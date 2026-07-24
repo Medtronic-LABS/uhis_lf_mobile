@@ -8,6 +8,8 @@ import '../../features/training/coaching_repository.dart';
 import '../../features/visit/assessment_repository.dart';
 import 'offline_sync_service.dart';
 
+const _retryDelay = Duration(seconds: 30);
+
 /// Monitors network connectivity and automatically triggers offline sync
 /// when connectivity is restored, matching Android's `ScheduledSyncWork`
 /// behaviour (WorkManager with `NetworkType.CONNECTED` constraint).
@@ -40,6 +42,7 @@ class SyncConnectivityService {
   final CoachingRepository _coachingRepo;
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
+  Timer? _retryTimer;
   bool _wasOffline = false;
 
   /// Begin listening. Safe to call multiple times (idempotent after first call).
@@ -47,13 +50,38 @@ class SyncConnectivityService {
     _subscription ??= Connectivity()
         .onConnectivityChanged
         .listen(_onConnectivityChanged);
+    // Probe current connectivity. Without this, assessments saved while the
+    // app was offline (or from a prior session) never auto-push when the app
+    // opens already online — `_wasOffline` stays false until an offline→online
+    // transition is observed in *this* process.
+    unawaited(_probeAndSyncIfNeeded());
     debugPrint('[SyncConnectivity] Connectivity monitoring started');
+  }
+
+  Future<void> _probeAndSyncIfNeeded() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      final isOnline = results.any((r) => r != ConnectivityResult.none);
+      if (!isOnline) {
+        _wasOffline = true;
+        debugPrint(
+            '[SyncConnectivity] Started offline — will sync when reconnected');
+        return;
+      }
+      debugPrint(
+          '[SyncConnectivity] Started online — pushing any pending assessments');
+      _triggerSync();
+    } catch (e) {
+      debugPrint('[SyncConnectivity] Initial connectivity probe failed: $e');
+    }
   }
 
   /// Stop listening. Called from widget dispose.
   void dispose() {
     _subscription?.cancel();
     _subscription = null;
+    _retryTimer?.cancel();
+    _retryTimer = null;
     debugPrint('[SyncConnectivity] Connectivity monitoring stopped');
   }
 
@@ -69,6 +97,8 @@ class SyncConnectivityService {
     // Connectivity restored after being offline — trigger sync.
     if (_wasOffline) {
       _wasOffline = false;
+      _retryTimer?.cancel();
+      _retryTimer = null;
       debugPrint('[SyncConnectivity] Connectivity restored — triggering automatic sync');
       _triggerSync();
     }
@@ -98,7 +128,13 @@ class SyncConnectivityService {
         })
         .then((_) => debugPrint('[SyncConnectivity] Coaching refresh complete'))
         .catchError((Object e) {
-          debugPrint('[SyncConnectivity] AutomaticSync error (will retry on next connectivity): $e');
+          debugPrint('[SyncConnectivity] AutomaticSync error — scheduling retry in ${_retryDelay.inSeconds}s: $e');
+          _retryTimer?.cancel();
+          _retryTimer = Timer(_retryDelay, () {
+            _retryTimer = null;
+            debugPrint('[SyncConnectivity] Retrying sync after network error');
+            _triggerSync();
+          });
         });
   }
 }

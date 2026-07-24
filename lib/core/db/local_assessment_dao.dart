@@ -255,7 +255,8 @@ class LocalAssessmentEntity {
       'villageId': villageId,
       'assessmentDate': createdAt?.toUtc().toIso8601String(),
       'patientStatus': referralStatus ?? 'Recovered',
-      'assessmentStatus': _buildCustomStatus(isReferred, referralStatus),
+      // Android Assessment DTO has no top-level assessmentStatus — only
+      // encounter.customStatus. Omitting keeps the wire shape Android-shaped.
       'peerSupervisorId': ?peerSupervisorId,
       // Android sends a joined String, not a JSON array.
       'referredReasons': _joinedReferredReasons(referredReasons),
@@ -485,24 +486,30 @@ class LocalAssessmentDao {
 
   /// Get all assessments eligible for upload.
   ///
-  /// Returns both [AssessmentSyncStatus.pending] (never attempted) and
-  /// [AssessmentSyncStatus.networkError] (previous attempt failed due to
-  /// connectivity — eligible for retry), matching Android's
-  /// `getUnSyncedAssessmentByHHMId` query that filters on both states.
-  Future<List<LocalAssessmentEntity>> getUnsynced() async {
+  /// Always includes [AssessmentSyncStatus.pending] and
+  /// [AssessmentSyncStatus.networkError] (matching Android's
+  /// `getUnSyncedAssessmentByHHMId`). When [includeFailed] is true (Manual /
+  /// Initial sync), also includes [AssessmentSyncStatus.failed] so the SK can
+  /// retry a prior server rejection.
+  Future<List<LocalAssessmentEntity>> getUnsynced({
+    bool includeFailed = false,
+  }) async {
+    final statuses = <String>[
+      AssessmentSyncStatus.pending.name,
+      AssessmentSyncStatus.networkError.name,
+      if (includeFailed) AssessmentSyncStatus.failed.name,
+    ];
+    final placeholders = List.filled(statuses.length, '?').join(',');
     final rows = await _db.db.query(
       tableName,
-      where: 'sync_status IN (?, ?)',
-      whereArgs: [
-        AssessmentSyncStatus.pending.name,
-        AssessmentSyncStatus.networkError.name,
-      ],
+      where: 'sync_status IN ($placeholders)',
+      whereArgs: statuses,
       orderBy: 'created_at ASC',
     );
     return rows.map(LocalAssessmentEntity.fromDb).toList();
   }
 
-  /// Count of assessments pending upload (pending + networkError eligible for retry).
+  /// Count of assessments pending upload (pending + networkError).
   Future<int> getUnsyncedCount() async {
     final result = await _db.db.rawQuery(
       'SELECT COUNT(*) as count FROM $tableName WHERE sync_status IN (?, ?)',
@@ -512,6 +519,27 @@ class LocalAssessmentDao {
       ],
     );
     return result.first['count'] as int? ?? 0;
+  }
+
+  /// Reclaim rows left as [AssessmentSyncStatus.inProgress] after a killed /
+  /// crashed sync — but only when older than [olderThan], so an in-flight
+  /// Android-parity status poll (create → InProgress → poll status) is not
+  /// reset mid-flight into a duplicate re-push.
+  Future<int> resetStuckInProgress({
+    Duration olderThan = const Duration(minutes: 15),
+  }) async {
+    final cutoff =
+        DateTime.now().subtract(olderThan).millisecondsSinceEpoch;
+    return _db.db.rawUpdate(
+      'UPDATE $tableName SET sync_status = ?, updated_at = ? '
+      'WHERE sync_status = ? AND updated_at < ?',
+      [
+        AssessmentSyncStatus.pending.name,
+        DateTime.now().millisecondsSinceEpoch,
+        AssessmentSyncStatus.inProgress.name,
+        cutoff,
+      ],
+    );
   }
 
   /// Open referred assessments (still `Referred` / `OnTreatment` or flagged

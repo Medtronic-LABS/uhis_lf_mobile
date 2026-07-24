@@ -38,8 +38,10 @@ class AddMemberRegRequest {
   });
 
   /// Convert to JSON for API requests.
+  ///
+  /// Android `HouseHoldMember.dateOfBirth` is non-null — never emit JSON null.
   Map<String, dynamic> toJson() => {
-    'dateOfBirth': dateOfBirth,
+    'dateOfBirth': dateOfBirth ?? '',
     'gender': gender,
     'householdId': householdId,
     'name': name,

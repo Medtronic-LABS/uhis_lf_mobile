@@ -350,7 +350,7 @@ class EnrollmentRepository extends ApiRepository {
     final svId = int.tryParse(subVillageId ?? '') ?? 0;
     final ssWorkerId = userId;
 
-    final normDob = _normaliseDob(member.dateOfBirth);
+    final normDob = wireDateOfBirth(member.dateOfBirth, age: member.age);
 
     // Member payload mirroring Android HouseHoldMember DTO when household
     // already has a fhirId (server has already processed the household).
@@ -432,7 +432,7 @@ class EnrollmentRepository extends ApiRepository {
     double latitude = 0.0,
     double longitude = 0.0,
   }) {
-    final normDob = _normaliseDob(member.dateOfBirth);
+    final normDob = wireDateOfBirth(member.dateOfBirth, age: member.age);
     return {
       'referenceId': referenceId,
       'householdReferenceId': householdReferenceId,
@@ -490,16 +490,57 @@ class EnrollmentRepository extends ApiRepository {
     }
   }
 
-  static String _normaliseDob(String dob) {
-    if (dob.isEmpty) return dob;
-    if (dob.contains('T')) return dob;
+  /// Android `HouseHoldMember.dateOfBirth` is a non-null `String`. An empty or
+  /// omitted value becomes JSON `null` on the fetch-synced-data round-trip and
+  /// crashes Android `toHouseholdMemberEntity` (`dateOfBirth is null`). Always
+  /// emit a concrete UTC timestamp — parse common UI formats, else derive from
+  /// [age] (1 Jan of birth year).
+  @visibleForTesting
+  static String wireDateOfBirth(String dob, {int age = 0}) {
+    final normalised = _normaliseDob(dob);
+    if (normalised.isNotEmpty) return normalised;
+    if (age > 0) return _dobFromAge(age);
+    // Last resort so the field is never empty/null on the wire.
+    return '1970-01-01T00:00:00+00:00';
+  }
 
-    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(dob.trim())) {
-      return '${dob.trim()}T00:00:00+00:00';
+  static String _dobFromAge(int age) {
+    final year = DateTime.now().toUtc().year - age;
+    final y = year.toString().padLeft(4, '0');
+    return '$y-01-01T00:00:00+00:00';
+  }
+
+  static String _normaliseDob(String dob) {
+    if (dob.isEmpty) return '';
+    final trimmed = dob.trim();
+    if (trimmed.contains('T')) return trimmed;
+
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed)) {
+      return '${trimmed}T00:00:00+00:00';
+    }
+
+    // UI hint is DD/MM/YYYY — previously unparsed → '' → server null → Android NPE.
+    final dmy = RegExp(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$')
+        .firstMatch(trimmed);
+    if (dmy != null) {
+      final day = int.tryParse(dmy.group(1)!);
+      final month = int.tryParse(dmy.group(2)!);
+      final year = int.tryParse(dmy.group(3)!);
+      if (day != null &&
+          month != null &&
+          year != null &&
+          month >= 1 &&
+          month <= 12 &&
+          day >= 1 &&
+          day <= 31) {
+        final mm = month.toString().padLeft(2, '0');
+        final dd = day.toString().padLeft(2, '0');
+        return '$year-$mm-${dd}T00:00:00+00:00';
+      }
     }
 
     final match =
-        RegExp(r'^(\d{1,2})\s+([A-Za-z]{3,4})\s+(\d{4})$').firstMatch(dob.trim());
+        RegExp(r'^(\d{1,2})\s+([A-Za-z]{3,4})\s+(\d{4})$').firstMatch(trimmed);
     if (match != null) {
       final day = int.tryParse(match.group(1)!);
       final month = _parseMonth(match.group(2)!);
