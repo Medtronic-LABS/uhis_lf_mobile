@@ -1256,7 +1256,7 @@ String _shortReasonLabel(String reason) {
   return t.isEmpty ? '' : t[0].toUpperCase() + t.substring(1);
 }
 
-_TimelineEntry _assessmentToEntry(MemberAssessment a) {
+_TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = true}) {
   final raw = _normalizeRaw(a.rawJson);
   final prog = Programme.fromString(a.type);
   final relDate = _relativeDate(a.date);
@@ -1561,13 +1561,15 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
   // Post-switch: referral status overrides vitals-derived severity.
   // Vitals may be absent or junk in test data; the backend already encoded
   // the clinical decision in referralStatus + referralReason.
-  if (rawStatus == 'referred') {
+  // showAsReferral is false for older referred assessments — only the most
+  // recent referral entry gets the badge and narrative (see _buildTimelineEntries).
+  if (showAsReferral && rawStatus == 'referred') {
     dotColor = _kDotCritical;
     badge = 'Referred';
     badgeColor = _kBadgeCriticalBg;
     badgeFgColor = _kBadgeCriticalFg;
     description = _buildReferralNarrative(referralReasons, raw);
-  } else if (rawStatus == 'ontreatment') {
+  } else if (showAsReferral && rawStatus == 'ontreatment') {
     dotColor = _kDotHigh;
     badge = 'On treatment';
     badgeColor = _kBadgeHighBg;
@@ -1692,8 +1694,21 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       ancAssessments[i].id: i + 1,
   };
 
+  // data.assessments is newest-first. Find the most recent assessment with
+  // a referral status so only that entry shows the referral badge + narrative.
+  final latestReferredId = data.assessments
+      .where((a) {
+        final s = (_normalizeRaw(a.rawJson)['referralStatus'] as String? ?? a.status ?? '')
+            .toLowerCase()
+            .trim();
+        return s == 'referred' || s == 'ontreatment';
+      })
+      .firstOrNull
+      ?.id;
+
   for (final a in data.assessments) {
-    final entry = _assessmentToEntry(a);
+    final showAsReferral = latestReferredId == null || a.id == latestReferredId;
+    final entry = _assessmentToEntry(a, showAsReferral: showAsReferral);
     final ordinal = ancOrdinal[a.id];
     if (ordinal != null && entry.title == 'ANC Checkup') {
       entries.add(entry.copyWith(title: 'ANC Visit $ordinal'));

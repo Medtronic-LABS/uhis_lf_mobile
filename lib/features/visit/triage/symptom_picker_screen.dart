@@ -131,6 +131,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// a second ANC visit on the same calendar day.
   bool _ancVisitedToday = false;
 
+  /// Under-5 only: whether the SK has explicitly tapped the Vaccination card.
+  /// Starts false so the card shows unselected; tap toggles it.
+  bool _vaccinationSelected = false;
+
   @override
   void initState() {
     super.initState();
@@ -501,18 +505,24 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     });
   }
 
-  /// Handles the Vaccination CTA tap for under-5 patients.
+  /// Toggles the vaccination card selection state (under-5).
+  void _onVaccinationToggle() {
+    setState(() => _vaccinationSelected = !_vaccinationSelected);
+  }
+
+  /// Advances to the vaccination visit step.
   ///
-  /// In embedded mode (inside VisitFlowScreen): advances the visit flow to the
-  /// vaccination step by calling [_onContinue], which fires [onAdvance].
+  /// In embedded mode (inside VisitFlowScreen): fires [onAdvance] with
+  /// vaccinationOnly so the IMCI form is skipped.
   /// In standalone mode: pushes the immunisation timeline route directly.
   void _onVaccination() {
     debugPrint('[_SymptomPickerScreenState] _onVaccination');
     final vm = _viewModel;
     if (vm == null) return;
     if (widget.onAdvance != null) {
-      // Children bypass the no-symptoms guard — vaccination is always valid.
-      _doAdvance(vm);
+      // vaccinationOnly: true so auto-activated IMCI pathway does not trigger
+      // the child health form — the SK chose vaccination only.
+      _doAdvance(vm, vaccinationOnly: true);
     } else {
       _openVaccinationTimeline();
     }
@@ -552,10 +562,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       return;
     }
 
-    _doAdvance(vm);
+    _doAdvance(vm, vaccinationSelected: _vaccinationSelected);
   }
 
-  Future<void> _doAdvance(TriageViewModel vm) async {
+  /// [vaccinationOnly] suppresses IMCI — vaccination card tap = vaccination-only.
+  /// [vaccinationSelected] adds Programme.epi so VisitFlowScreen can gate the
+  /// vaccination step (skipped when only child health is selected).
+  Future<void> _doAdvance(
+    TriageViewModel vm, {
+    bool vaccinationOnly = false,
+    bool vaccinationSelected = false,
+  }) async {
     // If the rule engine produced no pathways but the patient has enrolled
     // programmes, synthesize a pathway from enrolment so the form always
     // opens the correct section (guards against sex/data quality issues
@@ -633,12 +650,24 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // In-flow host (VisitFlowScreen) intercepts via callback.
     final onAdvance = widget.onAdvance;
     if (onAdvance != null) {
-      if (!(_patientContext?.isUnder5 ?? false)) {
-        // Delivery visit must always carry PNC so Step 2 opens the pregnancy-
-        // outcome / PNC form even if the live set was emptied by a rebuild.
-        final programmes = _isDelivery
-            ? (Set<Programme>.from(_selectedProgrammes)..add(Programme.pnc))
-            : _selectedProgrammes;
+      // Always report the SK's confirmed programme set — including under-5
+      // visits so VisitFlowScreen knows whether Child Health (IMCI) was
+      // explicitly selected and can show the IMCI form after vaccination.
+      // vaccinationOnly = true clears programmes so auto-activated pathways
+      // (e.g. EPI_DUE) don't smuggle IMCI into a vaccination-only visit.
+      {
+        final Set<Programme> programmes;
+        if (vaccinationOnly) {
+          programmes = const <Programme>{};
+        } else if (_isDelivery) {
+          programmes = Set<Programme>.from(_selectedProgrammes)..add(Programme.pnc);
+        } else {
+          final base = Set<Programme>.from(_selectedProgrammes);
+          // Include epi so VisitFlowScreen knows vaccination was selected;
+          // without it the vaccination step is skipped for IMCI-only visits.
+          if (vaccinationSelected) base.add(Programme.epi);
+          programmes = base;
+        }
         widget.onProgrammesSelected?.call(Set.unmodifiable(programmes));
         widget.onDeliverySelected?.call(_isDelivery);
       }
@@ -846,9 +875,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     ),
                   ),
 
-                // Eligible services grid — adults only; under-5 uses vaccination CTA
-                if (!(_patientContext!.isUnder5))
-                  SliverPadding(
+                // Eligible services grid — shown for all patients.
+                // Under-5: Vaccination + Child Health cards only.
+                // Adults: full programme card set.
+                SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     sliver: SliverToBoxAdapter(
                       child: _InlineServiceSelector(
@@ -873,6 +903,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         },
                         onPWToggle: _onPWToggle,
                         onDeliveryToggle: _onDeliveryToggle,
+                        onVaccination: _onVaccination,
+                        vaccinationSelected: _vaccinationSelected,
+                        onVaccinationToggle: widget.onAdvance != null
+                            ? _onVaccinationToggle
+                            : null,
                       ),
                     ),
                   ),
@@ -930,27 +965,42 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                             ),
                           ),
 
-                        // ── Vaccination CTA (under-5 only) ─────────────────
-                        // For children the vaccination button is the primary
-                        // CTA; in embedded mode it also advances the visit flow
-                        // to the vaccination step. The "Start Checkup" button
-                        // is hidden for under-5 patients.
+                        // ── Under-5 CTA — driven by vaccination + child-health selection
                         if (_patientContext!.isUnder5) ...[
                           const SizedBox(height: 4),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed: _onVaccination,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.pink,
-                                foregroundColor: AppColors.textOnNavy,
+                          Builder(builder: (context) {
+                            final imciSelected = _selectedProgrammes
+                                .contains(Programme.imci);
+                            final bothSelected =
+                                _vaccinationSelected && imciSelected;
+                            final neitherSelected =
+                                !_vaccinationSelected && !imciSelected;
+                            final label = bothSelected || imciSelected
+                                ? SymptomPickerStrings.ctaStartCheckup
+                                : ChildAssessmentStrings.vaccinationCta;
+                            final VoidCallback? onPressed = neitherSelected
+                                ? null
+                                : (_vaccinationSelected && !imciSelected
+                                    ? _onVaccination
+                                    : _onContinue);
+                            return SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: onPressed,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: neitherSelected
+                                      ? AppColors.pink.withValues(alpha: 0.4)
+                                      : AppColors.pink,
+                                  foregroundColor: AppColors.textOnNavy,
+                                ),
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700),
+                                ),
                               ),
-                              child: Text(
-                                ChildAssessmentStrings.vaccinationCta,
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                          ),
+                            );
+                          }),
                         ],
 
                         // ── Start Checkup button (adults only) ────────────
@@ -1570,7 +1620,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               ),
             ),
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
 
             // ── Chip grid ─────────────────────────────────────────────────
             if (gridIsEmpty) ...[
@@ -1630,6 +1680,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: gridSections
                     .expand((s) => s.$2)
                     .toSet()
@@ -1667,6 +1718,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
+                        alignment: WrapAlignment.spaceBetween,
                         children: section.$2
                             .map(
                               (code) => _PickerChip(
@@ -1681,12 +1733,12 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                             )
                             .toList(),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 6),
                     ],
                 ],
               ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
           ],
         );
       },
@@ -1887,7 +1939,7 @@ class _PickerChip extends StatelessWidget {
 // Meta-cards PW and Delivery are UI gates (not Programme enums) that lock/unlock
 // ANC and PNC respectively. Under-5 patients skip this widget entirely.
 
-enum _ServiceCardKind { programme, pw, delivery, general, rmnch }
+enum _ServiceCardKind { programme, pw, delivery, general, rmnch, vaccination }
 
 
 class _ServiceCardDef {
@@ -1906,20 +1958,25 @@ class _ServiceCardDef {
   bool get isPW => kind == _ServiceCardKind.pw;
   bool get isDelivery => kind == _ServiceCardKind.delivery;
   bool get isRMNCH => kind == _ServiceCardKind.rmnch;
+  bool get isVaccination => kind == _ServiceCardKind.vaccination;
 }
 
 // Card order matches the Eligible Services wireframe (apon_sushashthya_v14):
 // Row 1: PW, ANC, Pregnancy Outcome
 // Row 2: PNC, FP, NCD
 // Row 3: TB, Eye care
+// Under-5 row: Vaccination, Child Health
 const _kAllServiceCards = [
-  _ServiceCardDef(kind: _ServiceCardKind.pw,        emoji: '🤰', label: 'PW'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',               programme: Programme.anc),
-  _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Pregnancy Outcome'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',               programme: Programme.pnc),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',                programme: Programme.familyPlanning),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',               programme: Programme.ncd),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
+  _ServiceCardDef(kind: _ServiceCardKind.pw,          emoji: '🤰', label: 'PW'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🏥', label: 'ANC',               programme: Programme.anc),
+  _ServiceCardDef(kind: _ServiceCardKind.delivery,    emoji: '🚼', label: 'Pregnancy Outcome'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '👶', label: 'PNC',               programme: Programme.pnc),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🌸', label: 'FP',                programme: Programme.familyPlanning),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '💊', label: 'NCD',               programme: Programme.ncd),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
+  // Under-5 cards — shown only when ctx.isUnder5
+  _ServiceCardDef(kind: _ServiceCardKind.vaccination, emoji: '💉', label: 'Vaccination'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🧒', label: 'Child Health',      programme: Programme.imci),
 ];
 
 class _InlineServiceSelector extends StatelessWidget {
@@ -1934,6 +1991,9 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.onProgrammeToggle,
     required this.onPWToggle,
     required this.onDeliveryToggle,
+    required this.onVaccination,
+    this.vaccinationSelected = false,
+    this.onVaccinationToggle,
   });
 
   final PatientContext patientContext;
@@ -1951,18 +2011,30 @@ class _InlineServiceSelector extends StatelessWidget {
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
-  /// All 8 service cards shown for adult patients; eligibility is communicated
-  /// via lock state (greyed + snackbar on tap) rather than hiding. Order and
-  /// visibility match the Eligible Services wireframe (apon_sushashthya_v14).
+  /// Whether the SK has selected the Vaccination card (under-5 only).
+  final bool vaccinationSelected;
+
+  /// Called when SK toggles the Vaccination card. Replaces the old direct-
+  /// navigation [onVaccination] tap — selection is now decoupled from the CTA.
+  final VoidCallback? onVaccinationToggle;
+
+  /// Legacy — kept for standalone (non-embedded) use where the card tap
+  /// still pushes the immunisation route directly.
+  final VoidCallback onVaccination;
+
   List<_ServiceCardDef> _visibleCards() {
     final ctx = patientContext;
     return _kAllServiceCards.where((c) {
       switch (c.kind) {
+        case _ServiceCardKind.vaccination:
+          return ctx.isUnder5;
         case _ServiceCardKind.pw:
         case _ServiceCardKind.delivery:
-          return ctx.isFemale && ctx.ageYears >= 15;
+          return ctx.isFemale && ctx.ageYears >= 15 && !ctx.isUnder5;
         case _ServiceCardKind.programme:
           final p = c.programme!;
+          if (p == Programme.imci) return ctx.isUnder5;
+          if (ctx.isUnder5) return false;
           if (p == Programme.anc || p == Programme.pnc) {
             return ctx.isFemale && ctx.ageYears >= 15;
           }
@@ -2000,6 +2072,8 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   bool _isLocked(_ServiceCardDef card) {
+    if (card.isVaccination) return false;
+    if (card.programme == Programme.imci) return false;
     final ctx = patientContext;
     final pregnant = ctx.isPregnant && !ctx.isPostpartum;
     if (card.isPW) return isDelivery || !pregnant;
@@ -2009,10 +2083,13 @@ class _InlineServiceSelector extends StatelessWidget {
     }
     if (card.isDelivery) return !pregnant;
     if (card.programme == Programme.pnc) return !ctx.isPostpartum;
+    // FP is contraindicated during active pregnancy; available post-delivery.
+    if (card.programme == Programme.familyPlanning) return pregnant;
     return false;
   }
 
   bool _isCardSelected(_ServiceCardDef card) {
+    if (card.isVaccination) return vaccinationSelected;
     if (card.isPW) return isPW && !isDelivery;
     if (card.isDelivery) return isDelivery;
     if (card.isRMNCH) {
@@ -2026,6 +2103,16 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
+    if (card.isVaccination) {
+      // Embedded in visit flow — toggle selection; CTA drives the advance.
+      // Standalone (no toggle callback) — navigate directly as before.
+      if (onVaccinationToggle != null) {
+        onVaccinationToggle!();
+      } else {
+        onVaccination();
+      }
+      return;
+    }
     final alreadySelected = _isCardSelected(card);
     if (_isLocked(card) && !alreadySelected) {
       final hint = isDelivery

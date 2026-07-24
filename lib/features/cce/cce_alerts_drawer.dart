@@ -47,6 +47,7 @@ class CceAlertsDrawer extends StatefulWidget {
 
 class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
   late Future<List<CceAlert>> _future;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -56,6 +57,16 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
 
   void _reload() {
     _future = widget.repository.loadAlerts();
+  }
+
+  List<CceAlert> _filtered(List<CceAlert> alerts) {
+    if (_searchQuery.isEmpty) return alerts;
+    final q = _searchQuery.toLowerCase();
+    return alerts
+        .where((a) =>
+            a.patientName.toLowerCase().contains(q) ||
+            (a.villageName?.toLowerCase().contains(q) ?? false))
+        .toList();
   }
 
   @override
@@ -72,19 +83,52 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
         builder: (context, snap) {
           final alerts = snap.data ?? const <CceAlert>[];
           final count = widget.repository.actionsNeededCount(alerts);
+          final visible = _filtered(alerts);
           return Column(
             children: [
               _header(count),
+              _searchBar(),
               if (snap.connectionState == ConnectionState.waiting)
                 const Expanded(
                     child: Center(child: CircularProgressIndicator()))
-              else if (alerts.isEmpty)
-                const Expanded(child: _EmptyState())
+              else if (visible.isEmpty)
+                Expanded(
+                    child: _searchQuery.isEmpty
+                        ? const _EmptyState()
+                        : const _SearchEmptyState())
               else
-                Expanded(child: _list(alerts)),
+                Expanded(child: _list(visible)),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _searchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: CceStrings.searchHint,
+          prefixIcon: const Icon(Icons.search_rounded, size: 20),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear_rounded, size: 20),
+                  onPressed: () => setState(() => _searchQuery = ''),
+                )
+              : null,
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          isDense: true,
+        ),
+        onChanged: (v) => setState(() => _searchQuery = v.trim()),
       ),
     );
   }
@@ -260,6 +304,26 @@ class _EmptyState extends StatelessWidget {
           iconBg: AppColors.statusSuccess.withValues(alpha: 0.1),
           title: CceStrings.emptyTitle,
           subtitle: CceStrings.emptyBody,
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchEmptyState extends StatelessWidget {
+  const _SearchEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Center(
+        child: EmptyStateCard(
+          icon: Icons.search_off_rounded,
+          iconColor: AppColors.textMuted,
+          iconBg: AppColors.textMuted.withValues(alpha: 0.1),
+          title: CceStrings.searchNoResultsTitle,
+          subtitle: CceStrings.searchNoResultsBody,
         ),
       ),
     );

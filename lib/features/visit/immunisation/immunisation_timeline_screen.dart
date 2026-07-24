@@ -33,6 +33,7 @@ class ImmunisationTimelineScreen extends StatefulWidget {
     this.encounterId,
     this.householdMemberLocalId,
     this.memberId,
+    this.showChildAssessment = true,
   });
 
   final String patientId;
@@ -56,6 +57,11 @@ class ImmunisationTimelineScreen extends StatefulWidget {
 
   /// Backend member UUID — carried through to the assessment payload.
   final String? memberId;
+
+  /// Whether to show the Child Assessment section below the vaccine timeline.
+  /// False when SK selected Vaccination-only (no Child Health card) so the
+  /// IMCI questions don't appear inside a vaccination-only visit.
+  final bool showChildAssessment;
 
   @override
   State<ImmunisationTimelineScreen> createState() =>
@@ -399,15 +405,17 @@ class _ImmunisationTimelineScreenState
                     _showUpdateSheet(milestone, patientName),
               ),
 
-              // Child health programme questions — always visible on vaccination screen
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: ChildAssessmentSection(
-                  data: _childAssessmentData,
-                  onChanged: (updated) =>
-                      setState(() => _childAssessmentData = updated),
+              // Child health programme questions — only when Child Health was
+              // selected alongside Vaccination. Hidden for vaccination-only visits.
+              if (widget.showChildAssessment)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: ChildAssessmentSection(
+                    data: _childAssessmentData,
+                    onChanged: (updated) =>
+                        setState(() => _childAssessmentData = updated),
+                  ),
                 ),
-              ),
             ],
           ),
         ),

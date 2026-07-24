@@ -322,6 +322,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// after the SK deselected every programme.
   bool _programmesExplicitlyChosen = false;
 
+  /// True once the vaccination sub-step has completed in a combined child
+  /// visit (Vaccination + Child Health). While false, step 1 shows the
+  /// immunisation timeline; once set, step 1 shows the IMCI assessment form.
+
   /// True when the SK confirmed a delivery visit in Step 1. Gates whether
   /// the pregnancyOutcome form sections are included in Step 2.
   bool _isDeliveryVisit = false;
@@ -503,9 +507,13 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
         );
       case 1:
-        // For child visits (EPI / IMCI) Step 2 is the immunisation timeline,
-        // not the standard checkup form. The 3-step progress header is unchanged.
+        // Child visits always route through _Step2Vaccination (vaccination
+        // timeline + optional ChildAssessmentSection). "Child Health" card
+        // maps to ChildAssessmentSection (weight, breastfeeding, congenital
+        // defect), NOT the ICCM sick-child form. The vaccination timeline is
+        // shown regardless so the SK can update the schedule in the same visit.
         if (_isChildVisit) {
+          final hasImci = _confirmedProgrammes.contains(Programme.imci);
           return _Step2Vaccination(
             key: ValueKey('flow-step2-vacc-${widget.visitId}'),
             patientId: widget.patientId,
@@ -513,19 +521,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             encounterId: widget.visitId,
             memberId: widget.memberId,
             householdMemberLocalId: _householdMemberLocalId,
+            showChildAssessment: hasImci,
             onAdvance: () {
               setState(() {
                 _primaryProgramme = Programme.imci;
-                // Ensure NABA and WhatsApp message generators see the IMCI
-                // programme — vaccination step doesn't come through the
-                // programme-selection path so _confirmedProgrammes may be
-                // empty for under-5 patients with no symptoms.
-                if (!_confirmedProgrammes.contains(Programme.imci)) {
-                  _confirmedProgrammes = {
-                    ..._confirmedProgrammes,
-                    Programme.imci,
-                  };
-                }
                 _referralRecommended = false;
                 _step = 2;
               });
@@ -887,6 +886,7 @@ class _Step2Vaccination extends StatefulWidget {
     this.encounterId,
     this.memberId,
     this.householdMemberLocalId,
+    this.showChildAssessment = false,
   });
 
   final String patientId;
@@ -898,6 +898,10 @@ class _Step2Vaccination extends StatefulWidget {
   final String? encounterId;
   final String? memberId;
   final int? householdMemberLocalId;
+
+  /// Forwarded to [ImmunisationTimelineScreen] — false for vaccination-only
+  /// visits so the Child Assessment section is hidden.
+  final bool showChildAssessment;
 
   @override
   State<_Step2Vaccination> createState() => _Step2VaccinationState();
@@ -944,6 +948,7 @@ class _Step2VaccinationState extends State<_Step2Vaccination> {
       encounterId: widget.encounterId,
       memberId: widget.memberId,
       householdMemberLocalId: widget.householdMemberLocalId,
+      showChildAssessment: widget.showChildAssessment,
     );
   }
 }

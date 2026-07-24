@@ -73,7 +73,14 @@ class CceRepository {
     }).toList(growable: false);
 
     final sorted = [...alerts]..sort(_compare);
-    return sorted;
+
+    // One card per patient — keep the most critical referral (first after sort).
+    // Patients with multiple open referrals should not appear as duplicates.
+    final seen = <String>{};
+    final deduped =
+        sorted.where((a) => seen.add(a.patientId)).toList(growable: false);
+
+    return deduped;
   }
 
   /// Total open CCE alerts — matches the number of cards the drawer renders.
