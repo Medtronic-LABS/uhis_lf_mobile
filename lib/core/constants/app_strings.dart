@@ -5350,6 +5350,12 @@ abstract final class CceStrings {
   // ── Bell entry point ──────────────────────────────────────────────────────
   static const String bellTooltip = 'Care Coordination Alerts';
 
+  // ── Search ───────────────────────────────────────────────────────────────
+  static const String searchHint = 'Search by name or village…';
+  static const String searchNoResultsTitle = 'No alerts match your search';
+  static const String searchNoResultsBody =
+      'Try a different patient name or village.';
+
   // ── Empty state ───────────────────────────────────────────────────────────
   static const String emptyTitle = 'All referrals on track';
   static const String emptyBody =
