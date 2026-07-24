@@ -144,7 +144,19 @@ class AssessmentRepository extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final pending = await _dao.getUnsynced();
+      // Rows marked inProgress mid-flight (app killed / crash) never re-enter
+      // getUnsynced otherwise — reclaim them before each push attempt.
+      final recovered = await _dao.resetStuckInProgress();
+      if (recovered > 0) {
+        debugPrint(
+            '[AssessmentSync] Recovered $recovered stuck inProgress → pending');
+      }
+
+      // Manual / Initial sync also retries prior HTTP failures; AutomaticSync
+      // only retries pending + networkError (server rejections stay failed).
+      final includeFailed =
+          syncMode == 'ManualSync' || syncMode == 'InitialSync';
+      final pending = await _dao.getUnsynced(includeFailed: includeFailed);
       debugPrint('[AssessmentSync] Pending count: ${pending.length} (syncMode=$syncMode)');
       if (pending.isEmpty) return 0;
 
@@ -286,19 +298,44 @@ class AssessmentRepository extends ChangeNotifier {
       debugPrint('[AssessmentSync] Response HTTP $status — body: ${response.data}');
 
       if (status >= 200 && status < 300) {
-        await _dao.updateSyncStatus(ids, AssessmentSyncStatus.success);
-        debugPrint('[AssessmentSync] Marked ${ids.length} as success');
-        // Follow-ups accepted in the same envelope → flip to InProgress
-        // (awaiting server confirmation on the next pull) and mark their
-        // calls synced so they are not re-pushed.
-        if (pushedFollowUpIds.isNotEmpty && _followUpCalls != null) {
-          try {
-            await _followUpCalls.markPushed(pushedFollowUpIds);
-          } catch (e) {
-            debugPrint('[AssessmentSync] follow-up markPushed skipped: $e');
+        // Android keeps local status InProgress on HTTP 201 and only flips to
+        // Success/Failed after POST /offline-sync/status reports terminal
+        // entity states. Premature Success hid Failed queue rows (e.g.
+        // fhirmapper connection refused) from the SK.
+        debugPrint(
+            '[AssessmentSync] Queue accepted (HTTP $status) — polling status '
+            'for requestId=$requestId');
+        final terminal = await _pollOfflineSyncStatus(
+          requestId: requestId,
+          deviceId: deviceId,
+        );
+        if (terminal == _OfflineSyncPollResult.success) {
+          await _dao.updateSyncStatus(ids, AssessmentSyncStatus.success);
+          debugPrint('[AssessmentSync] Marked ${ids.length} as success');
+          if (pushedFollowUpIds.isNotEmpty && _followUpCalls != null) {
+            try {
+              await _followUpCalls.markPushed(pushedFollowUpIds);
+            } catch (e) {
+              debugPrint('[AssessmentSync] follow-up markPushed skipped: $e');
+            }
           }
+          return ids.length;
         }
-        return ids.length;
+        if (terminal == _OfflineSyncPollResult.failed) {
+          await _dao.updateSyncStatus(ids, AssessmentSyncStatus.failed);
+          debugPrint(
+              '[AssessmentSync] ✗ Status poll reported Failed — marked '
+              '${ids.length} as failed');
+          throw StateError(
+              'Batch sync Failed for requestId=$requestId (status poll)');
+        }
+        // Still InProgress after retries — leave rows inProgress (not pending)
+        // so the next sync does not re-POST duplicates. Stuck reclaim is
+        // age-gated in LocalAssessmentDao.resetStuckInProgress.
+        debugPrint(
+            '[AssessmentSync] Status still InProgress after polls — leaving '
+            '${ids.length} as inProgress (requestId=$requestId)');
+        return 0;
       } else {
         // Server returned an error response — mark as failed (not network error).
         // Failed assessments are NOT automatically retried; require manual sync.
@@ -915,7 +952,81 @@ class AssessmentRepository extends ChangeNotifier {
       urineProtein: urine is String ? urine : urine?.toString(),
     );
   }
+
+  /// Poll `offline-sync/status` until every entity is terminal (Success/Failed)
+  /// or [maxAttempts] is exhausted. Mirrors Android
+  /// `ScheduledSyncWork.getSyncStatus` (4 × 10s) /
+  /// `OfflineSyncRepository.getSyncStatusForOffline`.
+  Future<_OfflineSyncPollResult> _pollOfflineSyncStatus({
+    required String requestId,
+    required String deviceId,
+    int maxAttempts = 4,
+    Duration delayBetween = const Duration(seconds: 10),
+  }) async {
+    final userId = await _auth.userId();
+    var sawFailed = false;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        await Future<void>.delayed(delayBetween);
+      }
+      final body = <String, dynamic>{
+        'requestId': requestId,
+        'dataRequired': false,
+        if (userId != null) 'userId': userId,
+        'appVersionName': AppConfig.appVersionName,
+        'appVersionCode': AppConfig.appVersionCode,
+        if (deviceId.isNotEmpty) 'deviceId': deviceId,
+      };
+      ConsoleLog.banner('[PayloadDebug] sync-status\n${body.toString()}');
+      try {
+        final res = await _api.dio.post<Map<String, dynamic>>(
+          Endpoints.offlineSyncStatus,
+          data: body,
+        );
+        final data = res.data ?? const <String, dynamic>{};
+        final entities = data['entityList'];
+        debugPrint(
+            '[AssessmentSync] status poll $attempt/$maxAttempts → '
+            'HTTP ${res.statusCode} entities=${entities is List ? entities.length : 0}');
+
+        if (entities is! List || entities.isEmpty) {
+          // Empty list while queue is still spinning up — keep polling.
+          continue;
+        }
+
+        var anyInProgress = false;
+        for (final raw in entities) {
+          if (raw is! Map) continue;
+          final entityStatus = raw['status']?.toString() ?? '';
+          debugPrint(
+              '[AssessmentSync] status entity type=${raw['type']} '
+              'ref=${raw['referenceId']} status=$entityStatus '
+              'err=${raw['errorMessage']}');
+          if (entityStatus == 'InProgress') {
+            anyInProgress = true;
+          } else if (entityStatus == 'Failed') {
+            sawFailed = true;
+          }
+        }
+        if (anyInProgress) continue;
+        return sawFailed
+            ? _OfflineSyncPollResult.failed
+            : _OfflineSyncPollResult.success;
+      } on DioException catch (e) {
+        debugPrint(
+            '[AssessmentSync] status poll $attempt/$maxAttempts error: '
+            '${e.type} HTTP ${e.response?.statusCode}');
+        // Transport blip — keep trying; do not mark Failed yet.
+      }
+    }
+    return sawFailed
+        ? _OfflineSyncPollResult.failed
+        : _OfflineSyncPollResult.inProgress;
+  }
 }
+
+enum _OfflineSyncPollResult { success, failed, inProgress }
 
 class SaveAssessmentResult {
   const SaveAssessmentResult({

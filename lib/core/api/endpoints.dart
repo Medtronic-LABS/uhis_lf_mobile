@@ -176,6 +176,12 @@ class Endpoints {
   static const String offlineSyncCreate =
       '/offline-service/offline-sync/create';
 
+  /// Poll queue processing for a prior [offlineSyncCreate] requestId.
+  /// Matches Android `POST /offline-service/offline-sync/status`
+  /// (`RequestGetSyncStatus` → `SyncResponse.entityList`).
+  static const String offlineSyncStatus =
+      '/offline-service/offline-sync/status';
+
   // ── FHIR Server: observations ─────────────────────────────────────────────
   /// FHIR Observation search by encounter — returns a Bundle.
   static String fhirObservationByEncounter(String encounterId,

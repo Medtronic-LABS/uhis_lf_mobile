@@ -104,6 +104,66 @@ class FieldOption {
         name: json['name']?.toString() ?? '',
         cultureValue: json['cultureValue']?.toString(),
       );
+
+  /// Coerce a stored field value to the string id form used by option widgets.
+  ///
+  /// Some `field_library.json` options declare JSON bool/int ids (e.g.
+  /// `isRegularSmoker: true/false`); [fromJson] stringifies those. History
+  /// preload / drafts can still leave a Dart [bool] or [num] in
+  /// CanonicalVisitData — never `as String?` cast those.
+  static String? coerceId(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value;
+    return value.toString();
+  }
+
+  /// Resolve [value] to a canonical option [id], or null if unmatched.
+  ///
+  /// Accepts option id, display name, and boolean / Yes-No aliases so a
+  /// preloaded `true` matches either id `"true"` or `"Yes"`.
+  static String? matchId(dynamic value, List<FieldOption> options) {
+    if (value == null) return null;
+    if (options.isEmpty) return coerceId(value);
+    final raw = coerceId(value)!;
+    for (final o in options) {
+      if (o.id == raw) return o.id;
+    }
+    final lower = raw.toLowerCase().trim();
+    for (final o in options) {
+      if (o.id.toLowerCase() == lower || o.name.toLowerCase() == lower) {
+        return o.id;
+      }
+    }
+    final aliases = _yesNoAliases(lower);
+    if (aliases != null) {
+      for (final o in options) {
+        final idL = o.id.toLowerCase();
+        final nameL = o.name.toLowerCase();
+        if (aliases.contains(idL) || aliases.contains(nameL)) return o.id;
+      }
+    }
+    return null;
+  }
+
+  /// First option whose id matches [value] via [matchId], or null.
+  static FieldOption? find(dynamic value, List<FieldOption> options) {
+    final id = matchId(value, options);
+    if (id == null) return null;
+    for (final o in options) {
+      if (o.id == id) return o;
+    }
+    return null;
+  }
+
+  static Set<String>? _yesNoAliases(String lower) {
+    if (lower == 'true' || lower == '1' || lower == 'yes') {
+      return const {'true', '1', 'yes'};
+    }
+    if (lower == 'false' || lower == '0' || lower == 'no') {
+      return const {'false', '0', 'no'};
+    }
+    return null;
+  }
 }
 
 /// A single `condition` entry declared on a *driver* field in

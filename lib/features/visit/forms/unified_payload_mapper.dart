@@ -788,18 +788,19 @@ abstract final class UnifiedPayloadMapper {
 
   // ── Eye Care ───────────────────────────────────────────────────────────────
   // Android wire type: "eye_care", flat pass-through (no wrapper key).
-  // Form section: "eyeCare" in layout_manifests.json.
+  // Form section: "eyeCare" in layout_manifests.json — field IDs must match
+  // field_library / layout_manifests (eyeTestOutcome, glassPower, …), not the
+  // older visualAcuity* placeholders that left every sync as `{}`.
 
   static Map<String, dynamic> _toEyeCare(CanonicalVisitData d) {
     return _compact({
-      'visualAcuityRight': d.getValue('visualAcuityRight'),
-      'visualAcuityLeft': d.getValue('visualAcuityLeft'),
-      'eyeCondition': d.getValue('eyeCondition'),
-      'eyeDisease': d.getValue('eyeDisease'),
-      'referredForEyeCare': d.getValue('referredForEyeCare'),
-      'eyeCareRecommendations': d.getValue('eyeCareRecommendations'),
-      // Generic pass-through for any additional eye care fields in the form.
-      'eyeCareAssessment': d.getValue('eyeCareAssessment'),
+      'eyeTestOutcome': d.getValue('eyeTestOutcome'),
+      'glassPower': d.getValue('glassPower'),
+      'haveTheGlassesBeenSold': d.getValue('haveTheGlassesBeenSold'),
+      'typeOfGlass': d.getValue('typeOfGlass'),
+      'typeOfFrame': d.getValue('typeOfFrame'),
+      'firstTimeUser': d.getValue('firstTimeUser'),
+      'referPlace': d.getValue('referPlace'),
     });
   }
 

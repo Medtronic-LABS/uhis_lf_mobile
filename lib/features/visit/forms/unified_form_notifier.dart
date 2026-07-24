@@ -911,20 +911,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// Matches [value] against option ids first, then display names → id.
-  static String? _matchOption(dynamic value, List<FieldOption> options) {
-    if (options.isEmpty) return value?.toString();
-    final raw = value.toString();
-    for (final o in options) {
-      if (o.id == raw) return o.id;
-    }
-    final lower = raw.toLowerCase().trim();
-    for (final o in options) {
-      if (o.id.toLowerCase() == lower || o.name.toLowerCase() == lower) {
-        return o.id;
-      }
-    }
-    return null;
-  }
+  /// Also accepts bool / 1|0 aliases for Yes/No options (see [FieldOption.matchId]).
+  static String? _matchOption(dynamic value, List<FieldOption> options) =>
+      FieldOption.matchId(value, options);
 
   static num? _asNum(dynamic v) {
     if (v is num) return v;

@@ -2369,18 +2369,13 @@ class _SectionCard extends StatelessWidget {
       case WidgetHint.radioGroup:
         // Canonical store uses option id; RadioFormField works with display names.
         // Translate: stored id → locale display name for render, selected → id.
-        final storedId = currentValue as String?;
-        final displayName = def.options
-            .cast<FieldOption?>()
-            .firstWhere(
-              (o) => o!.id == storedId || o.name == storedId,
-              orElse: () => null,
-            )
-            ?.displayName;
+        // Prefill/history may leave a Dart bool (e.g. isRegularSmoker) — never
+        // cast with `as String?`.
+        final matched = FieldOption.find(currentValue, def.options);
         return RadioFormField(
           key: Key('unified_form_${def.id}_input'),
           options: def.options.map((o) => o.displayName).toList(),
-          currentValue: displayName,
+          currentValue: matched?.displayName,
           severityColors: _severityColorsByField[def.id],
           onChanged: (name) {
             if (name == null) {
@@ -2388,18 +2383,10 @@ class _SectionCard extends StatelessWidget {
               onFieldChanged(def.id, null);
               return;
             }
-            final id = def.options
-                .cast<FieldOption?>()
-                .firstWhere(
-                  (o) =>
-                      o!.displayName == name ||
-                      o.name == name ||
-                      o.id == name,
-                  orElse: () => null,
-                )
-                ?.id ??
-                name;
-            onFieldChanged(def.id, id);
+            onFieldChanged(
+              def.id,
+              FieldOption.matchId(name, def.options) ?? name,
+            );
           },
         );
 
@@ -2460,42 +2447,27 @@ class _SectionCard extends StatelessWidget {
         // SK expects. Genuine multi-option spinners (e.g. deliveryFacilityType)
         // keep the dropdown.
         if (_isYesNoOptions(def.options)) {
-          final storedId = currentValue as String?;
-          final displayName = def.options
-              .cast<FieldOption?>()
-              .firstWhere(
-                (o) => o!.id == storedId || o.name == storedId,
-                orElse: () => null,
-              )
-              ?.displayName;
+          final matched = FieldOption.find(currentValue, def.options);
           return RadioFormField(
             key: Key('unified_form_${def.id}_input'),
             options: def.options.map((o) => o.displayName).toList(),
-            currentValue: displayName,
+            currentValue: matched?.displayName,
             onChanged: (name) {
               if (name == null) {
                 onFieldChanged(def.id, null);
                 return;
               }
-              final id = def.options
-                      .cast<FieldOption?>()
-                      .firstWhere(
-                        (o) =>
-                            o!.displayName == name ||
-                            o.name == name ||
-                            o.id == name,
-                        orElse: () => null,
-                      )
-                      ?.id ??
-                  name;
-              onFieldChanged(def.id, id);
+              onFieldChanged(
+                def.id,
+                FieldOption.matchId(name, def.options) ?? name,
+              );
             },
           );
         }
         return _SpinnerField(
           key: Key('unified_form_${def.id}_input'),
           options: def.options,
-          currentValue: currentValue as String?,
+          currentValue: FieldOption.coerceId(currentValue),
           onChanged: (v) => onFieldChanged(def.id, v),
         );
 
