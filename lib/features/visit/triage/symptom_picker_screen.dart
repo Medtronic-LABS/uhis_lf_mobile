@@ -512,7 +512,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     if (vm == null) return;
     if (widget.onAdvance != null) {
       // Children bypass the no-symptoms guard — vaccination is always valid.
-      _doAdvance(vm);
+      // vaccinationOnly: true so auto-activated IMCI pathway does not trigger
+      // the child health form — the SK chose vaccination only.
+      _doAdvance(vm, vaccinationOnly: true);
     } else {
       _openVaccinationTimeline();
     }
@@ -555,7 +557,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     _doAdvance(vm);
   }
 
-  Future<void> _doAdvance(TriageViewModel vm) async {
+  /// [vaccinationOnly] suppresses IMCI from the reported programmes even when
+  /// the pathway engine auto-activated it — vaccination card tap means the SK
+  /// explicitly chose vaccination-only, not a combined child health visit.
+  Future<void> _doAdvance(TriageViewModel vm, {bool vaccinationOnly = false}) async {
     // If the rule engine produced no pathways but the patient has enrolled
     // programmes, synthesize a pathway from enrolment so the form always
     // opens the correct section (guards against sex/data quality issues
@@ -635,13 +640,18 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     if (onAdvance != null) {
       // Always report the SK's confirmed programme set — including under-5
       // visits so VisitFlowScreen knows whether Child Health (IMCI) was
-      // selected and can show the IMCI form after vaccination.
+      // explicitly selected and can show the IMCI form after vaccination.
+      // vaccinationOnly = true clears programmes so auto-activated pathways
+      // (e.g. EPI_DUE) don't smuggle IMCI into a vaccination-only visit.
       {
-        // Delivery visit must always carry PNC so Step 2 opens the pregnancy-
-        // outcome / PNC form even if the live set was emptied by a rebuild.
-        final programmes = _isDelivery
-            ? (Set<Programme>.from(_selectedProgrammes)..add(Programme.pnc))
-            : _selectedProgrammes;
+        final Set<Programme> programmes;
+        if (vaccinationOnly) {
+          programmes = const <Programme>{};
+        } else if (_isDelivery) {
+          programmes = Set<Programme>.from(_selectedProgrammes)..add(Programme.pnc);
+        } else {
+          programmes = _selectedProgrammes;
+        }
         widget.onProgrammesSelected?.call(Set.unmodifiable(programmes));
         widget.onDeliverySelected?.call(_isDelivery);
       }
