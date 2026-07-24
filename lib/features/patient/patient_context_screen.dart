@@ -1061,15 +1061,60 @@ int _sys(String bp) => int.tryParse(bp.split('/').firstOrNull ?? '') ?? 0;
 int _dia(String bp) => int.tryParse(bp.split('/').lastOrNull ?? '') ?? 0;
 
 /// Convert a single [MemberAssessment] into a display [_TimelineEntry].
-/// Joins referral reason codes into a sentence, capitalising the first word.
+/// Maps a single referral reason token to a clinical narrative sentence.
+/// Matches on lowercase keywords so it handles backend code variations.
+String _humanizeReason(String reason) {
+  final k = reason.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (k.contains('blood glucose') || k.contains('bloodglucose') ||
+      (k.contains('glucose') && !k.contains('blood pressure'))) {
+    return 'Blood sugar is elevated — review and follow-up required.';
+  }
+  if (k.contains('pulse')) {
+    return 'Pulse is abnormal — needs urgent attention.';
+  }
+  if (k.contains('blood pressure') || k.contains('bloodpressure') ||
+      k == 'bp' || k.contains('hypertension')) {
+    return 'BP is above the normal — review and follow-up required.';
+  }
+  if (k.contains('hemoglobin') || k.contains('anaemia') || k.contains('anemia') ||
+      (k.startsWith('hb') && k.length <= 4)) {
+    return 'Severe anemia — urgent review needed.';
+  }
+  if (k.contains('danger sign') || k == 'dangersign' || k == 'danger') {
+    return 'Danger sign reported — urgent attention required.';
+  }
+  if (k.contains('temperature') || k.contains('fever')) {
+    return 'Elevated temperature — needs urgent attention.';
+  }
+  if (k.contains('weight') && !k.contains('birth weight')) {
+    return 'Low weight detected — monitor nutrition.';
+  }
+  if (k.contains('medication') || k.contains('adherence')) {
+    return 'Medication adherence is low — confirm daily intake.';
+  }
+  if (k.contains('family planning') || k.contains('contraception') ||
+      k == 'fp' || k == 'no fp') {
+    return 'No contraception method in use — counsel on options.';
+  }
+  if (k.contains('supplement') || k.contains('vitamin') ||
+      k.contains('ifa') || k.contains('calcium')) {
+    return 'Supplement gap — ensure continued supplementation.';
+  }
+  if (k.contains('overdue') || k.contains('missed visit')) {
+    return 'Visit overdue — schedule follow-up urgently.';
+  }
+  // Unknown code: title-case and pass through
+  final trimmed = reason.trim();
+  return trimmed[0].toUpperCase() + trimmed.substring(1);
+}
+
+/// Maps comma-separated referral reason tokens to clinical narrative sentences.
 /// Falls back to [fallback] when [reasons] is null or empty.
 String _narrativeFromReasons(String? reasons, String fallback) {
   if (reasons == null || reasons.trim().isEmpty) return fallback;
   final parts = reasons.split(',').map((r) => r.trim()).where((r) => r.isNotEmpty).toList();
   if (parts.isEmpty) return fallback;
-  final joined = parts.join(', ');
-  final sentence = joined[0].toUpperCase() + joined.substring(1);
-  return '$sentence — follow-up required.';
+  return parts.map(_humanizeReason).join(' ');
 }
 
 _TimelineEntry _assessmentToEntry(MemberAssessment a) {
