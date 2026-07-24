@@ -623,6 +623,34 @@ class LocalAssessmentDao {
   }
 
   /// Returns the most recent extracted vitals per patient.
+  /// Returns the most recent draft `created_at` (epoch ms) per patient.
+  /// Used by the worklist scorer to suppress the overdue signal when a draft
+  /// was saved offline more recently than the last synced follow-up date.
+  Future<Map<String, int>> latestDraftCreatedAtForMany(
+      List<String> patientIds) async {
+    if (patientIds.isEmpty) return const {};
+    final placeholders = List.filled(patientIds.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      '''
+      SELECT patient_id, MAX(created_at) AS latest_at
+      FROM $tableName
+      WHERE patient_id IN ($placeholders)
+        AND patient_id IS NOT NULL
+      GROUP BY patient_id
+      ''',
+      patientIds,
+    );
+    final out = <String, int>{};
+    for (final r in rows) {
+      final pid = r['patient_id'] as String?;
+      final at = r['latest_at'];
+      if (pid != null && at != null) {
+        out[pid] = (at is int) ? at : int.tryParse(at.toString()) ?? 0;
+      }
+    }
+    return out;
+  }
+
   /// Queries the most recent NCD or ANC assessment per patient and parses the
   /// assessmentDetails JSON. Merges the form-level eclampsia flag with the
   /// 3-visit trend rule (PRD §2.8.1 Band 2). Returns an empty map if no
