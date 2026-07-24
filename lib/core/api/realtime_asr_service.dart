@@ -26,9 +26,9 @@ class RealtimeAsrService {
 
   final ApiClient api;
 
-  // Nginx routes scribe at /ai-scribe-service/; strip this prefix only when
+  // Nginx routes scribe at /ai-scribe/; strip this prefix only when
   // AI_SERVICE_URL bypasses nginx and hits the local service directly.
-  static const String _nginxPrefix = '/ai-scribe-service';
+  static const String _nginxPrefix = '/ai-scribe';
 
   Future<RealtimeAsrConnectionInfo> connectionInfo({
     required String language,
