@@ -111,13 +111,6 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          PatientContextStrings.actionsTitle,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
