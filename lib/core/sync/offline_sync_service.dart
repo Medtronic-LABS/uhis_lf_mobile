@@ -1288,15 +1288,14 @@ class OfflineSyncService extends ChangeNotifier {
         final prev = latestVisitMs[patientId];
         if (prev == null || visitMs > prev) latestVisitMs[patientId] = visitMs;
 
-        // nextFollowUpDate wins over inferred interval — only overwrite if the
-        // new value is more recent than one we've already seen for this patient.
+        // nextFollowUpDate: use the date from the MOST RECENT assessment.
+        // Items are sorted newest-first so the first non-null nfd seen per
+        // patient is the one that belongs to the latest visit. Taking the max
+        // across all history rows is wrong — an older visit may have a farther
+        // future date that has since been superseded by a closer appointment.
         final nfd = item.nextFollowUpDate;
-        if (nfd != null) {
-          final nfdMs = nfd.millisecondsSinceEpoch;
-          final prevNfd = nextFollowUpMs[patientId];
-          if (prevNfd == null || nfdMs > prevNfd) {
-            nextFollowUpMs[patientId] = nfdMs;
-          }
+        if (nfd != null && !nextFollowUpMs.containsKey(patientId)) {
+          nextFollowUpMs[patientId] = nfd.millisecondsSinceEpoch;
         }
       }
 
@@ -1381,10 +1380,14 @@ class OfflineSyncService extends ChangeNotifier {
       // Write assessment rows keyed by FHIR patient ID so AssessmentDao queries
       // by patientId resolve correctly (assessment history uses numeric
       // householdMemberId; the bulk-sync bundle may use a different field).
+      // Fall back to householdMemberId itself when the lookup fails — a row
+      // stored under the member's own ID is better than silently dropping it;
+      // the screen's local-assessment query can still find it via that key.
       final assessmentRows = <AssessmentRow>[];
       for (final item in items) {
-        final patientId = memberToPatient[item.householdMemberId];
-        if (patientId == null || patientId.isEmpty) continue;
+        final patientId =
+            memberToPatient[item.householdMemberId] ?? item.householdMemberId;
+        if (patientId.isEmpty) continue;
         assessmentRows.add(AssessmentRow(
           id: item.encounterId,
           patientId: patientId,
