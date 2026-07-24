@@ -1121,14 +1121,15 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
         badgeColor = _kBadgeAmberBg;
         badgeFgColor = _kBadgeAmberFg;
         description = 'Hb ${hbANC}g/dL — anemia. Review iron supplementation.';
+      } else if (hbANC >= 10 && hbANC < 11) {
+        dotColor = _kDotModerate;
+        badge = 'Mild anemia';
+        badgeColor = _kBadgeAmberBg;
+        badgeFgColor = _kBadgeAmberFg;
+        description = 'Hb ${hbANC}g/dL — mild anemia. Ensure iron supplementation continues.';
       } else {
         dotColor = _kDotAnc;
-        final dp = <String>[];
-        if (bpANC.isNotEmpty) dp.add('BP $bpANC');
-        if (hbANC > 0) dp.add('Hb $hbANC g/dL');
-        final wt = raw['weight']?.toString();
-        if (wt != null) dp.add('Weight $wt kg');
-        description = dp.isEmpty ? null : dp.join(' · ');
+        description = 'Routine antenatal visit — vitals within normal range.';
       }
 
     // ─── PNC / Delivery ───────────────────────────────────────────────────
@@ -1179,6 +1180,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
         final diaPNC = _dia(bpPNC);
         final hbPNC = double.tryParse(raw['hemoglobin']?.toString() ?? '') ?? 0;
         final fpMethod = raw['familyPlanningMethods']?.toString() ?? raw['currentFpMethod']?.toString() ?? '';
+        final rawTemp = double.tryParse(raw['temperature']?.toString() ?? '') ?? 0;
+        // temperature stored as °C (≥38.9) or °F (≥102); detect by magnitude
+        final tempHighC = rawTemp >= 50 ? rawTemp >= 102 : rawTemp >= 38.9;
+        final pulse = int.tryParse(raw['pulse']?.toString() ?? raw['heartRate']?.toString() ?? '') ?? 0;
+        final pulseHigh = pulse > 90;
+        final pulseLow = pulse > 0 && pulse < 60;
+        final bpHighPNC = sysPNC >= 140 || diaPNC >= 90;
 
         if (dSign.isNotEmpty && !['none', 'no', 'false', ''].contains(dSign.trim().toLowerCase())) {
           dotColor = _kDotCritical;
@@ -1186,12 +1194,17 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
           description = 'Danger sign reported: $dSign.';
-        } else if (sysPNC >= 140 || diaPNC >= 90) {
+        } else if (bpHighPNC || tempHighC || pulseHigh || pulseLow) {
           dotColor = _kDotCritical;
           badge = 'Urgent';
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
-          description = 'BP $bpPNC is above target — needs urgent attention.';
+          final urgentParts = <String>[];
+          if (bpHighPNC) urgentParts.add('BP $bpPNC is above target');
+          if (tempHighC) urgentParts.add('Temperature is elevated');
+          if (pulseHigh) urgentParts.add('Pulse $pulse bpm is above normal');
+          if (pulseLow)  urgentParts.add('Pulse $pulse bpm is below normal');
+          description = '${urgentParts.join(', ')} — needs urgent attention.';
         } else if (hbPNC > 0 && hbPNC < 8) {
           dotColor = _kDotHigh;
           badge = 'Severe anemia';
