@@ -562,13 +562,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       return;
     }
 
-    _doAdvance(vm);
+    _doAdvance(vm, vaccinationSelected: _vaccinationSelected);
   }
 
-  /// [vaccinationOnly] suppresses IMCI from the reported programmes even when
-  /// the pathway engine auto-activated it — vaccination card tap means the SK
-  /// explicitly chose vaccination-only, not a combined child health visit.
-  Future<void> _doAdvance(TriageViewModel vm, {bool vaccinationOnly = false}) async {
+  /// [vaccinationOnly] suppresses IMCI — vaccination card tap = vaccination-only.
+  /// [vaccinationSelected] adds Programme.epi so VisitFlowScreen can gate the
+  /// vaccination step (skipped when only child health is selected).
+  Future<void> _doAdvance(
+    TriageViewModel vm, {
+    bool vaccinationOnly = false,
+    bool vaccinationSelected = false,
+  }) async {
     // If the rule engine produced no pathways but the patient has enrolled
     // programmes, synthesize a pathway from enrolment so the form always
     // opens the correct section (guards against sex/data quality issues
@@ -658,7 +662,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         } else if (_isDelivery) {
           programmes = Set<Programme>.from(_selectedProgrammes)..add(Programme.pnc);
         } else {
-          programmes = _selectedProgrammes;
+          final base = Set<Programme>.from(_selectedProgrammes);
+          // Include epi so VisitFlowScreen knows vaccination was selected;
+          // without it the vaccination step is skipped for IMCI-only visits.
+          if (vaccinationSelected) base.add(Programme.epi);
+          programmes = base;
         }
         widget.onProgrammesSelected?.call(Set.unmodifiable(programmes));
         widget.onDeliverySelected?.call(_isDelivery);

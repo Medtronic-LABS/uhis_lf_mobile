@@ -512,11 +512,17 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
         );
       case 1:
-        // Child visits: vaccination timeline first, then IMCI assessment form
-        // if Child Health was selected. Vaccination-only → skip straight to summary.
+        // Child visits: show vaccination step only when SK selected vaccination
+        // (epi in confirmedProgrammes, or empty set = vaccination-only path via
+        // _onVaccination). IMCI-only visits skip vaccination and go straight to
+        // the child health assessment form.
         if (_isChildVisit) {
           final hasImci = _confirmedProgrammes.contains(Programme.imci);
-          if (!_childVaccinationDone) {
+          // Empty confirmedProgrammes = vaccination-only route (_onVaccination
+          // passes {} so auto-activated pathways don't contaminate the set).
+          final hasVaccination = _confirmedProgrammes.isEmpty ||
+              _confirmedProgrammes.contains(Programme.epi);
+          if (hasVaccination && !_childVaccinationDone) {
             return _Step2Vaccination(
               key: ValueKey('flow-step2-vacc-${widget.visitId}'),
               patientId: widget.patientId,
@@ -530,7 +536,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   _primaryProgramme = Programme.imci;
                   _referralRecommended = false;
                   if (hasImci) {
-                    // Child Health also selected — show IMCI form next.
+                    // Vaccination done; show IMCI form next.
                     _childVaccinationDone = true;
                   } else {
                     // Vaccination only — go straight to summary.
