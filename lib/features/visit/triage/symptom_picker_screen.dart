@@ -131,6 +131,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// a second ANC visit on the same calendar day.
   bool _ancVisitedToday = false;
 
+  /// Under-5 only: whether the SK has explicitly tapped the Vaccination card.
+  /// Starts false so the card shows unselected; tap toggles it.
+  bool _vaccinationSelected = false;
+
   @override
   void initState() {
     super.initState();
@@ -501,17 +505,21 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     });
   }
 
-  /// Handles the Vaccination CTA tap for under-5 patients.
+  /// Toggles the vaccination card selection state (under-5).
+  void _onVaccinationToggle() {
+    setState(() => _vaccinationSelected = !_vaccinationSelected);
+  }
+
+  /// Advances to the vaccination visit step.
   ///
-  /// In embedded mode (inside VisitFlowScreen): advances the visit flow to the
-  /// vaccination step by calling [_onContinue], which fires [onAdvance].
+  /// In embedded mode (inside VisitFlowScreen): fires [onAdvance] with
+  /// vaccinationOnly so the IMCI form is skipped.
   /// In standalone mode: pushes the immunisation timeline route directly.
   void _onVaccination() {
     debugPrint('[_SymptomPickerScreenState] _onVaccination');
     final vm = _viewModel;
     if (vm == null) return;
     if (widget.onAdvance != null) {
-      // Children bypass the no-symptoms guard — vaccination is always valid.
       // vaccinationOnly: true so auto-activated IMCI pathway does not trigger
       // the child health form — the SK chose vaccination only.
       _doAdvance(vm, vaccinationOnly: true);
@@ -888,6 +896,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         onPWToggle: _onPWToggle,
                         onDeliveryToggle: _onDeliveryToggle,
                         onVaccination: _onVaccination,
+                        vaccinationSelected: _vaccinationSelected,
+                        onVaccinationToggle: widget.onAdvance != null
+                            ? _onVaccinationToggle
+                            : null,
                       ),
                     ),
                   ),
@@ -945,27 +957,42 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                             ),
                           ),
 
-                        // ── Under-5: single CTA — Vaccination or Start Checkup when IMCI selected
+                        // ── Under-5 CTA — driven by vaccination + child-health selection
                         if (_patientContext!.isUnder5) ...[
                           const SizedBox(height: 4),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed: _selectedProgrammes.contains(Programme.imci)
-                                  ? _onContinue
-                                  : _onVaccination,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.pink,
-                                foregroundColor: AppColors.textOnNavy,
+                          Builder(builder: (context) {
+                            final imciSelected = _selectedProgrammes
+                                .contains(Programme.imci);
+                            final bothSelected =
+                                _vaccinationSelected && imciSelected;
+                            final neitherSelected =
+                                !_vaccinationSelected && !imciSelected;
+                            final label = bothSelected || imciSelected
+                                ? SymptomPickerStrings.ctaStartCheckup
+                                : ChildAssessmentStrings.vaccinationCta;
+                            final VoidCallback? onPressed = neitherSelected
+                                ? null
+                                : (_vaccinationSelected && !imciSelected
+                                    ? _onVaccination
+                                    : _onContinue);
+                            return SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: onPressed,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: neitherSelected
+                                      ? AppColors.pink.withValues(alpha: 0.4)
+                                      : AppColors.pink,
+                                  foregroundColor: AppColors.textOnNavy,
+                                ),
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700),
+                                ),
                               ),
-                              child: Text(
-                                _selectedProgrammes.contains(Programme.imci)
-                                    ? SymptomPickerStrings.ctaStartCheckup
-                                    : ChildAssessmentStrings.vaccinationCta,
-                                style: const TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                          ),
+                            );
+                          }),
                         ],
 
                         // ── Start Checkup button (adults only) ────────────
@@ -1957,6 +1984,8 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.onPWToggle,
     required this.onDeliveryToggle,
     required this.onVaccination,
+    this.vaccinationSelected = false,
+    this.onVaccinationToggle,
   });
 
   final PatientContext patientContext;
@@ -1974,7 +2003,15 @@ class _InlineServiceSelector extends StatelessWidget {
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
-  /// Called when SK taps the Vaccination card (under-5 only).
+  /// Whether the SK has selected the Vaccination card (under-5 only).
+  final bool vaccinationSelected;
+
+  /// Called when SK toggles the Vaccination card. Replaces the old direct-
+  /// navigation [onVaccination] tap — selection is now decoupled from the CTA.
+  final VoidCallback? onVaccinationToggle;
+
+  /// Legacy — kept for standalone (non-embedded) use where the card tap
+  /// still pushes the immunisation route directly.
   final VoidCallback onVaccination;
 
   List<_ServiceCardDef> _visibleCards() {
@@ -2044,7 +2081,7 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   bool _isCardSelected(_ServiceCardDef card) {
-    if (card.isVaccination) return true;
+    if (card.isVaccination) return vaccinationSelected;
     if (card.isPW) return isPW && !isDelivery;
     if (card.isDelivery) return isDelivery;
     if (card.isRMNCH) {
@@ -2059,7 +2096,13 @@ class _InlineServiceSelector extends StatelessWidget {
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
     if (card.isVaccination) {
-      onVaccination();
+      // Embedded in visit flow — toggle selection; CTA drives the advance.
+      // Standalone (no toggle callback) — navigate directly as before.
+      if (onVaccinationToggle != null) {
+        onVaccinationToggle!();
+      } else {
+        onVaccination();
+      }
       return;
     }
     final alreadySelected = _isCardSelected(card);
