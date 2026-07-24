@@ -633,7 +633,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // In-flow host (VisitFlowScreen) intercepts via callback.
     final onAdvance = widget.onAdvance;
     if (onAdvance != null) {
-      if (!(_patientContext?.isUnder5 ?? false)) {
+      // Always report the SK's confirmed programme set — including under-5
+      // visits so VisitFlowScreen knows whether Child Health (IMCI) was
+      // selected and can show the IMCI form after vaccination.
+      {
         // Delivery visit must always carry PNC so Step 2 opens the pregnancy-
         // outcome / PNC form even if the live set was emptied by a rebuild.
         final programmes = _isDelivery

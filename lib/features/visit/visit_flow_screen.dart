@@ -322,6 +322,11 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// after the SK deselected every programme.
   bool _programmesExplicitlyChosen = false;
 
+  /// True once the vaccination sub-step has completed in a combined child
+  /// visit (Vaccination + Child Health). While false, step 1 shows the
+  /// immunisation timeline; once set, step 1 shows the IMCI assessment form.
+  bool _childVaccinationDone = false;
+
   /// True when the SK confirmed a delivery visit in Step 1. Gates whether
   /// the pregnancyOutcome form sections are included in Step 2.
   bool _isDeliveryVisit = false;
@@ -392,7 +397,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
+        if (_childVaccinationDone) {
+          setState(() => _childVaccinationDone = false);
+        } else if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
           setState(() => _step -= 1);
         } else {
           await _exitFlow();
@@ -421,7 +428,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                       ? _step1LiveProgrammes.map((p) => p.name).toList()
                       : _confirmedProgrammes.map((p) => p.name).toList(),
                   onBack: () {
-                    if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
+                    if (_childVaccinationDone) {
+                      setState(() => _childVaccinationDone = false);
+                    } else if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
                       setState(() => _step -= 1);
                     } else {
                       _exitFlow();
@@ -503,30 +512,63 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
         );
       case 1:
-        // For child visits (EPI / IMCI) Step 2 is the immunisation timeline,
-        // not the standard checkup form. The 3-step progress header is unchanged.
+        // Child visits: vaccination timeline first, then IMCI assessment form
+        // if Child Health was selected. Vaccination-only → skip straight to summary.
         if (_isChildVisit) {
-          return _Step2Vaccination(
-            key: ValueKey('flow-step2-vacc-${widget.visitId}'),
+          final hasImci = _confirmedProgrammes.contains(Programme.imci);
+          if (!_childVaccinationDone) {
+            return _Step2Vaccination(
+              key: ValueKey('flow-step2-vacc-${widget.visitId}'),
+              patientId: widget.patientId,
+              patientName: widget.patientName,
+              encounterId: widget.visitId,
+              memberId: widget.memberId,
+              householdMemberLocalId: _householdMemberLocalId,
+              onAdvance: () {
+                setState(() {
+                  _primaryProgramme = Programme.imci;
+                  _referralRecommended = false;
+                  if (hasImci) {
+                    // Child Health also selected — show IMCI form next.
+                    _childVaccinationDone = true;
+                  } else {
+                    // Vaccination only — go straight to summary.
+                    _step = 2;
+                  }
+                });
+              },
+            );
+          }
+          // Vaccination done; now show IMCI assessment form.
+          return _Step2ProgrammesThenForm(
+            key: ValueKey('flow-step2-imci-${widget.visitId}'),
+            visitId: widget.visitId,
             patientId: widget.patientId,
-            patientName: widget.patientName,
-            encounterId: widget.visitId,
             memberId: widget.memberId,
+            householdId: widget.householdId,
+            villageId: widget.villageId,
             householdMemberLocalId: _householdMemberLocalId,
-            onAdvance: () {
+            patientAge: widget.patientAge,
+            patientName: widget.patientName,
+            patientGender: widget.patientGender,
+            gestationalWeeks: _effectiveGestationalWeeks,
+            lmpMs: _resolvedLmpMs,
+            eddMs: _resolvedEddMs,
+            isPostpartum: _isPostpartum,
+            postpartumWeeks: _postpartumWeeks,
+            confirmedSymptoms: _confirmedSymptoms,
+            aiPickedSymptoms: _aiPickedSymptoms,
+            sicknessDuration: _sicknessDuration,
+            otherSymptoms: _otherSymptoms,
+            seedProgrammes: _confirmedProgrammes,
+            isDeliveryVisit: false,
+            origin: widget.origin,
+            onAdvance: (programme, referral, reasons, facility) {
               setState(() {
-                _primaryProgramme = Programme.imci;
-                // Ensure NABA and WhatsApp message generators see the IMCI
-                // programme — vaccination step doesn't come through the
-                // programme-selection path so _confirmedProgrammes may be
-                // empty for under-5 patients with no symptoms.
-                if (!_confirmedProgrammes.contains(Programme.imci)) {
-                  _confirmedProgrammes = {
-                    ..._confirmedProgrammes,
-                    Programme.imci,
-                  };
-                }
-                _referralRecommended = false;
+                _primaryProgramme = programme;
+                _referralRecommended = referral;
+                _referredReasons = reasons;
+                _referralFacility = facility;
                 _step = 2;
               });
             },
