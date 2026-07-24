@@ -3832,7 +3832,7 @@ class _TimelineEntryRow extends StatelessWidget {
                   width: _dotSize,
                   height: _dotSize,
                   decoration: BoxDecoration(
-                    color: entry.dotColor,
+                    color: entry.dotColor.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: Center(
