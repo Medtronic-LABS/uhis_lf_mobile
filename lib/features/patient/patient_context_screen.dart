@@ -3886,7 +3886,7 @@ class _TimelineEntryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Flexible(
+              Expanded(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -3912,7 +3912,6 @@ class _TimelineEntryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Spacer(),
               Text(
                 entry.relativeDate,
                 style: const TextStyle(
