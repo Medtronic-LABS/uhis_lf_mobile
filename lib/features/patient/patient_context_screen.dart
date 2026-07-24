@@ -1003,6 +1003,22 @@ class _TimelineEntry {
   final Programme? programme;
   /// Original assessment for tap-to-detail; null for synthetic entries.
   final MemberAssessment? source;
+
+  _TimelineEntry copyWith({String? title}) => _TimelineEntry(
+        emoji: emoji,
+        title: title ?? this.title,
+        relativeDate: relativeDate,
+        category: category,
+        date: date,
+        dotColor: dotColor,
+        description: description,
+        badge: badge,
+        badgeColor: badgeColor,
+        badgeFgColor: badgeFgColor,
+        isPending: isPending,
+        programme: programme,
+        source: source,
+      );
 }
 
 // ─── Timeline synthesis helpers ────────────────────────────────────────────
@@ -1662,8 +1678,28 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
 List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
   final entries = <_TimelineEntry>[];
 
+  // Derive ANC visit ordinals from chronological order (oldest = visit 1).
+  // assessments are newest-first; ANC visits in ascending date order get 1,2,3…
+  final ancAssessments = data.assessments
+      .where((a) {
+        final p = Programme.fromString(a.type);
+        return p == Programme.anc || p == Programme.pw;
+      })
+      .toList()
+    ..sort((a, b) => a.date.compareTo(b.date)); // oldest first
+  final ancOrdinal = {
+    for (int i = 0; i < ancAssessments.length; i++)
+      ancAssessments[i].id: i + 1,
+  };
+
   for (final a in data.assessments) {
-    entries.add(_assessmentToEntry(a));
+    final entry = _assessmentToEntry(a);
+    final ordinal = ancOrdinal[a.id];
+    if (ordinal != null && entry.title == 'ANC Checkup') {
+      entries.add(entry.copyWith(title: 'ANC Visit $ordinal'));
+    } else {
+      entries.add(entry);
+    }
   }
 
   return entries;
