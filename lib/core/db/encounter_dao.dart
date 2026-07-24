@@ -187,17 +187,19 @@ class EncounterDao {
 
   /// Get recent encounters for a patient, ordered by most recent first.
   ///
-  /// Restricted to [EncounterStatus.completed] — use
-  /// [recentWithVitalsForPatient] when reading vitals (sync seeds `synced`;
-  /// the vitals step writes `vitalsComplete`).
+  /// Includes both [EncounterStatus.completed] (locally finished, not yet
+  /// uploaded) and [EncounterStatus.synced] (uploaded to server). Excluding
+  /// synced caused assessments to disappear from the patient context screen
+  /// after background sync marked them synced — before the next full-sync
+  /// download populated AssessmentDao with the server copy.
   Future<List<EncounterRow>> recentForPatient(
     String patientId, {
     int limit = 10,
   }) async {
     final rows = await _db.db.query(
       AppDatabase.tableEncounters,
-      where: 'patient_id = ? AND status = ?',
-      whereArgs: [patientId, EncounterStatus.completed.name],
+      where: 'patient_id = ? AND status IN (?, ?)',
+      whereArgs: [patientId, EncounterStatus.completed.name, EncounterStatus.synced.name],
       orderBy: 'started_at DESC',
       limit: limit,
     );

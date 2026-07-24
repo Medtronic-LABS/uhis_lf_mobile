@@ -194,7 +194,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         for (final entry in membersByHousehold.entries) {
           final hhId = entry.key;
           final members = entry.value;
-          if (members.isEmpty) continue;
           // Create household item from member data
           final firstMember = members.first;
           final memberList = members.map((e) {
@@ -233,6 +232,17 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
               members: memberList,
             ),
           );
+        }
+
+        // Merge in households that have no members yet (e.g. newly created).
+        // The member-grouped loop only covers households with ≥1 member;
+        // memberless ones exist in the household table but have no entry in
+        // membersByHousehold, so they are silently dropped otherwise.
+        final coveredIds = membersByHousehold.keys.toSet();
+        for (final hh in localHouseholds) {
+          if (!coveredIds.contains(hh.id)) {
+            items.add(_HouseholdItem.fromEntity(hh, []));
+          }
         }
         return items;
       }
