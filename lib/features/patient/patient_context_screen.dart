@@ -1061,60 +1061,158 @@ int _sys(String bp) => int.tryParse(bp.split('/').firstOrNull ?? '') ?? 0;
 int _dia(String bp) => int.tryParse(bp.split('/').lastOrNull ?? '') ?? 0;
 
 /// Convert a single [MemberAssessment] into a display [_TimelineEntry].
-/// Maps a single referral reason token to a clinical narrative sentence.
-/// Matches on lowercase keywords so it handles backend code variations.
-String _humanizeReason(String reason) {
-  final k = reason.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-  if (k.contains('blood glucose') || k.contains('bloodglucose') ||
-      (k.contains('glucose') && !k.contains('blood pressure'))) {
-    return 'Blood sugar is elevated — review and follow-up required.';
-  }
-  if (k.contains('pulse')) {
-    return 'Pulse is abnormal — needs urgent attention.';
-  }
-  if (k.contains('blood pressure') || k.contains('bloodpressure') ||
-      k == 'bp' || k.contains('hypertension')) {
-    return 'BP is above the normal — review and follow-up required.';
-  }
-  if (k.contains('hemoglobin') || k.contains('anaemia') || k.contains('anemia') ||
-      (k.startsWith('hb') && k.length <= 4)) {
-    return 'Severe anemia — urgent review needed.';
-  }
-  if (k.contains('danger sign') || k == 'dangersign' || k == 'danger') {
-    return 'Danger sign reported — urgent attention required.';
-  }
-  if (k.contains('temperature') || k.contains('fever')) {
-    return 'Elevated temperature — needs urgent attention.';
-  }
-  if (k.contains('weight') && !k.contains('birth weight')) {
-    return 'Low weight detected — monitor nutrition.';
-  }
-  if (k.contains('medication') || k.contains('adherence')) {
-    return 'Medication adherence is low — confirm daily intake.';
-  }
-  if (k.contains('family planning') || k.contains('contraception') ||
-      k == 'fp' || k == 'no fp') {
-    return 'No contraception method in use — counsel on options.';
-  }
-  if (k.contains('supplement') || k.contains('vitamin') ||
-      k.contains('ifa') || k.contains('calcium')) {
-    return 'Supplement gap — ensure continued supplementation.';
-  }
-  if (k.contains('overdue') || k.contains('missed visit')) {
-    return 'Visit overdue — schedule follow-up urgently.';
-  }
-  // Unknown code: title-case and pass through
-  final trimmed = reason.trim();
-  return trimmed[0].toUpperCase() + trimmed.substring(1);
-}
+/// Builds a clinical narrative that combines referral reason tokens WITH actual
+/// vitals from [raw]. Each condition is checked from two directions:
+///   1. Does the reason string mention it? (backend clinical decision)
+///   2. Does the raw vital value exceed a clinical threshold?
+/// Actual values are injected when available and within plausible ranges.
+/// Implausible test values (e.g. Hb 43 g/dL) are silently ignored.
+String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
+  final tokens = (reasons ?? '')
+      .split(',')
+      .map((r) => r.toLowerCase().trim())
+      .where((r) => r.isNotEmpty)
+      .toSet();
 
-/// Maps comma-separated referral reason tokens to clinical narrative sentences.
-/// Falls back to [fallback] when [reasons] is null or empty.
-String _narrativeFromReasons(String? reasons, String fallback) {
-  if (reasons == null || reasons.trim().isEmpty) return fallback;
-  final parts = reasons.split(',').map((r) => r.trim()).where((r) => r.isNotEmpty).toList();
-  if (parts.isEmpty) return fallback;
-  return parts.map(_humanizeReason).join(' ');
+  bool mentions(List<String> keys) => tokens.any((t) => keys.any(t.contains));
+
+  final findings = <String>[];
+  final handled = <String>{};
+
+  // ── Danger signs ─────────────────────────────────────────────────────────
+  final dSign = (raw['dangerSigns']?.toString() ?? raw['dangerSign']?.toString() ?? '').trim();
+  final dSignPresent = dSign.isNotEmpty &&
+      !const ['none', 'no', 'false', ''].contains(dSign.toLowerCase());
+  if (mentions(['danger']) || dSignPresent) {
+    findings.add(dSignPresent
+        ? 'Danger sign reported: $dSign.'
+        : 'Danger sign reported — urgent attention required.');
+    handled.addAll(['danger']);
+  }
+
+  // ── BP ───────────────────────────────────────────────────────────────────
+  final bp = raw['bp']?.toString() ?? '';
+  final sys = _sys(bp);
+  final dia = _dia(bp);
+  final bpHigh = sys >= 140 || dia >= 90;
+  if (mentions(['bp', 'blood pressure', 'hypertension']) || bpHigh) {
+    if (bp.isNotEmpty && sys > 0) {
+      if (sys >= 160 || dia >= 110) {
+        findings.add('BP $bp is dangerously elevated — urgent referral needed.');
+      } else {
+        findings.add('BP $bp is above the normal — review and follow-up required.');
+      }
+    } else {
+      findings.add('BP is above the normal — review and follow-up required.');
+    }
+    handled.addAll(['bp', 'blood pressure', 'hypertension']);
+  }
+
+  // ── Blood glucose ─────────────────────────────────────────────────────────
+  final bg = double.tryParse(raw['bg']?.toString() ?? '') ?? 0;
+  final bgType = raw['bgType']?.toString() ?? 'RBS';
+  final bgThreshold = bgType == 'FBS' ? 7.0 : 11.1;
+  final bgHigh = bg > 0 && bg < 50 && bg >= bgThreshold; // cap 50 to exclude junk
+  if (mentions(['glucose', 'blood sugar', 'bloodglucose']) || bgHigh) {
+    if (bg > 0 && bg < 50) {
+      findings.add('Blood sugar $bg mmol/L ($bgType) is elevated — review and follow-up required.');
+    } else {
+      findings.add('Blood sugar is elevated — review and follow-up required.');
+    }
+    handled.addAll(['glucose', 'blood sugar', 'bloodglucose']);
+  }
+
+  // ── Hemoglobin ────────────────────────────────────────────────────────────
+  final hb = double.tryParse(raw['hemoglobin']?.toString() ?? '') ?? 0;
+  final hbPlausible = hb > 0 && hb <= 20;
+  final hbLow = hbPlausible && hb < 8;
+  if (mentions(['hemoglobin', 'anemia', 'anaemia']) || hbLow) {
+    if (hbPlausible) {
+      findings.add(hb < 7
+          ? 'Severe anemia (Hb $hb g/dL) — urgent review needed.'
+          : 'Anemia (Hb $hb g/dL) — review iron supplementation.');
+    } else {
+      findings.add('Severe anemia — urgent review needed.');
+    }
+    handled.addAll(['hemoglobin', 'anemia', 'anaemia']);
+  }
+
+  // ── Pulse ─────────────────────────────────────────────────────────────────
+  final pulse = int.tryParse(
+      raw['pulse']?.toString() ?? raw['heartRate']?.toString() ?? '') ?? 0;
+  final pulseAbnormal = pulse > 0 && (pulse > 90 || pulse < 60);
+  if (mentions(['pulse']) || pulseAbnormal) {
+    if (pulse > 0) {
+      final dir = pulse > 90 ? 'above' : 'below';
+      findings.add('Pulse $pulse bpm is $dir normal — needs urgent attention.');
+    } else {
+      findings.add('Pulse is abnormal — needs urgent attention.');
+    }
+    handled.add('pulse');
+  }
+
+  // ── Temperature ───────────────────────────────────────────────────────────
+  final rawTemp = double.tryParse(raw['temperature']?.toString() ?? '') ?? 0;
+  // detect °F vs °C by magnitude
+  final tempC = rawTemp >= 50 ? (rawTemp - 32) * 5 / 9 : rawTemp;
+  final tempHigh = tempC > 0 && tempC >= 38.9;
+  if (mentions(['temperature', 'fever']) || tempHigh) {
+    if (tempC > 0) {
+      findings.add('Temperature ${tempC.toStringAsFixed(1)}°C is elevated — needs urgent attention.');
+    } else {
+      findings.add('Elevated temperature — needs urgent attention.');
+    }
+    handled.addAll(['temperature', 'fever']);
+  }
+
+  // ── Weight ────────────────────────────────────────────────────────────────
+  final wt = double.tryParse(raw['weight']?.toString() ?? '') ?? 0;
+  final wtPlausible = wt >= 20 && wt <= 200;
+  final wtLow = wtPlausible && wt < 45;
+  if (mentions(['weight']) || wtLow) {
+    if (wtPlausible) {
+      findings.add('Low weight ($wt kg) — monitor nutrition.');
+    } else {
+      findings.add('Low weight detected — monitor nutrition.');
+    }
+    handled.add('weight');
+  }
+
+  // ── Medication adherence ──────────────────────────────────────────────────
+  if (mentions(['medication', 'adherence'])) {
+    findings.add('Medication adherence is low — confirm daily intake.');
+    handled.addAll(['medication', 'adherence']);
+  }
+
+  // ── Family planning ───────────────────────────────────────────────────────
+  if (mentions(['family planning', 'contraception', 'fp'])) {
+    findings.add('No contraception method in use — counsel on options.');
+    handled.addAll(['family planning', 'contraception', 'fp']);
+  }
+
+  // ── Supplements ───────────────────────────────────────────────────────────
+  if (mentions(['supplement', 'vitamin', 'ifa', 'calcium'])) {
+    findings.add('Supplement gap — ensure continued supplementation.');
+    handled.addAll(['supplement', 'vitamin', 'ifa', 'calcium']);
+  }
+
+  // ── Overdue ───────────────────────────────────────────────────────────────
+  if (mentions(['overdue', 'missed visit'])) {
+    findings.add('Visit overdue — schedule follow-up urgently.');
+    handled.addAll(['overdue', 'missed visit']);
+  }
+
+  // ── Pass-through for unrecognised tokens ─────────────────────────────────
+  for (final token in tokens) {
+    if (token.length > 2 && !handled.any(token.contains)) {
+      final t = token.trim();
+      findings.add('${t[0].toUpperCase()}${t.substring(1)}.');
+    }
+  }
+
+  return findings.isEmpty
+      ? 'Referred for clinical review — follow-up required.'
+      : findings.join(' ');
 }
 
 _TimelineEntry _assessmentToEntry(MemberAssessment a) {
@@ -1414,13 +1512,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
     badge = 'Referred';
     badgeColor = _kBadgeCriticalBg;
     badgeFgColor = _kBadgeCriticalFg;
-    description = _narrativeFromReasons(referralReasons, 'Referred for clinical review.');
+    description = _buildReferralNarrative(referralReasons, raw);
   } else if (rawStatus == 'ontreatment') {
     dotColor = _kDotHigh;
     badge = 'On treatment';
     badgeColor = _kBadgeHighBg;
     badgeFgColor = _kBadgeHighFg;
-    description = _narrativeFromReasons(referralReasons, 'Under treatment — follow-up as scheduled.');
+    description = _buildReferralNarrative(referralReasons, raw);
   }
 
   return _TimelineEntry(
