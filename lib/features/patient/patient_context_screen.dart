@@ -1068,13 +1068,15 @@ int _dia(String bp) => int.tryParse(bp.split('/').lastOrNull ?? '') ?? 0;
 /// Actual values are injected when available and within plausible ranges.
 /// Implausible test values (e.g. Hb 43 g/dL) are silently ignored.
 String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
-  final tokens = (reasons ?? '')
+  final reasonLower = (reasons ?? '').toLowerCase();
+  final tokens = reasonLower
       .split(',')
-      .map((r) => r.toLowerCase().trim())
+      .map((r) => r.trim())
       .where((r) => r.isNotEmpty)
       .toSet();
 
-  bool mentions(List<String> keys) => tokens.any((t) => keys.any(t.contains));
+  // Explicit lambda avoids method-tear-off type ambiguity with Iterable.any.
+  bool hasReason(List<String> keys) => keys.any((k) => reasonLower.contains(k));
 
   final findings = <String>[];
   final handled = <String>{};
@@ -1083,7 +1085,7 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
   final dSign = (raw['dangerSigns']?.toString() ?? raw['dangerSign']?.toString() ?? '').trim();
   final dSignPresent = dSign.isNotEmpty &&
       !const ['none', 'no', 'false', ''].contains(dSign.toLowerCase());
-  if (mentions(['danger']) || dSignPresent) {
+  if (hasReason(['danger']) || dSignPresent) {
     findings.add(dSignPresent
         ? 'Danger sign reported: $dSign.'
         : 'Danger sign reported — urgent attention required.');
@@ -1095,7 +1097,7 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
   final sys = _sys(bp);
   final dia = _dia(bp);
   final bpHigh = sys >= 140 || dia >= 90;
-  if (mentions(['bp', 'blood pressure', 'hypertension']) || bpHigh) {
+  if (hasReason(['bp', 'blood pressure', 'hypertension']) || bpHigh) {
     if (bp.isNotEmpty && sys > 0) {
       if (sys >= 160 || dia >= 110) {
         findings.add('BP $bp is dangerously elevated — urgent referral needed.');
@@ -1113,7 +1115,7 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
   final bgType = raw['bgType']?.toString() ?? 'RBS';
   final bgThreshold = bgType == 'FBS' ? 7.0 : 11.1;
   final bgHigh = bg > 0 && bg < 50 && bg >= bgThreshold; // cap 50 to exclude junk
-  if (mentions(['glucose', 'blood sugar', 'bloodglucose']) || bgHigh) {
+  if (hasReason(['glucose', 'blood sugar', 'bloodglucose']) || bgHigh) {
     if (bg > 0 && bg < 50) {
       findings.add('Blood sugar $bg mmol/L ($bgType) is elevated — review and follow-up required.');
     } else {
@@ -1126,7 +1128,7 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
   final hb = double.tryParse(raw['hemoglobin']?.toString() ?? '') ?? 0;
   final hbPlausible = hb > 0 && hb <= 20;
   final hbLow = hbPlausible && hb < 8;
-  if (mentions(['hemoglobin', 'anemia', 'anaemia']) || hbLow) {
+  if (hasReason(['hemoglobin', 'anemia', 'anaemia']) || hbLow) {
     if (hbPlausible) {
       findings.add(hb < 7
           ? 'Severe anemia (Hb $hb g/dL) — urgent review needed.'
@@ -1141,7 +1143,7 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
   final pulse = int.tryParse(
       raw['pulse']?.toString() ?? raw['heartRate']?.toString() ?? '') ?? 0;
   final pulseAbnormal = pulse > 0 && (pulse > 90 || pulse < 60);
-  if (mentions(['pulse']) || pulseAbnormal) {
+  if (hasReason(['pulse']) || pulseAbnormal) {
     if (pulse > 0) {
       final dir = pulse > 90 ? 'above' : 'below';
       findings.add('Pulse $pulse bpm is $dir normal — needs urgent attention.');
@@ -1156,7 +1158,7 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
   // detect °F vs °C by magnitude
   final tempC = rawTemp >= 50 ? (rawTemp - 32) * 5 / 9 : rawTemp;
   final tempHigh = tempC > 0 && tempC >= 38.9;
-  if (mentions(['temperature', 'fever']) || tempHigh) {
+  if (hasReason(['temperature', 'fever']) || tempHigh) {
     if (tempC > 0) {
       findings.add('Temperature ${tempC.toStringAsFixed(1)}°C is elevated — needs urgent attention.');
     } else {
@@ -1169,7 +1171,7 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
   final wt = double.tryParse(raw['weight']?.toString() ?? '') ?? 0;
   final wtPlausible = wt >= 20 && wt <= 200;
   final wtLow = wtPlausible && wt < 45;
-  if (mentions(['weight']) || wtLow) {
+  if (hasReason(['weight']) || wtLow) {
     if (wtPlausible) {
       findings.add('Low weight ($wt kg) — monitor nutrition.');
     } else {
@@ -1179,32 +1181,32 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
   }
 
   // ── Medication adherence ──────────────────────────────────────────────────
-  if (mentions(['medication', 'adherence'])) {
+  if (hasReason(['medication', 'adherence'])) {
     findings.add('Medication adherence is low — confirm daily intake.');
     handled.addAll(['medication', 'adherence']);
   }
 
   // ── Family planning ───────────────────────────────────────────────────────
-  if (mentions(['family planning', 'contraception', 'fp'])) {
+  if (hasReason(['family planning', 'contraception', 'fp'])) {
     findings.add('No contraception method in use — counsel on options.');
     handled.addAll(['family planning', 'contraception', 'fp']);
   }
 
   // ── Supplements ───────────────────────────────────────────────────────────
-  if (mentions(['supplement', 'vitamin', 'ifa', 'calcium'])) {
+  if (hasReason(['supplement', 'vitamin', 'ifa', 'calcium'])) {
     findings.add('Supplement gap — ensure continued supplementation.');
     handled.addAll(['supplement', 'vitamin', 'ifa', 'calcium']);
   }
 
   // ── Overdue ───────────────────────────────────────────────────────────────
-  if (mentions(['overdue', 'missed visit'])) {
+  if (hasReason(['overdue', 'missed visit'])) {
     findings.add('Visit overdue — schedule follow-up urgently.');
     handled.addAll(['overdue', 'missed visit']);
   }
 
   // ── Pass-through for unrecognised tokens ─────────────────────────────────
   for (final token in tokens) {
-    if (token.length > 2 && !handled.any(token.contains)) {
+    if (token.length > 2 && !handled.any((h) => token.contains(h))) {
       final t = token.trim();
       findings.add('${t[0].toUpperCase()}${t.substring(1)}.');
     }
