@@ -1578,6 +1578,15 @@ Map<String, dynamic> _unpackRaw(Map<String, dynamic> rawJson) {
 ///    but under form-specific keys: `systolic`, `diastolic`, `glucoseValue`.
 /// 3. NCD bpLog format: `bpLog.avgSystolic` / `glucoseLog.glucose`.
 ///
+/// Safely coerce a dynamic map value to String?.
+/// JSON-parsed numbers (int/double) are converted via toString(); null stays null.
+String? _rawStr(dynamic v) {
+  if (v == null) return null;
+  if (v is String) return v;
+  return v.toString();
+}
+
+///
 /// After normalisation, callers read `out['bp']`, `out['bg']`, `out['bgType']`
 /// regardless of origin. The merge uses putIfAbsent so explicit top-level keys
 /// always win over sub-map values.
@@ -1608,7 +1617,7 @@ Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) {
   }
 
   // Step 3 — synthesise canonical 'bp' ("sys/dia" string) if missing.
-  if ((out['bp'] as String?) == null) {
+  if (_rawStr(out['bp']) == null) {
     int? sys;
     int? dia;
     for (final k in const ['systolic', 'bloodPressureSystolic', 'avgSystolic']) {
@@ -1678,16 +1687,16 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final snap = data.pregnancySnapshot;
 
     // EDD/weeks-to-go shown in GestationalAgeCard above — omit here to avoid duplication.
-    final visitNum = raw['ancVisitNumber'] as String?;
+    final visitNum = _rawStr(raw['ancVisitNumber']);
     if (visitNum != null && visitNum.isNotEmpty) stats[PatientProfileStrings.visitsCompleted] = visitNum;
-    final ancBp = raw['bp'] as String?;
+    final ancBp = _rawStr(raw['bp']);
     if (ancBp != null && ancBp.isNotEmpty) stats['Last BP'] = '$ancBp mmHg';
-    final hb = raw['hemoglobin'] as String?;
+    final hb = _rawStr(raw['hemoglobin']);
     if (hb != null && hb.isNotEmpty) stats['Haemoglobin'] = '$hb g/dL';
-    final ancWeight = raw['weight'] as String?;
+    final ancWeight = _rawStr(raw['weight']);
     if (ancWeight != null && ancWeight.isNotEmpty) stats['Weight'] = '$ancWeight kg';
-    final g = raw['gravida'] as String?;
-    final p = raw['parity'] as String?;
+    final g = _rawStr(raw['gravida']);
+    final p = _rawStr(raw['parity']);
     if (g != null && g.isNotEmpty && p != null && p.isNotEmpty) stats['Gravida / Parity'] = 'G$g P$p';
     final ancTotal =
         data.assessments.where((a) => Programme.fromString(a.type) == Programme.anc).length;
@@ -1708,8 +1717,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
   if (data.programmes.contains(Programme.ncd)) {
     final latest = latestOf(Programme.ncd);
     final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
-    final bp = raw['bp'] as String?;
-    final dx = (raw['confirmDiagnosis'] as String?)?.trim();
+    final bp = _rawStr(raw['bp']);
+    final dx = _rawStr(raw['confirmDiagnosis'])?.trim();
     final ncdTotal = data.assessments.where((a) => Programme.fromString(a.type) == Programme.ncd).length;
 
     threads.add(_CareThread(
@@ -1726,9 +1735,9 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       checkupDate: latest?.date,
     ));
 
-    final bg = raw['bg'] as String?;
+    final bg = _rawStr(raw['bg']);
     if (bg != null && bg.isNotEmpty) {
-      final bgType = (raw['bgType'] as String?)?.trim();
+      final bgType = _rawStr(raw['bgType'])?.trim();
       final bgLabel = (bgType != null && bgType.isNotEmpty) ? 'Blood sugar ($bgType)' : 'Blood sugar';
       threads.add(_CareThread(
         programme: Programme.ncd,
@@ -1745,10 +1754,10 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
   if (data.programmes.contains(Programme.pnc)) {
     final latest = latestOf(Programme.pnc);
     final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
-    final pncVisit = raw['pncVisitNumber'] as String?;
-    final deliveryMode = raw['modeOfDelivery'] as String?;
-    final complications = raw['anyComplicationsDuringDelivery'] as String?;
-    final livingChildren = raw['numberOfLivingChildren'] as String?;
+    final pncVisit = _rawStr(raw['pncVisitNumber']);
+    final deliveryMode = _rawStr(raw['modeOfDelivery']);
+    final complications = _rawStr(raw['anyComplicationsDuringDelivery']);
+    final livingChildren = _rawStr(raw['numberOfLivingChildren']);
     threads.add(_CareThread(
       programme: Programme.pnc,
       label: CareThreadStrings.pnc,
@@ -1769,7 +1778,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
   if (data.programmes.contains(Programme.imci)) {
     final latest = latestOf(Programme.imci);
     final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
-    final weight = raw['weight'] as String?;
+    final weight = _rawStr(raw['weight']);
     final imciTotal = data.assessments.where((a) => Programme.fromString(a.type) == Programme.imci).length;
     threads.add(_CareThread(
       programme: Programme.imci,
@@ -1796,7 +1805,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
   if (data.programmes.contains(Programme.tb)) {
     final latest = latestOf(Programme.tb);
     final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
-    final dx = (raw['confirmDiagnosis'] as String?)?.trim();
+    final dx = _rawStr(raw['confirmDiagnosis'])?.trim();
     final tbTotal =
         data.assessments.where((a) => Programme.fromString(a.type) == Programme.tb).length;
     threads.add(_CareThread(
@@ -2436,13 +2445,13 @@ class _StatsGrid extends StatelessWidget {
     for (final a in assessments) {
       final raw = _normalizeRaw(a.rawJson);
       if (field == '_gravida_parity') {
-        final g = raw['gravida'] as String?;
-        final p = raw['parity'] as String?;
+        final g = _rawStr(raw['gravida']);
+        final p = _rawStr(raw['parity']);
         if (g != null && p != null && g.isNotEmpty && p.isNotEmpty) {
           result.add((a.date, 'G$g P$p', a));
         }
       } else {
-        final v = raw[field] as String?;
+        final v = _rawStr(raw[field]);
         if (v != null && v.isNotEmpty) {
           result.add((a.date, '$v$suffix', a));
         }
@@ -2462,7 +2471,7 @@ class _StatsGrid extends StatelessWidget {
       if (progNames.contains(progName)) {
         final raw = _normalizeRaw(a.rawJson);
         final visitNum =
-            raw['ancVisitNumber'] as String? ?? raw['pncVisitNumber'] as String?;
+            _rawStr(raw['ancVisitNumber']) ?? _rawStr(raw['pncVisitNumber']);
         final progLabel = a.type.toUpperCase();
         final suffix = visitNum != null ? '  #$visitNum' : '';
         entries.add((a.date, '$progLabel$suffix', a));
