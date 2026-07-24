@@ -658,6 +658,14 @@ class TriageViewModel extends ChangeNotifier {
     final ctx = _patientContext;
     final enrolled = ctx.activeProgrammes;
     final sections = <SymptomSection>[];
+    // Codes already assigned to a prior section — skip to avoid duplicates
+    // when the same symptom (e.g. headache, fever) spans multiple programmes.
+    final seen = <String>{};
+
+    List<String> codesFor(Programme p) => SymptomCatalog.byProgramme(p)
+        .map((s) => s.code)
+        .where((c) => seen.add(c))
+        .toList();
 
     // Maternal symptoms (ANC/PNC) only apply to patients old enough to be a
     // mother. A neonate or infant enrolled in 'pnc' is a neonatal PNC case —
@@ -667,42 +675,34 @@ class TriageViewModel extends ChangeNotifier {
 
     // ANC: enrolled, or patient is pregnant (may not be formally enrolled yet).
     if (isMaternalAge && (enrolled.contains(Programme.anc) || ctx.isPregnant)) {
-      sections.add(SymptomSection(
-        programme: Programme.anc,
-        codes: SymptomCatalog.byProgramme(Programme.anc)
-            .map((s) => s.code)
-            .toList(),
-      ));
+      final codes = codesFor(Programme.anc);
+      if (codes.isNotEmpty) {
+        sections.add(SymptomSection(programme: Programme.anc, codes: codes));
+      }
     }
 
     // PNC: enrolled, or patient is postpartum.
     if (isMaternalAge && (enrolled.contains(Programme.pnc) || ctx.isPostpartum)) {
-      sections.add(SymptomSection(
-        programme: Programme.pnc,
-        codes: SymptomCatalog.byProgramme(Programme.pnc)
-            .map((s) => s.code)
-            .toList(),
-      ));
+      final codes = codesFor(Programme.pnc);
+      if (codes.isNotEmpty) {
+        sections.add(SymptomSection(programme: Programme.pnc, codes: codes));
+      }
     }
 
     // NCD + TB: only show when the patient is actually enrolled.
     // Eligibility (adult age) alone does not add a section — the SK selects
     // these programmes in the service grid first.
     if (enrolled.contains(Programme.ncd)) {
-      sections.add(SymptomSection(
-        programme: Programme.ncd,
-        codes: SymptomCatalog.byProgramme(Programme.ncd)
-            .map((s) => s.code)
-            .toList(),
-      ));
+      final codes = codesFor(Programme.ncd);
+      if (codes.isNotEmpty) {
+        sections.add(SymptomSection(programme: Programme.ncd, codes: codes));
+      }
     }
     if (enrolled.contains(Programme.tb)) {
-      sections.add(SymptomSection(
-        programme: Programme.tb,
-        codes: SymptomCatalog.byProgramme(Programme.tb)
-            .map((s) => s.code)
-            .toList(),
-      ));
+      final codes = codesFor(Programme.tb);
+      if (codes.isNotEmpty) {
+        sections.add(SymptomSection(programme: Programme.tb, codes: codes));
+      }
     }
 
     return sections;

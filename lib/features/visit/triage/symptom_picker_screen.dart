@@ -1570,7 +1570,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               ),
             ),
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
 
             // ── Chip grid ─────────────────────────────────────────────────
             if (gridIsEmpty) ...[
@@ -1681,12 +1681,12 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                             )
                             .toList(),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 6),
                     ],
                 ],
               ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
           ],
         );
       },
@@ -2009,6 +2009,8 @@ class _InlineServiceSelector extends StatelessWidget {
     }
     if (card.isDelivery) return !pregnant;
     if (card.programme == Programme.pnc) return !ctx.isPostpartum;
+    // FP is contraindicated during active pregnancy; available post-delivery.
+    if (card.programme == Programme.familyPlanning) return pregnant;
     return false;
   }
 
