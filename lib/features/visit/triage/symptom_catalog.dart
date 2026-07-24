@@ -60,6 +60,16 @@ abstract final class SymptomCatalog {
     SymptomDef(code: 'fever',              label: 'Fever',         programme: Programme.tb),
     SymptomDef(code: 'weight_loss',        label: 'Losing weight', programme: Programme.tb),
     SymptomDef(code: 'weakness',           label: 'Feeling weak',  programme: Programme.tb),
+
+    // ── IMCI (Child Health, under-5) ─────────────────────────────────────────
+    SymptomDef(code: 'fever',          label: 'Fever',          programme: Programme.imci),
+    SymptomDef(code: 'cough',          label: 'Cough',          programme: Programme.imci),
+    SymptomDef(code: 'fast_breathing', label: 'Fast breathing', programme: Programme.imci),
+    SymptomDef(code: 'diarrhea',       label: 'Diarrhoea',      programme: Programme.imci),
+    SymptomDef(code: 'vomiting',       label: 'Vomiting',       programme: Programme.imci),
+    SymptomDef(code: 'not_eating',     label: 'Not eating',     programme: Programme.imci),
+    SymptomDef(code: 'convulsions',    label: 'Convulsions',    programme: Programme.imci),
+    SymptomDef(code: 'lethargy',       label: 'Lethargy',       programme: Programme.imci),
   ];
 
   static List<SymptomDef> byProgramme(Programme p) =>

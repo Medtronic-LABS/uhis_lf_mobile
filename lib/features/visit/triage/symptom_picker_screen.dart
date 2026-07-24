@@ -932,38 +932,27 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                             ),
                           ),
 
-                        // ── Vaccination CTA (under-5 only) ─────────────────
+                        // ── Under-5: single CTA — Vaccination or Start Checkup when IMCI selected
                         if (_patientContext!.isUnder5) ...[
                           const SizedBox(height: 4),
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
-                              onPressed: _onVaccination,
+                              onPressed: _selectedProgrammes.contains(Programme.imci)
+                                  ? _onContinue
+                                  : _onVaccination,
                               style: FilledButton.styleFrom(
                                 backgroundColor: AppColors.pink,
                                 foregroundColor: AppColors.textOnNavy,
                               ),
                               child: Text(
-                                ChildAssessmentStrings.vaccinationCta,
+                                _selectedProgrammes.contains(Programme.imci)
+                                    ? SymptomPickerStrings.ctaStartCheckup
+                                    : ChildAssessmentStrings.vaccinationCta,
                                 style: const TextStyle(fontWeight: FontWeight.w700),
                               ),
                             ),
                           ),
-                          // Child Health assessment CTA — only when SK selected it.
-                          if (_selectedProgrammes.contains(Programme.imci)) ...[
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FilledButton(
-                                onPressed: _onContinue,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.navy,
-                                  foregroundColor: AppColors.textOnNavy,
-                                ),
-                                child: Text(SymptomPickerStrings.ctaStartCheckup),
-                              ),
-                            ),
-                          ],
                         ],
 
                         // ── Start Checkup button (adults only) ────────────
