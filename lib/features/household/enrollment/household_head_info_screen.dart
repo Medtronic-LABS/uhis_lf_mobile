@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -327,6 +328,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                         controller: _mobileCtrl,
                         keyboardType: TextInputType.phone,
                         validator: _validatePhone,
+                        inputFormatters: [LengthLimitingTextInputFormatter(14)],
                       ),
                       const SizedBox(height: 8),
                     ],

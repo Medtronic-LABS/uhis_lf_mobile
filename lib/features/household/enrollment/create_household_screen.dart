@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -689,6 +690,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                         hint: EnrollmentStrings.mobileNumberHint,
                         controller: _mobileCtrl,
                         keyboardType: TextInputType.phone,
+                        inputFormatters: [LengthLimitingTextInputFormatter(14)],
                       ),
                       const SizedBox(height: 8),
                     ],
