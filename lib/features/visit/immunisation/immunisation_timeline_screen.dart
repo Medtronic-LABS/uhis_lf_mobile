@@ -111,7 +111,40 @@ class _ImmunisationTimelineScreenState
           .timeout(const Duration(seconds: 5));
 
       if (dtos.isNotEmpty) {
-        final milestones = _dtosToMilestones(dtos);
+        // Merge local given dates to handle backend eventual consistency —
+        // a vaccine saved locally but not yet reflected in the backend response
+        // must still show as completed so subsequent milestones unlock.
+        final rowMap = await immunisationDao.forMany([widget.patientId]);
+        final localGivenByName = <String, String>{};
+        for (final r in (rowMap[widget.patientId] ?? [])) {
+          if (r.vaccineCode != null && r.givenAt != null) {
+            localGivenByName[r.vaccineCode!] =
+                DateTime.fromMillisecondsSinceEpoch(r.givenAt!)
+                    .toIso8601String()
+                    .substring(0, 10);
+          }
+        }
+        final effectiveDtos = dtos.map((dto) {
+          final localDate = localGivenByName[dto.vaccineName];
+          if (localDate != null && dto.status != 'Vaccinated') {
+            return VaccinationDetailDto(
+              id: dto.id,
+              type: dto.type,
+              value: dto.value,
+              status: 'Vaccinated',
+              vaccineName: dto.vaccineName,
+              scheduledDate: dto.scheduledDate,
+              vaccinatedDate: localDate,
+              doseClosureWeeks: dto.doseClosureWeeks,
+              reason: dto.reason,
+              displayOrder: dto.displayOrder,
+              category: dto.category,
+              vaccineOrder: dto.vaccineOrder,
+            );
+          }
+          return dto;
+        }).toList();
+        final milestones = _dtosToMilestones(effectiveDtos);
         if (mounted) {
           setState(() {
             _patient = patient;
@@ -476,21 +509,29 @@ class _ImmunisationTimelineScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _UpdateStatusSheet(
-        milestone: milestone,
-        patientId: widget.patientId,
-        patient: _patient,
-        patientName: patientName,
-        ageLabel: _ageLabel(_patient),
-        locationLabel: _patient?.villageName ?? '',
-        encounterId: widget.encounterId,
-        memberId: widget.memberId,
-        householdId: _patient?.householdId,
-        onRecorded: () {
-          setState(() => _loading = true);
-          _load();
-        },
-      ),
+      builder: (ctx) {
+        DateTime? patientDob;
+        final dobStr = _patient?.dob ?? widget.dob;
+        if (dobStr != null && dobStr.isNotEmpty) {
+          patientDob = DateTime.tryParse(dobStr);
+        }
+        return _UpdateStatusSheet(
+          milestone: milestone,
+          patientId: widget.patientId,
+          patient: _patient,
+          patientName: patientName,
+          ageLabel: _ageLabel(_patient),
+          locationLabel: _patient?.villageName ?? '',
+          encounterId: widget.encounterId,
+          memberId: widget.memberId,
+          householdId: _patient?.householdId,
+          dob: patientDob,
+          onRecorded: () {
+            setState(() => _loading = true);
+            _load();
+          },
+        );
+      },
     );
   }
 }
@@ -988,6 +1029,7 @@ class _UpdateStatusSheet extends StatefulWidget {
     this.encounterId,
     this.memberId,
     this.householdId,
+    this.dob,
   });
 
   final VaccineMilestone milestone;
@@ -1008,6 +1050,9 @@ class _UpdateStatusSheet extends StatefulWidget {
   /// Required by /immunisation/create to look up the household member.
   final String? memberId;
   final String? householdId;
+
+  /// Patient date of birth — used as the earliest selectable date administered.
+  final DateTime? dob;
 
   @override
   State<_UpdateStatusSheet> createState() => _UpdateStatusSheetState();
@@ -1223,7 +1268,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
                       final picked = await showDatePicker(
                         context: context,
                         initialDate: _givenDate,
-                        firstDate: DateTime(2020),
+                        firstDate: widget.dob ?? DateTime(2020),
                         lastDate: DateTime.now(),
                       );
                       if (picked != null) {

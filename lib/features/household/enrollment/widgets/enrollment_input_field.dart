@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_theme.dart';
 
@@ -31,6 +32,7 @@ class EnrollmentInputField extends StatefulWidget {
     this.customFillColor,
     this.customTextColor,
     this.labelSuffix,
+    this.inputFormatters,
     super.key,
   });
 
@@ -46,6 +48,7 @@ class EnrollmentInputField extends StatefulWidget {
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
   final bool readOnly;
+  final List<TextInputFormatter>? inputFormatters;
 
   /// Override the border colour (used by auto-generated field: #A7F3D0).
   final Color? customBorderColor;
@@ -158,6 +161,7 @@ class _EnrollmentInputFieldState extends State<EnrollmentInputField> {
               maxLines: widget.maxLines,
               minLines: widget.minLines,
               keyboardType: widget.keyboardType,
+              inputFormatters: widget.inputFormatters,
               decoration: InputDecoration(
                 hintText: widget.hint,
                 hintStyle: const TextStyle(
