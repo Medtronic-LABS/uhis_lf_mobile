@@ -3851,18 +3851,34 @@ class _TimelineEntryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title + relative date
+          // Title · badge (inline) + relative date
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(
-                child: Text(
-                  entry.title,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    color: isPending ? AppColors.statusWarningDark : AppColors.textPrimary,
-                  ),
+              Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        entry.title,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: isPending ? AppColors.statusWarningDark : AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    if (entry.badge != null) ...[
+                      const SizedBox(width: 5),
+                      _TimelineBadge(
+                        label: entry.badge!,
+                        bg: entry.badgeColor ?? _kBadgeGrayBg,
+                        fg: entry.badgeFgColor ?? _kBadgeGrayFg,
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
@@ -3876,15 +3892,6 @@ class _TimelineEntryCard extends StatelessWidget {
               ),
             ],
           ),
-          // Badge chip (risk/status pill)
-          if (entry.badge != null) ...[
-            const SizedBox(height: 5),
-            _TimelineBadge(
-              label: entry.badge!,
-              bg: entry.badgeColor ?? _kBadgeGrayBg,
-              fg: entry.badgeFgColor ?? _kBadgeGrayFg,
-            ),
-          ],
           // Clinical narrative
           if (entry.description != null && entry.description!.isNotEmpty) ...[
             const SizedBox(height: 4),
