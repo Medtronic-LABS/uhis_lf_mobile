@@ -1215,6 +1215,29 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) {
       : findings.join(' ');
 }
 
+/// Short human-readable label for a single referral reason token.
+/// Used in the detail sheet where space is tighter than the full narrative.
+String _shortReasonLabel(String reason) {
+  final k = reason.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (k.contains('bloodglucose') || k.contains('blood glucose') ||
+      (k.contains('glucose') && !k.contains('blood pressure'))) return 'Blood glucose elevated';
+  if (k.contains('pulse')) return 'Abnormal pulse';
+  if (k.contains('blood pressure') || k.contains('bloodpressure') ||
+      k == 'bp' || k.contains('hypertension')) return 'High BP';
+  if (k.contains('hemoglobin') || k.contains('anaemia') || k.contains('anemia') ||
+      (k.startsWith('hb') && k.length <= 4)) return 'Low Hb / Anemia';
+  if (k.contains('danger sign') || k == 'dangersign' || k == 'danger') return 'Danger sign';
+  if (k.contains('temperature') || k.contains('fever')) return 'Elevated temperature';
+  if (k.contains('weight') && !k.contains('birth')) return 'Low weight';
+  if (k.contains('medication') || k.contains('adherence')) return 'Low medication adherence';
+  if (k.contains('family planning') || k.contains('contraception') || k == 'fp') return 'No FP method';
+  if (k.contains('supplement') || k.contains('vitamin') ||
+      k.contains('ifa') || k.contains('calcium')) return 'Supplement gap';
+  if (k.contains('overdue') || k.contains('missed visit')) return 'Visit overdue';
+  final t = reason.trim();
+  return t.isEmpty ? '' : t[0].toUpperCase() + t.substring(1);
+}
+
 _TimelineEntry _assessmentToEntry(MemberAssessment a) {
   final raw = _normalizeRaw(a.rawJson);
   final prog = Programme.fromString(a.type);
@@ -4123,13 +4146,27 @@ class _TimelineEventSheet extends StatelessWidget {
 
     // ── Referral (all programmes) ─────────────────────────────────────────
     addIfPresent('referralStatus', 'Referral status');
-    addIfPresent('referralReason', 'Referral reason');
+    // Humanize referral reason codes (camelCase backend tokens → readable labels)
+    final reasonRaw = (raw['referralReason']?.toString() ??
+        raw['referredReasons']?.toString() ??
+        assessment.notes ?? '').trim();
+    if (reasonRaw.isNotEmpty) {
+      final humanized = reasonRaw
+          .split(',')
+          .map((r) => _shortReasonLabel(r.trim()))
+          .where((r) => r.isNotEmpty)
+          .join(', ');
+      entries.add(MapEntry('Referral reason', humanized));
+    }
 
-    // ── customStatus list → join as string ────────────────────────────────
+    // ── customStatus — only if distinct from referralStatus (avoid duplicate) ──
     final cs = raw['customStatus'];
     if (cs is List && cs.isNotEmpty) {
       final joined = cs.map((e) => e.toString()).join(', ');
-      if (joined.isNotEmpty) entries.add(MapEntry('Status', joined));
+      final refStatus = (raw['referralStatus']?.toString() ?? assessment.status ?? '').toLowerCase();
+      if (joined.isNotEmpty && joined.toLowerCase() != refStatus) {
+        entries.add(MapEntry('Status', joined));
+      }
     }
 
     final result = DraggableScrollableSheet(
