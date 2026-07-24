@@ -3525,35 +3525,48 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
       final visible = (_expanded || !hasMore)
           ? widget.entries
           : widget.entries.take(_kInitialCount).toList();
-      final rows = <Widget>[];
+      final entryRows = <Widget>[];
       for (int i = 0; i < visible.length; i++) {
-        rows.add(_TimelineEntryRow(
+        entryRows.add(_TimelineEntryRow(
           entry: visible[i],
           isLast: i == visible.length - 1 && (!hasMore || _expanded),
         ));
       }
+      Widget? showMoreBtn;
       if (hasMore) {
         final remaining = widget.entries.length - _kInitialCount;
-        rows.add(
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: TextButton.icon(
-              onPressed: () => setState(() => _expanded = !_expanded),
-              icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 16),
-              label: Text(_expanded
-                  ? PatientProfileStrings.showLess
-                  : PatientProfileStrings.showMoreEntries(remaining)),
-              style: TextButton.styleFrom(
-                foregroundColor: _expanded ? AppColors.textMuted : AppColors.aiPurple,
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+        showMoreBtn = Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: TextButton.icon(
+            onPressed: () => setState(() => _expanded = !_expanded),
+            icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 16),
+            label: Text(_expanded
+                ? PatientProfileStrings.showLess
+                : PatientProfileStrings.showMoreEntries(remaining)),
+            style: TextButton.styleFrom(
+              foregroundColor: _expanded ? AppColors.textMuted : AppColors.aiPurple,
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
         );
       }
-      body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 6, offset: Offset(0, 1))],
+            ),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 2),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: entryRows),
+          ),
+          if (showMoreBtn != null) showMoreBtn,
+        ],
+      );
     }
 
     final result = Column(
@@ -3563,7 +3576,7 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
           'CARE HISTORY',
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted, letterSpacing: 0.8),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         body,
       ],
     );
@@ -3581,8 +3594,8 @@ class _TimelineEntryRow extends StatelessWidget {
   final _TimelineEntry entry;
   final bool isLast;
 
-  static const _dotSize = 36.0;
-  static const _lineWidth = 2.0;
+  static const _dotSize = 24.0;
+  static const _lineWidth = 1.5;
 
   @override
   Widget build(BuildContext context) {
@@ -3592,7 +3605,7 @@ class _TimelineEntryRow extends StatelessWidget {
         children: [
           // Solid dot + vertical connector
           SizedBox(
-            width: 42,
+            width: 26,
             child: Column(
               children: [
                 Container(
@@ -3618,10 +3631,10 @@ class _TimelineEntryRow extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 11),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 18, top: 6),
+              padding: const EdgeInsets.only(bottom: 14, top: 6),
               child: _TimelineEntryCard(entry: entry),
             ),
           ),
@@ -3657,8 +3670,8 @@ class _TimelineEntryCard extends StatelessWidget {
                 child: Text(
                   entry.title,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
                     color: isPending ? AppColors.statusWarningDark : AppColors.textPrimary,
                   ),
                 ),
@@ -3667,8 +3680,8 @@ class _TimelineEntryCard extends StatelessWidget {
               Text(
                 entry.relativeDate,
                 style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textMuted,
                 ),
               ),
@@ -3689,8 +3702,8 @@ class _TimelineEntryCard extends StatelessWidget {
             Text(
               entry.description!,
               style: const TextStyle(
-                fontSize: 12,
-                height: 1.45,
+                fontSize: 11.5,
+                height: 1.4,
                 color: AppColors.textMid,
               ),
               maxLines: 3,
@@ -3727,15 +3740,15 @@ class _TimelineBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: FontWeight.w700,
           color: fg,
         ),
