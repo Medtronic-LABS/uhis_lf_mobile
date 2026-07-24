@@ -405,9 +405,13 @@ class _PatientContextScreenState
     debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
         ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
-    // Skip remote assessment fetch when a full sync completed within the last
-    // 30 minutes — the local DB already has everything the server would return.
-    final skipRemote = syncAge != null && syncAge.inMinutes < 30;
+    // Skip remote assessment fetch only when a sync completed recently AND the
+    // local DB already has assessment rows for this patient. When local is empty
+    // (e.g. member-to-patient mapping failed during the sync pull), fall back to
+    // the remote API so the Recent Visit section doesn't silently go blank.
+    final skipRemote = syncAge != null &&
+        syncAge.inMinutes < 30 &&
+        localAssessments.isNotEmpty;
     ConsoleLog.banner('[PatientCtx] phase1 local=${t0.elapsedMilliseconds}ms'
         ' localPatient=${localPatient != null} localAssessments=${localAssessments.length}'
         ' syncAge=${syncAge?.inMinutes ?? '?'}min skipRemote=$skipRemote');
