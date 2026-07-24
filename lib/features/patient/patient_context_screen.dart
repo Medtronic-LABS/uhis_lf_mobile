@@ -1274,7 +1274,14 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
     case Programme.anc:
     case Programme.pw:
       emoji = '🤰';
-      final vn = raw['ancVisitNumber']?.toString();
+      final vn = raw['ancVisitNumber']?.toString()
+          ?? (raw['medicalHistoryPhysicalExamination'] is Map
+              ? (raw['medicalHistoryPhysicalExamination'] as Map)['ancVisitNumber']?.toString()
+              : null)
+          ?? (raw['anc'] is Map
+              ? (raw['anc'] as Map)['ancVisitNumber']?.toString()
+              : null)
+          ?? a.visitNumber?.toString();
       title = vn != null && vn.isNotEmpty ? 'ANC Visit $vn' : 'ANC Checkup';
       category = 'Antenatal Care';
 
