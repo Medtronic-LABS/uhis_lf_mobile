@@ -56,6 +56,133 @@ class EnrollmentRepository extends ApiRepository {
   /// Returns [EnrollmentResult] with the generated reference IDs so the caller
   /// can persist the data locally immediately (offline-first pattern matching
   /// Android's HouseHoldRepository.insertHouseHoldEntity / registerMember).
+  /// Build the offline-sync/create payload without making a network call.
+  /// Returns the body map and the pre-generated reference IDs so the caller
+  /// can persist locally before attempting the POST.
+  ({Map<String, dynamic> body, EnrollmentResult result}) buildPayload({
+    required Household household,
+    required HouseholdHeadInfo head,
+    required List<HouseholdMember> members,
+    required int userId,
+    required String userFhirId,
+    required String organizationId,
+    required String deviceId,
+    double latitude = 0.0,
+    double longitude = 0.0,
+    String appVersionName = AppConfig.appVersionName,
+    int appVersionCode = AppConfig.appVersionCode,
+  }) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final hhReferenceId = _uuid.v4();
+
+    final provenance = ProvanceDto.fromMap({
+      'modifiedDate': DateTime.now().toUtc().toIso8601String(),
+      'organizationId': organizationId,
+      'spiceUserId': userId,
+      'userId': userFhirId,
+      'spiceRole': _skRole,
+    });
+
+    final villageId = int.tryParse(household.villageId) ?? 0;
+    final subVillageId = int.tryParse(household.subVillageId ?? '') ?? 0;
+    final ssWorkerId = int.tryParse(household.healthWorkerId) ?? userId;
+
+    final headRefId = _uuid.v4();
+    final extraRefIds = [for (final _ in members) _uuid.v4()];
+
+    final allMembers = <Map<String, dynamic>>[
+      _memberPayload(
+        referenceId: headRefId,
+        member: head,
+        householdReferenceId: hhReferenceId,
+        isHouseholdHead: true,
+        villageId: villageId,
+        subVillageId: subVillageId,
+        villageName: household.villageName ?? '',
+        provenance: provenance,
+        nowMs: nowMs,
+        skUserId: userId,
+        ssWorkerId: ssWorkerId,
+        latitude: latitude,
+        longitude: longitude,
+      ),
+      for (var i = 0; i < members.length; i++)
+        _memberPayload(
+          referenceId: extraRefIds[i],
+          member: members[i],
+          householdReferenceId: hhReferenceId,
+          isHouseholdHead: false,
+          villageId: villageId,
+          subVillageId: subVillageId,
+          villageName: household.villageName ?? '',
+          provenance: provenance,
+          nowMs: nowMs,
+          skUserId: userId,
+          ssWorkerId: ssWorkerId,
+          latitude: latitude,
+          longitude: longitude,
+        ),
+    ];
+
+    final householdNo = int.tryParse(household.householdNumber) ?? nowMs;
+
+    final hhPayload = {
+      'referenceId': hhReferenceId,
+      'name': head.name,
+      'householdNo': householdNo,
+      'householdType': household.householdType,
+      'villageId': villageId,
+      'subVillageId': subVillageId,
+      'village': household.villageName ?? '',
+      'shasthyaShebikaId': ssWorkerId,
+      'noOfPeople': household.numberOfMembers,
+      'householdHeadOccupation': household.occupation,
+      if (household.occupation.toLowerCase() == 'other')
+        'otherOccupation': household.occupation,
+      'monthlyIncome': _incomeToInt(household.monthlyIncome),
+      'disabilityPersonsCount': household.disabilityQuestion ? 1 : 0,
+      'latitude': latitude,
+      'longitude': longitude,
+      'provenance': provenance.toJson(),
+      'householdMembers': allMembers,
+      'createdAt': nowMs,
+      'updatedAt': nowMs,
+    };
+
+    final body = {
+      'requestId': _uuid.v4(),
+      'appVersionName': appVersionName,
+      'appVersionCode': appVersionCode,
+      'deviceId': deviceId,
+      'appType': AppConfig.appType,
+      'syncMode': 'AutomaticSync',
+      'households': [hhPayload],
+      'householdMembers': <dynamic>[],
+      'assessments': <dynamic>[],
+      'followUps': <dynamic>[],
+      'householdMemberLinks': <dynamic>[],
+      'communityProfiles': <dynamic>[],
+      'rxBuddies': <dynamic>[],
+    };
+
+    return (
+      body: body,
+      result: EnrollmentResult(
+        hhReferenceId: hhReferenceId,
+        memberReferenceIds: [headRefId, ...extraRefIds],
+      ),
+    );
+  }
+
+  /// POST a pre-built payload to offline-sync/create.
+  Future<void> postEnrollment(Map<String, dynamic> body) async {
+    if (kDebugMode) {
+      debugPrint('[EnrollmentRepository] offline-sync/create payload:\n'
+          '${const JsonEncoder.withIndent('  ').convert(body)}');
+    }
+    await postOk(Endpoints.offlineSyncCreate, data: body, action: 'Enrollment');
+  }
+
   Future<EnrollmentResult> submit({
     required Household household,
     required HouseholdHeadInfo head,
