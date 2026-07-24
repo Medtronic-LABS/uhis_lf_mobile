@@ -3895,8 +3895,6 @@ class _TimelineEntryCard extends StatelessWidget {
                 height: 1.4,
                 color: AppColors.textMid,
               ),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
           if (entry.source != null)
