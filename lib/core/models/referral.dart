@@ -12,6 +12,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 /// Tier of the referral, which drives the SLA windows in [SlaEvaluator].
 ///
 /// Tier is a property of the referral itself (set at creation from the
@@ -43,6 +45,46 @@ enum SlaTier {
       default:
         return SlaTier.routine;
     }
+  }
+
+  /// Heuristic: map a referral reason string into an SLA tier when the wire
+  /// payload doesn't carry an explicit category. Pilot-grade — clinical lead
+  /// to tune (OQ #2 in spec). Match is case-insensitive substring.
+  static SlaTier inferFromReason(String? reason) {
+    if (reason == null || reason.isEmpty) return SlaTier.routine;
+    final r = reason.toLowerCase().replaceAll('_', ' ');
+    const emergencyMarkers = <String>[
+      'severe',
+      'convulsion',
+      'eclampsia',
+      'obstetric emergency',
+      'dehydration',
+      'shock',
+      'stroke',
+      'one sided',
+      'one-sided',
+      'chest pain',
+      'angina',
+    ];
+    if (emergencyMarkers.any(r.contains)) return SlaTier.emergency;
+    const urgentMarkers = <String>[
+      'high-risk',
+      'hypertensive crisis',
+      'hypertension',
+      'hypertensive',
+      'bloodpressure',
+      'blood pressure',
+      'moderate pneumonia',
+      'severe anemia',
+      'anemia',
+      'bloodglucose',
+      'blood glucose',
+      'glucose',
+      'diabetes',
+      'hba1c',
+    ];
+    if (urgentMarkers.any(r.contains)) return SlaTier.urgent;
+    return SlaTier.routine;
   }
 }
 
@@ -214,6 +256,28 @@ class Referral {
   final int? closedAt;
   final String? rawJson;
 
+  /// Best-effort referral target facility name, parsed from [rawJson].
+  /// Tries multiple keys the server wire has used across versions.
+  String? get facilityName {
+    if (rawJson == null || rawJson!.isEmpty) {
+      debugPrint('[ReferralFacility] Referral($id) rawJson=null → facilityName=null');
+      return null;
+    }
+    try {
+      final m = jsonDecode(rawJson!);
+      if (m is! Map) return null;
+      for (final k in const ['facilityName', 'referredTo', 'referredSiteName', 'referredSite']) {
+        final v = m[k];
+        if (v is String && v.trim().isNotEmpty) {
+          debugPrint('[ReferralFacility] Referral($id) key=$k → ${v.trim()}');
+          return v.trim();
+        }
+      }
+    } catch (_) {}
+    debugPrint('[ReferralFacility] Referral($id) rawJson present but no facility key matched');
+    return null;
+  }
+
   Map<String, Object?> toDb() => {
         'id': id,
         'patient_id': patientId,
@@ -281,6 +345,7 @@ class Referral {
     String? villageId,
     String? diagnosisCode,
     String? diagnosisLabel,
+    String? facilityName,
     DateTime? now,
   }) {
     final ts = (now ?? DateTime.now()).millisecondsSinceEpoch;
@@ -295,6 +360,7 @@ class Referral {
       state: ReferralStatus.created,
       createdAt: ts,
       updatedAt: ts,
+      rawJson: facilityName != null ? jsonEncode({'facilityName': facilityName}) : null,
     );
   }
 
@@ -307,7 +373,7 @@ class Referral {
     return Referral(
       id: (p['id'] ?? '') as String,
       patientId: (p['memberId'] ?? p['patientId'] ?? '') as String,
-      slaTier: _inferTier(p['referredReason'] as String?),
+      slaTier: SlaTier.inferFromReason(p['referredReason'] as String?),
       diagnosisLabel: p['referredReason'] as String?,
       state: ReferralStatus.fromWireTag(p['patientStatus'] as String?),
       createdAt: _parseDateMs(p['referredDate']) ?? ts,
@@ -352,32 +418,6 @@ class Referral {
         closedAt: closedAt ?? this.closedAt,
         rawJson: rawJson,
       );
-
-  /// Heuristic: map a referral reason string into an SLA tier when the wire
-  /// payload doesn't carry an explicit category. Pilot-grade — clinical lead
-  /// to tune (OQ #2 in spec). Match is case-insensitive substring.
-  static SlaTier _inferTier(String? reason) {
-    if (reason == null || reason.isEmpty) return SlaTier.routine;
-    final r = reason.toLowerCase();
-    const emergencyMarkers = <String>[
-      'severe',
-      'convulsion',
-      'eclampsia',
-      'obstetric emergency',
-      'dehydration',
-      'shock',
-    ];
-    if (emergencyMarkers.any(r.contains)) return SlaTier.emergency;
-    const urgentMarkers = <String>[
-      'high-risk',
-      'hypertensive crisis',
-      'moderate pneumonia',
-      'severe anemia',
-      'anemia',
-    ];
-    if (urgentMarkers.any(r.contains)) return SlaTier.urgent;
-    return SlaTier.routine;
-  }
 
   static int? _parseDateMs(Object? v) {
     if (v == null) return null;

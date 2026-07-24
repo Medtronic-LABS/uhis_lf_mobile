@@ -76,25 +76,6 @@ import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
 
-/// Remove any legacy seeded/demo test data from local SQLite.
-/// This ensures only real API data is shown in the worklist.
-Future<void> _clearSeededTestData(AppDatabase db) async {
-  try {
-    // Clear locally seeded test patients
-    await db.db.delete(AppDatabase.tablePatients, where: "id LIKE 'PAT-SEED-%'");
-    await db.db.delete(AppDatabase.tablePatientProgrammes, where: "patient_id LIKE 'PAT-SEED-%'");
-    await db.db.delete(AppDatabase.tableFollowUps, where: "patient_id LIKE 'PAT-SEED-%'");
-    
-    // Clear demo referrals
-    await db.db.delete('referral_status_events', where: "referral_id LIKE 'ref-demo-%'");
-    await db.db.delete(AppDatabase.tableReferrals, where: "id LIKE 'ref-demo-%'");
-    
-    debugPrint('[main] cleared seeded/demo test data');
-  } catch (e) {
-    // Silently ignore — tables might not exist yet on fresh install
-    debugPrint('[main] clearSeededTestData: $e');
-  }
-}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -118,8 +99,6 @@ Future<void> main() async {
     }
     throw e!;
   });
-  // Clear any legacy seeded test data (PAT-SEED-* entries)
-  await _clearSeededTestData(appDb);
   final authState = AuthState(
     authRepo,
     biometric,
@@ -200,6 +179,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     pregnancySnapshot: _pregnancySnapshotDao,
     treatmentPresence: _treatmentPresenceDao,
     encounterDao: _encounterDao,
+    // CCE: project followUp / assessment-history referrals into `referrals`.
+    referrals: _referralDao,
     // P1: share the same UserHierarchyService instance so OfflineSyncService
     // can reuse already-fetched static-data without a second user-data call.
     hierarchy: _userHierarchy,
@@ -235,6 +216,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     slaEvaluator: _slaEvaluator,
     priorityScorer: _priorityScorer,
     notificationScheduler: _repeatScheduler,
+    localAssessments: _localAssessmentDao,
   );
 
   // ── Mission Dashboard wiring ──────────────────────────────────────────
@@ -268,20 +250,19 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final UserHierarchyService _userHierarchy =
       UserHierarchyService(widget.api, widget.authRepo);
 
-  // ── Connectivity-aware auto-sync ─────────────────────────────────────────
-  // Monitors network state changes and triggers AutomaticSync (outbound push +
-  // inbound warm pull) when connectivity is restored — mirrors Android's
-  // ScheduledSyncWork with NetworkType.CONNECTED constraint.
-  late final SyncConnectivityService _connectivitySync = SyncConnectivityService(
-    assessmentRepo: _assessmentRepo,
-    syncService: _sync,
-    authState: widget.authState,
-  );
-
   // ── Micro-coaching ────────────────────────────────────────────────────────
   late final CoachingDao _coachingDao = CoachingDao(widget.appDb);
   late final CoachingRepository _coachingRepo =
       CoachingRepository(_coachingDao, widget.api, widget.authRepo);
+
+  // Connectivity-aware auto-sync: outbound push + inbound warm pull + coaching
+  // refresh on reconnect (mirrors Android ScheduledSyncWork CONNECTED).
+  late final SyncConnectivityService _connectivitySync = SyncConnectivityService(
+    assessmentRepo: _assessmentRepo,
+    syncService: _sync,
+    authState: widget.authState,
+    coachingRepo: _coachingRepo,
+  );
 
   @override
   void initState() {
@@ -303,14 +284,16 @@ class _UhisNextAppState extends State<UhisNextApp>
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
     widget.authState.registerLogoutHook(_coachingRepo.clear);
+    // Reset sync progress so the next user's /sync screen does not see
+    // isComplete=true from the previous session and skip their cold sync.
+    widget.authState.registerLogoutHook(_sync.resetProgress);
   }
 
   Future<void> _bootstrapNotifications() async {
     try {
       await _notifications.initialize();
       await _repeatScheduler.rehydrateOnBoot();
-      // NOTE: Demo referral seeding moved to dashboard_screen.dart
-      // to run after login when user context is available
+
     } catch (e, st) {
       // Notifications are a non-critical surface; failure should not block
       // app startup. Surface to console for now; once a telemetry sink lands

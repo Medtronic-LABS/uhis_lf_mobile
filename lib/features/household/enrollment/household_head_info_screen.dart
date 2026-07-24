@@ -53,8 +53,17 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   String? _disabilityStatus;
   bool _mobileNotAvailable = false;
 
+  static String? _validatePhone(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 10) return 'Invalid phone number';
+    if (RegExp(r'(\d)\1{4,}').hasMatch(digits)) return 'Invalid phone number';
+    return null;
+  }
+
   @override
   void initState() {
+    debugPrint('[_HouseholdHeadInfoScreenState] initState fromNidScan=${widget.fromNidScan}');
     super.initState();
     _nameCtrl = TextEditingController();
     _fatherCtrl = TextEditingController();
@@ -94,6 +103,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_HouseholdHeadInfoScreenState] dispose');
     _nameCtrl.removeListener(_onFormChanged);
     _idNumberCtrl.removeListener(_onFormChanged);
     _nameCtrl.dispose();
@@ -155,6 +165,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   }
 
   void _handleNext(EnrollmentController controller) {
+    debugPrint('[_HouseholdHeadInfoScreenState] _handleNext idType=$_idType gender=$_gender maritalStatus=$_maritalStatus');
     if (_nameCtrl.text.isEmpty ||
         _idNumberCtrl.text.isEmpty ||
         _gender == null ||
@@ -202,7 +213,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
             title: const Text(
               'Household Head',
               style: TextStyle(
-                fontFamily: 'Nunito',
+                fontFamily: AppFonts.display,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: Colors.white,
@@ -315,6 +326,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                         hint: EnrollmentStrings.mobileNumberHint,
                         controller: _mobileCtrl,
                         keyboardType: TextInputType.phone,
+                        validator: _validatePhone,
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -335,7 +347,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Text(
+                        Text(
                           EnrollmentStrings.mobileNotAvailableHint,
                           style: TextStyle(
                             fontSize: 13,

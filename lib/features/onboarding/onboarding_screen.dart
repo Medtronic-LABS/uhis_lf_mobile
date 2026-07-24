@@ -57,16 +57,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text(OnboardingStrings.skipConfirmTitle),
-        content: const Text(OnboardingStrings.skipConfirmBody),
+        title: Text(OnboardingStrings.skipConfirmTitle),
+        content: Text(OnboardingStrings.skipConfirmBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(OnboardingStrings.cancelButton),
+            child: Text(OnboardingStrings.cancelButton),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text(OnboardingStrings.skipAnywayButton),
+            child: Text(OnboardingStrings.skipAnywayButton),
           ),
         ],
       ),
@@ -83,8 +83,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (!mounted) return;
 
-    // Go directly to home (sync already done before onboarding)
-    context.go('/home');
+    // Go to sync screen — handles background sync still in progress or done.
+    context.go('/sync');
   }
 
   @override

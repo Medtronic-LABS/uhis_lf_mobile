@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../core/db/follow_up_dao.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/referral_dao.dart';
@@ -13,8 +14,10 @@ import '../../core/models/referral.dart';
 import '../../core/models/sla.dart';
 import '../../core/notifications/channel_registry.dart';
 import '../../core/notifications/repeat_scheduler.dart';
+import '../../core/referral/referral_ingest_mapper.dart';
 import '../../core/sla/priority_scorer.dart';
 import '../../core/sla/sla_evaluator.dart';
+import '../../core/time/calendar_day.dart';
 
 /// View-model + lifecycle owner for referrals. UI consumes [load] / [counts]
 /// / [watchChanges] only — never touches DAOs or the engines directly.
@@ -32,6 +35,7 @@ class ReferralRepository {
     required SlaEvaluator slaEvaluator,
     required PriorityScorer priorityScorer,
     RepeatScheduler? notificationScheduler,
+    LocalAssessmentDao? localAssessments,
     DateTime Function()? clock,
   })  : _referrals = referrals,
         _patients = patients,
@@ -40,6 +44,7 @@ class ReferralRepository {
         _sla = slaEvaluator,
         _priority = priorityScorer,
         _notifications = notificationScheduler,
+        _localAssessments = localAssessments,
         _clock = clock ?? DateTime.now;
 
   final ReferralDao _referrals;
@@ -49,6 +54,7 @@ class ReferralRepository {
   final SlaEvaluator _sla;
   final PriorityScorer _priority;
   final RepeatScheduler? _notifications;
+  final LocalAssessmentDao? _localAssessments;
   final DateTime Function() _clock;
 
   final _changes = ValueNotifier<int>(0);
@@ -67,6 +73,7 @@ class ReferralRepository {
     String? villageId,
     String? diagnosisCode,
     String? diagnosisLabel,
+    String? facilityName,
     String actor = 'sk',
   }) async {
     final now = _clock();
@@ -79,6 +86,7 @@ class ReferralRepository {
       villageId: villageId,
       diagnosisCode: diagnosisCode,
       diagnosisLabel: diagnosisLabel,
+      facilityName: facilityName,
       now: now,
     );
     await _referrals.upsertMany([draft]);
@@ -147,6 +155,7 @@ class ReferralRepository {
   /// open referral. Mirrors `WorklistRepository.recomputeAllAfterSync`.
   /// Returns the count of referrals re-scored.
   Future<int> recomputeAllAfterSync() async {
+    await _backfillFromLocalAssessments();
     final open = await _referrals.allOpen();
     if (open.isEmpty) return 0;
     final patientIds = open.map((r) => r.patientId).toSet().toList();
@@ -171,6 +180,67 @@ class ReferralRepository {
     }
     _changes.value++;
     return reprocessed;
+  }
+
+  /// Ensure locally-created referred assessments have a CCE `referrals` row.
+  /// Idempotent via `ref-assess-{assessmentId}`.
+  Future<void> _backfillFromLocalAssessments() async {
+    final dao = _localAssessments;
+    if (dao == null) return;
+    final rows = await dao.getOpenReferred();
+    if (rows.isEmpty) return;
+    var created = 0;
+    for (final a in rows) {
+      final patientId = a.patientId;
+      if (patientId == null || patientId.isEmpty) continue;
+      final referralId = 'ref-assess-${a.id}';
+      final existing = await _referrals.byId(referralId);
+      if (existing != null) continue;
+      final reasons = _decodeReasonList(a.referredReasons);
+      final draft = ReferralIngestMapper.fromLocalAssessment(
+        assessmentId: a.id,
+        patientId: patientId,
+        reasons: reasons,
+        householdId: a.householdId,
+        villageId: a.villageId,
+        diagnosisCode: a.assessmentType,
+        now: a.createdAt ?? _clock(),
+      );
+      await _referrals.upsertMany([draft]);
+      await _referrals.appendStatusEvent(ReferralStatusEventRow(
+        id: '$referralId:create:${_clock().millisecondsSinceEpoch}',
+        referralId: referralId,
+        toState: ReferralStatus.created,
+        occurredAt: (a.createdAt ?? _clock()).millisecondsSinceEpoch,
+        actor: 'local-backfill',
+      ));
+      created++;
+    }
+    if (created > 0) {
+      debugPrint(
+        '[ReferralRepository] CCE backfill: created $created from local_assessments',
+      );
+    }
+  }
+
+  static List<String> _decodeReasonList(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .map((e) => e.toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList(growable: false);
+      }
+    } catch (_) {
+      // Fall through — treat as comma-joined plain text.
+    }
+    return raw
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList(growable: false);
   }
 
   /// Re-emit notifications for any newly-breached or newly-warning referrals.
@@ -279,7 +349,7 @@ class ReferralRepository {
     required List<FollowUpRow> followUps,
     required DateTime now,
   }) {
-    final ageYears = patient?.age ?? _ageFromDob(patient?.dob);
+    final ageYears = patient?.age ?? CalendarDay.ageFromDob(patient?.dob);
     final isPregnancy = programmes.contains(Programme.anc);
     final isEmergency = r.slaTier == SlaTier.emergency;
 
@@ -370,395 +440,6 @@ class ReferralRepository {
     return drivers.isEmpty
         ? 'Open referral needs your attention.'
         : drivers;
-  }
-
-  static int? _ageFromDob(String? dob) {
-    if (dob == null || dob.isEmpty) return null;
-    final parsed = DateTime.tryParse(dob);
-    if (parsed == null) return null;
-    final now = DateTime.now();
-    var years = now.year - parsed.year;
-    if (now.month < parsed.month ||
-        (now.month == parsed.month && now.day < parsed.day)) {
-      years -= 1;
-    }
-    return years < 0 ? 0 : years;
-  }
-
-  /// Seeds comprehensive demo referral data matching the SLA monitoring spec.
-  /// Creates varied scenarios: SLA breached, facility delay, completed, etc.
-  /// Always clears and reseeds demo data to ensure fresh scenarios.
-  Future<int> seedDemoDataIfEmpty() async {
-    // Clear existing demo data to reseed with latest scenarios
-    final cleared = await _referrals.clearDemoData();
-    if (cleared > 0) {
-      debugPrint('[referrals] cleared $cleared old demo referrals');
-    }
-    
-    final now = _clock();
-    final patients = await _patients.allForVillages(const <String>[]);
-    debugPrint('[referrals] found ${patients.length} patients for demo data');
-    
-    final patientIds = patients.isEmpty
-        ? ['demo-rashida', 'demo-nasrin', 'demo-karim', 'demo-fatima', 'demo-rahim', 'demo-salma']
-        : patients.take(6).map((p) => p.id).toList();
-    
-    int seeded = 0;
-    
-    // ══════════════════════════════════════════════════════════════════════
-    // SCENARIO 1: CRITICAL SLA BREACH — Child with severe pneumonia
-    // 7 days overdue, not arrived at facility, emergency tier
-    // ══════════════════════════════════════════════════════════════════════
-    if (patientIds.isNotEmpty) {
-      final referralId = 'ref-demo-critical-1';
-      final createdAt = now.subtract(const Duration(days: 10));
-      final dueArrival = createdAt.add(const Duration(days: 3)); // 3-day SLA
-      final breachedAt = dueArrival; // Breached 7 days ago
-      
-      final r1 = Referral(
-        id: referralId,
-        patientId: patientIds[0],
-        slaTier: SlaTier.emergency,
-        state: ReferralStatus.created, // Still not arrived
-        diagnosisCode: 'J18.9',
-        diagnosisLabel: 'Severe pneumonia',
-        rawJson: jsonEncode({'facilityName': 'UHC Manikganj'}),
-        priorityScore: 95,
-        priorityLevel: 'critical',
-        priorityDrivers: const [
-          '🔴 SLA BREACHED +7d',
-          '👶 Child under 5',
-          '🚌 Transport barrier detected',
-          '⚠️ Emergency referral',
-        ],
-        dueArrivalAt: dueArrival.millisecondsSinceEpoch,
-        breachedSince: breachedAt.millisecondsSinceEpoch,
-        escalationLevel: 2, // Escalated to supervisor
-        createdAt: createdAt.millisecondsSinceEpoch,
-        updatedAt: now.millisecondsSinceEpoch,
-      );
-      await _referrals.upsertMany([r1]);
-      
-      // Timeline events
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:sk-visit:${createdAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        toState: ReferralStatus.created,
-        occurredAt: createdAt.millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'SK home visit - child presenting with high fever, respiratory distress',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:referred:${createdAt.add(const Duration(hours: 1)).millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.created,
-        toState: ReferralStatus.created,
-        occurredAt: createdAt.add(const Duration(hours: 1)).millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'Referred to UHC Manikganj - Emergency pediatric care',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:breached:${breachedAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.created,
-        toState: ReferralStatus.breachedArrival,
-        occurredAt: breachedAt.millisecondsSinceEpoch,
-        actor: 'system',
-        reason: 'SLA breached - Patient not arrived within 3-day window',
-      ));
-      seeded++;
-    }
-    
-    // ══════════════════════════════════════════════════════════════════════
-    // SCENARIO 2: FACILITY QUEUE DELAY — High-risk ANC waiting for OB review
-    // Arrived but waiting 2 days for specialist, 1 day left on SLA
-    // ══════════════════════════════════════════════════════════════════════
-    if (patientIds.length > 1) {
-      final referralId = 'ref-demo-delay-1';
-      final createdAt = now.subtract(const Duration(days: 5));
-      final arrivedAt = createdAt.add(const Duration(hours: 6));
-      final dueTreatment = createdAt.add(const Duration(days: 6)); // 1 day left
-      
-      final r2 = Referral(
-        id: referralId,
-        patientId: patientIds[1],
-        slaTier: SlaTier.urgent,
-        state: ReferralStatus.arrived, // At facility, waiting
-        diagnosisCode: 'O26.8',
-        diagnosisLabel: 'High-risk ANC - Pre-eclampsia screening',
-        rawJson: jsonEncode({'facilityName': 'District Hospital'}),
-        priorityScore: 78,
-        priorityLevel: 'high',
-        priorityDrivers: const [
-          '🟠 SLA: 1d left',
-          '🤰 High-risk pregnancy',
-          '⏳ OB queue delay: 48h',
-          '🏥 At facility - awaiting review',
-        ],
-        dueArrivalAt: createdAt.add(const Duration(days: 1)).millisecondsSinceEpoch,
-        dueTreatmentAt: dueTreatment.millisecondsSinceEpoch,
-        escalationLevel: 1,
-        createdAt: createdAt.millisecondsSinceEpoch,
-        updatedAt: arrivedAt.millisecondsSinceEpoch,
-      );
-      await _referrals.upsertMany([r2]);
-      
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:sk-visit:${createdAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        toState: ReferralStatus.created,
-        occurredAt: createdAt.millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'ANC visit - elevated BP detected, protein in urine',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:referred:${createdAt.add(const Duration(hours: 2)).millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.created,
-        toState: ReferralStatus.created,
-        occurredAt: createdAt.add(const Duration(hours: 2)).millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'Referred to District Hospital - OB specialist evaluation',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:arrived:${arrivedAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.created,
-        toState: ReferralStatus.arrived,
-        occurredAt: arrivedAt.millisecondsSinceEpoch,
-        actor: 'facility',
-        reason: 'Patient checked in at District Hospital',
-      ));
-      seeded++;
-    }
-    
-    // ══════════════════════════════════════════════════════════════════════
-    // SCENARIO 3: COMPLETED REFERRAL — Diabetic foot care completed
-    // Discharged, prescription shared, follow-up scheduled
-    // ══════════════════════════════════════════════════════════════════════
-    if (patientIds.length > 2) {
-      final referralId = 'ref-demo-completed-1';
-      final createdAt = now.subtract(const Duration(days: 15));
-      final arrivedAt = createdAt.add(const Duration(hours: 4));
-      final treatedAt = createdAt.add(const Duration(days: 1));
-      final dischargedAt = createdAt.add(const Duration(days: 2));
-      
-      final r3 = Referral(
-        id: referralId,
-        patientId: patientIds[2],
-        slaTier: SlaTier.routine,
-        state: ReferralStatus.closedRecovered,
-        diagnosisCode: 'E11.621',
-        diagnosisLabel: 'Diabetic foot ulcer - wound care',
-        rawJson: jsonEncode({'facilityName': 'UHC wound care clinic'}),
-        priorityScore: 15,
-        priorityLevel: 'low',
-        priorityDrivers: const [
-          '🟢 Completed ✓',
-          '📋 Follow-up in 7d',
-          '💊 Prescription shared',
-        ],
-        dueArrivalAt: createdAt.add(const Duration(days: 7)).millisecondsSinceEpoch,
-        dueTreatmentAt: createdAt.add(const Duration(days: 14)).millisecondsSinceEpoch,
-        createdAt: createdAt.millisecondsSinceEpoch,
-        updatedAt: dischargedAt.millisecondsSinceEpoch,
-        closedAt: dischargedAt.millisecondsSinceEpoch,
-      );
-      await _referrals.upsertMany([r3]);
-      
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:sk-visit:${createdAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        toState: ReferralStatus.created,
-        occurredAt: createdAt.millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'Home visit - non-healing foot wound, requires debridement',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:arrived:${arrivedAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.created,
-        toState: ReferralStatus.arrived,
-        occurredAt: arrivedAt.millisecondsSinceEpoch,
-        actor: 'facility',
-        reason: 'Checked in at UHC wound care clinic',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:treated:${treatedAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.arrived,
-        toState: ReferralStatus.treatmentStarted,
-        occurredAt: treatedAt.millisecondsSinceEpoch,
-        actor: 'facility',
-        reason: 'Wound debrided, antibiotics prescribed, dressing applied',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:discharged:${dischargedAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.treatmentStarted,
-        toState: ReferralStatus.closedRecovered,
-        occurredAt: dischargedAt.millisecondsSinceEpoch,
-        actor: 'facility',
-        reason: 'Discharged with wound care instructions, follow-up in 10 days',
-      ));
-      seeded++;
-    }
-    
-    // ══════════════════════════════════════════════════════════════════════
-    // SCENARIO 4: SLA WARNING — Urgent maternal case approaching deadline
-    // In transit, 4 hours left on emergency SLA
-    // ══════════════════════════════════════════════════════════════════════
-    if (patientIds.length > 3) {
-      final referralId = 'ref-demo-warning-1';
-      final createdAt = now.subtract(const Duration(hours: 20));
-      final dueArrival = createdAt.add(const Duration(hours: 24)); // 4h left
-      
-      final r4 = Referral(
-        id: referralId,
-        patientId: patientIds[3],
-        slaTier: SlaTier.emergency,
-        state: ReferralStatus.inTransit,
-        diagnosisCode: 'O62.1',
-        diagnosisLabel: 'Prolonged labor - emergency C-section evaluation',
-        rawJson: jsonEncode({'facilityName': 'District Hospital'}),
-        priorityScore: 88,
-        priorityLevel: 'critical',
-        priorityDrivers: const [
-          '🟡 SLA: 4h remaining',
-          '🚑 In transit to facility',
-          '🤰 Active labor complications',
-          '⚠️ Emergency maternal',
-        ],
-        dueArrivalAt: dueArrival.millisecondsSinceEpoch,
-        escalationLevel: 1,
-        createdAt: createdAt.millisecondsSinceEpoch,
-        updatedAt: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
-      );
-      await _referrals.upsertMany([r4]);
-      
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:sk-visit:${createdAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        toState: ReferralStatus.created,
-        occurredAt: createdAt.millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'Emergency call - prolonged labor >18h, no progress',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:transit:${now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.created,
-        toState: ReferralStatus.inTransit,
-        occurredAt: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'Ambulance dispatched - ETA 2 hours to District Hospital',
-      ));
-      seeded++;
-    }
-    
-    // ══════════════════════════════════════════════════════════════════════
-    // SCENARIO 5: FOLLOW-UP OVERDUE — Post-treatment follow-up missed
-    // Treatment completed but patient missed scheduled follow-up
-    // ══════════════════════════════════════════════════════════════════════
-    if (patientIds.length > 4) {
-      final referralId = 'ref-demo-followup-1';
-      final createdAt = now.subtract(const Duration(days: 21));
-      final treatedAt = createdAt.add(const Duration(days: 3));
-      final followUpDue = createdAt.add(const Duration(days: 14)); // 7 days overdue
-      
-      final r5 = Referral(
-        id: referralId,
-        patientId: patientIds[4],
-        slaTier: SlaTier.routine,
-        state: ReferralStatus.treatmentStarted, // Needs follow-up
-        diagnosisCode: 'I10',
-        diagnosisLabel: 'Hypertension - medication adjustment',
-        rawJson: jsonEncode({'facilityName': 'UHC Manikganj'}),
-        priorityScore: 55,
-        priorityLevel: 'medium',
-        priorityDrivers: const [
-          '📅 Follow-up 7d overdue',
-          '💊 Medication compliance check needed',
-          '📞 No response to reminders',
-        ],
-        dueArrivalAt: createdAt.add(const Duration(days: 2)).millisecondsSinceEpoch,
-        dueTreatmentAt: followUpDue.millisecondsSinceEpoch,
-        createdAt: createdAt.millisecondsSinceEpoch,
-        updatedAt: treatedAt.millisecondsSinceEpoch,
-      );
-      await _referrals.upsertMany([r5]);
-      
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:sk-visit:${createdAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        toState: ReferralStatus.created,
-        occurredAt: createdAt.millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'Routine NCD screening - BP 180/110, requires evaluation',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:treated:${treatedAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.arrived,
-        toState: ReferralStatus.treatmentStarted,
-        occurredAt: treatedAt.millisecondsSinceEpoch,
-        actor: 'facility',
-        reason: 'Started on Amlodipine 5mg, follow-up in 2 weeks',
-      ));
-      seeded++;
-    }
-    
-    // ══════════════════════════════════════════════════════════════════════
-    // SCENARIO 6: NEW REFERRAL — Just created, within SLA
-    // Fresh referral, patient preparing to travel
-    // ══════════════════════════════════════════════════════════════════════
-    if (patientIds.length > 5) {
-      final referralId = 'ref-demo-new-1';
-      final createdAt = now.subtract(const Duration(hours: 3));
-      
-      final r6 = Referral(
-        id: referralId,
-        patientId: patientIds[5],
-        slaTier: SlaTier.urgent,
-        state: ReferralStatus.acknowledged,
-        diagnosisCode: 'K35.8',
-        diagnosisLabel: 'Acute appendicitis - surgical evaluation',
-        rawJson: jsonEncode({'facilityName': 'District Hospital'}),
-        priorityScore: 72,
-        priorityLevel: 'high',
-        priorityDrivers: const [
-          '🟢 SLA: 45h remaining',
-          '✅ Patient notified',
-          '🚌 Transport being arranged',
-        ],
-        dueArrivalAt: createdAt.add(const Duration(days: 2)).millisecondsSinceEpoch,
-        createdAt: createdAt.millisecondsSinceEpoch,
-        updatedAt: now.millisecondsSinceEpoch,
-      );
-      await _referrals.upsertMany([r6]);
-      
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:sk-visit:${createdAt.millisecondsSinceEpoch}',
-        referralId: referralId,
-        toState: ReferralStatus.created,
-        occurredAt: createdAt.millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'Home visit - acute abdominal pain, rebound tenderness',
-      ));
-      await _referrals.appendStatusEvent(ReferralStatusEventRow(
-        id: '$referralId:ack:${now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch}',
-        referralId: referralId,
-        fromState: ReferralStatus.created,
-        toState: ReferralStatus.acknowledged,
-        occurredAt: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
-        actor: 'sk',
-        reason: 'Family contacted, preparing for travel to UHC',
-      ));
-      seeded++;
-    }
-    
-    _changes.value++;
-    return seeded;
   }
 
   // ══════════════════════════════════════════════════════════════════════════

@@ -28,16 +28,18 @@ class HouseholdCreatedScreen extends StatefulWidget {
 class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
   @override
   void initState() {
+    debugPrint('[_HouseholdCreatedScreenState] initState');
     super.initState();
   }
 
   Future<void> _handleSave(EnrollmentController controller) async {
+    debugPrint('[_HouseholdCreatedScreenState] _handleSave');
     final success = await controller.submitHousehold();
 
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(EnrollmentStrings.enrollmentSuccess),
             duration: Duration(seconds: 2),
           ),
@@ -144,7 +146,7 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     EnrollmentStrings.householdDetailsTitle,
                                     style: TextStyle(
                                       fontSize: 10,
@@ -205,7 +207,7 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                           // Members section header + count badge
                           Row(
                             children: [
-                              const Text(
+                              Text(
                                 EnrollmentStrings.householdMembersSectionHeader,
                                 style: TextStyle(
                                   fontSize: 12,

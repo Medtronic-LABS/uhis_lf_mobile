@@ -115,6 +115,7 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
       (svc == _Svc.anc || svc == _Svc.pnc) && !_pwSelected;
 
   void _onSvcTap(_Svc svc) {
+    debugPrint('[_NewPatientVisitScreenState] _onSvcTap svc=${svc}');
     if (svc == _Svc.pw) {
       setState(() {
         _pwSelected = !_pwSelected;
@@ -580,7 +581,7 @@ class _ServicesSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               NewPatientVisitStrings.eligibleServicesHeader,
               style: TextStyle(
                 fontSize: 15,
@@ -595,7 +596,7 @@ class _ServicesSection extends StatelessWidget {
                 color: const Color(0xFFEDE9FE),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Text(
+              child: Text(
                 NewPatientVisitStrings.eligibleServicesTag,
                 style: TextStyle(
                   fontSize: 10,

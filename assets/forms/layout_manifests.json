@@ -259,6 +259,16 @@
     "clinicalWorkflowId": 102,
     "sections": [
       {
+        "sectionId": "outcomeType",
+        "title": "Outcome type",
+        "fieldRefs": [
+          {
+            "fieldName": "Outcome type",
+            "id": "deliveryOutcomeType"
+          }
+        ]
+      },
+      {
         "sectionId": "maternalDeath",
         "title": "Maternal Death",
         "fieldRefs": [
@@ -345,6 +355,38 @@
             "fieldName": "Complications during delivery",
             "isMandatory": false,
             "id": "complicationsDuringDelivery"
+          }
+        ]
+      },
+      {
+        "sectionId": "newbornDetails",
+        "title": "Newborn details",
+        "fieldRefs": [
+          {
+            "fieldName": "Is the baby alive?",
+            "isMandatory": false,
+            "id": "babyAlive"
+          },
+          {
+            "fieldName": "Sex",
+            "isMandatory": false,
+            "id": "babySex"
+          },
+          {
+            "fieldName": "Birth weight (kg)",
+            "inputType": 2,
+            "isMandatory": false,
+            "id": "birthWeight"
+          },
+          {
+            "fieldName": "Essential newborn care",
+            "isMandatory": false,
+            "id": "essentialNewbornCare"
+          },
+          {
+            "fieldName": "Cause of neonatal death",
+            "isMandatory": false,
+            "id": "neonatalDeathCause"
           }
         ]
       },
@@ -542,6 +584,27 @@
     "clinicalWorkflowId": 4,
     "sections": [
       {
+        "sectionId": "ancMedicalHistory",
+        "title": "Medical History",
+        "fieldRefs": [
+          {
+            "id": "previousPregnancyComplications",
+            "fieldName": "Any complication during previous pregnancies",
+            "isMandatory": false
+          },
+          {
+            "id": "pregnantWomanExistingIllness",
+            "fieldName": "Pregnant woman has any existing illness",
+            "isMandatory": false
+          },
+          {
+            "id": "pregnantWomanOnTreatment",
+            "fieldName": "Pregnant woman on treatment for existing illness",
+            "isMandatory": false
+          }
+        ]
+      },
+      {
         "sectionId": "ancSpecificVitals",
         "title": "Clinical Examination",
         "fieldRefs": [
@@ -563,9 +626,26 @@
             "isMandatory": false
           },
           {
+            "id": "temperature",
+            "fieldName": "Temperature (°F)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "pulse",
+            "fieldName": "Pulse (per min)",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
             "id": "weight",
             "fieldName": "Weight (kg)",
             "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "edema",
+            "fieldName": "Edema",
             "isMandatory": false
           },
           {
@@ -660,17 +740,51 @@
         ]
       },
       {
-        "sectionId": "ancDangerSignsSection",
-        "title": "Danger Signs",
+        "sectionId": "ancServicesBirthPreparedness",
+        "title": "ANC Services & Birth Preparedness",
         "fieldRefs": [
-          "ancDangerSigns"
+          {
+            "id": "ancVisitsOtherProviders",
+            "fieldName": "No. of ANC visits with other providers",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "ancFromMedicalDoctor",
+            "fieldName": "ANC from medical doctor",
+            "isMandatory": false
+          },
+          {
+            "id": "ultrasound",
+            "fieldName": "Ultrasound",
+            "isMandatory": false
+          },
+          {
+            "id": "facilityIdentifiedForDelivery",
+            "fieldName": "Facility identified for delivery",
+            "isMandatory": false
+          }
         ]
       },
       {
-        "sectionId": "birthPreparedness",
-        "title": "Birth Preparedness",
+        "sectionId": "ancDangerSignsSection",
+        "title": "Danger Signs",
         "fieldRefs": [
-          "deliveryFacilityType"
+          {
+            "id": "dangerSignsExperienced12",
+            "fieldName": "Danger signs (up to 12 weeks)",
+            "isMandatory": false
+          },
+          {
+            "id": "dangerSignsExperienced13To27",
+            "fieldName": "Danger signs (13–27 weeks)",
+            "isMandatory": false
+          },
+          {
+            "id": "dangerSignsExperienced28To40",
+            "fieldName": "Danger signs (28–40 weeks)",
+            "isMandatory": false
+          }
         ]
       }
     ]
@@ -958,6 +1072,25 @@
     "clinicalWorkflowId": 21,
     "sections": [
       {
+        "sectionId": "ncdBiometrics",
+        "title": "Biometrics",
+        "fieldRefs": [
+          {
+            "id": "height",
+            "fieldName": "Height (cm)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "weight",
+            "fieldName": "Weight (kg)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          "bmi"
+        ]
+      },
+      {
         "sectionId": "bpLog",
         "title": "Blood Pressure",
         "fieldRefs": [
@@ -972,32 +1105,40 @@
             "id": "medicationFrequencyBp"
           },
           {
-            "id": "bloodPressure",
+            "id": "bpLogDetails",
             "fieldName": "Blood Pressure",
-            "isMandatory": false
-          },
-          {
-            "id": "systolic",
-            "fieldName": "Systolic",
-            "inputType": 3,
-            "isMandatory": false
-          },
-          {
-            "id": "diastolic",
-            "fieldName": "Diastolic",
-            "inputType": 3,
-            "isMandatory": false
-          },
-          {
-            "id": "pulse",
-            "fieldName": "Pulse (bpm)",
-            "inputType": 3,
             "isMandatory": false
           },
           {
             "fieldName": "Are you a regular smoker or have you been a regular smoker in the past 12 months?",
             "isMandatory": false,
             "id": "isRegularSmoker"
+          }
+        ]
+      },
+      {
+        "sectionId": "symptomsLog",
+        "title": "Symptoms & Compliance",
+        "fieldRefs": [
+          {
+            "id": "compliance",
+            "fieldName": "Medication compliance",
+            "isMandatory": false
+          },
+          {
+            "id": "hasSymptoms",
+            "fieldName": "Has symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "ncdSymptoms",
+            "fieldName": "NCD symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "newWorseningSymptoms",
+            "fieldName": "New or worsening symptoms",
+            "isMandatory": false
           }
         ]
       },
@@ -1019,17 +1160,16 @@
             "id": "glucoseType",
             "fieldName": "Type of Investigation",
             "isMandatory": false
-          }
-        ]
-      },
-      {
-        "sectionId": "ncdBiometrics",
-        "title": "Biometrics",
-        "fieldRefs": [
+          },
           {
-            "id": "weight",
-            "fieldName": "Weight (kg)",
+            "id": "glucose",
+            "fieldName": "Blood Glucose",
             "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "hba1c",
+            "fieldName": "HbA1c (%)",
             "isMandatory": false
           }
         ]
@@ -1252,6 +1392,161 @@
           {
             "isMandatory": true,
             "id": "qrCode"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "iccm",
+    "workflowName": "ICCM",
+    "sections": [
+      {
+        "sectionId": "iccmPresentation",
+        "title": "Presenting Complaint",
+        "fieldRefs": [
+          {
+            "isMandatory": true,
+            "id": "chiefComplaint"
+          },
+          {
+            "isMandatory": false,
+            "id": "presentingSymptoms"
+          }
+        ]
+      },
+      {
+        "sectionId": "iccmDangerSigns",
+        "title": "Danger Signs",
+        "fieldRefs": [
+          {
+            "isMandatory": false,
+            "id": "convulsions"
+          },
+          {
+            "isMandatory": false,
+            "id": "unconscious"
+          },
+          {
+            "isMandatory": false,
+            "id": "unableToFeedOrDrink"
+          },
+          {
+            "isMandatory": false,
+            "id": "stridor"
+          },
+          {
+            "isMandatory": false,
+            "id": "chestIndrawing"
+          },
+          {
+            "isMandatory": false,
+            "id": "vomitingEverything"
+          }
+        ]
+      },
+      {
+        "sectionId": "iccmVitals",
+        "title": "Vitals",
+        "fieldRefs": [
+          {
+            "isMandatory": false,
+            "id": "temperature"
+          },
+          {
+            "isMandatory": false,
+            "id": "respiratoryRate"
+          },
+          {
+            "isMandatory": false,
+            "id": "muac"
+          }
+        ]
+      },
+      {
+        "sectionId": "iccmClassification",
+        "title": "Classification",
+        "fieldRefs": [
+          {
+            "isMandatory": true,
+            "id": "iccmClassification"
+          },
+          {
+            "isMandatory": false,
+            "id": "severity"
+          }
+        ]
+      },
+      {
+        "sectionId": "iccmTreatment",
+        "title": "Treatment & Referral",
+        "fieldRefs": [
+          {
+            "isMandatory": false,
+            "id": "treatmentPrescribed"
+          },
+          {
+            "isMandatory": false,
+            "id": "referralRequired"
+          },
+          {
+            "isMandatory": false,
+            "id": "referralFacility"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "tb",
+    "workflowName": "TB",
+    "clinicalWorkflowId": 5,
+    "sections": [
+      {
+        "sectionId": "tbScreening",
+        "title": "TB Symptom Screening",
+        "fieldRefs": [
+          {
+            "isMandatory": false,
+            "id": "hasCough"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasCoughLastedLonger"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasNightSweats"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasTbFever"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasWeightLoss"
+          },
+          {
+            "isMandatory": false,
+            "id": "tbDateOfOnset"
+          }
+        ]
+      },
+      {
+        "sectionId": "contactTracing",
+        "title": "Contact Tracing",
+        "fieldRefs": [
+          {
+            "isMandatory": false,
+            "id": "tbRelationshipToIC"
+          },
+          {
+            "isMandatory": false,
+            "id": "tbSleepLocation"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasPreviouslyTreatedForTB"
           }
         ]
       }

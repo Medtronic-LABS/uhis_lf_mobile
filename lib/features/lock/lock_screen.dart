@@ -28,6 +28,7 @@ class _LockScreenState extends State<LockScreen> {
 
   @override
   void initState() {
+    debugPrint('[_LockScreenState] initState');
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSummary();
@@ -42,6 +43,7 @@ class _LockScreenState extends State<LockScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_LockScreenState] dispose');
     _connectivitySub?.cancel();
     super.dispose();
   }
@@ -62,6 +64,7 @@ class _LockScreenState extends State<LockScreen> {
   }
 
   Future<void> _loadSummary() async {
+    debugPrint('[_LockScreenState] _loadSummary');
     if (!mounted) return;
     final auth = context.read<AuthState>();
     final s = await auth.userProfileSummary();
@@ -165,6 +168,7 @@ class _LockContentState extends State<LockContent>
 
   @override
   void initState() {
+    debugPrint('[_LockContentState] initState');
     super.initState();
     _entranceCtrl = AnimationController(
       vsync: this,
@@ -185,6 +189,7 @@ class _LockContentState extends State<LockContent>
 
   @override
   void dispose() {
+    debugPrint('[_LockContentState] dispose');
     _entranceCtrl.dispose();
     super.dispose();
   }
@@ -304,7 +309,7 @@ class _LockContentState extends State<LockContent>
                       borderRadius: BorderRadius.circular(AppRadius.patRow),
                     ),
                     textStyle: const TextStyle(
-                      fontFamily: 'NunitoSans',
+                      fontFamily: AppFonts.body,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
@@ -384,7 +389,7 @@ class _ProfileCard extends StatelessWidget {
             child: Text(
               _initials(),
               style: TextStyle(
-                fontFamily: 'Nunito',
+                fontFamily: AppFonts.display,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: AppColors.pink,
@@ -401,7 +406,7 @@ class _ProfileCard extends StatelessWidget {
                 Text(
                   LockStrings.shasthyaKormi,
                   style: TextStyle(
-                    fontFamily: 'NunitoSans',
+                    fontFamily: AppFonts.body,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                     color: AppColors.navy.withValues(alpha: 0.45),
@@ -414,7 +419,7 @@ class _ProfileCard extends StatelessWidget {
                       ? _fullName()
                       : LockStrings.profileLoading,
                   style: const TextStyle(
-                    fontFamily: 'Nunito',
+                    fontFamily: AppFonts.display,
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                     color: AppColors.navy,
@@ -450,7 +455,7 @@ class _OrDivider extends StatelessWidget {
           child: Text(
             'OR',
             style: TextStyle(
-              fontFamily: 'NunitoSans',
+              fontFamily: AppFonts.body,
               fontSize: 11,
               fontWeight: FontWeight.w700,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -498,7 +503,7 @@ class _ConnectivityStatusRow extends StatelessWidget {
               ? LockStrings.onlineStatus
               : LockStrings.offlineLoginAvailable,
           style: const TextStyle(
-            fontFamily: 'NunitoSans',
+            fontFamily: AppFonts.body,
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: AppColors.textMuted,
@@ -548,6 +553,7 @@ class _FingerprintCardState extends State<_FingerprintCard>
 
   @override
   void initState() {
+    debugPrint('[_FingerprintCardState] initState');
     super.initState();
     _glowCtrl = AnimationController(
       vsync: this,
@@ -592,6 +598,7 @@ class _FingerprintCardState extends State<_FingerprintCard>
 
   @override
   void dispose() {
+    debugPrint('[_FingerprintCardState] dispose');
     _glowCtrl.dispose();
     _scanCtrl.dispose();
     _verifyCtrl.dispose();
@@ -667,7 +674,7 @@ class _FingerprintCardState extends State<_FingerprintCard>
               Text(
                 title,
                 style: const TextStyle(
-                  fontFamily: 'Nunito',
+                  fontFamily: AppFonts.display,
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
                   color: Colors.white,

@@ -45,6 +45,7 @@ class ProgrammeTag extends StatelessWidget {
     switch (p) {
       case Programme.imci:
         return (AppColors.imciSurface, AppColors.imciText, Icons.child_care);
+      case Programme.pw:
       case Programme.anc:
         return (AppColors.ancSurface, AppColors.ancText, Icons.pregnant_woman);
       case Programme.pnc:
@@ -72,6 +73,7 @@ class ProgrammeTag extends StatelessWidget {
     switch (p) {
       case Programme.imci:
         return WorklistStrings.programmeImci;
+      case Programme.pw:
       case Programme.anc:
         return WorklistStrings.programmeAnc;
       case Programme.pnc:

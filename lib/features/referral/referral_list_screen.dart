@@ -22,6 +22,7 @@ import '../visit/visit_controller.dart';
 import '../visit/visit_start_helper.dart';
 import '../visit/widgets/widgets.dart';
 import 'referral_api_service.dart';
+import '../../core/widgets/patient_filter_panel.dart' show VillageFilterTab;
 import 'referral_repository.dart';
 import 'widgets/bulk_actions.dart';
 import 'widgets/critical_banner.dart';
@@ -98,7 +99,9 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   @override
   void initState() {
+    debugPrint('[_ReferralListScreenState] initState');
     super.initState();
+    debugPrint('[_ReferralListScreenState] initState');
     _tabController = TabController(length: 2, vsync: this);
     // Defer to didChangeDependencies where context is valid
   }
@@ -126,11 +129,13 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   @override
   void dispose() {
+    debugPrint('[_ReferralListScreenState] dispose');
     _tabController.dispose();
     _repo?.changes.removeListener(_onChanges);
     _missionRepo?.changes.removeListener(_onMissionChanges);
     _autoRefreshTimer?.cancel();
     _connectivitySubscription?.cancel();
+    debugPrint('[_ReferralListScreenState] dispose');
     super.dispose();
   }
 
@@ -161,12 +166,14 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _onChanges() {
+    debugPrint('[_ReferralListScreenState] _onChanges');
     if (!mounted) return;
     _reload();
   }
 
   /// Called when mission dashboard data changes (e.g., after assessment completion).
   void _onMissionChanges() {
+    debugPrint('[_ReferralListScreenState] _onMissionChanges');
     if (!mounted) return;
     debugPrint('[Tasks] Mission data changed, reloading queue...');
     _reloadMissionQueue();
@@ -227,6 +234,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   Future<_DashboardData> _loadAll(SlaPriority? filter) async {
+    debugPrint('[_ReferralListScreenState] _loadAll filter=${filter}');
     final repo = _repo;
     final patientDao = _patientDao;
     final sync = _sync;
@@ -673,21 +681,18 @@ class _ReferralListScreenState extends State<ReferralListScreen>
             ),
           ),
           const SizedBox(height: 6),
-          SizedBox(
-            height: 32,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                _VisitVillageChip(
+                VillageFilterTab(
                   label: MissionDashboardStrings.allVillages,
                   isActive: _selectedVisitVillage == null,
-                  navyColor: AppColors.navy,
                   onTap: () => setState(() => _selectedVisitVillage = null),
                 ),
-                ...villageNames.map((v) => _VisitVillageChip(
+                ...villageNames.map((v) => VillageFilterTab(
                       label: v,
                       isActive: _selectedVisitVillage == v,
-                      navyColor: AppColors.navy,
                       onTap: () => setState(() {
                         _selectedVisitVillage =
                             _selectedVisitVillage == v ? null : v;
@@ -904,6 +909,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   /// Handle tap on a visit card - navigate to patient.
   void _handleVisitTap(MissionQueueItem item) {
+    debugPrint('[_ReferralListScreenState] _handleVisitTap item=${item}');
     if (item.patientId != null) {
       context.push('/patient/${item.patientId}?origin=tasks');
     }
@@ -911,6 +917,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   /// Handle action button on a visit card - start visit.
   Future<void> _handleVisitAction(MissionQueueItem item) async {
+    debugPrint('[_ReferralListScreenState] _handleVisitAction item=${item}');
     if (item.patientId == null) return;
     try {
       final visitController = context.read<VisitController>();
@@ -1127,6 +1134,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
                                   onScheduleFollowUp: () => _handleScheduleFollowUp(r, patient),
                                   onSendReminder: () => _handleSendReminder(r, patient),
                                   onCloseCase: () => _handleCloseCase(r),
+                                  facilityName: r.facilityName,
                                 );
                                 return SelectableReferralCard(
                                   referralId: r.id,
@@ -1166,10 +1174,11 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   // ── Action Handlers ─────────────────────────────────────────────────────────
 
   void _handleCallFamily(Referral r, Patient? patient) {
+    debugPrint('[_ReferralListScreenState] _handleCallFamily patient=${patient}');
     final phone = patient?.phone;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ReferralStrings.errorNoPhone)),
+        SnackBar(content: Text(ReferralStrings.errorNoPhone)),
       );
       return;
     }
@@ -1213,8 +1222,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
               const SizedBox(height: 16),
               ListTile(
                 leading: Icon(Icons.phone, color: scheme.primary),
-                title: const Text(ReferralStrings.contactCall),
-                subtitle: const Text(ReferralStrings.contactCallSubtitle),
+                title: Text(ReferralStrings.contactCall),
+                subtitle: Text(ReferralStrings.contactCallSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchPhoneDialer(phone);
@@ -1225,8 +1234,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
                   Icons.message,
                   color: Theme.of(context).extension<LeapfrogColors>()!.whatsapp,
                 ),
-                title: const Text(ReferralStrings.contactWhatsApp),
-                subtitle: const Text(ReferralStrings.contactWhatsAppSubtitle),
+                title: Text(ReferralStrings.contactWhatsApp),
+                subtitle: Text(ReferralStrings.contactWhatsAppSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchWhatsApp(phone, _buildContactMessage(name, referral, patient));
@@ -1234,8 +1243,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
               ),
               ListTile(
                 leading: Icon(Icons.sms, color: scheme.tertiary),
-                title: const Text(ReferralStrings.contactSms),
-                subtitle: const Text(ReferralStrings.contactSmsSubtitle),
+                title: Text(ReferralStrings.contactSms),
+                subtitle: Text(ReferralStrings.contactSmsSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchSms(phone, _buildContactMessage(name, referral, patient));
@@ -1285,7 +1294,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(uri);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorPhoneDialer)),
+          SnackBar(content: Text(ReferralStrings.errorPhoneDialer)),
         );
       }
     } catch (e) {
@@ -1306,7 +1315,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorWhatsApp)),
+          SnackBar(content: Text(ReferralStrings.errorWhatsApp)),
         );
       }
     } catch (e) {
@@ -1329,7 +1338,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(uri);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorSms)),
+          SnackBar(content: Text(ReferralStrings.errorSms)),
         );
       }
     } catch (e) {
@@ -1342,10 +1351,12 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleUpdateStatus(Referral r) {
+    debugPrint('[_ReferralListScreenState] _handleUpdateStatus');
     _showStatusUpdateSheet(r);
   }
 
   void _handleLocate(Referral r, Patient? patient) {
+    debugPrint('[_ReferralListScreenState] _handleLocate patient=${patient}');
     // Try to get location from patient's raw JSON or household
     final patientName = patient?.name ?? 'Patient';
     final villageId = patient?.villageId;
@@ -1375,8 +1386,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
               const SizedBox(height: 16),
               ListTile(
                 leading: Icon(Icons.map, color: scheme.primary),
-                title: const Text(ReferralStrings.locateOpenMaps),
-                subtitle: const Text(ReferralStrings.locateOpenMapsSubtitle),
+                title: Text(ReferralStrings.locateOpenMaps),
+                subtitle: Text(ReferralStrings.locateOpenMapsSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchGoogleMaps(patientName, villageId);
@@ -1384,8 +1395,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
               ),
               ListTile(
                 leading: Icon(Icons.directions, color: scheme.tertiary),
-                title: const Text(ReferralStrings.locateGetDirections),
-                subtitle: const Text(ReferralStrings.locateGetDirectionsSubtitle),
+                title: Text(ReferralStrings.locateGetDirections),
+                subtitle: Text(ReferralStrings.locateGetDirectionsSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchGoogleMapsDirections(patientName, villageId);
@@ -1421,7 +1432,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(webUri, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorMaps)),
+          SnackBar(content: Text(ReferralStrings.errorMaps)),
         );
       }
     } catch (e) {
@@ -1455,7 +1466,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(webUri, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorMaps)),
+          SnackBar(content: Text(ReferralStrings.errorMaps)),
         );
       }
     } catch (e) {
@@ -1468,6 +1479,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleEscalate(Referral r) async {
+    debugPrint('[_ReferralListScreenState] _handleEscalate');
     final reasonController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1543,6 +1555,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleCallFacility(Referral r) {
+    debugPrint('[_ReferralListScreenState] _handleCallFacility');
     // Try to get facility phone from referral raw JSON
     // In production, fetch from facility metadata via ReferralApiService
     const facilityPhone = '+8801700000000';
@@ -1554,14 +1567,17 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleUpdateQueue(Referral r) {
+    debugPrint('[_ReferralListScreenState] _handleUpdateQueue');
     _showQueueUpdateSheet(r);
   }
 
   void _handleOpenReferral(Referral r) {
+    debugPrint('[_ReferralListScreenState] _handleOpenReferral');
     context.push('/patient/${r.patientId}/referrals');
   }
 
   Future<void> _handleViewPrescription(Referral r, Patient? patient) async {
+    debugPrint('[_ReferralListScreenState] _handleViewPrescription patient=${patient}');
     // Show loading indicator
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1634,6 +1650,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   Future<void> _handleScheduleFollowUp(Referral r, Patient? patient) async {
+    debugPrint('[_ReferralListScreenState] _handleScheduleFollowUp patient=${patient}');
     final followUpCalls = context.read<FollowUpCallService>();
     final success = await FollowUpScheduler.show(
       context,
@@ -1677,10 +1694,11 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleSendReminder(Referral r, Patient? patient) {
+    debugPrint('[_ReferralListScreenState] _handleSendReminder patient=${patient}');
     final phone = patient?.phone;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ReferralStrings.errorNoPhone)),
+        SnackBar(content: Text(ReferralStrings.errorNoPhone)),
       );
       return;
     }
@@ -1693,6 +1711,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleCloseCase(Referral r) async {
+    debugPrint('[_ReferralListScreenState] _handleCloseCase');
     final outcomeController = TextEditingController();
     ReferralStatus selectedOutcome = ReferralStatus.closedRecovered;
     
@@ -2072,48 +2091,3 @@ class _CompletedTodayChip extends StatelessWidget {
   }
 }
 
-class _VisitVillageChip extends StatelessWidget {
-  const _VisitVillageChip({
-    required this.label,
-    required this.isActive,
-    required this.navyColor,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isActive;
-  final Color navyColor;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: Semantics(
-        label: isActive ? 'Village filter: $label, selected' : 'Filter by village: $label',
-        button: true,
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isActive ? navyColor : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isActive ? navyColor : AppColors.border,
-              ),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

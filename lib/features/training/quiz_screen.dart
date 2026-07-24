@@ -1,13 +1,17 @@
 /// MCQ quiz screen — shown after completing all lesson cards in a module.
 ///
-/// Flow: question → tap option → immediate per-question feedback (green/red) →
-/// "Next" → … → result card (score, pass/fail, try-again or back).
+/// Layout matches spice-coaching-android SDK QuizQuestionScreen + QuizResultScreen:
+///   - Question: inline "Q N of M" counter, titleMedium SemiBold, no Card wrapper
+///   - Pre-selection: disabled "Select an answer" button
+///   - Post-selection: InlineAnswerFeedback (explanation callout + Next inline)
+///   - Result: 72sp orange score %, badge label heading, "Your answers" list,
+///     pinned Try Again (orange) + Done (primary) pill buttons
 ///
 /// Pass threshold: ≥ 70% correct.
 ///
 /// Engineering Design Standards:
 ///   - All strings from [CoachingStrings].
-///   - No I/O — reads mock data passed in via constructor.
+///   - No I/O — reads data passed in via constructor.
 library;
 
 import 'package:flutter/material.dart';
@@ -17,7 +21,16 @@ import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import 'coaching_models.dart';
 import 'coaching_repository.dart';
-import 'module_player_screen.dart';
+
+// SDK-matched local palette
+const _kResultOrange = Color(0xFFC23C02);
+const _kHeadingText = Color(0xFF1A1A1A);
+const _kMutedText = Color(0xFF6B6B6B);
+const _kDividerColor = Color(0xFFECECEC);
+const _kCorrectTint = Color(0xFF2E7D52);
+const _kCorrectCircleBg = Color(0xFFE6F4EC);
+const _kWrongTint = Color(0xFFD9534F);
+const _kWrongCircleBg = Color(0xFFFBEAEA);
 
 class QuizScreen extends StatefulWidget {
   const QuizScreen({super.key, required this.module});
@@ -37,10 +50,11 @@ class _QuizScreenState extends State<QuizScreen> {
   int _correctCount = 0;
   bool _done = false;
 
+  // Records per-question selections for the result "Your answers" list.
+  late final List<int?> _answers = List.filled(widget.module.quiz.length, null);
+
   List<QuizQuestion> get _questions => widget.module.quiz;
-
   QuizQuestion get _current => _questions[_questionIndex];
-
   bool get _isCorrect => _selectedOption == _current.correctIndex;
 
   void _selectOption(int index) {
@@ -48,6 +62,7 @@ class _QuizScreenState extends State<QuizScreen> {
     setState(() {
       _selectedOption = index;
       _answered = true;
+      _answers[_questionIndex] = index;
       if (index == _current.correctIndex) _correctCount++;
     });
   }
@@ -73,58 +88,82 @@ class _QuizScreenState extends State<QuizScreen> {
       _answered = false;
       _correctCount = 0;
       _done = false;
+      for (var i = 0; i < _answers.length; i++) {
+        _answers[i] = null;
+      }
     });
-  }
-
-  void _backToModule() {
-    Navigator.of(context).pop();
-  }
-
-  void _reviewModule() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => ModulePlayerScreen(module: widget.module),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_done) return _ResultScreen(this);
-    return _QuestionScreen(this);
+    if (_questions.isEmpty) return _EmptyQuizScreen(module: widget.module);
+    if (_done) {
+      return _ResultScreen(
+        questions: _questions,
+        answers: _answers,
+        correctCount: _correctCount,
+        onRestart: _restart,
+        onDone: () => Navigator.of(context).pop(),
+      );
+    }
+    return _QuestionScreen(
+      module: widget.module,
+      questions: _questions,
+      questionIndex: _questionIndex,
+      selectedOption: _selectedOption,
+      answered: _answered,
+      isCorrect: _isCorrect,
+      onSelect: _selectOption,
+      onNext: _advance,
+      onBack: () => Navigator.of(context).pop(),
+    );
   }
 }
 
 // ─── Active question screen ───────────────────────────────────────────────────
 
 class _QuestionScreen extends StatelessWidget {
-  const _QuestionScreen(this.state);
+  const _QuestionScreen({
+    required this.module,
+    required this.questions,
+    required this.questionIndex,
+    required this.selectedOption,
+    required this.answered,
+    required this.isCorrect,
+    required this.onSelect,
+    required this.onNext,
+    required this.onBack,
+  });
 
-  final _QuizScreenState state;
+  final CoachingModule module;
+  final List<QuizQuestion> questions;
+  final int questionIndex;
+  final int? selectedOption;
+  final bool answered;
+  final bool isCorrect;
+  final void Function(int) onSelect;
+  final VoidCallback onNext;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final q = state._current;
-    final total = state._questions.length;
-    final idx = state._questionIndex;
-    final progress = (idx + 1) / total;
+    final q = questions[questionIndex];
+    final total = questions.length;
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        title: const Text(CoachingStrings.quizTitle),
-        backgroundColor: AppColors.aiPurpleDark,
+        title: Text(module.titleEn),
+        backgroundColor: const Color(0xFF2514BE),
         foregroundColor: Colors.white,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4),
-          child: LinearProgressIndicator(
-            value: progress,
-            backgroundColor: AppColors.aiBorderDark,
-            color: AppColors.aiPurpleLight,
-            minHeight: 4,
+        leading: BackButton(onPressed: onBack),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.home_rounded),
+            onPressed: onBack,
           ),
-        ),
+        ],
       ),
       body: Column(
         children: [
@@ -134,95 +173,159 @@ class _QuestionScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Question counter ────────────────────────────────────
+                  // "Q N of M" counter in primary color
                   Text(
-                    CoachingStrings.questionProgress(idx + 1, total),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: AppColors.textMuted,
-                      letterSpacing: 0.8,
+                    CoachingStrings.quizQuestionCounter(questionIndex + 1, total),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: AppColors.navy,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.xxxl),
+                  const SizedBox(height: 8),
 
-                  // ── Question text ───────────────────────────────────────
-                  Card(
-                    color: AppColors.aiSurfaceStart,
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.h5xl),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            q.questionEn,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                              height: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          Text(
-                            q.questionBn,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.textMuted,
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
+                  // Question text — no card wrapper
+                  Text(
+                    q.questionEn,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                      height: 1.6,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.h6xl),
+                  const SizedBox(height: 24),
 
-                  // ── Options ─────────────────────────────────────────────
+                  // Answer options
                   ...List.generate(q.options.length, (i) {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
                       child: _OptionTile(
                         label: q.options[i],
                         index: i,
-                        selectedIndex: state._selectedOption,
+                        selectedIndex: selectedOption,
                         correctIndex: q.correctIndex,
-                        answered: state._answered,
-                        onTap: () => state._selectOption(i),
+                        answered: answered,
+                        onTap: () => onSelect(i),
                       ),
                     );
                   }),
 
-                  // ── Rationale (shown after answering) ───────────────────
-                  if (state._answered)
-                    _RationaleCard(
-                      correct: state._isCorrect,
+                  // Inline feedback — explanation + Next button (shown after answering)
+                  if (answered)
+                    _InlineAnswerFeedback(
+                      correct: isCorrect,
                       rationale: q.rationale,
+                      onNext: onNext,
+                    )
+                  else
+                    // Pre-selection: disabled button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: FilledButton(
+                        onPressed: null,
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(CoachingStrings.quizSelectAnswer),
+                      ),
                     ),
-                ],
-              ),
-            ),
-          ),
 
-          // ── Next button ────────────────────────────────────────────────
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xxxl,
-                AppSpacing.md,
-                AppSpacing.xxxl,
-                AppSpacing.xxxl,
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: state._answered ? state._advance : null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.aiPurpleDark,
-                  ),
-                  child: const Text(CoachingStrings.nextQuestion),
-                ),
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Inline answer feedback ───────────────────────────────────────────────────
+
+class _InlineAnswerFeedback extends StatelessWidget {
+  const _InlineAnswerFeedback({
+    required this.correct,
+    required this.rationale,
+    required this.onNext,
+  });
+
+  final bool correct;
+  final String rationale;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = correct ? AppColors.statusSuccess : AppColors.statusCritical;
+    final surface = correct ? AppColors.statusSuccessSurface : AppColors.statusCriticalSurface;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Explanation callout
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.xxxl),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(AppRadius.patRow),
+            border: Border.all(color: color.withAlpha(80)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                correct ? Icons.lightbulb_rounded : Icons.info_outline_rounded,
+                size: 18,
+                color: color,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      CoachingStrings.rationaleLabel,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      rationale,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.5,
+                        color: correct
+                            ? AppColors.statusSuccessText
+                            : AppColors.statusCriticalText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: AppSpacing.xl),
+
+        // Next button inline
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: onNext,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2514BE),
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: Text(CoachingStrings.nextQuestion),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -270,7 +373,7 @@ class _OptionTile extends StatelessWidget {
         trailingIcon = Icons.cancel_rounded;
       }
     } else if (isSelected) {
-      borderColor = AppColors.aiPurpleDark;
+      borderColor = AppColors.navy;
       bgColor = AppColors.aiSurfaceStart;
     }
 
@@ -292,13 +395,37 @@ class _OptionTile extends StatelessWidget {
           ),
           child: Row(
             children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: answered
+                      ? (isCorrect
+                          ? AppColors.statusSuccessSurface
+                          : (index == (selectedIndex ?? -1)
+                              ? AppColors.statusCriticalSurface
+                              : bgColor))
+                      : Colors.white.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: borderColor.withValues(alpha: 0.5), width: 1),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  String.fromCharCode(65 + index),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   label,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: textColor,
-                    fontWeight:
-                        (answered && isCorrect) ? FontWeight.w700 : null,
+                    fontWeight: (answered && isCorrect) ? FontWeight.w700 : null,
                     height: 1.4,
                   ),
                 ),
@@ -308,9 +435,7 @@ class _OptionTile extends StatelessWidget {
                 Icon(
                   trailingIcon,
                   size: 20,
-                  color: isCorrect
-                      ? AppColors.statusSuccess
-                      : AppColors.statusCritical,
+                  color: isCorrect ? AppColors.statusSuccess : AppColors.statusCritical,
                 ),
               ],
             ],
@@ -321,62 +446,152 @@ class _OptionTile extends StatelessWidget {
   }
 }
 
-// ─── Rationale card ───────────────────────────────────────────────────────────
+// ─── Result screen ────────────────────────────────────────────────────────────
 
-class _RationaleCard extends StatelessWidget {
-  const _RationaleCard({required this.correct, required this.rationale});
+class _ResultScreen extends StatelessWidget {
+  const _ResultScreen({
+    required this.questions,
+    required this.answers,
+    required this.correctCount,
+    required this.onRestart,
+    required this.onDone,
+  });
 
-  final bool correct;
-  final String rationale;
+  final List<QuizQuestion> questions;
+  final List<int?> answers;
+  final int correctCount;
+  final VoidCallback onRestart;
+  final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = correct ? AppColors.statusSuccess : AppColors.statusCritical;
-    final surface = correct
-        ? AppColors.statusSuccessSurface
-        : AppColors.statusCriticalSurface;
+    final total = questions.length;
+    final score = correctCount / total;
+    final passed = score >= _QuizScreenState._passThreshold;
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.xxxl),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(AppRadius.patRow),
-        border: Border.all(color: color.withAlpha(80)),
+    return Scaffold(
+      backgroundColor: AppColors.canvas,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF2514BE),
+        foregroundColor: Colors.white,
+        automaticallyImplyLeading: false,
+        title: Text(CoachingStrings.quizResult),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      body: Column(
         children: [
-          Icon(
-            correct
-                ? Icons.lightbulb_rounded
-                : Icons.info_outline_rounded,
-            size: 18,
-            color: color,
-          ),
-          const SizedBox(width: AppSpacing.md),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               children: [
+                const SizedBox(height: 48),
+
+                // 72sp orange score %
                 Text(
-                  CoachingStrings.rationaleLabel,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w700,
+                  '${(score * 100).round()}%',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 72,
+                    fontWeight: FontWeight.bold,
+                    color: _kResultOrange,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.xs),
+                const SizedBox(height: 4),
+
+                // Badge label heading
                 Text(
-                  rationale,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    height: 1.5,
-                    color: correct
-                        ? AppColors.statusSuccessText
-                        : AppColors.statusCriticalText,
+                  CoachingStrings.badgeLabel(score),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: _kHeadingText,
                   ),
                 ),
+                const SizedBox(height: 8),
+
+                // Score summary
+                Text(
+                  CoachingStrings.quizScore(correctCount, total),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: _kMutedText),
+                ),
+                const SizedBox(height: 24),
+
+                // "Your answers" section
+                if (questions.isNotEmpty) ...[
+                  Text(
+                    CoachingStrings.yourAnswers,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: _kMutedText,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  ...List.generate(questions.length, (i) {
+                    final isCorrect = answers[i] == questions[i].correctIndex;
+                    return Column(
+                      children: [
+                        _AnswerRow(
+                          questionText: questions[i].questionEn,
+                          isCorrect: isCorrect,
+                        ),
+                        if (i < questions.length - 1)
+                          Container(
+                            height: 1,
+                            color: _kDividerColor,
+                          ),
+                      ],
+                    );
+                  }),
+                ],
+
+                const SizedBox(height: 24),
               ],
+            ),
+          ),
+
+          // Pinned bottom CTAs
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!passed) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: onRestart,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _kResultOrange,
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: Text(
+                          CoachingStrings.tryAgain,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: onDone,
+                      style: FilledButton.styleFrom(
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: Text(
+                        CoachingStrings.quizDone,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -385,125 +600,104 @@ class _RationaleCard extends StatelessWidget {
   }
 }
 
-// ─── Result screen ────────────────────────────────────────────────────────────
+// ─── Answer row ───────────────────────────────────────────────────────────────
 
-class _ResultScreen extends StatelessWidget {
-  const _ResultScreen(this.state);
+class _AnswerRow extends StatelessWidget {
+  const _AnswerRow({required this.questionText, required this.isCorrect});
 
-  final _QuizScreenState state;
+  final String questionText;
+  final bool isCorrect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: isCorrect ? _kCorrectCircleBg : _kWrongCircleBg,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isCorrect ? Icons.check_rounded : Icons.close_rounded,
+              size: 16,
+              color: isCorrect ? _kCorrectTint : _kWrongTint,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              questionText,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: _kHeadingText,
+                  ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Empty quiz state ─────────────────────────────────────────────────────────
+
+class _EmptyQuizScreen extends StatelessWidget {
+  const _EmptyQuizScreen({required this.module});
+
+  final CoachingModule module;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final total = state._questions.length;
-    final correct = state._correctCount;
-    final score = correct / total;
-    final passed = score >= _QuizScreenState._passThreshold;
-    final scoreColor =
-        passed ? AppColors.statusSuccess : AppColors.statusCritical;
-    final scoreSurface = passed
-        ? AppColors.statusSuccessSurface
-        : AppColors.statusCriticalSurface;
-
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        title: const Text(CoachingStrings.quizResult),
-        backgroundColor: AppColors.aiPurpleDark,
+        title: Text(CoachingStrings.quizTitle),
+        backgroundColor: const Color(0xFF2514BE),
         foregroundColor: Colors.white,
-        automaticallyImplyLeading: false,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // ── Score circle ─────────────────────────────────────────────
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: scoreSurface,
-                shape: BoxShape.circle,
-                border: Border.all(color: scoreColor, width: 3),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${(score * 100).round()}%',
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: scoreColor,
-                      ),
-                    ),
-                    Text(
-                      CoachingStrings.quizScore(correct, total),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scoreColor,
-                      ),
-                    ),
-                  ],
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.h8xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.quiz_rounded, size: 64, color: AppColors.textMuted),
+              const SizedBox(height: AppSpacing.h6xl),
+              Text(
+                CoachingStrings.quizNotReady,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.h6xl),
-
-            // ── Pass / fail message ──────────────────────────────────────
-            Icon(
-              passed
-                  ? Icons.emoji_events_rounded
-                  : Icons.replay_rounded,
-              size: 40,
-              color: scoreColor,
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            Text(
-              passed ? CoachingStrings.quizPassed : CoachingStrings.quizFailed,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.h8xl),
-
-            // ── CTAs ─────────────────────────────────────────────────────
-            if (!passed) ...[
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: state._reviewModule,
-                  icon: const Icon(Icons.menu_book_rounded, size: 18),
-                  label: const Text('Review Module'),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                CoachingStrings.quizNotReadySub,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textMuted,
+                  height: 1.5,
                 ),
               ),
-              const SizedBox(height: AppSpacing.xl),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: state._restart,
-                  icon: const Icon(Icons.replay_rounded, size: 18),
-                  label: const Text(CoachingStrings.tryAgain),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.aiPurpleDark,
-                  ),
+              const SizedBox(height: AppSpacing.h8xl),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: Text(CoachingStrings.backToModules),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF2514BE),
                 ),
               ),
-            ] else
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: state._backToModule,
-                  icon: const Icon(Icons.check_rounded, size: 18),
-                  label: const Text(CoachingStrings.backToModules),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.statusSuccessAction,
-                  ),
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -22,11 +22,15 @@ import '../../core/db/local_dashboard_repository.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
+import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
+import '../search/member_search_repository.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
 import 'widgets/dashboard_search_field.dart';
 import '../visit/visit_controller.dart';
+import '../../core/db/patient_programmes_dao.dart';
+import '../../core/mission/programme_reason.dart';
 import '../visit/visit_start_helper.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
@@ -64,7 +68,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Cached reference to mission repository for change listening.
   MissionDashboardRepository? _missionRepo;
   bool _missionListenerAdded = false;
-  bool _demoSeeded = false;
   
   // Flag to track if data needs refresh when widget becomes visible.
   bool _pendingRefresh = false;
@@ -85,6 +88,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Set<NeedFilter> _availableNeeds = const {};
   String _searchQuery = '';
 
+  // Global member search (patients NOT in the priority queue).
+  List<MemberHit> _globalSearchHits = const [];
+  bool _globalSearchBusy = false;
+  Timer? _globalSearchDebounce;
+
   // Full unfiltered queue — filter/search applied synchronously from this cache.
   List<MissionQueueItem> _baseQueue = const [];
 
@@ -101,6 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void initState() {
+    debugPrint('[_DashboardScreenState] initState');
     super.initState();
     _reloadStats();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -122,15 +131,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _missionListenerAdded = true;
       _missionRepo!.changes.addListener(_onMissionChanges);
     }
-    // Debug builds only: seed the 3 wireframe CCE scenarios once so the
-    // Care Coordination Alerts drawer has data to demo. Never runs in
-    // release, so real users never see fabricated referrals.
-    if (kDebugMode && !_demoSeeded) {
-      _demoSeeded = true;
-      context.read<ReferralRepository>().seedDemoDataIfEmpty().then((_) {
-        if (mounted) _refreshNotificationCount();
-      });
-    }
     _refreshNotificationCount();
   }
 
@@ -150,6 +150,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_DashboardScreenState] dispose');
+    _globalSearchDebounce?.cancel();
     _missionRepo?.changes.removeListener(_onMissionChanges);
     super.dispose();
   }
@@ -182,6 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// string once data has landed. Empty-result paths leave [_villagesLine]
   /// null so the existing fallback continues to show.
   Future<void> _loadVillagesLine() async {
+    debugPrint('[_DashboardScreenState] _loadVillagesLine');
     if (!mounted) return;
     try {
       final hhDao = context.read<HouseholdDao>();
@@ -206,6 +209,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadSummary(AuthState auth) async {
+    debugPrint('[_DashboardScreenState] _loadSummary');
     if (!mounted) return;
     final s = await auth.userProfileSummary();
     if (!mounted) return;
@@ -229,6 +233,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _loadMissionData() {
+    debugPrint('[_DashboardScreenState] _loadMissionData');
     if (!mounted) return;
     // Provider registers MissionDashboardRepository as non-nullable; reading
     // `T?` would silently return null on miss and strand the screen on its
@@ -388,6 +393,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _selectedVillageChipName = null;
     _searchQuery = '';
     _queueRevealCount = _kQueuePageSize;
+    _globalSearchHits = const [];
+    _globalSearchDebounce?.cancel();
+  }
+
+  void _runGlobalSearch(String q) {
+    _globalSearchDebounce?.cancel();
+    if (q.trim().length < 2) {
+      setState(() {
+        _globalSearchHits = const [];
+        _globalSearchBusy = false;
+      });
+      return;
+    }
+    setState(() => _globalSearchBusy = true);
+    _globalSearchDebounce = Timer(const Duration(milliseconds: 400), () async {
+      if (!mounted) return;
+      try {
+        final repo = context.read<MemberSearchRepository>();
+        final result = await repo.search(query: q.trim());
+        if (!mounted) return;
+        final queueIds = _baseQueue
+            .map((i) => i.patientId)
+            .whereType<String>()
+            .toSet();
+        final hits = result.matches
+            .where((h) => h.id != null && !queueIds.contains(h.id))
+            .toList();
+        debugPrint(
+          '[Dashboard] global search "$q" → ${result.matches.length} total, '
+          '${hits.length} not in queue',
+        );
+        setState(() {
+          _globalSearchHits = hits;
+          _globalSearchBusy = false;
+        });
+      } catch (e) {
+        debugPrint('[Dashboard] global search error: $e');
+        if (mounted) setState(() => _globalSearchBusy = false);
+      }
+    });
   }
 
   /// Re-apply current filters to the cached base queue synchronously.
@@ -516,6 +561,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// prototype's "Visit now" — single tap drops the SK into triage.
   /// Falls back to opening the patient detail when the visit can't start.
   Future<void> _startVisitFromQueue(MissionQueueItem item) async {
+    debugPrint('[_DashboardScreenState] _startVisitFromQueue patientId=${item.patientId} patientName=${item.patientName}');
     assert(() {
       final code = '${item.band.wireTag.replaceFirst('band', '')}'
           '${item.modifier == Modifier.none ? '' : item.modifier.wireTag}';
@@ -566,7 +612,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       return;
     }
-    // Look up member to get referenceId (backend integer PK) and memberId.
+    await _startVisitByPatientId(
+      patientId: patientId,
+      programme: item.primaryProgramme,
+      patientName: item.patientName,
+      patientAge: item.age,
+      householdId: item.householdId,
+      logPrefix: '[Dashboard]',
+    );
+  }
+
+  Future<void> _startVisitFromHit(MemberHit hit) async {
+    final patientId = hit.id;
+    if (patientId == null || patientId.isEmpty) return;
+    debugPrint(
+      '[Dashboard] global search start visit: patientId=$patientId name=${hit.name}',
+    );
+    // Derive the correct programme from the patient's enrolled programmes
+    // rather than hardcoding Programme.ncd.
+    final progDao = context.read<PatientProgrammesDao>();
+    final programmes = await progDao.programmesFor(patientId);
+    final programme = primaryProgrammeOf(programmes);
+    debugPrint('[Dashboard] global search programme resolved: ${programme.name}');
+    await _startVisitByPatientId(
+      patientId: patientId,
+      programme: programme,
+      patientName: hit.name,
+      householdId: hit.householdId,
+      logPrefix: '[Dashboard] global search',
+    );
+  }
+
+  /// Shared visit-start implementation. Looks up the member record, calls
+  /// [startOrResumeVisit], then navigates to the visit flow on success.
+  Future<void> _startVisitByPatientId({
+    required String patientId,
+    required Programme programme,
+    required String? patientName,
+    required String? householdId,
+    int? patientAge,
+    String logPrefix = '[Dashboard]',
+  }) async {
     final memberDao = context.read<MemberDao>();
     final controller = context.read<VisitController>();
     final member = await memberDao.getByPatientId(patientId);
@@ -581,28 +667,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // member-assessment-history pull (scoped to [203, 204, 206]) can find
     // Flutter-submitted assessments. Parent villageId (34) is invisible to it.
     final villageId = member?.subVillageId ?? member?.villageId;
-    debugPrint('[Dashboard] member lookup: patientId=$patientId referenceId=${member?.referenceId} memberId=$memberId villageId=$villageId → householdMemberLocalId=$householdMemberLocalId');
+    debugPrint(
+      '$logPrefix member lookup: patientId=$patientId '
+      'referenceId=${member?.referenceId} memberId=$memberId '
+      'villageId=$villageId → householdMemberLocalId=$householdMemberLocalId',
+    );
     if (!mounted) return;
     final encounterId = await startOrResumeVisit(
       context,
       controller: controller,
       patientId: patientId,
-      programme: item.primaryProgramme,
-      patientName: item.patientName,
-      patientAge: item.age,
-      householdId: item.householdId,
+      programme: programme,
+      patientName: patientName,
+      patientAge: patientAge,
+      householdId: householdId,
     );
     if (!mounted) return;
     if (encounterId != null) {
-      debugPrint('[Dashboard] Starting visit, navigating with origin=dashboard');
+      debugPrint('$logPrefix visit started, navigating with origin=dashboard');
       context.go(
         '/patients/visit/$encounterId/flow?origin=dashboard',
         extra: {
           'patientId': patientId,
-          'patientName': item.patientName,
+          'patientName': patientName,
           'patientGender': member?.gender,
-          'householdId': item.householdId,
-          'patientAge': item.age,
+          'householdId': householdId,
+          'patientAge': patientAge,
           'memberId': memberId,
           'householdMemberLocalId': householdMemberLocalId,
           'villageId': villageId,
@@ -610,6 +700,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
       return;
     }
+    debugPrint('$logPrefix visit start failed: ${controller.error}');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -620,6 +711,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _navigateToFirstQueueItem() async {
+    debugPrint('[_DashboardScreenState] _navigateToFirstQueueItem');
     // Navigate to Tasks screen (Visits tab)
     if (mounted) context.push('/tasks');
   }
@@ -663,6 +755,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _queueRevealCount = _kQueuePageSize;
                 });
                 _applyFilters();
+                _runGlobalSearch(q);
               },
             ),
             // Referral alert strip — sits between header/search and village tabs
@@ -730,8 +823,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     final hasMore = revealed < queue.length;
                     final bodyCount =
                         waiting || queue.isEmpty ? 1 : revealed;
-                    final itemCount =
-                        headerCount + bodyCount + (hasMore ? 1 : 0);
+
+                    // Global search section — patients not in today's queue.
+                    final globalHits = _searchQuery.length >= 2
+                        ? _globalSearchHits
+                        : const <MemberHit>[];
+                    final showGlobalSection = _searchQuery.length >= 2 &&
+                        (_globalSearchBusy || globalHits.isNotEmpty);
+                    final globalItemCount = showGlobalSection
+                        ? (1 + (_globalSearchBusy ? 1 : globalHits.length))
+                        : 0;
+
+                    final itemCount = headerCount +
+                        bodyCount +
+                        (hasMore ? 1 : 0) +
+                        globalItemCount;
 
                     return NotificationListener<ScrollNotification>(
                       onNotification: (n) {
@@ -798,6 +904,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           }
                           if (index == 3) return const SizedBox(height: 10);
 
+                          // Global search items follow all queue items.
+                          final totalQueueEnd = headerCount +
+                              bodyCount +
+                              (hasMore ? 1 : 0);
+                          if (showGlobalSection && index >= totalQueueEnd) {
+                            final globalIndex = index - totalQueueEnd;
+                            if (globalIndex == 0) {
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(0, 16, 0, 8),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.search,
+                                      size: 16,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Text(
+                                      'Search results — not in today\'s queue',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                    if (_globalSearchBusy) ...[
+                                      const SizedBox(width: 8),
+                                      const SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            }
+                            if (_globalSearchBusy) {
+                              return const SizedBox.shrink();
+                            }
+                            final hit = globalHits[globalIndex - 1];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _GlobalSearchResultCard(
+                                hit: hit,
+                                onStartVisit: () => _startVisitFromHit(hit),
+                              ),
+                            );
+                          }
+
                           if (waiting) {
                             return const Padding(
                               padding: EdgeInsets.symmetric(vertical: 32),
@@ -814,6 +972,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           }
 
                           if (queue.isEmpty) {
+                            if (_globalSearchHits.isNotEmpty || _globalSearchBusy) {
+                              return const SizedBox.shrink();
+                            }
                             if (hasFilters) {
                               return _FilterEmptyCard(
                                 onClearFilters: () {
@@ -930,8 +1091,8 @@ class _SettingsMenu extends StatelessWidget {
               final confirmPin = await showDialog<bool>(
                 context: ctx,
                 builder: (dlgCtx) => AlertDialog(
-                  title: const Text(PinStrings.confirmRemovePin),
-                  content: const Text(PinStrings.confirmRemovePinBody),
+                  title: Text(PinStrings.confirmRemovePin),
+                  content: Text(PinStrings.confirmRemovePinBody),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(false),
@@ -939,7 +1100,7 @@ class _SettingsMenu extends StatelessWidget {
                     ),
                     FilledButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(true),
-                      child: const Text(CommonStrings.remove),
+                      child: Text(CommonStrings.remove),
                     ),
                   ],
                 ),
@@ -948,7 +1109,7 @@ class _SettingsMenu extends StatelessWidget {
               await auth.disablePin();
               if (ctx.mounted) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text(PinStrings.disabledSnack)),
+                  SnackBar(content: Text(PinStrings.disabledSnack)),
                 );
               }
               break;
@@ -1364,6 +1525,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
 
   @override
   void initState() {
+    debugPrint('[_ReferralAlertBannerState] initState');
     super.initState();
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -1376,6 +1538,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
 
   @override
   void dispose() {
+    debugPrint('[_ReferralAlertBannerState] dispose');
     _pulseCtrl.dispose();
     super.dispose();
   }
@@ -1428,7 +1591,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
                               child: Text(
                                 total > 99 ? '99+' : '$total',
                                 style: const TextStyle(
-                                  fontFamily: 'Nunito',
+                                  fontFamily: AppFonts.display,
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white,
@@ -1461,7 +1624,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
                         child: Text(
                           MissionDashboardStrings.referralAlertsLabel,
                           style: const TextStyle(
-                            fontFamily: 'NunitoSans',
+                            fontFamily: AppFonts.body,
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
@@ -1683,6 +1846,7 @@ class _NotificationBellState extends State<_NotificationBell>
 
   @override
   void initState() {
+    debugPrint('[_NotificationBellState] initState');
     super.initState();
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -1693,6 +1857,7 @@ class _NotificationBellState extends State<_NotificationBell>
 
   @override
   void dispose() {
+    debugPrint('[_NotificationBellState] dispose');
     _pulseCtrl.dispose();
     super.dispose();
   }
@@ -1749,7 +1914,7 @@ class _NotificationBellState extends State<_NotificationBell>
                           child: Text(
                             count > 9 ? '9+' : '$count',
                             style: const TextStyle(
-                              fontFamily: 'Nunito',
+                              fontFamily: AppFonts.display,
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
@@ -1764,6 +1929,77 @@ class _NotificationBellState extends State<_NotificationBell>
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _GlobalSearchResultCard extends StatelessWidget {
+  const _GlobalSearchResultCard({
+    required this.hit,
+    required this.onStartVisit,
+  });
+
+  final MemberHit hit;
+  final VoidCallback onStartVisit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: const Color(0xFFEFF6FF),
+            child: Text(
+              hit.name?.isNotEmpty == true
+                  ? hit.name![0].toUpperCase()
+                  : '?',
+              style: const TextStyle(
+                color: Color(0xFF1D4ED8),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hit.name ?? 'Unknown',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                if (hit.gender != null)
+                  Text(
+                    hit.gender!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          FilledButton.tonal(
+            onPressed: onStartVisit,
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Start Visit', style: TextStyle(fontSize: 12)),
+          ),
+        ],
       ),
     );
   }

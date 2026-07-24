@@ -30,8 +30,8 @@ import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import 'models/anc_assessment.dart';
-import '../patient/enroll/pregnancy_registration_sheet.dart';
 import '../../core/db/local_assessment_dao.dart';
+import 'assessment_repository.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
@@ -155,9 +155,13 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   int? get _effectiveGestationalWeeks =>
       widget.gestationalWeeks ?? _resolvedGestationalWeeks;
 
+  /// ANC or PNC visit number for the header badge (1-based). Null until loaded.
+  int? _visitNumber;
+
   @override
   void initState() {
     super.initState();
+    debugPrint('[_VisitFlowState] initState');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Always load — even when patientName is supplied we still need DOB + age
       // for the smart age label (months for infants). ??-guards inside prevent
@@ -173,10 +177,46 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       if (widget.patientId.isNotEmpty) {
         _loadPregnancySnapshotFromDb();
       }
+      if (widget.patientId.isNotEmpty) {
+        _loadVisitNumber();
+      }
     });
   }
 
+  Future<void> _loadVisitNumber({Set<Programme>? programmes}) async {
+    final progs = programmes ?? widget.seedProgrammes;
+    final isAnc = progs.contains(Programme.anc);
+    final isPnc = progs.contains(Programme.pnc);
+    if (!isAnc && !isPnc) return;
+    try {
+      int count;
+      if (isAnc) {
+        final history = await context
+            .read<AssessmentRepository>()
+            .ancVitalsHistory(widget.patientId);
+        count = history.length;
+      } else {
+        final rows = await context
+            .read<LocalAssessmentDao>()
+            .getByPatientId(widget.patientId);
+        count = rows
+            .where((r) => r.assessmentType.toUpperCase() == 'PNC_MOTHER')
+            .length;
+      }
+      if (mounted) setState(() => _visitNumber = count + 1);
+    } catch (e) {
+      debugPrint('[VisitFlow] visit number load failed: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _step1Scribe?.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadPatientNameFromDb() async {
+    debugPrint('[_VisitFlowState] _loadPatientNameFromDb');
     try {
       final dao = context.read<PatientDao>();
       final p = await dao.byId(widget.patientId);
@@ -192,6 +232,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   }
 
   Future<void> _loadPostpartumFromDb() async {
+    debugPrint('[_VisitFlowState] _loadPostpartumFromDb');
     try {
       final dao = context.read<PregnancySnapshotDao>();
       final all = await dao.getAll();
@@ -208,9 +249,22 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   }
 
   Future<void> _loadPregnancySnapshotFromDb() async {
+    debugPrint('[_VisitFlowState] _loadPregnancySnapshotFromDb');
     try {
       final dao = context.read<PregnancySnapshotDao>();
-      final snap = await dao.byPatient(widget.patientId);
+      var snap = await dao.byPatient(widget.patientId);
+      // Sync sometimes keys the row by household-member id when the FHIR
+      // patient map was incomplete — fall back to memberId.
+      final memberId = widget.memberId;
+      if ((snap?.lmpDate == null && snap?.eddDate == null) &&
+          memberId != null &&
+          memberId.isNotEmpty &&
+          memberId != widget.patientId) {
+        final byMember = await dao.byPatient(memberId);
+        if (byMember?.lmpDate != null || byMember?.eddDate != null) {
+          snap = byMember;
+        }
+      }
       if (!mounted || snap == null) return;
 
       DateTime? lmp;
@@ -268,6 +322,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// after the SK deselected every programme.
   bool _programmesExplicitlyChosen = false;
 
+  /// True when the SK confirmed a delivery visit in Step 1. Gates whether
+  /// the pregnancyOutcome form sections are included in Step 2.
+  bool _isDeliveryVisit = false;
+
   /// Live programmes from Step 1 service card selection — drives header badge
   /// before the SK advances. Updated on every card toggle via [onProgrammesLive].
   Set<Programme> _step1LiveProgrammes = {};
@@ -276,6 +334,21 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
   List<String> _referredReasons = const [];
+  String? _referralFacility;
+
+  /// True once triage (Step 1) has been submitted. Blocks back-navigation to
+  /// Step 1 from Step 2+ — re-entering triage would create a duplicate assessment.
+  ///
+  /// Initialised to true when [widget.initialStep] > 0 (e.g. flows launched
+  /// from NewPatientVisitScreen that already captured symptoms on a separate
+  /// screen). This prevents back-navigation from landing on an empty step 0.
+  late bool _triageSubmitted = widget.initialStep > 0;
+
+  /// AI Scribe controller for step 0 (symptom picker). Owned here so the
+  /// controller — and any in-progress or completed transcript — survives
+  /// step transitions instead of being discarded when the step-0 widget is
+  /// replaced in the widget tree.
+  ScribeController? _step1Scribe;
 
   /// Smart age label: months for under-2, years otherwise.
   /// Falls back to DOB when age-in-years is null (common for infants).
@@ -319,7 +392,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (_step > 0) {
+        if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
           setState(() => _step -= 1);
         } else {
           await _exitFlow();
@@ -340,6 +413,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   ageDisplay: _ageDisplay,
                   householdId: widget.householdId,
                   patientGender: widget.patientGender,
+                  visitNumber: _visitNumber,
                   primaryProgramme: _pathways.isNotEmpty
                       ? _pathways.first.programme
                       : _primaryProgramme,
@@ -347,7 +421,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                       ? _step1LiveProgrammes.map((p) => p.name).toList()
                       : _confirmedProgrammes.map((p) => p.name).toList(),
                   onBack: () {
-                    if (_step > 0) {
+                    if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
                       setState(() => _step -= 1);
                     } else {
                       _exitFlow();
@@ -375,6 +449,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Widget _buildStepBody() {
     switch (_step) {
       case 0:
+        _step1Scribe ??= ScribeController(
+          api: context.read<ScribeApiService>(),
+          permissionService: ScribePermissionService(),
+        );
         return _Step1Symptoms(
           key: ValueKey('flow-step1-${widget.visitId}'),
           encounterId: widget.visitId,
@@ -385,6 +463,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientName: widget.patientName,
           patientGender: widget.patientGender,
           origin: widget.origin,
+          scribeController: _step1Scribe!,
           onSymptomsConfirmed: (symptoms, duration, other, aiPicked) {
             // Captured before onAdvance fires (see SymptomPickerScreen).
             _confirmedSymptoms = symptoms;
@@ -398,6 +477,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             _confirmedProgrammes = programmes;
             _programmesExplicitlyChosen = true;
           },
+          onDeliverySelected: (isDelivery) {
+            debugPrint('[DeliveryGate] onDeliverySelected: $isDelivery → _isDeliveryVisit=$isDelivery');
+            _isDeliveryVisit = isDelivery;
+          },
           onProgrammesLive: (programmes) {
             setState(() => _step1LiveProgrammes = programmes);
           },
@@ -410,7 +493,13 @@ class _VisitFlowState extends State<VisitFlowScreen> {
               _confirmedProgrammes =
                   pathways.map((p) => p.programme).toSet();
             }
-            setState(() => _step = 1);
+            if (_visitNumber == null) {
+              _loadVisitNumber(programmes: _confirmedProgrammes);
+            }
+            setState(() {
+              _step = 1;
+              _triageSubmitted = true;
+            });
           },
         );
       case 1:
@@ -458,6 +547,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientName: widget.patientName,
           patientGender: widget.patientGender,
           gestationalWeeks: _effectiveGestationalWeeks,
+          lmpMs: _resolvedLmpMs,
+          eddMs: _resolvedEddMs,
           isPostpartum: _isPostpartum,
           postpartumWeeks: _postpartumWeeks,
           confirmedSymptoms: _confirmedSymptoms,
@@ -465,12 +556,15 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           sicknessDuration: _sicknessDuration,
           otherSymptoms: _otherSymptoms,
           seedProgrammes: _confirmedProgrammes,
+          isDeliveryVisit: _isDeliveryVisit,
           origin: widget.origin,
-          onAdvance: (programme, referral, reasons) {
+          onAdvance: (programme, referral, reasons, facility) {
+            debugPrint('[ReferralFacility] flow captured — facility=$facility referral=$referral');
             setState(() {
               _primaryProgramme = programme;
               _referralRecommended = referral;
               _referredReasons = reasons;
+              _referralFacility = facility;
               _step = 2;
             });
           },
@@ -492,6 +586,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           primaryProgramme: _primaryProgramme,
           referralRecommended: _referralRecommended,
           referredReasons: _referredReasons,
+          referralFacility: _referralFacility,
           memberId: widget.memberId,
           householdId: widget.householdId,
           origin: widget.origin ?? 'patients',
@@ -499,7 +594,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     }
   }
 
-  Future<bool?> _confirmExit() => showLeaveVisitDialog(context);
+  Future<bool?> _confirmExit() {
+    debugPrint('[_VisitFlowState] _confirmExit');
+    return showLeaveVisitDialog(context);
+  }
 }
 
 /// Shared leave-visit confirmation dialog.
@@ -573,7 +671,7 @@ Future<bool?> showLeaveVisitDialog(BuildContext context) {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  child: const Text(VisitFlowStrings.discardCancel),
+                  child: Text(VisitFlowStrings.discardCancel),
                 ),
               ),
               const SizedBox(height: 8),
@@ -592,7 +690,7 @@ Future<bool?> showLeaveVisitDialog(BuildContext context) {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  child: const Text(VisitFlowStrings.discardConfirmCta),
+                  child: Text(VisitFlowStrings.discardConfirmCta),
                 ),
               ),
             ],
@@ -619,30 +717,6 @@ Future<bool?> showLeaveVisitDialog(BuildContext context) {
 /// Step label 2 takes the activated programme name (or "Visit" fallback)
 /// so the SK sees what they are about to enter.
 
-class _DemoChip extends StatelessWidget {
-  const _DemoChip({required this.icon, required this.label});
-  final IconData icon;
-  final String label;
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: Colors.white.withValues(alpha: 0.75)),
-        const SizedBox(width: 3),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.75),
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-
 /// Step 1 — symptom check.
 ///
 /// Thin host for [SymptomPickerScreen] with a parent-supplied `onAdvance`
@@ -656,6 +730,7 @@ class _Step1Symptoms extends StatelessWidget {
     required this.patientId,
     required this.onAdvance,
     required this.onSymptomsConfirmed,
+    required this.scribeController,
     this.memberId,
     this.householdId,
     this.patientAge,
@@ -664,6 +739,7 @@ class _Step1Symptoms extends StatelessWidget {
     this.origin,
     this.onProgrammesSelected,
     this.onProgrammesLive,
+    this.onDeliverySelected,
   });
 
   final String encounterId;
@@ -682,6 +758,10 @@ class _Step1Symptoms extends StatelessWidget {
     Set<String> aiPickedSymptoms,
   ) onSymptomsConfirmed;
 
+  /// Controller owned by [_VisitFlowState] so the AI Scribe session and
+  /// transcript survive step transitions (e.g. step 0 → 1 → back to 0).
+  final ScribeController scribeController;
+
   /// Fired just before [onAdvance] with the SK-confirmed programme set from
   /// the inline eligible-services grid. Absent for child visits (under-5).
   final ValueChanged<Set<Programme>>? onProgrammesSelected;
@@ -689,13 +769,13 @@ class _Step1Symptoms extends StatelessWidget {
   /// Fired on every service card toggle — drives the Step 1 header badge live.
   final ValueChanged<Set<Programme>>? onProgrammesLive;
 
+  /// Fired just before [onAdvance] with whether the SK confirmed a delivery visit.
+  final ValueChanged<bool>? onDeliverySelected;
+
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<ScribeController>(
-      create: (ctx) => ScribeController(
-        api: ctx.read<ScribeApiService>(),
-        permissionService: ScribePermissionService(),
-      ),
+    return ChangeNotifierProvider<ScribeController>.value(
+      value: scribeController,
       child: SymptomPickerScreen(
         encounterId: encounterId,
         patientId: patientId,
@@ -709,6 +789,7 @@ class _Step1Symptoms extends StatelessWidget {
         onSymptomsConfirmed: onSymptomsConfirmed,
         onProgrammesSelected: onProgrammesSelected,
         onProgrammesLive: onProgrammesLive,
+        onDeliverySelected: onDeliverySelected,
       ),
     );
   }
@@ -728,12 +809,15 @@ class _Step2VitalsForm extends StatelessWidget {
     this.householdMemberLocalId,
     this.patientAge,
     this.gestationalWeeks,
+    this.lmpMs,
+    this.eddMs,
     this.pathwayNames,
     this.triageNotes,
     this.origin,
     this.enrolledProgrammes = const {},
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
+    this.isDeliveryVisit = false,
   });
 
   final String visitId;
@@ -744,9 +828,12 @@ class _Step2VitalsForm extends StatelessWidget {
   final int? householdMemberLocalId;
   final int? patientAge;
   final int? gestationalWeeks;
+  final int? lmpMs;
+  final int? eddMs;
   final List<String>? pathwayNames;
   final String? triageNotes;
   final String? origin;
+  final bool isDeliveryVisit;
   /// Enrolled programmes from the patient record — used to order sections.
   final Set<Programme> enrolledProgrammes;
   /// Symptom codes selected in Step 1.
@@ -757,6 +844,7 @@ class _Step2VitalsForm extends StatelessWidget {
     Programme primaryProgramme,
     bool referralRecommended,
     List<String> referredReasons,
+    String? referralFacility,
   ) onAdvance;
 
   @override
@@ -770,7 +858,10 @@ class _Step2VitalsForm extends StatelessWidget {
       householdMemberLocalId: householdMemberLocalId,
       patientAge: patientAge,
       gestationalWeeks: gestationalWeeks,
+      lmpMs: lmpMs,
+      eddMs: eddMs,
       activatedPathways: pathwayNames,
+      isDeliveryVisit: isDeliveryVisit,
       triageNotes: triageNotes,
       origin: origin,
       enrolledProgrammes: enrolledProgrammes,
@@ -819,10 +910,12 @@ class _Step2VaccinationState extends State<_Step2Vaccination> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_Step2VaccinationState] initState');
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadDob());
   }
 
   Future<void> _loadDob() async {
+    debugPrint('[_Step2VaccinationState] _loadDob');
     try {
       final dao = context.read<PatientDao>();
       final patient = await dao.byId(widget.patientId);
@@ -886,8 +979,11 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     this.patientName,
     this.patientGender,
     this.gestationalWeeks,
+    this.lmpMs,
+    this.eddMs,
     this.isPostpartum = false,
     this.postpartumWeeks,
+    this.isDeliveryVisit = false,
     this.origin,
   });
 
@@ -901,8 +997,11 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final String? patientName;
   final String? patientGender;
   final int? gestationalWeeks;
+  final int? lmpMs;
+  final int? eddMs;
   final bool isPostpartum;
   final int? postpartumWeeks;
+  final bool isDeliveryVisit;
   final Set<String> confirmedSymptoms;
   /// Subset of [confirmedSymptoms] pre-selected by the AI Scribe.
   final Set<String> aiPickedSymptoms;
@@ -914,6 +1013,7 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     Programme primaryProgramme,
     bool referralRecommended,
     List<String> referredReasons,
+    String? referralFacility,
   ) onAdvance;
 
   @override
@@ -933,7 +1033,18 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_Step2ProgrammesThenFormState] initState');
     _selectedProgrammes = widget.seedProgrammes;
+    // Delivery visit always needs PNC in the seed so the form opens
+    // pregnancy-outcome even if Step 1 live-set was emptied by a rebuild.
+    if (widget.isDeliveryVisit) {
+      _selectedProgrammes = {..._selectedProgrammes, Programme.pnc};
+    }
+    debugPrint(
+      '[DeliveryGate] Step2 seed programmes='
+      '${_selectedProgrammes.map((p) => p.name).join(', ')} '
+      'isDeliveryVisit=${widget.isDeliveryVisit}',
+    );
     // AI programme recommendation disabled — use rule-based PathwayEngine result directly.
     _phase = _Step2Phase.form;
     WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
@@ -945,22 +1056,66 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       final progs = await dao.programmesFor(widget.patientId);
       if (!mounted) return;
 
-      // If ANC is active and PW registration was NOT selected (i.e. returning
-      // ANC patient with missing snapshot), collect LMP via sheet BEFORE the
-      // form renders. When Programme.pw is selected, LMP is captured inline in
-      // the unified form — do not show the sheet in that case.
-      if (_selectedProgrammes.contains(Programme.anc) &&
-          !_selectedProgrammes.contains(Programme.pw)) {
-        final snapshotDao = context.read<PregnancySnapshotDao>();
-        final snapshot = await snapshotDao.byPatient(widget.patientId);
-        if ((snapshot?.lmpDate == null) && mounted) {
-          await PregnancyRegistrationSheet.show(
+      final hasAnc = _selectedProgrammes.contains(Programme.anc);
+
+      // Task 3 — PW once-only: drop PW silently if already enrolled.
+      // Do not show a dialog — ANC/other programmes in the same visit should
+      // continue without interrupting the SK.
+      if (_selectedProgrammes.contains(Programme.pw) &&
+          progs.contains(Programme.pw)) {
+        debugPrint(
+          '[Step2][PayloadDebug] PW block: patient=${widget.patientId} '
+          'already enrolled in PW — re-enrollment skipped (no dialog).',
+        );
+        _selectedProgrammes =
+            _selectedProgrammes.difference({Programme.pw});
+        if (_selectedProgrammes.isEmpty) {
+          if (!mounted) return;
+          Navigator.of(context).pop();
+          return;
+        }
+      }
+
+      // Task 2 — Block ANC when patient is postpartum (PNC/Delivery Outcome
+      // completed). ANC must not be started after delivery.
+      if (hasAnc && widget.isPostpartum) {
+        await _showAncBlockedDialog(
+          context,
+          AppStrings.ancBlockedPostpartumTitle,
+          AppStrings.ancBlockedPostpartumMessage,
+        );
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        return;
+      }
+
+      // Task 1 — Block duplicate ANC on same calendar day.
+      if (hasAnc) {
+        final assessmentDao = context.read<LocalAssessmentDao>();
+        final hasTodayAnc = await assessmentDao
+            .hasAncAssessmentTodayForPatient(widget.patientId);
+        if (!mounted) return;
+        if (hasTodayAnc) {
+          await _showAncBlockedDialog(
             context,
-            patientId: widget.patientId,
-            patientName: widget.patientName ?? 'Patient',
-            patientAge: widget.patientAge,
+            AppStrings.ancBlockedDuplicateTitle,
+            AppStrings.ancBlockedDuplicateMessage,
           );
           if (!mounted) return;
+          Navigator.of(context).pop();
+          return;
+        }
+      }
+
+      // Task 5 — When ANC is selected for a first-time pregnancy (no LMP
+      // snapshot yet) and PW was not explicitly chosen, auto-include PW so the
+      // pregnancy profile form is submitted alongside the ANC visit.
+      if (hasAnc && !_selectedProgrammes.contains(Programme.pw)) {
+        final snapshotDao = context.read<PregnancySnapshotDao>();
+        final snapshot = await snapshotDao.byPatient(widget.patientId);
+        if (!mounted) return;
+        if (snapshot?.lmpDate == null) {
+          _selectedProgrammes = {..._selectedProgrammes, Programme.pw};
         }
       }
 
@@ -978,6 +1133,27 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
         _ready = true;
       });
     }
+  }
+
+  Future<void> _showAncBlockedDialog(
+    BuildContext ctx,
+    String title,
+    String message,
+  ) {
+    return showDialog<void>(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Map<String, dynamic> _buildRequest(Set<Programme> currentProgrammes) {
@@ -1032,10 +1208,13 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       householdMemberLocalId: widget.householdMemberLocalId,
       patientAge: widget.patientAge,
       gestationalWeeks: widget.gestationalWeeks,
+      lmpMs: widget.lmpMs,
+      eddMs: widget.eddMs,
       pathwayNames: _selectedProgrammes
           .where((p) => p != Programme.unknown)
           .map((p) => p.name)
           .toList(),
+      isDeliveryVisit: widget.isDeliveryVisit,
       triageNotes: widget.otherSymptoms,
       origin: widget.origin,
       enrolledProgrammes: _currentProgrammes,
@@ -1074,6 +1253,7 @@ class _Step3AiReco extends StatefulWidget {
     this.eddMs,
     this.memberId,
     this.householdId,
+    this.referralFacility,
   });
 
   final String visitId;
@@ -1094,6 +1274,7 @@ class _Step3AiReco extends StatefulWidget {
   final String? memberId;
   final String? householdId;
   final String origin;
+  final String? referralFacility;
 
   @override
   State<_Step3AiReco> createState() => _Step3AiRecoState();
@@ -1142,6 +1323,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   @override
   void initState() {
     super.initState();
+    debugPrint('[_Step3AiRecoState] initState');
     _future = _fetchNaba();
     _shimmer = AnimationController(
       vsync: this,
@@ -1152,6 +1334,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<void> _loadPatientPhone() async {
+    debugPrint('[_Step3AiRecoState] _loadPatientPhone');
     final member = await context
         .read<MemberDao>()
         .getByPatientId(widget.patientId);
@@ -1162,6 +1345,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<void> _loadHouseholdMembers() async {
+    debugPrint('[_Step3AiRecoState] _loadHouseholdMembers');
     String? hid = widget.householdId;
 
     // patients.household_id is sparsely populated; members.household_id is
@@ -1221,10 +1405,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   @override
   void dispose() {
     _shimmer.dispose();
+    debugPrint('[_Step3AiRecoState] dispose');
     super.dispose();
   }
 
   Future<NabaResponse> _fetchNaba() async {
+    debugPrint('[_Step3AiRecoState] _fetchNaba');
     final apiClient = context.read<ApiClient>(); // read before any await
     final toggles =
         context.read<AiFeatureTogglesNotifier>().toggles; // ditto
@@ -1308,6 +1494,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<void> _loadVitalsAndLabs() async {
+    debugPrint('[_Step3AiRecoState] _loadVitalsAndLabs');
     try {
       final dao = context.read<LocalAssessmentDao>(); // read before first await
       final assessments = await dao.getByPatientId(widget.patientId);
@@ -1417,6 +1604,17 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         unit: glucose['glucoseUnit'] as String? ?? 'mg/dL',
         referenceRange: isFasting ? '<100 mg/dL' : '<140 mg/dL',
         abnormal: isFasting ? v >= 126 : v >= 200,
+      ));
+    }
+    final hba1cRaw = glucose['hba1c'];
+    if (hba1cRaw != null) {
+      final v = (hba1cRaw as num).toDouble();
+      labs.add(NabaLabResult(
+        name: 'HbA1c',
+        value: v.toStringAsFixed(1),
+        unit: '%',
+        referenceRange: '<6.5%',
+        abnormal: v >= 6.5,
       ));
     }
     _loadedLabs = labs;
@@ -1749,11 +1947,18 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       final isFasting = gl?.name.contains('Fasting') ?? false;
       final glVal = double.tryParse(gl?.value ?? '');
 
+      final hba1cLab = _loadedLabs.cast<NabaLabResult?>().firstWhere(
+            (l) => l?.name == 'HbA1c',
+            orElse: () => null,
+          );
+      final hba1cVal = hba1cLab != null ? double.tryParse(hba1cLab.value) : null;
+
       final result = NcdReferralEvaluator.evaluate(
         systolic: sys,
         diastolic: dia,
         fastingGlucoseMmol: isFasting ? glVal : null,
         randomGlucoseMmol: isFasting ? null : glVal,
+        hba1cPercent: hba1cVal,
         symptoms: widget.confirmedSymptoms.toList(),
       );
 
@@ -1961,6 +2166,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<void> _onAccepted(NabaResponse naba) async {
+    debugPrint('[_Step3AiRecoState] _onAccepted naba=${naba}');
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
@@ -2063,7 +2269,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     NabaStrings.loadingSubtitle,
                     style: TextStyle(
                       fontSize: 13,
@@ -2122,7 +2328,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               NabaStrings.errorTitle,
               style: TextStyle(
                 fontWeight: FontWeight.w800,
@@ -2132,7 +2338,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               NabaStrings.errorSubtitle,
               style: TextStyle(
                 fontSize: 13,
@@ -2147,7 +2353,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               child: FilledButton.icon(
                 onPressed: _retry,
                 icon: const Icon(Icons.refresh_rounded),
-                label: const Text(NabaStrings.retryButton),
+                label: Text(NabaStrings.retryButton),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.navy,
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
@@ -2157,7 +2363,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             const SizedBox(height: 10),
             TextButton(
               onPressed: () => context.go(_returnPath),
-              child: const Text(NabaStrings.skipButton),
+              child: Text(NabaStrings.skipButton),
             ),
           ],
         ),
@@ -2190,6 +2396,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                           ? naba.dangerSigns.take(2).join(', ')
                           : 'Referral recommended')),
               urgency: naba.referralRecommendation?.urgency ?? 'Today',
+              facilityName: widget.referralFacility,
             ),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
@@ -2302,368 +2509,15 @@ class _OfflineFallbackBanner extends StatelessWidget {
   }
 }
 
-/// Pink gestational age summary shown at the top of Step 3 whenever any
-/// pregnancy data is available (gestationalWeeks, LMP, or EDD).
-///
-/// Dates are taken directly from [lmpMs]/[eddMs] when provided (snapshot
-/// values), and back-calculated from [gestationalWeeks] only as a fallback.
-class _GestationalAgeCard extends StatelessWidget {
-  const _GestationalAgeCard({
-    this.gestationalWeeks,
-    this.lmpMs,
-    this.eddMs,
-  });
-
-  final int? gestationalWeeks;
-  /// LMP epoch-ms from the snapshot — used in preference to back-calculation.
-  final int? lmpMs;
-  /// EDD epoch-ms from the snapshot — used in preference to back-calculation.
-  final int? eddMs;
-
-  static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-  static const _pinkAccent = Color(0xFF9D174D);
-  static const _navy = Color(0xFF1B2B5E);
-  static const _unitGrey = Color(0xFF6B7280);
-
-  @override
-  Widget build(BuildContext context) {
-    final today = DateTime.now();
-
-    // Prefer snapshot dates; fall back to back-calculating from weeks.
-    late final DateTime lmp;
-    late final DateTime edd;
-    if (lmpMs != null) {
-      lmp = DateTime.fromMillisecondsSinceEpoch(lmpMs!);
-      edd = eddMs != null
-          ? DateTime.fromMillisecondsSinceEpoch(eddMs!)
-          : lmp.add(const Duration(days: 280));
-    } else if (eddMs != null) {
-      edd = DateTime.fromMillisecondsSinceEpoch(eddMs!);
-      lmp = edd.subtract(const Duration(days: 280));
-    } else {
-      // Back-calculate from gestationalWeeks (last resort).
-      final weeks = gestationalWeeks ?? 0;
-      lmp = today.subtract(Duration(days: weeks * 7));
-      edd = lmp.add(const Duration(days: 280));
-    }
-
-    final effectiveWeeks = gestationalWeeks ??
-        today.difference(lmp).inDays ~/ 7;
-    final days = today.difference(lmp).inDays % 7;
-
-    final lmpLabel =
-        '${lmp.day} ${_months[lmp.month - 1]} ${lmp.year}';
-    final eddLabel =
-        '${edd.day} ${_months[edd.month - 1]} ${edd.year}';
-
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFFDF2F8),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF9A8D4)),
-      ),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Hero row: circle avatar + label + number ─────────────
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: const Text('🤰', style: TextStyle(fontSize: 19)),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'GESTATIONAL AGE',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: _pinkAccent,
-                      letterSpacing: 0.6,
-                      height: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  RichText(
-                    text: TextSpan(
-                      style: const TextStyle(
-                        fontFamily: 'Nunito',
-                        color: _navy,
-                        height: 1,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: '$effectiveWeeks ',
-                          style: const TextStyle(
-                            fontSize: 21,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const TextSpan(
-                          text: 'wks',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: _unitGrey,
-                          ),
-                        ),
-                        if (days > 0) ...[
-                          TextSpan(
-                            text: ' $days ',
-                            style: const TextStyle(
-                              fontSize: 21,
-                              fontWeight: FontWeight.w900,
-                              color: _navy,
-                            ),
-                          ),
-                          const TextSpan(
-                            text: 'days',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: _unitGrey,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          // ── LMP + EDD row ────────────────────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: _DatePill(
-                  icon: '📅',
-                  label: 'LMP',
-                  value: lmpLabel,
-                  valueColor: _navy,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _DatePill(
-                  icon: '🍼',
-                  label: 'EDD',
-                  value: eddLabel,
-                  valueColor: const Color(0xFFDB2777),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DatePill extends StatelessWidget {
-  const _DatePill({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.valueColor,
-  });
-
-  final String icon;
-  final String label;
-  final String value;
-  final Color valueColor;
-
-  static const _pinkAccent = Color(0xFF9D174D);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(icon, style: const TextStyle(fontSize: 12)),
-              const SizedBox(width: 4),
-              Text(
-                label.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: _pinkAccent,
-                  letterSpacing: 0.6,
-                ),
-              ),
-            ],
-          ),
-          Flexible(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: valueColor,
-              ),
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.end,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VitalsSummaryCard extends StatelessWidget {
-  const _VitalsSummaryCard({
-    required this.programme,
-    required this.summary,
-    required this.hasIssues,
-  });
-  final Programme programme;
-  final String summary;
-  final bool hasIssues;
-
-  String _label(Programme p) => switch (p) {
-        Programme.anc || Programme.pnc => 'ANC Vitals',
-        Programme.ncd => 'Vitals & Labs',
-        Programme.imci => 'Child Assessment',
-        Programme.tb => 'TB Follow-up',
-        _ => 'Vitals',
-      };
-
-  String _pillText() {
-    if (hasIssues) return 'Review';
-    return switch (programme) {
-      Programme.anc || Programme.pnc => 'On track',
-      Programme.ncd => 'Monitored',
-      _ => 'Normal',
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const greenBg = Color(0xFFECFDF5);
-    const greenBorder = Color(0xFFA7F3D0);
-    const greenAccent = Color(0xFF059669);
-    const reviewBg = Color(0xFFFFFBEB);
-    const reviewBorder = Color(0xFFFDE68A);
-    const reviewAccent = Color(0xFFB45309);
-
-    final bg = hasIssues ? reviewBg : greenBg;
-    final border = hasIssues ? reviewBorder : greenBorder;
-    final accent = hasIssues ? reviewAccent : greenAccent;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  hasIssues
-                      ? Icons.warning_amber_rounded
-                      : Icons.favorite_rounded,
-                  size: 16,
-                  color: accent,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _label(programme),
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: accent,
-                    letterSpacing: 0.1,
-                  ),
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  _pillText(),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            summary,
-            style: TextStyle(
-              fontSize: 13,
-              color: accent.withValues(alpha: 0.85),
-              height: 1.45,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ReferralAlertCard extends StatelessWidget {
   const _ReferralAlertCard({
     required this.reason,
     required this.urgency,
+    this.facilityName,
   });
   final String reason;
   final String urgency;
+  final String? facilityName;
 
   // Maps raw API camelCase referral keys → human-readable labels (fallback path).
   static const _reasonLabels = <String, String>{
@@ -2772,6 +2626,27 @@ class _ReferralAlertCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (facilityName != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on_outlined,
+                          size: 12, color: accent.withValues(alpha: 0.75)),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          facilityName!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: accent.withValues(alpha: 0.85),
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -2813,9 +2688,6 @@ class _AiCounsellingCard extends StatelessWidget {
   Color _outerBg() => programme == Programme.ncd
       ? const Color(0xFFFFFBEB)
       : const Color(0xFFF0FDF4);
-  Color _outerBorder() => programme == Programme.ncd
-      ? const Color(0xFFFDE68A)
-      : const Color(0xFFA7F3D0);
 
   Future<void> _sendWhatsApp(BuildContext context) async {
     final encoded = Uri.encodeComponent(text);
@@ -2836,7 +2708,7 @@ class _AiCounsellingCard extends StatelessWidget {
     }
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
             content: Text(NabaStrings.whatsAppNotInstalled)),
       );
     }
@@ -2873,7 +2745,7 @@ class _AiCounsellingCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           NabaStrings.aiCounsellingGuide,
                           style: TextStyle(
                             fontSize: 10,
@@ -3132,9 +3004,8 @@ class _FollowUpDateRow extends StatefulWidget {
 class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   late DateTime _date;
 
-  static const _cardBg     = Color(0xFFF3F4F8);
-  static const _cardBorder = Color(0xFFE5E7EB);
-  static const _cardText   = Color(0xFF9D174D);
+  static const _cardBg   = Color(0xFFF3F4F8);
+  static const _cardText = Color(0xFF9D174D);
   static const _bellColor  = Color(0xFFB45309);
 
   /// Public static helper so _Step3AiRecoState can compute the default date
@@ -3152,6 +3023,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_FollowUpDateRowState] initState');
     _date = _initialDate();
   }
 
@@ -3382,7 +3254,7 @@ class _BottomCtaBar extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: accepted ? null : onAccepted,
                   icon: const Icon(Icons.check_rounded),
-                  label: const Text(NabaStrings.acceptProposal),
+                  label: Text(NabaStrings.acceptProposal),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFFEC4899),
                     foregroundColor: Colors.white,
@@ -3409,7 +3281,7 @@ class _BottomCtaBar extends StatelessWidget {
                       },
                     ),
                     icon: const Icon(Icons.chat_rounded),
-                    label: const Text(VisitCompleteStrings.sendCounsellingMessage),
+                    label: Text(VisitCompleteStrings.sendCounsellingMessage),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: headerColor,
                       side: BorderSide(
@@ -3423,224 +3295,6 @@ class _BottomCtaBar extends StatelessWidget {
           ),
         ],
       );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Programme confirm bottom sheet — shown after Step 1 triage so the SK can
-// see which pathways were matched by the rule engine and add / remove any
-// before opening the assessment form.
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _ProgrammeConfirmSheet extends StatefulWidget {
-  const _ProgrammeConfirmSheet({
-    required this.pathways,
-    required this.onConfirm,
-    this.patientGender,
-    this.patientAgeYears,
-  });
-
-  final List<ActivatedPathway> pathways;
-  final void Function(Set<Programme>) onConfirm;
-
-  /// Patient demographics used to hide clinically-impossible programmes from
-  /// the manual "Add manually" list (e.g. ANC/PNC for a male patient). Without
-  /// this filter, an ineligible selection reaches the FHIR mapper which 500s
-  /// while trying to build maternal/pregnancy resources for the patient.
-  final String? patientGender;
-  final int? patientAgeYears;
-
-  @override
-  State<_ProgrammeConfirmSheet> createState() =>
-      _ProgrammeConfirmSheetState();
-}
-
-/// Filters [candidates] to programmes the patient is demographically eligible
-/// for. Mirrors the demographic gates in `pathway_rules_v1.dart` so a manual
-/// selection can never produce a payload the backend rejects:
-///   - ANC / PNC → female, reproductive age (≥10y); never male.
-///   - IMCI      → under 5.
-///   - NCD       → 5y and older.
-/// When a demographic fact is unknown the programme is allowed through rather
-/// than over-restricting (matches the PathwayEngine's permissive-on-unknown
-/// stance).
-Set<Programme> _eligibleProgrammes(
-  Iterable<Programme> candidates, {
-  String? gender,
-  int? ageYears,
-}) {
-  final g = gender?.trim().toLowerCase();
-  final isMale = g == 'male' || g == 'm';
-  return candidates.where((p) {
-    switch (p) {
-      case Programme.anc:
-      case Programme.pnc:
-        if (isMale) return false;
-        if (ageYears != null && ageYears < 10) return false;
-        return true;
-      case Programme.imci:
-        if (ageYears != null && ageYears > 5) return false;
-        return true;
-      case Programme.ncd:
-        if (ageYears != null && ageYears < 5) return false;
-        return true;
-      default:
-        return true;
-    }
-  }).toSet();
-}
-
-class _ProgrammeConfirmSheetState extends State<_ProgrammeConfirmSheet> {
-  late Set<Programme> _selected;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = widget.pathways.map((p) => p.programme).toSet();
-  }
-
-  String _readable(String s) {
-    final lower = s.replaceAll('_', ' ').toLowerCase();
-    if (lower.isEmpty) return lower;
-    return lower[0].toUpperCase() + lower.substring(1);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final matched = widget.pathways.map((p) => p.programme).toSet();
-    // Only offer manually-addable programmes the patient is demographically
-    // eligible for — prevents e.g. ANC being added for a male patient, which
-    // the FHIR mapper rejects with a 500.
-    final unmatched = _eligibleProgrammes(
-      Programme.kPilotProgrammes.where((p) => !matched.contains(p)),
-      gender: widget.patientGender,
-      ageYears: widget.patientAgeYears,
-    ).toList();
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Opening forms for',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Tap to add or remove care pathways',
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 12),
-          if (widget.pathways.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'No pathways matched. Select one manually to continue.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppColors.textMuted),
-              ),
-            ),
-          ...widget.pathways.map((pathway) {
-            final triggers = [
-              ...pathway.triggerSymptoms,
-              ...pathway.triggerConditions,
-            ];
-            return CheckboxListTile(
-              value: _selected.contains(pathway.programme),
-              onChanged: (val) => setState(() {
-                if (val == true) {
-                  _selected.add(pathway.programme);
-                } else {
-                  _selected.remove(pathway.programme);
-                }
-              }),
-              title: Text(pathway.programme.displayName),
-              subtitle: triggers.isNotEmpty
-                  ? Text(
-                      triggers.map(_readable).join(', '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: AppColors.textMuted),
-                    )
-                  : null,
-              controlAffinity: ListTileControlAffinity.leading,
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-            );
-          }),
-          if (unmatched.isNotEmpty) ...[
-            const Divider(height: 24),
-            Text(
-              'Add manually',
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall
-                  ?.copyWith(color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 4),
-            ...unmatched.map((p) => CheckboxListTile(
-                  value: _selected.contains(p),
-                  onChanged: (val) => setState(() {
-                    if (val == true) {
-                      _selected.add(p);
-                    } else {
-                      _selected.remove(p);
-                    }
-                  }),
-                  title: Text(
-                    p.displayName,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(color: AppColors.textMuted),
-                  ),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                )),
-          ],
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _selected.isEmpty
-                  ? null
-                  : () {
-                      Navigator.of(context).pop();
-                      widget.onConfirm(_selected);
-                    },
-              child: const Text('Start visit'),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -3891,170 +3545,6 @@ class _MemberAvatar extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// While You're Here page — shown after accepting the AI recommendation when
-// other household members are due for a visit.
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _WhileYoureHerePage extends StatelessWidget {
-  const _WhileYoureHerePage({
-    required this.members,
-    required this.returnPath,
-  });
-
-  final List<_HouseholdMember> members;
-  final String returnPath;
-
-  @override
-  Widget build(BuildContext context) {
-    final others = members.where((m) => !m.isCurrentPatient).toList();
-    return Scaffold(
-      backgroundColor: AppColors.canvas,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded, color: AppColors.navy),
-          onPressed: () => context.go(returnPath),
-        ),
-        title: const Text(
-          VisitFlowStrings.alsoCoverWhileHere,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            color: AppColors.navy,
-            letterSpacing: 0.6,
-          ),
-        ),
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Divider(height: 1),
-          Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: others.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, i) {
-                final m = others[i];
-                return _WhileYouHereMemberCard(
-                  member: m,
-                  onTap: () => context.push('/patients/${m.patientId}'),
-                );
-              },
-            ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => context.go(returnPath),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.navy,
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                  ),
-                  child: const Text(VisitCompleteStrings.doneForNow),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WhileYouHereMemberCard extends StatelessWidget {
-  const _WhileYouHereMemberCard({required this.member, required this.onTap});
-
-  final _HouseholdMember member;
-  final VoidCallback onTap;
-
-  static (Color bg, Color border, Color text, String label) _style(Programme p) {
-    switch (p) {
-      case Programme.anc:
-        return (AppColors.ancSurface, AppColors.ancBorder, AppColors.ancText, 'ANC');
-      case Programme.pnc:
-        return (AppColors.pncSurface, AppColors.pncBorder, AppColors.pncText, 'PNC');
-      case Programme.ncd:
-        return (AppColors.ncdSurface, AppColors.ncdBorder, AppColors.ncdText, 'NCD');
-      case Programme.imci:
-        return (AppColors.imciSurface, AppColors.imciBorder, AppColors.imciText, 'Child');
-      case Programme.tb:
-        return (AppColors.tbSurface, AppColors.tbBorder, AppColors.tbText, 'TB');
-      default:
-        return (Colors.grey.shade50, AppColors.border, AppColors.textMuted, 'Visit');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final (bg, border, text, label) = _style(member.primaryProgramme);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: Container(
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: border),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: text.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Text(_MemberAvatar._emoji(member.primaryProgramme),
-                  style: const TextStyle(fontSize: 20)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    member.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: AppColors.textStrong,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: text.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: text,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded, color: text),
-          ],
         ),
       ),
     );

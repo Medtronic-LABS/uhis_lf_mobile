@@ -47,17 +47,21 @@ class _VisitBriefingScreenState extends State<VisitBriefingScreen> {
 
   @override
   void initState() {
+    debugPrint('[_VisitBriefingScreenState] initState');
     super.initState();
+    debugPrint('[_VisitBriefingScreenState] initState');
     _briefingFuture = _fetchBriefing();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    debugPrint('[_VisitBriefingScreenState] dispose');
     super.dispose();
   }
 
   Future<VisitBriefingResponse?> _fetchBriefing() async {
+    debugPrint('[_VisitBriefingScreenState] _fetchBriefing');
     try {
       final vitalsRepo = context.read<VitalsRepository>();
       final followUpRepo = context.read<FollowUpRepository>();
@@ -151,6 +155,7 @@ class _VisitBriefingScreenState extends State<VisitBriefingScreen> {
   }
 
   void _navigateToTriage() {
+    debugPrint('[_VisitBriefingScreenState] _navigateToTriage');
     final originParam =
         widget.origin != null ? '?origin=${widget.origin}' : '';
     context.go(
@@ -519,7 +524,7 @@ class _BottomBar extends StatelessWidget {
                     ? FilledButton.icon(
                         onPressed: onBeginAssessment,
                         icon: const Icon(Icons.play_arrow),
-                        label: const Text(VisitBriefingStrings.beginAssessment),
+                        label: Text(VisitBriefingStrings.beginAssessment),
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(52),
                         ),
@@ -532,7 +537,7 @@ class _BottomBar extends StatelessWidget {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text(ComposerStrings.nextButton),
+                            Text(ComposerStrings.nextButton),
                             const SizedBox(width: 6),
                             const Icon(Icons.arrow_forward, size: 18),
                           ],
@@ -543,7 +548,7 @@ class _BottomBar extends StatelessWidget {
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: onBeginAssessment,
-                  child: const Text(VisitBriefingStrings.skipBriefing),
+                  child: Text(VisitBriefingStrings.skipBriefing),
                 ),
               ],
             ],

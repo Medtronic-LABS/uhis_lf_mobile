@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/api/endpoints.dart';
 import '../../core/config/app_config.dart';
 
 class CoachingTelemetryService {
@@ -33,7 +34,7 @@ class CoachingTelemetryService {
 
   void _post(Map<String, dynamic> payload) {
     final url =
-        '${AppConfig.coachingServiceUrl}/medtronics-api/telemetry/events';
+        '${AppConfig.coachingServiceUrl}${Endpoints.coachingTelemetryEvents}';
     _api.dio.post<void>(url, data: payload).catchError((Object e) {
       debugPrint('[CoachingTelemetry] fire failed: $e');
       return Response<void>(requestOptions: RequestOptions(path: url));

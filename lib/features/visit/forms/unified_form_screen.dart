@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/clinical/assessment_thresholds.dart';
+import '../../../core/widgets/gestational_age_card.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
+import '../../../core/i18n/app_locale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
@@ -43,6 +45,8 @@ class UnifiedFormScreen extends StatefulWidget {
     required this.activeFormTypes,
     required this.onSubmitComplete,
     this.gestationalWeeks,
+    this.lmpMs,
+    this.eddMs,
     this.enrolledFormTypes = const [],
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
@@ -54,8 +58,15 @@ class UnifiedFormScreen extends StatefulWidget {
   /// Called after [UnifiedFormNotifier.submit] succeeds. Navigation lives here.
   final VoidCallback onSubmitComplete;
 
-  /// Passed to [UnifiedSectionRules] for conditional `birthPreparedness` visibility.
+  /// Passed to [UnifiedSectionRules] / ANC field GA gates. Prefer notifier
+  /// value after [UnifiedFormNotifier.loadPregnancyData] resolves.
   final int? gestationalWeeks;
+
+  /// Optional LMP/EDD epoch-ms already resolved by VisitFlow from the
+  /// pregnancy snapshot — seeds the gestational-age card when the notifier
+  /// lookup races or is keyed under memberId.
+  final int? lmpMs;
+  final int? eddMs;
 
   /// FormType keys of programmes the patient is already enrolled in.
   /// These sections render after the Vitals group and before recommended ones.
@@ -98,9 +109,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// programme types — used for the weight-delta badge.  `null` until loaded.
   double? _lastRecordedWeight;
 
+  // One GlobalKey per section — used to scroll to the first error section
+  // on submit so the SK doesn't have to hunt for the highlighted field.
+  final Map<String, GlobalKey> _sectionKeys = {};
+
   @override
   void initState() {
     super.initState();
+    debugPrint('[_UnifiedFormScreenState] initState');
     _loadConfig();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -109,22 +125,54 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       if (widget.confirmedSymptoms.isNotEmpty) {
         // Store raw codes so section-rules can drive conditional visibility.
         notifier.updateField('_triageSymptoms', widget.confirmedSymptoms);
-
-        // Pre-fill symptom fields derived from triage selections.
-        // Done BEFORE loadDraft so that a saved draft can override these
-        // suggestions (draft values win over triage-derived defaults).
-        for (final ft in widget.activeFormTypes) {
-          final prefills = TriageSymptomMapper.prefillsFor(
-            ft,
-            widget.confirmedSymptoms,
-          );
-          for (final entry in prefills.entries) {
-            notifier.updateField(entry.key, entry.value);
-          }
-        }
       }
 
-      notifier.loadDraft();
+      notifier.loadDraft().then((_) async {
+        // Seed triage → form symptom fields after draft load so a prior
+        // draft without symptoms does not leave Step 2 empty, while any
+        // already-saved hasSymptoms / ncdSymptoms / danger-sign values win.
+        if (widget.confirmedSymptoms.isNotEmpty) {
+          for (final ft in widget.activeFormTypes) {
+            final prefills = TriageSymptomMapper.prefillsFor(
+              ft,
+              widget.confirmedSymptoms,
+            );
+            for (final entry in prefills.entries) {
+              final existing = notifier.data.getValue(entry.key);
+              final empty = existing == null ||
+                  (existing is String && existing.trim().isEmpty) ||
+                  (existing is List && existing.isEmpty);
+              if (empty) {
+                notifier.updateField(entry.key, entry.value);
+              }
+            }
+          }
+        }
+        await notifier.preloadBiometrics();
+        final hasAnc = widget.activeFormTypes.contains('anc') ||
+            widget.enrolledFormTypes.contains('anc');
+        if (hasAnc) {
+          await notifier.preloadAncMedicalHistory();
+          await notifier.preloadAncChronic();
+        }
+        if (widget.activeFormTypes.contains('ncd') ||
+            widget.enrolledFormTypes.contains('ncd')) {
+          await notifier.preloadNcdChronic();
+        }
+        if (widget.activeFormTypes.contains('pncMother') ||
+            widget.enrolledFormTypes.contains('pncMother')) {
+          await notifier.preloadPncMotherChronic();
+        }
+        if (widget.activeFormTypes.contains('familyPlanning') ||
+            widget.enrolledFormTypes.contains('familyPlanning') ||
+            widget.activeFormTypes.contains('family_planning') ||
+            widget.enrolledFormTypes.contains('family_planning')) {
+          await notifier.preloadFpChronic();
+        }
+        // Android RMNCH summary auto-fills next visit; seed after draft so
+        // a saved SK override is never clobbered.
+        notifier.seedRmnchFollowUpIfNeeded();
+      });
 
       // Load the patient's most-recent weight from ANY prior visit so the
       // weight-delta badge shows "Last: X kg" regardless of programme type.
@@ -140,10 +188,64 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             setState(() => _priorAncVisits = history);
           }
         });
-        // Load LMP/EDD from patient raw JSON for the gestational-age card.
-        notifier.loadPregnancyData();
+        // Load LMP/EDD for the gestational-age card (snapshot → seed → history).
+        _reloadPregnancyIfSeeded();
       }
     });
+  }
+
+  /// Best available GA: notifier (post-load) then navigation seed.
+  int? _effectiveGestationalWeeks(UnifiedFormNotifier notifier) =>
+      notifier.gestationalWeeks ?? widget.gestationalWeeks;
+
+  /// 1-based ANC visit number from prior history (+1 for today's visit).
+  int _ancVisitNumber() => _priorAncVisits.length + 1;
+
+  bool _isFieldVisible(
+    FieldDef field,
+    UnifiedFormNotifier notifier, {
+    String? formType,
+  }) {
+    return FieldVisibilityRules.isFieldVisible(
+      field: field,
+      data: notifier.data,
+      rulesByTargetId: _config!.visibilityRulesByTargetId,
+      gestationalWeeks: _effectiveGestationalWeeks(notifier),
+      ancVisitNumber: _ancVisitNumber(),
+      formType: formType,
+    );
+  }
+
+  void _reloadPregnancyIfSeeded() {
+    if (!(widget.activeFormTypes.contains('anc') ||
+        widget.enrolledFormTypes.contains('anc'))) {
+      return;
+    }
+    final notifier = context.read<UnifiedFormNotifier>();
+    notifier.loadPregnancyData(
+      seedLmp: widget.lmpMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(widget.lmpMs!)
+          : null,
+      seedEdd: widget.eddMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(widget.eddMs!)
+          : null,
+      seedWeeks: widget.gestationalWeeks,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant UnifiedFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // VisitFlow resolves snapshot async — re-seed when LMP/EDD/weeks arrive.
+    final seedChanged = oldWidget.lmpMs != widget.lmpMs ||
+        oldWidget.eddMs != widget.eddMs ||
+        oldWidget.gestationalWeeks != widget.gestationalWeeks;
+    if (seedChanged) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _reloadPregnancyIfSeeded();
+      });
+    }
   }
 
   /// Builds a snapshot of the current visit's live vitals from the form data,
@@ -152,12 +254,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   @override
   void dispose() {
     _scrollCtrl.dispose();
+    debugPrint('[_UnifiedFormScreenState] dispose');
     super.dispose();
   }
 
   Future<void> _loadConfig() async {
+    debugPrint('[_UnifiedFormScreenState] _loadConfig');
     try {
-      final cfg = await FormConfig.load(rootBundle);
+      final cfg = await FormConfig.loadAndCache(rootBundle);
       if (mounted) setState(() { _config = cfg; _configLoading = false; });
     } catch (e, st) {
       debugPrint('[UnifiedForm] FormConfig.load failed: $e\n$st');
@@ -181,13 +285,20 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
     return Consumer<UnifiedFormNotifier>(
       builder: (ctx, notifier, _) {
+        final effectiveGa = _effectiveGestationalWeeks(notifier);
         final annotated = UnifiedSectionRules.activeSections(
           config: _config!,
           activeFormTypes: widget.activeFormTypes,
           currentData: notifier.data,
-          gestationalWeeks: widget.gestationalWeeks,
+          gestationalWeeks: effectiveGa,
           enrolledFormTypes: widget.enrolledFormTypes,
         );
+        final outcomeValue = notifier.data.getValue('deliveryOutcomeType');
+        if (widget.activeFormTypes.contains('pregnancyOutcome')) {
+          debugPrint('[DeliveryOutcome] rebuild sections=${annotated.length} '
+              'deliveryOutcomeType=$outcomeValue '
+              'sectionIds=${annotated.map((a) => a.section.sectionId).join(', ')}');
+        }
 
         // Only emit the [Form] debug summary when the section/field count
         // changes — suppresses per-keystroke log spam during form filling.
@@ -236,17 +347,34 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         final isAnc = widget.activeFormTypes.contains('anc');
 
         // ── Gestational age card (ANC) — top of scroll area ────────────────
+        final cardLmp = notifier.lmpDate ??
+            (widget.lmpMs != null
+                ? DateTime.fromMillisecondsSinceEpoch(widget.lmpMs!)
+                : null);
+        final cardEdd = notifier.eddDate ??
+            (widget.eddMs != null
+                ? DateTime.fromMillisecondsSinceEpoch(widget.eddMs!)
+                : null);
+        // Always mount on ANC visits — even when LMP/EDD/GA are missing
+        // (shows "—" placeholders). Android shows pregnancy context whenever
+        // the ANC form is open; gating on dates hid the card for patients
+        // whose pregnancyInfos snapshot has null LMP (common after messy
+        // PNC/outcome history).
+        final hasLmpData =
+            cardLmp != null || cardEdd != null || effectiveGa != null;
         if (isAnc) {
           debugPrint(
             '[LMP] card MOUNT patient=${notifier.patientId} '
-            'lmp=${notifier.lmpDate} edd=${notifier.eddDate} '
-            'weeks=${notifier.gestationalWeeks} '
-            'hasDate=${notifier.lmpDate != null || notifier.eddDate != null}',
+            'lmp=$cardLmp edd=$cardEdd '
+            'weeks=$effectiveGa '
+            'hasDate=$hasLmpData',
           );
-          items.add(_GestationalAgeCard(
-            lmpDate: notifier.lmpDate,
-            eddDate: notifier.eddDate,
-            gestationalWeeks: notifier.gestationalWeeks,
+          items.add(GestationalAgeCard(
+            lmpDate: cardLmp,
+            eddDate: cardEdd,
+            gestationalWeeks: effectiveGa,
+            bottomPadding: AppSpacing.xl,
+            ancVisitNumber: _ancVisitNumber().toString(),
           ));
         } else {
           debugPrint(
@@ -276,13 +404,15 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             }
           }
           items.add(_SectionCard(
+            key: _sectionKeyFor(annotatedSection.section.sectionId),
             section: annotatedSection.section,
             config: _config!,
             data: notifier.data,
             validationErrors: notifier.validationErrors,
             onFieldChanged: notifier.updateField,
             previousWeight: _lastRecordedWeight,
-            gestationalWeeks: widget.gestationalWeeks,
+            gestationalWeeks: effectiveGa,
+            ancVisitNumber: _ancVisitNumber(),
             isNewEnrolment: isNew,
           ));
         }
@@ -363,6 +493,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     UnifiedFormNotifier notifier,
     List<AnnotatedFormSection> annotated,
   ) async {
+    debugPrint('[_UnifiedFormScreenState] _onSubmit');
     if (_config == null) return;
 
     // Strip stale values for fields that are no longer visible (e.g. Parity
@@ -377,12 +508,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     final errors = _computeValidationErrors(notifier, annotated);
     if (errors.isNotEmpty) {
       notifier.setValidationErrors(errors);
-      // Scroll to top so the SK sees the highlighted fields.
-      _scrollCtrl.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      // Scroll to the first section containing an error so the SK lands
+      // directly on the highlighted field rather than hunting from the top.
+      _scrollToFirstError(annotated, errors);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
@@ -410,7 +538,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text(VisitFormStrings.saveFailed),
+        content: Text(VisitFormStrings.saveFailed),
         backgroundColor: Theme.of(context).colorScheme.error,
       ));
     }
@@ -428,11 +556,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         if (def == null) continue;
         // A hidden field (e.g. Parity before Gravida >= 2) must never block
         // submission even if it's flagged mandatory in the field library.
-        if (!FieldVisibilityRules.isFieldVisible(
-          field: def,
-          data: notifier.data,
-          rulesByTargetId: _config!.visibilityRulesByTargetId,
-        )) {
+        if (!_isFieldVisible(def, notifier, formType: a.section.formType)) {
           continue;
         }
         final mandatory = def.isMandatory || ref.isMandatory;
@@ -447,6 +571,38 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     return errors;
   }
 
+  /// Returns or creates the [GlobalKey] for a section (by sectionId).
+  GlobalKey _sectionKeyFor(String sectionId) =>
+      _sectionKeys.putIfAbsent(sectionId, GlobalKey.new);
+
+  /// Scrolls to the first section that contains a validation error.
+  void _scrollToFirstError(
+    List<AnnotatedFormSection> annotated,
+    Set<String> errors,
+  ) {
+    for (final a in annotated) {
+      final hasError = a.section.fieldRefs.any((r) => errors.contains(r.id));
+      if (!hasError) continue;
+      final key = _sectionKeys[a.section.sectionId];
+      final ctx = key?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+          alignment: 0.1,
+        );
+        return;
+      }
+    }
+    // Fallback: scroll to top if no key context found yet.
+    _scrollCtrl.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
   /// Returns the set of field IDs that are currently hidden (per the same
   /// visibility rules used for rendering and validation) but still hold a
   /// value in [notifier] — these are stale and must not reach the payload.
@@ -459,11 +615,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       for (final ref in a.section.fieldRefs) {
         final def = _config!.fields[ref.id];
         if (def == null) continue;
-        if (FieldVisibilityRules.isFieldVisible(
-          field: def,
-          data: notifier.data,
-          rulesByTargetId: _config!.visibilityRulesByTargetId,
-        )) {
+        if (_isFieldVisible(def, notifier, formType: a.section.formType)) {
           continue;
         }
         if (notifier.data.getValue(ref.id) != null) hidden.add(ref.id);
@@ -967,10 +1119,9 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
   }
 }
 
-// ── Gestational age card ──────────────────────────────────────────────────────
+// _GestationalAgeCard and _DateSubBox extracted to
+// lib/core/widgets/gestational_age_card.dart.
 
-/// Navy-gradient card shown at the top of the ANC section displaying the
-/// patient's gestational age, LMP, and EDD loaded from patient rawJson.
 class _GestationalAgeCard extends StatelessWidget {
   const _GestationalAgeCard({
     required this.lmpDate,
@@ -1062,7 +1213,7 @@ class _GestationalAgeCard extends StatelessWidget {
                     RichText(
                       text: TextSpan(
                         style: const TextStyle(
-                          fontFamily: 'Nunito',
+                          fontFamily: AppFonts.display,
                           color: _navy,
                           height: 1,
                         ),
@@ -1265,6 +1416,7 @@ class _AiFilledBadgeWrap extends StatelessWidget {
 
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
+    super.key,
     required this.section,
     required this.config,
     required this.data,
@@ -1272,6 +1424,7 @@ class _SectionCard extends StatelessWidget {
     required this.onFieldChanged,
     this.previousWeight,
     this.gestationalWeeks,
+    this.ancVisitNumber = 1,
     this.isNewEnrolment = false,
   });
 
@@ -1288,6 +1441,9 @@ class _SectionCard extends StatelessWidget {
   /// Patient's current gestational age in weeks — used to compute the
   /// fundal-height expected value and lag/ahead badge.  `null` when unknown.
   final int? gestationalWeeks;
+
+  /// 1-based ANC visit count for Android visit-number field gates.
+  final int ancVisitNumber;
 
   /// True when this section belongs to a newly enrolled programme.
   /// Renders with a tinted background + accent border.
@@ -1311,18 +1467,14 @@ class _SectionCard extends StatelessWidget {
   };
 
   // ── Supplement pair detection ─────────────────────────────────────────────
-  // Maps each "consumed" field id → (set of possible "provided" field ids,
-  // outer card label, Bengali sub-label, emoji).
-  static const Map<String, ({Set<String> providedIds, String label, String subLabel, String emoji})>
-      _supplementConsumedMap = {
+  // Maps each numeric "consumed" field id → (possible "provided" field ids,
+  // outer card label, emoji). TextLabel ids (ifaTablets / calciumTablets) are
+  // NOT pair drivers — they are section headings skipped when a pair renders
+  // (Android: one consumed + one provided under a single label).
+  static Map<String, ({Set<String> providedIds, String label, String subLabel, String emoji})>
+      get _supplementConsumedMap => {
     'folicAcidTotalConsumed': (
       providedIds: {'folicAcidProvided', 'folicAcidTablets'},
-      label: UnifiedFormStrings.folatePairLabel,
-      subLabel: UnifiedFormStrings.folatePairSubLabel,
-      emoji: '💊',
-    ),
-    'folicAcidTablets': (
-      providedIds: {'folicAcidProvided'},
       label: UnifiedFormStrings.folatePairLabel,
       subLabel: UnifiedFormStrings.folatePairSubLabel,
       emoji: '💊',
@@ -1339,12 +1491,6 @@ class _SectionCard extends StatelessWidget {
       subLabel: UnifiedFormStrings.ifaPairSubLabel,
       emoji: '🩸',
     ),
-    'ifaTablets': (
-      providedIds: {'ifaProvided', 'ifaTabletsProvided'},
-      label: UnifiedFormStrings.ifaPairLabel,
-      subLabel: UnifiedFormStrings.ifaPairSubLabel,
-      emoji: '🩸',
-    ),
     'calciumTotalConsumed': (
       providedIds: {'calciumProvided', 'calciumTabletsProvided'},
       label: UnifiedFormStrings.calciumPairLabel,
@@ -1352,12 +1498,6 @@ class _SectionCard extends StatelessWidget {
       emoji: '🦴',
     ),
     'calciumTabletsConsumed': (
-      providedIds: {'calciumProvided', 'calciumTabletsProvided'},
-      label: UnifiedFormStrings.calciumPairLabel,
-      subLabel: UnifiedFormStrings.calciumPairSubLabel,
-      emoji: '🦴',
-    ),
-    'calciumTablets': (
       providedIds: {'calciumProvided', 'calciumTabletsProvided'},
       label: UnifiedFormStrings.calciumPairLabel,
       subLabel: UnifiedFormStrings.calciumPairSubLabel,
@@ -1376,9 +1516,13 @@ class _SectionCard extends StatelessWidget {
 
     final hasBpPulseTriple = hasBpPair && sectionIds.contains('pulse');
 
-    // Blood-glucose pair: fasting + random shown side-by-side.
+    // Blood-glucose pair: fasting + random shown side-by-side (ANC/PNC forms).
     final hasGlucosePair = sectionIds.contains('fastingBloodSugar') &&
         sectionIds.contains('randomBloodSugar');
+
+    // BloodGlucoseEntry drives both type toggle and numeric value via 'glucose'.
+    // The standalone 'glucose' EditText must not render alongside it.
+    final hasBloodGlucoseEntry = sectionIds.contains('glucoseType');
 
     // Height + weight pair: physical measurements shown side-by-side.
     final hasHeightWeightPair = sectionIds.contains('height') &&
@@ -1396,6 +1540,12 @@ class _SectionCard extends StatelessWidget {
       }
     }
 
+    // TextLabel heading → consumed field that owns the pair card title.
+    const supplementLabelForConsumed = {
+      'ifaTablets': 'ifaTabletsConsumed',
+      'calciumTablets': 'calciumTabletsConsumed',
+      'folicAcidTablets': 'folicAcidTotalConsumed',
+    };
     // IDs absorbed into a composite widget — skip when encountered individually.
     final consumedIds = <String>{
       // When a combined BP card is rendered, skip the standalone fields.
@@ -1404,11 +1554,16 @@ class _SectionCard extends StatelessWidget {
       if (hasBpPulseTriple) 'pulse',
       // Combined glucose pair — skip the random field (fasting card drives).
       if (hasGlucosePair) 'randomBloodSugar',
+      // BloodGlucoseEntry handles glucose numeric value — skip the standalone field.
+      if (hasBloodGlucoseEntry) ...const {'glucose', 'bloodSugar', 'ancBloodGlucose'},
       // Combined height+weight pair — skip weight (height card drives).
       if (hasHeightWeightPair) 'weight',
       // For each supplement pair, skip the "provided" counterpart field —
       // it will be rendered inline inside the consumed field's pair card.
       for (final p in supplementConsumedToProvidedRef.values) ?p,
+      // Skip TextLabel headings when that supplement's pair card is present.
+      for (final e in supplementLabelForConsumed.entries)
+        if (supplementConsumedToProvidedRef[e.value] != null) e.key,
     };
 
     bool bpPairEmitted = false;
@@ -1434,11 +1589,21 @@ class _SectionCard extends StatelessWidget {
 
       final def = config.fields[ref.id];
       if (def == null) continue;
-      if (!FieldVisibilityRules.isFieldVisible(
+      final visible = FieldVisibilityRules.isFieldVisible(
         field: def,
         data: data,
         rulesByTargetId: config.visibilityRulesByTargetId,
-      )) {
+        gestationalWeeks: gestationalWeeks,
+        ancVisitNumber: ancVisitNumber,
+        formType: section.formType,
+      );
+      if (section.formType == 'pregnancyOutcome') {
+        // ignore: avoid_print
+        print('[FieldVisibility] pregnancyOutcome.${section.sectionId}.${ref.id} '
+            'baseVisibility=${def.visibility} visible=$visible '
+            'deliveryOutcomeType=${data.getValue('deliveryOutcomeType')}');
+      }
+      if (!visible) {
         continue;
       }
       final questionNumber = section.sectionId == 'pregnancyHistory'
@@ -1532,6 +1697,12 @@ class _SectionCard extends StatelessWidget {
       ));
     }
 
+    if (section.formType == 'pregnancyOutcome') {
+      // ignore: avoid_print
+      print('[FieldRender] pregnancyOutcome.${section.sectionId} '
+          'rendered=${fieldWidgets.length}/${section.fieldRefs.length} fields');
+    }
+
     final inner = Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
       child: Column(
@@ -1592,8 +1763,8 @@ class _SectionCard extends StatelessWidget {
     );
 
     final subLabel = pulseDef != null
-        ? '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}  ·  pulse bpm'
-        : '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}';
+        ? '${UnifiedFormStrings.bpUnit} · ${UnifiedFormStrings.bpPulseUnit}'
+        : UnifiedFormStrings.bpUnit;
 
     return _FieldShell(
       label: UnifiedFormStrings.bpCardLabel,
@@ -1709,7 +1880,8 @@ class _SectionCard extends StatelessWidget {
         providedDef.isMandatory;
     return _FieldShell(
       label: meta.label,
-      subLabel: meta.subLabel,
+      // Locale-pure primary label only — no second-language sub-line.
+      subLabel: null,
       emoji: meta.emoji,
       emojiBg: const Color(0xFFF0FDF4),
       isMandatory: isMandatory,
@@ -1800,7 +1972,7 @@ class _SectionCard extends StatelessWidget {
         randomDef.isMandatory || randomRef.isMandatory;
     return _FieldShell(
       label: UnifiedFormStrings.glucosePairLabel,
-      subLabel: UnifiedFormStrings.glucosePairSubLabel,
+      subLabel: UnifiedFormStrings.bloodGlucoseEntryUnit,
       emoji: '🩸',
       emojiBg: const Color(0xFFFFF1F2),
       isMandatory: isMandatory,
@@ -1892,14 +2064,13 @@ class _SectionCard extends StatelessWidget {
         weightDef.isMandatory || weightRef.isMandatory;
     final currentWeight = _VitalStatusEval.asDouble(data.getValue(weightRef.id));
     final weightStatus = _VitalStatusEval.weight(currentWeight, previousWeight);
-    // Sub-label: last weight info when available.
-    final subParts = <String>[UnifiedFormStrings.heightWeightPairSubLabel];
-    if (previousWeight != null) {
-      subParts.add(UnifiedFormStrings.vsLastWeight(previousWeight!));
-    }
+    // Sub-label: last weight info when available (no second language line).
+    final subLabel = previousWeight != null
+        ? UnifiedFormStrings.vsLastWeight(previousWeight!)
+        : null;
     return _FieldShell(
       label: UnifiedFormStrings.heightWeightPairLabel,
-      subLabel: subParts.join(' · '),
+      subLabel: subLabel,
       emoji: '📐',
       emojiBg: const Color(0xFFEEF2FF),
       isMandatory: isMandatory,
@@ -1999,7 +2170,7 @@ class _SectionCard extends StatelessWidget {
           );
           return _InfoLabelField(
             key: Key('unified_form_${def.id}_info'),
-            label: def.label,
+            label: def.displayLabel,
             value: currentValue?.toString(),
             statusBadge: bmiStatus != null
                 ? _VitalBadge(label: bmiStatus.label, color: bmiStatus.color)
@@ -2022,10 +2193,9 @@ class _SectionCard extends StatelessWidget {
         final unit = def.unitMeasurement;
 
         // ── Vital-status enrichment (per-field rules) ─────────────────────
+        // subLabel is unit / clinical extras only — never a second language.
         _VitalStatus? vitalStatus;
         List<String> subParts = [
-          if (def.labelCulture != null && def.labelCulture!.isNotEmpty)
-            def.labelCulture!,
           if (unit != null && unit.isNotEmpty) unit,
         ];
 
@@ -2035,8 +2205,6 @@ class _SectionCard extends StatelessWidget {
             vitalStatus = _VitalStatusEval.weight(w, previousWeight);
             if (previousWeight != null) {
               subParts = [
-                if (def.labelCulture != null && def.labelCulture!.isNotEmpty)
-                  def.labelCulture!,
                 if (unit != null && unit.isNotEmpty) unit,
                 UnifiedFormStrings.vsLastWeight(previousWeight!),
               ];
@@ -2047,8 +2215,6 @@ class _SectionCard extends StatelessWidget {
             vitalStatus = _VitalStatusEval.fundalHeight(fh, gestationalWeeks);
             if (gestationalWeeks != null) {
               subParts = [
-                if (def.labelCulture != null && def.labelCulture!.isNotEmpty)
-                  def.labelCulture!,
                 if (unit != null && unit.isNotEmpty) unit,
                 UnifiedFormStrings.vsFhExpectedSubLabel(gestationalWeeks!),
               ];
@@ -2090,8 +2256,17 @@ class _SectionCard extends StatelessWidget {
             }
         }
 
+        // Layout fieldName disambiguates shared library labels (e.g. three
+        // medication questions on NCD). Prefer Bangla [displayLabel] when
+        // the locale switcher is on — layout fieldName is English-only.
+        final override = ref.fieldName?.trim();
+        final primary = (!AppLocale.isBangla &&
+                override != null &&
+                override.isNotEmpty)
+            ? override
+            : def.displayLabel;
         return _FieldShell(
-          label: questionNumber != null ? '$questionNumber. ${def.label}' : def.label,
+          label: questionNumber != null ? '$questionNumber. $primary' : primary,
           subLabel: subParts.isEmpty ? null : subParts.join(' · '),
           emoji: glyph?.emoji,
           emojiBg: glyph?.background,
@@ -2149,6 +2324,15 @@ class _SectionCard extends StatelessWidget {
           }
           return null;
         };
+      case 'hba1c':
+        return (v) {
+          if (v == null || v.isEmpty) return null;
+          final n = double.tryParse(v);
+          if (n == null || n < hba1cFormMin || n > hba1cFormMax) {
+            return ComposerStrings.hba1cValidationError;
+          }
+          return null;
+        };
       case 'fundalHeight':
         return (v) {
           if (v == null || v.isEmpty) return null;
@@ -2184,7 +2368,7 @@ class _SectionCard extends StatelessWidget {
     switch (def.widgetHint) {
       case WidgetHint.radioGroup:
         // Canonical store uses option id; RadioFormField works with display names.
-        // Translate: stored id → display name for render, selected name → id on change.
+        // Translate: stored id → locale display name for render, selected → id.
         final storedId = currentValue as String?;
         final displayName = def.options
             .cast<FieldOption?>()
@@ -2192,10 +2376,10 @@ class _SectionCard extends StatelessWidget {
               (o) => o!.id == storedId || o.name == storedId,
               orElse: () => null,
             )
-            ?.name;
+            ?.displayName;
         return RadioFormField(
           key: Key('unified_form_${def.id}_input'),
-          options: def.options.map((o) => o.name).toList(),
+          options: def.options.map((o) => o.displayName).toList(),
           currentValue: displayName,
           severityColors: _severityColorsByField[def.id],
           onChanged: (name) {
@@ -2206,44 +2390,63 @@ class _SectionCard extends StatelessWidget {
             }
             final id = def.options
                 .cast<FieldOption?>()
-                .firstWhere((o) => o!.name == name, orElse: () => null)
-                ?.id ?? name;
+                .firstWhere(
+                  (o) =>
+                      o!.displayName == name ||
+                      o.name == name ||
+                      o.id == name,
+                  orElse: () => null,
+                )
+                ?.id ??
+                name;
             onFieldChanged(def.id, id);
           },
         );
 
       case WidgetHint.dialogCheckbox:
         // Canonical store uses list of option ids; inline list works with display names.
+        // ANC on-treatment options are derived from selected illnesses
+        // (Android AssessmentRMNCHFragment.onCheckBoxDialogueClicked).
+        final effectiveOptions = def.id == 'pregnantWomanOnTreatment'
+            ? FieldVisibilityRules.ancOnTreatmentOptions(
+                illnessField:
+                    config.fields['pregnantWomanExistingIllness'] ?? def,
+                onTreatmentField: def,
+                data: data,
+              )
+            : def.options;
         final storedIds = (currentValue is List)
             ? currentValue.cast<String>()
             : <String>[];
         final displayNames = storedIds.map((sid) {
-          return def.options
+          return effectiveOptions
                   .cast<FieldOption?>()
                   .firstWhere(
                     (o) => o!.id == sid || o.name == sid,
                     orElse: () => null,
                   )
-                  ?.name ??
+                  ?.displayName ??
               sid;
         }).toList();
-        final subParts = <String>[
-          if (def.labelCulture != null && def.labelCulture!.isNotEmpty)
-            def.labelCulture!,
-        ];
         return _InlineListSelectField(
           key: Key('unified_form_${def.id}_input'),
-          label: def.label,
-          subLabel: subParts.isEmpty ? null : subParts.first,
+          label: def.displayLabel,
+          subLabel: null,
           isMandatory: def.isMandatory || ref.isMandatory,
           hasError: validationErrors.contains(ref.id),
-          options: def.options.map((o) => o.name).toList(),
+          options: effectiveOptions.map((o) => o.displayName).toList(),
           selectedValues: displayNames,
           onChanged: (names) {
             final ids = names.map((n) {
-              return def.options
+              return effectiveOptions
                       .cast<FieldOption?>()
-                      .firstWhere((o) => o!.name == n, orElse: () => null)
+                      .firstWhere(
+                        (o) =>
+                            o!.displayName == n ||
+                            o.name == n ||
+                            o.id == n,
+                        orElse: () => null,
+                      )
                       ?.id ??
                   n;
             }).toList();
@@ -2264,10 +2467,10 @@ class _SectionCard extends StatelessWidget {
                 (o) => o!.id == storedId || o.name == storedId,
                 orElse: () => null,
               )
-              ?.name;
+              ?.displayName;
           return RadioFormField(
             key: Key('unified_form_${def.id}_input'),
-            options: def.options.map((o) => o.name).toList(),
+            options: def.options.map((o) => o.displayName).toList(),
             currentValue: displayName,
             onChanged: (name) {
               if (name == null) {
@@ -2276,7 +2479,13 @@ class _SectionCard extends StatelessWidget {
               }
               final id = def.options
                       .cast<FieldOption?>()
-                      .firstWhere((o) => o!.name == name, orElse: () => null)
+                      .firstWhere(
+                        (o) =>
+                            o!.displayName == name ||
+                            o.name == name ||
+                            o.id == name,
+                        orElse: () => null,
+                      )
                       ?.id ??
                   name;
               onFieldChanged(def.id, id);
@@ -2295,7 +2504,8 @@ class _SectionCard extends StatelessWidget {
         // glucoseType (def.id) stores the selected type; 'glucose' stores the
         // numeric value.  Both are written to CanonicalVisitData individually.
         return _BloodGlucoseEntryField(
-          key: Key('unified_form_${def.id}_bge'),
+          // Scope by formType so ANC + NCD can both mount glucoseType.
+          key: Key('unified_form_${section.formType}_${def.id}_bge'),
           options: def.options,
           glucoseType: currentValue as String?,
           glucoseValue: data.getValue('glucose'),
@@ -2307,6 +2517,17 @@ class _SectionCard extends StatelessWidget {
 
       case WidgetHint.numeric:
       case WidgetHint.bloodGlucose:
+        // inputType 0 = text (e.g. newWorseningSymptoms comment field) — no
+        // numeric keyboard, no unit, no parse. Render as plain text input.
+        if (ref.inputType == 0 && def.unitMeasurement == null) {
+          return TextFormField(
+            initialValue: currentValue?.toString(),
+            style: Theme.of(context).textTheme.bodyMedium,
+            decoration: _filledInputDecoration(hintText: def.hintText),
+            maxLines: 3,
+            onChanged: (v) => onFieldChanged(def.id, v.isEmpty ? null : v),
+          );
+        }
         // inputType 2 = numberDecimal; "decimal" string (from EditText fields) is
         // also treated as decimal — use isDecimal flag.
         final isDecimal = ref.inputType == 2 ||
@@ -2333,10 +2554,14 @@ class _SectionCard extends StatelessWidget {
         );
 
       case WidgetHint.dateField:
+        // Follow-up is always a future date; other date fields stay
+        // past/today-only (DOB, LMP, etc.).
+        final allowFuture = def.id == 'followUpVisit';
         return _DateField(
           key: Key('unified_form_${def.id}_input'),
           currentValue: currentValue as String?,
           onChanged: (v) => onFieldChanged(def.id, v),
+          allowFuture: allowFuture,
         );
 
       case WidgetHint.infoLabel:
@@ -2344,14 +2569,14 @@ class _SectionCard extends StatelessWidget {
         // available; otherwise show a muted placeholder.
         return _InfoLabelField(
           key: Key('unified_form_${def.id}_info'),
-          label: def.label,
+          label: def.displayLabel,
           value: currentValue?.toString(),
         );
 
       case WidgetHint.textLabel:
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-          child: Text(def.label, style: AppTextStyles.subText),
+          child: Text(def.displayLabel, style: AppTextStyles.subText),
         );
 
       case WidgetHint.bpField:
@@ -2408,7 +2633,9 @@ abstract final class _VitalStatusEval {
   _VitalStatusEval._();
 
   // ── Blood pressure ───────────────────────────────────────────────────────
-  // Thresholds from the ANC / NCD clinical spec in CLAUDE.md.
+  // Android AssessmentRMNCHFragment: High Risk only when sys ≥ 140 or
+  // dia ≥ 90 (AssessmentDefinedParams.HIGH_BP_*). No "elevated" band below
+  // that — 120/80 is Normal on ANC (same as NCD green).
   static _VitalStatus? bloodPressure(int? sys, int? dia) {
     if (sys == null && dia == null) return null;
     final s = sys ?? 0;
@@ -2419,22 +2646,10 @@ abstract final class _VitalStatusEval {
         color: AppColors.statusCritical,
       );
     }
-    if (s >= 140 || d >= 90) {
+    if (s >= bpHighSystolic || d >= bpHighDiastolic) {
       return _VitalStatus(
         label: UnifiedFormStrings.vsBpHigh,
         color: AppColors.statusCritical,
-      );
-    }
-    if (s >= 130 || d >= 85) {
-      return _VitalStatus(
-        label: UnifiedFormStrings.vsBpSlightlyElevated,
-        color: AppColors.statusWarning,
-      );
-    }
-    if (s >= 120) {
-      return _VitalStatus(
-        label: UnifiedFormStrings.vsBpElevated,
-        color: AppColors.statusWarning,
       );
     }
     if (s > 0 || d > 0) {
@@ -2446,11 +2661,8 @@ abstract final class _VitalStatusEval {
     return null;
   }
 
-  /// NCD-specific BP bands — deliberately separate from [bloodPressure]
-  /// (ANC): the two programmes use different threshold sets (see CLAUDE.md
-  /// "Key Clinical Thresholds" — NCD's crisis/high bands sit higher than
-  /// ANC's), so this reuses the shared NCD constants from
-  /// assessment_thresholds.dart rather than the ANC-tuned evaluator above.
+  /// NCD badge bands — Android NCDReferralColorEvaluator green when
+  /// sys < 140 and dia < 90. Higher bands mirror crisis / Upazila limits.
   static _VitalStatus? bloodPressureNcd(int? sys, int? dia) {
     if (sys == null && dia == null) return null;
     final s = sys ?? 0;
@@ -2470,12 +2682,6 @@ abstract final class _VitalStatusEval {
     if (s >= bpHighSystolic || d >= bpHighDiastolic) {
       return _VitalStatus(
         label: UnifiedFormStrings.vsBpSlightlyElevated,
-        color: AppColors.statusWarning,
-      );
-    }
-    if (s >= 130 || d >= 85) {
-      return _VitalStatus(
-        label: UnifiedFormStrings.vsBpElevated,
         color: AppColors.statusWarning,
       );
     }
@@ -2781,9 +2987,9 @@ class _FieldLabel extends StatelessWidget {
 
 /// The consistent chrome around every editable field: a white rounded card with
 /// a `1.5px` border (red when [hasError]).  The header row mirrors the v13
-/// mockup's vitals cards — an optional pastel [emoji] tile, the bold English
-/// [label] + mandatory `*`, and a muted bilingual [subLabel] (Bengali · unit) —
-/// with the control [child] below.
+/// mockup's vitals cards — an optional pastel [emoji] tile, the bold locale-pure
+/// [label] + mandatory `*`, and an optional muted [subLabel] (unit / clinical
+/// extras only — never a second language) — with the control [child] below.
 class _FieldShell extends StatelessWidget {
   const _FieldShell({
     required this.label,
@@ -2801,7 +3007,7 @@ class _FieldShell extends StatelessWidget {
   final String label;
   final Widget child;
 
-  /// Muted second line under the label (e.g. `"রক্তচাপ · mmHg"`).
+  /// Muted second line under the label (e.g. unit `"mmHg"`, not a second language).
   final String? subLabel;
 
   /// Optional decorative emoji shown in a pastel tile to the left of the label.
@@ -2994,6 +3200,7 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_BloodGlucoseEntryFieldState] initState');
     _ctrl = TextEditingController(
       text: widget.glucoseValue?.toString() ?? '',
     );
@@ -3021,6 +3228,7 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
   @override
   void dispose() {
     _ctrl.dispose();
+    debugPrint('[_BloodGlucoseEntryFieldState] dispose');
     super.dispose();
   }
 
@@ -3036,7 +3244,7 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
 
     return _FieldShell(
       label: UnifiedFormStrings.bloodGlucoseEntryLabel,
-      subLabel: UnifiedFormStrings.bloodGlucoseEntrySubLabel,
+      subLabel: UnifiedFormStrings.bloodGlucoseEntryUnit,
       emoji: '🩸',
       emojiBg: const Color(0xFFFEE2E2),
       isMandatory: widget.isMandatory,
@@ -3150,6 +3358,7 @@ class _NumericFieldState extends State<_NumericField> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_NumericFieldState] initState');
     _ctrl = TextEditingController(text: widget.initialValue ?? '');
   }
 
@@ -3179,6 +3388,7 @@ class _NumericFieldState extends State<_NumericField> {
   @override
   void dispose() {
     _ctrl.dispose();
+    debugPrint('[_NumericFieldState] dispose');
     super.dispose();
   }
 
@@ -3271,7 +3481,7 @@ class _SpinnerField extends StatelessWidget {
             (o) => DropdownMenuItem<String>(
               value: o.id,
               child: Text(
-                o.name,
+                o.displayName,
                 style: theme.textTheme.bodyMedium,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -3288,10 +3498,14 @@ class _DateField extends StatefulWidget {
     super.key,
     required this.onChanged,
     this.currentValue,
+    this.allowFuture = false,
   });
 
   final String? currentValue;
   final ValueChanged<String?> onChanged;
+
+  /// When true (e.g. follow-up visit), picker allows future dates.
+  final bool allowFuture;
 
   @override
   State<_DateField> createState() => _DateFieldState();
@@ -3303,6 +3517,7 @@ class _DateFieldState extends State<_DateField> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_DateFieldState] initState');
     _ctrl = TextEditingController(text: widget.currentValue ?? '');
   }
 
@@ -3322,6 +3537,7 @@ class _DateFieldState extends State<_DateField> {
   @override
   void dispose() {
     _ctrl.dispose();
+    debugPrint('[_DateFieldState] dispose');
     super.dispose();
   }
 
@@ -3339,11 +3555,22 @@ class _DateFieldState extends State<_DateField> {
         ),
       ),
       onTap: () async {
+        final today = DateTime.now();
+        final parsed = DateTime.tryParse(widget.currentValue ?? '');
+        final first = widget.allowFuture ? today : DateTime(1900);
+        final last = widget.allowFuture
+            ? today.add(const Duration(days: 365 * 2))
+            : today;
+        var initial = parsed ?? (widget.allowFuture
+            ? today.add(const Duration(days: 28))
+            : today);
+        if (initial.isBefore(first)) initial = first;
+        if (initial.isAfter(last)) initial = last;
         final picked = await showDatePicker(
           context: context,
-          initialDate: DateTime.now(),
-          firstDate: DateTime(1900),
-          lastDate: DateTime.now(),
+          initialDate: initial,
+          firstDate: first,
+          lastDate: last,
         );
         if (picked != null) {
           widget.onChanged(picked.toIso8601String().substring(0, 10));
@@ -3355,16 +3582,19 @@ class _DateFieldState extends State<_DateField> {
 
 // ── BP reading field ──────────────────────────────────────────────────────────
 
-/// Systolic / diastolic pair that matches Android's `bpLogDetails` wire format.
+/// Multi-reading BP widget matching Android's `bpLogDetails` wire format.
 ///
-/// Stores value as `List<Map<String, dynamic>>` with one entry per reading:
-/// `[{'systolic': 120, 'diastolic': 80, 'pulse': 72}]`.
+/// Supports up to 3 readings (Android parity). Each row captures systolic,
+/// diastolic, and pulse. Stores value as `List<Map<String, dynamic>>`:
+/// `[{'systolic': 120, 'diastolic': 80, 'pulse': 72}, ...]`.
 class _BpReadingField extends StatefulWidget {
   const _BpReadingField({
     super.key,
     required this.readings,
     required this.onChanged,
   });
+
+  static const int _maxReadings = 3;
 
   final List<Map<String, dynamic>> readings;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
@@ -3374,29 +3604,49 @@ class _BpReadingField extends StatefulWidget {
 }
 
 class _BpReadingFieldState extends State<_BpReadingField> {
-  late TextEditingController _sys;
-  late TextEditingController _dia;
-  late TextEditingController _pulse;
+  // One triplet of controllers per row (up to _maxReadings).
+  late List<(TextEditingController, TextEditingController, TextEditingController)> _rows;
 
   @override
   void initState() {
     super.initState();
-    final first =
-        widget.readings.isNotEmpty ? widget.readings.first : const {};
-    _sys = TextEditingController(text: first['systolic']?.toString() ?? '');
-    _dia = TextEditingController(text: first['diastolic']?.toString() ?? '');
-    _pulse = TextEditingController(text: first['pulse']?.toString() ?? '');
+    _rows = _buildRows(widget.readings);
+  }
+
+  List<(TextEditingController, TextEditingController, TextEditingController)> _buildRows(
+    List<Map<String, dynamic>> readings,
+  ) {
+    final source = readings.isNotEmpty ? readings : [const <String, dynamic>{}];
+    return source.map((r) {
+      return (
+        TextEditingController(text: r['systolic']?.toString() ?? ''),
+        TextEditingController(text: r['diastolic']?.toString() ?? ''),
+        TextEditingController(text: r['pulse']?.toString() ?? ''),
+      );
+    }).toList();
   }
 
   @override
   void didUpdateWidget(_BpReadingField old) {
     super.didUpdateWidget(old);
     if (old.readings != widget.readings) {
-      final first =
-          widget.readings.isNotEmpty ? widget.readings.first : const {};
-      _syncCtrl(_sys, first['systolic']?.toString() ?? '');
-      _syncCtrl(_dia, first['diastolic']?.toString() ?? '');
-      _syncCtrl(_pulse, first['pulse']?.toString() ?? '');
+      // Sync only rows that haven't changed length; rebuild otherwise.
+      if (widget.readings.length != _rows.length) {
+        for (final (s, d, p) in _rows) {
+          s.dispose();
+          d.dispose();
+          p.dispose();
+        }
+        setState(() => _rows = _buildRows(widget.readings));
+      } else {
+        for (var i = 0; i < _rows.length; i++) {
+          final r = widget.readings[i];
+          final (s, d, p) = _rows[i];
+          _syncCtrl(s, r['systolic']?.toString() ?? '');
+          _syncCtrl(d, r['diastolic']?.toString() ?? '');
+          _syncCtrl(p, r['pulse']?.toString() ?? '');
+        }
+      }
     }
   }
 
@@ -3409,39 +3659,135 @@ class _BpReadingFieldState extends State<_BpReadingField> {
 
   @override
   void dispose() {
-    _sys.dispose();
-    _dia.dispose();
-    _pulse.dispose();
+    for (final (s, d, p) in _rows) {
+      s.dispose();
+      d.dispose();
+      p.dispose();
+    }
     super.dispose();
   }
 
   void _emit() {
-    final sys = int.tryParse(_sys.text);
-    final dia = int.tryParse(_dia.text);
-    if (sys == null && dia == null) {
-      widget.onChanged([]);
-      return;
+    final out = <Map<String, dynamic>>[];
+    for (final (s, d, p) in _rows) {
+      final sys = int.tryParse(s.text);
+      final dia = int.tryParse(d.text);
+      if (sys == null && dia == null) continue;
+      final reading = <String, dynamic>{};
+      if (sys != null) reading['systolic'] = sys;
+      if (dia != null) reading['diastolic'] = dia;
+      final pulse = int.tryParse(p.text);
+      if (pulse != null) reading['pulse'] = pulse;
+      out.add(reading);
     }
-    final reading = <String, dynamic>{};
-    if (sys != null) reading['systolic'] = sys;
-    if (dia != null) reading['diastolic'] = dia;
-    final pulse = int.tryParse(_pulse.text);
-    if (pulse != null) reading['pulse'] = pulse;
-    widget.onChanged([reading]);
+    widget.onChanged(out);
   }
+
+  void _addRow() {
+    if (_rows.length >= _BpReadingField._maxReadings) return;
+    setState(() {
+      _rows.add((
+        TextEditingController(),
+        TextEditingController(),
+        TextEditingController(),
+      ));
+    });
+  }
+
+  void _removeRow(int index) {
+    if (_rows.length <= 1) return;
+    final (s, d, p) = _rows[index];
+    s.dispose();
+    d.dispose();
+    p.dispose();
+    setState(() => _rows.removeAt(index));
+    _emit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < _rows.length; i++) ...[
+          if (_rows.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Text(
+                    '${UnifiedFormStrings.bpReadingNumberLabel} ${i + 1}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (i > 0)
+                    GestureDetector(
+                      onTap: () => _removeRow(i),
+                      child: Text(
+                        UnifiedFormStrings.bpRemoveReadingTooltip,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: AppColors.statusCritical,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          _BpReadingRow(
+            sysCtrl: _rows[i].$1,
+            diaCtrl: _rows[i].$2,
+            pulseCtrl: _rows[i].$3,
+            onChanged: (_) => _emit(),
+          ),
+          if (i < _rows.length - 1) const SizedBox(height: 10),
+        ],
+        if (_rows.length < _BpReadingField._maxReadings) ...[
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: _addRow,
+            child: Text(
+              UnifiedFormStrings.bpAddReadingLabel,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: AppColors.navy,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Single systolic / diastolic / pulse row inside [_BpReadingField].
+class _BpReadingRow extends StatelessWidget {
+  const _BpReadingRow({
+    required this.sysCtrl,
+    required this.diaCtrl,
+    required this.pulseCtrl,
+    required this.onChanged,
+  });
+
+  final TextEditingController sysCtrl;
+  final TextEditingController diaCtrl;
+  final TextEditingController pulseCtrl;
+  final ValueChanged<void> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Systolic / diastolic pair joined by a "/" separator.
         Expanded(
           flex: 3,
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpSystolicLabel,
-            controller: _sys,
+            controller: sysCtrl,
             suffixText: UnifiedFormStrings.bpUnit,
             validator: _SectionCard._numericRangeValidator('systolic'),
           ),
@@ -3461,18 +3807,17 @@ class _BpReadingFieldState extends State<_BpReadingField> {
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpDiastolicLabel,
-            controller: _dia,
+            controller: diaCtrl,
             validator: _SectionCard._numericRangeValidator('diastolic'),
           ),
         ),
         const SizedBox(width: 10),
-        // Pulse.
         Expanded(
           flex: 3,
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpPulseLabel,
-            controller: _pulse,
+            controller: pulseCtrl,
             suffixText: UnifiedFormStrings.bpPulseUnit,
           ),
         ),
@@ -3480,7 +3825,6 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     );
   }
 
-  /// One captioned, filled numeric input used for systolic / diastolic / pulse.
   Widget _bpCell(
     BuildContext context, {
     required String caption,
@@ -3488,15 +3832,13 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     String? suffixText,
     FormFieldValidator<String>? validator,
   }) {
-    // Placeholder-inside-input, matching the mockup — disappears once the SK
-    // starts typing, rather than a permanent label above the field.
     return TextFormField(
       controller: controller,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       style: Theme.of(context).textTheme.bodyMedium,
       decoration: _filledInputDecoration(hintText: caption, suffixText: suffixText),
-      onChanged: (_) => _emit(),
+      onChanged: (_) => onChanged(null),
       validator: validator,
     );
   }
@@ -3571,7 +3913,7 @@ class _InfoLabelField extends StatelessWidget {
               Text(
                 hasValue ? value! : UnifiedFormStrings.autoComputedPlaceholder,
                 style: const TextStyle(
-                  fontFamily: 'Nunito',
+                  fontFamily: AppFonts.display,
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
                   color: AppColors.navy,
@@ -3625,7 +3967,13 @@ class _InlineListSelectField extends StatelessWidget {
             orElse: () => null,
           );
 
-  bool _isNone(String opt) => opt.toLowerCase().startsWith(_noneKey);
+  bool _isNone(String opt) {
+    final lower = opt.toLowerCase();
+    // "None", "none", and Android's "Not taking any treatment".
+    return lower == _noneKey ||
+        lower.startsWith('$_noneKey ') ||
+        lower.contains('not taking any treatment');
+  }
 
   void _toggle(String option) {
     final current = List<String>.from(selectedValues);
@@ -3850,7 +4198,7 @@ class _SubmitBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.button),
               ),
               textStyle: const TextStyle(
-                fontFamily: 'Nunito',
+                fontFamily: AppFonts.display,
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
               ),
@@ -3864,7 +4212,7 @@ class _SubmitBar extends StatelessWidget {
                       color: AppColors.textOnNavy,
                     ),
                   )
-                : const Text(UnifiedFormStrings.submitLabel),
+                : Text(UnifiedFormStrings.submitLabel),
           ),
         ),
       ),

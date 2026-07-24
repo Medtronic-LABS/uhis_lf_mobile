@@ -14,8 +14,11 @@ import '../features/household/household_detail_screen.dart';
 import '../features/household/household_list_screen.dart';
 import '../features/lock/lock_screen.dart';
 import '../features/login/login_screen.dart';
+import '../features/login/forgot_password_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/patient/patient_context_screen.dart';
+import '../features/patient/vitals_repository.dart';
+import '../features/patient/member_detail_repository.dart';
 import '../features/pin/pin_setup_screen.dart';
 import '../features/pin/pin_unlock_screen.dart';
 import '../features/referral/referral_detail_screen.dart';
@@ -23,7 +26,6 @@ import '../features/referral/referral_list_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
 import '../features/counselling/counselling_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
-import '../features/training/training_screen.dart';
 import '../features/assistant/assistant_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
@@ -38,6 +40,7 @@ import '../features/household/enrollment/add_household_member_screen.dart';
 import '../features/household/enrollment/enrollment_controller.dart';
 import '../features/household/enrollment/select_household_screen.dart';
 import '../features/household/enrollment/link_member_screen.dart';
+import '../features/consent/consent_screen.dart';
 import '../core/db/household_dao.dart';
 import '../core/db/member_dao.dart';
 import '../core/db/patient_dao.dart';
@@ -63,6 +66,7 @@ GoRouter buildRouter(AuthState auth) {
           return loc == '/' ? null : '/';
         case AuthStatus.signedOut:
           if (!auth.splashReady && loc == '/') return null;
+          if (loc == '/forgot-password') return null;
           if (auth.reentryEnabled) {
             // Cold-start or post-expiry with biometric or PIN still enrolled.
             // Bounce login attempts back through /lock unless user explicitly
@@ -118,6 +122,10 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/lock',
         builder: (_, _) => const LockScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (_, _) => const ForgotPasswordScreen(),
       ),
       GoRoute(
         path: '/onboarding',
@@ -232,6 +240,31 @@ GoRouter buildRouter(AuthState auth) {
                           memberId: extra['memberId'] as String?,
                           householdMemberLocalId:
                               extra['householdMemberLocalId'] as int?,
+                        ),
+                      );
+                    },
+                  ),
+                  // All-trends full-screen viewer
+                  GoRoute(
+                    path: ':id/trends',
+                    name: 'patient-trends',
+                    pageBuilder: (context, state) {
+                      final extra = state.extra is Map<String, dynamic>
+                          ? state.extra as Map<String, dynamic>
+                          : <String, dynamic>{};
+                      return MaterialPage(
+                        key: ValueKey('trends-${state.pathParameters['id']}'),
+                        child: TrendsScreen(
+                          patientId: state.pathParameters['id']!,
+                          patientName: extra['patientName'] as String?,
+                          vitalHistory: extra['vitalHistory'] is List
+                              ? List<VisitVitals>.from(
+                                  extra['vitalHistory'] as List)
+                              : const [],
+                          assessments: extra['assessments'] is List
+                              ? List<MemberAssessment>.from(
+                                  extra['assessments'] as List)
+                              : const [],
                         ),
                       );
                     },
@@ -489,6 +522,17 @@ GoRouter buildRouter(AuthState auth) {
         ],
       ),
 
+      // Informed consent — push before /household/enrollment/create
+      // Returns bool: true = consented, false/null = declined.
+      GoRoute(
+        path: '/household/enrollment/consent',
+        name: 'enrollment-consent',
+        pageBuilder: (context, state) => const MaterialPage(
+          key: ValueKey('enrollment-consent'),
+          child: ConsentScreen(),
+        ),
+      ),
+
       // Select existing household → link new member
       GoRoute(
         path: '/household/enrollment/select-household',
@@ -576,46 +620,7 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/training',
         name: 'training',
-        pageBuilder: (context, state) => const MaterialPage(
-          key: ValueKey('training-page'),
-          child: TrainingScreen(),
-        ),
-      ),
-
-      // ─────────────────────────────────────────────────────────────────────
-      // Legacy routes (for backward compatibility)
-      // ─────────────────────────────────────────────────────────────────────
-      GoRoute(
-        path: '/dashboard',
-        redirect: (_, _) => '/home',
-      ),
-      GoRoute(
-        path: '/households',
-        redirect: (_, _) => '/patients/households',
-      ),
-      GoRoute(
-        path: '/households/:id',
-        redirect: (_, state) => '/patients/household/${state.pathParameters['id']}',
-      ),
-      GoRoute(
-        path: '/members',
-        redirect: (_, _) => '/patients',
-      ),
-      GoRoute(
-        path: '/referrals',
-        redirect: (_, _) => '/tasks',
-      ),
-      GoRoute(
-        path: '/patient/:id',
-        redirect: (_, state) => '/patients/${state.pathParameters['id']}',
-      ),
-      GoRoute(
-        path: '/patient/:id/referrals',
-        redirect: (_, state) => '/tasks/${state.pathParameters['id']}',
-      ),
-      GoRoute(
-        path: '/household/:id',
-        redirect: (_, state) => '/patients/household/${state.pathParameters['id']}',
+        redirect: (_, _) => '/assistant',
       ),
 
       // ─────────────────────────────────────────────────────────────────────
@@ -809,10 +814,10 @@ class _SplashScreenState extends State<_SplashScreen>
               const SizedBox(height: 20),
               _fade(
                 fade: _titleFade, slide: _titleSlide,
-                child: const Text(
+                child: Text(
                   LockStrings.aponSushashthya,
                   style: TextStyle(
-                    fontFamily: 'Nunito',
+                    fontFamily: AppFonts.display,
                     fontSize: 26,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,

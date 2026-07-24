@@ -6,6 +6,7 @@ import '../../core/auth/auth_state.dart';
 import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/sync/offline_sync_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.fromLock = false});
@@ -25,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void initState() {
+    debugPrint('[_LoginScreenState] initState');
     super.initState();
     final auth = context.read<AuthState>();
     final last = auth.username;
@@ -45,12 +47,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_LoginScreenState] dispose');
     _userCtl.dispose();
     _passCtl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    debugPrint('[_LoginScreenState] _submit username=${_userCtl.text.trim()}');
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthState>();
     final ok = await auth.login(_userCtl.text.trim(), _passCtl.text);
@@ -59,12 +63,58 @@ class _LoginScreenState extends State<LoginScreen> {
       // Prefetch user hierarchy (saves upazila from chiefdoms[0].name) so the
       // lock screen profile card shows correct data on next background lock.
       context.read<UserHierarchyService>().prefetch().ignore();
-      // Go to sync screen to download data before showing dashboard
-      context.go('/sync');
+      debugPrint('[_LoginScreenState] post-login: onboardingComplete=${auth.onboardingComplete} pinEnabled=${auth.pinEnabled} biometricEnabled=${auth.biometricEnabled}');
+      if (!auth.onboardingComplete && !auth.pinEnabled) {
+        // New user — kick off sync in background immediately so data arrives
+        // while they complete PIN setup, then go to onboarding.
+        debugPrint('[_LoginScreenState] new user → background sync + /onboarding');
+        context.read<OfflineSyncService>().coldSync(wipeBeforeSync: true).ignore();
+        context.go('/onboarding');
+      } else if (!auth.pinEnabled && !auth.biometricEnabled) {
+        // Returning user with no security enrolled (e.g. pre-PIN-mandate accounts).
+        // Re-enter onboarding so user sees the "Set up security / Skip" choice.
+        debugPrint('[_LoginScreenState] returning user, no security → /onboarding');
+        context.go('/onboarding');
+      } else {
+        // Returning user with PIN or biometric — go to sync screen as normal.
+        debugPrint('[_LoginScreenState] returning user → /sync');
+        context.go('/sync');
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(auth.error ?? LoginStrings.loginFailed)),
-      );
+      final msg = auth.error ?? LoginStrings.loginFailed;
+      final isOffline = msg.contains('internet') || msg.contains('timed out');
+      final hasPinOrBio = auth.pinEnabled ||
+          (auth.biometricEnabled && auth.biometricAvailable);
+      final isSessionExpired = _bannerMessage?.contains('expired') ?? false;
+      if (isOffline && hasPinOrBio && !isSessionExpired) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(LoginStrings.offlineUsePinHint),
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: auth.pinEnabled ? PinStrings.usePinShort : LoginStrings.useDeviceUnlock,
+              onPressed: () {
+                if (auth.pinEnabled) {
+                  context.go('/pin-unlock');
+                } else {
+                  context.go('/lock');
+                }
+              },
+            ),
+          ),
+        );
+      } else if (isOffline && isSessionExpired) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(LoginStrings.sessionExpiredNeedOnline),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
     }
   }
 
@@ -129,7 +179,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                       ),
-                    if (widget.fromLock)
+                    if (widget.fromLock && _bannerMessage == null)
                       Container(
                         margin: const EdgeInsets.only(bottom: 16),
                         padding: const EdgeInsets.all(12),
@@ -163,14 +213,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      const Row(
+                      Row(
                         children: [
-                          Expanded(child: Divider()),
+                          const Expanded(child: Divider()),
                           Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                             child: Text(CommonStrings.or),
                           ),
-                          Expanded(child: Divider()),
+                          const Expanded(child: Divider()),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -222,6 +272,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Text(LoginStrings.signIn),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: busy
+                            ? null
+                            : () => context.push('/forgot-password'),
+                        child: Text(LoginStrings.forgotPassword),
+                      ),
                     ),
                     // Medtronic Labs branding + logo temporarily hidden.
                     // const SizedBox(height: 48),

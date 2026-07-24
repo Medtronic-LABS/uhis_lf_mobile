@@ -1,3 +1,5 @@
+import '../../../core/clinical/referral_evaluator.dart';
+import '../../../core/debug/console_log.dart';
 import 'canonical_visit_data.dart';
 
 /// A single per-programme assessment payload ready for
@@ -66,10 +68,12 @@ abstract final class UnifiedPayloadMapper {
       ));
     }
 
+    // PNC_NEONATE: Android wire type is "PNC_NEONATE" (not "PNC_CHILD") wrapped
+    // under "pncNeonatal" key. GAP 6 fix.
     if (activeFormTypes.contains('pncChild') ||
         activeFormTypes.contains('pncNeonatal')) {
       payloads.add(ProgrammePayload(
-        assessmentType: 'PNC_CHILD',
+        assessmentType: 'PNC_NEONATE',
         details: _toPncChild(data),
       ));
     }
@@ -81,52 +85,78 @@ abstract final class UnifiedPayloadMapper {
       ));
     }
 
-    // ── Debug: log merged common fields then per-programme payloads ─────
+    // GAP 10: programmes that have form sections but previously had no mapper.
+    if (activeFormTypes.contains('eyeCare') ||
+        activeFormTypes.contains('eye_care')) {
+      payloads.add(ProgrammePayload(
+        assessmentType: 'EYE_CARE',
+        details: _toEyeCare(data),
+      ));
+    }
+
+    if (activeFormTypes.contains('cataract')) {
+      payloads.add(ProgrammePayload(
+        assessmentType: 'CATARACT',
+        details: _toCataract(data),
+      ));
+    }
+
+    if (activeFormTypes.contains('familyPlanning') ||
+        activeFormTypes.contains('family_planning')) {
+      payloads.add(ProgrammePayload(
+        assessmentType: 'FAMILY_PLANNING',
+        details: _toFamilyPlanning(data),
+      ));
+    }
+
+    // GAP 11b: IMCI sick-child visit (in pilot scope; form to be added separately).
+    if (activeFormTypes.contains('iccm') ||
+        activeFormTypes.contains('imci')) {
+      payloads.add(ProgrammePayload(
+        assessmentType: 'ICCM',
+        details: _toIccm(data),
+      ));
+    }
+
+    if (activeFormTypes.contains('tb')) {
+      payloads.add(ProgrammePayload(
+        assessmentType: 'TB',
+        details: _toTb(data),
+      ));
+    }
+
+    // TODO: add EPI form + mapper when EPI is added to kPilotProgrammes (GAP 12).
+    // TODO: add HIV form + mapper when HIV is in scope (GAP 12).
+    // TODO: add NUTRITION form + mapper when NUTRITION is in scope (GAP 12).
+
     _debugLogMergedCommons(data);
     _debugLogPayloads(payloads);
+    ConsoleLog.banner('[PayloadDebug] programme-payload — decompose → ${payloads.length} payloads: ${payloads.map((p) => p.assessmentType).join(', ')}');
 
     return payloads;
   }
 
-  /// Logs the merged common field values at submit time so the developer can
-  /// verify that a single captured value fans out to every programme payload.
   static void _debugLogMergedCommons(CanonicalVisitData d) {
-    // ignore: avoid_print
-    print('[Payload] submit → merged common fields:');
-    // ignore: avoid_print
-    print('[Payload]   systolic=${d.getValue('systolic')} '
-        'diastolic=${d.getValue('diastolic')} '
-        'weight=${d.getValue('weight')}');
-    // ignore: avoid_print
-    print('[Payload]   ifaConsumed=${d.getValue('ifaTotalConsumed') ?? d.getValue('ifaTabletsConsumed') ?? d.getValue('ifaTablets')} '
-        'ifaProvided=${d.getValue('ifaProvided') ?? d.getValue('ifaTabletsProvided')}');
-    // ignore: avoid_print
-    print('[Payload]   calciumConsumed=${d.getValue('calciumTotalConsumed') ?? d.getValue('calciumTabletsConsumed') ?? d.getValue('calciumTablets')} '
-        'calciumProvided=${d.getValue('calciumProvided') ?? d.getValue('calciumTabletsProvided')}');
-    // ignore: avoid_print
-    print('[Payload]   glucoseType=${d.getValue('glucoseType') ?? d.getValue('bloodSugar')} '
-        'glucoseValue=${d.getValue('glucoseValue') ?? d.getValue('glucose') ?? d.getValue('fastingBloodSugar') ?? d.getValue('randomBloodSugar')}');
+    ConsoleLog.step('[PayloadDebug] programme-payload — merged common fields: '
+        'systolic=${d.getValue('systolic')} diastolic=${d.getValue('diastolic')} '
+        'weight=${d.getValue('weight')} '
+        'glucoseType=${d.getValue('glucoseType') ?? d.getValue('bloodSugar')} '
+        'glucoseValue=${d.getValue('glucoseValue') ?? d.getValue('glucose')}');
   }
 
   static void _debugLogPayloads(List<ProgrammePayload> payloads) {
-    // ignore: avoid_print
-    print('[Payload] ── decompose → ${payloads.length} programme payloads ──');
     for (final p in payloads) {
-      final nonNull = p.details.entries
+      final summary = p.details.entries
           .where((e) => e.value != null)
           .map((e) {
             final v = e.value;
-            // Summarise nested maps/lists instead of dumping raw JSON
             if (v is Map) return '${e.key}:{${v.keys.join(',')}}';
             if (v is List) return '${e.key}:[${v.length}]';
             return '${e.key}=${e.value}';
           })
           .join(' · ');
-      // ignore: avoid_print
-      print('[Payload]   ${p.assessmentType}: $nonNull');
+      ConsoleLog.step('[PayloadDebug] programme-payload   ${p.assessmentType}: $summary');
     }
-    // ignore: avoid_print
-    print('[Payload] ── end ───────────────────────────────────────────────');
   }
 
   // ── ANC ────────────────────────────────────────────────────────────────────
@@ -280,6 +310,32 @@ abstract final class UnifiedPayloadMapper {
     final visitNo = d.getValue('ancVisitNumber') ?? d.getValue('visitNo');
     final bmiCategory = d.getValue('bmiCategory');
 
+    // Compute ANC care gaps (mirrors Android ANCAssessmentEvaluator.evaluateGapsInANC).
+    int? toInt(dynamic v) {
+      if (v is int) return v;
+      if (v is double) return v.toInt();
+      if (v is String) return int.tryParse(v);
+      return null;
+    }
+
+    final gestationalWeeks = asNum(
+      d.getValue('gestationalAge') ?? d.getValue('gestationalWeeks'),
+    );
+    final gapsResult = AncReferralEvaluator.evaluateGaps(
+      gestationalAgeWeeks: gestationalWeeks,
+      ttTdCompleted: d.getValue('ttTdCompleted') as String?,
+      ultrasound: d.getValue('ultrasound') as String?,
+      ancFromMedicalDoctor: d.getValue('ancFromMedicalDoctor') as String?,
+      facilityIdentifiedForDelivery:
+          d.getValue('facilityIdentifiedForDelivery') as String?,
+      ifaTotalConsumed: toInt(ifaConsumed),
+      calciumTotalConsumed: toInt(calciumConsumed),
+      ancVisitCount: toInt(visitNo),
+    );
+
+    final summary = <String, dynamic>{};
+    if (gapsResult.hasGaps) summary['gapsInAnc'] = gapsResult.gaps;
+
     return {
       if (visitNo != null) 'visitNo': visitNo,
       if (bmiCategory != null) 'bmiCategory': bmiCategory,
@@ -288,6 +344,7 @@ abstract final class UnifiedPayloadMapper {
       'dangerSignsRiskIdentification': dangerSigns,
       if (vaccination.isNotEmpty) 'vaccinationAndSupplements': vaccination,
       if (birthPrep.isNotEmpty) 'ancServicesBirthPreparedness': birthPrep,
+      if (summary.isNotEmpty) 'summary': summary,
     };
   }
 
@@ -302,10 +359,10 @@ abstract final class UnifiedPayloadMapper {
         ? DateTime.tryParse(lmpStr)?.millisecondsSinceEpoch
         : null;
     return _compact({
-      if (lmpMs != null) 'lmpDate': lmpMs,
+      if (lmpMs != null) 'lastMenstrualPeriod': lmpMs,
       'gravida': d.getValue('gravida'),
       'parity': d.getValue('parity'),
-      'livingChildren': d.getValue('livingChildren'),
+      'numberOfLivingChildren': d.getValue('livingChildren'),
       'ageOfLastChild': d.getValue('ageOfLastChild'),
       'pregnancyTest': d.getValue('pregnancyTest'),
     });
@@ -425,6 +482,8 @@ abstract final class UnifiedPayloadMapper {
       bpLog['avgDiastolic'] = avgDia;
       bpLog['avgBloodPressure'] = '$avgSys/$avgDia';
       bpLog['bpLogDetails'] = bpDetails;
+      // Android CommonUtils stamps bpTakenOn on every NCD BP log (UTC ISO-8601).
+      bpLog['bpTakenOn'] = DateTime.now().toUtc().toIso8601String();
       // Biometric data inside bpLog (Android stores weight/height/bmi here).
       final weight = asNum(d.getValue('weight'));
       if (weight != null) bpLog['weight'] = weight;
@@ -432,15 +491,20 @@ abstract final class UnifiedPayloadMapper {
       if (height != null) bpLog['height'] = height;
       final bmi = asNum(d.getValue('bmi'));
       if (bmi != null) bpLog['bmi'] = bmi;
+      final bmiCategory = d.getValue('bmiCategory');
+      if (bmiCategory != null) bpLog['bmiCategory'] = bmiCategory;
       final isRegularSmoker = d.getValue('isRegularSmoker');
       if (isRegularSmoker != null) {
         // Spice-service BpLogDTO field is Boolean — coerce "Yes"/"yes"/true → true.
         bpLog['isRegularSmoker'] = toBool(isRegularSmoker);
       }
-      // Prior diagnosis fields (from history section of the form).
-      final diagBp = d.getValue('diagnosedBP');
+      // Prior diagnosis fields: Flutter form uses isBeforeHtnDiagnosis / medicationFrequencyBp
+      // (both store "Yes"/"No" strings); Android wire names are diagnosedBP / diagnosedBPMedication.
+      final diagBp =
+          d.getValue('diagnosedBP') ?? d.getValue('isBeforeHtnDiagnosis');
       if (diagBp != null) bpLog['diagnosedBP'] = diagBp;
-      final diagBpMed = d.getValue('diagnosedBPMedication');
+      final diagBpMed =
+          d.getValue('diagnosedBPMedication') ?? d.getValue('medicationFrequencyBp');
       if (diagBpMed != null) bpLog['diagnosedBPMedication'] = diagBpMed;
       final cvdRisk = d.getValue('cvdRisk');
       if (cvdRisk != null) bpLog['cvdRisk'] = cvdRisk;
@@ -464,6 +528,7 @@ abstract final class UnifiedPayloadMapper {
       if (glucoseType != null) glucoseLog['glucoseType'] = glucoseType;
       glucoseLog['glucoseUnit'] =
           d.getValue('glucoseUnit') as String? ?? 'mmol/L';
+      glucoseLog['bgTakenOn'] = DateTime.now().toUtc().toIso8601String();
       final hba1c = asNum(d.getValue('hba1c'));
       if (hba1c != null) {
         glucoseLog['hba1c'] = hba1c;
@@ -473,10 +538,13 @@ abstract final class UnifiedPayloadMapper {
       if (glucoseDateTime != null) glucoseLog['glucoseDateTime'] = glucoseDateTime;
       final hba1cDateTime = d.getValue('hba1cDateTime');
       if (hba1cDateTime != null) glucoseLog['hba1cDateTime'] = hba1cDateTime;
-      // Prior diagnosis.
-      final diagGlucose = d.getValue('diagnosedGlucose');
+      // Prior diagnosis: Flutter form uses isBeforeDiabetesDiagnosis / medicationFrequencyBg;
+      // Android wire names are diagnosedGlucose / diagnosedGlucoseMedication.
+      final diagGlucose =
+          d.getValue('diagnosedGlucose') ?? d.getValue('isBeforeDiabetesDiagnosis');
       if (diagGlucose != null) glucoseLog['diagnosedGlucose'] = diagGlucose;
-      final diagGlucoseMed = d.getValue('diagnosedGlucoseMedication');
+      final diagGlucoseMed =
+          d.getValue('diagnosedGlucoseMedication') ?? d.getValue('medicationFrequencyBg');
       if (diagGlucoseMed != null) glucoseLog['diagnosedGlucoseMedication'] = diagGlucoseMed;
     }
 
@@ -493,7 +561,9 @@ abstract final class UnifiedPayloadMapper {
     if (ncdSymptoms != null) symptomsLog['ncdSymptoms'] = ncdSymptoms;
     final newWorseningSymptoms = d.getValue('newWorseningSymptoms');
     if (newWorseningSymptoms != null) symptomsLog['newWorseningSymptoms'] = newWorseningSymptoms;
-    final ncdSymptomsMedication = d.getValue('ncdSymptomsMedication');
+    // Android wire key is ncdSymptomsMedication; Flutter layout uses 'compliance' (same field).
+    // Read ncdSymptomsMedication first; fall back to compliance so either layout ID works.
+    final ncdSymptomsMedication = d.getValue('ncdSymptomsMedication') ?? complianceStr;
     if (ncdSymptomsMedication != null) symptomsLog['ncdSymptomsMedication'] = ncdSymptomsMedication;
 
     return {
@@ -605,6 +675,14 @@ abstract final class UnifiedPayloadMapper {
       if (hasRbs) 'randomBloodSugar': glucoseValue,
       if (hasRbs) 'randomBloodSugarUnit': 'mmol/L',
     });
+    if (hasFbs || hasRbs) maternal['bgTakenOn'] = DateTime.now().toUtc().toIso8601String();
+    for (final sign in const [
+      'heavyBleeding', 'foulSmellDischarge', 'severeAbdominalPain',
+      'difficultyBreathing', 'convulsions', 'unconsciousness',
+    ]) {
+      final v = d.getValue(sign);
+      if (v != null) maternal[sign] = v;
+    }
 
     final pregnancy = _compact({
       'parity': d.getValue('parity'),
@@ -625,10 +703,13 @@ abstract final class UnifiedPayloadMapper {
     });
   }
 
-  // ── PNC Child ──────────────────────────────────────────────────────────────
+  // ── PNC Neonate (PNC_NEONATE wire type) ───────────────────────────────────
+  // Android wraps under "pncNeonatal" key; _wrapDetailsForType handles that.
+  // visitNo is extracted by _extractVisitNumber in local_assessment_dao.dart.
 
   static Map<String, dynamic> _toPncChild(CanonicalVisitData d) {
     return _compact({
+      'visitNo': d.getValue('pncNeonateVisitNumber') ?? d.getValue('visitNo'),
       'isChildAlive': d.getValue('isChildAlive'),
       'childWeight': d.getValue('childWeight'),
       'childHeight': d.getValue('childHeight'),
@@ -640,16 +721,186 @@ abstract final class UnifiedPayloadMapper {
   }
 
   // ── Pregnancy Outcome ──────────────────────────────────────────────────────
+  // Android wire structure (FormResultComposer.groupValues groups by sectionId):
+  //   pregnancyOutcome → {
+  //     outcomeType:     { deliveryOutcomeType },
+  //     maternalDeath:   { timeOfDeath, gestationMonthAtDeath, causeOfDeath },
+  //     abortion:        { gestationMonthAtAbortion, typeOfAbortion },
+  //     deliveryOutcomes: { deliveryOutcome, liveBirthNumbers, stillbirthNumbers,
+  //                         placeOfDelivery, dateOfDelivery, modeOfDelivery,
+  //                         birthAttendant, anyComplicationsDuringDelivery,
+  //                         complicationsDuringDelivery },
+  //     newbornDetails:  [{ isBabyAlive, sex, birthWeight, essentialNewbornCare,
+  //                         causeOfNeonatalDeath }]   ← single entry from flat form
+  //   }
+  // Field-ID renames (Flutter form id → Android wire key):
+  //   babyAlive        → isBabyAlive
+  //   babySex          → sex
+  //   neonatalDeathCause → causeOfNeonatalDeath
+  // _wrapDetailsForType wraps this map under "pregnancyOutcome" automatically.
 
   static Map<String, dynamic> _toPregnancyOutcome(CanonicalVisitData d) {
+    // Android wire key is "pregnancyOutcomeType"; Flutter form field ID is
+    // "deliveryOutcomeType" — remap so the server receives the expected key.
+    final outcomeType = _compact({
+      'pregnancyOutcomeType': d.getValue('deliveryOutcomeType'),
+    });
+
+    final maternalDeath = _compact({
+      'timeOfDeath': d.getValue('timeOfDeath'),
+      'gestationMonthAtDeath': d.getValue('gestationMonthAtDeath'),
+      'causeOfDeath': d.getValue('causeOfDeath'),
+    });
+
+    final abortion = _compact({
+      'gestationMonthAtAbortion': d.getValue('gestationMonthAtAbortion'),
+      'typeOfAbortion': d.getValue('typeOfAbortion'),
+    });
+
+    final deliveryOutcomes = _compact({
+      'deliveryOutcome': d.getValue('deliveryOutcome'),
+      'liveBirthNumbers': d.getValue('liveBirthNumbers'),
+      'stillbirthNumbers': d.getValue('stillbirthNumbers'),
+      'placeOfDelivery': d.getValue('placeOfDelivery'),
+      'dateOfDelivery': d.getValue('dateOfDelivery'),
+      'modeOfDelivery': d.getValue('modeOfDelivery'),
+      'birthAttendant': d.getValue('birthAttendant'),
+      'anyComplicationsDuringDelivery': d.getValue('anyComplicationsDuringDelivery'),
+      'complicationsDuringDelivery': d.getValue('complicationsDuringDelivery'),
+    });
+
+    final babyEntry = _compact({
+      'isBabyAlive': d.getValue('babyAlive'),
+      'sex': d.getValue('babySex'),
+      'birthWeight': d.getValue('birthWeight'),
+      'essentialNewbornCare': d.getValue('essentialNewbornCare'),
+      'causeOfNeonatalDeath': d.getValue('neonatalDeathCause'),
+    });
+
+    return _compact(<String, dynamic>{
+      if (outcomeType.isNotEmpty) 'outcomeType': outcomeType,
+      if (maternalDeath.isNotEmpty) 'maternalDeath': maternalDeath,
+      if (abortion.isNotEmpty) 'abortion': abortion,
+      if (deliveryOutcomes.isNotEmpty) 'deliveryOutcomes': deliveryOutcomes,
+      if (babyEntry.isNotEmpty) 'newbornDetails': [babyEntry],
+    });
+  }
+
+  // ── Eye Care ───────────────────────────────────────────────────────────────
+  // Android wire type: "eye_care", flat pass-through (no wrapper key).
+  // Form section: "eyeCare" in layout_manifests.json.
+
+  static Map<String, dynamic> _toEyeCare(CanonicalVisitData d) {
     return _compact({
-      'deliveryType': d.getValue('deliveryType'),
-      'deliveryAt': d.getValue('deliveryAt'),
-      'deliveryDate': d.getValue('deliveryDate'),
-      'deliveryStatus': d.getValue('deliveryStatus'),
-      'motherAlive': d.getValue('motherAlive'),
-      'neonateOutcome': d.getValue('neonateOutcome'),
-      'stateOfBaby': d.getValue('stateOfBaby'),
+      'visualAcuityRight': d.getValue('visualAcuityRight'),
+      'visualAcuityLeft': d.getValue('visualAcuityLeft'),
+      'eyeCondition': d.getValue('eyeCondition'),
+      'eyeDisease': d.getValue('eyeDisease'),
+      'referredForEyeCare': d.getValue('referredForEyeCare'),
+      'eyeCareRecommendations': d.getValue('eyeCareRecommendations'),
+      // Generic pass-through for any additional eye care fields in the form.
+      'eyeCareAssessment': d.getValue('eyeCareAssessment'),
+    });
+  }
+
+  // ── Cataract ───────────────────────────────────────────────────────────────
+  // Android wire type: "cataract", flat pass-through.
+  // Form sections: "cataract" + "bpLog" + "glucoseLog" + "referralInformation".
+
+  static Map<String, dynamic> _toCataract(CanonicalVisitData d) {
+    double? asNum(dynamic v) {
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    return _compact({
+      // Cataract-specific.
+      'cataractType': d.getValue('cataractType'),
+      'cataractGrade': d.getValue('cataractGrade'),
+      'visualAcuityRight': d.getValue('visualAcuityRight'),
+      'visualAcuityLeft': d.getValue('visualAcuityLeft'),
+      'referredForCataractSurgery': d.getValue('referredForCataractSurgery'),
+      'cataractReferralFacility': d.getValue('cataractReferralFacility'),
+      // Biometrics (cataract form includes BP and glucose).
+      'systolic': asNum(d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'))?.toInt().toString(),
+      'diastolic': asNum(d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'))?.toInt().toString(),
+      'weight': asNum(d.getValue('weight')),
+      'height': asNum(d.getValue('height')),
+      'bmi': asNum(d.getValue('bmi')),
+      'glucoseValue': asNum(d.getValue('glucoseValue') ?? d.getValue('glucose')),
+      'glucoseType': d.getValue('glucoseType'),
+    });
+  }
+
+  // ── Family Planning ────────────────────────────────────────────────────────
+  // Android wire type: "family_planning", flat pass-through.
+  // Form section: "clientProfileAssessment".
+
+  static Map<String, dynamic> _toFamilyPlanning(CanonicalVisitData d) {
+    return _compact({
+      'familyPlanningMethods': d.getValue('familyPlanningMethods'),
+      'desireForChildren': d.getValue('desireForChildren') ?? d.getValue('desireForChildrenInFuture'),
+      'numberOfLivingChildren': d.getValue('numberOfLivingChildren'),
+      'lastDeliveryDate': d.getValue('lastDeliveryDate'),
+      'breastfeeding': d.getValue('breastfeeding'),
+      'counsellingProvided': d.getValue('counsellingProvided'),
+      'sideEffects': d.getValue('sideEffects'),
+      'clientAssessment': d.getValue('clientAssessment'),
+    });
+  }
+
+  // ── ICCM / Sick-Child Visit ────────────────────────────────────────────────
+  // Android wire type: "iccm", wrapped under "iccm" key (the only non-NCD/PNC
+  // programme with explicit wrapping in OfflineSyncRepository.getAssessmentDetails).
+  // GAP 11b: IMCI form sections to be added to layout_manifests.json separately.
+
+  static Map<String, dynamic> _toIccm(CanonicalVisitData d) {
+    return _compact({
+      // Chief complaint / presenting symptoms.
+      'chiefComplaint': d.getValue('chiefComplaint'),
+      'presentingSymptoms': d.getValue('presentingSymptoms') ?? d.getValue('symptoms'),
+      // Danger signs (IMCI critical fields).
+      'convulsions': d.getValue('convulsions'),
+      'unconscious': d.getValue('unconscious'),
+      'unableToFeedOrDrink': d.getValue('unableToFeedOrDrink'),
+      'stridor': d.getValue('stridor'),
+      'chestIndrawing': d.getValue('chestIndrawing'),
+      'vomitingEverything': d.getValue('vomitingEverything'),
+      // Classification.
+      'iccmClassification': d.getValue('iccmClassification') ?? d.getValue('illnessClassification'),
+      'severity': d.getValue('severity'),
+      // Vitals.
+      'temperature': d.getValue('temperature'),
+      'respiratoryRate': d.getValue('respiratoryRate'),
+      'muac': d.getValue('muac'),
+      // Treatment.
+      'treatmentPrescribed': d.getValue('treatmentPrescribed') ?? d.getValue('treatment'),
+      'referralRequired': d.getValue('referralRequired'),
+      'referralFacility': d.getValue('referralFacility'),
+      // CBS follow-up fields are added by Android's updateCbsForRMNCH when CBS
+      // form data is present; Flutter has no CBS form section yet — omit for now.
+    });
+  }
+
+  // ── TB Screening ───────────────────────────────────────────────────────────
+  // Android wire type: "TB", wrapped under "tb" key by toApiRequest().
+  // Form sections: "tbScreening" + "contactTracing".
+
+  static Map<String, dynamic> _toTb(CanonicalVisitData d) {
+    return _compact({
+      // WHO 4-symptom screen
+      'hasCough': d.getValue('hasCough'),
+      'hasCoughLastedLonger': d.getValue('hasCoughLastedLonger'),
+      'hasNightSweats': d.getValue('hasNightSweats'),
+      'hasFever': d.getValue('hasTbFever') ?? d.getValue('hasFever'),
+      'hasWeightLoss': d.getValue('hasWeightLoss'),
+      // Android wire key is "dateOfOnset"; form field ID is "tbDateOfOnset".
+      'dateOfOnset': d.getValue('tbDateOfOnset') ?? d.getValue('dateOfOnset'),
+      // Contact tracing
+      'relationshipToIC': d.getValue('tbRelationshipToIC'),
+      'sleepLocation': d.getValue('tbSleepLocation'),
+      'hasPreviouslyTreatedForTB': d.getValue('hasPreviouslyTreatedForTB'),
     });
   }
 

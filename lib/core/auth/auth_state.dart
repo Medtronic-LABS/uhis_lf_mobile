@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../config/app_config.dart';
 import '../constants/app_strings.dart';
 import '../debug/console_log.dart';
+import '../errors/domain_exceptions.dart';
 import 'auth_repository.dart';
 import 'biometric_service.dart';
 
@@ -109,6 +112,27 @@ class AuthState extends ChangeNotifier {
     _error = null;
     _scheduleNotify();
     try {
+      // Offline path: verify stored hash (Spice Android parity).
+      // Allows CHWs to authenticate for days/weeks without connectivity.
+      if (await _isDeviceOffline()) {
+        final hashOk = await _repo.verifyOfflinePassword(username, password);
+        if (hashOk) {
+          final graceOk = await _repo.restoreTokensIgnoringExpiry();
+          _username = username;
+          _sameUserRelogin = true;
+          _biometricEnabled = await _repo.isBiometricEnabled();
+          _pinEnabled = await _repo.isPinSet();
+          _onboardingComplete = await _repo.isOnboardingComplete();
+          _status = AuthStatus.signedIn;
+          _locked = false;
+          debugPrint('[AuthState] login: offline password verified${graceOk ? ', session restored' : ', no prior session'}');
+          return true;
+        }
+        _error = LoginStrings.loginFailed;
+        _status = AuthStatus.signedOut;
+        return false;
+      }
+      // Online path: normal network login.
       // Must run BEFORE _repo.login(), which overwrites the cached username.
       _sameUserRelogin = await _repo.isReturningUser(username);
       await _repo.login(username, password);
@@ -120,7 +144,7 @@ class AuthState extends ChangeNotifier {
       _locked = false;
       return true;
     } catch (e) {
-      _error = e.toString();
+      _error = NetworkErrorMapper.friendly(e);
       _status = AuthStatus.signedOut;
       return false;
     } finally {
@@ -142,20 +166,52 @@ class AuthState extends ChangeNotifier {
       );
       if (!ok) return false;
       final restored = await _repo.restorePersistedSession();
-      if (!restored) return _failExpiredRestore();
+      debugPrint('[AuthState] biometricUnlock: restored=$restored');
+      if (!restored) {
+        final offline = await _isDeviceOffline();
+        debugPrint('[AuthState] biometricUnlock: restore failed, offline=$offline');
+        if (offline) {
+          // Offline grace: biometric identity verified, device in hand, but
+          // no network to reach the server. Restore stored token as-is — the
+          // server will reject with 401 on the next online call, which fires
+          // handleSessionExpired() and forces a re-login at that point.
+          final graceOk = await _repo.restoreTokensIgnoringExpiry();
+          debugPrint('[AuthState] biometricUnlock: graceOk=$graceOk');
+          if (graceOk) {
+            _username = await _repo.biometricLastUsername() ?? _username;
+            _onboardingComplete = await _repo.isOnboardingComplete();
+            _status = AuthStatus.signedIn;
+            _locked = false;
+            debugPrint('[AuthState] biometricUnlock: offline grace — local expiry bypassed');
+            return true;
+          }
+        }
+        await _repo.clearExpiredReentrySession();
+        return _failExpiredRestore();
+      }
       _username = await _repo.biometricLastUsername() ?? _username;
       _onboardingComplete = await _repo.isOnboardingComplete();
       _status = AuthStatus.signedIn;
       _locked = false;
       return true;
     } catch (e) {
-      _error = e.toString();
+      _error = NetworkErrorMapper.friendly(e);
       return false;
     } finally {
       _busy = false;
       // Defer notification to avoid build scope conflicts when GoRouter
       // redirects during the current build phase.
       _scheduleNotify();
+    }
+  }
+
+  Future<bool> _isDeviceOffline() async {
+    try {
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 3));
+      return result.isEmpty || result[0].rawAddress.isEmpty;
+    } catch (_) {
+      return true;
     }
   }
 
@@ -230,14 +286,28 @@ class AuthState extends ChangeNotifier {
         return false;
       }
       final restored = await _repo.restorePersistedSession();
-      if (!restored) return _failExpiredRestore();
+      if (!restored) {
+        if (await _isDeviceOffline()) {
+          final graceOk = await _repo.restoreTokensIgnoringExpiry();
+          if (graceOk) {
+            _username = await _repo.biometricLastUsername() ?? _username;
+            _onboardingComplete = await _repo.isOnboardingComplete();
+            _status = AuthStatus.signedIn;
+            _locked = false;
+            debugPrint('[AuthState] pinUnlock: offline grace — local expiry bypassed');
+            return true;
+          }
+        }
+        await _repo.clearExpiredReentrySession();
+        return _failExpiredRestore();
+      }
       _username = await _repo.biometricLastUsername() ?? _username;
       _onboardingComplete = await _repo.isOnboardingComplete();
       _status = AuthStatus.signedIn;
       _locked = false;
       return true;
     } catch (e) {
-      _error = e.toString();
+      _error = NetworkErrorMapper.friendly(e);
       return false;
     } finally {
       _busy = false;

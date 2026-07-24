@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
 import '../auth/auth_state.dart';
+import '../../features/training/coaching_repository.dart';
 import '../../features/visit/assessment_repository.dart';
 import 'offline_sync_service.dart';
 
@@ -18,7 +19,7 @@ import 'offline_sync_service.dart';
 /// The service is intentionally simple:
 /// - When the device moves from *offline → online*, it fires both the outbound
 ///   assessment push (`offline-sync/create`) and the inbound warm pull
-///   (`offline-sync/fetch-synced-data`).
+///   (`offline-sync/fetch-synced-data`), then refreshes micro-coaching modules.
 /// - It checks [AuthState.status] before touching the network; sync never
 ///   runs when the user is logged out or the session is locked.
 /// - Failures are swallowed and logged — the next connectivity event will retry.
@@ -27,13 +28,16 @@ class SyncConnectivityService {
     required AssessmentRepository assessmentRepo,
     required OfflineSyncService syncService,
     required AuthState authState,
+    required CoachingRepository coachingRepo,
   })  : _assessmentRepo = assessmentRepo,
         _syncService = syncService,
-        _authState = authState;
+        _authState = authState,
+        _coachingRepo = coachingRepo;
 
   final AssessmentRepository _assessmentRepo;
   final OfflineSyncService _syncService;
   final AuthState _authState;
+  final CoachingRepository _coachingRepo;
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   bool _wasOffline = false;
@@ -77,8 +81,8 @@ class SyncConnectivityService {
       return;
     }
 
-    // Push pending assessments first (outbound), then pull fresh data (inbound).
-    // Both are fire-and-forget; errors are logged but not propagated.
+    // Push pending assessments first (outbound), then pull fresh data (inbound),
+    // then refresh micro-coaching. Fire-and-forget; errors are logged.
     _assessmentRepo
         .syncPendingAssessments(syncMode: 'AutomaticSync')
         .then((n) {
@@ -88,7 +92,11 @@ class SyncConnectivityService {
           // Warm pull after push so the worklist refreshes with any server updates.
           return _syncService.warmSync();
         })
-        .then((_) => debugPrint('[SyncConnectivity] AutomaticSync warm pull complete'))
+        .then((_) {
+          debugPrint('[SyncConnectivity] AutomaticSync warm pull complete');
+          return _coachingRepo.refresh();
+        })
+        .then((_) => debugPrint('[SyncConnectivity] Coaching refresh complete'))
         .catchError((Object e) {
           debugPrint('[SyncConnectivity] AutomaticSync error (will retry on next connectivity): $e');
         });

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/db/patient_dao.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/referral.dart';
 import 'referral_api_service.dart';
@@ -38,7 +39,9 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
 
   @override
   void initState() {
+    debugPrint('[_ReferralDetailScreenState] initState patientId=${widget.patientId}');
     super.initState();
+    debugPrint('[_ReferralDetailScreenState] initState');
     _tabController = TabController(length: 2, vsync: this);
   }
 
@@ -58,12 +61,15 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
 
   @override
   void dispose() {
+    debugPrint('[_ReferralDetailScreenState] dispose patientId=${widget.patientId}');
     _repo?.changes.removeListener(_onChanges);
     _tabController.dispose();
+    debugPrint('[_ReferralDetailScreenState] dispose');
     super.dispose();
   }
 
   void _onChanges() {
+    debugPrint('[_ReferralDetailScreenState] _onChanges patientId=${widget.patientId}');
     if (!mounted) return;
     _reload();
   }
@@ -77,6 +83,7 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
   }
 
   Future<_PatientReferrals> _load() async {
+    debugPrint('[_ReferralDetailScreenState] _load');
     final repo = _repo;
     final patientDao = _patientDao;
     // Return empty data if dependencies aren't ready
@@ -100,7 +107,7 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text(ReferralStrings.dashboardTitle),
+        title: Text(ReferralStrings.dashboardTitle),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -506,15 +513,104 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
     );
   }
 
-  void _updateStatus(Referral r) {
-    // Navigate to status update or show dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Opening status update...')),
+  Future<void> _updateStatus(Referral r) async {
+    ConsoleLog.step('[Referral] opening outcome sheet for ${r.id}');
+    final options = <({String label, String subtitle, ReferralStatus status, IconData icon, Color color})>[
+      (
+        label: ReferralStrings.outcomeReferred,
+        subtitle: ReferralStrings.outcomeReferredSubtitle,
+        status: ReferralStatus.created,
+        icon: Icons.local_hospital_outlined,
+        color: Colors.orange,
+      ),
+      (
+        label: ReferralStrings.outcomeOnTreatment,
+        subtitle: ReferralStrings.outcomeOnTreatmentSubtitle,
+        status: ReferralStatus.treatmentStarted,
+        icon: Icons.healing_outlined,
+        color: Colors.blue,
+      ),
+      (
+        label: ReferralStrings.outcomeRecovered,
+        subtitle: ReferralStrings.outcomeRecoveredSubtitle,
+        status: ReferralStatus.closedRecovered,
+        icon: Icons.check_circle_outline,
+        color: Colors.green,
+      ),
+      (
+        label: ReferralStrings.outcomeDeceased,
+        subtitle: ReferralStrings.outcomeDeceasedSubtitle,
+        status: ReferralStatus.closedDeceased,
+        icon: Icons.sentiment_very_dissatisfied_outlined,
+        color: Colors.grey,
+      ),
+    ];
+
+    final chosen = await showModalBottomSheet<ReferralStatus>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+              child: Text(
+                ReferralStrings.recordOutcomeTitle,
+                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Text(
+                ReferralStrings.recordOutcomeSubtitle,
+                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(ctx).colorScheme.outline,
+                    ),
+              ),
+            ),
+            ...options.map((opt) => ListTile(
+                  leading: Icon(opt.icon, color: opt.color),
+                  title: Text(opt.label,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(opt.subtitle),
+                  selected: r.state == opt.status,
+                  selectedTileColor:
+                      opt.color.withValues(alpha: 0.08),
+                  onTap: () => Navigator.of(ctx).pop(opt.status),
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
+
+    if (chosen == null || !mounted) return;
+    ConsoleLog.step('[Referral] status update: ${chosen.wireTag} for ${r.id}');
+    try {
+      await _repo!.transition(referralId: r.id, to: chosen);
+      ConsoleLog.success('[Referral] status updated to ${chosen.wireTag}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ReferralStrings.outcomeUpdated)),
+        );
+      }
+    } catch (e) {
+      ConsoleLog.warn('[Referral] status update failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ReferralStrings.outcomeUpdateFailed)),
+        );
+      }
+    }
   }
 
   void _showFullDetails(Referral r) {
-    // Could navigate to a more detailed view
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Opening full details...')),
     );

@@ -37,6 +37,10 @@ enum Programme {
     Programme.pw,
     Programme.pnc,
     Programme.ncd,
+    Programme.tb,
+    Programme.familyPlanning,
+    Programme.cataract,
+    Programme.eyeCare,
   };
 
   /// True when this programme is included in the v1 pilot scope.
@@ -66,12 +70,18 @@ enum Programme {
         return Programme.pw;
       case 'PNC':
       case 'POSTNATAL':
+      case 'PREGNANCY_OUTCOME':
+      case 'PREGNANCYOUTCOME':
       // Expanded form-type names used by the unified Step 2 form
       // (visit_form_screen._toFormTypes expands pnc → pncMother + pncChild).
       case 'PNCMOTHER':
       case 'PNC_MOTHER':
       case 'PNCCHILD':
       case 'PNC_CHILD':
+      case 'PNC_NEONATE':
+      case 'PNCNEONATAL':
+      case 'CHILDHOOD_VISIT':
+      case 'CHILDHOODVISIT':
         return Programme.pnc;
       case 'NCD':
       case 'HYPERTENSION':

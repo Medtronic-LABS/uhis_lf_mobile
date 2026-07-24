@@ -49,6 +49,24 @@ class AncReferralResult {
   bool get isReferralRequired => isEmergencyReferral || isNonEmergencyReferral;
 }
 
+/// ANC care-gap summary (mirrors Android ANCAssessmentEvaluator.evaluateGapsInANC).
+///
+/// Carried in [AncSummary.gapsInAnc] and sent in the offline-sync payload
+/// so the server can display gap flags without re-evaluating client logic.
+class AncGapsResult {
+  const AncGapsResult({this.gaps = const []});
+
+  final List<String> gaps;
+  bool get hasGaps => gaps.isNotEmpty;
+}
+
+/// PNC care-gap summary (mirrors Android PNCAssessmentEvaluator.evaluateGapsInPNC).
+class PncGapsResult {
+  const PncGapsResult({this.gaps = const []});
+  final List<String> gaps;
+  bool get hasGaps => gaps.isNotEmpty;
+}
+
 class PncReferralResult {
   const PncReferralResult({
     this.urgentConditions = const [],
@@ -77,15 +95,19 @@ class NcdReferralEvaluator {
     double? diastolic,
     double? fastingGlucoseMmol,
     double? randomGlucoseMmol,
+    double? hba1cPercent,
     List<String> symptoms = const [],
   }) {
     final bpBand = _bpBand(systolic, diastolic, symptoms);
     final bgBand = _bgBand(fastingGlucoseMmol, randomGlucoseMmol);
-    final band = _worse(bpBand, bgBand);
+    final hba1cBand = _hba1cBand(hba1cPercent);
+    final band = _worse(_worse(bpBand, bgBand), hba1cBand);
 
     final reasons = <String>[];
     if (bpBand != NcdRiskBand.green) reasons.add('bloodPressure');
-    if (bgBand != NcdRiskBand.green) reasons.add('bloodGlucose');
+    if (bgBand != NcdRiskBand.green || hba1cBand != NcdRiskBand.green) {
+      reasons.add('bloodGlucose');
+    }
     if (symptoms.isNotEmpty && bpBand == NcdRiskBand.red) reasons.add('symptoms');
 
     return NcdReferralResult(band: band, referralReasons: reasons);
@@ -114,7 +136,17 @@ class NcdReferralEvaluator {
     if (bg >= bgOrangeLowMmol) return NcdRiskBand.orange;
     if (bg >= bgYellowHighMmol) return NcdRiskBand.yellowHigh;
     if (fbs != null && fbs >= fbsYellowLowMmol) return NcdRiskBand.yellowLow;
+    // Bangladesh spec: RBS ≥ 11.1 mmol/L → CC referral (yellowHigh), not just monitor.
+    if (rbs != null && rbs >= ncdUncontrolledRbs) return NcdRiskBand.yellowHigh;
     if (rbs != null && rbs > rbsGreenHighMmol) return NcdRiskBand.yellowLow;
+    return NcdRiskBand.green;
+  }
+
+  static NcdRiskBand _hba1cBand(double? pct) {
+    if (pct == null) return NcdRiskBand.green;
+    if (pct >= hba1cCrisis) return NcdRiskBand.orange;
+    if (pct >= hba1cUncontrolled) return NcdRiskBand.yellowHigh;
+    if (pct >= hba1cDiabetesThreshold) return NcdRiskBand.yellowLow;
     return NcdRiskBand.green;
   }
 
@@ -149,6 +181,12 @@ class AncReferralEvaluator {
     int? pulseBpm,
     bool? hasChronicIllness,
     bool? chronicIllnessOnTreatment,
+    double? previousWeightKg,
+    int? daysSinceLastVisit,
+    bool? historyOfConvulsions,
+    bool? historyOfPph,
+    bool? historyOfSevereAnaemia,
+    bool? historyOfGdm,
   }) {
     final exam = assessment.medicalHistoryPhysicalExamination;
     final poci = assessment.pointOfCareInvestigations;
@@ -214,6 +252,16 @@ class AncReferralEvaluator {
       emergency.add('Chronic illness untreated');
     }
 
+    // Abnormal weight gain: negative or > 2× expected (0.5 kg/week)
+    if (weight != null && previousWeightKg != null &&
+        daysSinceLastVisit != null && daysSinceLastVisit > 0) {
+      final delta = weight - previousWeightKg;
+      final expectedGain = (daysSinceLastVisit / 7.0) * 0.5;
+      if (delta < 0 || delta > expectedGain * 2) {
+        emergency.add('Abnormal weight gain');
+      }
+    }
+
     // ── Non-emergency conditions ──────────────────────────────────────────────
 
     // High-risk age: < 18 or > 35
@@ -272,10 +320,92 @@ class AncReferralEvaluator {
       nonEmergency.add('High blood pressure');
     }
 
+    // H/O obstetric complications
+    if (historyOfConvulsions == true) nonEmergency.add('H/O Convulsions');
+    if (historyOfPph == true) nonEmergency.add('H/O Postpartum haemorrhage');
+    if (historyOfSevereAnaemia == true) nonEmergency.add('H/O Severe anaemia');
+    if (historyOfGdm == true) nonEmergency.add('H/O Gestational diabetes');
+
     return AncReferralResult(
       emergencyConditions: emergency,
       nonEmergencyConditions: nonEmergency,
     );
+  }
+
+  /// Evaluates 8 ANC care-gap conditions from the form data.
+  ///
+  /// Mirrors Android `ANCAssessmentEvaluator.evaluateGapsInANC()`.
+  /// Returns [AncGapsResult] whose [AncGapsResult.gaps] list is written into
+  /// `summary.gapsInAnc` in the offline-sync payload.
+  ///
+  /// [ifaTotalConsumed] and [calciumTotalConsumed] are only checked when
+  /// non-null — absence means the field wasn't filled in, not that zero were
+  /// consumed, matching Android's `isViewVisible` guard.
+  static AncGapsResult evaluateGaps({
+    double? gestationalAgeWeeks,
+    String? ttTdCompleted,
+    String? ultrasound,
+    String? ancFromMedicalDoctor,
+    int? ifaTotalConsumed,
+    int? calciumTotalConsumed,
+    String? facilityIdentifiedForDelivery,
+    int? ancVisitCount,
+  }) {
+    final gaps = <String>[];
+    final ga = gestationalAgeWeeks ?? 0.0;
+
+    // 1. TT/TD incomplete > 20 gestational weeks.
+    if (ga > ancGestationalAgeWeek20) {
+      final completed = ttTdCompleted?.toLowerCase();
+      if (completed == null || completed.isEmpty || completed == 'no') {
+        gaps.add('TT vaccination incomplete (>20 weeks)');
+      }
+    }
+
+    // 2. Ultrasound not done > 36 weeks.
+    if (ultrasound != null &&
+        ultrasound.toLowerCase() == 'notdone' &&
+        ga > ancGestationalAgeWeek36) {
+      gaps.add('USG not done (>36 weeks)');
+    }
+
+    // 3. No ANC from medical doctor > 36 weeks.
+    if (ancFromMedicalDoctor != null &&
+        ancFromMedicalDoctor.toLowerCase() == 'no' &&
+        ga > ancGestationalAgeWeek36) {
+      gaps.add('ANC with doctor not done (>36 weeks)');
+    }
+
+    // 4. Fewer than 3 ANC visits completed by 36 weeks.
+    if (ancVisitCount != null &&
+        ancVisitCount < ancMinVisitsRequired &&
+        ga >= ancGestationalAgeWeek36) {
+      gaps.add('Less than 3 ANCs completed by 36 weeks');
+    }
+
+    // 5. Inadequate IFA tablet consumption (< 30).
+    if (ifaTotalConsumed != null &&
+        ifaTotalConsumed < ancTabletConsumptionMin) {
+      gaps.add('Inadequate IFA consumption (<$ancTabletConsumptionMin tablets)');
+    }
+
+    // 6. Inadequate Calcium tablet consumption (< 30).
+    if (calciumTotalConsumed != null &&
+        calciumTotalConsumed < ancTabletConsumptionMin) {
+      gaps.add('Inadequate Calcium consumption (<$ancTabletConsumptionMin tablets)');
+    }
+
+    // 7. Delivery facility not yet identified.
+    if (facilityIdentifiedForDelivery?.toLowerCase() == 'notidentified') {
+      gaps.add('Delivery facility not identified');
+    }
+
+    // 8. Planned home delivery.
+    if (facilityIdentifiedForDelivery?.toLowerCase() == 'homedelivery') {
+      gaps.add('Planned home delivery');
+    }
+
+    return AncGapsResult(gaps: gaps);
   }
 
   static bool _isPresent(String? value) {
@@ -295,6 +425,7 @@ class PncReferralEvaluator {
 
   static PncReferralResult evaluate({
     bool hasDangerSigns = false,
+    List<String> dangerSignsList = const [],
     double? systolic,
     double? diastolic,
     double? temperatureCelsius,
@@ -345,7 +476,7 @@ class PncReferralEvaluator {
       urgent.add('Severe anaemia (Hb <8 g/dL)');
     }
 
-    // High blood sugar: FBS ≥ 7.0 or RBS ≥ 11.1 mmol/L
+    // High blood sugar: FBS ≥ 7.0 or RBS ≥ 11.1 mmol/L (known DM/GDM thresholds)
     final highFbs =
         fastingGlucoseMmol != null && fastingGlucoseMmol >= pncFbsHighMmol;
     final highRbs =
@@ -398,10 +529,62 @@ class PncReferralEvaluator {
       nonUrgent.add('Diabetes on treatment');
     }
 
+    // Suspected diabetes in women without known DM/GDM:
+    // FBS ≥ 5.1 or RBS ≥ 8.5 mmol/L — Bangladesh UHIS Phase 1 spec, #3.
+    if (hasKnownDmGdm != true) {
+      final suspectedFbs = fastingGlucoseMmol != null &&
+          fastingGlucoseMmol >= ancFbsDiabetesMmol;
+      final suspectedRbs =
+          randomGlucoseMmol != null && randomGlucoseMmol >= ancRbsDiabetesMmol;
+      if (suspectedFbs || suspectedRbs) nonUrgent.add('Suspected diabetes (FBS≥5.1 or RBS≥8.5)');
+    }
+
     return PncReferralResult(
       urgentConditions: urgent,
       nonUrgentConditions: nonUrgent,
     );
+  }
+
+  /// Evaluates 4 PNC care-gap conditions from the form data.
+  ///
+  /// Mirrors Android `PNCAssessmentEvaluator.evaluateGapsInPNC()`.
+  static PncGapsResult evaluateGaps({
+    bool? vitaminAConsumed,
+    int? daysSinceDelivery,
+    int? ifaTabletsConsumed,
+    int? calciumTabletsConsumed,
+    String? familyPlanningMethod,
+  }) {
+    final gaps = <String>[];
+
+    // 1. Vitamin A not consumed within 56 days of delivery.
+    if (vitaminAConsumed == false &&
+        daysSinceDelivery != null &&
+        daysSinceDelivery <= 56) {
+      gaps.add('Vitamin A not consumed (within 8 weeks)');
+    }
+
+    // 2. Inadequate IFA tablet consumption (< 30).
+    if (ifaTabletsConsumed != null &&
+        ifaTabletsConsumed < ancTabletConsumptionMin) {
+      gaps.add('Inadequate IFA consumption (<$ancTabletConsumptionMin tablets)');
+    }
+
+    // 3. Inadequate Calcium tablet consumption (< 30).
+    if (calciumTabletsConsumed != null &&
+        calciumTabletsConsumed < ancTabletConsumptionMin) {
+      gaps.add('Inadequate Calcium consumption (<$ancTabletConsumptionMin tablets)');
+    }
+
+    // 4. No contraception method ≥ 42 days after delivery.
+    if (daysSinceDelivery != null && daysSinceDelivery >= 42) {
+      final method = familyPlanningMethod?.toLowerCase() ?? '';
+      if (method.isEmpty || method == 'none' || method == 'notused') {
+        gaps.add('No contraception method (≥42 days postpartum)');
+      }
+    }
+
+    return PncGapsResult(gaps: gaps);
   }
 
   static bool _isPresent(String? value) {

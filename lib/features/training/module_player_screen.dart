@@ -1,12 +1,13 @@
 /// Card-by-card lesson player for a [CoachingModule].
 ///
-/// Renders lesson cards sequentially. Each card body is dispatched through
-/// [RichCardBodyWidget] which handles paragraph / heading / bullet / ordered
-/// block types (pilot scope — image/audio deferred to full scope).
+/// Layout matches the spice-coaching-android SDK `LessonPlayerScreen`:
+///   - Navy SdkScreenHeader with "Learning X of N" counter
+///   - White body: scrollable card title + rich body
+///   - Fixed bottom row: outlined ← Prev | filled Next → / Start Quiz → / Done ✓
 ///
 /// Engineering Design Standards:
 ///   - All strings from [CoachingStrings].
-///   - No I/O — reads mock data passed in via constructor.
+///   - No I/O — reads data passed in via constructor.
 library;
 
 import 'package:flutter/material.dart';
@@ -17,6 +18,10 @@ import '../../core/theme/app_theme.dart';
 import 'coaching_models.dart';
 import 'coaching_repository.dart';
 import 'quiz_screen.dart';
+
+// SDK-matched color constants (not in AppColors — kept local to this screen).
+const _kTitleColor = Color(0xFF101828);
+const _kBodyTextColor = Color(0xFF344054);
 
 class ModulePlayerScreen extends StatefulWidget {
   const ModulePlayerScreen({super.key, required this.module});
@@ -32,10 +37,16 @@ class _ModulePlayerScreenState extends State<ModulePlayerScreen> {
 
   bool get _isLast => _cardIndex == widget.module.cards.length - 1;
 
+  bool get _hasQuiz => widget.module.quiz.isNotEmpty;
+
   void _next() {
     context.read<CoachingRepository>().markCardViewed(widget.module.id, _cardIndex);
     if (_isLast) {
-      _launchQuiz();
+      if (_hasQuiz) {
+        _launchQuiz();
+      } else {
+        Navigator.of(context).pop();
+      }
       return;
     }
     setState(() => _cardIndex++);
@@ -55,131 +66,100 @@ class _ModulePlayerScreenState extends State<ModulePlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final cards = widget.module.cards;
     final card = cards[_cardIndex];
     final total = cards.length;
-    final progress = (_cardIndex + 1) / total;
 
     return Scaffold(
-      backgroundColor: AppColors.canvas,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(widget.module.titleEn),
-        backgroundColor: AppColors.aiPurpleDark,
+        title: Text(CoachingStrings.lessonProgress(_cardIndex + 1, total)),
+        backgroundColor: AppColors.navy,
         foregroundColor: Colors.white,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4),
-          child: LinearProgressIndicator(
-            value: progress,
-            backgroundColor: AppColors.aiBorderDark,
-            color: AppColors.aiPurpleLight,
-            minHeight: 4,
-          ),
-        ),
+        elevation: 0,
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // ── Card counter ───────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xxxl,
-              AppSpacing.xxxl,
-              AppSpacing.xxxl,
-              0,
+          // ── Scrollable body ────────────────────────────────────────────────
+          SingleChildScrollView(
+            padding: const EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 16,
+              bottom: 96, // space for pinned bottom row
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Card title
                 Text(
-                  CoachingStrings.cardProgress(_cardIndex + 1, total),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.textMuted,
-                    letterSpacing: 0.8,
-                  ),
+                  card.titleEn,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: _kTitleColor,
+                      ),
                 ),
-                Text(
-                  '${widget.module.estimatedMinutes} ${CoachingStrings.minLabel}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.textMuted,
-                  ),
-                ),
+                const SizedBox(height: 12),
+                // Rich body
+                RichCardBodyWidget(blocks: card.blocks),
               ],
             ),
           ),
 
-          // ── Card content ───────────────────────────────────────────────
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.xxxl),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.h5xl),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Card title (en)
-                      Text(
-                        card.titleEn,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
+          // ── Fixed bottom nav row ───────────────────────────────────────────
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                child: Row(
+                  children: [
+                    // Prev button — always takes half width, disabled on first card
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _cardIndex > 0 ? _prev : null,
+                        icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                        label: Text(CoachingStrings.prevCard),
+                        style: OutlinedButton.styleFrom(
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
-                      // Card title (bn)
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        card.titleBn,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 12),
+                    // Next / Start Quiz / Done button
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _next,
+                        icon: Icon(
+                          _isLast && _hasQuiz
+                              ? Icons.quiz_rounded
+                              : _isLast
+                                  ? Icons.check_rounded
+                                  : Icons.arrow_forward_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          _isLast && _hasQuiz
+                              ? CoachingStrings.startQuiz
+                              : _isLast
+                                  ? CoachingStrings.reviewCourse
+                                  : CoachingStrings.nextCard,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.navy,
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
-                      const Divider(height: AppSpacing.h6xl * 2),
-
-                      // Rich content blocks
-                      RichCardBodyWidget(blocks: card.blocks),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-          ),
-
-          // ── Navigation row ─────────────────────────────────────────────
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xxxl,
-                AppSpacing.md,
-                AppSpacing.xxxl,
-                AppSpacing.xxxl,
-              ),
-              child: Row(
-                children: [
-                  if (_cardIndex > 0)
-                    OutlinedButton.icon(
-                      onPressed: _prev,
-                      icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                      label: const Text(CoachingStrings.prevCard),
-                    ),
-                  const Spacer(),
-                  FilledButton.icon(
-                    onPressed: _next,
-                    icon: Icon(
-                      _isLast
-                          ? Icons.quiz_rounded
-                          : Icons.arrow_forward_rounded,
-                      size: 18,
-                    ),
-                    label: Text(
-                      _isLast
-                          ? CoachingStrings.startQuiz
-                          : CoachingStrings.nextCard,
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.aiPurpleDark,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
@@ -233,11 +213,11 @@ class _ParagraphBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Text(
         text,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.textMid,
+              color: _kBodyTextColor,
               height: 1.6,
             ),
       ),
@@ -253,12 +233,12 @@ class _HeadingBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: _kTitleColor,
             ),
       ),
     );
@@ -275,13 +255,13 @@ class _ListBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: List.generate(items.length, (i) {
           final bullet = ordered ? '${i + 1}.' : '•';
           return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+            padding: const EdgeInsets.only(bottom: 6),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -290,7 +270,7 @@ class _ListBlock extends StatelessWidget {
                   child: Text(
                     bullet,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: AppColors.aiPurpleDark,
+                      color: AppColors.navy,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -299,7 +279,7 @@ class _ListBlock extends StatelessWidget {
                   child: Text(
                     items[i],
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textMid,
+                      color: _kBodyTextColor,
                       height: 1.5,
                     ),
                   ),

@@ -23,6 +23,7 @@ import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'programme_grid_sync.dart';
+import 'symptom_catalog.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
 
@@ -48,6 +49,7 @@ class SymptomPickerScreen extends StatefulWidget {
     this.onSymptomsConfirmed,
     this.onProgrammesSelected,
     this.onProgrammesLive,
+    this.onDeliverySelected,
   });
 
   final String encounterId;
@@ -89,6 +91,10 @@ class SymptomPickerScreen extends StatefulWidget {
   /// header badge in real time without waiting for the SK to tap Continue.
   final ValueChanged<Set<Programme>>? onProgrammesLive;
 
+  /// Fired just before [onAdvance] with whether the SK confirmed a delivery
+  /// visit. When true, the host includes the pregnancyOutcome form sections.
+  final ValueChanged<bool>? onDeliverySelected;
+
   @override
   State<SymptomPickerScreen> createState() => _SymptomPickerScreenState();
 }
@@ -101,7 +107,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   VisitBriefingResponse? _briefingData;
   bool _briefingLoading = true;
-  int? _ancVisitCount;
 
   /// Programmes the SK has selected in the inline service grid.
   /// Initialized from the pathway engine on load; SK can toggle freely.
@@ -116,15 +121,20 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// undone when symptoms/AI refresh pathway activation.
   final Set<Programme> _skDismissedProgrammes = {};
 
-  /// PW meta-flag — gates ANC. Auto-true when patient is known pregnant.
+  /// PW meta-flag — gates ANC. Auto-true when patient already has PW/ANC registered.
   bool _isPW = false;
 
   /// Delivery meta-flag — gates PNC. Auto-true when patient is postpartum.
   bool _isDelivery = false;
 
+  /// True when patient already has an ANC assessment recorded today — blocks
+  /// a second ANC visit on the same calendar day.
+  bool _ancVisitedToday = false;
+
   @override
   void initState() {
     super.initState();
+    debugPrint('[_SymptomPickerScreenState] initState');
     // Defer to after first frame to ensure context is available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadPatientContext();
@@ -132,6 +142,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   Future<void> _loadPatientContext() async {
+    debugPrint('[_SymptomPickerScreenState] _loadPatientContext');
     debugPrint(
       '[SymptomPicker] Starting load for encounterId=${widget.encounterId}, patientId=${widget.patientId}',
     );
@@ -202,9 +213,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       debugPrint('[SymptomPicker] Success! Setting up view model...');
       final vm = TriageViewModel(patientContext: ctx);
       final pathwaySet = vm.activatedPathways.map((p) => p.programme).toSet();
-      final isPw =
-          ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc);
-      final isDelivery = ctx.isPostpartum;
+      // ANC gates behind PW: only pre-select PW if patient already has a PW
+      // or ANC registration. Brand-new pregnant women start with PW=false so
+      // the SK must explicitly select PW first before ANC becomes available.
+      final isPw = ctx.activeProgrammes.contains(Programme.pw) ||
+          ctx.activeProgrammes.contains(Programme.anc);
+      // Block a second ANC visit on the same calendar day.
+      final ancToday = await context
+          .read<LocalAssessmentDao>()
+          .hasAncAssessmentTodayForPatient(patientId);
+      // Pregnancy Outcome is an explicit SK choice — never auto-on.
+      // Postpartum mothers get PNC via [enrolledSeed], not this flag.
       final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
         enrolled: ctx.activeProgrammes.toSet(),
         isPregnant: ctx.isPregnant,
@@ -225,7 +244,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           ..clear()
           ..addAll(pathwaySet);
         _isPW = isPw;
-        _isDelivery = isDelivery;
+        _isDelivery = false;
+        _ancVisitedToday = ancToday;
         _isLoading = false;
       });
       debugPrint(
@@ -347,7 +367,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         setState(() {
           _briefingData = data;
           _briefingLoading = false;
-          _ancVisitCount = visitsByVisit.length;
         });
       }
     } on Object catch (e, st) {
@@ -359,6 +378,75 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   void _fireProgrammesLive() {
     widget.onProgrammesLive?.call(Set.unmodifiable(_selectedProgrammes));
+  }
+
+  void _onPWToggle(bool selected) {
+    setState(() {
+      _isPW = selected;
+      if (!selected) {
+        _selectedProgrammes.remove(Programme.anc);
+        _selectedProgrammes.remove(Programme.pw);
+        _skDismissedProgrammes.add(Programme.anc);
+        _skDismissedProgrammes.add(Programme.pw);
+      } else {
+        _skDismissedProgrammes.remove(Programme.anc);
+        _skDismissedProgrammes.remove(Programme.pw);
+        _selectedProgrammes.add(Programme.pw);
+        if (_patientContext!.activeProgrammes.contains(Programme.anc) ||
+            _pathwayActivatedProgrammes.contains(Programme.anc)) {
+          _selectedProgrammes.add(Programme.anc);
+        }
+      }
+    });
+    _fireProgrammesLive();
+  }
+
+  void _onDeliveryToggle(bool selected) {
+    setState(() {
+      _isDelivery = selected;
+      if (!selected) {
+        _selectedProgrammes.remove(Programme.pnc);
+        _skDismissedProgrammes.add(Programme.pnc);
+        // Restore ANC/PW that the delivery gate dismissed (and any pathway
+        // programmes that were previously dismissed for the same reason).
+        _skDismissedProgrammes.remove(Programme.anc);
+        _skDismissedProgrammes.remove(Programme.pw);
+        for (final p in _pathwayActivatedProgrammes) {
+          _skDismissedProgrammes.remove(p);
+          _selectedProgrammes.add(p);
+        }
+        // Re-enable PW gate when patient is still pregnant / ANC-enrolled.
+        final ctx = _patientContext;
+        if (ctx != null &&
+            (ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc))) {
+          _isPW = true;
+          _selectedProgrammes.add(Programme.pw);
+          if (ctx.activeProgrammes.contains(Programme.anc) ||
+              _pathwayActivatedProgrammes.contains(Programme.anc)) {
+            _selectedProgrammes.add(Programme.anc);
+          }
+        }
+      } else {
+        // Delivery / pregnancy-outcome visit: clear only ANC + PW. Other
+        // selected programmes (NCD, TB, etc.) stay open alongside PNC /
+        // pregnancy-outcome forms.
+        _isPW = false;
+        final next = ProgrammeGridSync.applyDeliverySelected(
+          selected: _selectedProgrammes,
+          dismissedBySk: _skDismissedProgrammes,
+        );
+        _selectedProgrammes
+          ..clear()
+          ..addAll(next.selected);
+        _skDismissedProgrammes
+          ..clear()
+          ..addAll(next.dismissedBySk);
+      }
+    });
+    debugPrint('[DeliveryGate] chip toggled: selected=$selected '
+        'programmes=${_selectedProgrammes.map((p) => p.name).join(", ")} '
+        'isPW=$_isPW');
+    _fireProgrammesLive();
   }
 
   /// Keeps [_selectedProgrammes] and [_pathwayActivatedProgrammes] in sync
@@ -389,10 +477,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   void dispose() {
     _viewModel?.removeListener(_syncPathwaysToServiceGrid);
     _viewModel?.dispose();
+    debugPrint('[_SymptomPickerScreenState] dispose');
     super.dispose();
   }
 
   void _openVaccinationTimeline() {
+    debugPrint('[_SymptomPickerScreenState] _openVaccinationTimeline');
     final ctx = _patientContext;
     if (ctx == null) return;
     // Fetch DOB from patient DAO to pass to timeline screen
@@ -417,6 +507,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// vaccination step by calling [_onContinue], which fires [onAdvance].
   /// In standalone mode: pushes the immunisation timeline route directly.
   void _onVaccination() {
+    debugPrint('[_SymptomPickerScreenState] _onVaccination');
     final vm = _viewModel;
     if (vm == null) return;
     if (widget.onAdvance != null) {
@@ -428,6 +519,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   void _onContinue() {
+    debugPrint('[_SymptomPickerScreenState] _onContinue');
     final vm = _viewModel;
     if (vm == null || _patientContext == null) return;
 
@@ -449,7 +541,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: const Text(SymptomPickerStrings.noSymptomsGuard),
+            content: Text(SymptomPickerStrings.noSymptomsGuard),
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: SymptomPickerStrings.noSymptomsGuardCta,
@@ -542,7 +634,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     final onAdvance = widget.onAdvance;
     if (onAdvance != null) {
       if (!(_patientContext?.isUnder5 ?? false)) {
-        widget.onProgrammesSelected?.call(Set.unmodifiable(_selectedProgrammes));
+        // Delivery visit must always carry PNC so Step 2 opens the pregnancy-
+        // outcome / PNC form even if the live set was emptied by a rebuild.
+        final programmes = _isDelivery
+            ? (Set<Programme>.from(_selectedProgrammes)..add(Programme.pnc))
+            : _selectedProgrammes;
+        widget.onProgrammesSelected?.call(Set.unmodifiable(programmes));
+        widget.onDeliverySelected?.call(_isDelivery);
       }
       widget.onSymptomsConfirmed?.call(
         vm.selectedSymptoms,
@@ -559,6 +657,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   void _navigateToForm(List<ActivatedPathway> pathways) {
+    debugPrint('[_SymptomPickerScreenState] _navigateToForm pathways=${pathways}');
     final origin = widget.origin;
     final originParam = origin != null ? '?origin=$origin' : '';
 
@@ -615,7 +714,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     });
                     _loadPatientContext();
                   },
-                  child: const Text(TriageStrings.retryButton),
+                  child: Text(TriageStrings.retryButton),
                 ),
               ],
             ),
@@ -759,6 +858,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         enrolledProgrammes: _patientContext!.activeProgrammes.toSet(),
                         isPW: _isPW,
                         isDelivery: _isDelivery,
+                        ancVisitedToday: _ancVisitedToday,
                         onProgrammeToggle: (programme, selected) {
                           setState(() {
                             if (selected) {
@@ -771,46 +871,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                           });
                           _fireProgrammesLive();
                         },
-                        onPWToggle: (selected) {
-                          setState(() {
-                            _isPW = selected;
-                            if (!selected) {
-                              _selectedProgrammes.remove(Programme.anc);
-                              _selectedProgrammes.remove(Programme.pw);
-                              _skDismissedProgrammes.add(Programme.anc);
-                              _skDismissedProgrammes.add(Programme.pw);
-                            } else {
-                              _skDismissedProgrammes.remove(Programme.anc);
-                              _skDismissedProgrammes.remove(Programme.pw);
-                              _selectedProgrammes.add(Programme.pw);
-                              // Turning PW on surfaces enrolled/pathway ANC.
-                              if (_patientContext!.activeProgrammes
-                                      .contains(Programme.anc) ||
-                                  _pathwayActivatedProgrammes
-                                      .contains(Programme.anc)) {
-                                _selectedProgrammes.add(Programme.anc);
-                              }
-                            }
-                          });
-                          _fireProgrammesLive();
-                        },
-                        onDeliveryToggle: (selected) {
-                          setState(() {
-                            _isDelivery = selected;
-                            if (!selected) {
-                              _selectedProgrammes.remove(Programme.pnc);
-                              _skDismissedProgrammes.add(Programme.pnc);
-                            } else {
-                              _skDismissedProgrammes.remove(Programme.pnc);
-                              // Delivery unlocks PNC — include enrolled PNC.
-                              if (_patientContext!.activeProgrammes
-                                  .contains(Programme.pnc)) {
-                                _selectedProgrammes.add(Programme.pnc);
-                              }
-                            }
-                          });
-                          _fireProgrammesLive();
-                        },
+                        onPWToggle: _onPWToggle,
+                        onDeliveryToggle: _onDeliveryToggle,
                       ),
                     ),
                   ),
@@ -883,7 +945,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                                 backgroundColor: AppColors.pink,
                                 foregroundColor: AppColors.textOnNavy,
                               ),
-                              child: const Text(
+                              child: Text(
                                 ChildAssessmentStrings.vaccinationCta,
                                 style: TextStyle(fontWeight: FontWeight.w700),
                               ),
@@ -902,7 +964,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                                 backgroundColor: AppColors.pink,
                                 foregroundColor: AppColors.textOnNavy,
                               ),
-                              child: const Text(
+                              child: Text(
                                   SymptomPickerStrings.ctaStartCheckup),
                             ),
                           ),
@@ -919,124 +981,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     );
   }
 
-}
-
-// ── ANC Visit Summary Chip ────────────────────────────────────────────────────
-//
-// Spec §4.1: Read-only strip at the top of Step 1 for ANC patients.
-// Shows: patient name · ANC visit number · gestational week · parity · key trend.
-// Sits flush edge-to-edge so it reads as a contextual header, not a card.
-
-class _AncVisitSummaryChip extends StatelessWidget {
-  const _AncVisitSummaryChip({
-    required this.patientContext,
-    this.patientName,
-    this.visitCount,
-  });
-
-  final PatientContext patientContext;
-  final String? patientName;
-
-  /// Total completed visits for this patient — loaded from vitals history.
-  /// Null while the briefing fetch is in flight.
-  final int? visitCount;
-
-  String? get _keyTrend {
-    final facts = patientContext.pregnancyFacts;
-    if (patientContext.lastBpSystolic != null &&
-        patientContext.lastBpSystolic! >= 140) {
-      return ComposerStrings.ancSummaryBpElevated;
-    }
-    if (facts == null) return null;
-    if (facts.isNearTermAnc) return ComposerStrings.ancSummaryNearTerm;
-    if (facts.highRiskPregnantWoman) return ComposerStrings.ancSummaryHighRisk;
-    if (facts.hasGapsInAnc) return ComposerStrings.ancSummaryAncGap;
-    return null;
-  }
-
-  Color get _trendColor {
-    final facts = patientContext.pregnancyFacts;
-    if (patientContext.lastBpSystolic != null &&
-        patientContext.lastBpSystolic! >= 140) {
-      return AppColors.statusCritical;
-    }
-    if (facts?.isNearTermAnc == true) return AppColors.statusWarning;
-    if (facts?.highRiskPregnantWoman == true) return AppColors.statusCritical;
-    if (facts?.hasGapsInAnc == true) return AppColors.statusWarning;
-    return AppColors.textMuted;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ga = patientContext.gestationalWeeks;
-    final g = patientContext.gravida;
-    final p = patientContext.para;
-    final trend = _keyTrend;
-
-    return Container(
-      color: AppColors.ancSurface,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      child: Row(
-        children: [
-          // Pill chips — GA · parity · key trend
-          Wrap(
-            spacing: 5,
-            children: [
-              if (ga != null)
-                _SummaryPill(
-                  label: '$ga ${ComposerStrings.ancSummaryGaUnit}',
-                  color: AppColors.ancText,
-                  surface: AppColors.ancBorder,
-                ),
-              if (g != null && p != null)
-                _SummaryPill(
-                  label: ComposerStrings.ancSummaryParity(g, p),
-                  color: AppColors.ancText,
-                  surface: AppColors.ancBorder,
-                ),
-              if (trend != null)
-                _SummaryPill(
-                  label: trend,
-                  color: Colors.white,
-                  surface: _trendColor,
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryPill extends StatelessWidget {
-  const _SummaryPill({
-    required this.label,
-    required this.color,
-    required this.surface,
-  });
-
-  final String label;
-  final Color color;
-  final Color surface;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
-  }
 }
 
 // ── AI Briefing Section: 3 stacked cards ─────────────────────────────────────
@@ -1501,6 +1445,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_UnifiedSymptomPickerState] initState');
     _searchCtrl.addListener(() {
       setState(() => _query = _searchCtrl.text.trim().toLowerCase());
     });
@@ -1509,6 +1454,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    debugPrint('[_UnifiedSymptomPickerState] dispose');
     super.dispose();
   }
 
@@ -1529,6 +1475,8 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
     }
   }
 
+  static String? _sectionLabel(Programme? p) => null;
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -1538,24 +1486,15 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
         final selected = vm.selectedSymptoms;
         final isSearching = _query.isNotEmpty;
 
-        // Default grid: enrolled-programme symptoms only (or all primary codes
-        // when the patient has no enrolled programmes).
-        final defaultCodes = vm.enrolledProgrammeVocabCodes;
-
-        // Once the SK types 3+ chars, open up the full applicable vocab so
-        // cross-programme symptoms become discoverable via search.
+        // Search pool: full applicable vocab for cross-programme discovery
+        // once the SK types 3+ chars; otherwise restricted to catalog codes.
         final searchPool = _query.length >= _secondaryThreshold
             ? vm.applicableVocabCodes
-            : defaultCodes;
-
-        // Whether the enrolled-programme filter is active for this patient.
-        final hasEnrolledFilter =
-            vm.patientContext.activeProgrammes.isNotEmpty;
+            : SymptomCatalog.all.map((s) => s.code).toList();
 
         // Determine which sections to show in the grid.
-        // Searching → one flat headerless section of matches. Otherwise →
-        // per-programme sections plus any selected codes that fall outside
-        // the default list (e.g. found via search from other programmes).
+        // Searching → flat headerless section of matches.
+        // Default → per-programme sections with headers from simpleProgrammeSections.
         final List<(String?, List<String>)> gridSections;
         if (isSearching) {
           gridSections = [
@@ -1574,98 +1513,182 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
           ];
         } else {
           gridSections = [
-            for (final s in vm.groupedVocabSections)
-              (null, s.codes.where((c) => !selected.contains(c)).toList()),
+            for (final s in vm.simpleProgrammeSections)
+              (
+                _sectionLabel(s.programme),
+                s.codes.where((c) => !selected.contains(c)).toList(),
+              ),
           ];
         }
-        final gridIsEmpty =
-            gridSections.every((s) => s.$2.isEmpty);
+        final gridIsEmpty = gridSections.every((s) => s.$2.isEmpty);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-              // ── Search bar ────────────────────────────────────────────────
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: TextField(
-                  key: const Key('triage_symptom_search'),
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: SymptomPickerStrings.searchSymptomsHint,
-                    prefixIcon: const Icon(
-                      Icons.search_rounded,
-                      size: 18,
-                      color: AppColors.textMuted,
-                    ),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                    filled: false,
-                    suffixIcon: _query.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              size: 16,
-                              color: AppColors.textMuted,
-                            ),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              FocusScope.of(context).unfocus();
-                            },
-                          )
-                        : null,
+            // ── Search bar ────────────────────────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: TextField(
+                key: const Key('triage_symptom_search'),
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: SymptomPickerStrings.searchSymptomsHint,
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    size: 18,
+                    color: AppColors.textMuted,
                   ),
-                  maxLines: 1,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  filled: false,
+                  suffixIcon: _query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: AppColors.textMuted,
+                          ),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            FocusScope.of(context).unfocus();
+                          },
+                        )
+                      : null,
+                ),
+                maxLines: 1,
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // ── Chip grid ─────────────────────────────────────────────────
+            if (gridIsEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  isSearching
+                      ? SymptomPickerStrings.searchNoResults
+                      : SymptomPickerStrings.searchOnlyEmptyHint,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ),
-
-              const SizedBox(height: 14),
-
-              // ── Chip grid (single flat Wrap — no per-section gaps) ───────
-              if (gridIsEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    isSearching
-                        ? SymptomPickerStrings.searchNoResults
-                        : SymptomPickerStrings.searchOnlyEmptyHint,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textMuted,
+              // When searching and no match — offer to add as free-text chip.
+              if (isSearching && _query.isNotEmpty)
+                GestureDetector(
+                  onTap: () {
+                    vm.addOtherChip(_query);
+                    _searchCtrl.clear();
+                    FocusScope.of(context).unfocus();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF0FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFC4B5FD)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.add_rounded,
+                          size: 14,
+                          color: Color(0xFF6B63D4),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Add "$_query" as symptom',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF6B63D4),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                )
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: gridSections
-                      .expand((s) => s.$2)
-                      .map(
-                        (code) => _PickerChip(
-                          key: ValueKey('triage_chip_$code'),
-                          code: code,
-                          isSelected: selected.contains(code),
-                          isAi: vm.isScribePreTick(code),
-                          onTap: () => _toggleSymptom(code),
-                        ),
-                      )
-                      .toList(),
                 ),
+            ] else if (isSearching)
+              // Search results — flat wrap, no headers.
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: gridSections
+                    .expand((s) => s.$2)
+                    .toSet()
+                    .map(
+                      (code) => _PickerChip(
+                        key: ValueKey('triage_chip_$code'),
+                        code: code,
+                        isSelected: selected.contains(code),
+                        isAi: vm.isScribePreTick(code),
+                        onTap: () => _toggleSymptom(code),
+                      ),
+                    )
+                    .toList(),
+              )
+            else
+              // Default grid — one Wrap per programme section with a label.
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final section in gridSections)
+                    if (section.$2.isNotEmpty) ...[
+                      if (section.$1 != null && section.$1!.isNotEmpty) ...[
+                        Text(
+                          section.$1!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textMuted,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: section.$2
+                            .map(
+                              (code) => _PickerChip(
+                                key: ValueKey(
+                                  'triage_chip_${section.$1}_$code',
+                                ),
+                                code: code,
+                                isSelected: selected.contains(code),
+                                isAi: vm.isScribePreTick(code),
+                                onTap: () => _toggleSymptom(code),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                ],
+              ),
 
-              const SizedBox(height: 10),
-            ],
-          );
+            const SizedBox(height: 10),
+          ],
+        );
       },
     );
   }
@@ -1864,7 +1887,8 @@ class _PickerChip extends StatelessWidget {
 // Meta-cards PW and Delivery are UI gates (not Programme enums) that lock/unlock
 // ANC and PNC respectively. Under-5 patients skip this widget entirely.
 
-enum _ServiceCardKind { programme, pw, delivery, general }
+enum _ServiceCardKind { programme, pw, delivery, general, rmnch }
+
 
 class _ServiceCardDef {
   const _ServiceCardDef({
@@ -1881,17 +1905,21 @@ class _ServiceCardDef {
 
   bool get isPW => kind == _ServiceCardKind.pw;
   bool get isDelivery => kind == _ServiceCardKind.delivery;
+  bool get isRMNCH => kind == _ServiceCardKind.rmnch;
 }
 
-// Full card set — visibility filtered per patient demographics in the widget.
+// Card order matches the Eligible Services wireframe (apon_sushashthya_v14):
+// Row 1: PW, ANC, Pregnancy Outcome
+// Row 2: PNC, FP, NCD
+// Row 3: TB, Eye care
 const _kAllServiceCards = [
   _ServiceCardDef(kind: _ServiceCardKind.pw,        emoji: '🤰', label: 'PW'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',      programme: Programme.anc),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',       programme: Programme.familyPlanning),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',      programme: Programme.pnc),
-  _ServiceCardDef(kind: _ServiceCardKind.general,   emoji: '🩺', label: 'General'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',      programme: Programme.ncd),
-  _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Delivery'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',               programme: Programme.anc),
+  _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Pregnancy Outcome'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',               programme: Programme.pnc),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',                programme: Programme.familyPlanning),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',               programme: Programme.ncd),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
 ];
 
 class _InlineServiceSelector extends StatelessWidget {
@@ -1902,6 +1930,7 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.enrolledProgrammes,
     required this.isPW,
     required this.isDelivery,
+    required this.ancVisitedToday,
     required this.onProgrammeToggle,
     required this.onPWToggle,
     required this.onDeliveryToggle,
@@ -1917,52 +1946,91 @@ class _InlineServiceSelector extends StatelessWidget {
 
   final bool isPW;
   final bool isDelivery;
+  final bool ancVisitedToday;
   final void Function(Programme programme, bool selected) onProgrammeToggle;
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
+  /// All 8 service cards shown for adult patients; eligibility is communicated
+  /// via lock state (greyed + snackbar on tap) rather than hiding. Order and
+  /// visibility match the Eligible Services wireframe (apon_sushashthya_v14).
   List<_ServiceCardDef> _visibleCards() {
     final ctx = patientContext;
     return _kAllServiceCards.where((c) {
       switch (c.kind) {
         case _ServiceCardKind.pw:
         case _ServiceCardKind.delivery:
-          return ctx.isFemale;
+          return ctx.isFemale && ctx.ageYears >= 15;
         case _ServiceCardKind.programme:
           final p = c.programme!;
-          if (p == Programme.anc || p == Programme.familyPlanning) {
+          if (p == Programme.anc || p == Programme.pnc) {
             return ctx.isFemale && ctx.ageYears >= 15;
           }
-          if (p == Programme.pnc) return ctx.isFemale;
-          return ctx.ageYears >= 15; // NCD, TB
-        case _ServiceCardKind.general:
+          if (p == Programme.familyPlanning) {
+            return ctx.isFemale && ctx.ageYears >= 15;
+          }
           return ctx.ageYears >= 15;
+        case _ServiceCardKind.rmnch:
+        case _ServiceCardKind.general:
+          return false;
       }
     }).toList();
   }
 
+  String _enrolledLabel(_ServiceCardDef card) {
+    if (card.isPW) return 'Registered';
+    switch (card.programme) {
+      case Programme.anc:
+      case Programme.pnc:
+        return 'Completed visit';
+      default:
+        return TriageStrings.enrolledBadge;
+    }
+  }
+
+  String _cardLabel(_ServiceCardDef card) {
+    if (card.isRMNCH) {
+      final ctx = patientContext;
+      return (ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum)
+          ? TriageStrings.pregnancyOutcomeChip
+          : 'PNC';
+    }
+    if (card.isDelivery) return TriageStrings.pregnancyOutcomeChip;
+    return card.label;
+  }
+
   bool _isLocked(_ServiceCardDef card) {
-    if (card.programme == Programme.anc) return !isPW;
-    if (card.programme == Programme.pnc) return !isDelivery;
+    final ctx = patientContext;
+    final pregnant = ctx.isPregnant && !ctx.isPostpartum;
+    if (card.isPW) return isDelivery || !pregnant;
+    if (card.programme == Programme.anc) {
+      // ANC requires PW registration first; also blocked if ANC already done today.
+      return !isPW || isDelivery || !pregnant || ancVisitedToday;
+    }
+    if (card.isDelivery) return !pregnant;
+    if (card.programme == Programme.pnc) return !ctx.isPostpartum;
     return false;
   }
 
   bool _isCardSelected(_ServiceCardDef card) {
-    if (card.isPW) return isPW;
+    if (card.isPW) return isPW && !isDelivery;
     if (card.isDelivery) return isDelivery;
+    if (card.isRMNCH) {
+      final ctx = patientContext;
+      return (ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum)
+          ? isDelivery
+          : selectedProgrammes.contains(Programme.pnc);
+    }
     if (card.programme != null) return selectedProgrammes.contains(card.programme);
-    return false; // General — untacked
+    return false;
   }
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
-    // Lock only blocks *adding* when the PW/Delivery gate is closed.
-    // Already-selected cards can always be deselected (e.g. enrolled PNC that
-    // was seeded incorrectly, or pathway ANC the SK does not want this visit).
     final alreadySelected = _isCardSelected(card);
     if (_isLocked(card) && !alreadySelected) {
-      final hint = card.programme == Programme.anc
-          ? TriageStrings.pwHint
-          : TriageStrings.deliveryHint;
+      final hint = isDelivery
+          ? TriageStrings.ancDeliveryConflictHint
+          : TriageStrings.pwHint;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
@@ -1975,12 +2043,14 @@ class _InlineServiceSelector extends StatelessWidget {
     if (card.isPW) {
       onPWToggle(!isPW);
     } else if (card.isDelivery) {
-      onDeliveryToggle(!isDelivery);
+      // Pregnancy Outcome visit — clears ANC/PW; other services stay on.
+      onDeliveryToggle(!alreadySelected);
     } else if (card.programme != null) {
       onProgrammeToggle(
-          card.programme!, !selectedProgrammes.contains(card.programme));
+        card.programme!,
+        !selectedProgrammes.contains(card.programme),
+      );
     }
-    // General card — no programme tracking
   }
 
   @override
@@ -1994,7 +2064,7 @@ class _InlineServiceSelector extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               TriageStrings.eligibleServicesHeader,
               style: TextStyle(
                 fontSize: 12,
@@ -2009,7 +2079,7 @@ class _InlineServiceSelector extends StatelessWidget {
                 color: const Color(0xFFEEF0FF),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
+              child: Text(
                 TriageStrings.eligibleServicesTag,
                 style: TextStyle(
                   fontSize: 9.5,
@@ -2032,12 +2102,13 @@ class _InlineServiceSelector extends StatelessWidget {
           children: cards
               .map((c) => _ServiceTile(
                     def: c,
+                    label: _cardLabel(c),
                     isSelected: _isCardSelected(c),
                     isLocked: _isLocked(c),
                     isEnrolled: (c.programme != null &&
                             enrolledProgrammes.contains(c.programme)) ||
-                        (c.isPW &&
-                            enrolledProgrammes.contains(Programme.anc)),
+                        (c.isPW && enrolledProgrammes.contains(Programme.anc)),
+                    enrolledLabel: _enrolledLabel(c),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
                     onTap: () => _handleTap(context, c),
@@ -2052,20 +2123,27 @@ class _InlineServiceSelector extends StatelessWidget {
 class _ServiceTile extends StatelessWidget {
   const _ServiceTile({
     required this.def,
+    required this.label,
     required this.isSelected,
     required this.isLocked,
     required this.isEnrolled,
+    required this.enrolledLabel,
     required this.isPathwaySuggested,
     required this.onTap,
   });
 
   final _ServiceCardDef def;
+  final String label;
   final bool isSelected;
   final bool isLocked;
 
   /// Patient is already enrolled in this programme from past visits.
-  /// Shows an "Enrolled" badge; the card remains selectable for this visit.
+  /// Shows an programme-specific badge; the card remains selectable for this visit.
   final bool isEnrolled;
+
+  /// Badge text when [isEnrolled] is true. Defaults to "Enrolled" for most
+  /// programmes; ANC/PNC use "Completed ANC"/"Completed PNC" etc.
+  final String enrolledLabel;
 
   final bool isPathwaySuggested;
   final VoidCallback onTap;
@@ -2088,10 +2166,10 @@ class _ServiceTile extends StatelessWidget {
       selected: isSelected,
       enabled: !isLocked,
       label: isEnrolled
-          ? TriageStrings.enrolledProgrammeA11y(def.label)
+          ? TriageStrings.enrolledProgrammeA11y(label)
           : (isSelected
-              ? TriageStrings.deselectProgrammeA11y(def.label)
-              : TriageStrings.selectProgrammeA11y(def.label)),
+              ? TriageStrings.deselectProgrammeA11y(label)
+              : TriageStrings.selectProgrammeA11y(label)),
       child: GestureDetector(
         onTap: onTap,
         child: Opacity(
@@ -2160,7 +2238,7 @@ class _ServiceTile extends StatelessWidget {
                       Text(def.emoji, style: const TextStyle(fontSize: 20)),
                       const SizedBox(height: 4),
                       Text(
-                        def.label,
+                        label,
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
@@ -2176,8 +2254,8 @@ class _ServiceTile extends StatelessWidget {
                             color: _enrolledBadgeBg,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text(
-                            TriageStrings.enrolledBadge,
+                          child: Text(
+                            enrolledLabel,
                             style: TextStyle(
                               fontSize: 8,
                               fontWeight: FontWeight.w700,

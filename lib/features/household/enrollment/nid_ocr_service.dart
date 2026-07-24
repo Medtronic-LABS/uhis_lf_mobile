@@ -16,6 +16,10 @@ enum NidScanStatus {
 
   /// The camera or OCR pipeline failed.
   error,
+
+  /// The SK chose to register the member without scanning an NID card.
+  /// Caller should open the form with blank NID fields for manual entry.
+  skipped,
 }
 
 /// Fields read from a Bangladesh NID card via on-device Latin OCR.

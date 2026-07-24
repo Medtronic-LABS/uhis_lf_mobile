@@ -54,11 +54,13 @@ class AppConfig {
     defaultValue: '',
   );
 
-  /// Fallback TTL (seconds) for the AuthCookie when the response omits
-  /// a `Max-Age` attribute.
+  /// Rolling reentry-session TTL (seconds). Each biometric/PIN unlock extends
+  /// the local expiry by this amount from now. Defaults to 14400 s (4 h) to
+  /// match the server's AUTH_TOKEN_TIME_LIMIT_IN_MINUTES=240 setting so the
+  /// local clock does not evict the session before the server does.
   static const int authCookieTtlSeconds = int.fromEnvironment(
     'AUTH_COOKIE_TTL_SECONDS',
-    defaultValue: 3600,
+    defaultValue: 14400,
   );
 
   /// Localized reason shown by Android `BiometricPrompt`.

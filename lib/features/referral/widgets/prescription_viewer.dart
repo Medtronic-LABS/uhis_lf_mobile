@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../referral_api_service.dart';
+import '../../../app/theme.dart';
+import '../../../core/widgets/empty_state_card.dart';
 
 /// Dialog/sheet for viewing prescription details.
 class PrescriptionViewer extends StatelessWidget {
@@ -153,42 +155,16 @@ class PrescriptionViewer extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return SafeArea(
+    return const SafeArea(
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLow,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.medication_outlined,
-                  size: 48,
-                  color: scheme.outline,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'No Prescriptions',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'No prescriptions found for this patient.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.outline,
-                    ),
-              ),
-            ],
+          padding: EdgeInsets.all(32),
+          child: EmptyStateCard(
+            icon: Icons.medication_outlined,
+            iconColor: AppColors.textMuted,
+            iconBg: AppColors.border,
+            title: 'No Prescriptions',
+            subtitle: 'No prescriptions found for this patient.',
           ),
         ),
       ),

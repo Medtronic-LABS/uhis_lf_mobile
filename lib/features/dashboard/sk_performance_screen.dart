@@ -19,11 +19,13 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
 
   @override
   void initState() {
+    debugPrint('[_SkPerformanceScreenState] initState');
     super.initState();
     _load();
   }
 
   void _load() {
+    debugPrint('[_SkPerformanceScreenState] _load');
     final db = context.read<AppDatabase>();
     _statsFuture = SkPerformanceRepository(db).load();
   }
@@ -42,7 +44,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               '📊 ${PerformanceStrings.title}',
               style: TextStyle(
                 color: Colors.white,
@@ -250,7 +252,7 @@ class _HeroCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       PerformanceStrings.heroScoreLabel,
                       style: TextStyle(
                         color: Colors.white60,
@@ -270,7 +272,7 @@ class _HeroCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       PerformanceStrings.heroDesc,
                       style: TextStyle(
                         color: Colors.white60,
@@ -388,7 +390,7 @@ class _VisitTrendCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 PerformanceStrings.visitTrendLabel,
                 style: TextStyle(
                   fontSize: 11,
@@ -397,7 +399,7 @@ class _VisitTrendCard extends StatelessWidget {
                   letterSpacing: 0.8,
                 ),
               ),
-              const Text(
+              Text(
                 PerformanceStrings.trendSteady,
                 style: TextStyle(
                   fontSize: 12,
@@ -652,7 +654,7 @@ class _ServiceBreakdownCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             PerformanceStrings.sectionServiceBreakdown,
             style: TextStyle(
               fontSize: 11,
@@ -843,7 +845,7 @@ class _ErrorView extends StatelessWidget {
           const SizedBox(height: 16),
           FilledButton.tonal(
             onPressed: onRetry,
-            child: const Text(CommonStrings.retry),
+            child: Text(CommonStrings.retry),
           ),
         ],
       ),

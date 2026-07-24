@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/patient_programmes_dao.dart';
+import '../../../core/i18n/app_locale.dart';
 import '../../../core/models/programme.dart';
 import '../../../core/theme/app_theme.dart' show LeapfrogColors;
 import 'pregnancy_registration_sheet.dart';
@@ -74,6 +75,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
   }
 
   void _togglePregnantWoman(bool v) {
+    debugPrint('[_ProgrammeEnrollScreenState] _togglePregnantWoman v=$v');
     setState(() {
       _pregnantWoman = v;
       if (!v) {
@@ -84,6 +86,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
   }
 
   void _toggleProgramme(Programme p) {
+    debugPrint('[_ProgrammeEnrollScreenState] _toggleProgramme p=$p');
     if (p == Programme.anc || p == Programme.pnc) {
       if (!_pregnantWoman) {
         final msg = p == Programme.anc
@@ -104,6 +107,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
   }
 
   Future<void> _confirm() async {
+    debugPrint('[_ProgrammeEnrollScreenState] _confirm patientId=${widget.patientId} selected=$_selected');
     if (_selected.isEmpty) return;
     setState(() => _saving = true);
     try {
@@ -112,7 +116,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
       await dao.replaceFor(widget.patientId, merged);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(EnrollStrings.savedToast)),
+        SnackBar(content: Text(EnrollStrings.savedToast)),
       );
       // ANC newly selected → collect pregnancy details before leaving.
       final needsPregnancyReg = _selected.contains(Programme.anc) &&
@@ -173,7 +177,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
                 _HeaderSection(patientName: widget.patientName),
                 const SizedBox(height: 20),
                 if (_showPregnancySection) ...[
-                  const _SectionLabel(EnrollStrings.sectionPregnancy),
+                  _SectionLabel(EnrollStrings.sectionPregnancy),
                   const SizedBox(height: 10),
                   _PregnantWomanTile(
                     value: _pregnantWoman,
@@ -209,7 +213,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
                   const SizedBox(height: 20),
                 ],
                 if (_showNcd) ...[
-                  const _SectionLabel(EnrollStrings.sectionChronic),
+                  _SectionLabel(EnrollStrings.sectionChronic),
                   const SizedBox(height: 10),
                   _TwocolGrid(children: [
                     _ProgrammeTile(
@@ -227,7 +231,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
                 ],
                 if (_showChildSection) ...[
                   const SizedBox(height: 20),
-                  const _SectionLabel(EnrollStrings.sectionChild),
+                  _SectionLabel(EnrollStrings.sectionChild),
                   const SizedBox(height: 10),
                   _TwocolGrid(children: [
                     _ProgrammeTile(
@@ -400,21 +404,15 @@ class _PregnantWomanTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    EnrollStrings.pregnantWomanLabel,
+                    AppLocale.isBangla
+                        ? EnrollStrings.pregnantWomanBengali
+                        : EnrollStrings.pregnantWomanLabel,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
                       color: value
                           ? const Color(0xFF9D174D)
                           : const Color(0xFF111827),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    EnrollStrings.pregnantWomanBengali,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
                     ),
                   ),
                 ],
@@ -515,19 +513,11 @@ class _ProgrammeTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              label,
+              AppLocale.isBangla ? bengali : label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
                 color: selected ? textColor : const Color(0xFF111827),
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              bengali,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey.shade500,
               ),
             ),
           ],

@@ -83,6 +83,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
 
   @override
   void initState() {
+    debugPrint('[_LinkMemberScreenState] initState householdId=${widget.householdId} householdReferenceId=${widget.householdReferenceId} fromNidScan=${widget.fromNidScan}');
     super.initState();
     // Pre-fill from NID scan when coming via the "link to existing" flow.
     if (widget.fromNidScan) {
@@ -120,6 +121,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_LinkMemberScreenState] dispose');
     _nameCtrl.dispose();
     _dobCtrl.dispose();
     _ageCtrl.dispose();
@@ -144,7 +146,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
 
   bool _validate() {
     if (_nameCtrl.text.trim().isEmpty || _gender == null || _maritalStatus == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(EnrollmentStrings.fieldRequired),
         duration: Duration(seconds: 2),
       ));
@@ -154,6 +156,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
   }
 
   Future<void> _submit() async {
+    debugPrint('[_LinkMemberScreenState] _submit householdId=${widget.householdId} householdReferenceId=${widget.householdReferenceId}');
     if (!_validate()) return;
     setState(() => _loading = true);
     try {
@@ -249,7 +252,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(LinkMemberStrings.successMessage),
         ));
         context.go('/patients/households');
@@ -344,7 +347,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               LinkMemberStrings.title,
               style: TextStyle(
                 fontSize: 18,
@@ -540,7 +543,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       EnrollmentStrings.mobileNotAvailableHint,
                       style: TextStyle(
                           fontSize: 13, color: AppColors.textMuted),

@@ -28,22 +28,38 @@ class NotificationService {
     if (_initialized) return;
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      ),
     );
     await _plugin.initialize(settings);
     await ChannelRegistry(_plugin).registerAll();
     _initialized = true;
   }
 
-  /// Request POST_NOTIFICATIONS on Android 13+. Returns `true` if granted
-  /// (or if the OS doesn't require runtime permission). Persist the user's
-  /// choice in `flutter_secure_storage`; this method does not handle the
-  /// 24-hour re-prompt cooldown — caller does that.
+  /// Request notification permission. On Android 13+ requests
+  /// POST_NOTIFICATIONS at runtime. On iOS requests alert/badge/sound
+  /// via UNUserNotificationCenter. Returns `true` if granted.
   Future<bool> requestPermissions() async {
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
-    if (android == null) return true;
-    final granted = await android.requestNotificationsPermission();
-    return granted ?? false;
+    if (android != null) {
+      final granted = await android.requestNotificationsPermission();
+      return granted ?? false;
+    }
+    final ios = _plugin.resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>();
+    if (ios != null) {
+      final granted = await ios.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      return granted ?? false;
+    }
+    return true;
   }
 
   /// One-shot immediate show. Caller supplies a stable [id] so duplicates

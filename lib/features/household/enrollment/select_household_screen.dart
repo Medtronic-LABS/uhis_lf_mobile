@@ -40,6 +40,7 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
 
   @override
   void initState() {
+    debugPrint('[_SelectHouseholdScreenState] initState');
     super.initState();
     _loadHouseholds();
     _searchCtrl.addListener(_onSearch);
@@ -47,11 +48,13 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_SelectHouseholdScreenState] dispose');
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadHouseholds() async {
+    debugPrint('[_SelectHouseholdScreenState] _loadHouseholds');
     final dao = context.read<HouseholdDao>();
     // The local DB already contains only this SK's assigned households
     // (synced by village scope). Village-ID filtering would use sub-village
@@ -68,6 +71,7 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
   }
 
   void _onSearch() {
+    debugPrint('[_SelectHouseholdScreenState] _onSearch query=${_searchCtrl.text}');
     final q = _searchCtrl.text.toLowerCase();
     setState(() {
       _filtered = q.isEmpty
@@ -81,6 +85,7 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
   }
 
   void _onProceed() {
+    debugPrint('[_SelectHouseholdScreenState] _onProceed householdId=${_selected?.id} householdNo=${_selected?.householdNo}');
     final hh = _selected;
     if (hh == null) return;
     context.push('/household/enrollment/link-member', extra: {
@@ -107,7 +112,7 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
         backgroundColor: AppColors.navy,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(

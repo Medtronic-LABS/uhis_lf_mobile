@@ -46,6 +46,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_ProgrammeSelectionScreenState] initState');
     _vm = ProgrammeSelectionViewModel(
       repository: context.read<ProgrammeRecommendationRepository>(),
       request: widget.request,
@@ -57,6 +58,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
   @override
   void dispose() {
     _vm.dispose();
+    debugPrint('[_ProgrammeSelectionScreenState] dispose');
     super.dispose();
   }
 
@@ -144,7 +146,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
         OutlinedButton.icon(
           onPressed: () => _openAddProgrammeSheet(context, vm),
           icon: const Icon(Icons.add, size: 18),
-          label: const Text(ProgrammeSelectionStrings.addProgrammeCta),
+          label: Text(ProgrammeSelectionStrings.addProgrammeCta),
           style: OutlinedButton.styleFrom(
             foregroundColor: Theme.of(context).colorScheme.onSurface,
             side: const BorderSide(color: AppColors.border),
@@ -172,6 +174,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
     BuildContext context,
     ProgrammeSelectionViewModel vm,
   ) async {
+    debugPrint('[_ProgrammeSelectionScreenState] _openReviewSheet');
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -196,6 +199,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
     BuildContext context,
     ProgrammeSelectionViewModel vm,
   ) async {
+    debugPrint('[_ProgrammeSelectionScreenState] _openAddProgrammeSheet');
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -264,7 +268,7 @@ Future<bool> _confirmAdd(BuildContext context, Programme programme) async {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text(ProgrammeSelectionStrings.addConfirmCancel),
+          child: Text(ProgrammeSelectionStrings.addConfirmCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(true),
@@ -272,7 +276,7 @@ Future<bool> _confirmAdd(BuildContext context, Programme programme) async {
             backgroundColor: AppColors.statusSuccess,
             foregroundColor: Colors.white,
           ),
-          child: const Text(ProgrammeSelectionStrings.addConfirmCta),
+          child: Text(ProgrammeSelectionStrings.addConfirmCta),
         ),
       ],
     ),
@@ -333,7 +337,7 @@ Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text(ProgrammeSelectionStrings.skipConfirmCancel),
+          child: Text(ProgrammeSelectionStrings.skipConfirmCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(true),
@@ -341,7 +345,7 @@ Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
             backgroundColor: AppColors.statusCritical,
             foregroundColor: Colors.white,
           ),
-          child: const Text(ProgrammeSelectionStrings.skipConfirmCta),
+          child: Text(ProgrammeSelectionStrings.skipConfirmCta),
         ),
       ],
     ),
@@ -535,7 +539,7 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: onRetry,
-              child: const Text(ProgrammeSelectionStrings.retry),
+              child: Text(ProgrammeSelectionStrings.retry),
             ),
           ],
         ),
@@ -683,7 +687,7 @@ class _CrossProgrammeNoticeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   ProgrammeSelectionStrings.crossNoticeTitle,
                   style: TextStyle(
                     fontSize: 12,
@@ -875,7 +879,7 @@ class _RecommendationCard extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: isSelected ? onSkip : null,
                   icon: const Icon(Icons.close_rounded, size: 16),
-                  label: const Text(ProgrammeSelectionStrings.rejectCta),
+                  label: Text(ProgrammeSelectionStrings.rejectCta),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.statusCritical,
                     side: BorderSide(
@@ -939,13 +943,7 @@ class _AddProgrammeSheet extends StatelessWidget {
   final ProgrammeSelectionViewModel vm;
   final ValueChanged<Programme> onAdded;
 
-  /// Programmes a user can manually add.
-  /// PILOT-SCOPE v1: limited to pilot programmes only (imci / anc / pnc / ncd).
-  /// To restore: replace with the full list below, or filter via `p.isPilot`.
-  // Full list for post-pilot restore:
-  // Programme.anc, Programme.pnc, Programme.ncd, Programme.tb, Programme.imci,
-  // Programme.epi, Programme.nutrition, Programme.familyPlanning,
-  // Programme.cataract, Programme.eyeCare,
+  /// Programmes a user can manually add — all programmes now in kPilotProgrammes.
   static final List<Programme> _allProgrammes = Programme.kPilotProgrammes
       .toList()
     ..sort((a, b) => a.name.compareTo(b.name));
@@ -1231,7 +1229,7 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onAdd,
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text(
+                  label: Text(
                     ProgrammeSelectionStrings.reviewSheetAddMore,
                   ),
                   style: OutlinedButton.styleFrom(
@@ -1272,7 +1270,7 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                             ),
                             textStyle: Theme.of(context).textTheme.titleSmall,
                           ),
-                          child: const Text(
+                          child: Text(
                             ProgrammeSelectionStrings.reviewSheetBack,
                           ),
                         ),

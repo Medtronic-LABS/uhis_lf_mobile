@@ -7,6 +7,7 @@ import '../pathway/ai_pathway_client.dart';
 import '../pathway/pathway_engine.dart';
 import 'ai_scribe_triage_vocab.dart';
 import 'patient_context_builder.dart';
+import 'symptom_catalog.dart';
 import 'unified_symptom_catalog.dart';
 
 /// ViewModel for the symptom picker screen.
@@ -640,6 +641,71 @@ class TriageViewModel extends ChangeNotifier {
           SymptomSection(programme: entry.key, codes: entry.value),
       if (general.isNotEmpty) SymptomSection(programme: null, codes: general),
     ];
+  }
+
+  /// Simplified 4-programme symptom grid for Step 1 triage.
+  ///
+  /// Visibility rules:
+  ///   - ANC : patient is pregnant or enrolled in ANC
+  ///   - PNC : patient is postpartum or enrolled in PNC
+  ///   - NCD : adult (≥ 180 months = 15 yrs) or age unknown
+  ///   - TB  : adult (≥ 180 months = 15 yrs) or age unknown
+  ///
+  /// Used by [_UnifiedSymptomPickerState] as the default programme-grouped
+  /// chip grid. [groupedVocabSections] is kept for AI Scribe pre-tick
+  /// compatibility and the expanded cross-programme search pool.
+  List<SymptomSection> get simpleProgrammeSections {
+    final ctx = _patientContext;
+    final enrolled = ctx.activeProgrammes;
+    final sections = <SymptomSection>[];
+
+    // Maternal symptoms (ANC/PNC) only apply to patients old enough to be a
+    // mother. A neonate or infant enrolled in 'pnc' is a neonatal PNC case —
+    // those patients must never see vaginal_bleeding or other maternal symptoms.
+    final isMaternalAge =
+        ctx.ageMonths >= AiScribeTriageVocab.maternalMinAgeMonths;
+
+    // ANC: enrolled, or patient is pregnant (may not be formally enrolled yet).
+    if (isMaternalAge && (enrolled.contains(Programme.anc) || ctx.isPregnant)) {
+      sections.add(SymptomSection(
+        programme: Programme.anc,
+        codes: SymptomCatalog.byProgramme(Programme.anc)
+            .map((s) => s.code)
+            .toList(),
+      ));
+    }
+
+    // PNC: enrolled, or patient is postpartum.
+    if (isMaternalAge && (enrolled.contains(Programme.pnc) || ctx.isPostpartum)) {
+      sections.add(SymptomSection(
+        programme: Programme.pnc,
+        codes: SymptomCatalog.byProgramme(Programme.pnc)
+            .map((s) => s.code)
+            .toList(),
+      ));
+    }
+
+    // NCD + TB: only show when the patient is actually enrolled.
+    // Eligibility (adult age) alone does not add a section — the SK selects
+    // these programmes in the service grid first.
+    if (enrolled.contains(Programme.ncd)) {
+      sections.add(SymptomSection(
+        programme: Programme.ncd,
+        codes: SymptomCatalog.byProgramme(Programme.ncd)
+            .map((s) => s.code)
+            .toList(),
+      ));
+    }
+    if (enrolled.contains(Programme.tb)) {
+      sections.add(SymptomSection(
+        programme: Programme.tb,
+        codes: SymptomCatalog.byProgramme(Programme.tb)
+            .map((s) => s.code)
+            .toList(),
+      ));
+    }
+
+    return sections;
   }
 
   /// Returns `true` when [code] belongs to a programme the patient is NOT

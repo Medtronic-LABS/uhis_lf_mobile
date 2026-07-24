@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
+import '../debug/console_log.dart';
 import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../auth/user_hierarchy_service.dart';
@@ -21,12 +22,15 @@ import '../db/member_dao.dart';
 import '../db/patient_dao.dart';
 import '../db/patient_programmes_dao.dart';
 import '../db/pregnancy_snapshot_dao.dart';
+import '../db/referral_dao.dart';
 import '../db/sync_meta_dao.dart';
 import '../db/treatment_presence_dao.dart';
 import '../mission/mission_pregnancy_facts.dart';
 import '../models/json_read.dart';
 import '../models/patient.dart';
 import '../models/programme.dart';
+import '../models/referral.dart';
+import '../referral/referral_ingest_mapper.dart';
 import 'sync_progress.dart';
 import 'sync_report.dart';
 
@@ -52,6 +56,9 @@ class OfflineSyncService extends ChangeNotifier {
     PregnancySnapshotDao? pregnancySnapshot,
     TreatmentPresenceDao? treatmentPresence,
     EncounterDao? encounterDao,
+    // CCE: ingest open referrals from followUps / assessment history into
+    // the local `referrals` table (SLA recompute runs after sync in UI).
+    ReferralDao? referrals,
     // P1: injected so OfflineSyncService can reuse already-fetched static-data
     // instead of making a second user-data HTTP call on every full sync.
     UserHierarchyService? hierarchy,
@@ -69,6 +76,7 @@ class OfflineSyncService extends ChangeNotifier {
         _pregnancySnapshot = pregnancySnapshot,
         _treatmentPresence = treatmentPresence,
         _encounterDao = encounterDao,
+        _referrals = referrals,
         _hierarchy = hierarchy;
 
   static const String _entityKey = 'worklist';
@@ -87,6 +95,7 @@ class OfflineSyncService extends ChangeNotifier {
   final PregnancySnapshotDao? _pregnancySnapshot;
   final TreatmentPresenceDao? _treatmentPresence;
   final EncounterDao? _encounterDao;
+  final ReferralDao? _referrals;
   // P1: shared hierarchy service — avoids second user-data call on full sync
   final UserHierarchyService? _hierarchy;
 
@@ -111,6 +120,14 @@ class OfflineSyncService extends ChangeNotifier {
   /// True when a sync is currently in flight — `WorklistView` consumes this to
   /// disable manual refresh.
   bool get isRunning => _running;
+
+  /// Reset progress state on logout so the next user's sync screen starts
+  /// fresh and doesn't see the previous session's isComplete=true shortcut.
+  void resetProgress() {
+    _progress = SyncProgress.initial;
+    _running = false;
+    notifyListeners();
+  }
 
   Future<DateTime?> lastSyncedAt() async {
     final row = await _syncMeta.read(_entityKey);
@@ -257,9 +274,11 @@ class OfflineSyncService extends ChangeNotifier {
       final int totalHouseholds = out.households;
       final int totalMembers = out.members;
       
-      // Step 3c: Merge assessment history serviceProvided → patient_programmes.
+      // Step 3c: Merge assessment history serviceProvided → patient_programmes
+      // and project open referrals into the CCE `referrals` table.
       // Runs after the member sync so the member→patientId map is fully built.
-      await _syncAssessmentHistoryProgrammes(villageIds);
+      final historyReferrals =
+          await _syncAssessmentHistoryProgrammes(villageIds);
 
       report = report.copyWith(
         finishedAt: DateTime.now(),
@@ -269,6 +288,7 @@ class OfflineSyncService extends ChangeNotifier {
         assessments: out.assessments,
         households: totalHouseholds,
         members: totalMembers,
+        referrals: out.referrals + historyReferrals,
       );
 
       if (fullSync) {
@@ -322,7 +342,9 @@ class OfflineSyncService extends ChangeNotifier {
       'appVersionCode': AppConfig.appVersionCode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'appType': AppConfig.appType,
+      'memberIds': <int>[],
     };
+    ConsoleLog.banner('[PayloadDebug] sync-fetch\n${body.toString()}');
     final resp = await _api.dio.post<List<int>>(
       Endpoints.offlineSyncFetch,
       data: body,
@@ -732,6 +754,31 @@ class OfflineSyncService extends ChangeNotifier {
     await _immunisations.upsertMany(immunisations);
     await _assessments.upsertMany(assessments);
 
+    // CCE: project open follow-up referrals into the `referrals` table.
+    final patientById = <String, Patient>{
+      for (final p in patients) p.id: p,
+    };
+    var referralCount = 0;
+    if (_referrals != null) {
+      final referralRows = <Referral>[];
+      for (final fu in remappedFollowUps) {
+        final patient = patientById[fu.patientId];
+        final mapped = ReferralIngestMapper.fromFollowUp(
+          fu,
+          householdId: patient?.householdId,
+          villageId: patient?.villageId,
+        );
+        if (mapped != null) referralRows.add(mapped);
+      }
+      if (referralRows.isNotEmpty) {
+        await _referrals.upsertMany(referralRows);
+        referralCount = referralRows.length;
+        debugPrint(
+          '[OfflineSyncService] CCE: ingested $referralCount referrals from followUps',
+        );
+      }
+    }
+
     // Persist households and members if found in bundle and DAOs are available
     if (households.isNotEmpty && _households != null) {
       await _households.upsertMany(households);
@@ -791,6 +838,7 @@ class OfflineSyncService extends ChangeNotifier {
       assessments: assessments.length,
       households: households.length,
       members: members.length,
+      referrals: referralCount,
     );
   }
 
@@ -872,13 +920,11 @@ class OfflineSyncService extends ChangeNotifier {
         _truthy(raw['isHypertensive'])) {
       out.add(Programme.ncd);
     }
-    // PILOT-SCOPE v1: TB enrolment signal disabled — TB not in pilot.
-    // To restore: un-comment the block below and add Programme.tb to kPilotProgrammes.
-    // if (_truthy(raw['isTbEnrolled']) ||
-    //     _truthy(raw['presumptiveTb']) ||
-    //     raw['presumptiveTbNo'] != null) {
-    //   out.add(Programme.tb);
-    // }
+    if (_truthy(raw['isTbEnrolled']) ||
+        _truthy(raw['presumptiveTb']) ||
+        raw['presumptiveTbNo'] != null) {
+      out.add(Programme.tb);
+    }
     final age = JsonRead.firstInt(raw, const ['age']);
     if (age != null && age < 5) out.add(Programme.imci);
     return out;
@@ -1187,17 +1233,20 @@ class OfflineSyncService extends ChangeNotifier {
   }
 
   /// Fetches assessment history and merges `serviceProvided` values into the
-  /// local `patient_programmes` table. Called after `_persistBundle` so that
-  /// the member→patient ID map is fully built before we do the lookup.
+  /// local `patient_programmes` table. Also projects open referrals into the
+  /// CCE `referrals` table. Called after `_persistBundle` so that the
+  /// member→patient ID map is fully built before we do the lookup.
   ///
   /// This supplements the programme extraction done in `_persistBundle` (which
   /// uses `pregnancyInfos`, `treatmentDetails`, and `followUps.encounterType`).
   /// Assessment history provides the most up-to-date service type per member.
-  Future<void> _syncAssessmentHistoryProgrammes(List<int> villageIds) async {
-    if (_members == null) return;
+  ///
+  /// Returns the number of referral rows ingested for [SyncReport.referrals].
+  Future<int> _syncAssessmentHistoryProgrammes(List<int> villageIds) async {
+    if (_members == null) return 0;
     try {
       final items = await fetchAssessmentHistory(villageIds: villageIds);
-      if (items.isEmpty) return;
+      if (items.isEmpty) return 0;
 
       // Collect unique member IDs and bulk-resolve to patient IDs.
       final memberIds = items
@@ -1348,16 +1397,41 @@ class OfflineSyncService extends ChangeNotifier {
         await _assessments.upsertMany(assessmentRows);
       }
 
+      // CCE: open referred visits → local referrals table (dedupe by encounter).
+      var referralCount = 0;
+      if (_referrals != null) {
+        final referralRows = <Referral>[];
+        final seen = <String>{};
+        for (final item in items) {
+          final patientId = memberToPatient[item.householdMemberId];
+          if (patientId == null || patientId.isEmpty) continue;
+          final mapped = ReferralIngestMapper.fromAssessmentHistory(
+            item,
+            patientId: patientId,
+          );
+          if (mapped == null) continue;
+          if (!seen.add(mapped.id)) continue;
+          referralRows.add(mapped);
+        }
+        if (referralRows.isNotEmpty) {
+          await _referrals.upsertMany(referralRows);
+          referralCount = referralRows.length;
+        }
+      }
+
       debugPrint(
         '[OfflineSyncService] assessment-history sync: '
         '${items.length} rows → $progUpdated programme updates, '
         '$schedUpdated visit-schedule updates, $vitalsWritten encounter rows with vitals, '
-        '${assessmentRows.length} assessment rows',
+        '${assessmentRows.length} assessment rows, '
+        '$referralCount CCE referrals',
       );
+      return referralCount;
     } catch (e) {
       debugPrint(
         '[OfflineSyncService] assessment-history programme sync failed: $e',
       );
+      return 0;
     }
   }
 
@@ -1570,7 +1644,9 @@ class OfflineSyncService extends ChangeNotifier {
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
+      'memberIds': <int>[],
     };
+    ConsoleLog.banner('[PayloadDebug] assessment-history\n${body.toString()}');
 
     try {
       final resp = await _api.dio.post(
@@ -1634,6 +1710,7 @@ class _PersistTotals {
     this.assessments = 0,
     this.households = 0,
     this.members = 0,
+    this.referrals = 0,
   });
 
   final int patients;
@@ -1642,6 +1719,7 @@ class _PersistTotals {
   final int assessments;
   final int households;
   final int members;
+  final int referrals;
 
   _PersistTotals copyWith({
     int? patients,
@@ -1650,6 +1728,7 @@ class _PersistTotals {
     int? assessments,
     int? households,
     int? members,
+    int? referrals,
   }) =>
       _PersistTotals(
         patients: patients ?? this.patients,
@@ -1658,6 +1737,7 @@ class _PersistTotals {
         assessments: assessments ?? this.assessments,
         households: households ?? this.households,
         members: members ?? this.members,
+        referrals: referrals ?? this.referrals,
       );
 }
 

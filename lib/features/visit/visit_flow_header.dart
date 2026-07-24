@@ -18,6 +18,7 @@ class VisitFlowHeader extends StatelessWidget {
     this.ageDisplay,
     this.householdId,
     this.patientGender,
+    this.visitNumber,
     this.primaryProgramme = Programme.unknown,
     this.activeFormTypes = const [],
   });
@@ -29,6 +30,8 @@ class VisitFlowHeader extends StatelessWidget {
   final String? ageDisplay;
   final String? householdId;
   final String? patientGender;
+  /// 1-based ANC/PNC visit number — appended to the programme badge.
+  final int? visitNumber;
   final Programme primaryProgramme;
   /// Programme keys active in the current visit — shown as pills on step 2.
   final List<String> activeFormTypes;
@@ -68,14 +71,24 @@ class VisitFlowHeader extends StatelessWidget {
       '3. ${VisitFlowStrings.step3Title}',
     ];
 
-    final subtitleParts = <String>[
-      if (ageDisplay != null) ageDisplay!,
-      if (patientGender != null && patientGender!.isNotEmpty)
-        patientGender!.toUpperCase().startsWith('F') ? 'Female' : 'Male',
-      if (householdId != null && householdId!.isNotEmpty)
-        'House #$householdId',
-    ];
-    final subtitle = subtitleParts.join(' · ');
+    final genderInitial = (patientGender != null && patientGender!.isNotEmpty)
+        ? patientGender![0].toUpperCase()
+        : null;
+    final numericAge = ageDisplay
+        ?.replaceAll(' yrs', '')
+        .replaceAll(' yr', '')
+        .replaceAll(' months', 'm')
+        .replaceAll(' month', 'm')
+        .trim();
+    final ageGender = numericAge != null && genderInitial != null
+        ? '$numericAge/$genderInitial'
+        : numericAge ?? genderInitial;
+    final displayName = ageGender != null
+        ? '${patientName ?? '—'} $ageGender'
+        : patientName ?? '—';
+    final subtitle = householdId != null && householdId!.isNotEmpty
+        ? 'House #$householdId'
+        : null;
 
     return Material(
       color: headerColor,
@@ -136,7 +149,7 @@ class VisitFlowHeader extends StatelessWidget {
                               ? () => context.push('/patients/$patientId')
                               : null,
                           child: Text(
-                            patientName ?? '—',
+                            displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -150,7 +163,7 @@ class VisitFlowHeader extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (subtitle.isNotEmpty) ...[
+                        if (subtitle != null) ...[
                           const SizedBox(height: 2),
                           Text(
                             subtitle,
@@ -175,8 +188,13 @@ class VisitFlowHeader extends StatelessWidget {
                             .whereType<Programme>()
                             .where((p) => p != Programme.unknown)
                             .firstOrNull;
-                        final label = primary?.displayName ??
+                        final baseName = primary?.displayName ??
                             activeFormTypes.first.toUpperCase();
+                        final label = visitNumber != null &&
+                                (primary == Programme.anc ||
+                                    primary == Programme.pnc)
+                            ? '$baseName $visitNumber'
+                            : baseName;
                         return Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

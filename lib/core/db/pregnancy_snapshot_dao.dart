@@ -16,6 +16,7 @@ class PregnancySnapshotRow {
     this.updatedAt,
     this.eddDate,
     this.lmpDate,
+    this.deliveryDateMillis,
   });
 
   final String patientId;
@@ -30,6 +31,11 @@ class PregnancySnapshotRow {
   /// gestational age without requiring the server to echo it in assessment rows.
   final int? lmpDate;
 
+  /// Delivery date as epoch milliseconds — written locally after
+  /// PREGNANCY_OUTCOME submission so `isPostpartum` is available immediately
+  /// without waiting for a server re-sync (mirrors Android PregnancyCohortRules).
+  final int? deliveryDateMillis;
+
   Map<String, Object?> toDb() => {
         'patient_id': patientId,
         'high_risk_pregnant_woman': facts.highRiskPregnantWoman ? 1 : 0,
@@ -41,6 +47,7 @@ class PregnancySnapshotRow {
         'updated_at': updatedAt,
         'edd_date': eddDate,
         'lmp_date': lmpDate,
+        'delivery_date_millis': deliveryDateMillis,
       };
 
   static PregnancySnapshotRow fromDb(Map<String, Object?> row) =>
@@ -57,6 +64,7 @@ class PregnancySnapshotRow {
         updatedAt: row['updated_at'] as int?,
         eddDate: row['edd_date'] as int?,
         lmpDate: row['lmp_date'] as int?,
+        deliveryDateMillis: row['delivery_date_millis'] as int?,
       );
 }
 
@@ -148,6 +156,7 @@ class PregnancySnapshotDao {
         updatedAt: rowAt >= prevAt ? row.updatedAt : prev.updatedAt,
         eddDate: row.eddDate ?? prev.eddDate,
         lmpDate: row.lmpDate ?? prev.lmpDate,
+        deliveryDateMillis: row.deliveryDateMillis ?? prev.deliveryDateMillis,
       );
     }
     return byId.values.toList(growable: false);
@@ -177,6 +186,7 @@ class PregnancySnapshotDao {
               updatedAt: row.updatedAt,
               eddDate: row.eddDate ?? prev.eddDate,
               lmpDate: row.lmpDate ?? prev.lmpDate,
+              deliveryDateMillis: row.deliveryDateMillis ?? prev.deliveryDateMillis,
             ));
     }
     for (final entry in prior.entries) {

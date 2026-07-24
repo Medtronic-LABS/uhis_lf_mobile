@@ -36,9 +36,41 @@ abstract final class ProgrammeGridSync {
           return isPostpartum;
         case Programme.unknown:
           return false;
-        default:
+        // FP: hidden during pregnancy; after delivery only once PNC is enrolled.
+        case Programme.familyPlanning:
+          if (isPregnant) return false;
+          if (isPostpartum) return enrolled.contains(Programme.pnc);
+          return true;
+        // Other non-maternal programmes are always applicable when enrolled.
+        case Programme.ncd:
+        case Programme.tb:
+        case Programme.cataract:
+        case Programme.eyeCare:
+        case Programme.epi:
+        case Programme.imci:
+        case Programme.nutrition:
           return true;
       }
     }).toSet();
+  }
+
+  /// Apply Pregnancy Outcome (delivery) selection to the service grid.
+  ///
+  /// Clears **only** ANC and PW. Other selected programmes stay on; PNC is
+  /// ensured so pregnancy-outcome / mother / child forms can open.
+  static ({Set<Programme> selected, Set<Programme> dismissedBySk})
+      applyDeliverySelected({
+    required Set<Programme> selected,
+    required Set<Programme> dismissedBySk,
+  }) {
+    final nextSelected = Set<Programme>.from(selected)
+      ..remove(Programme.anc)
+      ..remove(Programme.pw)
+      ..add(Programme.pnc);
+    final nextDismissed = Set<Programme>.from(dismissedBySk)
+      ..add(Programme.anc)
+      ..add(Programme.pw)
+      ..remove(Programme.pnc);
+    return (selected: nextSelected, dismissedBySk: nextDismissed);
   }
 }

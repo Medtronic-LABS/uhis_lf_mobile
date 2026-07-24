@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 26;
+  static const int schemaVersion = 29;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -46,6 +46,8 @@ class AppDatabase {
   static const String tableAiResponseCache = 'ai_response_cache';
   static const String tableCoachingModules = 'coaching_modules';
   static const String tableCoachingProgress = 'coaching_progress';
+  static const String tableChatMessages = 'chat_messages';
+  static const String tableCoachingFaqs = 'coaching_faqs';
   static const String tableScreenings = 'screenings';
   static const String tableNcdMedicalReviews = 'ncd_medical_reviews';
   static const String tableDiagnoses = 'diagnoses';
@@ -419,7 +421,8 @@ class AppDatabase {
         has_pnc_illness INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER,
         edd_date INTEGER,
-        lmp_date INTEGER
+        lmp_date INTEGER,
+        delivery_date_millis INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
@@ -517,6 +520,25 @@ class AppDatabase {
         quiz_score REAL NOT NULL DEFAULT 0.0,
         last_card_viewed INTEGER NOT NULL DEFAULT -1,
         updated_at INTEGER NOT NULL
+      )''');
+
+    // v29 — Micro-coaching: chat history + FAQ cache.
+    await db.execute('''
+      CREATE TABLE $tableChatMessages (
+        id TEXT PRIMARY KEY,
+        role TEXT NOT NULL,
+        text TEXT NOT NULL,
+        timestamp_ms INTEGER NOT NULL,
+        suggested_questions TEXT
+      )''');
+    await db.execute('''
+      CREATE TABLE $tableCoachingFaqs (
+        id TEXT PRIMARY KEY,
+        question_en TEXT NOT NULL,
+        question_bn TEXT,
+        occurrence_count INTEGER NOT NULL DEFAULT 0,
+        rank INTEGER NOT NULL DEFAULT 0,
+        synced_at INTEGER NOT NULL
       )''');
 
     // v26 — Clinical record tables: screenings, NCD medical reviews,
@@ -1365,6 +1387,47 @@ class AppDatabase {
       await addIdx26(
           'CREATE INDEX IF NOT EXISTS idx_rx_buddy_sync ON $tableRxBuddyCheckins(sync_status)');
     }
+    if (from < 27) {
+      // v27 — delivery_date_millis on pregnancy snapshot so postpartum state
+      // survives across visits without waiting for a server re-sync.
+      Future<void> addCol27(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol27(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN delivery_date_millis INTEGER');
+    }
+    if (from < 28) {
+      // v28 — Remediation: devices that were upgraded to v27 by a commit where
+      // the v27 migration was misplaced inside the v26 block never got the
+      // ALTER TABLE and are stuck at schemaVersion=27 with the column absent.
+      // Safe to re-run — catch swallows "duplicate column" if already present.
+      try {
+        await db.execute(
+            'ALTER TABLE $tablePregnancySnapshot ADD COLUMN delivery_date_millis INTEGER');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 29) {
+      // v29 — Chat history and coaching FAQ cache tables.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableChatMessages (
+          id TEXT PRIMARY KEY,
+          role TEXT NOT NULL,
+          text TEXT NOT NULL,
+          timestamp_ms INTEGER NOT NULL,
+          suggested_questions TEXT
+        )''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableCoachingFaqs (
+          id TEXT PRIMARY KEY,
+          question_en TEXT NOT NULL,
+          question_bn TEXT,
+          occurrence_count INTEGER NOT NULL DEFAULT 0,
+          rank INTEGER NOT NULL DEFAULT 0,
+          synced_at INTEGER NOT NULL
+        )''');
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -1377,6 +1440,7 @@ class AppDatabase {
     tableEncounters, tableLocalAssessments, tablePregnancySnapshot,
     tableTreatmentPresence, tableAssessmentDraft, tableAiSuggestions,
     tableEvalLog, tableAiResponseCache, tableCoachingModules, tableCoachingProgress,
+    tableChatMessages, tableCoachingFaqs,
     tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
     tableTreatmentDetails, tableRxBuddyCheckins,
   ];

@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/api_client.dart';
+import '../debug/console_log.dart';
 import '../api/endpoints.dart';
 import '../config/app_config.dart';
 
@@ -98,6 +99,11 @@ class AuthRepository {
   static const _kUserFhirId = 'userFhirId';
   static const _kDeviceId = 'deviceId';
   static const _kOrganizationFhirId = 'organizationFhirId';
+  // HmacSHA512 of the last successful online login password. Survives session
+  // expiry and clear (matches Spice Android SecuredPreference.clear() behavior)
+  // so offline password verification works for days/weeks without network.
+  // Cleared only on explicit logout.
+  static const _kOfflinePasswordHash = 'offline_pwd_hash';
 
   Future<String?> currentTenantId() async {
     final cached = _api.tenantId;
@@ -191,14 +197,16 @@ class AuthRepository {
     final hashedPwd = hashPassword(password);
     // ignore: avoid_print
     print('[Auth] Login attempt: user=$username, hash=${hashedPwd.substring(0, 16)}...');
-    
-    // Backend expects application/x-www-form-urlencoded
+
+    // Android sends multipart/form-data (MultipartBody.FORM) — match exactly.
+    final loginBody = FormData.fromMap({
+      'username': username,
+      'password': hashedPwd,
+    });
+    ConsoleLog.banner('[PayloadDebug] login\nusername=$username password=<hashed>');
     final resp = await _api.dio.post(
       Endpoints.login,
-      data: 'username=${Uri.encodeQueryComponent(username)}&password=${Uri.encodeQueryComponent(hashedPwd)}',
-      options: Options(
-        contentType: 'application/x-www-form-urlencoded',
-      ),
+      data: loginBody,
     );
     // ignore: avoid_print
     print('[Auth] Login response: ${resp.statusCode}');
@@ -206,6 +214,8 @@ class AuthRepository {
       throw AuthException('Invalid credentials');
     }
     await _storage.write(key: _kUsername, value: username);
+    // Persist hash for offline password verification (Spice Android parity).
+    await _storage.write(key: _kOfflinePasswordHash, value: hashedPwd);
     // Extract profile directly from login response — no separate profile call.
     // On web, Dio's BrowserHttpClientAdapter returns raw JSON text (String)
     // rather than a decoded Map; decode manually when needed.
@@ -378,6 +388,7 @@ class AuthRepository {
     await _clearReentrySession();
     await _storage.delete(key: _kBioEnabled);
     await _storage.delete(key: _kBioUsername);
+    await _storage.delete(key: _kOfflinePasswordHash);
     await clearPin();
   }
 
@@ -397,6 +408,40 @@ class AuthRepository {
     await _api.clearSession();
     await _storage.delete(key: _kTenantId);
     await _clearReentrySession();
+  }
+
+  /// Verifies [plaintext] password offline by re-hashing and comparing to the
+  /// stored hash from the last successful online login. Returns true on match.
+  Future<bool> verifyOfflinePassword(String username, String plaintext) async {
+    final storedUser = await _storage.read(key: _kUsername);
+    final storedHash = await _storage.read(key: _kOfflinePasswordHash);
+    if (storedHash == null || storedUser == null) return false;
+    if (storedUser != username) return false;
+    return hashPassword(plaintext) == storedHash;
+  }
+
+  /// Exposes session clearing for callers that defer the decision to
+  /// [AuthState] (e.g. when checking connectivity before evicting tokens).
+  Future<void> clearExpiredReentrySession() => _clearReentrySession();
+
+  /// Restores stored Bearer token and tenant to the API client without
+  /// checking the locally-tracked expiry timestamp. Used for offline grace
+  /// unlock: biometric/PIN identity was verified, device is offline, so we
+  /// cannot reach the server to refresh — the existing token is restored and
+  /// the server will reject it with 401 on the next online call, at which
+  /// point [handleSessionExpired] fires and forces a fresh login.
+  Future<bool> restoreTokensIgnoringExpiry() async {
+    final enabled = await isReentryEnabled();
+    if (!enabled) return false;
+    final authToken = await _storage.read(key: _kBioAuthToken);
+    final tenant = await _storage.read(key: _kBioTenant);
+    if (authToken == null || authToken.isEmpty || tenant == null) return false;
+    _api.importAuthToken(authToken);
+    _api.setTenantId(tenant);
+    await _storage.write(key: _kTenantId, value: tenant);
+    final orgFhirId = await _storage.read(key: _kOrganizationFhirId);
+    _api.setOrganizationFhirId(orgFhirId);
+    return true;
   }
 
   Future<bool> wasBiometricOffered() async =>
@@ -589,7 +634,9 @@ class AuthRepository {
     }
     final expiry = DateTime.tryParse(expiryStr);
     if (expiry == null || DateTime.now().isAfter(expiry)) {
-      await _clearReentrySession();
+      // Do NOT clear here — caller checks connectivity first.
+      // Online: caller calls clearExpiredReentrySession() then fails.
+      // Offline: caller calls restoreTokensIgnoringExpiry() for grace unlock.
       return false;
     }
 

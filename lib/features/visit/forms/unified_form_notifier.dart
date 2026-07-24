@@ -8,12 +8,16 @@ import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import '../../../core/debug/console_log.dart';
 import '../../../core/models/json_read.dart';
+import '../../../core/models/referral.dart';
+import '../../referral/referral_repository.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
 import '../models/anc_assessment.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
+import 'rmnch_follow_up_calculator.dart';
 import 'unified_payload_mapper.dart';
 import 'vitals_trend.dart';
 
@@ -36,6 +40,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
     String? villageId,
     int householdMemberLocalId = 0,
     String? pregnancyEpisodeId,
+    String? defaultReferralSiteId,
+    ReferralRepository? referralRepo,
   })  : _encounterId = encounterId,
         _patientId = patientId,
         _activeFormTypes = activeFormTypes,
@@ -47,7 +53,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _householdId = householdId,
         _villageId = villageId,
         _householdMemberLocalId = householdMemberLocalId,
-        _pregnancyEpisodeId = pregnancyEpisodeId;
+        _pregnancyEpisodeId = pregnancyEpisodeId,
+        _defaultReferralSiteId = defaultReferralSiteId,
+        _referralRepo = referralRepo;
 
   final String _encounterId;
   final String _patientId;
@@ -61,6 +69,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
   final String? _villageId;
   final int _householdMemberLocalId;
   final String? _pregnancyEpisodeId;
+  final String? _defaultReferralSiteId;
+  final ReferralRepository? _referralRepo;
 
   DateTime? _lmpDate;
   DateTime? _eddDate;
@@ -86,6 +96,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   bool _lastIsReferred = false;
   List<String> _lastReferredReasons = const [];
+  String? _lastReferralFacility;
 
   /// Provenance per fieldId — who last set the value (SK vs AI scribe).
   /// Fields never touched have no entry (treated as manual-owned once typed).
@@ -102,6 +113,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Read by [visit_form_screen] after submit to propagate to the Step-3 card.
   bool get lastIsReferred => _lastIsReferred;
   List<String> get lastReferredReasons => _lastReferredReasons;
+  String? get lastReferralFacility => _lastReferralFacility;
   String? get submitError => _submitError;
   Set<String> get validationErrors => _validationErrors;
 
@@ -131,6 +143,117 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// prior visit, or `null` when no prior weight exists.
   Future<double?> lastRecordedWeight() =>
       _assessmentRepo.lastRecordedWeight(_patientId);
+
+  /// Returns the most-recent height (cm) recorded for this patient from ANY
+  /// prior visit, or `null` when no prior height exists.
+  Future<double?> lastRecordedHeight() =>
+      _assessmentRepo.lastRecordedHeight(_patientId);
+
+  /// Pre-seeds height and weight from the patient's most-recent prior visit
+  /// when those fields are not yet filled in this visit. Called after
+  /// [loadDraft] so a saved draft always wins over historical values.
+  Future<void> preloadBiometrics() async {
+    var changed = false;
+    if (_data.getValue('height') == null) {
+      final h = await _assessmentRepo.lastRecordedHeight(_patientId);
+      if (h != null) {
+        _data = _data.setValue('height', h);
+        changed = true;
+      }
+    }
+    if (_data.getValue('weight') == null) {
+      final w = await _assessmentRepo.lastRecordedWeight(_patientId);
+      if (w != null) {
+        _data = _data.setValue('weight', w);
+        changed = true;
+      }
+    }
+    if (changed) {
+      _recomputeBmi();
+      notifyListeners();
+    }
+  }
+
+  /// Pre-fills `pregnantWomanExistingIllness` and `pregnantWomanOnTreatment`
+  /// from the most recent prior ANC assessment. Only seeds when the SK has not
+  /// already entered a value (i.e., field is null in current data).
+  Future<void> preloadAncMedicalHistory() async {
+    if (_data.getValue('pregnantWomanExistingIllness') != null) return;
+    final prior = await _assessmentRepo.lastAncIllnessData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Pre-fills stable ANC obstetric history fields: previousPregnancyComplications,
+  /// ttTdCompleted, facilityIdentifiedForDelivery.
+  Future<void> preloadAncChronic() async {
+    final prior = await _assessmentRepo.lastAncChronicData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Pre-fills stable NCD diagnosis/medication/lifestyle fields:
+  /// isBeforeHtnDiagnosis, medicationFrequencyBp, isBeforeDiabetesDiagnosis,
+  /// medicationFrequencyBg, isRegularSmoker.
+  Future<void> preloadNcdChronic() async {
+    if (_data.getValue('isBeforeHtnDiagnosis') != null) return;
+    final prior = await _assessmentRepo.lastNcdChronicData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Pre-fills stable PNC Mother history fields: gravida, parity,
+  /// livingChildren, and comorbidity/treatment flags.
+  Future<void> preloadPncMotherChronic() async {
+    if (_data.getValue('gravida') != null) return;
+    final prior = await _assessmentRepo.lastPncMotherChronicData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Pre-fills stable Family Planning fields: familyPlanningMethods,
+  /// desireForChildrenInFuture, numberOfLivingChildren.
+  Future<void> preloadFpChronic() async {
+    if (_data.getValue('familyPlanningMethods') != null) return;
+    final prior = await _assessmentRepo.lastFpData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
 
   /// Marks the given field IDs as having validation errors and notifies
   /// listeners so the form can highlight them.
@@ -173,6 +296,37 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  /// Android RMNCH summary auto-fills next follow-up; seed when empty so the
+  /// SK does not enter it manually. Draft / SK edits always win.
+  ///
+  /// ANC (community): today + 28 days
+  /// (`AssessmentRMNCHSummaryFragment.bindAncSummary`).
+  /// PNC mother: bands from `daysSinceDelivery` when that field is set.
+  void seedRmnchFollowUpIfNeeded() {
+    final existing = _data.getValue('followUpVisit');
+    if (existing != null && existing.toString().trim().isNotEmpty) return;
+
+    DateTime? next;
+    if (_activeFormTypes.contains('anc')) {
+      next = RmnchFollowUpCalculator.ancCommunityDefault();
+    } else if (_activeFormTypes.contains('pncMother')) {
+      final days = int.tryParse(
+        _data.getValue('daysSinceDelivery')?.toString() ?? '',
+      );
+      if (days != null) {
+        next = RmnchFollowUpCalculator.pncFromDaysSinceDelivery(days);
+      }
+    }
+    if (next == null) return;
+
+    final iso = RmnchFollowUpCalculator.toFormDate(next);
+    debugPrint('[FollowUp] auto-seed followUpVisit=$iso '
+        '(forms=$_activeFormTypes)');
+    _data = _data.setValue('followUpVisit', iso);
+    notifyListeners();
+    _saveDraft();
+  }
+
   /// Restores AI-provenance marking persisted with the draft so restored
   /// AI-filled values are still visibly "AI-filled — verify" rather than
   /// indistinguishable from SK-typed entries.
@@ -199,11 +353,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Load LMP and EDD for this ANC visit.
   ///
   /// Priority order:
-  /// 1. Pregnancy snapshot (`lmp_date` / `edd_date`) written at sync / enroll.
-  /// 2. LMP from server-synced past ANC assessments via
+  /// 1. Pregnancy snapshot (`lmp_date` / `edd_date`) written at sync / enroll
+  ///    (patientId, then [memberId] if dates still missing).
+  /// 2. Optional seed from VisitFlow (already resolved from the same snapshot).
+  /// 3. LMP from server-synced past ANC assessments via
   ///    [AssessmentRepository.lmpDateFromHistory].
-  /// 3. `lmpDate` / `gestationalWeeks` in patient rawJson (bulk member DTO).
-  Future<void> loadPregnancyData() async {
+  /// 4. Nested-aware patient rawJson (bulk member DTO / pregnancyDetails).
+  Future<void> loadPregnancyData({
+    DateTime? seedLmp,
+    DateTime? seedEdd,
+    int? seedWeeks,
+  }) async {
     try {
       DateTime? lmp;
       DateTime? edd;
@@ -211,9 +371,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
       var source = 'none';
 
       // ── 1. Prefer pregnancy snapshot (stable per-patient store) ───────────
-      final snap = await _pregnancySnapshotDao.byPatient(_patientId);
+      var snap = await _pregnancySnapshotDao.byPatient(_patientId);
+      // Snapshot rows are sometimes keyed by household-member id when the
+      // sync-time FHIR patient map was incomplete — try memberId next.
+      final memberId = _memberId;
+      if ((snap?.lmpDate == null && snap?.eddDate == null) &&
+          memberId != null &&
+          memberId.isNotEmpty &&
+          memberId != _patientId) {
+        final byMember = await _pregnancySnapshotDao.byPatient(memberId);
+        if (byMember?.lmpDate != null || byMember?.eddDate != null) {
+          snap = byMember;
+          debugPrint('[LMP] load using memberId snapshot member=$memberId');
+        }
+      }
       debugPrint(
-        '[LMP] load patient=$_patientId snapshot='
+        '[LMP] load patient=$_patientId member=$_memberId snapshot='
         '${snap == null ? "missing" : "hit"} '
         'lmpMs=${snap?.lmpDate} eddMs=${snap?.eddDate}',
       );
@@ -231,7 +404,27 @@ class UnifiedFormNotifier extends ChangeNotifier {
         edd ??= DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
       }
 
-      // ── 2. Fallback: scan server-synced ANC assessment history ────────────
+      // ── 2. Seed from VisitFlow (already resolved before Step 2 mounts) ───
+      if (lmp == null && seedLmp != null) {
+        lmp = seedLmp;
+        weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+        source = 'visitFlow.seedLmp';
+      }
+      if (edd == null && seedEdd != null) {
+        edd = seedEdd;
+        if (lmp == null) {
+          lmp = edd.subtract(const Duration(days: 280));
+          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+          source = 'visitFlow.seedEdd';
+        }
+      }
+      if (lmp == null && seedWeeks != null && seedWeeks > 0) {
+        weeks = seedWeeks;
+        lmp = DateTime.now().subtract(Duration(days: seedWeeks * 7));
+        source = 'visitFlow.seedWeeks';
+      }
+
+      // ── 3. Fallback: scan server-synced ANC assessment history ────────────
       if (lmp == null) {
         debugPrint('[LMP] load snapshot empty — trying assessment history');
         lmp = await _assessmentRepo.lmpDateFromHistory(_patientId);
@@ -241,7 +434,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         }
       }
 
-      // ── 3. Fallback: patient rawJson (ISO string or epoch ms) ─────────────
+      // ── 4. Fallback: patient rawJson (flatten nested pregnancy DTOs) ─────
       if (lmp == null) {
         final patient = await _patientDao.byId(_patientId);
         if (patient == null) {
@@ -250,25 +443,49 @@ class UnifiedFormNotifier extends ChangeNotifier {
         if (patient != null) {
           try {
             final json = jsonDecode(patient.rawJson) as Map<String, dynamic>;
+            final flat = _flattenPregnancyRaw(json);
             debugPrint(
-              '[LMP] load rawJson keys lmp=${json['lmpDate']} '
-              'lastMenstrualPeriod=${json['lastMenstrualPeriod']} '
-              'ga=${json['gestationalWeeks']}',
+              '[LMP] load rawJson keys lmp=${flat['lmpDate']} '
+              'lastMenstrualPeriod=${flat['lastMenstrualPeriod']} '
+              'ga=${flat['gestationalWeeks'] ?? flat['gestationalAge']}',
             );
-            lmp = JsonRead.firstDateTime(json, const [
+            lmp = JsonRead.firstDateTime(flat, const [
               'lmpDate',
               'lastMenstrualPeriod',
               'lastMenstrualPeriodDate',
               'lmp',
+              'lmpValue',
+              'menstrualDate',
+              'lastPeriodDate',
             ]);
             if (lmp != null) {
               weeks = DateTime.now().difference(lmp).inDays ~/ 7;
               source = 'patient.rawJson';
-            } else if (json['gestationalWeeks'] != null) {
-              weeks = (json['gestationalWeeks'] as num).toInt();
-              lmp = DateTime.now().subtract(Duration(days: weeks * 7));
-              source = 'patient.gestationalWeeks';
+            } else {
+              for (final key in const [
+                'gestationalWeeks',
+                'gestationalAge',
+                'gaWeeks',
+                'weeksPregnant',
+              ]) {
+                final v = flat[key];
+                int? w;
+                if (v is int) w = v;
+                if (v is num) w = v.toInt();
+                if (v is String) w = int.tryParse(v);
+                if (w != null && w > 0 && w < 45) {
+                  weeks = w;
+                  lmp = DateTime.now().subtract(Duration(days: w * 7));
+                  source = 'patient.$key';
+                  break;
+                }
+              }
             }
+            edd ??= JsonRead.firstDateTime(flat, const [
+              'estimatedDeliveryDate',
+              'edd',
+              'eddDate',
+            ]);
           } catch (_) {}
         }
       }
@@ -287,11 +504,47 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  /// Flatten nested pregnancy DTOs so LMP/EDD keys are readable at top level.
+  static Map<String, dynamic> _flattenPregnancyRaw(Map<String, dynamic> raw) {
+    final flat = <String, dynamic>{...raw};
+    for (final sub in const [
+      'pregnancyDetails',
+      'pregnancyDetail',
+      'pwProfile',
+      'pregnancyProfile',
+      'obstetricHistory',
+      'observations',
+      'assessmentDetails',
+      'pregnancyInfos',
+    ]) {
+      final nested = raw[sub];
+      if (nested is Map) {
+        for (final e in nested.entries) {
+          flat.putIfAbsent(e.key.toString(), () => e.value);
+        }
+      } else if (nested is List) {
+        for (final item in nested) {
+          if (item is! Map) continue;
+          for (final e in item.entries) {
+            flat.putIfAbsent(e.key.toString(), () => e.value);
+          }
+        }
+      }
+    }
+    return flat;
+  }
+
   /// Update a single field and autosave draft.
   ///
   /// When `height` or `weight` changes, BMI is automatically recomputed and
   /// stored under the `bmi` field so the `_InfoLabelField` stays in sync.
   void updateField(String fieldId, dynamic value) {
+    final valueType = value?.runtimeType ?? 'null';
+    if (value is List) {
+      ConsoleLog.step('[FormField] $fieldId (List[${value.length}]) = $value');
+    } else {
+      ConsoleLog.step('[FormField] $fieldId ($valueType) = $value');
+    }
     _data = _data.setValue(fieldId, value);
     // SK edit of an AI-filled value → aiModified (audit trail keeps the AI
     // origin); any other SK entry → manual. Either way the field is now
@@ -303,8 +556,85 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
     }
+    // Android resets on-treatment when existing illness changes.
+    if (fieldId == 'pregnantWomanExistingIllness') {
+      _data = _data.setValue('pregnantWomanOnTreatment', null);
+    }
+    // PNC summary recalculates follow-up when days-since-delivery changes.
+    if (fieldId == 'daysSinceDelivery' &&
+        _activeFormTypes.contains('pncMother')) {
+      final days = int.tryParse(value?.toString() ?? '');
+      if (days != null) {
+        final next = RmnchFollowUpCalculator.pncFromDaysSinceDelivery(days);
+        _data = _data.setValue(
+          'followUpVisit',
+          RmnchFollowUpCalculator.toFormDate(next),
+        );
+      }
+    }
+    // Cross-programme BP sync: NCD uses `bpLogDetails` list; ANC/PNC use
+    // flat systolic/diastolic/pulse. Keep both shapes aligned so filling
+    // either widget updates the other (pulse already did this; sys/dia
+    // were missing — SK reported only pulse mirrored).
+    _mirrorBpAcrossProgrammes(fieldId, value);
+    if (fieldId == 'deliveryOutcomeType') {
+      debugPrint('[DeliveryOutcome] updateField deliveryOutcomeType=$value → notifyListeners');
+    }
     notifyListeners();
     _saveDraft();
+  }
+
+  /// Keeps NCD `bpLogDetails` and ANC/PNC flat BP keys in sync.
+  void _mirrorBpAcrossProgrammes(String fieldId, dynamic value) {
+    const flatKeys = {'systolic', 'diastolic', 'pulse'};
+
+    if (fieldId == 'bpLogDetails' && value is List && value.isNotEmpty) {
+      final last = value.last;
+      if (last is! Map) return;
+      for (final key in flatKeys) {
+        final v = last[key];
+        if (v != null) _data = _data.setValue(key, v);
+      }
+      return;
+    }
+
+    if (!flatKeys.contains(fieldId)) return;
+
+    final readings = _data.getValue('bpLogDetails');
+    final List<dynamic> updated;
+    final Map<String, dynamic> last;
+    if (readings is List && readings.isNotEmpty) {
+      updated = List<dynamic>.from(readings);
+      last = Map<String, dynamic>.from(
+        updated.last is Map ? updated.last as Map : const {},
+      );
+    } else {
+      // Seed a reading so NCD's BP widget can show ANC/PNC entries.
+      updated = <dynamic>[];
+      last = <String, dynamic>{};
+    }
+    if (value == null) {
+      last.remove(fieldId);
+    } else {
+      last[fieldId] = value;
+    }
+    // Drop empty seed rows (no sys/dia yet) — pulse-only still kept so NCD
+    // can show a mirrored pulse before BP is entered.
+    final hasSysDia = last['systolic'] != null || last['diastolic'] != null;
+    final hasPulse = last['pulse'] != null;
+    if (!hasSysDia && !hasPulse) {
+      if (readings is List && readings.isNotEmpty) {
+        updated[updated.length - 1] = last;
+        _data = _data.setValue('bpLogDetails', updated);
+      }
+      return;
+    }
+    if (updated.isEmpty) {
+      updated.add(last);
+    } else {
+      updated[updated.length - 1] = last;
+    }
+    _data = _data.setValue('bpLogDetails', updated);
   }
 
   void _recomputeBmi() {
@@ -616,6 +946,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // For NCD: auto-set referralFacilityType from the user's default site
+      // when no form field has supplied it. Android auto-sets this from
+      // SecuredPreference.DEFAULT_SITE_ID at submit time.
+      if (_defaultReferralSiteId != null &&
+          _activeFormTypes.contains('ncd') &&
+          _data.getValue('referralFacilityType') == null) {
+        _data = _data.setValue('referralFacilityType', _defaultReferralSiteId);
+      }
+
       final payloads = UnifiedPayloadMapper.decompose(
         _data,
         _activeFormTypes.toSet(),
@@ -624,9 +963,16 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final (isReferred, referredReasons) = _computeReferral();
       _lastIsReferred = isReferred;
       _lastReferredReasons = referredReasons;
+      _lastReferralFacility = _data.getValue('referralFacility') as String? ??
+          _data.getValue('referralFacilityType') as String?;
+      ConsoleLog.step('[ReferralFacility] form submit — referralFacility=${_data.getValue('referralFacility')} referralFacilityType=${_data.getValue('referralFacilityType')} → _lastReferralFacility=$_lastReferralFacility');
 
       final savedIds = <String>[];
       for (final payload in payloads) {
+        ConsoleLog.banner(
+          '[PayloadDebug] submit — ${payload.assessmentType} payload:\n'
+          '${const JsonEncoder.withIndent("  ").convert(payload.details)}',
+        );
         final id = await _assessmentRepo.saveAssessment(
           assessmentType: payload.assessmentType,
           assessmentDetails: payload.details,
@@ -642,6 +988,18 @@ class UnifiedFormNotifier extends ChangeNotifier {
         );
         savedIds.add(id);
       }
+
+      // CCE: bridge referred assessments into the local referrals table so
+      // the dashboard bell / drawer see the case without waiting for sync.
+      if (isReferred && savedIds.isNotEmpty) {
+        await _ensureLocalReferral(
+          assessmentId: savedIds.first,
+          reasons: referredReasons,
+          assessmentType: payloads.isNotEmpty
+              ? payloads.first.assessmentType
+              : null,
+        );
+      }
       return savedIds;
     } catch (e) {
       _submitError = e.toString();
@@ -649,6 +1007,39 @@ class UnifiedFormNotifier extends ChangeNotifier {
     } finally {
       _submitting = false;
       notifyListeners();
+    }
+  }
+
+  /// Creates a local [Referral] for CCE when this visit was referred.
+  /// Idempotent on `ref-assess-{assessmentId}` so re-submit does not duplicate.
+  Future<void> _ensureLocalReferral({
+    required String assessmentId,
+    required List<String> reasons,
+    String? assessmentType,
+  }) async {
+    final repo = _referralRepo;
+    if (repo == null || _patientId.isEmpty) return;
+    final referralId = 'ref-assess-$assessmentId';
+    try {
+      final existing = await repo.byId(referralId);
+      if (existing != null) return;
+      final label = reasons.where((r) => r.trim().isNotEmpty).join(', ');
+      await repo.create(
+        id: referralId,
+        patientId: _patientId,
+        slaTier: SlaTier.inferFromReason(label.isEmpty ? null : label),
+        householdId: _householdId,
+        villageId: _villageId,
+        diagnosisCode: assessmentType,
+        diagnosisLabel: label.isEmpty ? null : label,
+        facilityName: _lastReferralFacility ?? _defaultReferralSiteId,
+      );
+      debugPrint(
+        '[Referral] CCE local create id=$referralId reasons=$label',
+      );
+    } catch (e) {
+      // Non-fatal — assessment is already saved; CCE can catch up on next sync.
+      debugPrint('[Referral] CCE local create failed: $e');
     }
   }
 
@@ -692,6 +1083,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         diastolic: dia,
         fastingGlucoseMmol: isFbs ? glVal : null,
         randomGlucoseMmol: !isFbs ? glVal : null,
+        hba1cPercent: asDouble('hba1c'),
         symptoms:
             (_data.getValue('ncdSymptoms') as List?)?.cast<String>() ??
                 const [],

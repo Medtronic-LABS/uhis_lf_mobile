@@ -38,6 +38,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
   }
 
   void _fetchDetails() {
+    debugPrint('[_VisitDetailsScreenState] _fetchDetails encounterId=${widget.visit.id}');
     final repo = context.read<MemberDetailRepository>();
     final encounterId = widget.visit.id;
     final patientRef = widget.visit.rawJson['patientReference']?.toString();
@@ -940,7 +941,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
     final rawJson = widget.visit.rawJson;
     
     // Extract additional fields that might be useful
-    const fieldsToShow = VisitDetailsStrings.additionalDetailLabels;
+    final fieldsToShow = VisitDetailsStrings.additionalDetailLabels;
 
     for (final entry in fieldsToShow.entries) {
       final value = rawJson[entry.key];

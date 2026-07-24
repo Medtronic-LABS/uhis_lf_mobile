@@ -87,6 +87,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   @override
   void initState() {
     super.initState();
+    debugPrint('[_EnrollmentOverlayState] initState');
     _sweepCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -130,7 +131,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
-      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
         if (mounted &&
             !_isScanning &&
             _cameraReady &&
@@ -146,6 +147,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
 
   @override
   void dispose() {
+    debugPrint('[_EnrollmentOverlayState] dispose');
     _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
@@ -154,6 +156,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
 
   /// Capture a frame from the live preview and read the NID number from it.
   Future<void> _handleCapture() async {
+    debugPrint('[_EnrollmentOverlayState] _handleCapture');
     final controller = _cameraController;
     if (_isScanning || controller == null || !_cameraReady) return;
     setState(() => _isScanning = true);
@@ -183,6 +186,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
       case NidScanStatus.error:
         _showSnack(EnrollmentStrings.nidScanError);
       case NidScanStatus.cancelled:
+      case NidScanStatus.skipped:
         break;
     }
   }
@@ -233,6 +237,10 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                   context.push('/household/enrollment/create');
                 },
                 onCancel: () => Navigator.of(context).pop(),
+                onRegisterManually: () {
+                  Navigator.of(context).pop();
+                  context.push('/household/enrollment/select-household');
+                },
               ),
               if (_overlayState == _OverlayState.postScan)
                 _PostScanSheet(
@@ -297,6 +305,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   @override
   void initState() {
     super.initState();
+    debugPrint('[_MemberNidScanOverlayState] initState');
     _sweepCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -334,7 +343,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
-      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
         if (mounted && !_isScanning && _cameraReady) _handleCapture();
       });
     } on CameraException catch (e) {
@@ -345,6 +354,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
 
   @override
   void dispose() {
+    debugPrint('[_MemberNidScanOverlayState] dispose');
     _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
@@ -352,6 +362,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   }
 
   Future<void> _handleCapture() async {
+    debugPrint('[_MemberNidScanOverlayState] _handleCapture');
     final controller = _cameraController;
     if (_isScanning || controller == null || !_cameraReady) return;
     setState(() => _isScanning = true);
@@ -372,7 +383,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
       case NidScanStatus.notFound:
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(EnrollmentStrings.nidScanNotFound),
               duration: Duration(seconds: 3),
             ),
@@ -381,13 +392,14 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
       case NidScanStatus.error:
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(EnrollmentStrings.nidScanError),
               duration: Duration(seconds: 3),
             ),
           );
         }
       case NidScanStatus.cancelled:
+      case NidScanStatus.skipped:
         break;
     }
   }
@@ -411,6 +423,8 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
             onCreateHousehold: () {},
             onCancel: () => Navigator.of(context).pop(null),
             showCreateHousehold: false,
+            onRegisterManually: () => Navigator.of(context)
+                .pop(const NidScanResult(NidScanStatus.skipped)),
           ),
         ),
       ),
@@ -433,6 +447,7 @@ class _ScannerBody extends StatelessWidget {
     this.autoScanActive = false,
     this.showCreateHousehold = true,
     this.onLinkToExisting,
+    this.onRegisterManually,
   });
 
   final bool isScanning;
@@ -451,6 +466,8 @@ class _ScannerBody extends StatelessWidget {
   final bool showCreateHousehold;
   /// Optional: navigates to SelectHouseholdScreen.
   final VoidCallback? onLinkToExisting;
+  /// Optional: skips NID scan and opens manual registration form.
+  final VoidCallback? onRegisterManually;
 
   bool get _canCapture =>
       !isScanning && !readingCard && cameraController != null;
@@ -458,7 +475,7 @@ class _ScannerBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = Column(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: [
           // ── Create Household (primary) ─────────────────────────────────
           if (showCreateHousehold) ...[
@@ -563,6 +580,56 @@ class _ScannerBody extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           ], // end if (showCreateHousehold)
+          // ── Register without NID (primary escape hatch) ───────────────
+          if (onRegisterManually != null) ...[
+            GestureDetector(
+              onTap: onRegisterManually,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.20), width: 1.5),
+                  borderRadius: BorderRadius.circular(AppRadius.patRow),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.person_add_outlined, color: Colors.white, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No NID? Register manually',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Fill in member details by hand',
+                            style: TextStyle(fontSize: 10, color: AppColors.onDarkLow),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('or scan NID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.onDarkFaint)),
+                ),
+                Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
           // ── Camera scanner (secondary) ─────────────────────────────────
           Text(
             readingCard
@@ -586,11 +653,13 @@ class _ScannerBody extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          _Viewfinder(
-            isScanning: isScanning,
-            sweep: sweep,
-            cameraController: cameraController,
-            cameraUnavailable: cameraUnavailable,
+          Expanded(
+            child: _Viewfinder(
+              isScanning: isScanning,
+              sweep: sweep,
+              cameraController: cameraController,
+              cameraUnavailable: cameraUnavailable,
+            ),
           ),
           const SizedBox(height: 10),
           const Text(
@@ -662,20 +731,16 @@ class _ScannerBody extends StatelessWidget {
     );
 
     final screenH = MediaQuery.of(context).size.height;
-    final vPad = AppSpacing.h5xl + AppSpacing.h6xl;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.h5xl,
-        AppSpacing.h5xl,
-        AppSpacing.h5xl,
-        AppSpacing.h6xl,
-      ),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: screenH - vPad),
-        child: Align(
-          alignment: Alignment.center,
-          child: content,
+    return SizedBox(
+      height: screenH,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.h5xl,
+          AppSpacing.h5xl,
+          AppSpacing.h5xl,
+          AppSpacing.h6xl,
         ),
+        child: content,
       ),
     );
   }
@@ -1033,7 +1098,7 @@ class _PostScanSheet extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 3),
-                          const Text(
+                          Text(
                             EnrollmentStrings.existingPatientHint,
                             style: TextStyle(
                               fontSize: 11,

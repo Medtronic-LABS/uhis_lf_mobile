@@ -83,7 +83,7 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
             content: Text(CounsellingStrings.whatsAppNotInstalled)),
       );
     }
@@ -97,7 +97,7 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
     if (!await canLaunchUrl(uri)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(CounsellingStrings.smsNotAvailable)),
+          SnackBar(content: Text(CounsellingStrings.smsNotAvailable)),
         );
       }
       return;
@@ -112,7 +112,7 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        title: const Text(CounsellingStrings.title),
+        title: Text(CounsellingStrings.title),
         backgroundColor: _waHeaderColor,
         foregroundColor: Colors.white,
         actions: _hasMessage
@@ -148,7 +148,7 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
               widget.patientLabel,
               style: theme.textTheme.titleSmall,
             ),
-            subtitle: const Text(CounsellingStrings.subtitle),
+            subtitle: Text(CounsellingStrings.subtitle),
           ),
           const Divider(height: 1),
 
@@ -187,7 +187,7 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
                       child: FilledButton.icon(
                         onPressed: _sendWhatsApp,
                         icon: const Icon(Icons.chat_rounded, size: 18),
-                        label: const Text(CounsellingStrings.sendWhatsApp),
+                        label: Text(CounsellingStrings.sendWhatsApp),
                         style: FilledButton.styleFrom(
                           backgroundColor: _waAccentColor,
                           foregroundColor: Colors.white,

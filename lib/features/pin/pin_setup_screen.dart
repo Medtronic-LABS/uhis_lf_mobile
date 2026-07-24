@@ -27,6 +27,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
   bool get _confirming => _firstEntry != null;
 
   Future<void> _onChanged(String v) async {
+    debugPrint('[_PinSetupScreenState] _onChanged v.length=${v.length} confirming=$_confirming');
     setState(() {
       _value = v;
       _error = null;
@@ -46,8 +47,9 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
       final auth = context.read<AuthState>();
       await auth.enrolPin(v);
       if (!mounted) return;
-      // PIN setup complete - go directly to home (sync already done before onboarding)
-      context.go('/home');
+      // PIN setup complete — go to sync screen. If background sync is still
+      // running it shows progress; if already done it navigates straight to home.
+      context.go('/sync');
     } else {
       setState(() {
         _error = PinStrings.mismatch;

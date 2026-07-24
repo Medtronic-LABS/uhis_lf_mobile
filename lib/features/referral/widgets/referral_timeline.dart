@@ -181,13 +181,13 @@ class ReferralTimeline extends StatelessWidget {
   List<_TimelineNode> _nodesFor(ReferralStatus current) {
     // Exception states show a single trailing node.
     if (current.isException) {
-      return const [
+      return [
         _TimelineNode(ReferralStatus.created, ReferralStrings.stepCreated),
         _TimelineNode(
             ReferralStatus.breachedArrival, ReferralStrings.stepBreached),
       ];
     }
-    return const [
+    return [
       _TimelineNode(ReferralStatus.created, ReferralStrings.stepCreated),
       _TimelineNode(
           ReferralStatus.acknowledged, ReferralStrings.stepAcknowledged),

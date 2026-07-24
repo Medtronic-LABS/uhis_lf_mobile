@@ -26,7 +26,7 @@ class AiSettingsScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
         toolbarHeight: 60,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -60,6 +60,7 @@ class AiSettingsScreen extends StatelessWidget {
   }
 
   Future<void> _confirmReset(BuildContext context) async {
+    debugPrint('[AiSettingsScreen] _confirmReset context=${context}');
     final vadNotifier = context.read<VadTuningNotifier>();
     final togglesNotifier = context.read<AiFeatureTogglesNotifier>();
     await Future.wait([
@@ -68,7 +69,7 @@ class AiSettingsScreen extends StatelessWidget {
     ]);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text(AiSettingsStrings.resetConfirmation)),
+      SnackBar(content: Text(AiSettingsStrings.resetConfirmation)),
     );
   }
 }

@@ -119,6 +119,14 @@ abstract final class AppColors {
   static const Color pncText      = Color(0xFF4C1D95);
   static const Color pncBorder    = Color(0xFFC4B5FD);
   static const Color pncSurface   = Color(0xFFF5F3FF);
+  // Care-thread supplement (reuse existing where hex matches)
+  // threadGrowthText  → aiPurpleDark (0xFF3D3599)
+  // threadImmText     → tbText       (0xFF065F46)
+  // threadSugarBg     → statusInfoSurface (0xFFE0F2FE)
+  // threadGeneralText → textMid      (0xFF4B5563)
+  static const Color threadInfoText   = Color(0xFF075985); // info-blue text (sugar/newborn)
+  static const Color threadGeneralBg  = Color(0xFFF3F4F6); // neutral grey bg (general enrolment)
+  static const Color threadImmBg      = Color(0xFFECFDF5); // immunization surface (≠ tbSurface)
 
   // dark-mode programme
   static const Color ancTextDark  = Color(0xFFF9A8D4);
@@ -494,6 +502,17 @@ abstract final class AppAnimations {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// FONTS
+// Single source of truth for font family names. Use AppFonts.display
+// and AppFonts.body everywhere instead of bare string literals.
+// ═══════════════════════════════════════════════════════════════
+
+abstract final class AppFonts {
+  static const String display = 'Nunito';
+  static const String body    = 'NunitoSans';
+}
+
+// ═══════════════════════════════════════════════════════════════
 // TEXT STYLES
 // Named semantic styles that directly match the HTML design.
 // Use these in widgets instead of Theme.of(context).textTheme.*
@@ -519,12 +538,12 @@ abstract final class AppTextStyles {
   // ─── Header ────────────────────────────────────────────────
   // .header-title: Nunito 20px w800 white
   static const TextStyle headerTitle = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w800,
     color: Colors.white,
   );
   // .header-sub: NunitoSans 12px rgba(255,255,255,0.6)
   static const TextStyle headerSub = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
     color: AppColors.onDarkLow,
   );
 
@@ -532,41 +551,41 @@ abstract final class AppTextStyles {
   // but one weight lighter (w700 vs w800) — a deliberate, explicit choice for
   // this feature area, not a duplicate of the dashboard's own header tokens.
   static const TextStyle householdHeaderTitle = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w700,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w700,
     color: Colors.white,
   );
   static const TextStyle householdHeaderSub = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
     color: AppColors.onDarkLow,
   );
 
   // ─── Body / content ────────────────────────────────────────
   // default body: NunitoSans 13px w400 --text
   static const TextStyle body = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 15, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 15, fontWeight: FontWeight.w400,
     color: AppColors.textPrimary,
   );
   // .patient-name: NunitoSans 14px w700
   static const TextStyle listTitle = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 16, fontWeight: FontWeight.w700,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 16, fontWeight: FontWeight.w700,
     color: AppColors.textPrimary,
   );
   // .patient-meta, sub-text: NunitoSans 11px --muted
   static const TextStyle subText = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
   );
 
   // ─── Section labels ────────────────────────────────────────
   // .section-label, .ai-label: NunitoSans 11px w700 uppercase ls0.07em --muted
   static const TextStyle sectionLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w700,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w700,
     color: AppColors.textMuted,
     letterSpacing: 0.77, // 0.07em × 11px (original mockup size, kept as-is)
   );
   // Uppercase variant (text-transform applied at call site via toUpperCase())
   static const TextStyle sectionLabelOnNavy = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11.5, fontWeight: FontWeight.w700,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 11.5, fontWeight: FontWeight.w700,
     color: AppColors.onDarkFaint, // rgba(255,255,255,0.5)
     letterSpacing: 0.80, // 0.08em × 10px (original mockup size, kept as-is)
   );
@@ -574,94 +593,94 @@ abstract final class AppTextStyles {
   // ─── Stats & vitals ────────────────────────────────────────
   // .stat-num: Nunito 22px w800 --navy
   static const TextStyle statNumber = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 25.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 25.5, fontWeight: FontWeight.w800,
     color: AppColors.navy,
   );
   // .stat-lbl: NunitoSans 10px --muted
   static const TextStyle statLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11.5, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 11.5, fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
   );
   // .vital-val: Nunito 24px w800 --text
   static const TextStyle vitalValue = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 27.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 27.5, fontWeight: FontWeight.w800,
     color: AppColors.textPrimary,
   );
   // .vital-lbl: NunitoSans 10px w700 uppercase ls0.05em --muted
   static const TextStyle vitalLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11.5, fontWeight: FontWeight.w700,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 11.5, fontWeight: FontWeight.w700,
     color: AppColors.textMuted, letterSpacing: 0.50,
   );
   // .vital-unit: NunitoSans 12px w400 --muted
   static const TextStyle vitalUnit = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
   );
 
   // ─── Score / tag pills ─────────────────────────────────────
   // .score-pill, .tag: Nunito 11px w800
   static const TextStyle scorePill = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w800,
   );
   // .chip: NunitoSans 12px w600
   static const TextStyle chip = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w600,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w600,
   );
 
   // ─── AI cards ──────────────────────────────────────────────
   // .ai-title: Nunito 18px w800 --navy
   static const TextStyle aiTitle = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 20.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 20.5, fontWeight: FontWeight.w800,
     color: AppColors.navy,
   );
   // .ai-label: NunitoSans 11px w700 uppercase ls0.06em --purple
   static const TextStyle aiLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w700,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w700,
     color: AppColors.aiPurple, letterSpacing: 0.66,
   );
   // .ai-sub: NunitoSans 12px w400 --muted
   static const TextStyle aiSub = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
   );
 
   // ─── Telecall ──────────────────────────────────────────────
   // .call-timer: Nunito 32px w800 white ls2px
   static const TextStyle callTimer = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 37, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 37, fontWeight: FontWeight.w800,
     color: Colors.white, letterSpacing: 2,
   );
   // .call-name: Nunito 16px w800 white
   static const TextStyle callName = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 18.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 18.5, fontWeight: FontWeight.w800,
     color: Colors.white,
   );
   // .call-sub: NunitoSans 12px rgba(255,255,255,0.6)
   static const TextStyle callSub = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
     color: AppColors.onDarkLow,
   );
 
   // ─── Navigation ────────────────────────────────────────────
   // .nav-tab-lbl: NunitoSans 10px w600 --muted
   static const TextStyle navTabLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11.5, fontWeight: FontWeight.w600,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 11.5, fontWeight: FontWeight.w600,
     color: AppColors.textMuted,
   );
 
   // ─── Diagnosis / step ──────────────────────────────────────
   // .diag-title: Nunito 16px w800
   static const TextStyle diagTitle = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 18.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 18.5, fontWeight: FontWeight.w800,
   );
   // .diag-body: NunitoSans 12px ls1.6 #4B5563
   static const TextStyle diagBody = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
     color: AppColors.textMid, height: 1.6,
   );
   // .step-text: NunitoSans 13px ls1.5 --text
   static const TextStyle stepText = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 15, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 15, fontWeight: FontWeight.w400,
     color: AppColors.textPrimary, height: 1.5,
   );
 
@@ -672,7 +691,7 @@ abstract final class AppTextStyles {
   /// only so the existing 9px usages have a named home instead of a bare
   /// literal; do not use it in new code, use [scorePill]/[chip] instead.
   static const TextStyle microTag = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 10.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 10.5, fontWeight: FontWeight.w800,
   );
 
   // ─── v13 Dashboard / AI Worklist text styles ───────────────
@@ -680,44 +699,44 @@ abstract final class AppTextStyles {
   // read these outdoors on varied devices; restored after a pixel-match
   // pass briefly shrank it back to the literal mockup size.
   static const TextStyle worklistPatientName = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 15.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 15.5, fontWeight: FontWeight.w800,
     color: AppColors.textPrimary,
   );
   // .patient-meta age row: legibility-bumped size; w800 matches spec exactly
   // (was w700, a pixel mismatch — also was previously unwired dead code,
   // now actually referenced by mission_queue_card.dart's age text).
   static const TextStyle worklistPatientMeta = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w800,
     color: Color(0xFF111827),
   );
   // .worklist-row-label: legibility-bumped over the literal 13.5px spec.
   static const TextStyle worklistRowLabel = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 15.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 15.5, fontWeight: FontWeight.w800,
     color: AppColors.textPrimary,
   );
   // .v-status status pill: legibility-bumped over the literal 10px spec.
   static const TextStyle worklistStatusPill = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w800,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w800,
   );
   // .cat-bubble label: NunitoSans 9.5px w700 #6B7280
   static const TextStyle categoryBubbleLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11, fontWeight: FontWeight.w700,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 11, fontWeight: FontWeight.w700,
     color: AppColors.textMuted,
   );
   // Village tab: legibility-bumped over the literal 13px spec.
   static const TextStyle villageTab = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 15, fontWeight: FontWeight.w700,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 15, fontWeight: FontWeight.w700,
   );
   // Worklist card address line — legibility-bumped size/weight (w600, not
   // the spec's plain w400 — lighter text is harder to read outdoors). No
   // baked-in color (like [worklistStatusPill]) — caller supplies the
   // theme-aware muted color.
   static const TextStyle worklistAddress = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w600,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w600,
   );
   // Worklist card phone line — legibility-bumped over the literal 11.5px spec.
   static const TextStyle worklistPhone = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
+    fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
   );
 }
 
@@ -1857,8 +1876,8 @@ TextTheme _buildTextTheme(Brightness brightness) {
       ? Typography.material2021().black
       : Typography.material2021().white;
 
-  final h = base.apply(fontFamily: 'Nunito');
-  final b = base.apply(fontFamily: 'NunitoSans');
+  final h = base.apply(fontFamily: AppFonts.display);
+  final b = base.apply(fontFamily: AppFonts.body);
 
   // Bangla fallback on every role — see AppTextStyles._bn for why this is
   // safe to land ahead of the actual font asset.
@@ -1960,7 +1979,7 @@ ThemeData buildAppTheme() {
 
   return ThemeData(
     useMaterial3: true,
-    fontFamily: 'NunitoSans',
+    fontFamily: AppFonts.body,
     colorScheme: scheme,
     textTheme: textTheme,
     primaryTextTheme: textTheme,
@@ -1983,7 +2002,7 @@ ThemeData buildAppTheme() {
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
       titleTextStyle: const TextStyle(
-        fontFamily: 'Nunito', fontSize: 23, fontWeight: FontWeight.w800,
+        fontFamily: AppFonts.display, fontSize: 23, fontWeight: FontWeight.w800,
         color: AppColors.textOnNavy,
       ),
       iconTheme: const IconThemeData(color: AppColors.textOnNavy),
@@ -2013,10 +2032,10 @@ ThemeData buildAppTheme() {
       filled: true,
       fillColor: AppColors.cardSurfaceMuted,
       hintStyle: const TextStyle(
-        fontFamily: 'NunitoSans', fontSize: 15, color: AppColors.textMuted,
+        fontFamily: AppFonts.body, fontSize: 15, color: AppColors.textMuted,
       ),
       errorStyle: const TextStyle(
-        fontFamily: 'NunitoSans', fontSize: 12.5, fontWeight: FontWeight.w400,
+        fontFamily: AppFonts.body, fontSize: 12.5, fontWeight: FontWeight.w400,
         color: AppColors.statusCriticalText,
       ),
       border: OutlineInputBorder(
@@ -2056,7 +2075,7 @@ ThemeData buildAppTheme() {
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w800,
+          fontFamily: AppFonts.display, fontSize: 15, fontWeight: FontWeight.w800,
         ),
       ).copyWith(
         overlayColor: WidgetStateProperty.resolveWith((states) =>
@@ -2074,7 +2093,7 @@ ThemeData buildAppTheme() {
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: AppFonts.display, fontSize: 15, fontWeight: FontWeight.w700,
         ),
       ).copyWith(
         overlayColor: WidgetStateProperty.resolveWith((states) =>
@@ -2092,7 +2111,7 @@ ThemeData buildAppTheme() {
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: AppFonts.display, fontSize: 15, fontWeight: FontWeight.w700,
         ),
       ),
     ),
@@ -2100,7 +2119,7 @@ ThemeData buildAppTheme() {
       style: TextButton.styleFrom(
         foregroundColor: AppColors.aiPurple,
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: AppFonts.display, fontSize: 15, fontWeight: FontWeight.w700,
         ),
       ),
     ),
@@ -2123,11 +2142,11 @@ ThemeData buildAppTheme() {
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       labelStyle: const TextStyle(
-        fontFamily: 'NunitoSans', fontSize: 14, fontWeight: FontWeight.w600,
+        fontFamily: AppFonts.body, fontSize: 14, fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
       secondaryLabelStyle: const TextStyle(
-        fontFamily: 'NunitoSans', fontSize: 14, fontWeight: FontWeight.w700,
+        fontFamily: AppFonts.body, fontSize: 14, fontWeight: FontWeight.w700,
         color: AppColors.textOnNavy,
       ),
       padding: const EdgeInsets.symmetric(
@@ -2143,7 +2162,7 @@ ThemeData buildAppTheme() {
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(
-          fontFamily: 'NunitoSans', fontSize: 11.5,
+          fontFamily: AppFonts.body, fontSize: 11.5,
           fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
           color: selected ? AppColors.navy : AppColors.textMuted,
         );
@@ -2167,7 +2186,7 @@ ThemeData buildAppTheme() {
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       titleTextStyle: const TextStyle(
-        fontFamily: 'Nunito', fontSize: 20.5, fontWeight: FontWeight.w800,
+        fontFamily: AppFonts.display, fontSize: 20.5, fontWeight: FontWeight.w800,
         color: AppColors.textPrimary,
       ),
     ),
@@ -2184,7 +2203,7 @@ ThemeData buildAppTheme() {
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.navy,
       contentTextStyle: const TextStyle(
-        fontFamily: 'NunitoSans', color: AppColors.textOnNavy,
+        fontFamily: AppFonts.body, color: AppColors.textOnNavy,
         fontWeight: FontWeight.w600, fontSize: 15,
       ),
       shape: RoundedRectangleBorder(
@@ -2237,7 +2256,7 @@ ThemeData buildDarkTheme() {
 
   return ThemeData(
     useMaterial3: true,
-    fontFamily: 'NunitoSans',
+    fontFamily: AppFonts.body,
     brightness: Brightness.dark,
     colorScheme: scheme,
     textTheme: textTheme,
@@ -2261,7 +2280,7 @@ ThemeData buildDarkTheme() {
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
       titleTextStyle: const TextStyle(
-        fontFamily: 'Nunito', fontSize: 23, fontWeight: FontWeight.w800,
+        fontFamily: AppFonts.display, fontSize: 23, fontWeight: FontWeight.w800,
         color: AppColors.textPrimaryDark,
       ),
       iconTheme: const IconThemeData(color: AppColors.textPrimaryDark),
@@ -2290,10 +2309,10 @@ ThemeData buildDarkTheme() {
       filled: true,
       fillColor: AppColors.cardSurfaceMutedDark,
       hintStyle: const TextStyle(
-        fontFamily: 'NunitoSans', fontSize: 15, color: AppColors.textMutedDark,
+        fontFamily: AppFonts.body, fontSize: 15, color: AppColors.textMutedDark,
       ),
       errorStyle: const TextStyle(
-        fontFamily: 'NunitoSans', fontSize: 12.5, fontWeight: FontWeight.w400,
+        fontFamily: AppFonts.body, fontSize: 12.5, fontWeight: FontWeight.w400,
         color: AppColors.statusCriticalDark,
       ),
       border: OutlineInputBorder(
@@ -2332,7 +2351,7 @@ ThemeData buildDarkTheme() {
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w800,
+          fontFamily: AppFonts.display, fontSize: 15, fontWeight: FontWeight.w800,
         ),
       ).copyWith(
         overlayColor: WidgetStateProperty.resolveWith((states) =>
@@ -2350,7 +2369,7 @@ ThemeData buildDarkTheme() {
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: AppFonts.display, fontSize: 15, fontWeight: FontWeight.w700,
         ),
       ).copyWith(
         overlayColor: WidgetStateProperty.resolveWith((states) =>
@@ -2368,7 +2387,7 @@ ThemeData buildDarkTheme() {
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: AppFonts.display, fontSize: 15, fontWeight: FontWeight.w700,
         ),
       ),
     ),
@@ -2376,7 +2395,7 @@ ThemeData buildDarkTheme() {
       style: TextButton.styleFrom(
         foregroundColor: AppColors.aiPurpleLight,
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: AppFonts.display, fontSize: 15, fontWeight: FontWeight.w700,
         ),
       ),
     ),
@@ -2399,11 +2418,11 @@ ThemeData buildDarkTheme() {
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       labelStyle: const TextStyle(
-        fontFamily: 'NunitoSans', fontSize: 14, fontWeight: FontWeight.w600,
+        fontFamily: AppFonts.body, fontSize: 14, fontWeight: FontWeight.w600,
         color: AppColors.textPrimaryDark,
       ),
       secondaryLabelStyle: const TextStyle(
-        fontFamily: 'NunitoSans', fontSize: 14, fontWeight: FontWeight.w700,
+        fontFamily: AppFonts.body, fontSize: 14, fontWeight: FontWeight.w700,
         color: AppColors.textPrimaryDark,
       ),
       padding: const EdgeInsets.symmetric(
@@ -2419,7 +2438,7 @@ ThemeData buildDarkTheme() {
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(
-          fontFamily: 'NunitoSans', fontSize: 11.5,
+          fontFamily: AppFonts.body, fontSize: 11.5,
           fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
           color: selected ? AppColors.pinkLight : AppColors.textMutedDark,
         );
@@ -2444,7 +2463,7 @@ ThemeData buildDarkTheme() {
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       titleTextStyle: const TextStyle(
-        fontFamily: 'Nunito', fontSize: 20.5, fontWeight: FontWeight.w800,
+        fontFamily: AppFonts.display, fontSize: 20.5, fontWeight: FontWeight.w800,
         color: AppColors.textPrimaryDark,
       ),
     ),
@@ -2461,7 +2480,7 @@ ThemeData buildDarkTheme() {
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.cardSurfaceMutedDark,
       contentTextStyle: const TextStyle(
-        fontFamily: 'NunitoSans', color: AppColors.textPrimaryDark,
+        fontFamily: AppFonts.body, color: AppColors.textPrimaryDark,
         fontWeight: FontWeight.w600, fontSize: 15,
       ),
       shape: RoundedRectangleBorder(

@@ -5,26 +5,27 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
+import '../../core/mission/mission_pregnancy_facts.dart';
 import '../../core/models/programme.dart';
-import '../dashboard/mission_dashboard_repository.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
 import '../scribe/widgets/scribe_review_sheet.dart';
+import '../referral/referral_repository.dart';
 import '../worklist/worklist_repository.dart';
 import 'pathway/pathway_engine.dart';
 import 'assessment_repository.dart';
+import 'forms/form_type_resolver.dart';
 import 'forms/unified_form_notifier.dart';
 import 'forms/unified_form_screen.dart';
-import 'triage/patient_context_builder.dart';
 import 'visit_controller.dart';
 import 'visit_session.dart';
 
@@ -47,7 +48,10 @@ class VisitFormScreen extends StatefulWidget {
     this.householdMemberLocalId,
     this.patientAge,
     this.gestationalWeeks,
+    this.lmpMs,
+    this.eddMs,
     this.activatedPathways,
+    this.isDeliveryVisit = false,
     this.triageNotes,
     this.origin,
     this.onAdvance,
@@ -65,8 +69,17 @@ class VisitFormScreen extends StatefulWidget {
   final int? patientAge;
   final int? gestationalWeeks;
 
+  /// LMP / EDD epoch-ms from pregnancy snapshot (VisitFlow) — seeds the ANC
+  /// gestational-age card on Step 2.
+  final int? lmpMs;
+  final int? eddMs;
+
   /// Programme name strings from triage. Non-empty ⇒ sectioned assessment.
   final List<String>? activatedPathways;
+
+  /// When true, pregnancyOutcome sections are included alongside PNC sections.
+  /// Set only when the SK explicitly confirmed a delivery visit in Step 1.
+  final bool isDeliveryVisit;
 
   /// Free-text extra symptoms the SK entered in Step 1 not in the symptom list.
   final String? triageNotes;
@@ -80,6 +93,7 @@ class VisitFormScreen extends StatefulWidget {
     Programme primaryProgramme,
     bool referralRecommended,
     List<String> referredReasons,
+    String? referralFacility,
   )? onAdvance;
 
   /// Programmes the patient is already enrolled in (from [PatientProgrammesDao]).
@@ -127,11 +141,9 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   @override
   void dispose() {
     if (_scribeInitialized) _scribeCtrl.dispose();
+    debugPrint('[_VisitFormScreenState] dispose');
     super.dispose();
   }
-
-  String get _returnPath =>
-      widget.origin == 'dashboard' ? '/' : '/tasks';
 
   bool get _referralRecommended => _sectionedReferralTriggered;
 
@@ -188,52 +200,6 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       }
     }
     return Programme.unknown;
-  }
-
-  // ── Pathway reconstruction ─────────────────────────────────────────────────
-
-  List<ActivatedPathway> _buildPathways() {
-    return widget.activatedPathways!
-        .map(Programme.fromString)
-        .where((p) => p != Programme.unknown)
-        .map((p) => ActivatedPathway(
-              programme: p,
-              priority: _programmePriority(p),
-              confidence: 1.0,
-              trigger: PathwayTrigger.manual,
-              rationaleKey: 'pathwayManualRationale',
-            ))
-        .toList();
-  }
-
-  int _programmePriority(Programme p) {
-    switch (p) {
-      case Programme.imci:
-        return 10;
-      case Programme.anc:
-        return 20;
-      case Programme.pnc:
-        return 25;
-      case Programme.tb:
-        return 30;
-      case Programme.ncd:
-        return 40;
-      default:
-        return 50;
-    }
-  }
-
-  PatientContext _buildPatientContext() {
-    final pathwayNames = widget.activatedPathways ?? const [];
-    final hasAnc = pathwayNames.contains(Programme.anc.name) ||
-        pathwayNames.contains(Programme.pnc.name);
-    return PatientContext(
-      patientId: widget.patientId ?? '',
-      ageMonths: (widget.patientAge ?? 0) * 12,
-      sex: hasAnc ? Sex.female : Sex.unknown,
-      isPregnant: pathwayNames.contains(Programme.anc.name),
-      gestationalWeeks: widget.gestationalWeeks,
-    );
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -301,8 +267,11 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     bool embedded,
   ) {
     final rawPathways = widget.activatedPathways ?? const [];
-    final formTypes = _toFormTypes(rawPathways);
-    final enrolledFormTypes = _toFormTypes(
+    final formTypes = FormTypeResolver.resolve(
+      rawPathways,
+      isDelivery: widget.isDeliveryVisit,
+    );
+    final enrolledFormTypes = FormTypeResolver.resolve(
       widget.enrolledProgrammes
           .where((p) => p != Programme.unknown)
           .map((p) => p.name)
@@ -310,6 +279,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     );
 
     debugPrint('[VisitForm] ── form-type resolution ──────────────────────');
+    debugPrint('[VisitForm]   isDeliveryVisit    : ${widget.isDeliveryVisit}');
     debugPrint('[VisitForm]   activated pathways : ${rawPathways.join(', ')}');
     debugPrint('[VisitForm]   activeFormTypes    : ${formTypes.join(', ')}');
     debugPrint('[VisitForm]   enrolledFormTypes  : ${enrolledFormTypes.join(', ')}');
@@ -329,6 +299,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       householdId: widget.householdId,
       villageId: widget.villageId,
       householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+      defaultReferralSiteId: ctx.read<ApiClient>().organizationFhirId,
+      referralRepo: ctx.read<ReferralRepository>(),
     );
 
     return ChangeNotifierProvider<UnifiedFormNotifier>.value(
@@ -336,6 +308,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       child: UnifiedFormScreen(
         activeFormTypes: formTypes,
         gestationalWeeks: widget.gestationalWeeks,
+        lmpMs: widget.lmpMs,
+        eddMs: widget.eddMs,
         enrolledFormTypes: enrolledFormTypes,
         confirmedSymptoms: widget.confirmedSymptoms,
         aiPickedSymptoms: widget.aiPickedSymptoms,
@@ -343,42 +317,6 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
             _onSectionedSubmit(ctx, visitCtrl, session, notifier),
       ),
     );
-  }
-
-  /// Expands Programme enum names (from triage) to the formType keys used by
-  /// `layout_manifests.json` and `UnifiedPayloadMapper`.
-  ///
-  /// Rules:
-  /// - `pnc`  → `pncMother` + `pncChild` + `pregnancyOutcome`
-  /// - `anc`  → `anc` (unchanged)
-  /// - `ncd`  → `ncd` (unchanged)
-  /// - `imci` → `iccm` (no manifest yet; harmlessly ignored by form engine)
-  /// - others → passed through unchanged
-  static List<String> _toFormTypes(List<String> programmeNames) {
-    // For ANC-only and NCD-only visits, omit commonVitals from activeFormTypes
-    // — vitals fields are embedded directly in programme sections so the
-    // clinical workflow order is preserved (ANC: Pregnancy → Physical → Lab →
-    // Danger Signs; NCD: Symptoms → BP → Glucose → Biometrics).
-    // For any multi-programme visit, commonVitals leads as usual so shared
-    // measurements (height, weight, BP, pulse) are captured exactly once.
-    final omitCommonVitals = programmeNames.length == 1 &&
-        (programmeNames.contains('anc') || programmeNames.contains('ncd'));
-    final out = <String>[if (!omitCommonVitals) 'commonVitals'];
-    for (final p in programmeNames) {
-      switch (p) {
-        case 'pnc':
-          out.addAll(['pncMother', 'pncChild', 'pregnancyOutcome']);
-        case 'imci':
-          out.add('iccm');
-        case 'pw':
-          // PW registration — show only the pwProfile layout (LMP, gravida, parity).
-          // Not a clinical ANC visit; does not add ANC sections.
-          out.add('pwProfile');
-        default:
-          out.add(p);
-      }
-    }
-    return out;
   }
 
   Future<void> _onSectionedSubmit(
@@ -400,6 +338,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     final patientDao = ctx.read<PatientDao>();
     final worklistRepo = ctx.read<WorklistRepository>();
     final progDao = ctx.read<PatientProgrammesDao>();
+    final pregnancySnapshotDao = ctx.read<PregnancySnapshotDao>();
     // Read referral result computed by UnifiedFormNotifier.submit() so
     // _referralRecommended propagates correctly to Step-3's onAdvance callback.
     setState(() => _sectionedReferralTriggered = formNotifier.lastIsReferred);
@@ -450,6 +389,39 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               await encounterDao.updateVitals(encounterId, vitalsMap);
               debugPrint('[VisitForm] encounter vitals written: $vitalsMap');
             }
+
+            // After PREGNANCY_OUTCOME submission: flip snapshot to postpartum
+            // so next visit correctly shows PNC (not ANC).
+            // Mirrors Android PregnancyCohortRules: dateOfDelivery set → isPostpartum.
+            if (patientId != null && widget.isDeliveryVisit) {
+              final deliveryRaw = fieldValues['dateOfDelivery']
+                  ?? fieldValues['deliveryDate'];
+              final deliveryMs = deliveryRaw is String
+                  ? DateTime.tryParse(deliveryRaw)?.millisecondsSinceEpoch
+                  : null;
+              final existing = await pregnancySnapshotDao.byPatient(patientId);
+              final updated = PregnancySnapshotRow(
+                patientId: patientId,
+                facts: const PregnancyFacts(
+                  isPostpartumWindow: true,
+                  highRiskPregnantWoman: false,
+                  hasGapsInAnc: false,
+                  isNearTermAnc: false,
+                  hadDeliveryComplications: false,
+                  hasPncIllness: false,
+                ),
+                updatedAt: DateTime.now().millisecondsSinceEpoch,
+                // Preserve EDD/LMP for reference; delivery date drives postpartum gate.
+                eddDate: existing?.eddDate,
+                lmpDate: existing?.lmpDate,
+                deliveryDateMillis: deliveryMs
+                    ?? DateTime.now().millisecondsSinceEpoch,
+              );
+              await pregnancySnapshotDao.upsertOne(updated);
+              debugPrint('[VisitForm] pregnancy snapshot → postpartum '
+                  'deliveryMs=$deliveryMs patientId=$patientId');
+            }
+
             debugPrint('[VisitForm] triggering syncPendingAssessments');
             await assessmentRepo.syncPendingAssessments().then(
               (n) => debugPrint('[VisitForm] syncPendingAssessments → synced $n'),
@@ -478,10 +450,12 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         final onAdvance = widget.onAdvance;
         if (onAdvance != null) {
           debugPrint('[VisitForm] calling onAdvance');
+          debugPrint('[ReferralFacility] onAdvance — facility=${formNotifier.lastReferralFacility} referralRecommended=$_referralRecommended reasons=${formNotifier.lastReferredReasons}');
           onAdvance(
             _getPrimaryProgramme(),
             _referralRecommended,
             formNotifier.lastReferredReasons,
+            formNotifier.lastReferralFacility,
           );
         } else {
           ctx.go(
@@ -502,98 +476,11 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       debugPrint('[VisitForm] assessment save failed: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text(VisitFormStrings.saveFailed),
+        content: Text(VisitFormStrings.saveFailed),
         backgroundColor: Theme.of(context).colorScheme.error,
       ));
     }
   }
 
-  // ── Dialogs ────────────────────────────────────────────────────────────────
-  // Kept for non-sectioned fallback mode; sectioned visits navigate to
-  // VisitCompleteScreen instead.
-
-  // ignore: unused_element
-  void _showCompletionDialog(BuildContext ctx) {
-    final theme = Theme.of(ctx);
-    final programmes = widget.activatedPathways ?? [];
-    final label = programmes.isEmpty
-        ? 'Assessment'
-        : programmes
-            .map((p) => Programme.fromString(p))
-            .where((p) => p != Programme.unknown)
-            .map((p) => p.wireTag.toUpperCase())
-            .toSet()
-            .join(' + ');
-
-    showDialog<void>(
-      context: ctx,
-      barrierDismissible: false,
-      builder: (dlgCtx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(
-              _referralRecommended ? Icons.warning : Icons.check_circle,
-              color: _referralRecommended
-                  ? theme.colorScheme.error
-                  : AppColors.statusSuccess,
-            ),
-            const SizedBox(width: 12),
-            const Text('Assessment Complete'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('$label assessment saved.'),
-            if (_referralRecommended) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning,
-                        color: theme.colorScheme.onErrorContainer),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Referral recommended based on findings.',
-                        style: TextStyle(
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          if (_referralRecommended)
-            OutlinedButton(
-              onPressed: () {
-                Navigator.pop(dlgCtx);
-                ctx.read<MissionDashboardRepository>().clearCache();
-                ctx.go(_returnPath);
-              },
-              child: const Text('Create Referral'),
-            ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(dlgCtx);
-              ctx.read<MissionDashboardRepository>().clearCache();
-              ctx.go(_returnPath);
-            },
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
-  }
 
 }

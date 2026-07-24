@@ -1454,13 +1454,23 @@
     ],
     "condition": [
       {
+        "eq": "fasting",
+        "targetId": "fastingBloodSugar",
+        "visibility": "visible"
+      },
+      {
         "eq": "random",
         "targetId": "randomBloodSugar",
         "visibility": "visible"
       },
       {
         "eq": "fasting",
-        "targetId": "fastingBloodSugar",
+        "targetId": "bloodSugarFasting",
+        "visibility": "visible"
+      },
+      {
+        "eq": "random",
+        "targetId": "bloodSugarRandom",
         "visibility": "visible"
       }
     ]
@@ -1653,21 +1663,6 @@
             "system": "SNOMED_CT",
             "code": "260413007",
             "display": "None"
-          }
-        ]
-      },
-      {
-        "cultureValue": "কোনোটিই নেই",
-        "displayOrder": 8,
-        "id": 8,
-        "name": "Other",
-        "type": "postpartumDangerSigns",
-        "value": "other",
-        "clinicalConcept": [
-          {
-            "system": "SNOMED_CT",
-            "code": "74964007",
-            "display": "Other"
           }
         ]
       }
@@ -2071,7 +2066,7 @@
     "widgetHint": "TextLabel",
     "family": "counselling",
     "orderId": 1,
-    "visibility": "visible",
+    "visibility": "gone",
     "titleCulture": "মায়ের যত্ন",
     "isSummary": true,
     "programmes": [
@@ -2088,7 +2083,7 @@
     "widgetHint": "Instruction",
     "family": "counselling",
     "orderId": 2,
-    "visibility": "visible",
+    "visibility": "gone",
     "titleCulture": "সব পরবর্তী মায়ের পরিচর্যাঃ",
     "isSummary": true,
     "programmes": [
@@ -2105,7 +2100,7 @@
     "widgetHint": "Instruction",
     "family": "counselling",
     "orderId": 3,
-    "visibility": "visible",
+    "visibility": "gone",
     "titleCulture": "নবজাতকের যত্ন",
     "isSummary": true,
     "programmes": [
@@ -2127,7 +2122,7 @@
     "visibility": "visible",
     "titleCulture": "রেফারেল স্বাস্থ্যসেবা কেন্দ্র",
     "errorMessage": "Please select a valid option",
-    "isSummary": true,
+    "isSummary": false,
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -4571,11 +4566,11 @@
     "fieldName": "Pregnant woman has any existing illness",
     "family": "medicalHistoryPhysicalExamination",
     "orderId": 1,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Illness",
-    "titleCulture": "গর্ভবতী মায়ের আগে থেকে কোনো অসুখ আছে কি?",
+    "titleCulture": "গর্ভবতী মায়ের আগে থেকে কি কি দীর্ঘমেয়াদী রোগ আছে",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "localDataCache": "illness",
@@ -4595,40 +4590,44 @@
     ],
     "optionsList": [
       {
-        "id": "anemia",
-        "name": "Anemia"
+        "id": "htn",
+        "name": "HTN",
+        "cultureValue": "উচ্চ রক্তচাপ"
       },
       {
-        "id": "hypertension",
-        "name": "Hypertension"
+        "id": "dm",
+        "name": "DM",
+        "cultureValue": "ডায়াবেটিস"
       },
       {
-        "id": "diabetes",
-        "name": "Diabetes"
+        "id": "heartDisease",
+        "name": "Heart Disease",
+        "cultureValue": "হৃদরোগ"
       },
       {
-        "id": "cardiac_disease",
-        "name": "Cardiac disease"
-      },
-      {
-        "id": "renal_disease",
-        "name": "Renal disease"
-      },
-      {
-        "id": "epilepsy",
-        "name": "Epilepsy / Convulsions"
+        "id": "tuberculosis",
+        "name": "Tuberculosis",
+        "cultureValue": "যক্ষ্মা"
       },
       {
         "id": "asthma",
-        "name": "Asthma"
+        "name": "Asthma",
+        "cultureValue": "হাঁপানি"
       },
       {
-        "id": "thyroid_disorder",
-        "name": "Thyroid disorder"
+        "id": "kidneyDisease",
+        "name": "Kidney Disease",
+        "cultureValue": "কিডনি রোগ"
+      },
+      {
+        "id": "thyroidDisease",
+        "name": "Thyroid disease",
+        "cultureValue": "থাইরয়েড রোগ"
       },
       {
         "id": "none",
-        "name": "None"
+        "name": "None",
+        "cultureValue": "কোনো রোগ নাই"
       }
     ]
   },
@@ -4639,11 +4638,11 @@
     "fieldName": "Pregnant woman on treatment for any existing illness",
     "family": "medicalHistoryPhysicalExamination",
     "orderId": 2,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
-    "visibility": "visible",
-    "hint": "Illness",
-    "titleCulture": "গর্ভবতী মা কোনো আগের অসুখের জন্য চিকিৎসা নিচ্ছেন কি?",
+    "visibility": "gone",
+    "hint": "Treatment",
+    "titleCulture": "গর্ভবতী মা আগের কোন রোগের চিকিৎসা নিচ্ছেন",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -4658,6 +4657,13 @@
         "id": "anc",
         "workflowId": 4,
         "workflowName": "RMNCH"
+      }
+    ],
+    "optionsList": [
+      {
+        "id": "none",
+        "name": "Not taking any treatment",
+        "cultureValue": "কোনো চিকিৎসা গ্রহণ করছেন না"
       }
     ]
   },
@@ -5562,18 +5568,6 @@
             "display": "None"
           }
         ]
-      },
-      {
-        "id": "other",
-        "name": "Other",
-        "cultureValue": "অন্যান্য",
-        "clinicalConcept": [
-          {
-            "system": "SNOMED_CT",
-            "code": "74964007",
-            "display": "Other"
-          }
-        ]
       }
     ],
     "condition": []
@@ -5660,18 +5654,6 @@
             "display": "None"
           }
         ]
-      },
-      {
-        "id": "other",
-        "name": "Other",
-        "cultureValue": "অন্যান্য",
-        "clinicalConcept": [
-          {
-            "system": "SNOMED_CT",
-            "code": "74964007",
-            "display": "Other"
-          }
-        ]
       }
     ],
     "condition": []
@@ -5756,18 +5738,6 @@
             "system": "SNOMED_CT",
             "code": "260413007",
             "display": "None"
-          }
-        ]
-      },
-      {
-        "id": "other",
-        "name": "Other",
-        "cultureValue": "অন্যান্য",
-        "clinicalConcept": [
-          {
-            "system": "SNOMED_CT",
-            "code": "74964007",
-            "display": "Other"
           }
         ]
       }
@@ -5977,7 +5947,7 @@
     "readOnly": true,
     "visibility": "visible",
     "titleCulture": "পরবর্তী পরিদর্শন",
-    "isSummary": true,
+    "isSummary": false,
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -7038,11 +7008,11 @@
     "condition": [
       {
         "eqList": [
-          "+1.00",
-          "+1.50",
-          "+2.00",
-          "+2.50",
-          "+3.00"
+          "1.0",
+          "1.5",
+          "2.0",
+          "2.5",
+          "3.0"
         ],
         "targetId": "haveTheGlassesBeenSold",
         "visibility": "visible"
@@ -7110,13 +7080,8 @@
     ],
     "condition": [
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "typeOfGlass",
-        "visibility": "visible"
-      },
-      {
-        "eq": "No",
-        "targetId": "ncdServiceProvided",
         "visibility": "visible"
       }
     ]
@@ -7169,8 +7134,8 @@
     "condition": [
       {
         "eqList": [
-          "biFocal",
-          "singleVision"
+          "bf",
+          "sv"
         ],
         "targetId": "typeOfFrame",
         "visibility": "visible"
@@ -7225,8 +7190,8 @@
     "condition": [
       {
         "eqList": [
-          "Metal",
-          "Plastic"
+          "metal",
+          "plastic"
         ],
         "targetId": "firstTimeUser",
         "visibility": "visible"
@@ -7643,8 +7608,8 @@
       {
         "eqList": [
           "cataracts",
-          "DCT",
-          "DCR",
+          "dct",
+          "dcr",
           "pterygium",
           "other"
         ],
@@ -8027,15 +7992,15 @@
   },
   "medicationFrequencyBp": {
     "id": "medicationFrequencyBp",
-    "label": "Are you taking medication regularly?",
+    "label": "Are you taking BP medication regularly?",
     "widgetHint": "Spinner",
-    "fieldName": "Are you taking medication regularly?",
+    "fieldName": "Are you taking BP medication regularly?",
     "family": "bpLog",
     "orderId": 3.0,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "আপনি কি নিয়মিত ঔষধ খাচ্ছেন?",
+    "titleCulture": "আপনি কি নিয়মিত রক্তচাপের ঔষধ খাচ্ছেন?",
     "errorMessage": "Please select the medication",
     "localDataCache": "conditions",
     "isNeededDefault": true,
@@ -8104,7 +8069,7 @@
     "orderId": 2.0,
     "isMandatory": true,
     "isEnabled": true,
-    "visibility": "gone",
+    "visibility": "visible",
     "titleCulture": "রক্তচাপ",
     "errorMessage": "Please enter a blood pressure value",
     "minValue": 30.0,
@@ -8312,36 +8277,20 @@
         "eq": "Yes",
         "targetId": "medicationFrequencyBg",
         "visibility": "visible"
-      },
-      {
-        "eqList": [
-          "Yes",
-          "No"
-        ],
-        "targetId": "referralInformation",
-        "visibility": "visible"
-      },
-      {
-        "eqList": [
-          "Yes",
-          "No"
-        ],
-        "targetId": "whoReferredThisPerson",
-        "visibility": "visible"
       }
     ]
   },
   "medicationFrequencyBg": {
     "id": "medicationFrequencyBg",
-    "label": "Are you taking medication regularly?",
+    "label": "Are you taking diabetes medication regularly?",
     "widgetHint": "Spinner",
-    "fieldName": "Are you taking medication regularly?",
+    "fieldName": "Are you taking diabetes medication regularly?",
     "family": "glucoseLog",
     "orderId": 3.0,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "আপনি কি নিয়মিত ঔষধ খাচ্ছেন?",
+    "titleCulture": "আপনি কি নিয়মিত ডায়াবেটিসের ঔষধ খাচ্ছেন?",
     "errorMessage": "Please select the medication",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -8464,7 +8413,8 @@
       {
         "eqList": [
           "fbs",
-          "rbs"
+          "rbs",
+          "ppbs"
         ],
         "targetId": "glucose",
         "visibility": "visible"
@@ -8636,15 +8586,15 @@
   },
   "hasSymptoms": {
     "id": "hasSymptoms",
-    "label": "Has the Patient had any symptoms since the last follow up?",
+    "label": "Does the patient have any symptoms?",
     "widgetHint": "SingleSelectionView",
-    "fieldName": "Has the Patient had any symptoms since the last follow up?",
+    "fieldName": "Does the patient have any symptoms?",
     "family": "symptomsLog",
     "orderId": 0.0,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "শেষ ফলোআপের পর থেকে রোগীর কি কোনও লক্ষণ দেখা দিয়েছে?",
+    "titleCulture": "রোগীর কি কোনো উপসর্গ আছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "optionType": "boolean",
@@ -8732,69 +8682,63 @@
     ],
     "optionsList": [
       {
-        "id": "Headache",
-        "name": "Headache",
-        "cultureValue": "মাথাব্যথা"
+        "id": "1",
+        "name": "Shortness of breath",
+        "cultureValue": "শ্বাসকষ্ট",
+        "value": "shortnessOfBreath"
       },
       {
-        "id": "Blurred Vision",
-        "name": "Blurred Vision",
-        "cultureValue": "ঝাপসা দৃষ্টি"
+        "id": "2",
+        "name": "Dizziness/Fainting",
+        "cultureValue": "মাথা ঘোরা/ অজ্ঞ্যান হয়ে যাওয়া",
+        "value": "dizzinessfainting"
       },
       {
-        "id": "Chest Pain",
-        "name": "Chest Pain",
-        "cultureValue": "বুকে ব্যথা"
+        "id": "3",
+        "name": "Unable to speak/Slurred speech",
+        "cultureValue": "কথা বলতে না পারা,  কথা অস্পষ্ট হয়ে যাওয়া বা কথা জড়িয়ে যাওয়া",
+        "value": "unableToSpeakSlurredSpeech"
       },
       {
-        "id": "Shortness of Breath",
-        "name": "Shortness of Breath",
-        "cultureValue": "শ্বাসকষ্ট"
+        "id": "4",
+        "name": "Swelling of leg",
+        "cultureValue": "পা ফুলে যাওয়া/ পায়ে পানি আসা",
+        "value": "swellingOfLeg"
       },
       {
-        "id": "Weakness",
-        "name": "Weakness",
-        "cultureValue": "দুর্বলতা"
+        "id": "5",
+        "name": "Blurry vision",
+        "cultureValue": "দৃষ্টির সমস্যা (ঝাপসা দেখা",
+        "value": "blurryVision"
       },
       {
-        "id": "Numbness",
-        "name": "Numbness",
-        "cultureValue": "অসাড়তা"
+        "id": "6",
+        "name": "Double vision",
+        "cultureValue": "একই জিনিস দুইটা দেখা",
+        "value": "doubleVision"
       },
       {
-        "id": "Dizziness",
-        "name": "Dizziness",
-        "cultureValue": "মাথা ঘোরা"
-      },
-      {
-        "id": "Palpitations",
+        "id": "7",
         "name": "Palpitations",
-        "cultureValue": "বুক ধড়ফড়"
+        "cultureValue": "বুক ধড়পড় করা",
+        "value": "palpitations"
       },
       {
-        "id": "Leg Swelling",
-        "name": "Leg Swelling",
-        "cultureValue": "পায়ে ফোলা"
+        "id": "8",
+        "name": "Chest pain",
+        "cultureValue": "বুকে ব্যথা",
+        "value": "chest_pain"
       },
       {
-        "id": "Frequent Urination",
-        "name": "Frequent Urination",
-        "cultureValue": "ঘন ঘন প্রস্রাব"
+        "id": "10",
+        "name": "Headache",
+        "cultureValue": "মাথাব্যথা",
+        "value": "headache"
       },
       {
-        "id": "Excessive Thirst",
-        "name": "Excessive Thirst",
-        "cultureValue": "অতিরিক্ত তৃষ্ণা"
-      },
-      {
-        "id": "Unexplained Weight Loss",
-        "name": "Unexplained Weight Loss",
-        "cultureValue": "অকারণ ওজন হ্রাস"
-      },
-      {
-        "id": "None",
-        "name": "None",
-        "cultureValue": "কোনোটি নয়"
+        "id": "anyNewOrWorseningSymptoms",
+        "name": "Any new or worsening symptoms",
+        "cultureValue": "নতুন বা আগের তুলনায় বেড়ে যাওয়া উপসর্গ"
       }
     ],
     "condition": []
@@ -8835,15 +8779,15 @@
   },
   "compliance": {
     "id": "compliance",
-    "label": "Are you taking medication regularly?",
+    "label": "Medication compliance",
     "widgetHint": "Spinner",
-    "fieldName": "Are you taking medication regularly?",
+    "fieldName": "Medication compliance",
     "family": "symptomsLog",
     "orderId": 2.0,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "আপনি কি নিয়মিত ঔষধ খাচ্ছেন?",
+    "titleCulture": "ঔষধ আনুগত্য",
     "errorMessage": "Please select the medication",
     "isSummary": true,
     "titleSummary": "Medication Adherence",
@@ -10160,6 +10104,1123 @@
       {
         "name": "Present",
         "id": "Present"
+      }
+    ]
+  },
+  "chiefComplaint": {
+    "id": "chiefComplaint",
+    "label": "Chief Complaint",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 1,
+    "isMandatory": true,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Describe the main complaint",
+    "inputType": "text",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "presentingSymptoms": {
+    "id": "presentingSymptoms",
+    "label": "Presenting Symptoms",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 2,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Describe symptoms",
+    "inputType": "text",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "convulsions": {
+    "id": "convulsions",
+    "label": "Convulsions",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 3,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "unconscious": {
+    "id": "unconscious",
+    "label": "Unconscious / Lethargic",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 4,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "unableToFeedOrDrink": {
+    "id": "unableToFeedOrDrink",
+    "label": "Unable to Feed or Drink",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 5,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "stridor": {
+    "id": "stridor",
+    "label": "Stridor",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 6,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "chestIndrawing": {
+    "id": "chestIndrawing",
+    "label": "Chest Indrawing",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 7,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "vomitingEverything": {
+    "id": "vomitingEverything",
+    "label": "Vomiting Everything",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 8,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "respiratoryRate": {
+    "id": "respiratoryRate",
+    "label": "Respiratory Rate (breaths/min)",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 9,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Enter number",
+    "inputType": "number",
+    "unitMeasurement": "bpm",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "muac": {
+    "id": "muac",
+    "label": "MUAC (Mid-Upper Arm Circumference)",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 10,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Enter number",
+    "inputType": "decimal",
+    "unitMeasurement": "cm",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "iccmClassification": {
+    "id": "iccmClassification",
+    "label": "ICCM Classification",
+    "widgetHint": "Spinner",
+    "family": "iccm",
+    "orderId": 11,
+    "isMandatory": true,
+    "isEnabled": true,
+    "visibility": "visible",
+    "errorMessage": "Please select a classification",
+    "optionsList": [
+      {
+        "id": "dangerSigns",
+        "name": "Danger Signs Present"
+      },
+      {
+        "id": "pneumonia",
+        "name": "Pneumonia"
+      },
+      {
+        "id": "diarrhea",
+        "name": "Diarrhea"
+      },
+      {
+        "id": "malaria",
+        "name": "Malaria"
+      },
+      {
+        "id": "malnutrition",
+        "name": "Malnutrition"
+      },
+      {
+        "id": "noClassification",
+        "name": "No Classification"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "severity": {
+    "id": "severity",
+    "label": "Severity",
+    "widgetHint": "Spinner",
+    "family": "iccm",
+    "orderId": 12,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "optionsList": [
+      {
+        "id": "mild",
+        "name": "Mild"
+      },
+      {
+        "id": "moderate",
+        "name": "Moderate"
+      },
+      {
+        "id": "severe",
+        "name": "Severe"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "treatmentPrescribed": {
+    "id": "treatmentPrescribed",
+    "label": "Treatment Prescribed",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 13,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Describe treatment",
+    "inputType": "text",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "referralRequired": {
+    "id": "referralRequired",
+    "label": "Referral Required",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 14,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ],
+    "condition": [
+      {
+        "eq": true,
+        "targetId": "referralFacility",
+        "visibility": "visible"
+      }
+    ]
+  },
+  "deliveryOutcomeType": {
+    "id": "deliveryOutcomeType",
+    "label": "Outcome type",
+    "widgetHint": "RadioGroup",
+    "fieldName": "Outcome type",
+    "family": "pregnancyOutcome",
+    "orderId": 0,
+    "isMandatory": true,
+    "isEnabled": true,
+    "visibility": "visible",
+    "titleCulture": "ফলাফলের ধরন",
+    "options": [
+      {
+        "id": "maternalDeath",
+        "name": "Maternal Death"
+      },
+      {
+        "id": "abortion",
+        "name": "Abortion"
+      },
+      {
+        "id": "liveBirth",
+        "name": "Live birth"
+      },
+      {
+        "id": "stillbirth",
+        "name": "Stillbirth"
+      }
+    ],
+    "condition": [
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth"
+        ],
+        "targetId": "timeOfDeath",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth"
+        ],
+        "targetId": "gestationMonthAtDeath",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth"
+        ],
+        "targetId": "causeOfDeath",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth",
+          "maternalDeath"
+        ],
+        "targetId": "gestationMonthAtAbortion",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth",
+          "maternalDeath"
+        ],
+        "targetId": "typeOfAbortion",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "deliveryOutcome",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "liveBirthNumbers",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "stillbirthNumbers",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "placeOfDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "dateOfDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "modeOfDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "birthAttendant",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "anyComplicationsDuringDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "complicationsDuringDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eq": "liveBirth",
+        "targetId": "babyAlive",
+        "visibility": "visible"
+      },
+      {
+        "eq": "liveBirth",
+        "targetId": "babySex",
+        "visibility": "visible"
+      },
+      {
+        "eq": "liveBirth",
+        "targetId": "birthWeight",
+        "visibility": "visible"
+      },
+      {
+        "eq": "liveBirth",
+        "targetId": "essentialNewbornCare",
+        "visibility": "visible"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "babyAlive",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "babySex",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "birthWeight",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "essentialNewbornCare",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "neonatalDeathCause",
+        "visibility": "gone"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "babyAlive": {
+    "id": "babyAlive",
+    "label": "Is the baby alive?",
+    "widgetHint": "SingleSelectionView",
+    "fieldName": "Is the baby alive",
+    "family": "newbornDetails",
+    "orderId": 1,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "titleCulture": "শিশু কি জীবিত?",
+    "options": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "condition": [
+      {
+        "eq": "no",
+        "targetId": "neonatalDeathCause",
+        "visibility": "visible"
+      },
+      {
+        "eq": "yes",
+        "targetId": "neonatalDeathCause",
+        "visibility": "gone"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "babySex": {
+    "id": "babySex",
+    "label": "Sex",
+    "widgetHint": "RadioGroup",
+    "fieldName": "Baby sex",
+    "family": "newbornDetails",
+    "orderId": 2,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "titleCulture": "লিঙ্গ",
+    "options": [
+      {
+        "id": "male",
+        "name": "Male"
+      },
+      {
+        "id": "female",
+        "name": "Female"
+      },
+      {
+        "id": "other",
+        "name": "Other"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "birthWeight": {
+    "id": "birthWeight",
+    "label": "Birth weight (kg)",
+    "widgetHint": "EditText",
+    "fieldName": "Birth weight",
+    "family": "newbornDetails",
+    "orderId": 3,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "inputType": 2,
+    "titleCulture": "জন্ম ওজন (কেজি)",
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "essentialNewbornCare": {
+    "id": "essentialNewbornCare",
+    "label": "Essential newborn care",
+    "widgetHint": "DialogCheckbox",
+    "fieldName": "Essential newborn care",
+    "family": "newbornDetails",
+    "orderId": 4,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "titleCulture": "অত্যাবশ্যকীয় নবজাতক যত্ন",
+    "options": [
+      {
+        "id": "driedWrappedWarm",
+        "name": "Dried, wrapped & kept warm immediately"
+      },
+      {
+        "id": "breastfeedingInitiated",
+        "name": "Breastfeeding initiated within 1 hour"
+      },
+      {
+        "id": "breathingNormal",
+        "name": "Breathing normally, no danger signs"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "neonatalDeathCause": {
+    "id": "neonatalDeathCause",
+    "label": "Cause of neonatal death",
+    "widgetHint": "DialogCheckbox",
+    "fieldName": "Cause of neonatal death",
+    "family": "newbornDetails",
+    "orderId": 5,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "titleCulture": "নবজাতক মৃত্যুর কারণ",
+    "options": [
+      {
+        "id": "asphyxia",
+        "name": "Asphyxia"
+      },
+      {
+        "id": "lowTemperature",
+        "name": "Abnormally low temperature"
+      },
+      {
+        "id": "lowBirthWeight",
+        "name": "Low birth weight"
+      },
+      {
+        "id": "convulsions",
+        "name": "Convulsions"
+      },
+      {
+        "id": "prematureBirth",
+        "name": "Premature birth"
+      },
+      {
+        "id": "sepsis",
+        "name": "Sepsis / umbilical sepsis"
+      },
+      {
+        "id": "pneumonia",
+        "name": "Pneumonia"
+      },
+      {
+        "id": "congenitalAnomaly",
+        "name": "Congenital anomaly"
+      },
+      {
+        "id": "unknown",
+        "name": "Unknown"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "hasCough": {
+    "id": "hasCough",
+    "label": "Does the patient have a cough?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "49727002",
+        "display": "Cough (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ],
+    "condition": [
+      {
+        "eq": "Yes",
+        "targetId": "hasCoughLastedLonger",
+        "visibility": "visible"
+      },
+      {
+        "eq": "Yes",
+        "targetId": "hasNightSweats",
+        "visibility": "visible"
+      },
+      {
+        "eq": "Yes",
+        "targetId": "hasTbFever",
+        "visibility": "visible"
+      },
+      {
+        "eq": "Yes",
+        "targetId": "hasWeightLoss",
+        "visibility": "visible"
+      }
+    ]
+  },
+  "hasCoughLastedLonger": {
+    "id": "hasCoughLastedLonger",
+    "label": "Cough lasting 2 weeks or longer?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "68154008",
+        "display": "Chronic cough (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ],
+    "dependantOn": [
+      {
+        "optionId": "yes",
+        "id": "hasCough"
+      }
+    ]
+  },
+  "hasNightSweats": {
+    "id": "hasNightSweats",
+    "label": "Night sweats?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "42984000",
+        "display": "Night sweats (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "hasTbFever": {
+    "id": "hasTbFever",
+    "label": "Fever?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "386661006",
+        "display": "Fever (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "hasWeightLoss": {
+    "id": "hasWeightLoss",
+    "label": "Unexplained weight loss?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "161833006",
+        "display": "Weight loss (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "tbDateOfOnset": {
+    "id": "tbDateOfOnset",
+    "label": "Date symptoms started",
+    "widgetHint": "DateField",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select date",
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "85causal",
+        "display": "Date of symptom onset"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "tbRelationshipToIC": {
+    "id": "tbRelationshipToIC",
+    "label": "Relationship to TB index case",
+    "widgetHint": "Spinner",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select relationship",
+    "optionsList": [
+      {
+        "id": "parent",
+        "name": "Parent"
+      },
+      {
+        "id": "child",
+        "name": "Child"
+      },
+      {
+        "id": "sibling",
+        "name": "Sibling"
+      },
+      {
+        "id": "spouse",
+        "name": "Spouse"
+      },
+      {
+        "id": "grandparent",
+        "name": "Grandparent"
+      },
+      {
+        "id": "grandchild",
+        "name": "Grandchild"
+      },
+      {
+        "id": "otherRelative",
+        "name": "Other relative"
+      },
+      {
+        "id": "nonRelativeHousehold",
+        "name": "Non-relative household member"
+      },
+      {
+        "id": "other",
+        "name": "Other"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "408731000",
+        "display": "Contact with TB patient"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "tbSleepLocation": {
+    "id": "tbSleepLocation",
+    "label": "Sleeping location relative to index case",
+    "widgetHint": "Spinner",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "sameRoom",
+        "name": "Same room as index case"
+      },
+      {
+        "id": "differentRoom",
+        "name": "Different room, same house"
+      },
+      {
+        "id": "differentHouse",
+        "name": "Different house"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "224249004",
+        "display": "Sleeping environment"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "hasPreviouslyTreatedForTB": {
+    "id": "hasPreviouslyTreatedForTB",
+    "label": "Previously treated for TB?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "312004007",
+        "display": "TB treatment history"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
       }
     ]
   }

@@ -93,6 +93,17 @@ const double fbsScreeningMax = 15.0;
 const double rbsScreeningNormal = 7.8;
 const double rbsScreeningMax = 15.0;
 
+// ── HbA1c (% — referral and form bounds) ──
+// ≥ 6.5% = diabetes diagnosis threshold
+// ≥ 8.0% = uncontrolled DM → yellowHigh referral
+// ≥ 10.0% = very poorly controlled → orange referral
+// Form bounds: 4.0–14.0% (clinically plausible range)
+const double hba1cFormMin = 4.0;
+const double hba1cFormMax = 14.0;
+const double hba1cDiabetesThreshold = 6.5;
+const double hba1cUncontrolled = 8.0;
+const double hba1cCrisis = 10.0;
+
 // ── BMI (kg/m²) ──
 const double bmiUnderweight = 18.5;
 const double bmiOverweight = 25.0;
@@ -121,3 +132,13 @@ const double cvdVeryLowRisk = 5.0;
 const double cvdLowRisk = 10.0;
 const double cvdMediumRisk = 20.0;
 const double cvdMediumHighRisk = 30.0;
+
+// ── ANC gap thresholds (matches Android AssessmentDefinedParams) ──
+// TT/TD gap: incomplete vaccination after 20 gestational weeks.
+const double ancGestationalAgeWeek20 = 20.0;
+// USG / doctor-visit / ANC-count gap: evaluated at 36 weeks.
+const double ancGestationalAgeWeek36 = 36.0;
+// Minimum ANC visits required by 36 weeks before flagging as a gap.
+const int ancMinVisitsRequired = 3;
+// Minimum tablet doses consumed (IFA / Calcium) to not flag as inadequate.
+const int ancTabletConsumptionMin = 30;

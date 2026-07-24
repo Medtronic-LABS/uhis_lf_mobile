@@ -19,6 +19,7 @@ class LeaderboardEntry {
     required this.wardLabel,
     required this.videoCount,
     required this.points,
+    this.streakDays = 0,
     this.rankChange,
     this.isCurrentUser = false,
     this.weeklyRankChangeLabel,
@@ -30,6 +31,7 @@ class LeaderboardEntry {
   final String wardLabel;
   final int videoCount;
   final int points;
+  final int streakDays;
   /// Positive = moved up, negative = moved down, null = unchanged.
   final int? rankChange;
   final bool isCurrentUser;
@@ -151,40 +153,11 @@ abstract final class MockCoachingData {
   MockCoachingData._();
 
   static const List<LeaderboardEntry> leaderboard = [
-    LeaderboardEntry(
-      rank: 1,
-      initials: 'SR',
-      name: 'Sumaiya Rahman',
-      wardLabel: 'Ward 2',
-      videoCount: 18,
-      points: 980,
-    ),
-    LeaderboardEntry(
-      rank: 2,
-      initials: 'NK',
-      name: 'Nasima Khatun',
-      wardLabel: 'Ward 5',
-      videoCount: 15,
-      points: 845,
-    ),
-    LeaderboardEntry(
-      rank: 4,
-      initials: 'FB',
-      name: 'Fatema Begum',
-      wardLabel: 'Ward 4',
-      videoCount: 11,
-      points: 710,
-      isCurrentUser: true,
-      weeklyRankChangeLabel: '↑2 this week',
-    ),
-    LeaderboardEntry(
-      rank: 5,
-      initials: 'RB',
-      name: 'Roksana Begum',
-      wardLabel: 'Ward 1',
-      videoCount: 9,
-      points: 640,
-    ),
+    LeaderboardEntry(rank: 1, initials: 'FB', name: 'Fatema Begum', wardLabel: 'Dhamrai', videoCount: 18, points: 1840, streakDays: 14),
+    LeaderboardEntry(rank: 2, initials: 'NA', name: 'Nasrin Akter', wardLabel: 'Dhamrai', videoCount: 15, points: 1620, streakDays: 9),
+    LeaderboardEntry(rank: 3, initials: 'RK', name: 'Rahela Khanam', wardLabel: 'Dhamrai', videoCount: 12, points: 1410, streakDays: 7),
+    LeaderboardEntry(rank: 4, initials: 'SI', name: 'Sumaiya Islam', wardLabel: 'Dhamrai', videoCount: 9, points: 1190, streakDays: 5),
+    LeaderboardEntry(rank: 5, initials: 'SK', name: 'You', wardLabel: 'Dhamrai', videoCount: 11, points: 980, streakDays: 12, isCurrentUser: true),
   ];
 
   static const MonthlyStats monthlyStats = MonthlyStats(
@@ -383,4 +356,100 @@ abstract final class MockCoachingData {
       modules.where((m) => m.priorityToday).toList();
 
   static List<CoachingModule> get allModules => modules;
+
+  static const List<KnowledgeDocument> knowledgeDocs = [
+    KnowledgeDocument(
+      id: 'k1',
+      titleEn: 'ICCM Quick Reference Card',
+      titleBn: 'আইসিসিএম দ্রুত রেফারেন্স কার্ড',
+      domain: CoachingDomain.imci,
+      docType: 'PDF',
+      pageCount: 2,
+    ),
+    KnowledgeDocument(
+      id: 'k2',
+      titleEn: 'ANC Danger Signs Guide',
+      titleBn: 'এএনসি বিপদ চিহ্ন গাইড',
+      domain: CoachingDomain.anc,
+      docType: 'Guide',
+      pageCount: 4,
+    ),
+    KnowledgeDocument(
+      id: 'k3',
+      titleEn: 'NCD Medicine Protocol',
+      titleBn: 'এনসিডি ওষুধ প্রোটোকল',
+      domain: CoachingDomain.ncd,
+      docType: 'Protocol',
+      pageCount: 6,
+    ),
+    KnowledgeDocument(
+      id: 'k4',
+      titleEn: 'TB Symptom Checklist',
+      titleBn: 'টিবি উপসর্গ তালিকা',
+      domain: CoachingDomain.tb,
+      docType: 'PDF',
+      pageCount: 1,
+    ),
+  ];
+
+  static final List<TrainingRequest> trainingRequests = [
+    TrainingRequest(
+      id: 'tr1',
+      topic: 'Advanced ANC risk assessment',
+      notes: 'Need more training on high-risk pregnancy identification.',
+      submittedAt: DateTime(2026, 7, 18),
+      status: TrainingRequestStatus.approved,
+    ),
+    TrainingRequest(
+      id: 'tr2',
+      topic: 'MUAC measurement technique',
+      notes: 'Want refresher on correct MUAC band placement.',
+      submittedAt: DateTime(2026, 7, 20),
+      status: TrainingRequestStatus.pending,
+    ),
+  ];
+}
+
+// ─── Knowledge document ───────────────────────────────────────────────────────
+
+class KnowledgeDocument {
+  const KnowledgeDocument({
+    required this.id,
+    required this.titleEn,
+    required this.titleBn,
+    required this.domain,
+    required this.docType,
+    this.pageCount,
+    this.presignedUrl,
+    this.thumbnailPresignedUrl,
+  });
+
+  final String id;
+  final String titleEn;
+  final String titleBn;
+  final CoachingDomain domain;
+  final String docType;
+  final int? pageCount;
+  final String? presignedUrl;
+  final String? thumbnailPresignedUrl;
+}
+
+// ─── Training request ─────────────────────────────────────────────────────────
+
+enum TrainingRequestStatus { pending, approved, rejected }
+
+class TrainingRequest {
+  TrainingRequest({
+    required this.id,
+    required this.topic,
+    required this.notes,
+    required this.submittedAt,
+    this.status = TrainingRequestStatus.pending,
+  });
+
+  final String id;
+  final String topic;
+  final String notes;
+  final DateTime submittedAt;
+  TrainingRequestStatus status;
 }

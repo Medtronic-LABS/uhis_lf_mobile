@@ -6,6 +6,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/worklist_entry.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../referral/referral_repository.dart';
 import 'widgets/programme_chip_row.dart';
 import 'widgets/sync_strip.dart';
 import 'widgets/urgent_banner.dart';
@@ -33,6 +34,7 @@ class _WorklistViewState extends State<WorklistView> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_WorklistViewState] initState');
     _repo = context.read<WorklistRepository>();
     _sync = context.read<OfflineSyncService>();
     // Initialize directly without setState since widget isn't mounted yet
@@ -45,10 +47,12 @@ class _WorklistViewState extends State<WorklistView> {
   @override
   void dispose() {
     _repo.changes.removeListener(_onChanges);
+    debugPrint('[_WorklistViewState] dispose');
     super.dispose();
   }
 
   void _onChanges() {
+    debugPrint('[_WorklistViewState] _onChanges');
     if (!mounted) return;
     _reload();
   }
@@ -76,6 +80,8 @@ class _WorklistViewState extends State<WorklistView> {
     if (!mounted) return;
     await _repo.recomputeAllAfterSync();
     if (!mounted) return;
+    await context.read<ReferralRepository>().recomputeAllAfterSync();
+    if (!mounted) return;
     _refreshLastSyncedLabel();
     if (report.errors.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,6 +94,8 @@ class _WorklistViewState extends State<WorklistView> {
     final report = await _sync.warmSync();
     if (!mounted) return;
     await _repo.recomputeAllAfterSync();
+    if (!mounted) return;
+    await context.read<ReferralRepository>().recomputeAllAfterSync();
     _refreshLastSyncedLabel();
     if (!mounted) return;
     final msg = report.errors.isNotEmpty
@@ -97,6 +105,7 @@ class _WorklistViewState extends State<WorklistView> {
   }
 
   void _onFilterChanged(Set<Programme> next) {
+    debugPrint('[_WorklistViewState] _onFilterChanged next=${next}');
     setState(() => _filter = next);
     _reload();
   }
@@ -224,7 +233,7 @@ class _ErrorState extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text(CommonStrings.retry),
+              label: Text(CommonStrings.retry),
             ),
           ],
         ),

@@ -17,10 +17,12 @@ import '../../core/models/mission_queue_item.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/mockup_svg_icons.dart';
+import '../../core/time/calendar_day.dart';
+import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
-import '../visit/widgets/mission_queue_card.dart';
+import '../visit/widgets/mission_queue_card.dart' show programmeBadgeColors;
 import 'household_detail_screen.dart';
 
 /// The Patients tab — a single household-card list matching the v13
@@ -58,6 +60,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   @override
   void initState() {
+    debugPrint('[_HouseholdListScreenState] initState');
     super.initState();
     // Defer loading until after first frame when context is available.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -71,6 +74,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   /// Loads the mission queue so a household's flagged member (if any) can
   /// render with its real urgency badge/status.
   Future<void> _loadQueueItems() async {
+    debugPrint('[_HouseholdListScreenState] _loadQueueItems');
     if (!mounted) return;
     try {
       final missionRepo = context.read<MissionDashboardRepository>();
@@ -91,12 +95,15 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_HouseholdListScreenState] dispose');
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
+
   void _loadData() {
+    debugPrint('[_HouseholdListScreenState] _loadData');
     final householdDao = context.read<HouseholdDao>();
     final memberDao = context.read<MemberDao>();
     final repo = context.read<DashboardRepository>();
@@ -146,6 +153,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     MemberDao memberDao,
     DashboardRepository repo,
   ) async {
+    debugPrint('[_HouseholdListScreenState] _fetchHouseholds');
     try {
       final localHouseholds = await householdDao.getAll(limit: 1000);
 
@@ -254,7 +262,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: AppColors.canvas,
         body: SafeArea(
           top: false,
           bottom: false,
@@ -314,7 +321,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                                   const SizedBox(height: 16),
                                   FilledButton.tonal(
                                     onPressed: () => setState(_loadData),
-                                    child: const Text(CommonStrings.retry),
+                                    child: Text(CommonStrings.retry),
                                   ),
                                 ],
                               ),
@@ -323,24 +330,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                           final items = snapshot.data ?? [];
                           if (items.isEmpty) {
                             return Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.people_outline,
-                                    size: 64,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    HouseholdListStrings.noMembers,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge,
-                                  ),
-                                ],
+                              child: Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: EmptyStateCard(
+                                  icon: Icons.people_outline,
+                                  iconColor: AppColors.textMuted,
+                                  iconBg: AppColors.border,
+                                  title: HouseholdListStrings.noMembers,
+                                ),
                               ),
                             );
                           }
@@ -354,6 +351,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
       ),
     );
   }
+
 
   /// Households matching the selected village tab (search is applied
   /// per-item in [_buildHouseholdsList] since it also needs the member list).
@@ -377,6 +375,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     int householdCount,
     int patientCount,
   ) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return Container(
       color: AppColors.navy,
       padding: EdgeInsets.fromLTRB(
@@ -437,7 +436,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: lc.cardSurface,
               borderRadius: BorderRadius.circular(12),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -448,10 +447,11 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) =>
-                        setState(() => _searchQuery = v.trim().toLowerCase()),
+                    onChanged: (v) {
+                      setState(() => _searchQuery = v.trim().toLowerCase());
+                    },
                     style: const TextStyle(
-                      fontFamily: 'NunitoSans',
+                      fontFamily: AppFonts.body,
                       fontSize: 14,
                     ),
                     decoration: InputDecoration(
@@ -461,7 +461,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                       // fontSize matches the Home dashboard's own search bar
                       // hint (DashboardSearchField, fontSize: 14).
                       hintStyle: TextStyle(
-                        fontFamily: 'NunitoSans',
+                        fontFamily: AppFonts.body,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textMuted,
@@ -484,12 +484,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                   GestureDetector(
                     onTap: () {
                       _searchController.clear();
-                      setState(() => _searchQuery = '');
+                      setState(() { _searchQuery = ''; });
                     },
-                    child: const Icon(
+                    child: Icon(
                       Icons.clear,
                       size: 18,
-                      color: Color(0xFF9CA3AF),
+                      color: lc.textMuted,
                     ),
                   ),
               ],
@@ -559,20 +559,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
     if (filteredItems.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.search_off,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              HouseholdListStrings.noMembers,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: EmptyStateCard(
+            icon: Icons.search_off,
+            iconColor: AppColors.textMuted,
+            iconBg: AppColors.border,
+            title: HouseholdListStrings.noMembers,
+          ),
         ),
       );
     }
@@ -589,6 +583,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         final primary = _primaryMember(item);
         final others = item.members.where((m) => m != primary).toList();
         final id = item.id ?? '';
+        final q = _searchQuery;
+        final highlightPrimary = q.isNotEmpty &&
+            (primary.name?.toLowerCase().contains(q) ?? false);
+        debugPrint(
+          '[HouseholdList] card ${item.householdNo}: primary=${primary.name} highlightPrimary=$highlightPrimary query="$q"',
+        );
         return _HouseholdCard(
           item: item,
           villageDisplayName: _villageDisplayName(item.village),
@@ -596,6 +596,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
             context,
             _MemberInfo.fromMember(primary, item),
           ),
+          highlightPrimary: highlightPrimary,
+          searchQuery: q,
           primaryRelation: _displayRelation(primary.relation),
           otherMembers: others,
           isExpanded: _expandedHouseholdIds.contains(id),
@@ -630,6 +632,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   }
 
   void _navigateToDetail(BuildContext context, _HouseholdItem item) {
+    debugPrint('[_HouseholdListScreenState] _navigateToDetail id=${item.id}');
     final id = item.id;
     if (id == null || id.isEmpty) {
       debugPrint('[HouseholdList] Skipping nav — household has empty ID');
@@ -639,6 +642,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   }
 
   void _navigateToMemberDetail(BuildContext context, _MemberInfo member) {
+    debugPrint('[_HouseholdListScreenState] _navigateToMemberDetail patientId=${member.patientId} id=${member.id} name=${member.name}');
     final id = (member.patientId != null && member.patientId!.isNotEmpty)
         ? member.patientId!
         : member.id;
@@ -667,32 +671,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     );
   }
 
-  /// Shared member-row widget: a `MissionQueueCard` (embedded/flush, no own
-  /// card chrome) when the member has an active mission-queue entry, else a
-  /// plain `PatientBadgeRow`.
+  /// Member row matching the v14 wireframe: always uses [_WireframeMemberRow]
+  /// so the layout is consistent regardless of whether the member has a queue
+  /// entry. The status dot (Today / Overdue / This week) is derived from the
+  /// queue item's tier when one exists.
   Widget _buildMemberRow(BuildContext context, _MemberInfo member) {
     final pid = member.patientId ?? member.id;
     final queueItem = pid != null ? _queueItems[pid] : null;
-    if (queueItem != null) {
-      return MissionQueueCard(
-        item: queueItem,
-        compact: true,
-        embedded: true,
-        onTap: () {
-          final navId = queueItem.patientId;
-          if (navId != null &&
-              navId.isNotEmpty &&
-              navId != 'household' &&
-              navId != 'households') {
-            context.go(
-              '/patients/$navId',
-              extra: {'name': queueItem.patientName},
-            );
-          }
-        },
-      );
-    }
-    return PatientBadgeRow(
+    return _WireframeMemberRow(
       name: member.name,
       age: member.age,
       gender: member.gender,
@@ -702,6 +688,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
       pncVisitCount: member.pncVisitCount,
       householdNo: member.householdNo,
       householdName: member.householdName,
+      tier: queueItem?.tier,
       onTap: () => _navigateToMemberDetail(context, member),
     );
   }
@@ -763,6 +750,8 @@ class _HouseholdCard extends StatelessWidget {
     required this.item,
     required this.villageDisplayName,
     required this.primaryMemberRow,
+    this.highlightPrimary = false,
+    this.searchQuery = '',
     this.primaryRelation,
     required this.otherMembers,
     required this.isExpanded,
@@ -775,6 +764,13 @@ class _HouseholdCard extends StatelessWidget {
   final String? villageDisplayName;
   final Widget primaryMemberRow;
 
+  /// Whether the primary member row should be highlighted (name matches query).
+  final bool highlightPrimary;
+
+  /// Active search query — used to highlight matching other members and
+  /// auto-expand the panel when a non-primary member matches.
+  final String searchQuery;
+
   /// The primary member's relation to the household head (e.g. "Husband"),
   /// or null when not shown (blank, or the member IS the head/self).
   final String? primaryRelation;
@@ -786,6 +782,7 @@ class _HouseholdCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     final count = item.memberCount ?? 0;
     // Bare head name (mockup shows just the name, e.g. "Nasrin Begum") — the
     // "'s Household" suffix on `item.name` is this screen's own construction
@@ -807,7 +804,7 @@ class _HouseholdCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: lc.cardSurface,
         borderRadius: BorderRadius.circular(14),
         boxShadow: AppShadows.householdCard,
       ),
@@ -820,11 +817,11 @@ class _HouseholdCard extends StatelessWidget {
             child: InkWell(
               onTap: onTap,
               child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.cardSurfaceMuted,
+                decoration: BoxDecoration(
+                  color: lc.cardSurfaceMuted,
                   border: Border(
                     bottom: BorderSide(
-                      color: AppColors.progressTrack,
+                      color: lc.surfaceTrack,
                       width: 1,
                     ),
                   ),
@@ -844,7 +841,7 @@ class _HouseholdCard extends StatelessWidget {
                           Text(
                             title,
                             style: const TextStyle(
-                              fontFamily: 'Nunito',
+                              fontFamily: AppFonts.display,
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
                               color: AppColors.navy,
@@ -873,15 +870,15 @@ class _HouseholdCard extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.aiSurfaceStart,
+                        color: lc.aiSurfaceStart,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         HouseholdListStrings.membersCount(count),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.aiPurpleDark,
+                          color: lc.aiPurple,
                         ),
                       ),
                     ),
@@ -904,58 +901,74 @@ class _HouseholdCard extends StatelessWidget {
             ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: primaryMemberRow,
+            child: highlightPrimary
+                ? _SearchMatchHighlight(child: primaryMemberRow)
+                : primaryMemberRow,
           ),
           if (otherMembers.isNotEmpty) ...[
-            InkWell(
-              onTap: onToggleExpanded,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      HouseholdListStrings.otherMembersToggle(
-                        otherMembers.length,
-                      ),
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.aiPurple,
+            Builder(builder: (context) {
+              final anyOtherMatches = searchQuery.isNotEmpty &&
+                  otherMembers.any(
+                    (m) => m.name?.toLowerCase().contains(searchQuery) ?? false,
+                  );
+              final showExpanded = isExpanded || anyOtherMatches;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  InkWell(
+                    onTap: onToggleExpanded,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            HouseholdListStrings.otherMembersToggle(
+                              otherMembers.length,
+                            ),
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.aiPurple,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          AnimatedRotation(
+                            turns: showExpanded ? 0.5 : 0,
+                            duration: const Duration(milliseconds: 200),
+                            child: MockupIcons.chevronDown(),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 5),
-                    AnimatedRotation(
-                      turns: isExpanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 200),
-                      child: MockupIcons.chevronDown(),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            AnimatedCrossFade(
-              firstChild: const SizedBox(width: double.infinity),
-              secondChild: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Divider(height: 1, color: AppColors.progressTrack),
-                    for (final other in otherMembers)
-                      _OtherMemberRow(
-                        member: other,
-                        onTap: () => onMemberTap(other),
+                  ),
+                  AnimatedCrossFade(
+                    firstChild: const SizedBox(width: double.infinity),
+                    secondChild: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Divider(height: 1, color: lc.surfaceTrack),
+                          for (final other in otherMembers)
+                            _OtherMemberRow(
+                              member: other,
+                              isHighlighted: searchQuery.isNotEmpty &&
+                                  (other.name?.toLowerCase().contains(searchQuery) ?? false),
+                              onTap: () => onMemberTap(other),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
-              ),
-              crossFadeState: isExpanded
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              duration: const Duration(milliseconds: 200),
-              sizeCurve: Curves.easeOut,
-            ),
+                    ),
+                    crossFadeState: showExpanded
+                        ? CrossFadeState.showSecond
+                        : CrossFadeState.showFirst,
+                    duration: const Duration(milliseconds: 200),
+                    sizeCurve: Curves.easeOut,
+                  ),
+                ],
+              );
+            }),
           ],
         ],
       ),
@@ -970,15 +983,20 @@ class _HouseholdCard extends StatelessWidget {
 /// opens it — real capability shouldn't regress just because the mockup
 /// couldn't demonstrate it.
 class _OtherMemberRow extends StatelessWidget {
-  const _OtherMemberRow({required this.member, required this.onTap});
+  const _OtherMemberRow({
+    required this.member,
+    required this.onTap,
+    this.isHighlighted = false,
+  });
 
   final _HouseholdMember member;
   final VoidCallback onTap;
+  final bool isHighlighted;
 
   @override
   Widget build(BuildContext context) {
     final ageGender = [
-      if (member.dateOfBirth != null) '${_ageFromDob(member.dateOfBirth)}',
+      if (member.dateOfBirth != null) '${CalendarDay.ageFromDob(member.dateOfBirth)}',
       if (member.gender != null) member.gender,
     ].whereType<String>().join('/');
     final subtitle = [
@@ -987,8 +1005,9 @@ class _OtherMemberRow extends StatelessWidget {
       if (ageGender.isNotEmpty) ageGender,
     ].whereType<String>().join(' · ');
 
-    return InkWell(
+    final row = InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
@@ -996,7 +1015,7 @@ class _OtherMemberRow extends StatelessWidget {
             Container(
               width: 32,
               height: 32,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.progressTrack,
                 shape: BoxShape.circle,
               ),
@@ -1004,7 +1023,7 @@ class _OtherMemberRow extends StatelessWidget {
               child: Text(
                 memberInitials(member.name),
                 style: const TextStyle(
-                  fontFamily: 'Nunito',
+                  fontFamily: AppFonts.display,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textMuted,
@@ -1018,9 +1037,9 @@ class _OtherMemberRow extends StatelessWidget {
                 children: [
                   Text(
                     member.name ?? HouseholdListStrings.unnamedMember,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: isHighlighted ? FontWeight.w800 : FontWeight.w700,
                       color: AppColors.textPrimary,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1056,22 +1075,9 @@ class _OtherMemberRow extends StatelessWidget {
         ),
       ),
     );
+    return isHighlighted ? _SearchMatchHighlight(child: row) : row;
   }
 
-  static int? _ageFromDob(String? dob) {
-    if (dob == null) return null;
-    try {
-      final d = DateTime.parse(dob);
-      final now = DateTime.now();
-      var age = now.year - d.year;
-      if (now.month < d.month || (now.month == d.month && now.day < d.day)) {
-        age--;
-      }
-      return age;
-    } catch (_) {
-      return null;
-    }
-  }
 }
 
 class _HouseholdItem {
@@ -1429,6 +1435,216 @@ class _MemberInfo {
       programmes: member.programmes,
       ancVisitCount: member.ancVisitCount,
       pncVisitCount: member.pncVisitCount,
+    );
+  }
+}
+
+/// Light blue tint wrapper for a member row that matches the current search query.
+class _SearchMatchHighlight extends StatelessWidget {
+  const _SearchMatchHighlight({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.statusWarning, width: 1.5),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: child,
+    );
+  }
+}
+
+/// Member row that matches the v14 wireframe `renderHouseholds` member item:
+/// name + age/gender + programme badge baseline-aligned (Wrap), address on the
+/// next line, phone below that, and a [_TierStatusPill] on the right when the
+/// member has an active queue entry.
+class _WireframeMemberRow extends StatelessWidget {
+  const _WireframeMemberRow({
+    required this.name,
+    required this.onTap,
+    this.age,
+    this.gender,
+    this.phoneNumber,
+    this.programmes = const {},
+    this.ancVisitCount = 0,
+    this.pncVisitCount = 0,
+    this.householdNo,
+    this.householdName,
+    this.tier,
+  });
+
+  final String? name;
+  final int? age;
+  final String? gender;
+  final String? phoneNumber;
+  final Set<Programme> programmes;
+  final int ancVisitCount;
+  final int pncVisitCount;
+  final String? householdNo;
+  final String? householdName;
+  final DashboardTier? tier;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final badgeLabel = programmeReason(
+      programmes: programmes,
+      ancVisitCount: ancVisitCount,
+      pncVisitCount: pncVisitCount,
+    );
+    final (badgeBg, badgeFg) = programmeBadgeColors(primaryProgrammeOf(programmes));
+
+    final address = [
+      householdNo != null ? 'House #$householdNo' : null,
+      householdName,
+    ].whereType<String>().join(', ');
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 3,
+                    children: [
+                      Text(
+                        name ?? CommonStrings.unnamed,
+                        style: AppTextStyles.worklistPatientName,
+                      ),
+                      if (age != null || gender != null)
+                        Text(
+                          [
+                            if (age != null) '$age',
+                            if (gender != null)
+                              gender!.substring(0, 1).toUpperCase(),
+                          ].join('/'),
+                          style: AppTextStyles.worklistPatientMeta,
+                        ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          badgeLabel,
+                          style: TextStyle(
+                            fontFamily: AppFonts.body,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: badgeFg,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (address.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.worklistAddress.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                  if (phoneNumber != null && phoneNumber!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        phoneNumber!,
+                        style: AppTextStyles.worklistPhone.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (tier != null && tier != DashboardTier.upcoming) ...[
+              const SizedBox(width: 8),
+              _TierStatusPill(tier: tier!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dot + label status indicator matching the wireframe's `.v-status` element.
+/// Palette is taken directly from the v14 prototype JS data object
+/// (`statusColor` / `dotColor` per tier).
+class _TierStatusPill extends StatelessWidget {
+  const _TierStatusPill({required this.tier});
+  final DashboardTier tier;
+
+  static const _kTodayText    = Color(0xFF059669);
+  static const _kTodayDot     = Color(0xFF10B981);
+  static const _kOverdueText  = Color(0xFFDC2626);
+  static const _kOverdueDot   = Color(0xFFEF4444);
+  static const _kThisWeekText = Color(0xFFB45309);
+  static const _kThisWeekDot  = Color(0xFFF59E0B);
+
+  @override
+  Widget build(BuildContext context) {
+    final String label;
+    final Color textColor;
+    final Color dotColor;
+    if (tier == DashboardTier.critical || tier == DashboardTier.overdue) {
+      label = MissionDashboardStrings.tierLabelOverdue;
+      textColor = _kOverdueText;
+      dotColor = _kOverdueDot;
+    } else if (tier == DashboardTier.dueToday) {
+      label = WorklistStrings.urgencyToday;
+      textColor = _kTodayText;
+      dotColor = _kTodayDot;
+    } else if (tier == DashboardTier.thisWeek) {
+      label = WorklistStrings.urgencyThisWeek;
+      textColor = _kThisWeekText;
+      dotColor = _kThisWeekDot;
+    } else {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dotColor,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: AppTextStyles.worklistStatusPill.copyWith(color: textColor),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

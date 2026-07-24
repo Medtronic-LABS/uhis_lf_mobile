@@ -17,7 +17,7 @@ class CoachingDao {
     required String titleBn,
     required int estimatedMinutes,
     required String rawJson,
-    required bool priorityToday,
+    int priorityRank = 0,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.db.insert(
@@ -29,7 +29,8 @@ class CoachingDao {
         'title_bn': titleBn,
         'estimated_minutes': estimatedMinutes,
         'raw_json': rawJson,
-        'priority_today': priorityToday ? 1 : 0,
+        // Higher rank floats first (ORDER BY priority_today DESC). 0 = not today.
+        'priority_today': priorityRank,
         'synced_at': now,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -45,10 +46,31 @@ class CoachingDao {
     ''');
   }
 
-  Future<void> setPriorityToday(String moduleId, bool priority) async {
+  /// Clears every module's morning rank (sets `priority_today` to 0).
+  Future<void> clearAllPriorities() async {
+    await _db.db.update(tableModules, {'priority_today': 0});
+  }
+
+  /// Sets morning priority ranks. [orderedIds] is highest-priority first;
+  /// the first id gets rank = length, the last gets rank = 1.
+  Future<void> applyMorningPriorities(List<String> orderedIds) async {
+    await clearAllPriorities();
+    if (orderedIds.isEmpty) return;
+    final n = orderedIds.length;
+    for (var i = 0; i < n; i++) {
+      await _db.db.update(
+        tableModules,
+        {'priority_today': n - i},
+        where: 'id = ?',
+        whereArgs: [orderedIds[i]],
+      );
+    }
+  }
+
+  Future<void> setPriorityRank(String moduleId, int rank) async {
     await _db.db.update(
       tableModules,
-      {'priority_today': priority ? 1 : 0},
+      {'priority_today': rank},
       where: 'id = ?',
       whereArgs: [moduleId],
     );
@@ -122,5 +144,88 @@ class CoachingDao {
       await _db.db.rawQuery('SELECT COUNT(*) FROM $tableModules'),
     );
     return (count ?? 0) == 0;
+  }
+}
+
+/// Persists the assistant chat history so the user sees prior messages across
+/// app restarts.
+class ChatMessageDao {
+  const ChatMessageDao(this._db);
+
+  final AppDatabase _db;
+
+  static const String _table = AppDatabase.tableChatMessages;
+
+  Future<void> insertMessage({
+    required String id,
+    required String role,
+    required String text,
+    required int timestampMs,
+    String? suggestedQuestionsJson,
+  }) async {
+    await _db.db.insert(
+      _table,
+      {
+        'id': id,
+        'role': role,
+        'text': text,
+        'timestamp_ms': timestampMs,
+        'suggested_questions': suggestedQuestionsJson,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns up to [limit] most recent messages, ordered oldest-first.
+  Future<List<Map<String, dynamic>>> recentMessages({int limit = 50}) async {
+    return _db.db.query(
+      _table,
+      orderBy: 'timestamp_ms ASC',
+      limit: limit,
+    );
+  }
+
+  Future<void> clearAll() async {
+    await _db.db.delete(_table);
+  }
+}
+
+/// Caches coaching FAQ suggestions synced from the platform backend.
+class CoachingFaqDao {
+  const CoachingFaqDao(this._db);
+
+  final AppDatabase _db;
+
+  static const String _table = AppDatabase.tableCoachingFaqs;
+
+  Future<void> upsertFaq({
+    required String id,
+    required String questionEn,
+    String? questionBn,
+    required int occurrenceCount,
+    required int rank,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _db.db.insert(
+      _table,
+      {
+        'id': id,
+        'question_en': questionEn,
+        'question_bn': questionBn,
+        'occurrence_count': occurrenceCount,
+        'rank': rank,
+        'synced_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns all FAQs ordered by rank ascending (lower rank = higher priority).
+  Future<List<Map<String, dynamic>>> allFaqs() async {
+    return _db.db.query(_table, orderBy: 'rank ASC');
+  }
+
+  Future<void> clearAll() async {
+    await _db.db.delete(_table);
   }
 }

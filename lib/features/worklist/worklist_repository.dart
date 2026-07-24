@@ -100,7 +100,7 @@ class WorklistRepository {
     int ancVisitCount = 0,
     int pncVisitCount = 0,
   }) {
-    final age = p.age ?? _ageFromDob(p.dob);
+    final age = p.age ?? CalendarDay.ageFromDob(p.dob);
     return WorklistEntry(
       patientId: p.id,
       displayName: p.name ?? '(Unnamed patient)',
@@ -415,7 +415,7 @@ class WorklistRepository {
 
     return PatientFacts(
       patientId: p.id,
-      ageYears: p.age ?? _ageFromDob(p.dob),
+      ageYears: p.age ?? CalendarDay.ageFromDob(p.dob),
       programmes: programmes,
       missedVisitsLast90d: missed,
       daysSinceLastVisit: daysSinceLast,
@@ -490,18 +490,6 @@ class WorklistRepository {
     return now.difference(DateTime.fromMillisecondsSinceEpoch(last)).inDays;
   }
 
-  static int? _ageFromDob(String? dob) {
-    if (dob == null || dob.isEmpty) return null;
-    final parsed = DateTime.tryParse(dob);
-    if (parsed == null) return null;
-    final now = DateTime.now();
-    var years = now.year - parsed.year;
-    if (now.month < parsed.month ||
-        (now.month == parsed.month && now.day < parsed.day)) {
-      years -= 1;
-    }
-    return years < 0 ? 0 : years;
-  }
 }
 
 class _ScoreDebugRow {
