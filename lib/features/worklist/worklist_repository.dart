@@ -218,6 +218,7 @@ class WorklistRepository {
     final progMap = await _programmes.programmesForMany(ids);
     final followMap = await _followUps.forMany(ids);
     final immMap = await _immunisations.forMany(ids);
+    final draftDates = await _localAssessments.latestDraftCreatedAtForMany(ids);
     final localVitals = await _localAssessments.latestClinicalVitalsForMany(ids);
     final historyVitals = await _vitalsFromAssessmentHistory(ids);
     final now = DateTime.now();
@@ -254,9 +255,13 @@ class WorklistRepository {
         vitals,
         now,
         nextDueAt: nextDue,
+        latestDraftMs: draftDates[p.id],
       );
       final assessment = _risk.score(facts);
-      final lastVisit = _lastCompletedMillis(follows) ?? p.lastVisitAt;
+      final draftMs = draftDates[p.id];
+      final lastVisit = [_lastCompletedMillis(follows), p.lastVisitAt, draftMs]
+          .whereType<int>()
+          .fold<int?>(null, (best, v) => best == null || v > best ? v : best);
       await _patients.updateRisk(
         patientId: p.id,
         sortRank: assessment.sortRank,
@@ -388,6 +393,7 @@ class WorklistRepository {
     ClinicalVitals? vitals,
     DateTime now, {
     DateTime? nextDueAt,
+    int? latestDraftMs,
   }) {
     final cutoff = now.subtract(const Duration(days: 90)).millisecondsSinceEpoch;
     int missed = 0;
@@ -413,13 +419,34 @@ class WorklistRepository {
 
     final daysSinceLast = _daysSinceLastVisit(follows, now);
 
+    // A local draft (offline-saved assessment) counts as a completed visit.
+    // Derive effective last-visit days from whichever is more recent: the
+    // synced follow-up or the draft timestamp.
+    final draftDays = latestDraftMs == null
+        ? null
+        : now
+            .difference(DateTime.fromMillisecondsSinceEpoch(latestDraftMs))
+            .inDays;
+    final effectiveDaysSince = [daysSinceLast, draftDays]
+        .whereType<int>()
+        .fold<int?>(null, (best, v) => best == null || v < best ? v : best);
+
+    // When the draft is newer than the scheduled due date, the overdue signal
+    // no longer applies — the SK already completed the visit offline.
+    final effectiveNextDueAt =
+        (latestDraftMs != null &&
+                nextDueAt != null &&
+                latestDraftMs >= nextDueAt.millisecondsSinceEpoch)
+            ? null
+            : nextDueAt;
+
     return PatientFacts(
       patientId: p.id,
       ageYears: p.age ?? CalendarDay.ageFromDob(p.dob),
       programmes: programmes,
       missedVisitsLast90d: missed,
-      daysSinceLastVisit: daysSinceLast,
-      nextDueAt: nextDueAt,
+      daysSinceLastVisit: effectiveDaysSince,
+      nextDueAt: effectiveNextDueAt,
       lostToFollowUp: lost,
       redFlag: p.redFlag ?? false,
       serverRiskLevel: p.riskHintLevel,

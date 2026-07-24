@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/api/api_client.dart';
@@ -279,7 +281,8 @@ class EnrollmentController extends ChangeNotifier {
         final deviceId = await auth.deviceId();
         final location = await LocationService.getCurrentPosition();
 
-        final result = await repo.submit(
+        // Build payload first — generates reference IDs without a network call.
+        final (:body, :result) = repo.buildPayload(
           household: _household!,
           head: _householdHead!,
           members: _members,
@@ -291,13 +294,26 @@ class EnrollmentController extends ChangeNotifier {
           longitude: location.longitude,
         );
 
-        // Mirror Android: save to local SQLite immediately so the household
-        // and its members are visible without waiting for the backend queue
-        // to be processed and a subsequent warm-sync to pull them back.
+        // Persist to local SQLite before hitting the network so the household
+        // is visible immediately and survives an offline failure.
         await _persistLocally(
           result: result,
           location: (latitude: location.latitude, longitude: location.longitude),
         );
+
+        // Attempt the network POST. A connectivity failure is not fatal —
+        // the record is already saved locally and will sync on next warm-sync.
+        try {
+          await repo.postEnrollment(body);
+        } on DioException catch (e) {
+          if (_isNetworkError(e)) {
+            debugPrint('[EnrollmentController] offline — enrollment queued for sync');
+          } else {
+            rethrow;
+          }
+        } on SocketException {
+          debugPrint('[EnrollmentController] offline — enrollment queued for sync');
+        }
       } else {
         // No HTTP client injected — dev/test path.
         debugPrint('[EnrollmentController] mock submit: ${_household?.toJson()}');
@@ -452,4 +468,10 @@ class EnrollmentController extends ChangeNotifier {
   String _generateHouseholdNumber() {
     return DateTime.now().millisecondsSinceEpoch.toString();
   }
+
+  static bool _isNetworkError(DioException e) =>
+      e.type == DioExceptionType.connectionError ||
+      e.type == DioExceptionType.connectionTimeout ||
+      e.type == DioExceptionType.sendTimeout ||
+      e.type == DioExceptionType.receiveTimeout;
 }
