@@ -3882,7 +3882,7 @@ class _TimelineEntryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title · badge (inline) + relative date
+          // Title · badge (inline) + date pushed right + tap chevron
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -3912,7 +3912,7 @@ class _TimelineEntryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const Spacer(),
               Text(
                 entry.relativeDate,
                 style: const TextStyle(
@@ -3921,6 +3921,14 @@ class _TimelineEntryCard extends StatelessWidget {
                   color: AppColors.textMuted,
                 ),
               ),
+              if (entry.source != null) ...[
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 14,
+                  color: AppColors.textMuted.withValues(alpha: 0.45),
+                ),
+              ],
             ],
           ),
           // Clinical narrative
@@ -3935,15 +3943,6 @@ class _TimelineEntryCard extends StatelessWidget {
               ),
             ),
           ],
-          if (entry.source != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Icon(
-                Icons.chevron_right_rounded,
-                size: 14,
-                color: AppColors.textMuted.withValues(alpha: 0.45),
-              ),
-            ),
         ],
       ),
     );
