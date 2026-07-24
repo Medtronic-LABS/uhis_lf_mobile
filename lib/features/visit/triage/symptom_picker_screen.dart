@@ -846,9 +846,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     ),
                   ),
 
-                // Eligible services grid — adults only; under-5 uses vaccination CTA
-                if (!(_patientContext!.isUnder5))
-                  SliverPadding(
+                // Eligible services grid — shown for all patients.
+                // Under-5: Vaccination + Child Health cards only.
+                // Adults: full programme card set.
+                SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     sliver: SliverToBoxAdapter(
                       child: _InlineServiceSelector(
@@ -873,6 +874,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         },
                         onPWToggle: _onPWToggle,
                         onDeliveryToggle: _onDeliveryToggle,
+                        onVaccination: _onVaccination,
                       ),
                     ),
                   ),
@@ -931,10 +933,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                           ),
 
                         // ── Vaccination CTA (under-5 only) ─────────────────
-                        // For children the vaccination button is the primary
-                        // CTA; in embedded mode it also advances the visit flow
-                        // to the vaccination step. The "Start Checkup" button
-                        // is hidden for under-5 patients.
                         if (_patientContext!.isUnder5) ...[
                           const SizedBox(height: 4),
                           SizedBox(
@@ -947,10 +945,25 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                               ),
                               child: Text(
                                 ChildAssessmentStrings.vaccinationCta,
-                                style: TextStyle(fontWeight: FontWeight.w700),
+                                style: const TextStyle(fontWeight: FontWeight.w700),
                               ),
                             ),
                           ),
+                          // Child Health assessment CTA — only when SK selected it.
+                          if (_selectedProgrammes.contains(Programme.imci)) ...[
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: _onContinue,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.navy,
+                                  foregroundColor: AppColors.textOnNavy,
+                                ),
+                                child: Text(SymptomPickerStrings.ctaStartCheckup),
+                              ),
+                            ),
+                          ],
                         ],
 
                         // ── Start Checkup button (adults only) ────────────
@@ -1630,6 +1643,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: gridSections
                     .expand((s) => s.$2)
                     .toSet()
@@ -1667,6 +1681,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
+                        alignment: WrapAlignment.spaceBetween,
                         children: section.$2
                             .map(
                               (code) => _PickerChip(
@@ -1887,7 +1902,7 @@ class _PickerChip extends StatelessWidget {
 // Meta-cards PW and Delivery are UI gates (not Programme enums) that lock/unlock
 // ANC and PNC respectively. Under-5 patients skip this widget entirely.
 
-enum _ServiceCardKind { programme, pw, delivery, general, rmnch }
+enum _ServiceCardKind { programme, pw, delivery, general, rmnch, vaccination }
 
 
 class _ServiceCardDef {
@@ -1906,20 +1921,25 @@ class _ServiceCardDef {
   bool get isPW => kind == _ServiceCardKind.pw;
   bool get isDelivery => kind == _ServiceCardKind.delivery;
   bool get isRMNCH => kind == _ServiceCardKind.rmnch;
+  bool get isVaccination => kind == _ServiceCardKind.vaccination;
 }
 
 // Card order matches the Eligible Services wireframe (apon_sushashthya_v14):
 // Row 1: PW, ANC, Pregnancy Outcome
 // Row 2: PNC, FP, NCD
 // Row 3: TB, Eye care
+// Under-5 row: Vaccination, Child Health
 const _kAllServiceCards = [
-  _ServiceCardDef(kind: _ServiceCardKind.pw,        emoji: '🤰', label: 'PW'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',               programme: Programme.anc),
-  _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Pregnancy Outcome'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',               programme: Programme.pnc),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',                programme: Programme.familyPlanning),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',               programme: Programme.ncd),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
+  _ServiceCardDef(kind: _ServiceCardKind.pw,          emoji: '🤰', label: 'PW'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🏥', label: 'ANC',               programme: Programme.anc),
+  _ServiceCardDef(kind: _ServiceCardKind.delivery,    emoji: '🚼', label: 'Pregnancy Outcome'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '👶', label: 'PNC',               programme: Programme.pnc),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🌸', label: 'FP',                programme: Programme.familyPlanning),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '💊', label: 'NCD',               programme: Programme.ncd),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
+  // Under-5 cards — shown only when ctx.isUnder5
+  _ServiceCardDef(kind: _ServiceCardKind.vaccination, emoji: '💉', label: 'Vaccination'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🧒', label: 'Child Health',      programme: Programme.imci),
 ];
 
 class _InlineServiceSelector extends StatelessWidget {
@@ -1934,6 +1954,7 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.onProgrammeToggle,
     required this.onPWToggle,
     required this.onDeliveryToggle,
+    required this.onVaccination,
   });
 
   final PatientContext patientContext;
@@ -1951,18 +1972,22 @@ class _InlineServiceSelector extends StatelessWidget {
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
-  /// All 8 service cards shown for adult patients; eligibility is communicated
-  /// via lock state (greyed + snackbar on tap) rather than hiding. Order and
-  /// visibility match the Eligible Services wireframe (apon_sushashthya_v14).
+  /// Called when SK taps the Vaccination card (under-5 only).
+  final VoidCallback onVaccination;
+
   List<_ServiceCardDef> _visibleCards() {
     final ctx = patientContext;
     return _kAllServiceCards.where((c) {
       switch (c.kind) {
+        case _ServiceCardKind.vaccination:
+          return ctx.isUnder5;
         case _ServiceCardKind.pw:
         case _ServiceCardKind.delivery:
-          return ctx.isFemale && ctx.ageYears >= 15;
+          return ctx.isFemale && ctx.ageYears >= 15 && !ctx.isUnder5;
         case _ServiceCardKind.programme:
           final p = c.programme!;
+          if (p == Programme.imci) return ctx.isUnder5;
+          if (ctx.isUnder5) return false;
           if (p == Programme.anc || p == Programme.pnc) {
             return ctx.isFemale && ctx.ageYears >= 15;
           }
@@ -2000,6 +2025,8 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   bool _isLocked(_ServiceCardDef card) {
+    if (card.isVaccination) return false;
+    if (card.programme == Programme.imci) return false;
     final ctx = patientContext;
     final pregnant = ctx.isPregnant && !ctx.isPostpartum;
     if (card.isPW) return isDelivery || !pregnant;
@@ -2015,6 +2042,7 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   bool _isCardSelected(_ServiceCardDef card) {
+    if (card.isVaccination) return true;
     if (card.isPW) return isPW && !isDelivery;
     if (card.isDelivery) return isDelivery;
     if (card.isRMNCH) {
@@ -2028,6 +2056,10 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
+    if (card.isVaccination) {
+      onVaccination();
+      return;
+    }
     final alreadySelected = _isCardSelected(card);
     if (_isLocked(card) && !alreadySelected) {
       final hint = isDelivery
