@@ -705,6 +705,15 @@ class TriageViewModel extends ChangeNotifier {
       }
     }
 
+    // IMCI (Child Health): age-gated, no enrolment required — mirrors ANC/PNC
+    // which show on pregnancy context rather than explicit enrolment alone.
+    if (ctx.isUnder5) {
+      final codes = codesFor(Programme.imci);
+      if (codes.isNotEmpty) {
+        sections.add(SymptomSection(programme: Programme.imci, codes: codes));
+      }
+    }
+
     return sections;
   }
 
