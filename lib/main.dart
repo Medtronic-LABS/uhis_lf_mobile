@@ -16,6 +16,7 @@ import 'app/theme.dart';
 import 'app/theme_provider.dart';
 import 'core/api/api_client.dart';
 import 'core/api/realtime_asr_service.dart';
+import 'core/preferences/ai_feature_toggles_notifier.dart';
 import 'core/preferences/scribe_engine_notifier.dart';
 import 'core/preferences/vad_tuning_notifier.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -459,6 +460,13 @@ class _UhisNextAppState extends State<UhisNextApp>
         ChangeNotifierProvider<VadTuningNotifier>(
           create: (_) =>
               VadTuningNotifier(const FlutterSecureStorage())..load(),
+        ),
+        // Persisted per-step AI widget on/off switches (Settings → AI
+        // Settings → AI Widgets) — lets an SK disable an AI surface they
+        // don't want without a rebuild.
+        ChangeNotifierProvider<AiFeatureTogglesNotifier>(
+          create: (_) =>
+              AiFeatureTogglesNotifier(const FlutterSecureStorage())..load(),
         ),
         // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(

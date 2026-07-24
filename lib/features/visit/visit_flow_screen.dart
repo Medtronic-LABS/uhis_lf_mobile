@@ -28,6 +28,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import 'models/anc_assessment.dart';
 import '../../core/db/local_assessment_dao.dart';
 import 'assessment_repository.dart';
@@ -1411,7 +1412,16 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   Future<NabaResponse> _fetchNaba() async {
     debugPrint('[_Step3AiRecoState] _fetchNaba');
     final apiClient = context.read<ApiClient>(); // read before any await
+    final toggles =
+        context.read<AiFeatureTogglesNotifier>().toggles; // ditto
     await _loadVitalsAndLabs();
+    if (!toggles.step3SummaryEnabled &&
+        !toggles.step3ReferralAlertEnabled &&
+        !toggles.step3WhatsAppEnabled) {
+      // Every Step 3 AI surface is off — skip the network call entirely
+      // (saves the SK's data) rather than fetch and discard the result.
+      return _ruleBasedNaba();
+    }
     try {
       final repo = NabaRepository(apiClient);
       final programmes = widget.confirmedProgrammes
@@ -2108,6 +2118,53 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     setState(() => _future = nextFuture);
   }
 
+  /// Blends [fetched] (AI, or already rule-based if the AI call failed or
+  /// was skipped) with a purely local [_ruleBasedNaba()] per Step 3 toggle,
+  /// so a disabled sub-toggle substitutes local content for that specific
+  /// card even when the AI response already contains a value for it.
+  NabaResponse _effectiveNaba(NabaResponse fetched) {
+    final toggles = context.read<AiFeatureTogglesNotifier>().toggles;
+    if (toggles.step3SummaryEnabled &&
+        toggles.step3ReferralAlertEnabled &&
+        toggles.step3WhatsAppEnabled) {
+      return fetched;
+    }
+    final local = _ruleBasedNaba();
+    return NabaResponse(
+      requestId: fetched.requestId,
+      modelVersion: fetched.modelVersion,
+      generatedAt: fetched.generatedAt,
+      rationale: fetched.rationale,
+      visitSummary:
+          toggles.step3SummaryEnabled ? fetched.visitSummary : local.visitSummary,
+      clinicalFindings: toggles.step3SummaryEnabled
+          ? fetched.clinicalFindings
+          : local.clinicalFindings,
+      nextActions:
+          toggles.step3SummaryEnabled ? fetched.nextActions : local.nextActions,
+      dangerSigns:
+          toggles.step3ReferralAlertEnabled ? fetched.dangerSigns : local.dangerSigns,
+      followUp: toggles.step3SummaryEnabled ? fetched.followUp : local.followUp,
+      counselling:
+          toggles.step3SummaryEnabled ? fetched.counselling : local.counselling,
+      familyCounselling: toggles.step3SummaryEnabled
+          ? fetched.familyCounselling
+          : local.familyCounselling,
+      medicationAdvice: toggles.step3SummaryEnabled
+          ? fetched.medicationAdvice
+          : local.medicationAdvice,
+      whatsappSummary: toggles.step3WhatsAppEnabled
+          ? fetched.whatsappSummary
+          : local.whatsappSummary,
+      doctorHandover:
+          toggles.step3SummaryEnabled ? fetched.doctorHandover : local.doctorHandover,
+      referralRecommendation: toggles.step3ReferralAlertEnabled
+          ? fetched.referralRecommendation
+          : local.referralRecommendation,
+      contextTruncated: fetched.contextTruncated,
+    );
+  }
+
   Future<void> _onAccepted(NabaResponse naba) async {
     debugPrint('[_Step3AiRecoState] _onAccepted naba=${naba}');
     if (_accepted) return;
@@ -2148,7 +2205,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         if (snap.hasError) {
           return _buildError(snap.error);
         }
-        return _buildResult(snap.data!);
+        return _buildResult(_effectiveNaba(snap.data!));
       },
     );
   }

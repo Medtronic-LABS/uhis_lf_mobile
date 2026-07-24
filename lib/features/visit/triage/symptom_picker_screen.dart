@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/local_assessment_dao.dart';
@@ -252,7 +253,14 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           'enrolledSeed: ${enrolledSeed.map((p) => p.name).join(', ')} '
           'selected: ${_selectedProgrammes.map((p) => p.name).join(', ')}');
       _fireProgrammesLive();
-      _startBriefingFetch(ctx);
+      if (context.read<AiFeatureTogglesNotifier>().toggles.step1SummaryEnabled) {
+        _startBriefingFetch(ctx);
+      } else {
+        // Toggle off — skip the AI-service call entirely (saves the SK's
+        // data) and land in the same state the fallback-render path already
+        // treats as "show local briefing content".
+        setState(() => _briefingLoading = false);
+      }
     } catch (e, stack) {
       debugPrint('[SymptomPicker] ERROR: $e');
       debugPrint('[SymptomPicker] Stack: $stack');
@@ -737,6 +745,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         floatingActionButton: null,
         body: Consumer<TriageViewModel>(
           builder: (context, vm, _) {
+            final aiToggles = context.watch<AiFeatureTogglesNotifier>().toggles;
             return CustomScrollView(
               slivers: [
                 // 1) Before You Knock (AI brief — collapsible card).
@@ -777,7 +786,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                 ),
 
                 // Prominent AI Scribe mic banner — spec §4.1.2 / §5.1.1.
-                if (AppConfig.scribeEnabled)
+                if (AppConfig.scribeEnabled && aiToggles.step1AsrEnabled)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -60,8 +61,12 @@ class AiSettingsScreen extends StatelessWidget {
 
   Future<void> _confirmReset(BuildContext context) async {
     debugPrint('[AiSettingsScreen] _confirmReset context=${context}');
-    final notifier = context.read<VadTuningNotifier>();
-    await notifier.resetToDefaults();
+    final vadNotifier = context.read<VadTuningNotifier>();
+    final togglesNotifier = context.read<AiFeatureTogglesNotifier>();
+    await Future.wait([
+      vadNotifier.resetToDefaults(),
+      togglesNotifier.resetToDefaults(),
+    ]);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AiSettingsStrings.resetConfirmation)),
@@ -100,14 +105,30 @@ class _VadTuningBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                AiSettingsStrings.sectionHeader,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
-                  letterSpacing: 0.8,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    AiSettingsStrings.sectionHeader,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMuted,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => notifier.resetToDefaults(),
+                    child: const Text(
+                      AiSettingsStrings.widgetsResetToDefaults,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.aiPurpleDark,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               _TuningSlider(
@@ -195,7 +216,210 @@ class _VadTuningBody extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        const _AiWidgetTogglesCard(),
       ],
+    );
+  }
+}
+
+class _AiWidgetTogglesCard extends StatelessWidget {
+  const _AiWidgetTogglesCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final togglesNotifier = context.watch<AiFeatureTogglesNotifier>();
+    final t = togglesNotifier.toggles;
+
+    void save(AiFeatureToggles next) => togglesNotifier.update(next);
+    final allEnabled = t.step1SummaryEnabled &&
+        t.step1AsrEnabled &&
+        t.step2AsrEnabled &&
+        t.step3SummaryEnabled &&
+        t.step3ReferralAlertEnabled &&
+        t.step3WhatsAppEnabled;
+
+    return _WhiteCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                AiSettingsStrings.widgetsSectionHeader,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => togglesNotifier.resetToDefaults(),
+                child: const Text(
+                  AiSettingsStrings.widgetsResetToDefaults,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.aiPurpleDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            AiSettingsStrings.widgetsSectionDescription,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: AppColors.textMuted,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _ToggleRow(
+            label: AiSettingsStrings.selectAllLabel,
+            description: AiSettingsStrings.selectAllDesc,
+            value: allEnabled,
+            bold: true,
+            onChanged: (v) => save(AiFeatureToggles(
+              step1SummaryEnabled: v,
+              step1AsrEnabled: v,
+              step2AsrEnabled: v,
+              step3SummaryEnabled: v,
+              step3ReferralAlertEnabled: v,
+              step3WhatsAppEnabled: v,
+            )),
+          ),
+          const Divider(height: 18),
+          const _StepHeader(AiSettingsStrings.step1Header),
+          _ToggleRow(
+            label: AiSettingsStrings.step1SummaryLabel,
+            description: AiSettingsStrings.step1SummaryDesc,
+            value: t.step1SummaryEnabled,
+            onChanged: (v) => save(t.copyWith(step1SummaryEnabled: v)),
+          ),
+          _ToggleRow(
+            label: AiSettingsStrings.step1AsrLabel,
+            description: AiSettingsStrings.step1AsrDesc,
+            value: t.step1AsrEnabled,
+            onChanged: (v) => save(t.copyWith(step1AsrEnabled: v)),
+          ),
+          const _StepHeader(AiSettingsStrings.step2Header),
+          _ToggleRow(
+            label: AiSettingsStrings.step2AsrLabel,
+            description: AiSettingsStrings.step2AsrDesc,
+            value: t.step2AsrEnabled,
+            onChanged: (v) => save(t.copyWith(step2AsrEnabled: v)),
+          ),
+          const _StepHeader(AiSettingsStrings.step3Header),
+          _ToggleRow(
+            label: AiSettingsStrings.step3SummaryLabel,
+            description: AiSettingsStrings.step3SummaryDesc,
+            value: t.step3SummaryEnabled,
+            onChanged: (v) => save(t.copyWith(step3SummaryEnabled: v)),
+          ),
+          _ToggleRow(
+            label: AiSettingsStrings.step3ReferralAlertLabel,
+            description: AiSettingsStrings.step3ReferralAlertDesc,
+            value: t.step3ReferralAlertEnabled,
+            onChanged: (v) => save(t.copyWith(step3ReferralAlertEnabled: v)),
+          ),
+          _ToggleRow(
+            label: AiSettingsStrings.step3WhatsAppLabel,
+            description: AiSettingsStrings.step3WhatsAppDesc,
+            value: t.step3WhatsAppEnabled,
+            onChanged: (v) => save(t.copyWith(step3WhatsAppEnabled: v)),
+            isLast: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepHeader extends StatelessWidget {
+  const _StepHeader(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14, bottom: 2),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          color: AppColors.navy,
+        ),
+      ),
+    );
+  }
+}
+
+/// One AI-widget on/off row — same label + description shell as
+/// [_TuningSlider], with a themed [Switch] instead of a slider. Persists
+/// immediately on toggle (no drag-release semantics needed for a switch).
+class _ToggleRow extends StatelessWidget {
+  const _ToggleRow({
+    required this.label,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+    this.isLast = false,
+    this.bold = false,
+  });
+
+  final String label;
+  final String description;
+  final bool value;
+  final bool isLast;
+  final bool bold;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(top: 10, bottom: isLast ? 0 : 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: bold ? 14.5 : 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: bold ? AppColors.navy : AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeTrackColor: AppColors.aiPurple,
+            inactiveTrackColor: AppColors.progressTrack,
+          ),
+        ],
+      ),
     );
   }
 }
