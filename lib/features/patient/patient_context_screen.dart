@@ -1252,7 +1252,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
   // Backend referral status is the primary clinical signal — more reliable than
   // re-deriving from raw vitals, which may be missing or contain test data.
   final rawStatus = (raw['referralStatus'] as String? ?? a.status ?? '').toLowerCase().trim();
-  final referralReasons = a.notes?.isNotEmpty == true ? a.notes! : null;
+  // a.notes is null for local-DB assessments; fall back to raw['referralReason']
+  // which _normalizeRaw surfaces even when the field is nested under observations.
+  final referralReasons = a.notes?.isNotEmpty == true
+      ? a.notes!
+      : (raw['referralReason'] as String?)?.trim().isNotEmpty == true
+          ? (raw['referralReason'] as String).trim()
+          : null;
 
   String emoji;
   String title;
