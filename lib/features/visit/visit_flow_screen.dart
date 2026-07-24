@@ -524,6 +524,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
               encounterId: widget.visitId,
               memberId: widget.memberId,
               householdMemberLocalId: _householdMemberLocalId,
+              showChildAssessment: hasImci,
               onAdvance: () {
                 setState(() {
                   _primaryProgramme = Programme.imci;
@@ -929,6 +930,7 @@ class _Step2Vaccination extends StatefulWidget {
     this.encounterId,
     this.memberId,
     this.householdMemberLocalId,
+    this.showChildAssessment = false,
   });
 
   final String patientId;
@@ -940,6 +942,10 @@ class _Step2Vaccination extends StatefulWidget {
   final String? encounterId;
   final String? memberId;
   final int? householdMemberLocalId;
+
+  /// Forwarded to [ImmunisationTimelineScreen] — false for vaccination-only
+  /// visits so the Child Assessment section is hidden.
+  final bool showChildAssessment;
 
   @override
   State<_Step2Vaccination> createState() => _Step2VaccinationState();
@@ -986,6 +992,7 @@ class _Step2VaccinationState extends State<_Step2Vaccination> {
       encounterId: widget.encounterId,
       memberId: widget.memberId,
       householdMemberLocalId: widget.householdMemberLocalId,
+      showChildAssessment: widget.showChildAssessment,
     );
   }
 }
