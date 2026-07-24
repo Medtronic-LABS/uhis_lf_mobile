@@ -979,7 +979,11 @@ class _TimelineEntry {
     required this.relativeDate,
     required this.category,
     required this.date,
+    required this.dotColor,
     this.description,
+    this.badge,
+    this.badgeColor,
+    this.badgeFgColor,
     this.isPending = false,
     this.programme,
     this.source,
@@ -990,7 +994,11 @@ class _TimelineEntry {
   final String relativeDate;
   final String category;
   final DateTime date;
+  final Color dotColor;
   final String? description;
+  final String? badge;
+  final Color? badgeColor;
+  final Color? badgeFgColor;
   final bool isPending;
   final Programme? programme;
   /// Original assessment for tap-to-detail; null for synthetic entries.
@@ -1021,13 +1029,43 @@ String _relativeDate(DateTime date) {
   return '$yrs yr${yrs > 1 ? 's' : ''} $mos mo ago';
 }
 
+// ── Timeline colour palette ──────────────────────────────────────────────────
+
+const _kDotCritical = Color(0xFFEF4444); // red-500
+const _kDotHigh     = Color(0xFFBE185D); // rose-700
+const _kDotModerate = Color(0xFFD97706); // amber-600
+const _kDotOk       = Color(0xFF059669); // emerald-600
+const _kDotAnc      = Color(0xFF9D174D); // rose-800
+const _kDotPnc      = Color(0xFF9D174D); // rose-800
+const _kDotEpi      = Color(0xFF1D4ED8); // blue-700
+const _kDotTb       = Color(0xFF059669); // emerald-600
+const _kDotImci     = Color(0xFFDC2626); // red-600
+const _kDotFp       = Color(0xFF7C3AED); // violet-600
+const _kDotGeneral  = Color(0xFF6B7280); // gray-500
+const _kDotPending  = Color(0xFFEF4444); // red-500
+
+const _kBadgeCriticalBg = Color(0xFFFEE2E2);
+const _kBadgeCriticalFg = Color(0xFFDC2626);
+const _kBadgeHighBg     = Color(0xFFFCE7F3);
+const _kBadgeHighFg     = Color(0xFF9D174D);
+const _kBadgeAmberBg    = Color(0xFFFEF3C7);
+const _kBadgeAmberFg    = Color(0xFFB45309);
+const _kBadgeGreenBg    = Color(0xFFECFDF5);
+const _kBadgeGreenFg    = Color(0xFF065F46);
+const _kBadgeGrayBg     = Color(0xFFF3F4F6);
+const _kBadgeGrayFg     = Color(0xFF374151);
+
+// ── BP parse helpers ─────────────────────────────────────────────────────────
+
+int _sys(String bp) => int.tryParse(bp.split('/').firstOrNull ?? '') ?? 0;
+int _dia(String bp) => int.tryParse(bp.split('/').lastOrNull ?? '') ?? 0;
+
 /// Convert a single [MemberAssessment] into a display [_TimelineEntry].
 _TimelineEntry _assessmentToEntry(MemberAssessment a) {
   final raw = _normalizeRaw(a.rawJson);
   final prog = Programme.fromString(a.type);
   final relDate = _relativeDate(a.date);
 
-  // Flatten diagnosis + notes for keyword matching
   final dx = (raw['confirmDiagnosis'] as String? ?? '').toLowerCase();
   final notesLower = (a.notes ?? '').toLowerCase();
   final combined = '$dx $notesLower';
@@ -1036,101 +1074,255 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
   String title;
   String category;
   String? description;
+  String? badge;
+  Color? badgeColor;
+  Color? badgeFgColor;
+  Color dotColor;
 
   switch (prog) {
+    // ─── ANC / Antenatal ──────────────────────────────────────────────────
     case Programme.anc:
     case Programme.pw:
       emoji = '🤰';
       final vn = raw['ancVisitNumber']?.toString();
       title = vn != null && vn.isNotEmpty ? 'ANC Visit $vn' : 'ANC Checkup';
-      category = 'ANC / Pregnancy';
-      final parts = <String>[];
-      final bp = raw['bp']?.toString();
-      if (bp != null) parts.add('BP $bp');
-      final hb = raw['hemoglobin']?.toString();
-      if (hb != null) parts.add('Hb $hb g/dL');
-      final wt = raw['weight']?.toString();
-      if (wt != null) parts.add('Weight $wt kg');
-      description = parts.isEmpty ? null : parts.join(' · ');
+      category = 'Antenatal Care';
 
+      final bpANC = raw['bp']?.toString() ?? '';
+      final sysANC = _sys(bpANC);
+      final diaANC = _dia(bpANC);
+      final hbRaw = raw['hemoglobin']?.toString() ?? '';
+      final hbANC = double.tryParse(hbRaw) ?? 0;
+
+      if (sysANC >= 160 || diaANC >= 110) {
+        dotColor = _kDotCritical;
+        badge = 'Danger — High BP';
+        badgeColor = _kBadgeCriticalBg;
+        badgeFgColor = _kBadgeCriticalFg;
+        description = 'BP $bpANC is dangerously elevated — urgent referral needed.';
+      } else if (hbANC > 0 && hbANC < 7) {
+        dotColor = _kDotCritical;
+        badge = 'Severe anemia';
+        badgeColor = _kBadgeCriticalBg;
+        badgeFgColor = _kBadgeCriticalFg;
+        description = 'Hb ${hbANC}g/dL — severe anemia. Urgent review needed.';
+      } else if (sysANC >= 140 || diaANC >= 90) {
+        dotColor = _kDotHigh;
+        badge = 'High-risk pregnancy';
+        badgeColor = _kBadgeHighBg;
+        badgeFgColor = _kBadgeHighFg;
+        final dp = <String>[];
+        if (bpANC.isNotEmpty) dp.add('BP $bpANC above target');
+        if (hbANC > 0 && hbANC < 10) dp.add('Anemia (Hb ${hbANC}g/dL)');
+        description = dp.isEmpty ? 'High BP detected — monitor closely.' : dp.join(' · ');
+      } else if (hbANC > 0 && hbANC < 10) {
+        dotColor = _kDotModerate;
+        badge = 'Anemia';
+        badgeColor = _kBadgeAmberBg;
+        badgeFgColor = _kBadgeAmberFg;
+        description = 'Hb ${hbANC}g/dL — anemia. Review iron supplementation.';
+      } else {
+        dotColor = _kDotAnc;
+        final dp = <String>[];
+        if (bpANC.isNotEmpty) dp.add('BP $bpANC');
+        if (hbANC > 0) dp.add('Hb $hbANC g/dL');
+        final wt = raw['weight']?.toString();
+        if (wt != null) dp.add('Weight $wt kg');
+        description = dp.isEmpty ? null : dp.join(' · ');
+      }
+
+    // ─── PNC / Delivery ───────────────────────────────────────────────────
     case Programme.pnc:
       final delivery = raw['modeOfDelivery']?.toString() ?? '';
-      final isCs = delivery.toLowerCase().contains('caesar') ||
-          delivery.toLowerCase().contains('section') ||
-          delivery.toLowerCase().contains('c-section');
-      emoji = isCs ? '🏥' : '🤱';
-      title = isCs ? 'Emergency C-section' : 'Delivered baby';
-      category = isCs ? 'Emergency C-section' : 'Normal delivery';
-      final pv = raw['pncVisitNumber']?.toString();
-      if (pv != null && delivery.isEmpty) {
-        emoji = '🤱';
-        title = 'PNC Visit $pv';
-        category = 'Postnatal care';
-      }
-      final babyWt = raw['babyBirthWeight']?.toString() ??
-          raw['birthWeight']?.toString();
-      final place = raw['deliveryPlace']?.toString();
-      final descParts = <String>[
-        if (delivery.isNotEmpty) delivery,
-        if (place != null && place.isNotEmpty) 'at $place',
-        if (babyWt != null) 'baby $babyWt kg',
-      ];
-      description = descParts.isEmpty ? null : descParts.join(' · ');
+      final pncVN = raw['pncVisitNumber']?.toString() ?? '';
 
+      if (delivery.isNotEmpty && pncVN.isEmpty) {
+        // Pregnancy outcome
+        emoji = '🏥';
+        title = 'Pregnancy Outcome';
+        category = 'Delivery';
+
+        final allVals = raw.values.map((v) => v.toString().toLowerCase()).join(' ');
+        if (allVals.contains('stillbirth') || allVals.contains('neonatal death')) {
+          dotColor = _kDotCritical;
+          badge = 'Stillbirth / Neonatal death';
+          badgeColor = _kBadgeCriticalBg;
+          badgeFgColor = _kBadgeCriticalFg;
+          description = 'Stillbirth or neonatal death recorded — follow-up and counselling needed.';
+        } else if (allVals.contains('abortion') || allVals.contains('miscarriage')) {
+          dotColor = _kDotHigh;
+          badge = 'Pregnancy loss';
+          badgeColor = _kBadgeCriticalBg;
+          badgeFgColor = _kBadgeCriticalFg;
+          description = 'Pregnancy loss (abortion) recorded — follow-up care advised.';
+        } else {
+          final isCs = delivery.toLowerCase().contains('caesar') ||
+              delivery.toLowerCase().contains('c-section') ||
+              delivery.toLowerCase().contains('section');
+          dotColor = isCs ? _kDotHigh : _kDotOk;
+          badge = isCs ? 'Emergency C-section' : 'Normal delivery';
+          badgeColor = isCs ? _kBadgeHighBg : _kBadgeGreenBg;
+          badgeFgColor = isCs ? _kBadgeHighFg : _kBadgeGreenFg;
+          final babyWt = raw['babyBirthWeight']?.toString() ?? raw['birthWeight']?.toString();
+          description = 'Healthy delivery outcome — mother and baby both doing well.'
+              '${babyWt != null && babyWt.isNotEmpty ? ' Baby $babyWt kg.' : ''}';
+        }
+      } else {
+        // PNC follow-up
+        emoji = '🤱';
+        title = 'PNC Visit${pncVN.isNotEmpty ? ' $pncVN' : ''}';
+        category = 'Postnatal Care';
+
+        final dSign = raw['dangerSigns']?.toString() ?? raw['dangerSign']?.toString() ?? '';
+        final bpPNC = raw['bp']?.toString() ?? '';
+        final sysPNC = _sys(bpPNC);
+        final diaPNC = _dia(bpPNC);
+        final hbPNC = double.tryParse(raw['hemoglobin']?.toString() ?? '') ?? 0;
+        final fpMethod = raw['familyPlanningMethods']?.toString() ?? raw['currentFpMethod']?.toString() ?? '';
+
+        if (dSign.isNotEmpty && !['none', 'no', 'false', ''].contains(dSign.trim().toLowerCase())) {
+          dotColor = _kDotCritical;
+          badge = 'Danger sign';
+          badgeColor = _kBadgeCriticalBg;
+          badgeFgColor = _kBadgeCriticalFg;
+          description = 'Danger sign reported: $dSign.';
+        } else if (sysPNC >= 140 || diaPNC >= 90) {
+          dotColor = _kDotCritical;
+          badge = 'Urgent';
+          badgeColor = _kBadgeCriticalBg;
+          badgeFgColor = _kBadgeCriticalFg;
+          description = 'BP $bpPNC is above target — needs urgent attention.';
+        } else if (hbPNC > 0 && hbPNC < 8) {
+          dotColor = _kDotHigh;
+          badge = 'Severe anemia';
+          badgeColor = _kBadgeAmberBg;
+          badgeFgColor = _kBadgeAmberFg;
+          description = 'Severe anemia (Hb $hbPNC g/dL).';
+        } else if (fpMethod.isEmpty || ['none', 'no method', 'not using'].contains(fpMethod.trim().toLowerCase())) {
+          dotColor = _kDotPnc;
+          description = 'No contraception method in use — counsel on options.';
+        } else {
+          dotColor = _kDotOk;
+          description = 'Recovering well — no concerns at this PNC visit.';
+        }
+      }
+
+    // ─── NCD ──────────────────────────────────────────────────────────────
     case Programme.ncd:
       emoji = '❤️';
-      title = 'NCD Checkup';
-      if (dx.contains('diabetes') || dx.contains('sugar') || dx.contains('dm')) {
-        category = 'Blood sugar management';
-        emoji = '🩸';
-      } else if (dx.contains('hypertension') || dx.contains('htn')) {
-        category = 'Hypertension management';
-      } else {
-        category = 'NCD Follow-up';
-      }
-      final bpNcd = raw['bp']?.toString();
-      final bgNcd = raw['bg']?.toString();
-      final bgType = raw['bgType']?.toString();
-      final ncdParts = <String>[
-        if (bpNcd != null) 'BP $bpNcd',
-        if (bgNcd != null) 'Glucose $bgNcd${bgType != null ? ' ($bgType)' : ''}',
-      ];
-      description = ncdParts.isEmpty ? null : ncdParts.join(' · ');
+      title = 'NCD Visit';
+      category = 'NCD Follow-up';
 
+      final bpNCD = raw['bp']?.toString() ?? '';
+      final sysNCD = _sys(bpNCD);
+      final diaNCD = _dia(bpNCD);
+      final bgNCD = double.tryParse(raw['bg']?.toString() ?? '') ?? 0;
+      final bgTypeNCD = raw['bgType']?.toString() ?? 'RBS';
+      final bpHighNCD = sysNCD >= 140 || diaNCD >= 90;
+      final bgThreshold = bgTypeNCD == 'FBS' ? 7.0 : 11.1;
+      final bgHighNCD = bgNCD > 0 && bgNCD >= bgThreshold;
+
+      if (bpHighNCD && bgHighNCD) {
+        dotColor = _kDotCritical;
+        badge = 'High-risk';
+        badgeColor = _kBadgeCriticalBg;
+        badgeFgColor = _kBadgeCriticalFg;
+        description = 'Both BP and blood sugar are above target — needs review today and planned follow-up.';
+      } else if (bpHighNCD) {
+        dotColor = _kDotHigh;
+        badge = 'High BP';
+        badgeColor = _kBadgeHighBg;
+        badgeFgColor = _kBadgeHighFg;
+        description = 'BP is above the normal. Require review and follow-up';
+      } else if (bgHighNCD) {
+        dotColor = _kDotModerate;
+        badge = 'High blood sugar';
+        badgeColor = _kBadgeAmberBg;
+        badgeFgColor = _kBadgeAmberFg;
+        description = 'Blood sugar is elevated. Require review and follow-up';
+      } else {
+        dotColor = _kDotOk;
+        description = 'Vitals within target — continue current management.';
+      }
+
+    // ─── EPI / Vaccination ────────────────────────────────────────────────
+    case Programme.epi:
+      emoji = '💉';
+      title = 'Vaccination';
+      category = 'Immunization';
+      dotColor = _kDotEpi;
+      final vacName = raw['vaccineName']?.toString() ?? raw['vaccine']?.toString() ?? '';
+      final dose = raw['dose']?.toString() ?? '';
+      description = vacName.isNotEmpty
+          ? '$vacName${dose.isNotEmpty ? " — Dose $dose" : ""} administered.'
+          : 'Immunization on schedule, growth on track.';
+
+    // ─── IMCI ─────────────────────────────────────────────────────────────
     case Programme.imci:
       emoji = '👶';
       title = 'Child health visit';
       category = 'IMCI / Child care';
-      final vaccines = raw['receivedVaccine']?.toString() ?? '';
-      final wtImci = raw['weight']?.toString();
-      final imciParts = <String>[
-        if (wtImci != null) 'Weight $wtImci kg',
-        if (vaccines.isNotEmpty) 'Vaccines: $vaccines',
-      ];
-      description = imciParts.isEmpty ? null : imciParts.join(' · ');
+      dotColor = _kDotImci;
+      final dSignImci = raw['dangerSigns']?.toString() ?? '';
+      if (dSignImci.isNotEmpty && dSignImci.toLowerCase() != 'none') {
+        badge = 'Danger sign';
+        badgeColor = _kBadgeCriticalBg;
+        badgeFgColor = _kBadgeCriticalFg;
+        dotColor = _kDotCritical;
+        description = 'Danger sign: $dSignImci — urgent referral needed.';
+      } else {
+        final wtImci = raw['weight']?.toString();
+        final vaccines = raw['receivedVaccine']?.toString() ?? '';
+        final imciParts = <String>[
+          if (wtImci != null) 'Weight $wtImci kg',
+          if (vaccines.isNotEmpty) 'Vaccines: $vaccines',
+        ];
+        description = imciParts.isEmpty ? null : imciParts.join(' · ');
+      }
 
+    // ─── TB ───────────────────────────────────────────────────────────────
     case Programme.tb:
       emoji = '🫁';
       title = 'TB follow-up';
       category = 'TB Programme';
-      description = dx.isNotEmpty ? 'Dx: $dx' : null;
+      dotColor = _kDotTb;
+      description = dx.isNotEmpty ? 'Status: $dx' : null;
 
+    // ─── Family Planning ──────────────────────────────────────────────────
+    case Programme.familyPlanning:
+      emoji = '🌸';
+      title = 'Family Planning';
+      category = 'Family Planning';
+      dotColor = _kDotFp;
+      final fpM = raw['familyPlanningMethods']?.toString() ?? '';
+      description = fpM.isNotEmpty ? 'Method: $fpM' : null;
+
+    // ─── General / Unknown ────────────────────────────────────────────────
     default:
-      // Keyword-based illness detection for general/unknown programmes
+      dotColor = _kDotGeneral;
       if (combined.contains('malaria')) {
         emoji = '🦟';
         title = 'Malaria — treated';
         category = 'Past illness';
+        badge = 'Past illness';
+        badgeColor = _kBadgeGrayBg;
+        badgeFgColor = _kBadgeGrayFg;
         description = 'Tested positive, completed antimalarial course';
       } else if (combined.contains('diarrhea') || combined.contains('diarrhoea') || combined.contains('vomit')) {
         emoji = '🤢';
         title = 'Severe diarrhea & vomiting — treated';
         category = 'Past illness';
+        badge = 'Past illness';
+        badgeColor = _kBadgeGrayBg;
+        badgeFgColor = _kBadgeGrayFg;
         description = 'Treated with ORS & antibiotics, fully recovered';
       } else if (combined.contains('fever')) {
         emoji = '🌡️';
         title = 'Fever — treated';
         category = 'Past illness';
+        badge = 'Past illness';
+        badgeColor = _kBadgeGrayBg;
+        badgeFgColor = _kBadgeGrayFg;
         description = dx.isNotEmpty ? dx : null;
       } else {
         emoji = '📝';
@@ -1146,7 +1338,11 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
     relativeDate: relDate,
     category: category,
     date: a.date,
+    dotColor: dotColor,
     description: description,
+    badge: badge,
+    badgeColor: badgeColor,
+    badgeFgColor: badgeFgColor,
     programme: prog,
     source: a,
   );
@@ -1178,11 +1374,12 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
 
     if (sys != null && (sys >= 130 || rising)) {
       return _TimelineEntry(
-        emoji: '📍',
+        emoji: '🔔',
         title: 'BP recheck due',
         relativeDate: 'Today',
         category: 'Pre-eclampsia watch',
         date: DateTime.now(),
+        dotColor: _kDotPending,
         description: 'Rising trend flagged — check urine protein & danger signs',
         isPending: true,
         programme: Programme.anc,
@@ -1197,11 +1394,12 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
     final daysSince = DateTime.now().difference(imciVisits.first.date).inDays;
     if (daysSince >= 60) {
       return _TimelineEntry(
-        emoji: '📍',
+        emoji: '🔔',
         title: 'Child visit overdue',
         relativeDate: 'Today',
         category: 'IMCI / Child care',
         date: DateTime.now(),
+        dotColor: _kDotPending,
         description: 'Last child health visit was $daysSince days ago — check growth & vaccines',
         isPending: true,
         programme: Programme.imci,
@@ -1216,11 +1414,12 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
     final daysSince = DateTime.now().difference(ncdVisits.first.date).inDays;
     if (daysSince >= 30) {
       return _TimelineEntry(
-        emoji: '📍',
+        emoji: '🔔',
         title: 'Follow-up overdue',
         relativeDate: 'Today',
         category: 'NCD Follow-up',
         date: DateTime.now(),
+        dotColor: _kDotPending,
         description: 'NCD follow-up due — last visit $daysSince days ago',
         isPending: true,
         programme: Programme.ncd,
@@ -3375,33 +3574,15 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
 }
 
 
-/// Single row in the combined timeline — emoji dot + connector + entry card.
+/// Single row in the combined timeline — solid colour dot + connector + flat content.
 class _TimelineEntryRow extends StatelessWidget {
   const _TimelineEntryRow({required this.entry, required this.isLast});
 
   final _TimelineEntry entry;
   final bool isLast;
 
-  static const _dotSize = 34.0;
+  static const _dotSize = 36.0;
   static const _lineWidth = 2.0;
-
-  Color _dotBg(Programme? p) {
-    switch (p) {
-      case Programme.anc:
-      case Programme.pw:
-        return AppColors.ancSurface;
-      case Programme.ncd:
-        return AppColors.statusWarningSurface;
-      case Programme.imci:
-        return AppColors.threadImmBg;
-      case Programme.pnc:
-        return const Color(0xFFE0F2FE);
-      case Programme.tb:
-        return const Color(0xFFECFDF5);
-      default:
-        return AppColors.threadGeneralBg;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -3409,20 +3590,17 @@ class _TimelineEntryRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Emoji circle + vertical connector
+          // Solid dot + vertical connector
           SizedBox(
-            width: 38,
+            width: 42,
             child: Column(
               children: [
                 Container(
                   width: _dotSize,
                   height: _dotSize,
                   decoration: BoxDecoration(
-                    color: entry.isPending
-                        ? AppColors.statusWarningSurface
-                        : _dotBg(entry.programme),
+                    color: entry.dotColor,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.border, width: 1),
                   ),
                   child: Center(
                     child: Text(entry.emoji, style: const TextStyle(fontSize: 16)),
@@ -3431,7 +3609,10 @@ class _TimelineEntryRow extends StatelessWidget {
                 if (!isLast)
                   Expanded(
                     child: Center(
-                      child: Container(width: _lineWidth, color: AppColors.border),
+                      child: Container(
+                        width: _lineWidth,
+                        color: const Color(0xFFE5E7EB),
+                      ),
                     ),
                   ),
               ],
@@ -3440,7 +3621,7 @@ class _TimelineEntryRow extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 14),
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 18, top: 6),
               child: _TimelineEntryCard(entry: entry),
             ),
           ),
@@ -3450,7 +3631,8 @@ class _TimelineEntryRow extends StatelessWidget {
   }
 }
 
-/// Rich card for a single [_TimelineEntry]: title + category + relative date + description.
+/// Flat content block for a single [_TimelineEntry]: title + date + badge + narrative.
+/// No card border — text sits directly to the right of the dot.
 class _TimelineEntryCard extends StatelessWidget {
   const _TimelineEntryCard({required this.entry});
 
@@ -3464,68 +3646,98 @@ class _TimelineEntryCard extends StatelessWidget {
       onTap: entry.source != null
           ? () => _TimelineEventSheet.show(context, entry.source!)
           : null,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        decoration: BoxDecoration(
-          color: isPending ? AppColors.statusWarningSurface : AppColors.cardSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isPending ? AppColors.statusWarning : AppColors.border,
-            width: isPending ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title row + relative date
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    entry.title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: isPending ? AppColors.statusWarningDark : AppColors.textPrimary,
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title + relative date
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  entry.title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isPending ? AppColors.statusWarningDark : AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  entry.relativeDate,
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            // Category sub-label
-            Text(
-              entry.category,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.textMuted,
-                fontStyle: FontStyle.italic,
               ),
-            ),
-            // Description (vitals/narrative)
-            if (entry.description != null && entry.description!.isNotEmpty) ...[
-              const SizedBox(height: 6),
+              const SizedBox(width: 8),
               Text(
-                entry.description!,
-                style: const TextStyle(fontSize: 12, height: 1.5, color: AppColors.textMid),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+                entry.relativeDate,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textMuted,
+                ),
               ),
             ],
-            if (entry.source != null) ...[
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.textMuted.withValues(alpha: 0.6)),
-              ),
-            ],
+          ),
+          // Badge chip (risk/status pill)
+          if (entry.badge != null) ...[
+            const SizedBox(height: 5),
+            _TimelineBadge(
+              label: entry.badge!,
+              bg: entry.badgeColor ?? _kBadgeGrayBg,
+              fg: entry.badgeFgColor ?? _kBadgeGrayFg,
+            ),
           ],
+          // Clinical narrative
+          if (entry.description != null && entry.description!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              entry.description!,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.45,
+                color: AppColors.textMid,
+              ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          if (entry.source != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                Icons.chevron_right_rounded,
+                size: 14,
+                color: AppColors.textMuted.withValues(alpha: 0.45),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small coloured pill badge — risk level, delivery mode, illness type.
+class _TimelineBadge extends StatelessWidget {
+  const _TimelineBadge({
+    required this.label,
+    required this.bg,
+    required this.fg,
+  });
+
+  final String label;
+  final Color bg;
+  final Color fg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: fg,
         ),
       ),
     );
