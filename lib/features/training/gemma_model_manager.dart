@@ -165,7 +165,13 @@ class GemmaModelManager {
           ));
         },
       );
-      ConsoleLog.success('[GemmaModelManager] [$label] download complete → $destPath');
+      final fileSize = await File(destPath).length();
+      if (fileSize < 10 * 1024 * 1024) {
+        // < 10 MB → corrupt/truncated (real model is ~300 MB)
+        await File(destPath).delete().catchError((_) => File(destPath));
+        return '[$label] download truncated ($fileSize bytes) — upstream likely returned an error';
+      }
+      ConsoleLog.success('[GemmaModelManager] [$label] download complete → $destPath ($fileSize bytes)');
       _emit(GemmaModelReady(destPath));
       return null; // success
     } on DioException catch (e) {

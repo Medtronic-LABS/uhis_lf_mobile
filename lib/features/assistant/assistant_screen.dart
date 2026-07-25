@@ -8,6 +8,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
@@ -1266,6 +1267,7 @@ class _ChatBodyState extends State<_ChatBody> {
   final GemmaModelManager _gemmaManager = GemmaModelManager();
   final SttModelManager _sttDownloadManager = SttModelManager();
   final OfflineLlmService _offlineLlm = OfflineLlmService();
+  bool _useOnlineMode = false;
 
   static const List<String> _fallbackStarters = [
     AssistantStrings.suggestedMuac,
@@ -1530,7 +1532,7 @@ class _ChatBodyState extends State<_ChatBody> {
       initialData: _gemmaManager.currentState,
       builder: (ctx, gemmaSnap) {
         final gemmaState = gemmaSnap.data ?? _gemmaManager.currentState;
-        if (gemmaState is GemmaModelReady) {
+        if (gemmaState is GemmaModelReady || _useOnlineMode) {
           return _buildChat(context, cachedFaqs, suggestions);
         }
         return StreamBuilder<SttModelState>(
@@ -1547,7 +1549,7 @@ class _ChatBodyState extends State<_ChatBody> {
                 _startGemmaDownload();
                 _startSttDownload();
               },
-              onClose: () => Navigator.of(context).maybePop(),
+              onClose: () => setState(() => _useOnlineMode = true),
             );
           },
         );
@@ -1717,8 +1719,8 @@ class _ModelNotReadyScreen extends StatelessWidget {
             onPressed: onClose,
             child: Text(
               _gemmaInFlight || _sttInFlight
-                  ? 'Continue in background'
-                  : 'Maybe later',
+                  ? 'Continue in background (use online assistant)'
+                  : 'Use online assistant',
               style: const TextStyle(color: Colors.grey),
             ),
           ),
@@ -2371,20 +2373,35 @@ class _ChatInputBar extends StatefulWidget {
 class _ChatInputBarState extends State<_ChatInputBar> {
   final SttModelManager _sttManager = SttModelManager();
   final CoachingSttService _stt = CoachingSttService();
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechAvail = false;
   bool _listening = false;
   StreamSubscription<SttPartialResult>? _sttSub;
 
-  bool get _sttAvail => _stt.isAvailable;
+  // Offline sherpa STT ready → use it; otherwise fall back to device speech.
+  bool get _sttAvail => _stt.isAvailable || _speechAvail;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onCtrlChanged);
     _initStt();
+    // Device speech recognition — always available online; shown as fallback
+    // when offline Bengali STT model is not yet downloaded.
+    _speech
+        .initialize(
+          onStatus: (s) {
+            if (s == 'done' || s == 'notListening') _setListening(false);
+          },
+          onError: (_) => _setListening(false),
+        )
+        .then((ok) {
+      if (mounted) setState(() => _speechAvail = ok);
+    });
   }
 
   Future<void> _initStt() async {
-    await _sttManager.downloadIfNeeded();
+    if (!await _sttManager.isModelPresent()) return;
     final current = _sttManager.currentState;
     if (current is SttModelStateReady) {
       await _stt.initialize(current.modelDir);
@@ -2405,6 +2422,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
     _sttSub?.cancel();
     _stt.dispose();
     _sttManager.dispose();
+    _speech.stop();
     widget.controller.removeListener(_onCtrlChanged);
     super.dispose();
   }
@@ -2412,22 +2430,41 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   void _startListening() {
     if (!_sttAvail || _listening) return;
     _setListening(true);
-    _sttSub = _stt.startListening().listen(
-      (result) {
-        widget.controller.text = result.text;
-        widget.controller.selection =
-            TextSelection.fromPosition(TextPosition(offset: result.text.length));
-        if (result.isFinal) _setListening(false);
-      },
-      onError: (_) => _setListening(false),
-      onDone: () => _setListening(false),
-    );
+    if (_stt.isAvailable) {
+      // Offline Bengali STT (sherpa-onnx) — preferred when model on device.
+      _sttSub = _stt.startListening().listen(
+        (result) {
+          widget.controller.text = result.text;
+          widget.controller.selection = TextSelection.fromPosition(
+              TextPosition(offset: result.text.length));
+          if (result.isFinal) _setListening(false);
+        },
+        onError: (_) => _setListening(false),
+        onDone: () => _setListening(false),
+      );
+    } else {
+      // Device speech recognition fallback (Google / Android built-in).
+      _speech.listen(
+        onResult: (r) {
+          final text = r.recognizedWords;
+          widget.controller.text = text;
+          widget.controller.selection =
+              TextSelection.fromPosition(TextPosition(offset: text.length));
+          if (r.finalResult) _setListening(false);
+        },
+        cancelOnError: true,
+      );
+    }
   }
 
   Future<void> _stopListening() async {
-    await _sttSub?.cancel();
-    _sttSub = null;
-    await _stt.stopListening();
+    if (_stt.isAvailable) {
+      await _sttSub?.cancel();
+      _sttSub = null;
+      await _stt.stopListening();
+    } else {
+      await _speech.stop();
+    }
     _setListening(false);
   }
 
