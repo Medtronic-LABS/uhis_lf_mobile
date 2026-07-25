@@ -69,12 +69,44 @@ class GemmaModelManager {
     return File(path).exists();
   }
 
-  /// Emits [GemmaModelReady] if model is already on disk; otherwise idle.
-  Future<void> checkIfReady() async {
-    if (await isModelPresent()) {
-      final path = await modelPath;
-      _emit(GemmaModelReady(path));
+  /// Returns true only when the file exists, is ≥ 10 MB, and starts with the
+  /// ZIP magic bytes `PK\x03\x04` (MediaPipe .task files are ZIP archives).
+  Future<bool> isModelValid() async {
+    final path = await modelPath;
+    final f = File(path);
+    if (!await f.exists()) return false;
+    final size = await f.length();
+    if (size < 10 * 1024 * 1024) return false;
+    try {
+      final header = await f.openRead(0, 4).fold<List<int>>([], (a, b) => a..addAll(b));
+      // ZIP local file header magic: 50 4B 03 04
+      return header.length >= 4 && header[0] == 0x50 && header[1] == 0x4B &&
+          header[2] == 0x03 && header[3] == 0x04;
+    } catch (_) {
+      return false;
     }
+  }
+
+  /// Emits [GemmaModelReady] if model is valid on disk; deletes and emits idle
+  /// if the file is present but corrupt.
+  Future<void> checkIfReady() async {
+    final path = await modelPath;
+    if (await isModelValid()) {
+      _emit(GemmaModelReady(path));
+    } else if (await isModelPresent()) {
+      // File exists but corrupt — delete so next open shows the download gate.
+      ConsoleLog.warn('[GemmaModelManager] corrupt model file detected — deleting');
+      await File(path).delete().catchError((_) => File(path));
+      _emit(const GemmaModelIdle());
+    }
+  }
+
+  /// Delete the model file and reset to idle (called when MediaPipe init fails).
+  Future<void> invalidate() async {
+    final path = await modelPath;
+    ConsoleLog.warn('[GemmaModelManager] invalidating model file at $path');
+    await File(path).delete().catchError((_) => File(path));
+    _emit(const GemmaModelIdle());
   }
 
   Future<void> downloadIfNeeded() async {

@@ -1307,7 +1307,9 @@ class _ChatBodyState extends State<_ChatBody> {
       await _offlineLlm.initialize(modelPath);
       ConsoleLog.success('[ChatBody] Gemma on-device LLM initialized');
     } catch (e) {
-      ConsoleLog.warn('[ChatBody] Gemma init failed: $e');
+      ConsoleLog.warn('[ChatBody] Gemma init failed: $e — invalidating model file');
+      // File is corrupt or incompatible; delete it so the download gate shows.
+      await _gemmaManager.invalidate();
     } finally {
       if (mounted) setState(() => _llmInitializing = false);
     }
