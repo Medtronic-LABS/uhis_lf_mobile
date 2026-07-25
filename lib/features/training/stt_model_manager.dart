@@ -46,6 +46,8 @@ final class SttModelStateFailed extends SttModelState {
 // ── Manager ───────────────────────────────────────────────────────────────────
 
 class SttModelManager {
+  static bool _downloadInProgress = false;
+
   static const String _bengaliModelUrl =
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/'
       'sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09.tar.bz2';
@@ -76,13 +78,27 @@ class SttModelManager {
     return _requiredFiles.every((f) => File('$dir/$f').existsSync());
   }
 
+  /// Emits [SttModelStateReady] if model is on disk, otherwise emits nothing.
+  Future<void> checkIfReady() async {
+    if (await isModelPresent()) {
+      final dir = await _modelDir;
+      _emit(SttModelStateReady(dir));
+    }
+  }
+
   Future<void> downloadIfNeeded() async {
     if (await isModelPresent()) {
       final dir = await _modelDir;
       _emit(SttModelStateReady(dir));
       return;
     }
-    await _download();
+    if (_downloadInProgress) return;
+    _downloadInProgress = true;
+    try {
+      await _download();
+    } finally {
+      _downloadInProgress = false;
+    }
   }
 
   void cancel() {

@@ -16,7 +16,7 @@ import '../training/offline_llm_service.dart';
 import 'assistant_models.dart';
 
 class AssistantRepository {
-  const AssistantRepository(this._client);
+  AssistantRepository(this._client);
 
   final ApiClient _client;
 
@@ -51,20 +51,23 @@ class AssistantRepository {
     List<String> contextDocs = const [],
   }) async {
     // Offline-first: try on-device Gemma when initialized.
-    if (contextDocs.isNotEmpty) {
-      try {
-        final ready = await _offlineLlm.isReady();
-        if (ready) {
-          return _askOffline(question, contextDocs);
-        }
-      } on OfflineLlmException catch (e) {
-        ConsoleLog.warn('[AssistantRepository] offline LLM check failed: $e');
+    try {
+      final ready = await _offlineLlm.isReady();
+      if (ready) {
+        return _askOffline(question, contextDocs);
       }
+    } on OfflineLlmException catch (e) {
+      ConsoleLog.warn('[AssistantRepository] offline LLM check failed: $e');
     }
 
     final coachingUrl = AppConfig.coachingServiceUrl;
     if (coachingUrl.isNotEmpty && patientContext == null) {
-      return _askCoachingRag(question, coachingUrl);
+      try {
+        return await _askCoachingRag(question, coachingUrl);
+      } on AssistantException catch (e) {
+        ConsoleLog.warn(
+            '[AssistantRepository] coaching RAG unavailable (${e.statusCode ?? "conn-refused"}), falling back to AI-scribe');
+      }
     }
     return _askAiScribe(question, patientContext: patientContext);
   }
@@ -73,14 +76,10 @@ class AssistantRepository {
     String question,
     List<String> contextDocs,
   ) async {
-    final context = contextDocs.join('\n');
-    final prompt = '''You are a micro-coaching assistant for community health workers. Answer using only the provided context. Be concise and practical.
-
-Context:
-$context
-
-Question: $question
-Answer:''';
+    final contextSection = contextDocs.isEmpty
+        ? ''
+        : '\n\nContext:\n${contextDocs.join('\n')}';
+    final prompt = 'You are a micro-coaching assistant for community health workers. Be concise and practical.$contextSection\n\nQuestion: $question\nAnswer:';
 
     ConsoleLog.banner('[PayloadDebug] offline-llm → q=$question');
     try {

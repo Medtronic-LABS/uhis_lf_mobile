@@ -3,12 +3,12 @@ package com.medtroniclabs.uhis_next
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -67,7 +67,17 @@ class CoachingLlmPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 scope.launch {
                     try {
                         val answer = withContext(Dispatchers.IO) {
-                            inference.generateResponse(prompt)
+                            val sessionOpts =
+                                LlmInferenceSession.LlmInferenceSessionOptions.builder()
+                                    .setTopK(40)
+                                    .setTemperature(0.8f)
+                                    .build()
+                            LlmInferenceSession.createFromOptions(inference, sessionOpts).use { session ->
+                                session.addQueryChunk(prompt)
+                                session.generateResponse()
+                                    .substringBefore("<end_of_turn>")
+                                    .trim()
+                            }
                         }
                         result.success(answer)
                     } catch (e: Exception) {
@@ -97,9 +107,7 @@ class CoachingLlmPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         val options = LlmInference.LlmInferenceOptions.builder()
             .setModelPath(modelPath)
             .setMaxTokens(1024)
-            .setTopK(40)
-            .setTemperature(0.8f)
-            .setRandomSeed(101)
+            .setMaxTopK(40)
             .build()
         return LlmInference.createFromOptions(context, options)
     }

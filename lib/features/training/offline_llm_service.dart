@@ -26,7 +26,7 @@ class OfflineLlmService {
       );
       ConsoleLog.success('[OfflineLlmService] model ready');
     } on PlatformException catch (e) {
-      ConsoleLog.error('[OfflineLlmService] initialize failed', e);
+      ConsoleLog.warn('[OfflineLlmService] initialize failed: ${e.message}');
       throw OfflineLlmException(e.message ?? 'init failed', code: e.code);
     }
   }
@@ -53,7 +53,7 @@ class OfflineLlmService {
       ConsoleLog.success('[OfflineLlmService] answer=${answer?.length}chars');
       return answer ?? '';
     } on PlatformException catch (e) {
-      ConsoleLog.error('[OfflineLlmService] ask failed', e);
+      ConsoleLog.warn('[OfflineLlmService] ask failed: ${e.message}');
       throw OfflineLlmException(e.message ?? 'inference failed', code: e.code);
     }
   }

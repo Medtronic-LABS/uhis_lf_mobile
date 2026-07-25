@@ -104,6 +104,14 @@ class AppConfig {
   /// Length of the app-specific fallback PIN. Fixed at 4 digits.
   static const int pinLength = 4;
 
+  /// HuggingFace Hub access token for downloading gated models (e.g. Gemma).
+  /// Obtain from https://huggingface.co/settings/tokens
+  /// Pass via `--dart-define=HF_TOKEN=hf_xxx` at build time.
+  static const String huggingFaceToken = String.fromEnvironment(
+    'HF_TOKEN',
+    defaultValue: '',
+  );
+
   /// Base URL for the spice-coaching micro-coaching service.
   /// Default: Android emulator loopback to port 8000.
   static const String coachingServiceUrl = String.fromEnvironment(

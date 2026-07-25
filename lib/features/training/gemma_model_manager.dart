@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/debug/console_log.dart';
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -50,9 +52,11 @@ class GemmaModelManager {
   static const String _subdir = 'llm';
 
   final _controller = StreamController<GemmaModelState>.broadcast();
+  GemmaModelState _currentState = const GemmaModelIdle();
   CancelToken? _cancelToken;
 
   Stream<GemmaModelState> get stateStream => _controller.stream;
+  GemmaModelState get currentState => _currentState;
 
   Future<String> get modelPath async {
     final dir = await getApplicationDocumentsDirectory();
@@ -62,6 +66,14 @@ class GemmaModelManager {
   Future<bool> isModelPresent() async {
     final path = await modelPath;
     return File(path).exists();
+  }
+
+  /// Emits [GemmaModelReady] if model is already on disk; otherwise idle.
+  Future<void> checkIfReady() async {
+    if (await isModelPresent()) {
+      final path = await modelPath;
+      _emit(GemmaModelReady(path));
+    }
   }
 
   Future<void> downloadIfNeeded() async {
@@ -76,15 +88,69 @@ class GemmaModelManager {
     final dir = File(path).parent;
     await dir.create(recursive: true);
 
+    // Wait for Dart's socket layer to fully initialize before making requests.
+    await Future<void>.delayed(const Duration(seconds: 2));
+
     _cancelToken = CancelToken();
     _emit(const GemmaModelDownloading(progress: 0));
-    ConsoleLog.step('[GemmaModelManager] download started → $path');
 
-    final dio = Dio();
+    // Provider order: Backend (SPICE JWT) → HuggingFace (HF token)
+    // Mirrors micro_coaching ModelDownloadWorker provider chain.
     try {
-      await dio.download(
+      final sessionToken = await const FlutterSecureStorage(
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      ).read(key: 'bio_auth_token');
+      if (sessionToken != null && sessionToken.isNotEmpty) {
+        ConsoleLog.step('[GemmaModelManager] trying backend provider');
+        final backendErr = await _downloadFrom(
+          '${AppConfig.apiBaseUrl}api/v1/models/gemma/download',
+          path,
+          headers: {'Authorization': 'Bearer $sessionToken'},
+          label: 'backend',
+        );
+        if (backendErr == null) return; // success
+        if (backendErr.isEmpty) return; // cancelled — stop provider chain
+        ConsoleLog.warn('[GemmaModelManager] backend failed: $backendErr — trying HuggingFace');
+      } else {
+        ConsoleLog.warn('[GemmaModelManager] no session token — skipping backend provider');
+      }
+
+      final hfToken = AppConfig.huggingFaceToken;
+      final hfErr = await _downloadFrom(
         modelUrl,
         path,
+        headers: hfToken.isNotEmpty ? {'Authorization': 'Bearer $hfToken'} : {},
+        label: 'HuggingFace',
+      );
+      if (hfErr == null || hfErr.isEmpty) return; // success or cancelled
+      final msg = hfErr.contains('401')
+          ? 'Backend unavailable and HuggingFace requires auth (401). '
+              'Ensure you are logged in, or pass --dart-define=HF_TOKEN=hf_xxx.'
+          : hfErr;
+      ConsoleLog.warn('[GemmaModelManager] all providers failed: $msg');
+      _emit(GemmaModelFailed(msg));
+    } finally {
+      _cancelToken = null;
+    }
+  }
+
+  /// Downloads [url] to [destPath].
+  /// Returns null on success, empty string on user cancellation, error string on failure.
+  Future<String?> _downloadFrom(
+    String url,
+    String destPath, {
+    required Map<String, String> headers,
+    required String label,
+  }) async {
+    ConsoleLog.step('[GemmaModelManager] [$label] download started → $destPath');
+    final dio = Dio(BaseOptions(
+      headers: headers,
+      receiveTimeout: const Duration(minutes: 30),
+    ));
+    try {
+      await dio.download(
+        url,
+        destPath,
         cancelToken: _cancelToken,
         onReceiveProgress: (received, total) {
           final pct = total > 0 ? ((received / total) * 100).toInt() : -1;
@@ -95,20 +161,19 @@ class GemmaModelManager {
           ));
         },
       );
-
-      ConsoleLog.success('[GemmaModelManager] download complete → $path');
-      _emit(GemmaModelReady(path));
+      ConsoleLog.success('[GemmaModelManager] [$label] download complete → $destPath');
+      _emit(GemmaModelReady(destPath));
+      return null; // success
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {
         ConsoleLog.step('[GemmaModelManager] download cancelled');
         _emit(const GemmaModelIdle());
-      } else {
-        ConsoleLog.error('[GemmaModelManager] download failed', e);
-        _emit(GemmaModelFailed(e.message ?? 'Download failed'));
+        return ''; // sentinel: cancelled — caller stops provider chain
       }
-    } finally {
-      _cancelToken = null;
+      final code = e.response?.statusCode;
+      return '${code != null ? "$code " : ""}${e.message ?? "Download failed"}';
     }
+    // _cancelToken is NOT nulled here — caller owns its lifetime.
   }
 
   void cancel() {
@@ -121,6 +186,7 @@ class GemmaModelManager {
   }
 
   void _emit(GemmaModelState state) {
+    _currentState = state;
     if (!_controller.isClosed) _controller.add(state);
   }
 }
