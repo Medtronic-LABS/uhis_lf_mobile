@@ -1671,11 +1671,10 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                   ),
                 ),
             ] else if (isSearching)
-              // Search results — flat wrap, no headers.
+              // Search results — flat natural-width wrap.
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
                 children: gridSections
                     .expand((s) => s.$2)
                     .toSet()
@@ -1691,7 +1690,8 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                     .toList(),
               )
             else
-              // Default grid — one Wrap per programme section with a label.
+              // Per-service sections: each enrolled programme gets its own
+              // labeled chip block; chips wrap naturally within the block.
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -1700,12 +1700,12 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                     if (section.$2.isNotEmpty) ...[
                       if (section.$1 != null && section.$1!.isNotEmpty) ...[
                         Text(
-                          section.$1!,
+                          section.$1!.toUpperCase(),
                           style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
                             color: AppColors.textMuted,
-                            letterSpacing: 0.5,
+                            letterSpacing: 1.0,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -1713,7 +1713,6 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        alignment: WrapAlignment.spaceBetween,
                         children: section.$2
                             .map(
                               (code) => _PickerChip(
@@ -1728,7 +1727,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                             )
                             .toList(),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 14),
                     ],
                 ],
               ),
