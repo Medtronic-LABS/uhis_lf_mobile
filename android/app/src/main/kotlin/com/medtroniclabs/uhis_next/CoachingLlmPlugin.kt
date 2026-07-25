@@ -106,7 +106,7 @@ class CoachingLlmPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private fun buildLlm(modelPath: String): LlmInference {
         val options = LlmInference.LlmInferenceOptions.builder()
             .setModelPath(modelPath)
-            .setMaxTokens(1024)
+            .setMaxTokens(2048)
             .setMaxTopK(40)
             .build()
         return LlmInference.createFromOptions(context, options)

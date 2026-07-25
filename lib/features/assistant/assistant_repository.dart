@@ -72,13 +72,20 @@ class AssistantRepository {
     return _askAiScribe(question, patientContext: patientContext);
   }
 
+  static const _maxContextChars = 1800;
+
   Future<AssistantAnswer> _askOffline(
     String question,
     List<String> contextDocs,
   ) async {
-    final contextSection = contextDocs.isEmpty
-        ? ''
-        : '\n\nContext:\n${contextDocs.join('\n')}';
+    String contextSection = '';
+    if (contextDocs.isNotEmpty) {
+      final raw = contextDocs.join('\n');
+      final truncated = raw.length > _maxContextChars
+          ? raw.substring(0, _maxContextChars)
+          : raw;
+      contextSection = '\n\nContext:\n$truncated';
+    }
     final prompt = 'You are a micro-coaching assistant for community health workers. Be concise and practical.$contextSection\n\nQuestion: $question\nAnswer:';
 
     ConsoleLog.banner('[PayloadDebug] offline-llm → q=$question');
