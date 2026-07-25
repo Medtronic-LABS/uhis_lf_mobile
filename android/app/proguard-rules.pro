@@ -14,3 +14,12 @@
 # Keep Flutter wrapper classes
 -keep class io.flutter.** { *; }
 -keep class io.flutter.plugin.** { *; }
+
+# MediaPipe GenAI / LlmInference — protobuf annotations not in the runtime jar
+-dontwarn com.google.protobuf.Internal$ProtoMethodMayReturnNull
+-dontwarn com.google.protobuf.Internal$ProtoNonnullApi
+-dontwarn com.google.protobuf.ProtoPresenceBits
+-dontwarn com.google.mediapipe.**
+
+# Keep MediaPipe classes accessed via JNI / reflection
+-keep class com.google.mediapipe.** { *; }

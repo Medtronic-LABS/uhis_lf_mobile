@@ -1268,6 +1268,10 @@ class _ChatBodyState extends State<_ChatBody> {
   final SttModelManager _sttDownloadManager = SttModelManager();
   final OfflineLlmService _offlineLlm = OfflineLlmService();
   bool _useOnlineMode = false;
+  // True while MediaPipe loads the model file into memory (file exists but not
+  // yet queryable). Disables send to avoid spurious "no internet" errors while
+  // the on-device LLM warms up.
+  bool _llmInitializing = false;
 
   static const List<String> _fallbackStarters = [
     AssistantStrings.suggestedMuac,
@@ -1298,11 +1302,14 @@ class _ChatBodyState extends State<_ChatBody> {
   }
 
   Future<void> _initGemmaLlm(String modelPath) async {
+    if (mounted) setState(() => _llmInitializing = true);
     try {
       await _offlineLlm.initialize(modelPath);
       ConsoleLog.success('[ChatBody] Gemma on-device LLM initialized');
     } catch (e) {
       ConsoleLog.warn('[ChatBody] Gemma init failed: $e');
+    } finally {
+      if (mounted) setState(() => _llmInitializing = false);
     }
   }
 
@@ -1594,10 +1601,12 @@ class _ChatBodyState extends State<_ChatBody> {
         if (!_loading && suggestions.isNotEmpty)
           _SuggestionChipRow(chips: suggestions, onChipTap: _send),
         if (_isRecording) const _RecordingBadge(),
+        if (_llmInitializing)
+          const LinearProgressIndicator(minHeight: 2),
         const Divider(height: 1, thickness: 0.5),
         _ChatInputBar(
           controller: _input,
-          loading: _loading,
+          loading: _loading || _llmInitializing,
           onSend: () => _send(_input.text),
           onRecordingChanged: (v) => setState(() => _isRecording = v),
         ),
