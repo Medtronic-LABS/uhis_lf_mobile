@@ -12,12 +12,15 @@ import '../../core/api/endpoints.dart';
 import '../../core/config/app_config.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
+import '../training/offline_llm_service.dart';
 import 'assistant_models.dart';
 
 class AssistantRepository {
   const AssistantRepository(this._client);
 
   final ApiClient _client;
+
+  final _offlineLlm = OfflineLlmService();
 
   (Dio, String) _resolve() {
     final aiUrl = AppConfig.assistantBaseUrl;
@@ -36,18 +39,58 @@ class AssistantRepository {
 
   /// Ask the assistant a question.
   ///
-  /// Routes to the coaching RAG backend (`/medtronics-api/coaching/rag-query`)
-  /// when [AppConfig.coachingServiceUrl] is set and no [patientContext] is
-  /// provided. Falls back to the UHIS AI-Scribe assistant endpoint otherwise.
+  /// Priority order:
+  ///   1. On-device Gemma (offline) when the model is initialized and
+  ///      [contextDocs] are provided for RAG context.
+  ///   2. Coaching RAG backend when [AppConfig.coachingServiceUrl] is set and
+  ///      no [patientContext] is provided.
+  ///   3. UHIS AI-Scribe assistant endpoint (default / patient-scoped).
   Future<AssistantAnswer> ask(
     String question, {
     Map<String, dynamic>? patientContext,
+    List<String> contextDocs = const [],
   }) async {
+    // Offline-first: try on-device Gemma when initialized.
+    if (contextDocs.isNotEmpty) {
+      try {
+        final ready = await _offlineLlm.isReady();
+        if (ready) {
+          return _askOffline(question, contextDocs);
+        }
+      } on OfflineLlmException catch (e) {
+        ConsoleLog.warn('[AssistantRepository] offline LLM check failed: $e');
+      }
+    }
+
     final coachingUrl = AppConfig.coachingServiceUrl;
     if (coachingUrl.isNotEmpty && patientContext == null) {
       return _askCoachingRag(question, coachingUrl);
     }
     return _askAiScribe(question, patientContext: patientContext);
+  }
+
+  Future<AssistantAnswer> _askOffline(
+    String question,
+    List<String> contextDocs,
+  ) async {
+    final context = contextDocs.join('\n');
+    final prompt = '''You are a micro-coaching assistant for community health workers. Answer using only the provided context. Be concise and practical.
+
+Context:
+$context
+
+Question: $question
+Answer:''';
+
+    ConsoleLog.banner('[PayloadDebug] offline-llm → q=$question');
+    try {
+      final answer = await _offlineLlm.ask(prompt);
+      ConsoleLog.step('[PayloadDebug] offline-llm → ${answer.length}chars');
+      return AssistantAnswer(text: answer);
+    } on OfflineLlmException catch (e) {
+      ConsoleLog.warn('[PayloadDebug] offline-llm failed: $e');
+      throw AssistantException(e.message);
+    }
   }
 
   Future<AssistantAnswer> _askCoachingRag(

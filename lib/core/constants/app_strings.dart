@@ -5223,6 +5223,13 @@ abstract final class AssistantStrings {
   static const String sttNotAvailable = 'Voice input not available';
   static const String sttDownloadPrompt = 'Download offline voice model?';
   static const String sttDownloadAction = 'Download';
+
+  static const String gemmaDownloading = 'Downloading AI model…';
+  static const String gemmaReady = 'Offline AI ready';
+  static const String gemmaFailed = 'AI model download failed. Tap to retry.';
+  static const String gemmaNotReady = 'AI model not ready';
+  static const String gemmaDownloadPrompt = 'Download offline AI model (~304 MB)?';
+  static const String gemmaDownloadAction = 'Download';
 }
 
 /// Strings for [HouseholdFollowUpScreen].
