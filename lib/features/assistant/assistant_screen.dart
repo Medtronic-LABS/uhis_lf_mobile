@@ -8,7 +8,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
@@ -19,9 +18,12 @@ import '../training/all_modules_screen.dart';
 import '../training/coaching_dao.dart';
 import '../training/coaching_models.dart';
 import '../training/coaching_repository.dart';
+import '../training/coaching_stt_service.dart';
+import '../training/coaching_tts_service.dart';
 import '../training/knowledge_list_screen.dart';
 import '../training/module_detail_screen.dart';
 import '../training/quiz_screen.dart';
+import '../training/stt_model_manager.dart';
 import '../training/training_requests_screen.dart';
 import 'assistant_models.dart';
 import 'assistant_repository.dart';
@@ -1621,7 +1623,7 @@ class _AssistantBubble extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  const _MessageActions(),
+                  _MessageActions(text: text),
                 ],
               ],
             ),
@@ -1691,31 +1693,68 @@ class _UserBubble extends StatelessWidget {
 
 // ─── Message actions ──────────────────────────────────────────────────────────
 
-class _MessageActions extends StatelessWidget {
-  const _MessageActions();
+class _MessageActions extends StatefulWidget {
+  const _MessageActions({required this.text});
+  final String text;
+
+  @override
+  State<_MessageActions> createState() => _MessageActionsState();
+}
+
+class _MessageActionsState extends State<_MessageActions> {
+  final CoachingTtsService _tts = CoachingTtsService();
+  bool _speaking = false;
+
+  @override
+  void dispose() {
+    _tts.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggleSpeech() async {
+    if (_speaking) {
+      await _tts.stop();
+      if (mounted) setState(() => _speaking = false);
+    } else {
+      if (mounted) setState(() => _speaking = true);
+      await _tts.speak(widget.text);
+      if (mounted) setState(() => _speaking = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: const [
-        _ActionBtn(icon: Icons.volume_up_rounded),
-        SizedBox(width: 4),
-        _ActionBtn(icon: Icons.thumb_up_alt_outlined),
-        SizedBox(width: 4),
-        _ActionBtn(icon: Icons.thumb_down_alt_outlined),
+      children: [
+        _ActionBtn(
+          icon: _speaking ? Icons.stop_rounded : Icons.volume_up_rounded,
+          onTap: _toggleSpeech,
+        ),
+        const SizedBox(width: 4),
+        const _ActionBtn(icon: Icons.thumb_up_alt_outlined),
+        const SizedBox(width: 4),
+        const _ActionBtn(icon: Icons.thumb_down_alt_outlined),
       ],
     );
   }
 }
 
 class _ActionBtn extends StatelessWidget {
-  const _ActionBtn({required this.icon});
+  const _ActionBtn({required this.icon, this.onTap});
   final IconData icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Icon(icon, size: 16, color: AppColors.textMuted);
+    return GestureDetector(
+      onTap: onTap,
+      child: Icon(
+        icon,
+        size: 16,
+        color: onTap != null ? AppColors.navy : AppColors.textMuted,
+      ),
+    );
   }
 }
 
@@ -1969,28 +2008,31 @@ class _ChatInputBar extends StatefulWidget {
 }
 
 class _ChatInputBarState extends State<_ChatInputBar> {
-  final SpeechToText _speech = SpeechToText();
-  bool _speechAvail = false;
+  final SttModelManager _sttManager = SttModelManager();
+  final CoachingSttService _stt = CoachingSttService();
   bool _listening = false;
+  StreamSubscription<SttPartialResult>? _sttSub;
+
+  bool get _sttAvail => _stt.isAvailable;
 
   @override
   void initState() {
     super.initState();
-    _speech
-        .initialize(onStatus: _onStatus, onError: (_) {
-          if (mounted) _setListening(false);
-        })
-        .then((ok) {
-      if (mounted) setState(() => _speechAvail = ok);
-    });
     widget.controller.addListener(_onCtrlChanged);
+    _initStt();
+  }
+
+  Future<void> _initStt() async {
+    if (!await _sttManager.isModelPresent()) return;
+    await _sttManager.downloadIfNeeded();
+    final current = _sttManager.currentState;
+    if (current is SttModelStateReady) {
+      await _stt.initialize(current.modelDir);
+      if (mounted) setState(() {});
+    }
   }
 
   void _onCtrlChanged() => setState(() {});
-
-  void _onStatus(String status) {
-    if (status == 'done' || status == 'notListening') _setListening(false);
-  }
 
   void _setListening(bool value) {
     if (!mounted) return;
@@ -2000,28 +2042,32 @@ class _ChatInputBarState extends State<_ChatInputBar> {
 
   @override
   void dispose() {
-    _speech.stop();
+    _sttSub?.cancel();
+    _stt.dispose();
+    _sttManager.dispose();
     widget.controller.removeListener(_onCtrlChanged);
     super.dispose();
   }
 
   void _startListening() {
-    if (!_speechAvail || _listening) return;
-    _speech.listen(
-      onResult: (r) {
-        final words = r.recognizedWords;
-        widget.controller.text = words;
-        widget.controller.selection =
-            TextSelection.fromPosition(TextPosition(offset: words.length));
-        if (r.finalResult) _setListening(false);
-      },
-      listenOptions: SpeechListenOptions(pauseFor: const Duration(seconds: 3)),
-    );
+    if (!_sttAvail || _listening) return;
     _setListening(true);
+    _sttSub = _stt.startListening().listen(
+      (result) {
+        widget.controller.text = result.text;
+        widget.controller.selection =
+            TextSelection.fromPosition(TextPosition(offset: result.text.length));
+        if (result.isFinal) _setListening(false);
+      },
+      onError: (_) => _setListening(false),
+      onDone: () => _setListening(false),
+    );
   }
 
   Future<void> _stopListening() async {
-    await _speech.stop();
+    await _sttSub?.cancel();
+    _sttSub = null;
+    await _stt.stopListening();
     _setListening(false);
   }
 
@@ -2079,7 +2125,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
               ),
             ),
             const SizedBox(width: 8),
-            if (_speechAvail)
+            if (_sttAvail)
               GestureDetector(
                 onTap: _listening ? _stopListening : _startListening,
                 child: Container(

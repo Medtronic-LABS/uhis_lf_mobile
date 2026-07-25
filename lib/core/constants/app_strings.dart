@@ -5214,6 +5214,15 @@ abstract final class AssistantStrings {
       'How can I help you today? Ask me about patient counselling, clinical protocols, or SPICE.';
   static const String statusOnline = 'Online';
   static const String clearHistory = 'Clear chat history';
+
+  // Offline STT model download
+  static const String sttDownloading = 'Downloading voice model…';
+  static const String sttExtracting = 'Preparing voice model…';
+  static const String sttReady = 'Voice input ready';
+  static const String sttFailed = 'Voice model download failed';
+  static const String sttNotAvailable = 'Voice input not available';
+  static const String sttDownloadPrompt = 'Download offline voice model?';
+  static const String sttDownloadAction = 'Download';
 }
 
 /// Strings for [HouseholdFollowUpScreen].
