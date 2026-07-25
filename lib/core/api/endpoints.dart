@@ -262,4 +262,8 @@ class Endpoints {
   /// Presigned GET URLs for module thumbnails (batch POST, max 50 IDs).
   static const String coachingModuleThumbnails =
       '/medtronics-api/sync/modules/presigned-thumbnails';
+
+  /// On-device Gemma model download — server proxies HuggingFace with server-side HF token.
+  static const String coachingModelGemmaDownload =
+      '/medtronics-api/v1/models/gemma/download';
 }

@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/api/endpoints.dart';
 import '../../core/config/app_config.dart';
 import '../../core/debug/console_log.dart';
 
@@ -102,8 +103,11 @@ class GemmaModelManager {
       ).read(key: 'bio_auth_token');
       if (sessionToken != null && sessionToken.isNotEmpty) {
         ConsoleLog.step('[GemmaModelManager] trying backend provider');
+        final coachingBase = AppConfig.coachingServiceUrl.endsWith('/')
+            ? AppConfig.coachingServiceUrl.substring(0, AppConfig.coachingServiceUrl.length - 1)
+            : AppConfig.coachingServiceUrl;
         final backendErr = await _downloadFrom(
-          '${AppConfig.apiBaseUrl}api/v1/models/gemma/download',
+          '$coachingBase${Endpoints.coachingModelGemmaDownload}',
           path,
           headers: {'Authorization': 'Bearer $sessionToken'},
           label: 'backend',
