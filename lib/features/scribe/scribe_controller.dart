@@ -98,6 +98,20 @@ class ScribeController extends ChangeNotifier {
   /// can decode the file directly without a container conversion step.
   bool _useWavRecording = false;
 
+  // ── Real-time offline ASR (streaming triage) ──────────────────────────────
+
+  /// When true, triage recording streams PCM chunks live to sherpa-onnx
+  /// instead of writing a WAV file.  Partials are emitted via [session.liveTranscript].
+  bool _useStreamingAsr = false;
+
+  /// STT model directory, set in [startRecordingForTriage] when the model is
+  /// present.  Null when the STT model has not been downloaded.
+  String? _sttModelDir;
+
+  StreamSubscription<String>? _asrStreamSub;
+  String _offlineTranscript = '';
+  Completer<String>? _asrCompleter;
+
   /// Set before starting a form recording to include Step 1 extra symptom
   /// notes in the SOAP generation context.
   void setTriageNotes(String? notes) {
@@ -187,12 +201,22 @@ class ScribeController extends ChangeNotifier {
     _currentFormSchema = null;
     _currentProgrammes = const [];
 
-    // Use PCM16/WAV when offline + sherpa STT model is available so the
-    // offline ASR path can decode the file without container conversion.
+    // If the STT model is present, stream PCM chunks live to sherpa-onnx for
+    // real-time partials.  This call site is already an offline fallback (the
+    // banner only calls it after the WebSocket fails), so no connectivity check
+    // is needed — we always prefer streaming when the model is available.
     _useWavRecording = false;
-    if (await SttModelManager().isModelPresent()) {
-      final results = await Connectivity().checkConnectivity();
-      _useWavRecording = results.every((r) => r == ConnectivityResult.none);
+    _useStreamingAsr = false;
+    _sttModelDir = null;
+
+    final sttMgr = SttModelManager();
+    if (await sttMgr.isModelPresent()) {
+      await sttMgr.checkIfReady();
+      final state = sttMgr.currentState;
+      if (state is SttModelStateReady) {
+        _sttModelDir = state.modelDir;
+        _useStreamingAsr = true;
+      }
     }
 
     await _startRecordingInternal(
@@ -248,8 +272,6 @@ class ScribeController extends ChangeNotifier {
 
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final ext = _useWavRecording ? 'wav' : _recordingExtension;
-      _recordingPath = '${dir.path}/scribe_$ts.$ext';
       // Waveform visualization recorder writes to a separate dummy path.
       final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
 
@@ -259,18 +281,25 @@ class ScribeController extends ChangeNotifier {
         recorderSettings: _recorderSettings,
       );
 
-      // Start actual audio capture via record package.
-      // PCM16/WAV when offline so sherpa-onnx can decode the file directly.
-      final encoder = _useWavRecording ? AudioEncoder.pcm16bits : AudioEncoder.aacLc;
-      await _audioRecorder.start(
-        RecordConfig(
-          encoder: encoder,
-          sampleRate: 16000,
-          numChannels: 1,
-          bitRate: 64000,
-        ),
-        path: _recordingPath!,
-      );
+      if (_useStreamingAsr) {
+        // Real-time offline ASR: stream PCM16 chunks directly to sherpa-onnx.
+        // No file is written; transcript partials surface via session.liveTranscript.
+        await _startRealtimeOfflineAsr();
+      } else {
+        // File recording (online SOAP/formPrefill, or offline formPrefill WAV batch).
+        final ext = _useWavRecording ? 'wav' : _recordingExtension;
+        _recordingPath = '${dir.path}/scribe_$ts.$ext';
+        final encoder = _useWavRecording ? AudioEncoder.pcm16bits : AudioEncoder.aacLc;
+        await _audioRecorder.start(
+          RecordConfig(
+            encoder: encoder,
+            sampleRate: 16000,
+            numChannels: 1,
+            bitRate: 64000,
+          ),
+          path: _recordingPath!,
+        );
+      }
 
       _session = ScribeSession(state: ScribeState.recording, mode: mode);
       notifyListeners();
@@ -312,6 +341,11 @@ class ScribeController extends ChangeNotifier {
 
     // Drop WaveformWidget before native stop — reduces audio_waveforms hang.
     await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    if (_useStreamingAsr) {
+      await _stopStreamingAsr();
+      return;
+    }
 
     final effectivePath = await _stopRecorderSafely();
     if (effectivePath == null) {
@@ -427,6 +461,12 @@ class ScribeController extends ChangeNotifier {
     _currentMode = ScribeMode.soap;
     _triageNotes = null;
     _useWavRecording = false;
+    _useStreamingAsr = false;
+    _sttModelDir = null;
+    _offlineTranscript = '';
+    _asrStreamSub?.cancel();
+    _asrStreamSub = null;
+    _asrCompleter = null;
     _recycleRecorder();
     _session = const ScribeSession();
     notifyListeners();
@@ -680,6 +720,117 @@ class ScribeController extends ChangeNotifier {
         await File(wavPath).delete();
       } catch (_) {}
     }
+  }
+
+  // ── Real-time offline ASR helpers ─────────────────────────────────────────
+
+  Future<void> _startRealtimeOfflineAsr() async {
+    final modelDir = _sttModelDir;
+    if (modelDir == null) return;
+
+    _offlineTranscript = '';
+    _asrCompleter = Completer<String>();
+
+    try {
+      final pcmStream = await _audioRecorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+      );
+
+      final asr = ScribeAsrService(modelDir);
+      _asrStreamSub = asr.transcribeRealtime(pcmStream).listen(
+        (partial) {
+          _offlineTranscript = partial;
+          _session = _session.copyWith(liveTranscript: partial);
+          notifyListeners();
+        },
+        onDone: () {
+          if (!(_asrCompleter?.isCompleted ?? true)) {
+            _asrCompleter!.complete(_offlineTranscript);
+          }
+        },
+        onError: (Object e) {
+          debugPrint('[AIScribe] streaming ASR error: $e');
+          if (!(_asrCompleter?.isCompleted ?? true)) {
+            _asrCompleter!.complete(_offlineTranscript);
+          }
+        },
+        cancelOnError: false,
+      );
+    } catch (e) {
+      debugPrint('[AIScribe] startStream failed: $e');
+      if (!(_asrCompleter?.isCompleted ?? true)) {
+        _asrCompleter!.completeError(e);
+      }
+    }
+  }
+
+  Future<void> _stopStreamingAsr() async {
+    // Stop waveform recorder.
+    unawaited(
+      _recorder
+          .stop()
+          .then((p) => debugPrint('[AIScribe] waveform stop() path=$p'))
+          .catchError((Object e) {
+        debugPrint('[AIScribe] waveform stop() error: $e');
+        return null;
+      }),
+    );
+
+    // Stop audio stream — closes PCM source → ASR generator flushes and closes.
+    await _audioRecorder.stop().catchError((Object e) {
+      debugPrint('[AIScribe] audioRecorder stop() error: $e');
+      return null;
+    });
+
+    _recycleRecorder();
+    notifyListeners();
+
+    // Wait for sherpa to flush the last audio segment.
+    String transcript = _offlineTranscript;
+    try {
+      transcript = await _asrCompleter!.future.timeout(const Duration(seconds: 15));
+    } catch (e) {
+      debugPrint('[AIScribe] ASR flush timeout/error: $e — using accumulated transcript');
+    }
+    await _asrStreamSub?.cancel();
+    _asrStreamSub = null;
+    _asrCompleter = null;
+
+    _session = _session.copyWith(state: ScribeState.processing);
+    notifyListeners();
+
+    if (transcript.isEmpty) {
+      surfaceError(ScribeStrings.noSpeechDetected, mode: ScribeMode.triage);
+      return;
+    }
+
+    debugPrint('[AIScribe] streaming triage transcript: ${transcript.length} chars');
+
+    final result = TriageTranscriptMatcher.match(
+      transcript,
+      catalog: _currentSymptomCatalog ?? AiScribeTriageVocab.codes,
+    );
+
+    if (result == null || result.symptomCodes.isEmpty) {
+      surfaceError(
+        SymptomPickerStrings.scribeBannerNoSymptomsSubtitle,
+        mode: ScribeMode.triage,
+      );
+      return;
+    }
+
+    debugPrint('[AIScribe] streaming triage matched ${result.symptomCodes.length} codes');
+    _session = _session.copyWith(
+      state: ScribeState.reviewReady,
+      mode: ScribeMode.triage,
+      transcriptText: transcript,
+      triageExtractionResult: result,
+    );
+    notifyListeners();
   }
 
   void _prepareFreshRecorder() {
@@ -1037,6 +1188,7 @@ class ScribeController extends ChangeNotifier {
   void dispose() {
     _elapsedTimer?.cancel();
     _pollTimer?.cancel();
+    _asrStreamSub?.cancel();
     try {
       _recorder.dispose();
     } catch (_) {}

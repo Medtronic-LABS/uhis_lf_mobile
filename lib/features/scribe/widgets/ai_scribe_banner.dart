@@ -444,6 +444,13 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                   const SizedBox(height: 10),
                   AiScribeLiveAsrPanel(controller: _liveCtrl),
                 ],
+                if (!liveActive &&
+                    isRecording &&
+                    session.liveTranscript != null &&
+                    session.liveTranscript!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _OfflineTranscriptPanel(text: session.liveTranscript!),
+                ],
               ],
             ),
           ),
@@ -515,6 +522,34 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
         Icons.mic_rounded,
         color: AppColors.textOnNavy,
         size: 22,
+      ),
+    );
+  }
+}
+
+/// Inline panel shown inside [AiScribeBanner] while offline streaming ASR is
+/// active, displaying the sherpa-onnx partial transcript as it accumulates.
+class _OfflineTranscriptPanel extends StatelessWidget {
+  const _OfflineTranscriptPanel({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(AppRadius.rxIcon),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: AppColors.textOnNavy.withValues(alpha: 0.9),
+          fontSize: 12,
+        ),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
