@@ -127,7 +127,10 @@ class SttModelManager {
     ConsoleLog.step('[SttModelManager] download started → $dir');
 
     try {
-      final dio = Dio(BaseOptions(receiveTimeout: const Duration(minutes: 15)));
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(minutes: 15),
+      ));
       await dio.download(
         _bengaliModelUrl,
         archivePath,
