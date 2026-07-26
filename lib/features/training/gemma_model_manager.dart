@@ -178,6 +178,7 @@ class GemmaModelManager {
     ConsoleLog.step('[GemmaModelManager] [$label] download started → $destPath');
     final dio = Dio(BaseOptions(
       headers: headers,
+      connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(minutes: 30),
     ));
     try {
