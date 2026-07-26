@@ -16,7 +16,12 @@ class ScribeAsrService {
   const ScribeAsrService(this.modelDir);
   final String modelDir;
 
-  sherpa.OnlineRecognizerConfig _buildConfig() => sherpa.OnlineRecognizerConfig(
+  sherpa.OnlineRecognizerConfig _buildConfig() {
+    // Ensure the native sherpa-onnx FFI bindings are loaded before any API
+    // call.  initBindings() is idempotent (uses ??= internally) and safe to
+    // call multiple times.
+    sherpa.initBindings();
+    return sherpa.OnlineRecognizerConfig(
     model: sherpa.OnlineModelConfig(
       transducer: sherpa.OnlineTransducerModelConfig(
         encoder: '$modelDir/encoder.onnx',
@@ -36,7 +41,8 @@ class ScribeAsrService {
     rule1MinTrailingSilence: 2.4,
     rule2MinTrailingSilence: 1.2,
     rule3MinUtteranceLength: 20.0,
-  );
+    );
+  }
 
   /// Streams raw PCM16 chunks from [pcmChunks] through the online recognizer
   /// and yields the accumulated transcript text after each detected endpoint.
