@@ -67,6 +67,7 @@ import 'features/visit/assessment_repository.dart';
 import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
+import 'features/training/gemma_model_manager.dart';
 import 'features/training/offline_llm_service.dart';
 import 'features/visit/briefing/offline_briefing_service.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
@@ -252,6 +253,12 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final UserHierarchyService _userHierarchy =
       UserHierarchyService(widget.api, widget.authRepo);
 
+  // Shared OfflineLlmService instance — initialized once at app startup so
+  // the native Gemma model is loaded before any visit opens (fixes the race
+  // where briefing fetch fires before VisitFlowScreen's _autoInitGemma
+  // completes).
+  final _briefingLlm = OfflineLlmService();
+
   // ── Micro-coaching ────────────────────────────────────────────────────────
   late final CoachingDao _coachingDao = CoachingDao(widget.appDb);
   late final CoachingRepository _coachingRepo =
@@ -274,6 +281,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Register notification channels + rehydrate any pending repeat alarms
     // from the last session. Both are idempotent.
     unawaited(_bootstrapNotifications());
+    unawaited(_autoInitGemma());
     unawaited(_coachingRepo.initialize());
     // Start connectivity monitoring for automatic offline sync retry.
     _connectivitySync.start();
@@ -302,6 +310,24 @@ class _UhisNextAppState extends State<UhisNextApp>
       // app startup. Surface to console for now; once a telemetry sink lands
       // (worklist.md §8 / referral-sla-engine.md §8), route through it.
       debugPrint('[notifications] bootstrap failed: $e\n$st');
+    }
+  }
+
+  /// Initialize the on-device Gemma model at app startup so it is ready before
+  /// any visit opens.  This eliminates the race where the briefing fetch fires
+  /// (offline fallback path) before VisitFlowScreen's _autoInitGemma completes.
+  ///
+  /// VisitFlowScreen already checks isReady() first and skips re-init when the
+  /// model is already loaded, so the two paths are mutually exclusive.
+  Future<void> _autoInitGemma() async {
+    final manager = GemmaModelManager();
+    if (!await manager.isModelValid()) return;
+    final path = await manager.modelPath;
+    try {
+      await _briefingLlm.initialize(path);
+      debugPrint('[App] Gemma initialized');
+    } catch (e) {
+      debugPrint('[App] Gemma auto-init failed: $e');
     }
   }
 
@@ -457,7 +483,7 @@ class _UhisNextAppState extends State<UhisNextApp>
             create: (_) => VisitBriefingRepository(
                   widget.api,
                   cache: _aiCacheDao,
-                  offline: OfflineBriefingService(OfflineLlmService()),
+                  offline: OfflineBriefingService(_briefingLlm),
                 )),
         // AI Assistant — conversational Q&A (Tab 3)
         Provider<AssistantRepository>(

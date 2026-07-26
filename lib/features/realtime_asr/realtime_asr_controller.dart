@@ -223,12 +223,15 @@ class RealtimeAsrController extends ChangeNotifier {
       );
       debugPrint('[RealtimeASR] connecting to ${info.uri} headers=${info.headers.keys}');
       _channel = connectRealtimeChannel(info.uri, info.headers);
+      // Silence the unhandled-future rejection from channel.ready when DNS /
+      // TLS fails — the stream's onError below is the authoritative handler.
+      unawaited(_channel!.ready.then((_) {}, onError: (_) {}));
       _wsSub = _channel!.stream.listen(
         _onMessage,
         onDone: _onSocketDone,
         onError: (Object e) {
           debugPrint('[RealtimeASR] websocket error: $e');
-          _setError('Connection error: $e');
+          _setError(RealtimeAsrStrings.connectionFailed);
           unawaited(_teardown());
         },
         cancelOnError: true,
@@ -249,6 +252,13 @@ class RealtimeAsrController extends ChangeNotifier {
           androidConfig: AndroidRecordConfig(audioSource: AndroidAudioSource.mic),
         ),
       );
+      // WS may have errored during the startStream() await — _teardown() ran
+      // before _audioSub was set and couldn't stop the recorder.  Release the
+      // mic now so the offline fallback can open its own stream.
+      if (_state == RealtimeAsrState.error) {
+        await _recorder.stop().catchError((Object _) => null);
+        return;
+      }
       _audioSub = stream.listen(_onAudioChunk);
       debugPrint('[RealtimeASR] mic stream started');
 

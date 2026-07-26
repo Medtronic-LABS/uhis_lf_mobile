@@ -485,6 +485,9 @@ abstract final class RealtimeAsrStrings {
   static String get micPermissionDenied => AppLocale.isBangla
       ? 'রিয়েল-টাইম এএসআরের জন্য মাইক্রোফোন অনুমতি প্রয়োজন।'
       : 'Microphone permission is required for real-time ASR.';
+  static String get connectionFailed => AppLocale.isBangla
+      ? 'সংযোগ ব্যর্থ হয়েছে। অফলাইন মোডে চলছে।'
+      : 'Connection failed. Using offline mode.';
   static String get diagnosis => AppLocale.isBangla ? 'রোগ নির্ণয়' : 'Diagnosis';
   static String get bloodPressure => AppLocale.isBangla ? 'রক্তচাপ' : 'Blood Pressure';
   static String get bloodGlucose => AppLocale.isBangla ? 'রক্তের গ্লুকোজ' : 'Blood Glucose';
