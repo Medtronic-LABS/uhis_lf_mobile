@@ -56,7 +56,9 @@ class ScribeAsrService {
     try {
       await for (final chunk in pcmChunks) {
         if (chunk.isEmpty) continue;
-        final bytes = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+        // Always copy — stream chunks may be sublist views with non-zero
+        // offsetInBytes that would break asInt16List().
+        final bytes = Uint8List.fromList(chunk);
         final samples = _pcm16BytesToFloat(bytes);
         stream.acceptWaveform(samples: samples, sampleRate: 16000);
         while (recognizer.isReady(stream)) {
@@ -137,9 +139,16 @@ class ScribeAsrService {
   }
 
   /// Decode raw PCM16 bytes with no WAV header (from [AudioRecorder.startStream]).
+  ///
+  /// [AudioRecorder.startStream] may deliver chunks as sublist views whose
+  /// [ByteBuffer.offsetInBytes] is not a multiple of 2 — required by
+  /// [ByteBuffer.asInt16List].  Copying into a fresh [Uint8List] aligns the
+  /// offset to 0 before reinterpreting.
   Float32List _pcm16BytesToFloat(Uint8List bytes) {
     if (bytes.isEmpty) return Float32List(0);
-    final pcm = bytes.buffer.asInt16List(bytes.offsetInBytes, bytes.length ~/ 2);
+    // Always copy to guarantee offsetInBytes == 0 for asInt16List().
+    final aligned = Uint8List.fromList(bytes);
+    final pcm = aligned.buffer.asInt16List();
     final out = Float32List(pcm.length);
     for (var i = 0; i < pcm.length; i++) {
       out[i] = pcm[i] / 32768.0;
