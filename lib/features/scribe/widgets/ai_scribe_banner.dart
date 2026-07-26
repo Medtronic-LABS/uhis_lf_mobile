@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -113,6 +112,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
   bool _showDone = false;
   bool _resultConsumed = false;
+  bool _offlineFallbackStarted = false;
   ScribeController? _scribe;
 
   late final RealtimeAsrController _liveCtrl;
@@ -174,6 +174,21 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
   void _onLiveChanged() {
     if (!mounted) return;
+    // WS connection failed + offline schema present → fall back to batch offline recording.
+    if (_liveCtrl.state == RealtimeAsrState.error &&
+        !_offlineFallbackStarted) {
+      final schema = widget.offlineFormSchema;
+      if (schema != null && schema.isNotEmpty) {
+        _offlineFallbackStarted = true;
+        debugPrint('[AiScribeBanner] live ASR error — falling back to offline batch recording');
+        final scribe = _scribe;
+        if (scribe != null) {
+          scribe.startRecordingForFormPrefill(formSchema: schema);
+        }
+        setState(() {});
+        return;
+      }
+    }
     final fields = _liveCtrl.fields;
     if (fields != null && !identical(fields, _lastAppliedLiveFields)) {
       _lastAppliedLiveFields = fields;
@@ -206,27 +221,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
         _resultConsumed = false;
       });
     }
-    final schema = widget.offlineFormSchema;
-    if (schema != null && schema.isNotEmpty) {
-      Connectivity().checkConnectivity().then((results) {
-        final isOffline = results.every((r) => r == ConnectivityResult.none);
-        if (isOffline && mounted) {
-          final scribe = context.read<ScribeController>();
-          scribe.startRecordingForFormPrefill(
-            encounterId: null,
-            patientId: null,
-            formSchema: schema,
-          );
-          return;
-        }
-        _startLiveAsr();
-      });
-    } else {
-      _startLiveAsr();
-    }
-  }
-
-  void _startLiveAsr() {
+    _offlineFallbackStarted = false;
     if (widget.assessmentType != null) {
       debugPrint('<<========== ASR SESSION START — assessmentType='
           '${widget.assessmentType} ==========>>');
