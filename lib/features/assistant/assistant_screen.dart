@@ -1307,9 +1307,18 @@ class _ChatBodyState extends State<_ChatBody> {
       await _offlineLlm.initialize(modelPath);
       ConsoleLog.success('[ChatBody] Gemma on-device LLM initialized');
     } catch (e) {
-      ConsoleLog.warn('[ChatBody] Gemma init failed: $e — invalidating model file');
-      // File is corrupt or incompatible; delete it so the download gate shows.
-      await _gemmaManager.invalidate();
+      ConsoleLog.warn('[ChatBody] Gemma init failed: $e');
+      // Only delete the file if it fails the ZIP magic check — i.e. it is
+      // actually corrupt. A MediaPipe runtime error (OOM, unsupported device)
+      // does not mean the file is bad; deleting it forces a pointless re-download.
+      final valid = await _gemmaManager.isModelValid();
+      if (!valid) {
+        ConsoleLog.warn('[ChatBody] model file invalid — invalidating so download gate shows');
+        await _gemmaManager.invalidate();
+      } else {
+        ConsoleLog.warn('[ChatBody] model file intact — MediaPipe runtime error, keeping file');
+        if (mounted) setState(() {});
+      }
     } finally {
       if (mounted) setState(() => _llmInitializing = false);
     }
