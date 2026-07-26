@@ -731,6 +731,12 @@ class ScribeController extends ChangeNotifier {
     _offlineTranscript = '';
     _asrCompleter = Completer<String>();
 
+    // The offline fallback is triggered after a live-ASR WebSocket error while
+    // the live-ASR recorder is still holding the mic.  Android serialises
+    // exclusive mic access, so we wait briefly for the previous recorder to
+    // release the hardware before opening a new stream.
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
     try {
       final pcmStream = await _audioRecorder.startStream(
         const RecordConfig(

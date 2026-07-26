@@ -857,6 +857,9 @@ class RealtimeAsrController extends ChangeNotifier {
     _errorMessage = message;
     _state = RealtimeAsrState.error;
     notifyListeners();
+    // Release the mic immediately on error so that an offline-scribe fallback
+    // started by the banner can open a new audio stream without conflict.
+    unawaited(_teardown());
   }
 
   Future<void> _teardown() async {
