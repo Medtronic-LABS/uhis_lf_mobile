@@ -174,19 +174,25 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
   void _onLiveChanged() {
     if (!mounted) return;
-    // WS connection failed + offline schema present → fall back to batch offline recording.
-    if (_liveCtrl.state == RealtimeAsrState.error &&
-        !_offlineFallbackStarted) {
-      final schema = widget.offlineFormSchema;
-      if (schema != null && schema.isNotEmpty) {
-        _offlineFallbackStarted = true;
-        debugPrint('[AiScribeBanner] live ASR error — falling back to offline batch recording');
-        final scribe = _scribe;
-        if (scribe != null) {
+    // WS connection failed → fall back to offline batch recording.
+    if (_liveCtrl.state == RealtimeAsrState.error && !_offlineFallbackStarted) {
+      final scribe = _scribe;
+      if (scribe != null) {
+        final schema = widget.offlineFormSchema;
+        final vocab = widget.symptomVocab;
+        if (schema != null && schema.isNotEmpty) {
+          _offlineFallbackStarted = true;
+          debugPrint('[AiScribeBanner] live ASR error — offline form prefill batch fallback');
           scribe.startRecordingForFormPrefill(formSchema: schema);
+          setState(() {});
+          return;
+        } else if (vocab != null && vocab.isNotEmpty) {
+          _offlineFallbackStarted = true;
+          debugPrint('[AiScribeBanner] live ASR error — offline triage batch fallback');
+          scribe.startRecordingForTriage(symptomCatalog: vocab);
+          setState(() {});
+          return;
         }
-        setState(() {});
-        return;
       }
     }
     final fields = _liveCtrl.fields;

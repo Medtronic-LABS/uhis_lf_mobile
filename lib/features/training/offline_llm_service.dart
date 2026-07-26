@@ -42,6 +42,16 @@ class OfflineLlmService {
     }
   }
 
+  /// Release the model from MediaPipe memory. Safe to call if not initialized.
+  Future<void> close() async {
+    ConsoleLog.step('[OfflineLlmService] close');
+    try {
+      await _channel.invokeMethod<void>('close');
+    } on PlatformException catch (e) {
+      ConsoleLog.warn('[OfflineLlmService] close failed: ${e.message}');
+    }
+  }
+
   /// Send [prompt] to the on-device Gemma model and return its response.
   Future<String> ask(String prompt) async {
     ConsoleLog.step('[OfflineLlmService] ask prompt=${prompt.length}chars');

@@ -89,6 +89,15 @@ class CoachingLlmPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
             "isReady" -> result.success(llm != null)
 
+            "close" -> {
+                scope.launch {
+                    withContext(Dispatchers.IO) { runCatching { llm?.close() } }
+                    llm = null
+                    Log.i(TAG, "LlmInference closed")
+                    result.success(null)
+                }
+            }
+
             else -> result.notImplemented()
         }
     }
