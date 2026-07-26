@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -49,6 +50,7 @@ class AiScribeBanner extends StatefulWidget {
     this.onFormFill,
     this.symptomVocab,
     this.onLiveSymptomCodes,
+    this.offlineFormSchema,
   });
 
   final String encounterId;
@@ -91,6 +93,11 @@ class AiScribeBanner extends StatefulWidget {
   /// extraction (only fires when [symptomVocab] is set).
   final void Function(RealtimeSymptomCodes codes, String fullTranscript)?
       onLiveSymptomCodes;
+
+  /// When set, an offline fallback batch recording is used instead of live ASR
+  /// when connectivity is unavailable. Only applies when [tapStartsLiveAsr] is
+  /// true and [assessmentType] is non-null.
+  final List<FormFieldSchema>? offlineFormSchema;
 
   @override
   State<AiScribeBanner> createState() => _AiScribeBannerState();
@@ -199,6 +206,27 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
         _resultConsumed = false;
       });
     }
+    final schema = widget.offlineFormSchema;
+    if (schema != null && schema.isNotEmpty) {
+      Connectivity().checkConnectivity().then((results) {
+        final isOffline = results.every((r) => r == ConnectivityResult.none);
+        if (isOffline && mounted) {
+          final scribe = context.read<ScribeController>();
+          scribe.startRecordingForFormPrefill(
+            encounterId: null,
+            patientId: null,
+            formSchema: schema,
+          );
+          return;
+        }
+        _startLiveAsr();
+      });
+    } else {
+      _startLiveAsr();
+    }
+  }
+
+  void _startLiveAsr() {
     if (widget.assessmentType != null) {
       debugPrint('<<========== ASR SESSION START — assessmentType='
           '${widget.assessmentType} ==========>>');

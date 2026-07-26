@@ -5,6 +5,7 @@
 /// define that routes Visit Briefing and AI Scribe to a local container).
 library;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 
 import '../../core/api/api_client.dart';
@@ -50,10 +51,11 @@ class AssistantRepository {
     Map<String, dynamic>? patientContext,
     List<String> contextDocs = const [],
   }) async {
-    // Offline-first: try on-device Gemma when initialized.
+    // Use on-device Gemma only when offline and model is initialized.
     try {
-      final ready = await _offlineLlm.isReady();
-      if (ready) {
+      final connectivity = await Connectivity().checkConnectivity();
+      final isOffline = connectivity.every((r) => r == ConnectivityResult.none);
+      if (isOffline && await _offlineLlm.isReady()) {
         return _askOffline(question, contextDocs);
       }
     } on OfflineLlmException catch (e) {

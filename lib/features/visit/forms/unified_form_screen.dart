@@ -453,6 +453,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   tapStartsLiveAsr: true,
                   assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
                       widget.activeFormTypes),
+                  offlineFormSchema: FormFieldSchemaBuilder.forProgrammeNames(
+                      widget.activeFormTypes),
                   onFormFill: (fill) {
                     final rejected = notifier.applyAiPrefill(
                       fill.fields.where((f) => f.value != null).toList(),

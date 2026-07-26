@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_waveforms/audio_waveforms.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -9,10 +10,15 @@ import 'package:record/record.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/errors/domain_exceptions.dart';
+import '../training/offline_llm_service.dart';
+import '../training/stt_model_manager.dart';
 import '../visit/triage/ai_scribe_triage_vocab.dart';
 import '../visit/triage/triage_transcript_matcher.dart';
 import 'form_field_schema_builder.dart';
 import 'models/ai_extracted_field.dart';
+import 'offline_scribe_service.dart';
+import 'scribe_asr_service.dart';
+import 'scribe_field_extractor.dart';
 import 'scribe_permission_service.dart';
 import 'scribe_session.dart';
 
@@ -87,6 +93,10 @@ class ScribeController extends ChangeNotifier {
   ScribeMode _currentMode = ScribeMode.soap;
   List<String> _currentProgrammes = const [];
   String? _triageNotes;
+
+  /// When true, the audio recorder uses PCM16/WAV so the offline sherpa ASR
+  /// can decode the file directly without a container conversion step.
+  bool _useWavRecording = false;
 
   /// Set before starting a form recording to include Step 1 extra symptom
   /// notes in the SOAP generation context.
@@ -177,10 +187,41 @@ class ScribeController extends ChangeNotifier {
     _currentFormSchema = null;
     _currentProgrammes = const [];
 
+    // Use PCM16/WAV when offline + sherpa STT model is available so the
+    // offline ASR path can decode the file without container conversion.
+    _useWavRecording = false;
+    if (await SttModelManager().isModelPresent()) {
+      final results = await Connectivity().checkConnectivity();
+      _useWavRecording = results.every((r) => r == ConnectivityResult.none);
+    }
+
     await _startRecordingInternal(
       patientId: patientId,
       encounterId: encounterId,
       mode: ScribeMode.triage,
+    );
+  }
+
+  Future<void> startRecordingForFormPrefill({
+    String? patientId,
+    String? encounterId,
+    required List<FormFieldSchema> formSchema,
+  }) async {
+    _currentMode = ScribeMode.formPrefill;
+    _currentFormSchema = formSchema;
+    _currentSymptomCatalog = null;
+    _currentProgrammes = const [];
+
+    _useWavRecording = false;
+    if (await SttModelManager().isModelPresent()) {
+      final results = await Connectivity().checkConnectivity();
+      _useWavRecording = results.every((r) => r == ConnectivityResult.none);
+    }
+
+    await _startRecordingInternal(
+      patientId: patientId,
+      encounterId: encounterId,
+      mode: ScribeMode.formPrefill,
     );
   }
 
@@ -207,7 +248,8 @@ class ScribeController extends ChangeNotifier {
 
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
-      _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
+      final ext = _useWavRecording ? 'wav' : _recordingExtension;
+      _recordingPath = '${dir.path}/scribe_$ts.$ext';
       // Waveform visualization recorder writes to a separate dummy path.
       final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
 
@@ -217,10 +259,12 @@ class ScribeController extends ChangeNotifier {
         recorderSettings: _recorderSettings,
       );
 
-      // Start actual audio capture via record package — produces standard WAV.
+      // Start actual audio capture via record package.
+      // PCM16/WAV when offline so sherpa-onnx can decode the file directly.
+      final encoder = _useWavRecording ? AudioEncoder.pcm16bits : AudioEncoder.aacLc;
       await _audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
+        RecordConfig(
+          encoder: encoder,
           sampleRate: 16000,
           numChannels: 1,
           bitRate: 64000,
@@ -285,6 +329,11 @@ class ScribeController extends ChangeNotifier {
     }
     _recordingPath = effectivePath;
     debugPrint('[AIScribe] Recording saved to: $effectivePath');
+
+    if (_useWavRecording) {
+      await _runOfflineScribe(wavPath: effectivePath);
+      return;
+    }
 
     debugPrint('[AIScribe] Uploading audio (mode=${_currentMode.name})...');
 
@@ -377,6 +426,7 @@ class ScribeController extends ChangeNotifier {
     _currentProgrammes = const [];
     _currentMode = ScribeMode.soap;
     _triageNotes = null;
+    _useWavRecording = false;
     _recycleRecorder();
     _session = const ScribeSession();
     notifyListeners();
@@ -571,6 +621,66 @@ class ScribeController extends ChangeNotifier {
 
   // ── private helpers ───────────────────────────────────────────────────────
 
+  Future<void> _runOfflineScribe({required String wavPath}) async {
+    debugPrint('[AIScribe] offline path: mode=${_currentMode.name}');
+    final sttMgr = SttModelManager();
+    await sttMgr.checkIfReady();
+    final sttState = sttMgr.currentState;
+    if (sttState is! SttModelStateReady) {
+      _setRecordingError(ScribeStrings.transcriptionFailed);
+      return;
+    }
+
+    _session = _session.copyWith(state: ScribeState.processing);
+    notifyListeners();
+
+    try {
+      final asr = ScribeAsrService(sttState.modelDir);
+      final extractor = ScribeFieldExtractor(OfflineLlmService());
+      final offline = OfflineScribeService(asr: asr, extractor: extractor);
+
+      final result = await offline.process(
+        wavPath: wavPath,
+        mode: _currentMode,
+        formSchema: _currentFormSchema,
+        symptomCatalog: _currentSymptomCatalog,
+      );
+
+      if (result == null) {
+        _setRecordingError(ScribeStrings.noSpeechDetected);
+        return;
+      }
+
+      switch (_currentMode) {
+        case ScribeMode.triage:
+          _completeTriageJob(result: result);
+          break;
+        case ScribeMode.formPrefill:
+          _session = _session.copyWith(
+            state: ScribeState.fieldsPopulated,
+            transcriptText: result.transcriptText,
+            formPrefillResult: result.formPrefill,
+            fieldsJustPopulated: true,
+          );
+          notifyListeners();
+          Future.delayed(const Duration(seconds: 5), () {
+            if (_session.fieldsJustPopulated) {
+              _session = _session.copyWith(fieldsJustPopulated: false);
+              notifyListeners();
+            }
+          });
+          break;
+        case ScribeMode.soap:
+          _setRecordingError(ScribeStrings.transcriptionFailed);
+      }
+    } on Exception catch (e) {
+      _setRecordingError(e.toString());
+    } finally {
+      try {
+        await File(wavPath).delete();
+      } catch (_) {}
+    }
+  }
 
   void _prepareFreshRecorder() {
     if (_recorder.isRecording) return;

@@ -67,6 +67,8 @@ import 'features/visit/assessment_repository.dart';
 import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
+import 'features/training/offline_llm_service.dart';
+import 'features/visit/briefing/offline_briefing_service.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
 import 'features/visit/programme_selection/programme_recommendation_repository.dart';
 import 'features/visit/visit_controller.dart';
@@ -452,8 +454,11 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<AiResponseCacheDao>.value(value: _aiCacheDao),
         // AI Visit Briefing service
         Provider<VisitBriefingRepository>(
-            create: (_) =>
-                VisitBriefingRepository(widget.api, cache: _aiCacheDao)),
+            create: (_) => VisitBriefingRepository(
+                  widget.api,
+                  cache: _aiCacheDao,
+                  offline: OfflineBriefingService(OfflineLlmService()),
+                )),
         // AI Assistant — conversational Q&A (Tab 3)
         Provider<AssistantRepository>(
             create: (_) => AssistantRepository(widget.api)),
