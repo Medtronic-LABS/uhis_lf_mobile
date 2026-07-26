@@ -229,11 +229,9 @@ class RealtimeAsrController extends ChangeNotifier {
         onError: (Object e) {
           debugPrint('[RealtimeASR] websocket error: $e');
           _setError('Connection error: $e');
-          // A socket error leaves the mic stream and auto-extract timer
-          // running against a dead channel unless torn down here too — same
-          // leak as an unexpected close (see _onSocketDone).
           unawaited(_teardown());
         },
+        cancelOnError: true,
       );
 
       final hasPerm = await _recorder.hasPermission();
