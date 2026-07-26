@@ -94,6 +94,7 @@ class AssistantRepository {
     try {
       final answer = await _offlineLlm.ask(prompt);
       ConsoleLog.step('[PayloadDebug] offline-llm → ${answer.length}chars');
+      if (answer.isEmpty) return const AssistantAnswer(text: 'Could not generate a response. Please try rephrasing your question.');
       return AssistantAnswer(text: answer);
     } on OfflineLlmException catch (e) {
       ConsoleLog.warn('[PayloadDebug] offline-llm failed: $e');
