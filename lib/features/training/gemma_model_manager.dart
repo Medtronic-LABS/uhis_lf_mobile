@@ -69,22 +69,19 @@ class GemmaModelManager {
     return File(path).exists();
   }
 
-  /// Returns true only when the file exists, is ≥ 10 MB, and starts with the
-  /// ZIP magic bytes `PK\x03\x04` (MediaPipe .task files are ZIP archives).
+  /// Returns true when the file exists and is ≥ 100 MB.
+  ///
+  /// The real Gemma 3 270M model is ~303 MB. A 100 MB floor catches truncated
+  /// downloads while leaving room for future smaller quantisations.
+  /// Magic-byte checks were removed — the .task FlatBuffer format does not
+  /// reliably start with ZIP PK bytes and caused false-positive "corrupt"
+  /// detections on valid files.
   Future<bool> isModelValid() async {
     final path = await modelPath;
     final f = File(path);
     if (!await f.exists()) return false;
     final size = await f.length();
-    if (size < 10 * 1024 * 1024) return false;
-    try {
-      final header = await f.openRead(0, 4).fold<List<int>>([], (a, b) => a..addAll(b));
-      // ZIP local file header magic: 50 4B 03 04
-      return header.length >= 4 && header[0] == 0x50 && header[1] == 0x4B &&
-          header[2] == 0x03 && header[3] == 0x04;
-    } catch (_) {
-      return false;
-    }
+    return size >= 100 * 1024 * 1024;
   }
 
   /// Emits [GemmaModelReady] if model is valid on disk; deletes and emits idle
