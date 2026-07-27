@@ -12,6 +12,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/errors/domain_exceptions.dart';
 import '../training/offline_llm_service.dart';
 import '../training/stt_model_manager.dart';
+import '../training/whisper_model_manager.dart';
 import '../visit/triage/ai_scribe_triage_vocab.dart';
 import '../visit/triage/triage_transcript_matcher.dart';
 import 'form_field_schema_builder.dart';
@@ -110,8 +111,19 @@ class ScribeController extends ChangeNotifier {
   String? _sttModelDir;
 
   StreamSubscription<String>? _asrStreamSub;
+  // Separate sub for Whisper's raw PCM stream (List<int>, not String).
+  StreamSubscription<List<int>>? _whisperPcmSub;
   String _offlineTranscript = '';
   Completer<String>? _asrCompleter;
+
+  /// When true, triage ASR uses Whisper Small (OfflineRecognizer, batch) which
+  /// outputs clean English from code-mixed speech. Falls back to Bengali
+  /// Zipformer2 (streaming) when Whisper model is not downloaded.
+  bool _useWhisperAsr = false;
+
+  /// PCM16 byte buffer collected while Whisper is the active ASR.
+  /// Populated during recording; consumed at stop by [_runWhisperOnBuffer].
+  List<int>? _pcmBuffer;
 
   /// Set before starting a form recording to include Step 1 extra symptom
   /// notes in the SOAP generation context.
@@ -202,21 +214,32 @@ class ScribeController extends ChangeNotifier {
     _currentFormSchema = null;
     _currentProgrammes = const [];
 
-    // If the STT model is present, stream PCM chunks live to sherpa-onnx for
-    // real-time partials.  This call site is already an offline fallback (the
-    // banner only calls it after the WebSocket fails), so no connectivity check
-    // is needed — we always prefer streaming when the model is available.
+    // Prefer Whisper Small (batch, clean English output) over Bengali Zipformer2
+    // (streaming, phonetic Bengali for English words → breaks keyword matching).
+    // Whisper model downloads in background on first run; Bengali is the fallback.
     _useWavRecording = false;
     _useStreamingAsr = false;
+    _useWhisperAsr = false;
     _sttModelDir = null;
 
-    final sttMgr = SttModelManager();
-    if (await sttMgr.isModelPresent()) {
-      await sttMgr.checkIfReady();
-      final state = sttMgr.currentState;
-      if (state is SttModelStateReady) {
-        _sttModelDir = state.modelDir;
-        _useStreamingAsr = true;
+    final whisperMgr = WhisperModelManager();
+    if (await whisperMgr.isModelPresent()) {
+      _sttModelDir = await whisperMgr.modelDir;
+      _useWhisperAsr = true;
+      _useStreamingAsr = true;
+      debugPrint('[AIScribe] Whisper Small model found — using offline batch ASR');
+    } else {
+      // Trigger background download so Whisper is ready next time.
+      whisperMgr.downloadIfNeeded();
+      debugPrint('[AIScribe] Whisper not downloaded — falling back to Bengali Zipformer2');
+      final sttMgr = SttModelManager();
+      if (await sttMgr.isModelPresent()) {
+        await sttMgr.checkIfReady();
+        final state = sttMgr.currentState;
+        if (state is SttModelStateReady) {
+          _sttModelDir = state.modelDir;
+          _useStreamingAsr = true;
+        }
       }
     }
 
@@ -468,10 +491,14 @@ class ScribeController extends ChangeNotifier {
     _triageNotes = null;
     _useWavRecording = false;
     _useStreamingAsr = false;
+    _useWhisperAsr = false;
     _sttModelDir = null;
     _offlineTranscript = '';
+    _pcmBuffer = null;
     _asrStreamSub?.cancel();
     _asrStreamSub = null;
+    _whisperPcmSub?.cancel();
+    _whisperPcmSub = null;
     _asrCompleter = null;
     _recycleRecorder();
     _session = const ScribeSession();
@@ -737,6 +764,53 @@ class ScribeController extends ChangeNotifier {
     _offlineTranscript = '';
     _asrCompleter = Completer<String>();
 
+    if (_useWhisperAsr) {
+      // Whisper batch mode: collect all PCM during recording, transcribe at stop.
+      // No live partial transcripts — waveform animation shows recording is active.
+      _pcmBuffer = [];
+      try {
+        final pcmStream = await _audioRecorder.startStream(
+          const RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+        );
+        var pcmChunkCount = 0;
+        _whisperPcmSub = pcmStream.listen(
+          (chunk) {
+            _pcmBuffer!.addAll(chunk);
+            pcmChunkCount++;
+            if (pcmChunkCount == 1 || pcmChunkCount % 50 == 0) {
+              debugPrint(
+                '[AIScribe] Whisper: buffering PCM #$pcmChunkCount '
+                'buf=${_pcmBuffer!.length}B',
+              );
+            }
+          },
+          onDone: () {
+            if (!(_asrCompleter?.isCompleted ?? true)) {
+              _asrCompleter!.complete(''); // stream closed; buffer ready
+            }
+          },
+          onError: (Object e) {
+            debugPrint('[AIScribe] Whisper PCM stream error: $e');
+            if (!(_asrCompleter?.isCompleted ?? true)) {
+              _asrCompleter!.complete('');
+            }
+          },
+          cancelOnError: false,
+        );
+      } catch (e) {
+        debugPrint('[AIScribe] Whisper startStream failed: $e');
+        if (!(_asrCompleter?.isCompleted ?? true)) {
+          _asrCompleter!.completeError(e);
+        }
+      }
+      return;
+    }
+
+    // Bengali Zipformer2 streaming (fallback when Whisper not downloaded).
     try {
       final pcmStream = await _audioRecorder.startStream(
         const RecordConfig(
@@ -782,10 +856,23 @@ class ScribeController extends ChangeNotifier {
     }
   }
 
+  Future<String> _runWhisperOnBuffer() async {
+    final buf = _pcmBuffer;
+    final modelDir = _sttModelDir;
+    if (buf == null || buf.isEmpty || modelDir == null) return '';
+    try {
+      final asr = ScribeAsrService(modelDir);
+      return await asr.transcribeAccumulated(buf);
+    } catch (e) {
+      debugPrint('[AIScribe] Whisper transcription error: $e');
+      return '';
+    }
+  }
+
   Future<void> _stopStreamingAsr() async {
     // Waveform recorder was NOT started in streaming-ASR mode — skip stop.
 
-    // Stop audio stream — closes PCM source → ASR generator flushes and closes.
+    // Stop audio stream — closes PCM source.
     await _audioRecorder.stop().catchError((Object e) {
       debugPrint('[AIScribe] audioRecorder stop() error: $e');
       return null;
@@ -794,32 +881,59 @@ class ScribeController extends ChangeNotifier {
     _recycleRecorder();
     notifyListeners();
 
-    // Wait for sherpa to flush the last audio segment.
-    String transcript = _offlineTranscript;
-    try {
-      transcript = await _asrCompleter!.future.timeout(const Duration(seconds: 15));
-    } catch (e) {
-      debugPrint('[AIScribe] ASR flush timeout/error: $e — using accumulated transcript');
-    }
-    await _asrStreamSub?.cancel();
-    _asrStreamSub = null;
-    _asrCompleter = null;
+    String transcript;
 
-    _session = _session.copyWith(state: ScribeState.processing);
-    notifyListeners();
+    if (_useWhisperAsr) {
+      // Wait for PCM stream to close (short timeout — stream closes on stop()).
+      try {
+        await _asrCompleter!.future.timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('[AIScribe] Whisper PCM stream close timeout: $e');
+      }
+      await _whisperPcmSub?.cancel();
+      _whisperPcmSub = null;
+      _asrCompleter = null;
+
+      _session = _session.copyWith(state: ScribeState.processing);
+      notifyListeners();
+
+      // Transcribe the full accumulated buffer in one pass — best quality.
+      transcript = await _runWhisperOnBuffer();
+      _pcmBuffer = null;
+    } else {
+      // Zipformer streaming — wait for sherpa to flush the last segment.
+      transcript = _offlineTranscript;
+      try {
+        transcript = await _asrCompleter!.future.timeout(
+          const Duration(seconds: 15),
+        );
+      } catch (e) {
+        debugPrint(
+          '[AIScribe] ASR flush timeout/error: $e — using accumulated transcript',
+        );
+      }
+      await _asrStreamSub?.cancel();
+      _asrStreamSub = null;
+      _asrCompleter = null;
+
+      _session = _session.copyWith(state: ScribeState.processing);
+      notifyListeners();
+    }
 
     if (transcript.isEmpty) {
       surfaceError(ScribeStrings.noSpeechDetected, mode: ScribeMode.triage);
       return;
     }
 
-    debugPrint('[AIScribe] streaming triage transcript (${transcript.length} chars): $transcript');
+    debugPrint(
+      '[AIScribe] triage transcript (${transcript.length} chars): $transcript',
+    );
 
     final catalog = _currentSymptomCatalog ?? AiScribeTriageVocab.codes;
     var result = TriageTranscriptMatcher.match(transcript, catalog: catalog);
 
     if (result == null || result.symptomCodes.isEmpty) {
-      debugPrint('[AIScribe] keyword matcher found nothing — trying Gemma offline extraction');
+      debugPrint('[AIScribe] keyword matcher empty — trying Gemma extraction');
       result = await _extractSymptomsWithGemma(transcript, catalog);
     }
 
@@ -831,7 +945,7 @@ class ScribeController extends ChangeNotifier {
       return;
     }
 
-    debugPrint('[AIScribe] streaming triage matched ${result.symptomCodes.length} codes');
+    debugPrint('[AIScribe] triage matched ${result.symptomCodes.length} codes');
     _session = _session.copyWith(
       state: ScribeState.reviewReady,
       mode: ScribeMode.triage,
@@ -843,16 +957,26 @@ class ScribeController extends ChangeNotifier {
 
   // ── Offline Gemma triage extraction ──────────────────────────────────────
   //
-  // Gemma 270M is too small for structured JSON output — it produces verbose
-  // free-text. Use a minimal prompt and scan the response for catalog codes.
+  // Mirrors the server pipeline from inference.py:
+  //   - Inject symptoms as natural English labels with spaces (not underscores)
+  //     so Gemma sees "vaginal bleeding" not "vaginal_bleeding".
+  //   - Parse Gemma's response via label→code reverse map, then code scan,
+  //     then keyword matcher fallback. Three passes to maximize recall.
 
-  // No catalog injected — Gemma 270M echoes the list verbatim, triggering false
-  // positives on all codes. Instead ask for a plain English symptom summary;
-  // the keyword matcher then maps English terms to catalog codes.
-  static const String _gemmaTriagePrompt =
-      'The patient said: "{{transcript}}"\n\n'
-      'List the patient\'s current symptoms in English, one per line. '
-      'If none are clear, write NONE.';
+  /// Build the triage prompt mirroring the server's INFERENCE_PROMPT approach:
+  /// inject symptoms as natural English labels (underscore → space) so Gemma
+  /// can semantically match without echoing snake_case tokens literally.
+  static String _buildGemmaTriagePrompt(
+    String transcript,
+    List<String> catalog,
+  ) {
+    final naturalLabels =
+        catalog.map((c) => c.replaceAll('_', ' ')).join(', ');
+    return 'Patient said: "$transcript"\n\n'
+        'Available symptoms: $naturalLabels\n\n'
+        'List ONLY the symptoms from the list above that the patient currently '
+        'has, one per line. Write NONE if none apply.';
+  }
 
   Future<TriageExtractionResult?> _extractSymptomsWithGemma(
     String transcript,
@@ -863,7 +987,7 @@ class ScribeController extends ChangeNotifier {
         debugPrint('[AIScribe] Gemma not ready — skipping LLM extraction');
         return null;
       }
-      final prompt = _gemmaTriagePrompt.replaceFirst('{{transcript}}', transcript);
+      final prompt = _buildGemmaTriagePrompt(transcript, catalog);
       final response = await _llmService.ask(prompt);
       return _parseGemmaTriageResponse(response, catalog);
     } catch (e) {
@@ -876,17 +1000,37 @@ class ScribeController extends ChangeNotifier {
     String response,
     List<String> catalog,
   ) {
-    // Gemma 270M outputs free-text — scan response for any catalog code token.
-    final allowed = catalog.toSet();
-    final normalized = response.toLowerCase().replaceAll('-', '_');
+    final responseNorm = response.toLowerCase().trim();
     final seen = <String>{};
     final fields = <AIExtractedField>[];
 
-    for (final code in allowed) {
+    // Pass 1: match natural English labels (server pattern — spaces not underscores).
+    // Build reverse map: "vaginal bleeding" → "vaginal_bleeding".
+    final labelToCode = {
+      for (final c in catalog) c.replaceAll('_', ' '): c,
+    };
+    for (final entry in labelToCode.entries) {
+      final label = entry.key;
+      final code = entry.value;
       if (seen.contains(code)) continue;
-      // Match whole-word to avoid false substring hits (e.g. "pain" in "epigastric_pain").
+      if (!responseNorm.contains(label)) continue;
+      seen.add(code);
+      fields.add(AIExtractedField(
+        fieldId: code,
+        value: true,
+        confidence: 0.75,
+        sourceSegment: label,
+        source: FieldSource.aiPending,
+        extractedAt: DateTime.now(),
+      ));
+    }
+
+    // Pass 2: also catch snake_case codes Gemma sometimes emits anyway.
+    final normalizedResponse = responseNorm.replaceAll('-', '_');
+    for (final code in catalog) {
+      if (seen.contains(code)) continue;
       final pattern = RegExp('\\b${RegExp.escape(code)}\\b');
-      if (!pattern.hasMatch(normalized)) continue;
+      if (!pattern.hasMatch(normalizedResponse)) continue;
       seen.add(code);
       fields.add(AIExtractedField(
         fieldId: code,
@@ -898,14 +1042,14 @@ class ScribeController extends ChangeNotifier {
       ));
     }
 
-    if (fields.isEmpty) {
-      // Gemma 270M often responds in English prose without exact code names.
-      // Run the keyword matcher against its English response as a second pass.
-      debugPrint('[AIScribe] Gemma code scan empty — keyword pass on Gemma response');
-      return TriageTranscriptMatcher.match(response, catalog: catalog);
+    if (fields.isNotEmpty) {
+      debugPrint('[AIScribe] Gemma extracted ${fields.length} symptom codes');
+      return TriageExtractionResult(symptomCodes: fields, transcriptText: '');
     }
-    debugPrint('[AIScribe] Gemma extracted ${fields.length} symptom codes');
-    return TriageExtractionResult(symptomCodes: fields, transcriptText: '');
+
+    // Pass 3: Gemma responded in plain prose — keyword matcher as final fallback.
+    debugPrint('[AIScribe] Gemma label/code scan empty — keyword pass on Gemma response');
+    return TriageTranscriptMatcher.match(response, catalog: catalog);
   }
 
   void _prepareFreshRecorder() {
@@ -1264,6 +1408,7 @@ class ScribeController extends ChangeNotifier {
     _elapsedTimer?.cancel();
     _pollTimer?.cancel();
     _asrStreamSub?.cancel();
+    _whisperPcmSub?.cancel();
     try {
       _recorder.dispose();
     } catch (_) {}

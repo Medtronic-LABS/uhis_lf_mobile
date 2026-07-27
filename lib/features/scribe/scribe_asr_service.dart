@@ -6,15 +6,66 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import '../../core/debug/console_log.dart';
 
-/// ASR service backed by the sherpa-onnx Bengali Zipformer2 model.
+/// ASR service backed by either the Bengali Zipformer2 or Whisper Small model.
 ///
-/// Two modes:
-///   - [transcribeFile]: batch — reads a PCM16 WAV file and returns the full transcript.
-///   - [transcribeRealtime]: streaming — accepts a raw PCM16 byte stream and
-///     yields partial transcripts in real-time as the recognizer reaches endpoints.
+/// Modes:
+///   - [transcribeFile]: batch WAV — Zipformer2 online recognizer.
+///   - [transcribeRealtime]: streaming PCM — Zipformer2 online recognizer.
+///   - [transcribeAccumulated]: batch PCM buffer — Whisper Small offline recognizer.
+///     Runs after recording stops; outputs clean English from code-mixed speech,
+///     matching the server's Sarvam ASR quality without the Bengali-phonetic-script
+///     problem that makes downstream keyword matching fail.
 class ScribeAsrService {
   const ScribeAsrService(this.modelDir);
   final String modelDir;
+
+  // ── Whisper Small (OfflineRecognizer) ────────────────────────────────────
+
+  sherpa.OfflineRecognizerConfig _buildWhisperConfig() {
+    sherpa.initBindings();
+    // int8-quantized encoder/decoder — ~100 MB total; good accuracy/speed
+    // on mobile CPUs. `task = 'translate'` always outputs English, mirroring
+    // the server's English-output Sarvam ASR path so keyword matching works.
+    return sherpa.OfflineRecognizerConfig(
+      model: sherpa.OfflineModelConfig(
+        whisper: sherpa.OfflineWhisperModelConfig(
+          encoder: '$modelDir/encoder.int8.onnx',
+          decoder: '$modelDir/decoder.int8.onnx',
+          language: '',
+          task: 'translate',
+        ),
+        tokens: '$modelDir/tokens.txt',
+        numThreads: 2,
+        debug: false,
+        modelType: 'whisper',
+      ),
+    );
+  }
+
+  /// Transcribe raw PCM16 bytes (no WAV header) accumulated during recording.
+  ///
+  /// Sends the entire buffer to Whisper Small in one shot — better quality than
+  /// short windowed segments. Call after [AudioRecorder.stop()] to transcribe
+  /// the full recording. Returns an empty string on failure.
+  Future<String> transcribeAccumulated(List<int> rawPcmBytes) async {
+    if (rawPcmBytes.isEmpty) return '';
+    final config = _buildWhisperConfig();
+    final recognizer = sherpa.OfflineRecognizer(config);
+    final stream = recognizer.createStream();
+    try {
+      final bytes = Uint8List.fromList(rawPcmBytes);
+      final samples = _pcm16BytesToFloat(bytes);
+      if (samples.isEmpty) return '';
+      stream.acceptWaveform(samples: samples, sampleRate: 16000);
+      recognizer.decode(stream);
+      final text = recognizer.getResult(stream).text.trim();
+      ConsoleLog.success('[ScribeAsrService] Whisper transcript: ${text.length} chars');
+      return text;
+    } finally {
+      stream.free();
+      recognizer.free();
+    }
+  }
 
   sherpa.OnlineRecognizerConfig _buildConfig() {
     // Ensure the native sherpa-onnx FFI bindings are loaded before any API
