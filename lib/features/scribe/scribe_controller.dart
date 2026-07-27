@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:audio_waveforms/audio_waveforms.dart';
@@ -843,26 +842,15 @@ class ScribeController extends ChangeNotifier {
   }
 
   // ── Offline Gemma triage extraction ──────────────────────────────────────
+  //
+  // Gemma 270M is too small for structured JSON output — it produces verbose
+  // free-text. Use a minimal prompt and scan the response for catalog codes.
 
-  static const String _gemmaTriagePrompt = '''You are a clinical triage assistant for community health workers in Bangladesh.
-Given a noisy, possibly multilingual consultation transcript (Bengali / Hindi / English / code-mixed), identify which symptoms the patient CURRENTLY reports.
-
-ALLOWED_SYMPTOM_CODES (use ONLY these exact snake_case codes):
-{{symptom_catalog}}
-
-Respond with a single JSON object, no markdown:
-{"symptoms": [{"code": "<one of ALLOWED_SYMPTOM_CODES>", "confidence": 0.0, "sourceSegment": "short English quote or paraphrase from the transcript"}]}
-
-RULES:
-- Include ONLY codes from ALLOWED_SYMPTOM_CODES. Never invent codes.
-- Exclude denied, negated, or resolved symptoms (e.g. "no fever", "fever gone").
-- confidence: 1.0 = explicit; 0.8-0.95 = clear paraphrase; 0.6-0.79 = inferred.
-- Omit any symptom with confidence below 0.6.
-- If no symptoms are present, return {"symptoms": []}.
-- Output ONLY the JSON object.
-
-TRANSCRIPT:
-{{transcript}}''';
+  static const String _gemmaTriagePrompt =
+      'Patient says: "{{transcript}}"\n\n'
+      'Symptoms present (pick from list, comma-separated, no explanation):\n'
+      '{{symptom_catalog}}\n\n'
+      'Answer:';
 
   Future<TriageExtractionResult?> _extractSymptomsWithGemma(
     String transcript,
@@ -888,37 +876,36 @@ TRANSCRIPT:
     String response,
     List<String> catalog,
   ) {
-    final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(response);
-    if (jsonMatch == null) {
-      debugPrint('[AIScribe] Gemma response has no JSON object');
-      return null;
+    // Gemma 270M outputs free-text — scan response for any catalog code token.
+    final allowed = catalog.toSet();
+    final normalized = response.toLowerCase().replaceAll('-', '_');
+    final seen = <String>{};
+    final fields = <AIExtractedField>[];
+
+    for (final code in allowed) {
+      if (seen.contains(code)) continue;
+      // Match whole-word to avoid false substring hits (e.g. "pain" in "epigastric_pain").
+      final pattern = RegExp('\\b${RegExp.escape(code)}\\b');
+      if (!pattern.hasMatch(normalized)) continue;
+      seen.add(code);
+      fields.add(AIExtractedField(
+        fieldId: code,
+        value: true,
+        confidence: 0.7,
+        sourceSegment: code,
+        source: FieldSource.aiPending,
+        extractedAt: DateTime.now(),
+      ));
     }
-    try {
-      final decoded = jsonDecode(jsonMatch.group(0)!) as Map<String, dynamic>;
-      final symptoms = (decoded['symptoms'] as List<dynamic>?) ?? [];
-      final allowed = catalog.toSet();
-      final fields = <AIExtractedField>[];
-      for (final s in symptoms) {
-        final code = s['code'] as String? ?? '';
-        if (!allowed.contains(code)) continue;
-        final confidence = (s['confidence'] as num?)?.toDouble() ?? 0.6;
-        if (confidence < 0.6) continue;
-        fields.add(AIExtractedField(
-          fieldId: code,
-          value: true,
-          confidence: confidence,
-          sourceSegment: s['sourceSegment'] as String? ?? code,
-          source: FieldSource.aiPending,
-          extractedAt: DateTime.now(),
-        ));
-      }
-      if (fields.isEmpty) return null;
-      debugPrint('[AIScribe] Gemma extracted ${fields.length} symptom codes');
-      return TriageExtractionResult(symptomCodes: fields, transcriptText: '');
-    } catch (e) {
-      debugPrint('[AIScribe] Gemma JSON parse error: $e — raw: ${response.substring(0, response.length.clamp(0, 300))}');
-      return null;
+
+    if (fields.isEmpty) {
+      // Gemma 270M often responds in English prose without exact code names.
+      // Run the keyword matcher against its English response as a second pass.
+      debugPrint('[AIScribe] Gemma code scan empty — keyword pass on Gemma response');
+      return TriageTranscriptMatcher.match(response, catalog: catalog);
     }
+    debugPrint('[AIScribe] Gemma extracted ${fields.length} symptom codes');
+    return TriageExtractionResult(symptomCodes: fields, transcriptText: '');
   }
 
   void _prepareFreshRecorder() {
