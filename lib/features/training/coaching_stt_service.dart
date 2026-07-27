@@ -159,10 +159,13 @@ class CoachingSttService {
   }
 
   Float32List _pcm16ToFloat32(Uint8List bytes) {
-    final int16 = bytes.buffer.asInt16List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 2);
-    final f32 = Float32List(int16.length);
-    for (var i = 0; i < int16.length; i++) {
-      f32[i] = int16[i] / 32768.0;
+    if (bytes.isEmpty) return Float32List(0);
+    // Use ByteData to avoid Int16List alignment requirement (offsetInBytes may be odd).
+    final bd = ByteData.view(bytes.buffer, bytes.offsetInBytes, bytes.lengthInBytes);
+    final count = bytes.lengthInBytes ~/ 2;
+    final f32 = Float32List(count);
+    for (var i = 0; i < count; i++) {
+      f32[i] = bd.getInt16(i * 2, Endian.little) / 32768.0;
     }
     return f32;
   }

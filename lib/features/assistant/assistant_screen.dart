@@ -2422,6 +2422,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
 
   Future<void> _initStt() async {
     if (!await _sttManager.isModelPresent()) return;
+    await _sttManager.checkIfReady();
     final current = _sttManager.currentState;
     if (current is SttModelStateReady) {
       await _stt.initialize(current.modelDir);

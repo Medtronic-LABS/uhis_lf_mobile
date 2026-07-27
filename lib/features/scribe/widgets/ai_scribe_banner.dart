@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -220,7 +221,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     setState(() {});
   }
 
-  void _startAsr() {
+  Future<void> _startAsr() async {
     if (_showDone) {
       setState(() {
         _showDone = false;
@@ -232,6 +233,31 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       debugPrint('<<========== ASR SESSION START — assessmentType='
           '${widget.assessmentType} ==========>>');
     }
+
+    // Skip WS entirely when offline — go straight to local sherpa-onnx STT.
+    final results = await Connectivity().checkConnectivity();
+    final isOffline = results.every((r) => r == ConnectivityResult.none);
+    if (isOffline) {
+      final scribe = _scribe;
+      if (scribe != null) {
+        final vocab = widget.symptomVocab;
+        final schema = widget.offlineFormSchema;
+        if (vocab != null && vocab.isNotEmpty) {
+          _offlineFallbackStarted = true;
+          debugPrint('[AiScribeBanner] offline — skipping WS, direct offline triage STT');
+          unawaited(scribe.startRecordingForTriage(symptomCatalog: vocab));
+          if (mounted) setState(() {});
+          return;
+        } else if (schema != null && schema.isNotEmpty) {
+          _offlineFallbackStarted = true;
+          debugPrint('[AiScribeBanner] offline — skipping WS, direct offline form-prefill STT');
+          unawaited(scribe.startRecordingForFormPrefill(formSchema: schema));
+          if (mounted) setState(() {});
+          return;
+        }
+      }
+    }
+
     _liveCtrl.start(
       assessmentType: widget.assessmentType,
       symptomVocab: widget.symptomVocab,
@@ -306,7 +332,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       controller.bindContext(context);
       if (idleChoice) {
         if (widget.tapStartsLiveAsr) {
-          _startAsr();
+          unawaited(_startAsr());
         } else {
           controller.startRecording();
         }

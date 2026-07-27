@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:audio_waveforms/audio_waveforms.dart';
@@ -35,6 +36,7 @@ class ScribeController extends ChangeNotifier {
 
   final ScribeApiService _api;
   final ScribePermissionService _perm;
+  final OfflineLlmService _llmService = OfflineLlmService();
   /// Drives the live recording waveform visualization only.
   /// Recycled after each session — [RecorderController] can hang on reuse after
   /// stop() on Android (audio_waveforms native quirk).
@@ -746,8 +748,16 @@ class ScribeController extends ChangeNotifier {
         ),
       );
 
+      var _pcmChunkCount = 0;
+      final pcmStreamLogged = pcmStream.map((chunk) {
+        _pcmChunkCount++;
+        if (_pcmChunkCount == 1 || _pcmChunkCount % 50 == 0) {
+          debugPrint('[AIScribe] pcm chunk #$_pcmChunkCount len=${chunk.length}');
+        }
+        return chunk;
+      });
       final asr = ScribeAsrService(modelDir);
-      _asrStreamSub = asr.transcribeRealtime(pcmStream).listen(
+      _asrStreamSub = asr.transcribeRealtime(pcmStreamLogged).listen(
         (partial) {
           _offlineTranscript = partial;
           _session = _session.copyWith(liveTranscript: partial);
@@ -814,12 +824,15 @@ class ScribeController extends ChangeNotifier {
       return;
     }
 
-    debugPrint('[AIScribe] streaming triage transcript: ${transcript.length} chars');
+    debugPrint('[AIScribe] streaming triage transcript (${transcript.length} chars): $transcript');
 
-    final result = TriageTranscriptMatcher.match(
-      transcript,
-      catalog: _currentSymptomCatalog ?? AiScribeTriageVocab.codes,
-    );
+    final catalog = _currentSymptomCatalog ?? AiScribeTriageVocab.codes;
+    var result = TriageTranscriptMatcher.match(transcript, catalog: catalog);
+
+    if (result == null || result.symptomCodes.isEmpty) {
+      debugPrint('[AIScribe] keyword matcher found nothing — trying Gemma offline extraction');
+      result = await _extractSymptomsWithGemma(transcript, catalog);
+    }
 
     if (result == null || result.symptomCodes.isEmpty) {
       surfaceError(
@@ -837,6 +850,85 @@ class ScribeController extends ChangeNotifier {
       triageExtractionResult: result,
     );
     notifyListeners();
+  }
+
+  // ── Offline Gemma triage extraction ──────────────────────────────────────
+
+  static const String _gemmaTriagePrompt = '''You are a clinical triage assistant for community health workers in Bangladesh.
+Given a noisy, possibly multilingual consultation transcript (Bengali / Hindi / English / code-mixed), identify which symptoms the patient CURRENTLY reports.
+
+ALLOWED_SYMPTOM_CODES (use ONLY these exact snake_case codes):
+{{symptom_catalog}}
+
+Respond with a single JSON object, no markdown:
+{"symptoms": [{"code": "<one of ALLOWED_SYMPTOM_CODES>", "confidence": 0.0, "sourceSegment": "short English quote or paraphrase from the transcript"}]}
+
+RULES:
+- Include ONLY codes from ALLOWED_SYMPTOM_CODES. Never invent codes.
+- Exclude denied, negated, or resolved symptoms (e.g. "no fever", "fever gone").
+- confidence: 1.0 = explicit; 0.8-0.95 = clear paraphrase; 0.6-0.79 = inferred.
+- Omit any symptom with confidence below 0.6.
+- If no symptoms are present, return {"symptoms": []}.
+- Output ONLY the JSON object.
+
+TRANSCRIPT:
+{{transcript}}''';
+
+  Future<TriageExtractionResult?> _extractSymptomsWithGemma(
+    String transcript,
+    List<String> catalog,
+  ) async {
+    try {
+      if (!await _llmService.isReady()) {
+        debugPrint('[AIScribe] Gemma not ready — skipping LLM extraction');
+        return null;
+      }
+      final prompt = _gemmaTriagePrompt
+          .replaceFirst('{{symptom_catalog}}', catalog.join(', '))
+          .replaceFirst('{{transcript}}', transcript);
+      final response = await _llmService.ask(prompt);
+      return _parseGemmaTriageResponse(response, catalog);
+    } catch (e) {
+      debugPrint('[AIScribe] Gemma triage extraction error: $e');
+      return null;
+    }
+  }
+
+  TriageExtractionResult? _parseGemmaTriageResponse(
+    String response,
+    List<String> catalog,
+  ) {
+    final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(response);
+    if (jsonMatch == null) {
+      debugPrint('[AIScribe] Gemma response has no JSON object');
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(jsonMatch.group(0)!) as Map<String, dynamic>;
+      final symptoms = (decoded['symptoms'] as List<dynamic>?) ?? [];
+      final allowed = catalog.toSet();
+      final fields = <AIExtractedField>[];
+      for (final s in symptoms) {
+        final code = s['code'] as String? ?? '';
+        if (!allowed.contains(code)) continue;
+        final confidence = (s['confidence'] as num?)?.toDouble() ?? 0.6;
+        if (confidence < 0.6) continue;
+        fields.add(AIExtractedField(
+          fieldId: code,
+          value: true,
+          confidence: confidence,
+          sourceSegment: s['sourceSegment'] as String? ?? code,
+          source: FieldSource.aiPending,
+          extractedAt: DateTime.now(),
+        ));
+      }
+      if (fields.isEmpty) return null;
+      debugPrint('[AIScribe] Gemma extracted ${fields.length} symptom codes');
+      return TriageExtractionResult(symptomCodes: fields, transcriptText: '');
+    } catch (e) {
+      debugPrint('[AIScribe] Gemma JSON parse error: $e — raw: ${response.substring(0, response.length.clamp(0, 300))}');
+      return null;
+    }
   }
 
   void _prepareFreshRecorder() {
