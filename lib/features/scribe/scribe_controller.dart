@@ -846,11 +846,13 @@ class ScribeController extends ChangeNotifier {
   // Gemma 270M is too small for structured JSON output — it produces verbose
   // free-text. Use a minimal prompt and scan the response for catalog codes.
 
+  // No catalog injected — Gemma 270M echoes the list verbatim, triggering false
+  // positives on all codes. Instead ask for a plain English symptom summary;
+  // the keyword matcher then maps English terms to catalog codes.
   static const String _gemmaTriagePrompt =
-      'Patient says: "{{transcript}}"\n\n'
-      'Symptoms present (pick from list, comma-separated, no explanation):\n'
-      '{{symptom_catalog}}\n\n'
-      'Answer:';
+      'The patient said: "{{transcript}}"\n\n'
+      'List the patient\'s current symptoms in English, one per line. '
+      'If none are clear, write NONE.';
 
   Future<TriageExtractionResult?> _extractSymptomsWithGemma(
     String transcript,
@@ -861,9 +863,7 @@ class ScribeController extends ChangeNotifier {
         debugPrint('[AIScribe] Gemma not ready — skipping LLM extraction');
         return null;
       }
-      final prompt = _gemmaTriagePrompt
-          .replaceFirst('{{symptom_catalog}}', catalog.join(', '))
-          .replaceFirst('{{transcript}}', transcript);
+      final prompt = _gemmaTriagePrompt.replaceFirst('{{transcript}}', transcript);
       final response = await _llmService.ask(prompt);
       return _parseGemmaTriageResponse(response, catalog);
     } catch (e) {
