@@ -33,6 +33,7 @@ class CoachingSttService {
       return;
     }
     try {
+      sherpa.initBindings();
       final config = sherpa.OnlineRecognizerConfig(
         model: sherpa.OnlineModelConfig(
           transducer: sherpa.OnlineTransducerModelConfig(

@@ -277,11 +277,16 @@ class ScribeController extends ChangeNotifier {
       // Waveform visualization recorder writes to a separate dummy path.
       final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
 
-      // Start waveform recorder (audio_waveforms) for UI animation only.
-      await _recorder.record(
-        path: waveformPath,
-        recorderSettings: _recorderSettings,
-      );
+      // Waveform recorder uses its own AudioRecord instance. Running it
+      // alongside _audioRecorder's PCM stream causes exclusive-access conflicts
+      // on some Android builds — the PCM stream gets no data, silencing sherpa.
+      // Skip waveform when streaming ASR owns the mic.
+      if (!_useStreamingAsr) {
+        await _recorder.record(
+          path: waveformPath,
+          recorderSettings: _recorderSettings,
+        );
+      }
 
       if (_useStreamingAsr) {
         // Real-time offline ASR: stream PCM16 chunks directly to sherpa-onnx.
@@ -733,12 +738,6 @@ class ScribeController extends ChangeNotifier {
     _offlineTranscript = '';
     _asrCompleter = Completer<String>();
 
-    // The offline fallback is triggered after a live-ASR WebSocket error while
-    // the live-ASR recorder is still holding the mic.  Android serialises
-    // exclusive mic access, so we wait briefly for the previous recorder to
-    // release the hardware before opening a new stream.
-    await Future<void>.delayed(const Duration(milliseconds: 400));
-
     try {
       final pcmStream = await _audioRecorder.startStream(
         const RecordConfig(
@@ -748,11 +747,11 @@ class ScribeController extends ChangeNotifier {
         ),
       );
 
-      var _pcmChunkCount = 0;
+      var pcmChunkCount = 0;
       final pcmStreamLogged = pcmStream.map((chunk) {
-        _pcmChunkCount++;
-        if (_pcmChunkCount == 1 || _pcmChunkCount % 50 == 0) {
-          debugPrint('[AIScribe] pcm chunk #$_pcmChunkCount len=${chunk.length}');
+        pcmChunkCount++;
+        if (pcmChunkCount == 1 || pcmChunkCount % 50 == 0) {
+          debugPrint('[AIScribe] pcm chunk #$pcmChunkCount len=${chunk.length}');
         }
         return chunk;
       });
@@ -785,16 +784,7 @@ class ScribeController extends ChangeNotifier {
   }
 
   Future<void> _stopStreamingAsr() async {
-    // Stop waveform recorder.
-    unawaited(
-      _recorder
-          .stop()
-          .then((p) => debugPrint('[AIScribe] waveform stop() path=$p'))
-          .catchError((Object e) {
-        debugPrint('[AIScribe] waveform stop() error: $e');
-        return null;
-      }),
-    );
+    // Waveform recorder was NOT started in streaming-ASR mode — skip stop.
 
     // Stop audio stream — closes PCM source → ASR generator flushes and closes.
     await _audioRecorder.stop().catchError((Object e) {
