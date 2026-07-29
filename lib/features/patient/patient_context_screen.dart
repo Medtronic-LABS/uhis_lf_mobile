@@ -682,40 +682,21 @@ class _PatientContextScreenState
 
   /// Build the patient-scoped AI context (chip line, 2-line summary, and the
   /// structured payload the assistant answers from) out of the loaded data.
-  /// Clinical display priority — highest-priority programme shown first.
-  static const _progPriority = [
-    Programme.anc, Programme.pw, Programme.pnc, Programme.imci,
-    Programme.ncd, Programme.tb, Programme.epi, Programme.nutrition,
-    Programme.familyPlanning, Programme.cataract, Programme.eyeCare,
-  ];
-
   PatientAiContext _aiContext(PatientOrMemberData data) {
-    final progs = data.programmes.toList()
-      ..sort((a, b) {
-        final ai = _progPriority.indexOf(a);
-        final bi = _progPriority.indexOf(b);
-        return (ai < 0 ? 99 : ai).compareTo(bi < 0 ? 99 : bi);
-      });
+    final progs = data.programmes.toList();
 
     final band = data.riskBand;
     final bandLabel = band == null ? null : 'Band ${band.index + 1}';
     final reasons = data.riskReasons;
 
-    // Chip: top-2 programmes by priority + "+N more" suffix + age.
-    final chipProgs = progs.take(2).map((p) => p.displayName).join(' · ');
-    final chipExtra = progs.length > 2 ? ' · +${progs.length - 2} more' : '';
     final chip = <String>[
-      '$chipProgs$chipExtra',
       if (data.age != null) '${data.age}y',
+      if (data.gender != null) data.gender!,
     ].join(' · ');
 
-    // Summary: age, gender, top-3 programmes, pregnant flag.
-    final summaryProgs = progs.take(3).map((p) => p.displayName).join(', ');
-    final summaryExtra = progs.length > 3 ? ' (+${progs.length - 3} more)' : '';
     final summary = StringBuffer()
       ..write('${data.age != null ? '${data.age}y' : '—'}'
-          '${data.gender != null ? ', ${data.gender}' : ''}')
-      ..write(progs.isEmpty ? '' : '  ·  $summaryProgs$summaryExtra');
+          '${data.gender != null ? ', ${data.gender}' : ''}');
     if (data.isPregnant) summary.write('  ·  Pregnant');
 
     return PatientAiContext(
