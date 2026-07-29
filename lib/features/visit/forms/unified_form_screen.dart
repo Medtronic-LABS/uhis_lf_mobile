@@ -2324,15 +2324,6 @@ class _SectionCard extends StatelessWidget {
           }
           return null;
         };
-      case 'hba1c':
-        return (v) {
-          if (v == null || v.isEmpty) return null;
-          final n = double.tryParse(v);
-          if (n == null || n < hba1cFormMin || n > hba1cFormMax) {
-            return ComposerStrings.hba1cValidationError;
-          }
-          return null;
-        };
       case 'fundalHeight':
         return (v) {
           if (v == null || v.isEmpty) return null;

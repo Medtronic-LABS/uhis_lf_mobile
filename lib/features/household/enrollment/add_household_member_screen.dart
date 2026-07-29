@@ -47,14 +47,13 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   String? _gender;
   String? _maritalStatus;
   String? _disabilityStatus = 'Absent';
-  bool _mobileNotAvailable = false;
   bool _nidScanned = false;
   String? _ageSummary;
 
   final Map<String, GlobalKey> _fieldKeys = {};
   Map<String, String?> _fieldErrors = {};
 
-  static const _validationOrder = ['name', 'gender', 'maritalStatus'];
+  static const _validationOrder = ['name', 'gender', 'maritalStatus', 'mobile'];
 
   GlobalKey _key(String name) =>
       _fieldKeys.putIfAbsent(name, GlobalKey.new);
@@ -230,7 +229,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         final phone = patient.phone;
         if (phone != null && phone.isNotEmpty) {
           _mobileCtrl.text = phone;
-          _mobileNotAvailable = false;
         }
       });
     } on DioException catch (_) {
@@ -266,6 +264,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
       if (_gender == null) 'gender': 'Required',
       if (maritalRequired && _maritalStatus == null) 'maritalStatus': 'Required',
+      if (_mobileCtrl.text.trim().isEmpty) 'mobile': 'Required',
     };
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -297,8 +296,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       dateOfBirth: _dobCtrl.text,
       idType: _nidScanned ? 'NID' : 'BRN',
       idNumber: nid.isNotEmpty ? nid : null,
-      mobileNumber: _mobileNotAvailable ? null : _mobileCtrl.text,
-      mobileAvailable: !_mobileNotAvailable,
+      mobileNumber: _mobileCtrl.text,
+      mobileAvailable: true,
       maritalStatus: _maritalStatus ?? '',
       disabilityStatus: _disabilityStatus ?? 'Absent',
       relationshipToHead: 'Other',
@@ -730,53 +729,19 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     const SizedBox(height: 20),
 
                     // ── Q8: Mobile Number ──────────────────────────────────
+                    SizedBox(key: _key('mobile'), height: 0),
                     _QuestionLabel(number: 'Q8', text: 'Mobile Number'),
                     const SizedBox(height: 10),
-                    if (!_mobileNotAvailable) ...[
-                      EnrollmentInputField(
-                        label: EnrollmentStrings.mobileNumberLabel,
-                        hint: EnrollmentStrings.mobileNumberHint,
-                        controller: _mobileCtrl,
-                        keyboardType: TextInputType.phone,
-                        validator: _validatePhone,
-                        inputFormatters: [LengthLimitingTextInputFormatter(14)],
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: _mobileNotAvailable,
-                            onChanged: (v) => setState(
-                              () => _mobileNotAvailable = v ?? false,
-                            ),
-                            activeColor: AppColors.navy,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          EnrollmentStrings.mobileNotAvailableHint,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          EnrollmentStrings.otpHelperText,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.mobileNumberLabel,
+                      hint: EnrollmentStrings.mobileNumberHint,
+                      controller: _mobileCtrl,
+                      keyboardType: TextInputType.phone,
+                      isRequired: true,
+                      validator: _validatePhone,
+                      onChanged: (_) => _clearError('mobile'),
+                      errorText: _fieldErrors['mobile'],
+                      inputFormatters: [LengthLimitingTextInputFormatter(14)],
                     ),
                     const SizedBox(height: 20),
 
