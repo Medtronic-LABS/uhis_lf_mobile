@@ -24,7 +24,7 @@ import '../models/dashboard_tier.dart';
 abstract final class AppStrings {
   AppStrings._();
 
-  static const String appName = 'UHIS Next';
+  static const String appName = 'LEAPWELL';
   static const String appTagline = 'MedtronicLabs · Frontline Health';
   static const String poweredBy = 'Powered by Medtronic Labs';
 
@@ -624,7 +624,7 @@ abstract final class OnboardingStrings {
   static String get title => AppLocale.isBangla ? 'আপনার অ্যাকাউন্ট সুরক্ষিত করুন' : 'Secure Your Account';
   static String get subtitle => AppLocale.isBangla
       ? 'আপনার ডিভাইসের বায়োমেট্রিক্স ও ব্যাকআপ পিন ব্যবহার করে ইউএইচআইএস নেক্সটে দ্রুত ও নিরাপদ প্রবেশাধিকার সেট আপ করুন।'
-      : 'Set up quick, secure access to UHIS Next using your device\'s biometrics and a backup PIN.';
+      : 'Set up quick, secure access to LEAPWELL using your device\'s biometrics and a backup PIN.';
 
   static String get biometricFeatureTitle => AppLocale.isBangla ? 'ডিভাইস আনলক' : 'Device Unlock';
   static String get biometricFeatureDesc => AppLocale.isBangla
