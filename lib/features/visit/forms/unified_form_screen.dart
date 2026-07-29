@@ -404,7 +404,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             }
           }
           items.add(_SectionCard(
-            key: _sectionKeyFor(annotatedSection.section.sectionId),
+            key: _sectionKeyFor('${annotatedSection.section.formType}_${annotatedSection.section.sectionId}'),
             section: annotatedSection.section,
             config: _config!,
             data: notifier.data,
@@ -583,7 +583,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     for (final a in annotated) {
       final hasError = a.section.fieldRefs.any((r) => errors.contains(r.id));
       if (!hasError) continue;
-      final key = _sectionKeys[a.section.sectionId];
+      final key = _sectionKeys['${a.section.formType}_${a.section.sectionId}'];
       final ctx = key?.currentContext;
       if (ctx != null) {
         Scrollable.ensureVisible(
@@ -937,7 +937,7 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
             ),
             // ── Accordion body — collapsed by default ───────────────────────
             AnimatedCrossFade(
-              firstChild: const SizedBox(width: double.infinity),
+              firstChild: const SizedBox.shrink(),
               secondChild: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 0, 14, 13),
                 child: Column(

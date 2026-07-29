@@ -1021,7 +1021,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         villageId: _villageId,
         diagnosisCode: assessmentType,
         diagnosisLabel: label.isEmpty ? null : label,
-        facilityName: _lastReferralFacility ?? _defaultReferralSiteId,
+        facilityName: _lastReferralFacility,
       );
       debugPrint(
         '[Referral] CCE local create id=$referralId reasons=$label',

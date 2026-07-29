@@ -13,6 +13,7 @@ class VisitFlowHeader extends StatelessWidget {
     super.key,
     required this.step,
     required this.onBack,
+    this.showBackButton = true,
     this.patientId,
     this.patientName,
     this.ageDisplay,
@@ -25,6 +26,7 @@ class VisitFlowHeader extends StatelessWidget {
 
   final int step;
   final VoidCallback onBack;
+  final bool showBackButton;
   final String? patientId;
   final String? patientName;
   final String? ageDisplay;
@@ -103,23 +105,26 @@ class VisitFlowHeader extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  GestureDetector(
-                    onTap: onBack,
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
+                  if (showBackButton)
+                    GestureDetector(
+                      onTap: onBack,
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
                       ),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.arrow_back_rounded,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                  ),
+                    )
+                  else
+                    const SizedBox(width: 30, height: 30),
                   const SizedBox(width: 10),
                   Container(
                     width: 42,

@@ -234,7 +234,7 @@ class PatientContextBuilder {
     // mirrors Android PregnancyCohortRules.isActivePregnancy() which returns
     // false when dateOfDelivery is set.
     final pregnantFromFacts = pregnancyFacts != null && !hasDelivered;
-    final pregnantFromProgramme = programmes.contains(Programme.anc) && !hasDelivered;
+    final pregnantFromProgramme = (programmes.contains(Programme.anc) || programmes.contains(Programme.pw)) && !hasDelivered;
     final pregnantFromRaw = _isPregnantFromRaw(patient.rawJson) && !hasDelivered;
     final isPregnant = pregnantFromFacts || pregnantFromProgramme || pregnantFromRaw;
     debugPrint(

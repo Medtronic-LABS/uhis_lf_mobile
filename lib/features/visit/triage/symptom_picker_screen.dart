@@ -2070,10 +2070,13 @@ class _InlineServiceSelector extends StatelessWidget {
     if (card.programme == Programme.imci) return false;
     final ctx = patientContext;
     final pregnant = ctx.isPregnant && !ctx.isPostpartum;
-    if (card.isPW) return isDelivery || !pregnant;
+    // PW: starts a new pregnancy registration — never requires prior pregnancy record.
+    // Blocked only during delivery visit or when already postpartum.
+    if (card.isPW) return isDelivery || ctx.isPostpartum;
     if (card.programme == Programme.anc) {
-      // ANC requires PW registration first; also blocked if ANC already done today.
-      return !isPW || isDelivery || !pregnant || ancVisitedToday;
+      // ANC requires PW selection first; also blocked if ANC already done today.
+      // !pregnant removed: SK may start ANC for a new pregnancy (no prior PW record).
+      return !isPW || isDelivery || ancVisitedToday;
     }
     if (card.isDelivery) return !pregnant;
     if (card.programme == Programme.pnc) return !ctx.isPostpartum;
