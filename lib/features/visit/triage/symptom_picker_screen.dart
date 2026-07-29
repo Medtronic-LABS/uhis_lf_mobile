@@ -932,29 +932,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                                     color: AppColors.navy,
                                   ),
                                 ),
-                                if (vm.activatedPathways.isNotEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.only(top: 2),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.auto_awesome_rounded,
-                                          size: 11,
-                                          color: Color(0xFF7C3AED),
-                                        ),
-                                        SizedBox(width: 3),
-                                        Text(
-                                          'AI selected',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Color(0xFF7C3AED),
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
                               ],
                             ),
                           ),
@@ -2272,38 +2249,41 @@ class _ServiceTile extends StatelessWidget {
                         : null,
                   ),
                 ),
-                // Emoji + label + AI added
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(def.emoji, style: const TextStyle(fontSize: 28)),
-                      const SizedBox(height: 6),
-                      Text(
-                        label,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: labelColor,
-                        ),
-                      ),
-                      if (isPathwaySuggested) ...[
-                        const SizedBox(height: 2),
-                        const Text(
-                          'AI added',
+                // Emoji + label + AI added — Positioned.fill so Column
+                // gets tight constraints and mainAxisAlignment.center works.
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(def.emoji, style: const TextStyle(fontSize: 28)),
+                        const SizedBox(height: 6),
+                        Text(
+                          label,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF6B63D4),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: labelColor,
                           ),
                         ),
+                        if (isPathwaySuggested && isSelected) ...[
+                          const SizedBox(height: 2),
+                          const Text(
+                            'AI added',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF6B63D4),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ],
