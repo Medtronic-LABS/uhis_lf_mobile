@@ -922,9 +922,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                               children: [
                                 Text(
                                   SymptomPickerStrings.servicesOpeningStatus(
-                                    _selectedProgrammes.length,
                                     _selectedProgrammes
-                                        .map((p) => p.wireTag)
+                                        .map((p) => p.displayName)
                                         .toList(),
                                   ),
                                   style: const TextStyle(
@@ -2044,17 +2043,6 @@ class _InlineServiceSelector extends StatelessWidget {
     }).toList();
   }
 
-  String _enrolledLabel(_ServiceCardDef card) {
-    if (card.isPW) return 'Registered';
-    switch (card.programme) {
-      case Programme.anc:
-      case Programme.pnc:
-        return 'Completed visit';
-      default:
-        return TriageStrings.enrolledBadge;
-    }
-  }
-
   String _cardLabel(_ServiceCardDef card) {
     if (card.isRMNCH) {
       final ctx = patientContext;
@@ -2190,10 +2178,6 @@ class _InlineServiceSelector extends StatelessWidget {
                     label: _cardLabel(c),
                     isSelected: _isCardSelected(c),
                     isLocked: _isLocked(c),
-                    isEnrolled: (c.programme != null &&
-                            enrolledProgrammes.contains(c.programme)) ||
-                        (c.isPW && enrolledProgrammes.contains(Programme.anc)),
-                    enrolledLabel: _enrolledLabel(c),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
                     onTap: () => _handleTap(context, c),
@@ -2211,8 +2195,6 @@ class _ServiceTile extends StatelessWidget {
     required this.label,
     required this.isSelected,
     required this.isLocked,
-    required this.isEnrolled,
-    required this.enrolledLabel,
     required this.isPathwaySuggested,
     required this.onTap,
   });
@@ -2221,49 +2203,37 @@ class _ServiceTile extends StatelessWidget {
   final String label;
   final bool isSelected;
   final bool isLocked;
-
-  /// Patient is already enrolled in this programme from past visits.
-  /// Shows an programme-specific badge; the card remains selectable for this visit.
-  final bool isEnrolled;
-
-  /// Badge text when [isEnrolled] is true. Defaults to "Enrolled" for most
-  /// programmes; ANC/PNC use "Completed ANC"/"Completed PNC" etc.
-  final String enrolledLabel;
-
   final bool isPathwaySuggested;
   final VoidCallback onTap;
 
-  static const _enrolledBadgeBg = Color(0xFFE5E7EB);
-  static const _enrolledBadgeText = Color(0xFF6B7280);
-
   @override
   Widget build(BuildContext context) {
-    final Color bg = Colors.white;
+    final Color bg = isSelected
+        ? AppColors.navy.withValues(alpha: 0.04)
+        : Colors.white;
     final Color borderColor =
         isSelected ? AppColors.navy : const Color(0xFFE5E7EB);
-    final double borderWidth = isSelected ? 1.5 : 1;
+    final double borderWidth = isSelected ? 2.0 : 1.0;
     final Color labelColor = isLocked
-        ? AppColors.navy.withValues(alpha: 0.55)
+        ? AppColors.navy.withValues(alpha: 0.45)
         : AppColors.navy;
 
     return Semantics(
       button: true,
       selected: isSelected,
       enabled: !isLocked,
-      label: isEnrolled
-          ? TriageStrings.enrolledProgrammeA11y(label)
-          : (isSelected
-              ? TriageStrings.deselectProgrammeA11y(label)
-              : TriageStrings.selectProgrammeA11y(label)),
+      label: isSelected
+          ? TriageStrings.deselectProgrammeA11y(label)
+          : TriageStrings.selectProgrammeA11y(label),
       child: GestureDetector(
         onTap: onTap,
         child: Opacity(
-          opacity: isLocked ? 0.45 : 1.0,
+          opacity: isLocked ? 0.40 : 1.0,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
             decoration: BoxDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: borderColor, width: borderWidth),
               boxShadow: const [
                 BoxShadow(
@@ -2275,27 +2245,14 @@ class _ServiceTile extends StatelessWidget {
             ),
             child: Stack(
               children: [
-                // ✦ sparkle — pathway-engine suggested
-                if (isPathwaySuggested && isSelected)
-                  Positioned(
-                    top: 5,
-                    left: 6,
-                    child: Text(
-                      '✦',
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: AppColors.navy.withValues(alpha: 0.45),
-                      ),
-                    ),
-                  ),
-                // Checkmark — follows visit selection, not enrolment alone
+                // Selection circle — top-right
                 Positioned(
-                  top: 5,
-                  right: 6,
+                  top: 7,
+                  right: 7,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 140),
-                    width: 16,
-                    height: 16,
+                    width: 22,
+                    height: 22,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isSelected ? AppColors.navy : Colors.transparent,
@@ -2309,47 +2266,40 @@ class _ServiceTile extends StatelessWidget {
                     child: isSelected
                         ? const Icon(
                             Icons.check_rounded,
-                            size: 10,
+                            size: 13,
                             color: Colors.white,
                           )
                         : null,
                   ),
                 ),
-                // Emoji + label + enrolled badge
+                // Emoji + label + AI added
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+                  padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(def.emoji, style: const TextStyle(fontSize: 20)),
-                      const SizedBox(height: 4),
+                      Text(def.emoji, style: const TextStyle(fontSize: 28)),
+                      const SizedBox(height: 6),
                       Text(
                         label,
                         textAlign: TextAlign.center,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                           color: labelColor,
                         ),
                       ),
-                      if (isEnrolled) ...[
-                        const SizedBox(height: 3),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: _enrolledBadgeBg,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            enrolledLabel,
-                            style: TextStyle(
-                              fontSize: 8,
-                              fontWeight: FontWeight.w700,
-                              color: _enrolledBadgeText,
-                            ),
+                      if (isPathwaySuggested) ...[
+                        const SizedBox(height: 2),
+                        const Text(
+                          'AI added',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF6B63D4),
                           ),
                         ),
                       ],

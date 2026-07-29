@@ -3861,13 +3861,10 @@ abstract final class SymptomPickerStrings {
   // ── Status bar above CTA ────────────────────────────────────────────────
   static String symptomsSelectedStatus(int n) =>
       '$n ${n == 1 ? 'symptom' : 'symptoms'} selected';
-  static String servicesOpeningStatus(int count, List<String> labels) {
+  static String servicesOpeningStatus(List<String> labels) {
     if (labels.isEmpty) return '';
-    final caps = labels.map((l) => l.toUpperCase()).toList();
-    if (caps.length == 1) return 'This visit will cover ${caps[0]} screening';
-    final joined = caps.sublist(0, caps.length - 1).join(', ') +
-        ' & ${caps.last}';
-    return 'This visit will cover $joined';
+    if (labels.length == 1) return labels[0];
+    return '${labels.sublist(0, labels.length - 1).join(', ')} & ${labels.last}';
   }
 
   // ── Other symptoms free-text ─────────────────────────────────────────────
