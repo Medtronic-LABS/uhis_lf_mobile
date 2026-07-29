@@ -396,8 +396,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (_step < 2 && (_step > 0 || !_triageSubmitted)) {
-          setState(() => _step -= 1);
+        if (_step == 1) {
+          setState(() => _step = 0);
         } else {
           await _exitFlow();
         }
@@ -426,8 +426,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                       ? _step1LiveProgrammes.map((p) => p.name).toList()
                       : _confirmedProgrammes.map((p) => p.name).toList(),
                   onBack: () {
-                    if (_step < 2 && (_step > 0 || !_triageSubmitted)) {
-                      setState(() => _step -= 1);
+                    if (_step == 1) {
+                      setState(() => _step = 0);
                     } else {
                       _exitFlow();
                     }
