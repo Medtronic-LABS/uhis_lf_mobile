@@ -104,11 +104,11 @@ class AppConfig {
   /// Length of the app-specific fallback PIN. Fixed at 4 digits.
   static const int pinLength = 4;
 
-  /// Base URL for the spice-coaching micro-coaching service.
-  /// Default: Android emulator loopback to port 8000.
+  /// Base URL for the micro-coaching service.
+  /// Defaults to the shared UHIS dev backend — no dart-define required for dev.
   static const String coachingServiceUrl = String.fromEnvironment(
     'COACHING_SERVICE_URL',
-    defaultValue: 'http://10.0.2.2:8000',
+    defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com',
   );
 
   /// Base URL for the unified `leapfrog-ai-services` container — AI Visit
