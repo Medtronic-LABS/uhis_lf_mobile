@@ -51,6 +51,35 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   bool _nidScanned = false;
   String? _ageSummary;
 
+  final Map<String, GlobalKey> _fieldKeys = {};
+  Map<String, String?> _fieldErrors = {};
+
+  static const _validationOrder = ['name', 'gender', 'maritalStatus'];
+
+  GlobalKey _key(String name) =>
+      _fieldKeys.putIfAbsent(name, GlobalKey.new);
+
+  void _clearError(String name) {
+    if (_fieldErrors[name] != null) setState(() => _fieldErrors.remove(name));
+  }
+
+  void _scrollToFirstError() {
+    for (final k in _validationOrder) {
+      if (_fieldErrors[k] != null) {
+        final ctx = _fieldKeys[k]?.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOut,
+            alignment: 0.15,
+          );
+        }
+        return;
+      }
+    }
+  }
+
   static String? _validatePhone(String? value) {
     if (value == null || value.isEmpty) return null;
     final digits = value.replaceAll(RegExp(r'\D'), '');
@@ -232,15 +261,18 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
     final ageYears = int.tryParse(_ageCtrl.text) ?? 99;
     final maritalRequired = ageYears > 5;
-    if (_nameCtrl.text.isEmpty || _gender == null || (maritalRequired && _maritalStatus == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all required fields'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+
+    final errors = <String, String?>{
+      if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
+      if (_gender == null) 'gender': 'Required',
+      if (maritalRequired && _maritalStatus == null) 'maritalStatus': 'Required',
+    };
+    if (errors.isNotEmpty) {
+      setState(() => _fieldErrors = errors);
+      _scrollToFirstError();
       return;
     }
+    setState(() => _fieldErrors = {});
 
     final nid = _brnCtrl.text.trim();
     if (nid.isNotEmpty) {
@@ -546,6 +578,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     const SizedBox(height: 20),
 
                     // ── Q2: Name ───────────────────────────────────────────
+                    SizedBox(key: _key('name'), height: 0),
                     _QuestionLabel(number: 'Q2', text: 'Name'),
                     const SizedBox(height: 10),
                     EnrollmentInputField(
@@ -553,6 +586,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       hint: EnrollmentStrings.memberNameHint,
                       controller: _nameCtrl,
                       isRequired: true,
+                      onChanged: (_) => _clearError('name'),
+                      errorText: _fieldErrors['name'],
                     ),
                     const SizedBox(height: 20),
 
@@ -605,28 +640,37 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     const SizedBox(height: 20),
 
                     // ── Q4: Gender ─────────────────────────────────────────
+                    SizedBox(key: _key('gender'), height: 0),
                     _QuestionLabel(number: 'Q4', text: 'Gender'),
                     const SizedBox(height: 10),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.genderLabel,
                       options: EnrollmentStrings.gendersMember,
                       selectedValue: _gender,
-                      onChanged: (v) => setState(() => _gender = v),
+                      onChanged: (v) => setState(() {
+                        _gender = v;
+                        _fieldErrors.remove('gender');
+                      }),
                       isRequired: true,
+                      errorText: _fieldErrors['gender'],
                     ),
                     const SizedBox(height: 20),
 
                     // ── Q6: Marital Status — hidden for age ≤ 5 ───────────
                     if ((int.tryParse(_ageCtrl.text) ?? 99) > 5) ...[
+                      SizedBox(key: _key('maritalStatus'), height: 0),
                       _QuestionLabel(number: 'Q6', text: 'Marital Status'),
                       const SizedBox(height: 10),
                       EnrollmentDropdown(
                         label: EnrollmentStrings.maritalStatusLabel,
                         options: EnrollmentStrings.maritalStatusesV2,
                         value: _maritalStatus,
-                        onChanged: (v) =>
-                            setState(() => _maritalStatus = v),
+                        onChanged: (v) => setState(() {
+                          _maritalStatus = v;
+                          _fieldErrors.remove('maritalStatus');
+                        }),
                         hint: 'Select status',
+                        errorText: _fieldErrors['maritalStatus'],
                       ),
                       const SizedBox(height: 20),
                     ],
