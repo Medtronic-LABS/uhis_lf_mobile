@@ -116,10 +116,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// engine — rendered with the ✦ sparkle in the card.
   final Set<Programme> _pathwayActivatedProgrammes = {};
 
-  /// Programmes the SK explicitly turned off this visit. Pathway sync must
-  /// not resurrect these — otherwise deselecting NCD (etc.) is immediately
-  /// undone when symptoms/AI refresh pathway activation.
+  /// Programmes the SK explicitly turned off this visit. Pathway-engine and
+  /// background AI syncs must not resurrect these. However, an explicit
+  /// symptom selection that directly maps to a dismissed programme lifts the
+  /// dismissal (the SK is signalling clinical intent).
   final Set<Programme> _skDismissedProgrammes = {};
+
+  /// Shadow of [TriageViewModel.selectedSymptoms] from the last sync cycle.
+  /// Used to detect newly added symptoms so we can lift dismissals for their
+  /// catalogue-mapped programmes before re-running the service grid sync.
+  Set<String> _lastKnownSymptoms = {};
 
   /// PW meta-flag — gates ANC. Auto-true when patient already has PW/ANC registered.
   bool _isPW = false;
@@ -463,12 +469,25 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   ///      immediately surfaces all relevant services regardless of whether
   ///      a PathwayEngine rule fires for that exact symptom combination.
   ///
-  /// Only adds newly relevant programmes — never removes an SK selection, and
-  /// never resurrects a programme in [_skDismissedProgrammes].
+  /// Dismissal lift: when a symptom is *newly added* (not in [_lastKnownSymptoms]),
+  /// its catalogue-mapped programmes are removed from [_skDismissedProgrammes]
+  /// before the sync runs. Explicit symptom selection is a clinical signal that
+  /// overrides a prior card dismissal; background pathway/AI refreshes do not.
   void _syncPathwaysToServiceGrid() {
     if (!mounted) return;
     final vm = _viewModel;
     if (vm == null) return;
+
+    final currentSymptoms = vm.selectedSymptoms;
+
+    // Lift dismissal for programmes mapped to newly added symptoms.
+    // Only additions trigger this — removals leave dismissed state intact.
+    final newlyAdded = currentSymptoms.difference(_lastKnownSymptoms);
+    for (final code in newlyAdded) {
+      final def = UnifiedSymptomCatalog.byCode(code);
+      if (def != null) _skDismissedProgrammes.removeAll(def.programmes);
+    }
+    _lastKnownSymptoms = Set.from(currentSymptoms);
 
     // Source 1: rule-engine activations.
     final activated = vm.allPathways.map((p) => p.programme).toSet();
@@ -476,7 +495,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // Source 2: catalogue direct symptom→programme mapping.
     // Each UnifiedSymptomDef.programmes names every service that symptom
     // belongs to, providing finer-grained auto-selection than the rule engine.
-    for (final code in vm.selectedSymptoms) {
+    for (final code in currentSymptoms) {
       final def = UnifiedSymptomCatalog.byCode(code);
       if (def != null) activated.addAll(def.programmes);
     }
