@@ -4157,6 +4157,10 @@ abstract final class NabaStrings {
   static const String proposalNote =
       'This is an AI proposal. Review and accept to proceed.';
 
+  static const String callDoctorNow = 'Call a doctor now';
+  static const String callDoctorNowBn = 'ডাক্তারকে এখনই ফোন করন';
+  static const String callDoctorOfflineHint = 'Available when online';
+
   static const String fallbackNotice =
       'AI service was unavailable. Care plan is based on clinical guidelines. '
       'Review and adjust based on your assessment.';
@@ -4174,6 +4178,7 @@ abstract final class TeleconsultStrings {
       'The SK can initiate a call directly from a completed visit.';
   static const String callAction = 'Start Video Call';
   static const String smsAction = 'Send SMS to Doctor';
+  static const String doneButton = 'Done';
 }
 
 /// Counselling messages placeholder screen strings.

@@ -16,8 +16,10 @@
 ///   - All copy from [VisitFlowStrings] / [VisitCompleteStrings].
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -3220,6 +3222,106 @@ class _SkeletonCard extends StatelessWidget {
 }
 
 
+/// Pink "Call a doctor now" button for Step 3.
+///
+/// Enabled when the device has network connectivity; greyed + tooltip shown
+/// when offline. Taps navigate to [TeleconsultScreen] (feature placeholder).
+class _TeleconsultButton extends StatefulWidget {
+  const _TeleconsultButton({
+    required this.patientLabel,
+    required this.patientId,
+  });
+
+  final String patientLabel;
+  final String patientId;
+
+  @override
+  State<_TeleconsultButton> createState() => _TeleconsultButtonState();
+}
+
+class _TeleconsultButtonState extends State<_TeleconsultButton> {
+  bool _isOnline = false;
+  StreamSubscription<List<ConnectivityResult>>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkConnectivity();
+    _sub = Connectivity().onConnectivityChanged.listen((results) {
+      final online = results.any((r) => r != ConnectivityResult.none);
+      if (mounted) setState(() => _isOnline = online);
+    });
+  }
+
+  Future<void> _checkConnectivity() async {
+    final results = await Connectivity().checkConnectivity();
+    final online = results.any((r) => r != ConnectivityResult.none);
+    if (mounted) setState(() => _isOnline = online);
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: _isOnline ? '' : NabaStrings.callDoctorOfflineHint,
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          onPressed: _isOnline
+              ? () => context.push(
+                    '/teleconsult',
+                    extra: {
+                      'patientLabel': widget.patientLabel,
+                      'patientId': widget.patientId,
+                    },
+                  )
+              : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFDB2777),
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: const Color(0xFFDB2777).withValues(alpha: 0.35),
+            disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.phone_rounded, size: 18),
+              const SizedBox(width: 6),
+              const Icon(Icons.smartphone_rounded, size: 18),
+              const SizedBox(width: 10),
+              Text(
+                NabaStrings.callDoctorNow,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                NabaStrings.callDoctorNowBn,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: _isOnline ? 0.85 : 0.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BottomCtaBar extends StatelessWidget {
   const _BottomCtaBar({
     required this.naba,
@@ -3269,6 +3371,11 @@ class _BottomCtaBar extends StatelessWidget {
                     textStyle: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
+              ),
+              const SizedBox(height: 8),
+              _TeleconsultButton(
+                patientLabel: patientLabel ?? '',
+                patientId: memberId ?? '',
               ),
               if ((primaryProgramme == Programme.imci ||
                       primaryProgramme == Programme.epi) &&
