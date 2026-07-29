@@ -276,8 +276,10 @@ class HouseholdDetailData {
       id: str('id'),
       name: str('name'),
       householdNo: str('householdNo'),
-      village: str('village'),
-      subVillage: str('subVillage'),
+      // Prefer explicit name key; fall back to the raw 'village' field which
+      // may carry either a name or a numeric ID depending on the API path.
+      village: str('villageName') ?? str('village'),
+      subVillage: str('subVillageName') ?? str('subVillage'),
       memberCount: memberCount ?? memberList.length,
       latitude: lat,
       longitude: lng,
@@ -412,9 +414,25 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     } catch (_) {}
   }
 
-  /// Resolves village name, SS name, and last-visit date for households that
-  /// arrive pre-loaded with members (list-screen → detail navigation). Avoids
-  /// a redundant full member fetch when the roster is already in hand.
+  /// Resolves a village display name from an ordered list of candidate
+  /// ID/name values. Tries each candidate as an ID against the hierarchy's
+  /// sub-villages then top-level villages; returns the first match found.
+  /// If no ID matches (e.g. candidate is already a human-readable name),
+  /// returns the first non-null candidate unchanged.
+  String? _resolveVillageDisplayName(
+    UserHierarchyService hierarchy,
+    List<String?> candidates,
+  ) {
+    for (final id in candidates.whereType<String>()) {
+      final name =
+          hierarchy.subVillages?.where((sv) => sv.id == id).firstOrNull?.name ??
+          hierarchy.villages?.where((v) => v.id == id).firstOrNull?.name;
+      if (name != null) return name;
+    }
+    // No ID matched — first non-null candidate may already be a name string.
+    return candidates.whereType<String>().firstOrNull;
+  }
+
   /// Resolves village name, SS name, and last-visit date for households that
   /// arrive pre-loaded with members (list-screen → detail navigation). Avoids
   /// a redundant full member fetch when the roster is already in hand.
@@ -425,19 +443,13 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     final patientDao = context.read<PatientDao>();
     await hierarchy.prefetch();
 
-    // Village ID → human-readable name. Check subVillages first (more specific),
-    // then fall back to top-level villages.
-    final rawVillage = _household.village;
-    final villageName = rawVillage == null
-        ? null
-        : hierarchy.subVillages
-                ?.where((sv) => sv.id == rawVillage)
-                .firstOrNull
-                ?.name ??
-            hierarchy.villages
-                ?.where((v) => v.id == rawVillage)
-                .firstOrNull
-                ?.name;
+    // Resolve village name using household field first, then member sub-village
+    // and village IDs as fallbacks — covers cases where the household entity
+    // stores only a numeric villageId while the name lives in the hierarchy.
+    final villageName = _resolveVillageDisplayName(hierarchy, [
+      _household.village,
+      _household.members.firstOrNull?.villageId,
+    ]);
 
     // SS name from first member's DB entity (pre-loaded HouseholdMemberData
     // doesn't carry shasthyaShebikaId — must re-query).
@@ -463,7 +475,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     }
 
     ConsoleLog.banner('[HouseholdDetail] _enrichMeta'
-        ' village=${villageName ?? rawVillage} ssName=$ssName lastVisit=$lastVisitAt');
+        ' village=$villageName ssName=$ssName lastVisit=$lastVisitAt');
 
     if (!mounted) return;
     setState(() {
@@ -530,13 +542,18 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
           members: enriched,
           householdId: householdId,
         );
+        final resolvedVillage = _resolveVillageDisplayName(hierarchy, [
+          _household.village,
+          localMembers.first.subVillageId,
+          localMembers.first.villageId,
+        ]);
         if (!mounted) return;
         setState(() {
           _household = HouseholdDetailData(
             id: _household.id,
             name: derivedName,
             householdNo: _household.householdNo,
-            village: _household.village,
+            village: resolvedVillage,
             subVillage: _household.subVillage,
             memberCount: enriched.length,
             latitude: _household.latitude,
@@ -574,13 +591,19 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
           members: enriched,
           householdId: householdId,
         );
+        final resolvedVillage = _resolveVillageDisplayName(hierarchy, [
+          updated.village,
+          localMembers.firstOrNull?.subVillageId,
+          localMembers.firstOrNull?.villageId,
+          enriched.firstOrNull?.villageId,
+        ]);
         if (!mounted) return;
         setState(() {
           _household = HouseholdDetailData(
             id: updated.id,
             name: derivedName,
             householdNo: updated.householdNo,
-            village: updated.village,
+            village: resolvedVillage,
             subVillage: updated.subVillage,
             // Trust the loaded member list, not the API's own count field —
             // matches the local-cache path so `memberCount` means the same
