@@ -84,6 +84,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   String? _ageSummary;
   String? _guardianName;
 
+  /// Names of existing household members — loaded from local DB in standalone
+  /// mode (existingHouseholdId != null) so the guardian picker is populated.
+  List<String> _householdMemberNames = [];
+
   /// Age in whole years — used for validation and the `age` field sent to the
   /// server. Distinct from [_ageCtrl] which shows the most human-meaningful
   /// unit (months for babies < 1 year, days for newborns).
@@ -171,7 +175,24 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           setState(() => _mobileCtrl.text = headMobile);
         }
       });
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadHouseholdMembers());
     }
+  }
+
+  Future<void> _loadHouseholdMembers() async {
+    final hhId = widget.existingHouseholdId;
+    if (hhId == null || !mounted) return;
+    final dao = context.read<MemberDao>();
+    final entities = await dao.getByHouseholdId(hhId);
+    if (!mounted) return;
+    setState(() {
+      _householdMemberNames = entities
+          .map((e) => e.name)
+          .whereType<String>()
+          .where((n) => n.isNotEmpty)
+          .toList();
+    });
   }
 
   @override
@@ -953,32 +974,46 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    // ── Guardian — required for members under 18 ──────────
+                    // ── Guardian — required for members under 1 year ──────
                     if (_ageInYears < 1) ...[
                       SizedBox(key: _key('guardian'), height: 0),
                       _QuestionLabel(number: 'Q7', text: 'Guardian'),
                       const SizedBox(height: 10),
-                      Consumer<EnrollmentController>(
-                        builder: (context, ctrl, _) {
-                          final guardianOptions = [
-                            if (ctrl.householdHead?.name != null)
-                              ctrl.householdHead!.name,
-                            ...ctrl.members.map((m) => m.name),
-                          ];
-                          return EnrollmentDropdown(
-                            label: EnrollmentStrings.guardianLabel,
-                            options: guardianOptions,
-                            value: _guardianName,
-                            onChanged: (v) => setState(() {
-                              _guardianName = v;
-                              _fieldErrors.remove('guardian');
-                            }),
-                            hint: EnrollmentStrings.guardianHint,
-                            isRequired: true,
-                            errorText: _fieldErrors['guardian'],
-                          );
-                        },
-                      ),
+                      if (widget.isStandalone)
+                        EnrollmentDropdown(
+                          label: EnrollmentStrings.guardianLabel,
+                          options: _householdMemberNames,
+                          value: _guardianName,
+                          onChanged: (v) => setState(() {
+                            _guardianName = v;
+                            _fieldErrors.remove('guardian');
+                          }),
+                          hint: EnrollmentStrings.guardianHint,
+                          isRequired: true,
+                          errorText: _fieldErrors['guardian'],
+                        )
+                      else
+                        Consumer<EnrollmentController>(
+                          builder: (context, ctrl, _) {
+                            final guardianOptions = [
+                              if (ctrl.householdHead?.name != null)
+                                ctrl.householdHead!.name,
+                              ...ctrl.members.map((m) => m.name),
+                            ];
+                            return EnrollmentDropdown(
+                              label: EnrollmentStrings.guardianLabel,
+                              options: guardianOptions,
+                              value: _guardianName,
+                              onChanged: (v) => setState(() {
+                                _guardianName = v;
+                                _fieldErrors.remove('guardian');
+                              }),
+                              hint: EnrollmentStrings.guardianHint,
+                              isRequired: true,
+                              errorText: _fieldErrors['guardian'],
+                            );
+                          },
+                        ),
                       const SizedBox(height: 20),
                     ],
 
