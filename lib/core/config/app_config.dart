@@ -105,10 +105,12 @@ class AppConfig {
   static const int pinLength = 4;
 
   /// Base URL for the micro-coaching service.
-  /// Defaults to the shared UHIS dev backend — no dart-define required for dev.
+  /// The service is mounted at /micro-coaching/ on the nginx gateway;
+  /// FastAPI routes internally under /medtronics-api/ so the full path is
+  /// /micro-coaching/medtronics-api/<endpoint>.
   static const String coachingServiceUrl = String.fromEnvironment(
     'COACHING_SERVICE_URL',
-    defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com',
+    defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/micro-coaching',
   );
 
   /// Base URL for the unified `leapfrog-ai-services` container — AI Visit
