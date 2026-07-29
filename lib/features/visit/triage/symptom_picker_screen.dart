@@ -914,28 +914,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (_selectedProgrammes.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  SymptomPickerStrings.servicesOpeningStatus(
-                                    _selectedProgrammes
-                                        .map((p) => p.displayName)
-                                        .toList(),
-                                  ),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppColors.navy,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
                         // ── Under-5 CTA — driven by vaccination + child-health selection
                         if (_patientContext!.isUnder5) ...[
                           const SizedBox(height: 4),
