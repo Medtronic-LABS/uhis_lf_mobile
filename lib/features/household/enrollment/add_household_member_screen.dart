@@ -791,6 +791,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                                   hint: EnrollmentStrings.dateOfBirthHint,
                                   controller: _dobCtrl,
                                   readOnly: true,
+                                  isRequired: true,
                                 ),
                               ),
                             ),
@@ -899,6 +900,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                             hint: EnrollmentStrings.dateOfBirthHint,
                             controller: _dobCtrl,
                             readOnly: true,
+                            isRequired: true,
                             errorText: _fieldErrors['dob'],
                           ),
                         ),
@@ -983,6 +985,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                           _fieldErrors.remove('maritalStatus');
                         }),
                         hint: 'Select status',
+                        isRequired: true,
                         errorText: _fieldErrors['maritalStatus'],
                       ),
                       const SizedBox(height: 20),

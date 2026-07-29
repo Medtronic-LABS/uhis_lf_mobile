@@ -291,6 +291,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                               label: EnrollmentStrings.idNumberLabel,
                               hint: EnrollmentStrings.idNumberHint,
                               controller: _idNumberCtrl,
+                              isRequired: true,
                             ),
                             const SizedBox(height: 10),
                             EnrollmentInputField(
@@ -308,6 +309,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                                   hint: EnrollmentStrings.dateOfBirthHint,
                                   controller: _dobCtrl,
                                   readOnly: true,
+                                  isRequired: true,
                                 ),
                               ),
                             ),

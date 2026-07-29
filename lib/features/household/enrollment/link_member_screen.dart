@@ -385,22 +385,45 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
                     border: Border.all(
                         color: const Color(0xFFBFDBFE), width: 1),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.home_outlined,
-                          size: 18, color: AppColors.navy),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${widget.householdName ?? LinkMemberStrings.selectedHouseholdLabel}'
-                          '  •  ${widget.householdNo ?? ''}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.navy,
+                      Row(
+                        children: [
+                          const Icon(Icons.home_outlined,
+                              size: 18, color: AppColors.navy),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${widget.householdName ?? LinkMemberStrings.selectedHouseholdLabel}'
+                              '  •  ${widget.householdNo ?? ''}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.navy,
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
+                      if (widget.villageName?.isNotEmpty == true) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_outlined,
+                                size: 14, color: AppColors.navy),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${EnrollmentStrings.villageLabel}: ${widget.villageName}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.navy,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -413,6 +436,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
                   label: EnrollmentStrings.memberNameLabel,
                   hint: EnrollmentStrings.memberNameHint,
                   controller: _nameCtrl,
+                  isRequired: true,
                 ),
                 const SizedBox(height: 20),
 
@@ -456,7 +480,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
                 const SizedBox(height: 20),
 
                 // ── Q4 Gender ────────────────────────────────────────────────
-                _Q(number: 'Q4', text: EnrollmentStrings.genderLabel),
+                _Q(number: 'Q4', text: EnrollmentStrings.genderLabel, isRequired: true),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -501,6 +525,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
                   value: _maritalStatus,
                   options: EnrollmentStrings.maritalStatuses,
                   onChanged: (v) => setState(() => _maritalStatus = v),
+                  isRequired: true,
                 ),
                 const SizedBox(height: 20),
 
@@ -574,9 +599,10 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
 
 /// Numbered question label (e.g. "Q1 Full Name").
 class _Q extends StatelessWidget {
-  const _Q({required this.number, required this.text});
+  const _Q({required this.number, required this.text, this.isRequired = false});
   final String number;
   final String text;
+  final bool isRequired;
 
   @override
   Widget build(BuildContext context) {
@@ -599,6 +625,15 @@ class _Q extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
+          if (isRequired)
+            const TextSpan(
+              text: ' *',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.statusCritical,
+              ),
+            ),
         ],
       ),
     );
