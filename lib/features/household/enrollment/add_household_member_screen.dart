@@ -276,7 +276,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
       if (_gender == null) 'gender': 'Required',
       if (maritalRequired && _maritalStatus == null) 'maritalStatus': 'Required',
-      if (ageYears < 18 && _guardianName == null) 'guardian': 'Required',
+      if (ageYears < 1 && _guardianName == null) 'guardian': 'Required',
     };
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -684,7 +684,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       keyboardType: TextInputType.number,
                       onChanged: (v) => setState(() {
                         _ageSummary = null;
-                        if ((int.tryParse(v) ?? 99) <= 5) _maritalStatus = null;
+                        final years = int.tryParse(v) ?? 99;
+                        if (years <= 5) _maritalStatus = null;
+                        if (years >= 1) _guardianName = null;
                       }),
                     ),
                     if (_ageSummary != null) ...[
@@ -737,7 +739,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ],
 
                     // ── Guardian — required for members under 18 ──────────
-                    if ((int.tryParse(_ageCtrl.text) ?? 99) < 18) ...[
+                    if ((int.tryParse(_ageCtrl.text) ?? 99) < 1) ...[
                       SizedBox(key: _key('guardian'), height: 0),
                       _QuestionLabel(number: 'Q7', text: 'Guardian'),
                       const SizedBox(height: 10),
