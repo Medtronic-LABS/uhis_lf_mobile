@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/db/member_dao.dart';
 import '../../../core/debug/console_log.dart';
@@ -60,7 +59,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   late TextEditingController _dobCtrl;
   late TextEditingController _ageCtrl;
 
-  String? _idType = 'BRN';
+  String? _idType;
   String? _gender;
   String? _maritalStatus;
   String? _disabilityStatus;
@@ -159,43 +158,11 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       if (!mounted) return;
       final controller = context.read<EnrollmentController>();
       controller.reset();
-      final auth = context.read<AuthRepository>();
       final hierarchy = context.read<UserHierarchyService>();
 
       await hierarchy.prefetch();
       if (!mounted) return;
-
-      final userId = await auth.userId();
-      if (!mounted) return;
-      final villages = hierarchy.villages ?? [];
-      final subVillages = hierarchy.subVillages ?? [];
-
-      final firstVillage = villages.isNotEmpty ? villages.first : null;
-      final matchingSubs = firstVillage == null
-          ? subVillages
-          : subVillages.where((sv) => sv.villageId == firstVillage.id).toList();
-      final firstSubVillage = matchingSubs.isNotEmpty
-          ? matchingSubs.first
-          : (subVillages.isNotEmpty ? subVillages.first : null);
-
-      if (!mounted) return;
-      final ssWorkers = hierarchy.ssWorkers ?? [];
-      final firstSs = ssWorkers.isNotEmpty ? ssWorkers.first : null;
-      final ssSeedSub = (firstSs != null && firstSs.subVillages.isNotEmpty)
-          ? firstSs.subVillages.first
-          : firstSubVillage;
-      setState(() {
-        _selectedSsWorker = firstSs;
-        _selectedVillage = firstVillage;
-        _selectedSubVillage = ssSeedSub;
-      });
-      await controller.initializeHousehold(
-        healthWorkerId: _selectedSsWorker?.id ?? userId?.toString() ?? '',
-        villageId: firstVillage?.id.toString() ?? '',
-        villageName: firstVillage?.name,
-        subVillageId: firstSubVillage?.id.toString(),
-        subVillageName: firstSubVillage?.name,
-      );
+      setState(() {}); // trigger rebuild so dropdowns populate their option lists
     });
 
   }

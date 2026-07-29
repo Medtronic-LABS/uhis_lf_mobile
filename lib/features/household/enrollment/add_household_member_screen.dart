@@ -46,9 +46,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   String? _gender;
   String? _maritalStatus;
-  String? _disabilityStatus = 'Absent';
+  String? _disabilityStatus;
   bool _nidScanned = false;
-  String _idType = 'BRN';
+  String? _idType;
   String? _ageSummary;
   String? _guardianName;
 
@@ -322,7 +322,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       age: _ageInYears,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
-      idType: _idType == 'National ID' ? 'NID' : _idType,
+      idType: _idType == 'National ID' ? 'NID' : (_idType ?? 'BRN'),
       idNumber: _idType == 'Not Available' ? null : (nid.isNotEmpty ? nid : null),
       mobileNumber: mobile.isNotEmpty ? mobile : null,
       mobileAvailable: mobile.isNotEmpty,

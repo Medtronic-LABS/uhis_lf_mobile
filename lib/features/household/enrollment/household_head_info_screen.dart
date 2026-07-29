@@ -46,7 +46,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   late TextEditingController _dobCtrl;
   late TextEditingController _ageCtrl;
 
-  String? _idType = 'BRN';
+  String? _idType;
   String? _gender;
   String? _maritalStatus;
   String? _disabilityStatus;
