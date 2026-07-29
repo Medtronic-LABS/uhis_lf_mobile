@@ -55,7 +55,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   final Map<String, GlobalKey> _fieldKeys = {};
   Map<String, String?> _fieldErrors = {};
 
-  static const _validationOrder = ['name', 'idNumber', 'gender', 'maritalStatus'];
+  static const _validationOrder = ['name', 'dob', 'idNumber', 'gender', 'maritalStatus'];
 
   GlobalKey _key(String name) =>
       _fieldKeys.putIfAbsent(name, GlobalKey.new);
@@ -158,6 +158,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
       setState(() {
         _dobCtrl.text = formatted;
         _calculateAge(picked);
+        _fieldErrors.remove('dob');
       });
     }
   }
@@ -176,6 +177,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     debugPrint('[_HouseholdHeadInfoScreenState] _handleNext idType=$_idType gender=$_gender maritalStatus=$_maritalStatus');
     final errors = <String, String?>{
       if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
+      if (_dobCtrl.text.trim().isEmpty) 'dob': 'Required',
       if (_idNumberCtrl.text.trim().isEmpty) 'idNumber': 'Required',
       if (_gender == null) 'gender': 'Required',
       if (_maritalStatus == null) 'maritalStatus': 'Required',
@@ -396,14 +398,20 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
                     // Date of Birth — hidden when pre-filled from scan (card has it)
                     if (!_prefilledFromScan) ...[
+                      SizedBox(key: _key('dob'), height: 0),
                       GestureDetector(
-                        onTap: _selectDate,
+                        onTap: () {
+                          _clearError('dob');
+                          _selectDate();
+                        },
                         child: AbsorbPointer(
                           child: EnrollmentInputField(
                             label: EnrollmentStrings.dateOfBirthLabel,
                             hint: EnrollmentStrings.dateOfBirthHint,
                             controller: _dobCtrl,
                             readOnly: true,
+                            isRequired: true,
+                            errorText: _fieldErrors['dob'],
                           ),
                         ),
                       ),
