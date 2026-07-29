@@ -2074,35 +2074,6 @@ class _InlineServiceSelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            Text(
-              TriageStrings.eligibleServicesHeader,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: AppColors.navy,
-              ),
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEEF0FF),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                TriageStrings.eligibleServicesTag,
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF6B63D4),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
         GridView.count(
           crossAxisCount: 3,
           crossAxisSpacing: 9,
