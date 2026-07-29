@@ -239,7 +239,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                 onCancel: () => Navigator.of(context).pop(),
                 onRegisterManually: () {
                   Navigator.of(context).pop();
-                  context.push('/household/enrollment/select-household');
+                  context.push('/household/enrollment/create');
                 },
               ),
               if (_overlayState == _OverlayState.postScan)
