@@ -5,6 +5,7 @@
 /// define that routes Visit Briefing and AI Scribe to a local container).
 library;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 
 import '../../core/api/api_client.dart';
@@ -12,12 +13,15 @@ import '../../core/api/endpoints.dart';
 import '../../core/config/app_config.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
+import '../training/offline_llm_service.dart';
 import 'assistant_models.dart';
 
 class AssistantRepository {
-  const AssistantRepository(this._client);
+  AssistantRepository(this._client);
 
   final ApiClient _client;
+
+  final _offlineLlm = OfflineLlmService();
 
   (Dio, String) _resolve() {
     final aiUrl = AppConfig.assistantBaseUrl;
@@ -36,18 +40,66 @@ class AssistantRepository {
 
   /// Ask the assistant a question.
   ///
-  /// Routes to the coaching RAG backend (`/medtronics-api/coaching/rag-query`)
-  /// when [AppConfig.coachingServiceUrl] is set and no [patientContext] is
-  /// provided. Falls back to the UHIS AI-Scribe assistant endpoint otherwise.
+  /// Priority order:
+  ///   1. On-device Gemma (offline) when the model is initialized and
+  ///      [contextDocs] are provided for RAG context.
+  ///   2. Coaching RAG backend when [AppConfig.coachingServiceUrl] is set and
+  ///      no [patientContext] is provided.
+  ///   3. UHIS AI-Scribe assistant endpoint (default / patient-scoped).
   Future<AssistantAnswer> ask(
     String question, {
     Map<String, dynamic>? patientContext,
+    List<String> contextDocs = const [],
   }) async {
+    // Use on-device Gemma only when offline and model is initialized.
+    try {
+      final connectivity = await Connectivity().checkConnectivity();
+      final isOffline = connectivity.every((r) => r == ConnectivityResult.none);
+      if (isOffline && await _offlineLlm.isReady()) {
+        return _askOffline(question, contextDocs);
+      }
+    } on OfflineLlmException catch (e) {
+      ConsoleLog.warn('[AssistantRepository] offline LLM check failed: $e');
+    }
+
     final coachingUrl = AppConfig.coachingServiceUrl;
     if (coachingUrl.isNotEmpty && patientContext == null) {
-      return _askCoachingRag(question, coachingUrl);
+      try {
+        return await _askCoachingRag(question, coachingUrl);
+      } on AssistantException catch (e) {
+        ConsoleLog.warn(
+            '[AssistantRepository] coaching RAG unavailable (${e.statusCode ?? "conn-refused"}), falling back to AI-scribe');
+      }
     }
     return _askAiScribe(question, patientContext: patientContext);
+  }
+
+  static const _maxContextChars = 1800;
+
+  Future<AssistantAnswer> _askOffline(
+    String question,
+    List<String> contextDocs,
+  ) async {
+    String contextSection = '';
+    if (contextDocs.isNotEmpty) {
+      final raw = contextDocs.join('\n');
+      final truncated = raw.length > _maxContextChars
+          ? raw.substring(0, _maxContextChars)
+          : raw;
+      contextSection = '\n\nContext:\n$truncated';
+    }
+    final prompt = 'You are a micro-coaching assistant for community health workers. Be concise and practical.$contextSection\n\nQuestion: $question\nAnswer:';
+
+    ConsoleLog.banner('[PayloadDebug] offline-llm → q=$question');
+    try {
+      final answer = await _offlineLlm.ask(prompt);
+      ConsoleLog.step('[PayloadDebug] offline-llm → ${answer.length}chars');
+      if (answer.isEmpty) return const AssistantAnswer(text: 'Could not generate a response. Please try rephrasing your question.');
+      return AssistantAnswer(text: answer);
+    } on OfflineLlmException catch (e) {
+      ConsoleLog.warn('[PayloadDebug] offline-llm failed: $e');
+      throw AssistantException(e.message);
+    }
   }
 
   Future<AssistantAnswer> _askCoachingRag(

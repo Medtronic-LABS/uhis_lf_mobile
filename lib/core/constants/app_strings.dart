@@ -485,6 +485,9 @@ abstract final class RealtimeAsrStrings {
   static String get micPermissionDenied => AppLocale.isBangla
       ? 'রিয়েল-টাইম এএসআরের জন্য মাইক্রোফোন অনুমতি প্রয়োজন।'
       : 'Microphone permission is required for real-time ASR.';
+  static String get connectionFailed => AppLocale.isBangla
+      ? 'সংযোগ ব্যর্থ হয়েছে। অফলাইন মোডে চলছে।'
+      : 'Connection failed. Using offline mode.';
   static String get diagnosis => AppLocale.isBangla ? 'রোগ নির্ণয়' : 'Diagnosis';
   static String get bloodPressure => AppLocale.isBangla ? 'রক্তচাপ' : 'Blood Pressure';
   static String get bloodGlucose => AppLocale.isBangla ? 'রক্তের গ্লুকোজ' : 'Blood Glucose';
@@ -5215,6 +5218,22 @@ abstract final class AssistantStrings {
       'How can I help you today? Ask me about patient counselling, clinical protocols, or SPICE.';
   static const String statusOnline = 'Online';
   static const String clearHistory = 'Clear chat history';
+
+  // Offline STT model download
+  static const String sttDownloading = 'Downloading voice model…';
+  static const String sttExtracting = 'Preparing voice model…';
+  static const String sttReady = 'Voice input ready';
+  static const String sttFailed = 'Voice model download failed';
+  static const String sttNotAvailable = 'Voice input not available';
+  static const String sttDownloadPrompt = 'Download offline voice model?';
+  static const String sttDownloadAction = 'Download';
+
+  static const String gemmaDownloading = 'Downloading AI model…';
+  static const String gemmaReady = 'Offline AI ready';
+  static const String gemmaFailed = 'AI model download failed. Tap to retry.';
+  static const String gemmaNotReady = 'AI model not ready';
+  static const String gemmaDownloadPrompt = 'Download offline AI model (~304 MB)?';
+  static const String gemmaDownloadAction = 'Download';
 }
 
 /// Strings for [HouseholdFollowUpScreen].

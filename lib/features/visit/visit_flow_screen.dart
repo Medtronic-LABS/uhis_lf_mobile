@@ -44,6 +44,8 @@ import 'pathway/pathway_engine.dart';
 import '../patient/followup_call_service.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
+import '../training/gemma_model_manager.dart';
+import '../training/offline_llm_service.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
 import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
@@ -158,10 +160,14 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// ANC or PNC visit number for the header badge (1-based). Null until loaded.
   int? _visitNumber;
 
+  final _offlineLlm = OfflineLlmService();
+  bool _llmInitiatedByVisit = false;
+
   @override
   void initState() {
     super.initState();
     debugPrint('[_VisitFlowState] initState');
+    _autoInitGemma();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Always load — even when patientName is supplied we still need DOB + age
       // for the smart age label (months for infants). ??-guards inside prevent
@@ -209,9 +215,28 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     }
   }
 
+  Future<void> _autoInitGemma() async {
+    final ready = await _offlineLlm.isReady();
+    if (ready) return;
+    final manager = GemmaModelManager();
+    if (!await manager.isModelValid()) return;
+    final path = await manager.modelPath;
+    debugPrint('[VisitFlow] auto-initializing Gemma for offline AI features');
+    try {
+      await _offlineLlm.initialize(path);
+      _llmInitiatedByVisit = true;
+      debugPrint('[VisitFlow] Gemma initialized');
+    } catch (e) {
+      debugPrint('[VisitFlow] Gemma auto-init failed: $e');
+    }
+  }
+
   @override
   void dispose() {
     _step1Scribe?.dispose();
+    if (_llmInitiatedByVisit) {
+      _offlineLlm.close();
+    }
     super.dispose();
   }
 

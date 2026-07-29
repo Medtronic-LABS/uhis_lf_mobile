@@ -8,7 +8,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
@@ -19,9 +19,14 @@ import '../training/all_modules_screen.dart';
 import '../training/coaching_dao.dart';
 import '../training/coaching_models.dart';
 import '../training/coaching_repository.dart';
+import '../training/coaching_stt_service.dart';
+import '../training/coaching_tts_service.dart';
 import '../training/knowledge_list_screen.dart';
 import '../training/module_detail_screen.dart';
 import '../training/quiz_screen.dart';
+import '../training/gemma_model_manager.dart';
+import '../training/offline_llm_service.dart';
+import '../training/stt_model_manager.dart';
 import '../training/training_requests_screen.dart';
 import 'assistant_models.dart';
 import 'assistant_repository.dart';
@@ -1259,6 +1264,15 @@ class _ChatBodyState extends State<_ChatBody> {
   int _streamLen = 0;
   Timer? _streamTimer;
 
+  final GemmaModelManager _gemmaManager = GemmaModelManager();
+  final SttModelManager _sttDownloadManager = SttModelManager();
+  final OfflineLlmService _offlineLlm = OfflineLlmService();
+  bool _useOnlineMode = false;
+  // True while MediaPipe loads the model file into memory (file exists but not
+  // yet queryable). Disables send to avoid spurious "no internet" errors while
+  // the on-device LLM warms up.
+  bool _llmInitializing = false;
+
   static const List<String> _fallbackStarters = [
     AssistantStrings.suggestedMuac,
     AssistantStrings.suggestedAncDanger,
@@ -1271,7 +1285,54 @@ class _ChatBodyState extends State<_ChatBody> {
     super.initState();
     _dao = ChatMessageDao(context.read<AppDatabase>());
     _loadHistory();
+    _checkModels();
   }
+
+  /// On startup: only check if models are already present (no auto-download).
+  /// User must explicitly tap Download to start downloads.
+  Future<void> _checkModels() async {
+    await Future.wait([
+      _gemmaManager.checkIfReady(),
+      _sttDownloadManager.checkIfReady(),
+    ]);
+    final state = _gemmaManager.currentState;
+    if (state is GemmaModelReady) {
+      _initGemmaLlm(state.modelPath);
+    }
+  }
+
+  Future<void> _initGemmaLlm(String modelPath) async {
+    if (mounted) setState(() => _llmInitializing = true);
+    try {
+      await _offlineLlm.initialize(modelPath);
+      ConsoleLog.success('[ChatBody] Gemma on-device LLM initialized');
+    } catch (e) {
+      ConsoleLog.warn('[ChatBody] Gemma init failed: $e');
+      // Only delete the file if it fails the ZIP magic check — i.e. it is
+      // actually corrupt. A MediaPipe runtime error (OOM, unsupported device)
+      // does not mean the file is bad; deleting it forces a pointless re-download.
+      final valid = await _gemmaManager.isModelValid();
+      if (!valid) {
+        ConsoleLog.warn('[ChatBody] model file invalid — invalidating so download gate shows');
+        await _gemmaManager.invalidate();
+      } else {
+        ConsoleLog.warn('[ChatBody] model file intact — MediaPipe runtime error, keeping file');
+        if (mounted) setState(() {});
+      }
+    } finally {
+      if (mounted) setState(() => _llmInitializing = false);
+    }
+  }
+
+  Future<void> _startGemmaDownload() async {
+    await _gemmaManager.downloadIfNeeded();
+    final state = _gemmaManager.currentState;
+    if (state is GemmaModelReady) {
+      _initGemmaLlm(state.modelPath);
+    }
+  }
+
+  Future<void> _startSttDownload() => _sttDownloadManager.downloadIfNeeded();
 
   Future<void> _loadHistory() async {
     try {
@@ -1312,6 +1373,8 @@ class _ChatBodyState extends State<_ChatBody> {
     _streamTimer?.cancel();
     _input.dispose();
     _scroll.dispose();
+    _gemmaManager.dispose();
+    _sttDownloadManager.dispose();
     super.dispose();
   }
 
@@ -1350,6 +1413,16 @@ class _ChatBodyState extends State<_ChatBody> {
     });
     _scrollToBottom();
     final repo = context.read<AssistantRepository>();
+    final coaching = context.read<CoachingRepository>();
+
+    // Build offline RAG context from cached module lesson content.
+    final contextDocs = coaching.modules.expand((m) {
+      return m.cards.expand((c) {
+        return c.blocks
+            .where((b) => b.text != null && b.text!.isNotEmpty)
+            .map((b) => '[${m.titleEn}] ${b.text!}');
+      });
+    }).take(30).toList();
 
     try {
       await _dao.insertMessage(
@@ -1362,7 +1435,7 @@ class _ChatBodyState extends State<_ChatBody> {
       ConsoleLog.warn('[PayloadDebug] coaching-chat persist user msg failed: $e');
     }
     try {
-      final answer = await repo.ask(q);
+      final answer = await repo.ask(q, contextDocs: contextDocs);
       if (!mounted) return;
       final replyTs = DateTime.now();
       final assistantMsg = ChatMessage(
@@ -1472,6 +1545,38 @@ class _ChatBodyState extends State<_ChatBody> {
     final cachedFaqs = context.watch<CoachingRepository>().cachedFaqs;
     final suggestions = _activeSuggestions(cachedFaqs);
 
+    return StreamBuilder<GemmaModelState>(
+      stream: _gemmaManager.stateStream,
+      initialData: _gemmaManager.currentState,
+      builder: (ctx, gemmaSnap) {
+        final gemmaState = gemmaSnap.data ?? _gemmaManager.currentState;
+        if (gemmaState is GemmaModelReady || _useOnlineMode) {
+          return _buildChat(context, cachedFaqs, suggestions);
+        }
+        return StreamBuilder<SttModelState>(
+          stream: _sttDownloadManager.stateStream,
+          initialData: _sttDownloadManager.currentState,
+          builder: (ctx2, sttSnap) {
+            final sttState = sttSnap.data ?? _sttDownloadManager.currentState;
+            return _ModelNotReadyScreen(
+              gemmaState: gemmaState,
+              sttState: sttState,
+              onDownloadGemma: _startGemmaDownload,
+              onDownloadStt: _startSttDownload,
+              onDownloadBoth: () {
+                _startGemmaDownload();
+                _startSttDownload();
+              },
+              onClose: () => setState(() => _useOnlineMode = true),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildChat(
+      BuildContext context, List<String> cachedFaqs, List<String> suggestions) {
     return Column(
       children: [
         Expanded(
@@ -1507,14 +1612,294 @@ class _ChatBodyState extends State<_ChatBody> {
         if (!_loading && suggestions.isNotEmpty)
           _SuggestionChipRow(chips: suggestions, onChipTap: _send),
         if (_isRecording) const _RecordingBadge(),
+        if (_llmInitializing)
+          const LinearProgressIndicator(minHeight: 2),
         const Divider(height: 1, thickness: 0.5),
         _ChatInputBar(
           controller: _input,
-          loading: _loading,
+          loading: _loading || _llmInitializing,
           onSend: () => _send(_input.text),
           onRecordingChanged: (v) => setState(() => _isRecording = v),
         ),
       ],
+    );
+  }
+}
+
+// ─── Model not ready screen ───────────────────────────────────────────────────
+
+class _ModelNotReadyScreen extends StatelessWidget {
+  const _ModelNotReadyScreen({
+    required this.gemmaState,
+    required this.sttState,
+    required this.onDownloadGemma,
+    required this.onDownloadStt,
+    required this.onDownloadBoth,
+    required this.onClose,
+  });
+
+  final GemmaModelState gemmaState;
+  final SttModelState sttState;
+  final VoidCallback onDownloadGemma;
+  final VoidCallback onDownloadStt;
+  final VoidCallback onDownloadBoth;
+  final VoidCallback onClose;
+
+  bool get _gemmaInFlight =>
+      gemmaState is GemmaModelDownloading;
+  bool get _sttInFlight =>
+      sttState is SttModelStateDownloading || sttState is SttModelStateExtracting;
+  bool get _gemmaIdle =>
+      gemmaState is GemmaModelIdle || gemmaState is GemmaModelFailed;
+  bool get _sttIdle =>
+      sttState is SttModelStateIdle || sttState is SttModelStateFailed;
+  bool get _showBothCta => _gemmaIdle && _sttIdle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // ── Icon + heading ───────────────────────────────────────────────────
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: _kSpiceBlue.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.auto_awesome_rounded,
+                size: 28, color: _kSpiceBlue),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'AI Coaching Chat',
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.bold, color: _kSpiceBlue),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'A one-time download is needed for offline AI coaching. '
+            'AI model is required; voice model is optional.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 24),
+          // ── AI model card ────────────────────────────────────────────────────
+          _DownloadCard(
+            icon: Icons.psychology_rounded,
+            title: 'AI Coaching Model',
+            sizeLabel: '~304 MB  •  Required',
+            isRequired: true,
+            state: gemmaState,
+            onDownload: onDownloadGemma,
+            onCancel: () {}, // GemmaModelManager.cancel() wired via parent
+          ),
+          const SizedBox(height: 12),
+          // ── Voice model card ─────────────────────────────────────────────────
+          _DownloadCard(
+            icon: Icons.mic_rounded,
+            title: 'Bengali Voice Model',
+            sizeLabel: '~90 MB  •  Optional',
+            isRequired: false,
+            state: sttState,
+            onDownload: onDownloadStt,
+            onCancel: () {},
+          ),
+          // ── Download both ────────────────────────────────────────────────────
+          if (_showBothCta) ...[
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: const Text('Download both'),
+                onPressed: onDownloadBoth,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Wi-Fi recommended. Downloads happen in background.',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: Colors.grey.shade500),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: onClose,
+            child: Text(
+              _gemmaInFlight || _sttInFlight
+                  ? 'Continue in background (use online assistant)'
+                  : 'Use online assistant',
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Download card ────────────────────────────────────────────────────────────
+
+class _DownloadCard extends StatelessWidget {
+  const _DownloadCard({
+    required this.icon,
+    required this.title,
+    required this.sizeLabel,
+    required this.isRequired,
+    required this.state,
+    required this.onDownload,
+    required this.onCancel,
+  });
+
+  final IconData icon;
+  final String title;
+  final String sizeLabel;
+  final bool isRequired;
+  final dynamic state; // GemmaModelState or SttModelState
+  final VoidCallback onDownload;
+  final VoidCallback onCancel;
+
+  bool get _isReady =>
+      state is GemmaModelReady || state is SttModelStateReady;
+
+  bool get _isFailed =>
+      state is GemmaModelFailed || state is SttModelStateFailed;
+
+  bool get _isDownloading {
+    if (state is GemmaModelDownloading) return true;
+    if (state is SttModelStateDownloading || state is SttModelStateExtracting) {
+      return true;
+    }
+    return false;
+  }
+
+  int? get _progress {
+    if (state is GemmaModelDownloading) {
+      return (state as GemmaModelDownloading).progress;
+    }
+    if (state is SttModelStateDownloading) {
+      return (state as SttModelStateDownloading).percent;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: _isReady
+              ? Colors.green.shade300
+              : _isFailed
+                  ? Colors.red.shade300
+                  : Colors.grey.shade300,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        color: _isReady
+            ? Colors.green.shade50
+            : Theme.of(context).cardColor,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: _kSpiceBlue),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 14)),
+                    Text(sizeLabel,
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+              if (_isReady)
+                const Icon(Icons.check_circle_rounded,
+                    color: Colors.green, size: 20)
+              else if (!_isDownloading)
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor:
+                        _isFailed ? Colors.red.shade700 : null,
+                    side: _isFailed
+                        ? BorderSide(color: Colors.red.shade300)
+                        : null,
+                  ),
+                  onPressed: onDownload,
+                  child: Text(
+                    _isFailed ? 'Retry' : 'Download',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+            ],
+          ),
+          if (_isFailed) ...[
+            const SizedBox(height: 6),
+            Text(
+              state is GemmaModelFailed
+                  ? (state as GemmaModelFailed).error
+                  : state is SttModelStateFailed
+                      ? (state as SttModelStateFailed).error
+                      : 'Download failed',
+              style: TextStyle(fontSize: 11, color: Colors.red.shade700),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          if (_isDownloading) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: _progress != null && _progress! > 0
+                        ? _progress! / 100.0
+                        : null,
+                    minHeight: 4,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                if (_progress != null && _progress! > 0) ...[
+                  const SizedBox(width: 8),
+                  Text('$_progress%',
+                      style: const TextStyle(fontSize: 11)),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              state is SttModelStateExtracting
+                  ? 'Extracting…'
+                  : 'Downloading…',
+              style:
+                  TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1621,7 +2006,7 @@ class _AssistantBubble extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  const _MessageActions(),
+                  _MessageActions(text: text),
                 ],
               ],
             ),
@@ -1691,31 +2076,68 @@ class _UserBubble extends StatelessWidget {
 
 // ─── Message actions ──────────────────────────────────────────────────────────
 
-class _MessageActions extends StatelessWidget {
-  const _MessageActions();
+class _MessageActions extends StatefulWidget {
+  const _MessageActions({required this.text});
+  final String text;
+
+  @override
+  State<_MessageActions> createState() => _MessageActionsState();
+}
+
+class _MessageActionsState extends State<_MessageActions> {
+  final CoachingTtsService _tts = CoachingTtsService();
+  bool _speaking = false;
+
+  @override
+  void dispose() {
+    _tts.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggleSpeech() async {
+    if (_speaking) {
+      await _tts.stop();
+      if (mounted) setState(() => _speaking = false);
+    } else {
+      if (mounted) setState(() => _speaking = true);
+      await _tts.speak(widget.text);
+      if (mounted) setState(() => _speaking = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: const [
-        _ActionBtn(icon: Icons.volume_up_rounded),
-        SizedBox(width: 4),
-        _ActionBtn(icon: Icons.thumb_up_alt_outlined),
-        SizedBox(width: 4),
-        _ActionBtn(icon: Icons.thumb_down_alt_outlined),
+      children: [
+        _ActionBtn(
+          icon: _speaking ? Icons.stop_rounded : Icons.volume_up_rounded,
+          onTap: _toggleSpeech,
+        ),
+        const SizedBox(width: 4),
+        const _ActionBtn(icon: Icons.thumb_up_alt_outlined),
+        const SizedBox(width: 4),
+        const _ActionBtn(icon: Icons.thumb_down_alt_outlined),
       ],
     );
   }
 }
 
 class _ActionBtn extends StatelessWidget {
-  const _ActionBtn({required this.icon});
+  const _ActionBtn({required this.icon, this.onTap});
   final IconData icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Icon(icon, size: 16, color: AppColors.textMuted);
+    return GestureDetector(
+      onTap: onTap,
+      child: Icon(
+        icon,
+        size: 16,
+        color: onTap != null ? AppColors.navy : AppColors.textMuted,
+      ),
+    );
   }
 }
 
@@ -1969,28 +2391,46 @@ class _ChatInputBar extends StatefulWidget {
 }
 
 class _ChatInputBarState extends State<_ChatInputBar> {
-  final SpeechToText _speech = SpeechToText();
+  final SttModelManager _sttManager = SttModelManager();
+  final CoachingSttService _stt = CoachingSttService();
+  final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechAvail = false;
   bool _listening = false;
+  StreamSubscription<SttPartialResult>? _sttSub;
+
+  // Offline sherpa STT ready → use it; otherwise fall back to device speech.
+  bool get _sttAvail => _stt.isAvailable || _speechAvail;
 
   @override
   void initState() {
     super.initState();
+    widget.controller.addListener(_onCtrlChanged);
+    _initStt();
+    // Device speech recognition — always available online; shown as fallback
+    // when offline Bengali STT model is not yet downloaded.
     _speech
-        .initialize(onStatus: _onStatus, onError: (_) {
-          if (mounted) _setListening(false);
-        })
+        .initialize(
+          onStatus: (s) {
+            if (s == 'done' || s == 'notListening') _setListening(false);
+          },
+          onError: (_) => _setListening(false),
+        )
         .then((ok) {
       if (mounted) setState(() => _speechAvail = ok);
     });
-    widget.controller.addListener(_onCtrlChanged);
+  }
+
+  Future<void> _initStt() async {
+    if (!await _sttManager.isModelPresent()) return;
+    await _sttManager.checkIfReady();
+    final current = _sttManager.currentState;
+    if (current is SttModelStateReady) {
+      await _stt.initialize(current.modelDir);
+      if (mounted) setState(() {});
+    }
   }
 
   void _onCtrlChanged() => setState(() {});
-
-  void _onStatus(String status) {
-    if (status == 'done' || status == 'notListening') _setListening(false);
-  }
 
   void _setListening(bool value) {
     if (!mounted) return;
@@ -2000,28 +2440,52 @@ class _ChatInputBarState extends State<_ChatInputBar> {
 
   @override
   void dispose() {
+    _sttSub?.cancel();
+    _stt.dispose();
+    _sttManager.dispose();
     _speech.stop();
     widget.controller.removeListener(_onCtrlChanged);
     super.dispose();
   }
 
   void _startListening() {
-    if (!_speechAvail || _listening) return;
-    _speech.listen(
-      onResult: (r) {
-        final words = r.recognizedWords;
-        widget.controller.text = words;
-        widget.controller.selection =
-            TextSelection.fromPosition(TextPosition(offset: words.length));
-        if (r.finalResult) _setListening(false);
-      },
-      listenOptions: SpeechListenOptions(pauseFor: const Duration(seconds: 3)),
-    );
+    if (!_sttAvail || _listening) return;
     _setListening(true);
+    if (_stt.isAvailable) {
+      // Offline Bengali STT (sherpa-onnx) — preferred when model on device.
+      _sttSub = _stt.startListening().listen(
+        (result) {
+          widget.controller.text = result.text;
+          widget.controller.selection = TextSelection.fromPosition(
+              TextPosition(offset: result.text.length));
+          if (result.isFinal) _setListening(false);
+        },
+        onError: (_) => _setListening(false),
+        onDone: () => _setListening(false),
+      );
+    } else {
+      // Device speech recognition fallback (Google / Android built-in).
+      _speech.listen(
+        onResult: (r) {
+          final text = r.recognizedWords;
+          widget.controller.text = text;
+          widget.controller.selection =
+              TextSelection.fromPosition(TextPosition(offset: text.length));
+          if (r.finalResult) _setListening(false);
+        },
+        cancelOnError: true,
+      );
+    }
   }
 
   Future<void> _stopListening() async {
-    await _speech.stop();
+    if (_stt.isAvailable) {
+      await _sttSub?.cancel();
+      _sttSub = null;
+      await _stt.stopListening();
+    } else {
+      await _speech.stop();
+    }
     _setListening(false);
   }
 
@@ -2079,7 +2543,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
               ),
             ),
             const SizedBox(width: 8),
-            if (_speechAvail)
+            if (_sttAvail)
               GestureDetector(
                 onTap: _listening ? _stopListening : _startListening,
                 child: Container(

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_waveforms/audio_waveforms.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -9,10 +10,16 @@ import 'package:record/record.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/errors/domain_exceptions.dart';
+import '../training/offline_llm_service.dart';
+import '../training/stt_model_manager.dart';
+import '../training/whisper_model_manager.dart';
 import '../visit/triage/ai_scribe_triage_vocab.dart';
 import '../visit/triage/triage_transcript_matcher.dart';
 import 'form_field_schema_builder.dart';
 import 'models/ai_extracted_field.dart';
+import 'offline_scribe_service.dart';
+import 'scribe_asr_service.dart';
+import 'scribe_field_extractor.dart';
 import 'scribe_permission_service.dart';
 import 'scribe_session.dart';
 
@@ -29,6 +36,7 @@ class ScribeController extends ChangeNotifier {
 
   final ScribeApiService _api;
   final ScribePermissionService _perm;
+  final OfflineLlmService _llmService = OfflineLlmService();
   /// Drives the live recording waveform visualization only.
   /// Recycled after each session — [RecorderController] can hang on reuse after
   /// stop() on Android (audio_waveforms native quirk).
@@ -87,6 +95,35 @@ class ScribeController extends ChangeNotifier {
   ScribeMode _currentMode = ScribeMode.soap;
   List<String> _currentProgrammes = const [];
   String? _triageNotes;
+
+  /// When true, the audio recorder uses PCM16/WAV so the offline sherpa ASR
+  /// can decode the file directly without a container conversion step.
+  bool _useWavRecording = false;
+
+  // ── Real-time offline ASR (streaming triage) ──────────────────────────────
+
+  /// When true, triage recording streams PCM chunks live to sherpa-onnx
+  /// instead of writing a WAV file.  Partials are emitted via [session.liveTranscript].
+  bool _useStreamingAsr = false;
+
+  /// STT model directory, set in [startRecordingForTriage] when the model is
+  /// present.  Null when the STT model has not been downloaded.
+  String? _sttModelDir;
+
+  StreamSubscription<String>? _asrStreamSub;
+  // Separate sub for Whisper's raw PCM stream (List<int>, not String).
+  StreamSubscription<List<int>>? _whisperPcmSub;
+  String _offlineTranscript = '';
+  Completer<String>? _asrCompleter;
+
+  /// When true, triage ASR uses Whisper Small (OfflineRecognizer, batch) which
+  /// outputs clean English from code-mixed speech. Falls back to Bengali
+  /// Zipformer2 (streaming) when Whisper model is not downloaded.
+  bool _useWhisperAsr = false;
+
+  /// PCM16 byte buffer collected while Whisper is the active ASR.
+  /// Populated during recording; consumed at stop by [_runWhisperOnBuffer].
+  List<int>? _pcmBuffer;
 
   /// Set before starting a form recording to include Step 1 extra symptom
   /// notes in the SOAP generation context.
@@ -177,10 +214,62 @@ class ScribeController extends ChangeNotifier {
     _currentFormSchema = null;
     _currentProgrammes = const [];
 
+    // Prefer Whisper Small (batch, clean English output) over Bengali Zipformer2
+    // (streaming, phonetic Bengali for English words → breaks keyword matching).
+    // Whisper model downloads in background on first run; Bengali is the fallback.
+    _useWavRecording = false;
+    _useStreamingAsr = false;
+    _useWhisperAsr = false;
+    _sttModelDir = null;
+
+    final whisperMgr = WhisperModelManager();
+    if (await whisperMgr.isModelPresent()) {
+      _sttModelDir = await whisperMgr.modelDir;
+      _useWhisperAsr = true;
+      _useStreamingAsr = true;
+      debugPrint('[AIScribe] Whisper Small model found — using offline batch ASR');
+    } else {
+      // Trigger background download so Whisper is ready next time.
+      whisperMgr.downloadIfNeeded();
+      debugPrint('[AIScribe] Whisper not downloaded — falling back to Bengali Zipformer2');
+      final sttMgr = SttModelManager();
+      if (await sttMgr.isModelPresent()) {
+        await sttMgr.checkIfReady();
+        final state = sttMgr.currentState;
+        if (state is SttModelStateReady) {
+          _sttModelDir = state.modelDir;
+          _useStreamingAsr = true;
+        }
+      }
+    }
+
     await _startRecordingInternal(
       patientId: patientId,
       encounterId: encounterId,
       mode: ScribeMode.triage,
+    );
+  }
+
+  Future<void> startRecordingForFormPrefill({
+    String? patientId,
+    String? encounterId,
+    required List<FormFieldSchema> formSchema,
+  }) async {
+    _currentMode = ScribeMode.formPrefill;
+    _currentFormSchema = formSchema;
+    _currentSymptomCatalog = null;
+    _currentProgrammes = const [];
+
+    _useWavRecording = false;
+    if (await SttModelManager().isModelPresent()) {
+      final results = await Connectivity().checkConnectivity();
+      _useWavRecording = results.every((r) => r == ConnectivityResult.none);
+    }
+
+    await _startRecordingInternal(
+      patientId: patientId,
+      encounterId: encounterId,
+      mode: ScribeMode.formPrefill,
     );
   }
 
@@ -207,26 +296,39 @@ class ScribeController extends ChangeNotifier {
 
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
-      _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
       // Waveform visualization recorder writes to a separate dummy path.
       final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
 
-      // Start waveform recorder (audio_waveforms) for UI animation only.
-      await _recorder.record(
-        path: waveformPath,
-        recorderSettings: _recorderSettings,
-      );
+      // Waveform recorder uses its own AudioRecord instance. Running it
+      // alongside _audioRecorder's PCM stream causes exclusive-access conflicts
+      // on some Android builds — the PCM stream gets no data, silencing sherpa.
+      // Skip waveform when streaming ASR owns the mic.
+      if (!_useStreamingAsr) {
+        await _recorder.record(
+          path: waveformPath,
+          recorderSettings: _recorderSettings,
+        );
+      }
 
-      // Start actual audio capture via record package — produces standard WAV.
-      await _audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          sampleRate: 16000,
-          numChannels: 1,
-          bitRate: 64000,
-        ),
-        path: _recordingPath!,
-      );
+      if (_useStreamingAsr) {
+        // Real-time offline ASR: stream PCM16 chunks directly to sherpa-onnx.
+        // No file is written; transcript partials surface via session.liveTranscript.
+        await _startRealtimeOfflineAsr();
+      } else {
+        // File recording (online SOAP/formPrefill, or offline formPrefill WAV batch).
+        final ext = _useWavRecording ? 'wav' : _recordingExtension;
+        _recordingPath = '${dir.path}/scribe_$ts.$ext';
+        final encoder = _useWavRecording ? AudioEncoder.pcm16bits : AudioEncoder.aacLc;
+        await _audioRecorder.start(
+          RecordConfig(
+            encoder: encoder,
+            sampleRate: 16000,
+            numChannels: 1,
+            bitRate: 64000,
+          ),
+          path: _recordingPath!,
+        );
+      }
 
       _session = ScribeSession(state: ScribeState.recording, mode: mode);
       notifyListeners();
@@ -269,6 +371,11 @@ class ScribeController extends ChangeNotifier {
     // Drop WaveformWidget before native stop — reduces audio_waveforms hang.
     await Future<void>.delayed(const Duration(milliseconds: 50));
 
+    if (_useStreamingAsr) {
+      await _stopStreamingAsr();
+      return;
+    }
+
     final effectivePath = await _stopRecorderSafely();
     if (effectivePath == null) {
       debugPrint(
@@ -285,6 +392,11 @@ class ScribeController extends ChangeNotifier {
     }
     _recordingPath = effectivePath;
     debugPrint('[AIScribe] Recording saved to: $effectivePath');
+
+    if (_useWavRecording) {
+      await _runOfflineScribe(wavPath: effectivePath);
+      return;
+    }
 
     debugPrint('[AIScribe] Uploading audio (mode=${_currentMode.name})...');
 
@@ -377,6 +489,17 @@ class ScribeController extends ChangeNotifier {
     _currentProgrammes = const [];
     _currentMode = ScribeMode.soap;
     _triageNotes = null;
+    _useWavRecording = false;
+    _useStreamingAsr = false;
+    _useWhisperAsr = false;
+    _sttModelDir = null;
+    _offlineTranscript = '';
+    _pcmBuffer = null;
+    _asrStreamSub?.cancel();
+    _asrStreamSub = null;
+    _whisperPcmSub?.cancel();
+    _whisperPcmSub = null;
+    _asrCompleter = null;
     _recycleRecorder();
     _session = const ScribeSession();
     notifyListeners();
@@ -571,6 +694,363 @@ class ScribeController extends ChangeNotifier {
 
   // ── private helpers ───────────────────────────────────────────────────────
 
+  Future<void> _runOfflineScribe({required String wavPath}) async {
+    debugPrint('[AIScribe] offline path: mode=${_currentMode.name}');
+    final sttMgr = SttModelManager();
+    await sttMgr.checkIfReady();
+    final sttState = sttMgr.currentState;
+    if (sttState is! SttModelStateReady) {
+      _setRecordingError(ScribeStrings.transcriptionFailed);
+      return;
+    }
+
+    _session = _session.copyWith(state: ScribeState.processing);
+    notifyListeners();
+
+    try {
+      final asr = ScribeAsrService(sttState.modelDir);
+      final extractor = ScribeFieldExtractor(OfflineLlmService());
+      final offline = OfflineScribeService(asr: asr, extractor: extractor);
+
+      final result = await offline.process(
+        wavPath: wavPath,
+        mode: _currentMode,
+        formSchema: _currentFormSchema,
+        symptomCatalog: _currentSymptomCatalog,
+      );
+
+      if (result == null) {
+        _setRecordingError(ScribeStrings.noSpeechDetected);
+        return;
+      }
+
+      switch (_currentMode) {
+        case ScribeMode.triage:
+          _completeTriageJob(result: result);
+          break;
+        case ScribeMode.formPrefill:
+          _session = _session.copyWith(
+            state: ScribeState.fieldsPopulated,
+            transcriptText: result.transcriptText,
+            formPrefillResult: result.formPrefill,
+            fieldsJustPopulated: true,
+          );
+          notifyListeners();
+          Future.delayed(const Duration(seconds: 5), () {
+            if (_session.fieldsJustPopulated) {
+              _session = _session.copyWith(fieldsJustPopulated: false);
+              notifyListeners();
+            }
+          });
+          break;
+        case ScribeMode.soap:
+          _setRecordingError(ScribeStrings.transcriptionFailed);
+      }
+    } on Exception catch (e) {
+      _setRecordingError(e.toString());
+    } finally {
+      try {
+        await File(wavPath).delete();
+      } catch (_) {}
+    }
+  }
+
+  // ── Real-time offline ASR helpers ─────────────────────────────────────────
+
+  Future<void> _startRealtimeOfflineAsr() async {
+    final modelDir = _sttModelDir;
+    if (modelDir == null) return;
+
+    _offlineTranscript = '';
+    _asrCompleter = Completer<String>();
+
+    if (_useWhisperAsr) {
+      // Whisper batch mode: collect all PCM during recording, transcribe at stop.
+      // No live partial transcripts — waveform animation shows recording is active.
+      _pcmBuffer = [];
+      try {
+        final pcmStream = await _audioRecorder.startStream(
+          const RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+        );
+        var pcmChunkCount = 0;
+        _whisperPcmSub = pcmStream.listen(
+          (chunk) {
+            _pcmBuffer!.addAll(chunk);
+            pcmChunkCount++;
+            if (pcmChunkCount == 1 || pcmChunkCount % 50 == 0) {
+              debugPrint(
+                '[AIScribe] Whisper: buffering PCM #$pcmChunkCount '
+                'buf=${_pcmBuffer!.length}B',
+              );
+            }
+          },
+          onDone: () {
+            if (!(_asrCompleter?.isCompleted ?? true)) {
+              _asrCompleter!.complete(''); // stream closed; buffer ready
+            }
+          },
+          onError: (Object e) {
+            debugPrint('[AIScribe] Whisper PCM stream error: $e');
+            if (!(_asrCompleter?.isCompleted ?? true)) {
+              _asrCompleter!.complete('');
+            }
+          },
+          cancelOnError: false,
+        );
+      } catch (e) {
+        debugPrint('[AIScribe] Whisper startStream failed: $e');
+        if (!(_asrCompleter?.isCompleted ?? true)) {
+          _asrCompleter!.completeError(e);
+        }
+      }
+      return;
+    }
+
+    // Bengali Zipformer2 streaming (fallback when Whisper not downloaded).
+    try {
+      final pcmStream = await _audioRecorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+      );
+
+      var pcmChunkCount = 0;
+      final pcmStreamLogged = pcmStream.map((chunk) {
+        pcmChunkCount++;
+        if (pcmChunkCount == 1 || pcmChunkCount % 50 == 0) {
+          debugPrint('[AIScribe] pcm chunk #$pcmChunkCount len=${chunk.length}');
+        }
+        return chunk;
+      });
+      final asr = ScribeAsrService(modelDir);
+      _asrStreamSub = asr.transcribeRealtime(pcmStreamLogged).listen(
+        (partial) {
+          _offlineTranscript = partial;
+          _session = _session.copyWith(liveTranscript: partial);
+          notifyListeners();
+        },
+        onDone: () {
+          if (!(_asrCompleter?.isCompleted ?? true)) {
+            _asrCompleter!.complete(_offlineTranscript);
+          }
+        },
+        onError: (Object e) {
+          debugPrint('[AIScribe] streaming ASR error: $e');
+          if (!(_asrCompleter?.isCompleted ?? true)) {
+            _asrCompleter!.complete(_offlineTranscript);
+          }
+        },
+        cancelOnError: false,
+      );
+    } catch (e) {
+      debugPrint('[AIScribe] startStream failed: $e');
+      if (!(_asrCompleter?.isCompleted ?? true)) {
+        _asrCompleter!.completeError(e);
+      }
+    }
+  }
+
+  Future<String> _runWhisperOnBuffer() async {
+    final buf = _pcmBuffer;
+    final modelDir = _sttModelDir;
+    if (buf == null || buf.isEmpty || modelDir == null) return '';
+    try {
+      final asr = ScribeAsrService(modelDir);
+      return await asr.transcribeAccumulated(buf);
+    } catch (e) {
+      debugPrint('[AIScribe] Whisper transcription error: $e');
+      return '';
+    }
+  }
+
+  Future<void> _stopStreamingAsr() async {
+    // Waveform recorder was NOT started in streaming-ASR mode — skip stop.
+
+    // Stop audio stream — closes PCM source.
+    await _audioRecorder.stop().catchError((Object e) {
+      debugPrint('[AIScribe] audioRecorder stop() error: $e');
+      return null;
+    });
+
+    _recycleRecorder();
+    notifyListeners();
+
+    String transcript;
+
+    if (_useWhisperAsr) {
+      // Wait for PCM stream to close (short timeout — stream closes on stop()).
+      try {
+        await _asrCompleter!.future.timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('[AIScribe] Whisper PCM stream close timeout: $e');
+      }
+      await _whisperPcmSub?.cancel();
+      _whisperPcmSub = null;
+      _asrCompleter = null;
+
+      _session = _session.copyWith(state: ScribeState.processing);
+      notifyListeners();
+
+      // Transcribe the full accumulated buffer in one pass — best quality.
+      transcript = await _runWhisperOnBuffer();
+      _pcmBuffer = null;
+    } else {
+      // Zipformer streaming — wait for sherpa to flush the last segment.
+      transcript = _offlineTranscript;
+      try {
+        transcript = await _asrCompleter!.future.timeout(
+          const Duration(seconds: 15),
+        );
+      } catch (e) {
+        debugPrint(
+          '[AIScribe] ASR flush timeout/error: $e — using accumulated transcript',
+        );
+      }
+      await _asrStreamSub?.cancel();
+      _asrStreamSub = null;
+      _asrCompleter = null;
+
+      _session = _session.copyWith(state: ScribeState.processing);
+      notifyListeners();
+    }
+
+    if (transcript.isEmpty) {
+      surfaceError(ScribeStrings.noSpeechDetected, mode: ScribeMode.triage);
+      return;
+    }
+
+    debugPrint(
+      '[AIScribe] triage transcript (${transcript.length} chars): $transcript',
+    );
+
+    final catalog = _currentSymptomCatalog ?? AiScribeTriageVocab.codes;
+    var result = TriageTranscriptMatcher.match(transcript, catalog: catalog);
+
+    if (result == null || result.symptomCodes.isEmpty) {
+      debugPrint('[AIScribe] keyword matcher empty — trying Gemma extraction');
+      result = await _extractSymptomsWithGemma(transcript, catalog);
+    }
+
+    if (result == null || result.symptomCodes.isEmpty) {
+      surfaceError(
+        SymptomPickerStrings.scribeBannerNoSymptomsSubtitle,
+        mode: ScribeMode.triage,
+      );
+      return;
+    }
+
+    debugPrint('[AIScribe] triage matched ${result.symptomCodes.length} codes');
+    _session = _session.copyWith(
+      state: ScribeState.reviewReady,
+      mode: ScribeMode.triage,
+      transcriptText: transcript,
+      triageExtractionResult: result,
+    );
+    notifyListeners();
+  }
+
+  // ── Offline Gemma triage extraction ──────────────────────────────────────
+  //
+  // Mirrors the server pipeline from inference.py:
+  //   - Inject symptoms as natural English labels with spaces (not underscores)
+  //     so Gemma sees "vaginal bleeding" not "vaginal_bleeding".
+  //   - Parse Gemma's response via label→code reverse map, then code scan,
+  //     then keyword matcher fallback. Three passes to maximize recall.
+
+  /// Build the triage prompt mirroring the server's INFERENCE_PROMPT approach:
+  /// inject symptoms as natural English labels (underscore → space) so Gemma
+  /// can semantically match without echoing snake_case tokens literally.
+  static String _buildGemmaTriagePrompt(
+    String transcript,
+    List<String> catalog,
+  ) {
+    final naturalLabels =
+        catalog.map((c) => c.replaceAll('_', ' ')).join(', ');
+    return 'Patient said: "$transcript"\n\n'
+        'Available symptoms: $naturalLabels\n\n'
+        'List ONLY the symptoms from the list above that the patient currently '
+        'has, one per line. Write NONE if none apply.';
+  }
+
+  Future<TriageExtractionResult?> _extractSymptomsWithGemma(
+    String transcript,
+    List<String> catalog,
+  ) async {
+    try {
+      if (!await _llmService.isReady()) {
+        debugPrint('[AIScribe] Gemma not ready — skipping LLM extraction');
+        return null;
+      }
+      final prompt = _buildGemmaTriagePrompt(transcript, catalog);
+      final response = await _llmService.ask(prompt);
+      return _parseGemmaTriageResponse(response, catalog);
+    } catch (e) {
+      debugPrint('[AIScribe] Gemma triage extraction error: $e');
+      return null;
+    }
+  }
+
+  TriageExtractionResult? _parseGemmaTriageResponse(
+    String response,
+    List<String> catalog,
+  ) {
+    final responseNorm = response.toLowerCase().trim();
+    final seen = <String>{};
+    final fields = <AIExtractedField>[];
+
+    // Pass 1: match natural English labels (server pattern — spaces not underscores).
+    // Build reverse map: "vaginal bleeding" → "vaginal_bleeding".
+    final labelToCode = {
+      for (final c in catalog) c.replaceAll('_', ' '): c,
+    };
+    for (final entry in labelToCode.entries) {
+      final label = entry.key;
+      final code = entry.value;
+      if (seen.contains(code)) continue;
+      if (!responseNorm.contains(label)) continue;
+      seen.add(code);
+      fields.add(AIExtractedField(
+        fieldId: code,
+        value: true,
+        confidence: 0.75,
+        sourceSegment: label,
+        source: FieldSource.aiPending,
+        extractedAt: DateTime.now(),
+      ));
+    }
+
+    // Pass 2: also catch snake_case codes Gemma sometimes emits anyway.
+    final normalizedResponse = responseNorm.replaceAll('-', '_');
+    for (final code in catalog) {
+      if (seen.contains(code)) continue;
+      final pattern = RegExp('\\b${RegExp.escape(code)}\\b');
+      if (!pattern.hasMatch(normalizedResponse)) continue;
+      seen.add(code);
+      fields.add(AIExtractedField(
+        fieldId: code,
+        value: true,
+        confidence: 0.7,
+        sourceSegment: code,
+        source: FieldSource.aiPending,
+        extractedAt: DateTime.now(),
+      ));
+    }
+
+    if (fields.isNotEmpty) {
+      debugPrint('[AIScribe] Gemma extracted ${fields.length} symptom codes');
+      return TriageExtractionResult(symptomCodes: fields, transcriptText: '');
+    }
+
+    // Pass 3: Gemma responded in plain prose — keyword matcher as final fallback.
+    debugPrint('[AIScribe] Gemma label/code scan empty — keyword pass on Gemma response');
+    return TriageTranscriptMatcher.match(response, catalog: catalog);
+  }
 
   void _prepareFreshRecorder() {
     if (_recorder.isRecording) return;
@@ -927,6 +1407,8 @@ class ScribeController extends ChangeNotifier {
   void dispose() {
     _elapsedTimer?.cancel();
     _pollTimer?.cancel();
+    _asrStreamSub?.cancel();
+    _whisperPcmSub?.cancel();
     try {
       _recorder.dispose();
     } catch (_) {}

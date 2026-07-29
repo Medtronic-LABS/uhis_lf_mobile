@@ -7,6 +7,7 @@ import '../../../core/api/endpoints.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/db/ai_response_cache_dao.dart';
 import 'briefing_models.dart';
+import 'offline_briefing_service.dart';
 
 /// Calls the AI visit briefing service to generate pre-visit guidance cards.
 ///
@@ -20,11 +21,16 @@ import 'briefing_models.dart';
 /// payload changes so a stale entry is never served against a different
 /// patient snapshot.
 class VisitBriefingRepository {
-  const VisitBriefingRepository(this._client, {AiResponseCacheDao? cache})
-      : _cache = cache;
+  VisitBriefingRepository(
+    this._client, {
+    AiResponseCacheDao? cache,
+    OfflineBriefingService? offline,
+  })  : _cache = cache,
+        _offline = offline;
 
   final ApiClient _client;
   final AiResponseCacheDao? _cache;
+  final OfflineBriefingService? _offline;
 
   // Cache namespace — bump when the API response shape changes so rows
   // written by the old client are ignored. Last bump: invalidate DEV_SKIP_AUTH
@@ -69,30 +75,38 @@ class VisitBriefingRepository {
       }
     }
 
-    final (dio, path) = _resolve(
-      Endpoints.visitBriefingGenerate,
-      '/briefing/generate',
-    );
-    final response = await dio.post<dynamic>(path, data: patientContext);
-    final raw = response.data;
-    if (raw is! Map<String, dynamic>) {
-      throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-        type: DioExceptionType.badResponse,
-        error: 'Expected JSON object, got ${raw.runtimeType}',
+    try {
+      final (dio, path) = _resolve(
+        Endpoints.visitBriefingGenerate,
+        '/briefing/generate',
       );
-    }
+      final response = await dio.post<dynamic>(path, data: patientContext);
+      final raw = response.data;
+      if (raw is! Map<String, dynamic>) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+          type: DioExceptionType.badResponse,
+          error: 'Expected JSON object, got ${raw.runtimeType}',
+        );
+      }
 
-    if (cache != null) {
-      await cache.put(
-        cacheKey: cacheKey,
-        kind: _kindBriefing,
-        contentHash: hash,
-        payload: jsonEncode(raw),
-      );
+      if (cache != null) {
+        await cache.put(
+          cacheKey: cacheKey,
+          kind: _kindBriefing,
+          contentHash: hash,
+          payload: jsonEncode(raw),
+        );
+      }
+      return VisitBriefingResponse.fromJson(raw);
+    } on DioException {
+      final offline = _offline;
+      if (offline != null) {
+        return offline.generate(patientContext);
+      }
+      rethrow;
     }
-    return VisitBriefingResponse.fromJson(raw);
   }
 
   /// Short 2-3 sentence summary for the patient context screen header.
@@ -109,29 +123,37 @@ class VisitBriefingRepository {
       }
     }
 
-    final (dio, path) = _resolve(
-      Endpoints.visitBriefingSummary,
-      '/briefing/summary',
-    );
-    final response = await dio.post<dynamic>(path, data: patientContext);
-    final raw = response.data;
-    if (raw is! Map<String, dynamic>) {
-      throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-        type: DioExceptionType.badResponse,
-        error: 'Expected JSON object, got ${raw.runtimeType}',
+    try {
+      final (dio, path) = _resolve(
+        Endpoints.visitBriefingSummary,
+        '/briefing/summary',
       );
-    }
+      final response = await dio.post<dynamic>(path, data: patientContext);
+      final raw = response.data;
+      if (raw is! Map<String, dynamic>) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+          type: DioExceptionType.badResponse,
+          error: 'Expected JSON object, got ${raw.runtimeType}',
+        );
+      }
 
-    if (cache != null) {
-      await cache.put(
-        cacheKey: cacheKey,
-        kind: _kindSummary,
-        contentHash: hash,
-        payload: jsonEncode(raw),
-      );
+      if (cache != null) {
+        await cache.put(
+          cacheKey: cacheKey,
+          kind: _kindSummary,
+          contentHash: hash,
+          payload: jsonEncode(raw),
+        );
+      }
+      return (raw['summary'] as String?) ?? '';
+    } on DioException {
+      final offline = _offline;
+      if (offline != null) {
+        return offline.summary(patientContext);
+      }
+      rethrow;
     }
-    return (raw['summary'] as String?) ?? '';
   }
 }

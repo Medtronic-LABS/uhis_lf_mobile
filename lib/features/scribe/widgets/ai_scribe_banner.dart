@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -49,6 +50,7 @@ class AiScribeBanner extends StatefulWidget {
     this.onFormFill,
     this.symptomVocab,
     this.onLiveSymptomCodes,
+    this.offlineFormSchema,
   });
 
   final String encounterId;
@@ -92,6 +94,11 @@ class AiScribeBanner extends StatefulWidget {
   final void Function(RealtimeSymptomCodes codes, String fullTranscript)?
       onLiveSymptomCodes;
 
+  /// When set, an offline fallback batch recording is used instead of live ASR
+  /// when connectivity is unavailable. Only applies when [tapStartsLiveAsr] is
+  /// true and [assessmentType] is non-null.
+  final List<FormFieldSchema>? offlineFormSchema;
+
   @override
   State<AiScribeBanner> createState() => _AiScribeBannerState();
 }
@@ -106,6 +113,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
   bool _showDone = false;
   bool _resultConsumed = false;
+  bool _offlineFallbackStarted = false;
   ScribeController? _scribe;
 
   late final RealtimeAsrController _liveCtrl;
@@ -167,6 +175,27 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
   void _onLiveChanged() {
     if (!mounted) return;
+    // WS connection failed → fall back to offline batch recording.
+    if (_liveCtrl.state == RealtimeAsrState.error && !_offlineFallbackStarted) {
+      final scribe = _scribe;
+      if (scribe != null) {
+        final schema = widget.offlineFormSchema;
+        final vocab = widget.symptomVocab;
+        if (schema != null && schema.isNotEmpty) {
+          _offlineFallbackStarted = true;
+          debugPrint('[AiScribeBanner] live ASR error — offline form prefill batch fallback');
+          scribe.startRecordingForFormPrefill(formSchema: schema);
+          setState(() {});
+          return;
+        } else if (vocab != null && vocab.isNotEmpty) {
+          _offlineFallbackStarted = true;
+          debugPrint('[AiScribeBanner] live ASR error — offline triage batch fallback');
+          scribe.startRecordingForTriage(symptomCatalog: vocab);
+          setState(() {});
+          return;
+        }
+      }
+    }
     final fields = _liveCtrl.fields;
     if (fields != null && !identical(fields, _lastAppliedLiveFields)) {
       _lastAppliedLiveFields = fields;
@@ -192,17 +221,43 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     setState(() {});
   }
 
-  void _startAsr() {
+  Future<void> _startAsr() async {
     if (_showDone) {
       setState(() {
         _showDone = false;
         _resultConsumed = false;
       });
     }
+    _offlineFallbackStarted = false;
     if (widget.assessmentType != null) {
       debugPrint('<<========== ASR SESSION START — assessmentType='
           '${widget.assessmentType} ==========>>');
     }
+
+    // Skip WS entirely when offline — go straight to local sherpa-onnx STT.
+    final results = await Connectivity().checkConnectivity();
+    final isOffline = results.every((r) => r == ConnectivityResult.none);
+    if (isOffline) {
+      final scribe = _scribe;
+      if (scribe != null) {
+        final vocab = widget.symptomVocab;
+        final schema = widget.offlineFormSchema;
+        if (vocab != null && vocab.isNotEmpty) {
+          _offlineFallbackStarted = true;
+          debugPrint('[AiScribeBanner] offline — skipping WS, direct offline triage STT');
+          unawaited(scribe.startRecordingForTriage(symptomCatalog: vocab));
+          if (mounted) setState(() {});
+          return;
+        } else if (schema != null && schema.isNotEmpty) {
+          _offlineFallbackStarted = true;
+          debugPrint('[AiScribeBanner] offline — skipping WS, direct offline form-prefill STT');
+          unawaited(scribe.startRecordingForFormPrefill(formSchema: schema));
+          if (mounted) setState(() {});
+          return;
+        }
+      }
+    }
+
     _liveCtrl.start(
       assessmentType: widget.assessmentType,
       symptomVocab: widget.symptomVocab,
@@ -277,7 +332,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       controller.bindContext(context);
       if (idleChoice) {
         if (widget.tapStartsLiveAsr) {
-          _startAsr();
+          unawaited(_startAsr());
         } else {
           controller.startRecording();
         }
@@ -415,6 +470,13 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                   const SizedBox(height: 10),
                   AiScribeLiveAsrPanel(controller: _liveCtrl),
                 ],
+                if (!liveActive &&
+                    isRecording &&
+                    session.liveTranscript != null &&
+                    session.liveTranscript!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _OfflineTranscriptPanel(text: session.liveTranscript!),
+                ],
               ],
             ),
           ),
@@ -486,6 +548,34 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
         Icons.mic_rounded,
         color: AppColors.textOnNavy,
         size: 22,
+      ),
+    );
+  }
+}
+
+/// Inline panel shown inside [AiScribeBanner] while offline streaming ASR is
+/// active, displaying the sherpa-onnx partial transcript as it accumulates.
+class _OfflineTranscriptPanel extends StatelessWidget {
+  const _OfflineTranscriptPanel({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(AppRadius.rxIcon),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: AppColors.textOnNavy.withValues(alpha: 0.9),
+          fontSize: 12,
+        ),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
