@@ -2404,7 +2404,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                           ? naba.dangerSigns.take(2).join(', ')
                           : 'Referral recommended')),
               urgency: naba.referralRecommendation?.urgency ?? 'Today',
-              facilityName: widget.referralFacility,
             ),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
@@ -2521,11 +2520,9 @@ class _ReferralAlertCard extends StatelessWidget {
   const _ReferralAlertCard({
     required this.reason,
     required this.urgency,
-    this.facilityName,
   });
   final String reason;
   final String urgency;
-  final String? facilityName;
 
   // Maps raw API camelCase referral keys → human-readable labels (fallback path).
   static const _reasonLabels = <String, String>{
@@ -2634,27 +2631,6 @@ class _ReferralAlertCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (facilityName != null) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.location_on_outlined,
-                          size: 12, color: accent.withValues(alpha: 0.75)),
-                      const SizedBox(width: 3),
-                      Flexible(
-                        child: Text(
-                          facilityName!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: accent.withValues(alpha: 0.85),
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
