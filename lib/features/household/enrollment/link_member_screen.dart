@@ -130,6 +130,14 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
     super.dispose();
   }
 
+  void _calculateDobFromAge(String ageText) {
+    final age = int.tryParse(ageText);
+    if (age == null || age <= 0) return;
+    final now = DateTime.now();
+    final approxDob = DateTime(now.year - age, now.month, now.day);
+    _dobCtrl.text = DateFormat('yyyy-MM-dd').format(approxDob);
+  }
+
   void _pickDob() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -476,6 +484,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
                   hint: EnrollmentStrings.ageHint,
                   controller: _ageCtrl,
                   keyboardType: TextInputType.number,
+                  onChanged: _calculateDobFromAge,
                 ),
                 const SizedBox(height: 20),
 
