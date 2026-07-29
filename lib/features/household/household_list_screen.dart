@@ -588,20 +588,25 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         final item = filteredItems[index];
         final primary = _primaryMember(item);
         final q = _searchQuery;
-        final highlightPrimary = q.isNotEmpty &&
+        final highlightPrimary = primary != null &&
+            q.isNotEmpty &&
             (primary.name?.toLowerCase().contains(q) ?? false);
         debugPrint(
-          '[HouseholdList] card ${item.householdNo}: primary=${primary.name} highlightPrimary=$highlightPrimary query="$q"',
+          '[HouseholdList] card ${item.householdNo}: primary=${primary?.name} highlightPrimary=$highlightPrimary query="$q"',
         );
         return _HouseholdCard(
           item: item,
           villageDisplayName: _villageDisplayName(item.village),
-          primaryMemberRow: _buildMemberRow(
-            context,
-            _MemberInfo.fromMember(primary, item),
-          ),
+          primaryMemberRow: primary != null
+              ? _buildMemberRow(
+                  context,
+                  _MemberInfo.fromMember(primary, item),
+                )
+              : const SizedBox.shrink(),
           highlightPrimary: highlightPrimary,
-          primaryRelation: _displayRelation(primary.relation),
+          primaryRelation: primary != null
+              ? _displayRelation(primary.relation)
+              : null,
           onTap: () => _navigateToDetail(context, item),
         );
       },
@@ -706,7 +711,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   /// with an active mission-queue entry (if any), else the household head,
   /// else the first member — mirrors the v13 mockup's single "flagged
   /// member" per household card.
-  _HouseholdMember _primaryMember(_HouseholdItem item) {
+  _HouseholdMember? _primaryMember(_HouseholdItem item) {
+    if (item.members.isEmpty) return null;
     for (final m in item.members) {
       final pid = m.patientId ?? m.id;
       if (pid != null && _queueItems.containsKey(pid)) return m;
