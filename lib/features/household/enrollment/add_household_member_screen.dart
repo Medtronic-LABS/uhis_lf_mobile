@@ -457,49 +457,85 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       ),
                     ),
 
-                    // NID editable field — shown when scan succeeded so SK
+                    // NID scan editable card — shown when scan succeeded so SK
                     // can correct OCR errors without rescanning.
                     if (_nidScanned) ...[
                       const SizedBox(height: 10),
-                      EnrollmentInputField(
-                        label: EnrollmentStrings.nidNumberLabel,
-                        hint: EnrollmentStrings.nidNumberHint,
-                        controller: _brnCtrl,
-                        keyboardType: TextInputType.number,
-                        customBorderColor: AppColors.enrollmentSuccess,
-                        labelSuffix: Row(
-                          mainAxisSize: MainAxisSize.min,
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: AppColors.tbSurface,
+                          border: Border.all(color: AppColors.statusSuccessBorder),
+                          borderRadius: BorderRadius.circular(AppRadius.field),
+                        ),
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              EnrollmentStrings.nidScannedBadge,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.enrollmentSuccess,
-                              ),
+                            Row(
+                              children: [
+                                const Icon(Icons.auto_awesome, size: 14, color: AppColors.statusSuccessAction),
+                                const SizedBox(width: 6),
+                                const Expanded(
+                                  child: Text(
+                                    'Scanned from NID — edit if needed',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.statusSuccessActionDark,
+                                    ),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => setState(() {
+                                    _nidScanned = false;
+                                    _brnCtrl.clear();
+                                    _existingPatient = null;
+                                  }),
+                                  child: const Text(
+                                    'Clear',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.statusCritical,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(height: 12),
+                            EnrollmentInputField(
+                              label: EnrollmentStrings.nidNumberLabel,
+                              hint: EnrollmentStrings.nidNumberHint,
+                              controller: _brnCtrl,
+                              keyboardType: TextInputType.number,
+                              onChanged: (value) {
+                                if (value.length >= 10) _lookupExisting(value);
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                            EnrollmentInputField(
+                              label: EnrollmentStrings.memberNameLabel,
+                              hint: EnrollmentStrings.memberNameHint,
+                              controller: _nameCtrl,
+                              isRequired: true,
+                              onChanged: (_) => _clearError('name'),
+                              errorText: _fieldErrors['name'],
+                            ),
+                            const SizedBox(height: 10),
                             GestureDetector(
-                              onTap: () => setState(() {
-                                _nidScanned = false;
-                                _brnCtrl.clear();
-                                _existingPatient = null;
-                              }),
-                              child: Text(
-                                EnrollmentStrings.nidClearScan,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textMuted,
-                                  decoration: TextDecoration.underline,
+                              onTap: _selectDate,
+                              child: AbsorbPointer(
+                                child: EnrollmentInputField(
+                                  label: EnrollmentStrings.dateOfBirthLabel,
+                                  hint: EnrollmentStrings.dateOfBirthHint,
+                                  controller: _dobCtrl,
+                                  readOnly: true,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        onChanged: (value) {
-                          if (value.length >= 10) _lookupExisting(value);
-                        },
                       ),
                     ],
 
@@ -577,43 +613,48 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ],
                     const SizedBox(height: 20),
 
-                    // ── Q2: Name ───────────────────────────────────────────
-                    SizedBox(key: _key('name'), height: 0),
-                    _QuestionLabel(number: 'Q2', text: 'Name'),
-                    const SizedBox(height: 10),
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.memberNameLabel,
-                      hint: EnrollmentStrings.memberNameHint,
-                      controller: _nameCtrl,
-                      isRequired: true,
-                      onChanged: (_) => _clearError('name'),
-                      errorText: _fieldErrors['name'],
-                    ),
-                    const SizedBox(height: 20),
+                    // ── Q2: Name — hidden when NID scanned (card has it) ──
+                    if (!_nidScanned) ...[
+                      SizedBox(key: _key('name'), height: 0),
+                      _QuestionLabel(number: 'Q2', text: 'Name'),
+                      const SizedBox(height: 10),
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.memberNameLabel,
+                        hint: EnrollmentStrings.memberNameHint,
+                        controller: _nameCtrl,
+                        isRequired: true,
+                        onChanged: (_) => _clearError('name'),
+                        errorText: _fieldErrors['name'],
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                    if (_nidScanned) const SizedBox(height: 20),
 
-                    // ── Q3: Date of Birth ──────────────────────────────────
-                    _QuestionLabel(number: 'Q3', text: 'Date of Birth'),
-                    const SizedBox(height: 10),
-                    GestureDetector(
-                      onTap: _selectDate,
-                      child: AbsorbPointer(
-                        child: EnrollmentInputField(
-                          label: EnrollmentStrings.dateOfBirthLabel,
-                          hint: EnrollmentStrings.dateOfBirthHint,
-                          controller: _dobCtrl,
-                          readOnly: true,
+                    // ── Q3: Date of Birth — hidden when NID scanned (card has it) ──
+                    if (!_nidScanned) ...[
+                      _QuestionLabel(number: 'Q3', text: 'Date of Birth'),
+                      const SizedBox(height: 10),
+                      GestureDetector(
+                        onTap: _selectDate,
+                        child: AbsorbPointer(
+                          child: EnrollmentInputField(
+                            label: EnrollmentStrings.dateOfBirthLabel,
+                            hint: EnrollmentStrings.dateOfBirthHint,
+                            controller: _dobCtrl,
+                            readOnly: true,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      EnrollmentStrings.dobHelperText,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
+                      const SizedBox(height: 8),
+                      Text(
+                        EnrollmentStrings.dobHelperText,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textMuted,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
+                      const SizedBox(height: 10),
+                    ],
 
                     // Approximate Age
                     EnrollmentInputField(

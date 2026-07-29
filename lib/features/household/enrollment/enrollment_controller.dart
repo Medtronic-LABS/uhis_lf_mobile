@@ -125,8 +125,6 @@ class EnrollmentController extends ChangeNotifier {
   /// Update household head information (step 2).
   void updateHead({
     required String name,
-    String? fatherName,
-    String? motherName,
     required int age,
     required String gender,
     required String dateOfBirth,
@@ -140,8 +138,6 @@ class EnrollmentController extends ChangeNotifier {
   }) {
     _householdHead = HouseholdHeadInfo(
       name: name,
-      fatherName: fatherName,
-      motherName: motherName,
       age: age,
       gender: gender,
       dateOfBirth: dateOfBirth,

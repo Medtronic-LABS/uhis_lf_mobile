@@ -1433,7 +1433,7 @@ abstract final class MissionDashboardStrings {
   // ── HTML Dashboard composition ───────────────────────────────────────────
   static String aiSortedVisits(int n) => AppLocale.isBangla
       ? 'এআই রাতারাতি আপনার $n টি ভিজিট সাজিয়েছে'
-      : 'sorted your $n visits overnight';
+      : 'Sorted your $n visits overnight';
   static String get visitsToday =>
       AppLocale.isBangla ? 'আজকের ভিজিট' : 'Visits today';
 
@@ -1491,8 +1491,8 @@ abstract final class MissionDashboardStrings {
       return n == 1 ? '✦ সাজানো 1 টি ভিজিট আজ' : '✦ সাজানো $n টি ভিজিট আজ';
     }
     return n == 1
-        ? '✦ sorted 1 visit today'
-        : '✦ sorted $n visits today';
+        ? '✦ 1 visit today'
+        : '✦ $n visits today';
   }
   static String get actionVisitNow =>
       AppLocale.isBangla ? 'এখনই ভিজিট করুন' : 'Visit now';
