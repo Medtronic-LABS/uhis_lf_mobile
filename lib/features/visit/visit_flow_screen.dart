@@ -3265,28 +3265,29 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
     super.dispose();
   }
 
+  static const _pink = Color(0xFFEC4899);
+
+  void _onTap(BuildContext context) => context.push(
+        '/teleconsult',
+        extra: {
+          'patientLabel': widget.patientLabel,
+          'patientId': widget.patientId,
+        },
+      );
+
   @override
   Widget build(BuildContext context) {
+    final color = _isOnline ? _pink : const Color(0xFFCBD5E1);
     return Tooltip(
       message: _isOnline ? '' : NabaStrings.callDoctorOfflineHint,
       child: SizedBox(
         width: double.infinity,
-        child: FilledButton(
-          onPressed: _isOnline
-              ? () => context.push(
-                    '/teleconsult',
-                    extra: {
-                      'patientLabel': widget.patientLabel,
-                      'patientId': widget.patientId,
-                    },
-                  )
-              : null,
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFFDB2777),
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: const Color(0xFFDB2777).withValues(alpha: 0.35),
-            disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+        child: OutlinedButton(
+          onPressed: _isOnline ? () => _onTap(context) : null,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: color,
+            side: BorderSide(color: color, width: 1.5),
+            padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
             ),
@@ -3294,25 +3295,29 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.phone_rounded, size: 18),
-              const SizedBox(width: 6),
-              const Icon(Icons.smartphone_rounded, size: 18),
+              Icon(Icons.phone_in_talk_rounded, size: 20, color: color),
               const SizedBox(width: 10),
-              Text(
-                NabaStrings.callDoctorNow,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                NabaStrings.callDoctorNowBn,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white.withValues(alpha: _isOnline ? 0.85 : 0.5),
-                ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    NabaStrings.callDoctorNow,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                  Text(
+                    NabaStrings.callDoctorNowBn,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: color.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
