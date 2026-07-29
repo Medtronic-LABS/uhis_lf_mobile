@@ -132,10 +132,14 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
 
   void _calculateDobFromAge(String ageText) {
     final age = int.tryParse(ageText);
+    debugPrint('[LinkMember] _calculateDobFromAge age=$age');
     if (age == null || age <= 0) return;
     final now = DateTime.now();
-    final approxDob = DateTime(now.year - age, now.month, now.day);
-    _dobCtrl.text = DateFormat('yyyy-MM-dd').format(approxDob);
+    final dob = DateFormat('yyyy-MM-dd').format(DateTime(now.year - age, now.month, now.day));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _dobCtrl.text = dob);
+    });
   }
 
   void _pickDob() async {

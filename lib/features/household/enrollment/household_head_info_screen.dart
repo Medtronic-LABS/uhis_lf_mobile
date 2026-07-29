@@ -175,11 +175,17 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
   void _calculateDobFromAge(String ageText) {
     final age = int.tryParse(ageText);
+    debugPrint('[HouseholdHead] _calculateDobFromAge age=$age');
     if (age == null || age <= 0) return;
     final now = DateTime.now();
-    final approxDob = DateTime(now.year - age, now.month, now.day);
-    _dobCtrl.text = DateFormat('yyyy-MM-dd').format(approxDob);
-    setState(() => _fieldErrors.remove('dob'));
+    final dob = DateFormat('yyyy-MM-dd').format(DateTime(now.year - age, now.month, now.day));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _dobCtrl.text = dob;
+        _fieldErrors.remove('dob');
+      });
+    });
   }
 
   void _handleNext(EnrollmentController controller) {
