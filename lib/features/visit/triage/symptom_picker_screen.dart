@@ -1766,22 +1766,6 @@ class _SelectedSymptomRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Color(0x99FFFFFF), // rgba(255,255,255,0.6)
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: Text(
-              isAi ? 'AI detected' : 'Standard',
-              style: const TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: _rowText,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
           GestureDetector(
             onTap: onRemove,
             child: Container(
@@ -2126,7 +2110,7 @@ class _InlineServiceSelector extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
-          childAspectRatio: 1.05,
+          childAspectRatio: 0.88,
           children: cards
               .map((c) => _ServiceTile(
                     def: c,
@@ -2173,102 +2157,114 @@ class _ServiceTile extends StatelessWidget {
         ? AppColors.navy.withValues(alpha: 0.45)
         : AppColors.navy;
 
-    return Semantics(
-      button: true,
-      selected: isSelected,
-      enabled: !isLocked,
-      label: isSelected
-          ? TriageStrings.deselectProgrammeA11y(label)
-          : TriageStrings.selectProgrammeA11y(label),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Opacity(
-          opacity: isLocked ? 0.40 : 1.0,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: borderColor, width: borderWidth),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0A000000),
-                  blurRadius: 4,
-                  offset: Offset(0, 1),
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                // Selection circle — top-right
-                Positioned(
-                  top: 7,
-                  right: 7,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 140),
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected ? AppColors.navy : Colors.transparent,
-                      border: Border.all(
-                        color: isSelected
-                            ? AppColors.navy
-                            : const Color(0xFFD1D5DB),
-                        width: 1.5,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Expanded(
+          child: Semantics(
+            button: true,
+            selected: isSelected,
+            enabled: !isLocked,
+            label: isSelected
+                ? TriageStrings.deselectProgrammeA11y(label)
+                : TriageStrings.selectProgrammeA11y(label),
+            child: GestureDetector(
+              onTap: onTap,
+              child: Opacity(
+                opacity: isLocked ? 0.40 : 1.0,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: borderColor, width: borderWidth),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0A000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
                       ),
-                    ),
-                    child: isSelected
-                        ? const Icon(
-                            Icons.check_rounded,
-                            size: 13,
-                            color: Colors.white,
-                          )
-                        : null,
+                    ],
                   ),
-                ),
-                // Emoji + label + AI added — Positioned.fill so Column
-                // gets tight constraints and mainAxisAlignment.center works.
-                Positioned.fill(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(def.emoji, style: const TextStyle(fontSize: 28)),
-                        const SizedBox(height: 6),
-                        Text(
-                          label,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: labelColor,
-                          ),
-                        ),
-                        if (isPathwaySuggested && isSelected) ...[
-                          const SizedBox(height: 2),
-                          const Text(
-                            'AI added',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF6B63D4),
+                  child: Stack(
+                    children: [
+                      // Selection circle — top-right
+                      Positioned(
+                        top: 7,
+                        right: 7,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 140),
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isSelected ? AppColors.navy : Colors.transparent,
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.navy
+                                  : const Color(0xFFD1D5DB),
+                              width: 1.5,
                             ),
                           ),
-                        ],
-                      ],
-                    ),
+                          child: isSelected
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  size: 13,
+                                  color: Colors.white,
+                                )
+                              : null,
+                        ),
+                      ),
+                      // Emoji + label — Positioned.fill so Column
+                      // gets tight constraints and mainAxisAlignment.center works.
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(def.emoji, style: const TextStyle(fontSize: 28)),
+                              const SizedBox(height: 6),
+                              Text(
+                                label,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: labelColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+        // "AI added" tag below the card — uniform height so grid stays aligned.
+        SizedBox(
+          height: 17,
+          child: (isPathwaySuggested && isSelected)
+              ? const Center(
+                  child: Text(
+                    'AI added',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6B63D4),
+                    ),
+                  ),
+                )
+              : null,
+        ),
+      ],
     );
   }
 }
