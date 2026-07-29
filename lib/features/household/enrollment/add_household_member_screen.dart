@@ -52,6 +52,15 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   String? _ageSummary;
   String? _guardianName;
 
+  /// Age in whole years — used for validation and the `age` field sent to the
+  /// server. Distinct from [_ageCtrl] which shows the most human-meaningful
+  /// unit (months for babies < 1 year, days for newborns).
+  int _ageInYears = 0;
+
+  /// Unit label shown next to the age field after DOB auto-fill.
+  /// Empty for manual entry (user implies years).
+  String _ageUnit = '';
+
   final Map<String, GlobalKey> _fieldKeys = {};
   Map<String, String?> _fieldErrors = {};
 
@@ -64,9 +73,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     if (_nameCtrl.text.trim().isEmpty) return false;
     if (_gender == null) return false;
     if (_dobCtrl.text.trim().isEmpty) return false;
-    final ageYears = int.tryParse(_ageCtrl.text) ?? 99;
-    if (ageYears > 5 && _maritalStatus == null) return false;
-    if (ageYears < 1 && _guardianName == null) return false;
+    if (_ageInYears > 5 && _maritalStatus == null) return false;
+    if (_ageInYears < 1 && _guardianName == null) return false;
     return true;
   }
 
@@ -168,29 +176,35 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     int months = now.month - dob.month;
     int days = now.day - dob.day;
 
-    // Borrow days from previous month if negative.
     if (days < 0) {
       months--;
-      days += DateTime(now.year, now.month, 0).day; // last day of prev month
+      days += DateTime(now.year, now.month, 0).day;
     }
-    // Borrow months from previous year if negative.
     if (months < 0) {
       years--;
       months += 12;
     }
 
-    _ageCtrl.text = years.toString();
+    _ageInYears = years;
 
-    // Human-readable age: days if < 1 month, months if < 1 year, else years.
-    if (years == 0 && months == 0) {
-      _ageSummary = days <= 1 ? '< 1 day old' : '$days days old';
-    } else if (years == 0) {
+    // Mirror Android getAgeOrDobDisplay: show years ≥1, else months, else days.
+    if (years >= 1) {
+      _ageCtrl.text = years.toString();
+      _ageUnit = years == 1 ? 'year' : 'years';
+      _ageSummary = months > 0
+          ? '$years yr ${months}m old'
+          : '$years year${years == 1 ? '' : 's'} old';
+    } else if (months > 0) {
+      _ageCtrl.text = months.toString();
+      _ageUnit = months == 1 ? 'month' : 'months';
       _ageSummary = '$months month${months == 1 ? '' : 's'} old';
     } else {
-      _ageSummary = months > 0 ? '$years yr ${months}m old' : '$years year${years == 1 ? '' : 's'} old';
+      final d = days < 1 ? 1 : days;
+      _ageCtrl.text = d.toString();
+      _ageUnit = d == 1 ? 'day' : 'days';
+      _ageSummary = days < 1 ? '< 1 day old' : '$days days old';
     }
 
-    // Marital status not applicable for age ≤ 5.
     if (years <= 5) _maritalStatus = null;
   }
 
@@ -314,7 +328,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     final mobile = _mobileCtrl.text.trim();
     final member = HouseholdMember(
       name: _nameCtrl.text,
-      age: int.tryParse(_ageCtrl.text) ?? 0,
+      age: _ageInYears,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
       idType: _idType == 'National ID' ? 'NID' : _idType,
@@ -693,9 +707,21 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       hint: EnrollmentStrings.approximateAgeHint,
                       controller: _ageCtrl,
                       keyboardType: TextInputType.number,
+                      labelSuffix: _ageUnit.isNotEmpty
+                          ? Text(
+                              '($_ageUnit)',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textMuted,
+                              ),
+                            )
+                          : null,
                       onChanged: (v) => setState(() {
                         _ageSummary = null;
+                        _ageUnit = '';
                         final years = int.tryParse(v) ?? 99;
+                        _ageInYears = years;
                         if (years <= 5) _maritalStatus = null;
                         if (years >= 1) _guardianName = null;
                       }),
