@@ -152,61 +152,52 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       }
     }
 
-    // Initialise the household controller after first build
+    // Initialise the household controller after first build.
+    // Always reset so a second enrollment in the same session starts fresh —
+    // the ShellRoute keeps the same EnrollmentController alive across navigations.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final controller = context.read<EnrollmentController>();
-      if (controller.household == null) {
-        final auth = context.read<AuthRepository>();
-        final hierarchy = context.read<UserHierarchyService>();
+      controller.reset();
+      final auth = context.read<AuthRepository>();
+      final hierarchy = context.read<UserHierarchyService>();
 
-        // Ensure static-data has been fetched before reading the lists.
-        // prefetch() is a no-op if already loaded; safe to await here.
-        await hierarchy.prefetch();
-        if (!mounted) return;
+      await hierarchy.prefetch();
+      if (!mounted) return;
 
-        final userId = await auth.userId();
-        if (!mounted) return;
-        final villages = hierarchy.villages ?? [];
-        final subVillages = hierarchy.subVillages ?? [];
+      final userId = await auth.userId();
+      if (!mounted) return;
+      final villages = hierarchy.villages ?? [];
+      final subVillages = hierarchy.subVillages ?? [];
 
-        final firstVillage = villages.isNotEmpty ? villages.first : null;
-        // Prefer the first sub-village that belongs to the chosen village;
-        // fall back to the global first only if none map to it.
-        final matchingSubs = firstVillage == null
-            ? subVillages
-            : subVillages
-                .where((sv) => sv.villageId == firstVillage.id)
-                .toList();
-        final firstSubVillage = matchingSubs.isNotEmpty
-            ? matchingSubs.first
-            : (subVillages.isNotEmpty ? subVillages.first : null);
+      final firstVillage = villages.isNotEmpty ? villages.first : null;
+      final matchingSubs = firstVillage == null
+          ? subVillages
+          : subVillages.where((sv) => sv.villageId == firstVillage.id).toList();
+      final firstSubVillage = matchingSubs.isNotEmpty
+          ? matchingSubs.first
+          : (subVillages.isNotEmpty ? subVillages.first : null);
 
-        if (!mounted) return;
-        // Auto-select first SS worker from the SK's assigned SS list.
-        final ssWorkers = hierarchy.ssWorkers ?? [];
-        final firstSs = ssWorkers.isNotEmpty ? ssWorkers.first : null;
-        // The SS worker's own sub-villages are the authoritative pull scope;
-        // prefer them over the village-filtered top-level list.
-        final ssSeedSub = (firstSs != null && firstSs.subVillages.isNotEmpty)
-            ? firstSs.subVillages.first
-            : firstSubVillage;
-        setState(() {
-          _selectedSsWorker = firstSs;
-          // Seed the dropdown selections so a valid village + sub-village are
-          // sent even when the SK does not manually change them.
-          _selectedVillage = firstVillage;
-          _selectedSubVillage = ssSeedSub;
-        });
-        await controller.initializeHousehold(
-          healthWorkerId: _selectedSsWorker?.id ?? userId?.toString() ?? '',
-          villageId: firstVillage?.id.toString() ?? '',
-          villageName: firstVillage?.name,
-          subVillageId: firstSubVillage?.id.toString(),
-          subVillageName: firstSubVillage?.name,
-        );
-      }
+      if (!mounted) return;
+      final ssWorkers = hierarchy.ssWorkers ?? [];
+      final firstSs = ssWorkers.isNotEmpty ? ssWorkers.first : null;
+      final ssSeedSub = (firstSs != null && firstSs.subVillages.isNotEmpty)
+          ? firstSs.subVillages.first
+          : firstSubVillage;
+      setState(() {
+        _selectedSsWorker = firstSs;
+        _selectedVillage = firstVillage;
+        _selectedSubVillage = ssSeedSub;
+      });
+      await controller.initializeHousehold(
+        healthWorkerId: _selectedSsWorker?.id ?? userId?.toString() ?? '',
+        villageId: firstVillage?.id.toString() ?? '',
+        villageName: firstVillage?.name,
+        subVillageId: firstSubVillage?.id.toString(),
+        subVillageName: firstSubVillage?.name,
+      );
     });
+
   }
 
   @override
