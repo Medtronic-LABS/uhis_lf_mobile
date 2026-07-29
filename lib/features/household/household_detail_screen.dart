@@ -21,6 +21,9 @@ import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
+import 'enrollment/enrollment_entry_sheet.dart';
+import 'enrollment/nid_ocr_service.dart';
+import 'enrollment/widgets/enrollment_sticky_bar.dart';
 import '../visit/widgets/mission_queue_card.dart';
 
 /// Full details of a household member for display.
@@ -674,6 +677,33 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
 
   HouseholdDetailData get household => _household;
 
+  /// Opens the NID scanner (same modal as during enrollment add-member flow).
+  /// On scan success or skip → navigate to LinkMemberScreen pre-filled with
+  /// this household's data.
+  Future<void> _addMember() async {
+    final result = await showNidScannerForMember(context);
+    if (!mounted) return;
+    if (result == null) return;
+
+    final villageId = _household.members.firstOrNull?.villageId ?? '';
+    final extra = <String, dynamic>{
+      'householdId': _household.id ?? '',
+      'householdReferenceId': _household.id ?? '',
+      'householdName': _household.name ?? '',
+      'householdNo': _household.householdNo ?? '',
+      'villageId': villageId,
+      'villageName': _household.village ?? '',
+    };
+    if (result.status == NidScanStatus.success && result.data != null) {
+      extra['fromNidScan'] = true;
+      extra['nidNumber'] = result.data!.nidNumber;
+      extra['name'] = result.data!.name;
+      extra['dateOfBirth'] = result.data!.dateOfBirth;
+    }
+    if (!mounted) return;
+    context.push('/household/enrollment/link-member', extra: extra);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -684,6 +714,10 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       ),
       child: Scaffold(
         backgroundColor: AppColors.canvas,
+        bottomNavigationBar: EnrollmentStickyBar(
+          label: 'Add Member',
+          onPressed: _addMember,
+        ),
         body: SafeArea(
           top: false,
           bottom: false,
