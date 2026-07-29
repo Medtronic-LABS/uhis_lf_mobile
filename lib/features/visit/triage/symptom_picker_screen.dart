@@ -2110,7 +2110,7 @@ class _InlineServiceSelector extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
-          childAspectRatio: 0.88,
+          childAspectRatio: 1.05,
           children: cards
               .map((c) => _ServiceTile(
                     def: c,
@@ -2157,11 +2157,7 @@ class _ServiceTile extends StatelessWidget {
         ? AppColors.navy.withValues(alpha: 0.45)
         : AppColors.navy;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Expanded(
-          child: Semantics(
+    return Semantics(
             button: true,
             selected: isSelected,
             enabled: !isLocked,
@@ -2246,25 +2242,6 @@ class _ServiceTile extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-        ),
-        // "AI added" tag below the card — uniform height so grid stays aligned.
-        SizedBox(
-          height: 17,
-          child: (isPathwaySuggested && isSelected)
-              ? const Center(
-                  child: Text(
-                    'AI added',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF6B63D4),
-                    ),
-                  ),
-                )
-              : null,
-        ),
-      ],
     );
   }
 }
