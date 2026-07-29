@@ -781,9 +781,15 @@ class OfflineSyncService extends ChangeNotifier {
 
     // Persist households and members if found in bundle and DAOs are available
     if (households.isNotEmpty && _households != null) {
+      // Remove local placeholder rows (id = local UUID) before inserting
+      // FHIR-keyed rows from server to prevent duplicate household groups.
+      await _households.removeLocalPlaceholders(households);
       await _households.upsertMany(households);
     }
     if (members.isNotEmpty && _members != null) {
+      // Remove local placeholder rows (id = local UUID) before inserting
+      // FHIR-keyed rows from server to prevent members appearing in two groups.
+      await _members.removeLocalPlaceholders(members);
       await _members.upsertMany(members);
     }
 

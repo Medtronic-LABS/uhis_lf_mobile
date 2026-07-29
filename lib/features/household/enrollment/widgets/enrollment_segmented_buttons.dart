@@ -14,6 +14,7 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
     required this.selectedValue,
     required this.onChanged,
     this.isRequired = false,
+    this.errorText,
     super.key,
   });
 
@@ -22,6 +23,7 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
   final String? selectedValue;
   final ValueChanged<String> onChanged;
   final bool isRequired;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +58,10 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
         Container(
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            border: Border.all(color: AppColors.border, width: 1.5),
+            border: Border.all(
+              color: errorText != null ? AppColors.statusCritical : AppColors.border,
+              width: 1.5,
+            ),
             borderRadius: BorderRadius.circular(AppRadius.button),
           ),
           padding: const EdgeInsets.all(AppSpacing.xs),
@@ -113,6 +118,17 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
             ),
           ),
         ),
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            errorText!,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: AppColors.statusCritical,
+            ),
+          ),
+        ],
       ],
     );
   }

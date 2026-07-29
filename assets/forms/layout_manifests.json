@@ -1166,11 +1166,6 @@
             "fieldName": "Blood Glucose",
             "inputType": 8192,
             "isMandatory": false
-          },
-          {
-            "id": "hba1c",
-            "fieldName": "HbA1c (%)",
-            "isMandatory": false
           }
         ]
       }

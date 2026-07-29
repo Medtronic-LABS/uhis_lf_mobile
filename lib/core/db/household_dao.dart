@@ -8,6 +8,7 @@ class HouseholdEntity {
   const HouseholdEntity({
     required this.id,
     this.fhirId,
+    this.referenceId,
     this.householdNo,
     this.name,
     this.village,
@@ -32,6 +33,9 @@ class HouseholdEntity {
 
   final String id;
   final String? fhirId;
+  /// App-generated UUID from enrollment (server JSON `referenceId` field).
+  /// Stored to allow deduplication when the server later assigns a FHIR id.
+  final String? referenceId;
   final String? householdNo;
   final String? name;
   final String? village;
@@ -56,6 +60,7 @@ class HouseholdEntity {
   Map<String, dynamic> toDb() => {
         'id': id,
         'fhir_id': fhirId,
+        'reference_id': referenceId,
         'household_no': householdNo,
         'name': name,
         'village': village,
@@ -82,6 +87,7 @@ class HouseholdEntity {
     return HouseholdEntity(
       id: row['id'] as String,
       fhirId: row['fhir_id'] as String?,
+      referenceId: row['reference_id'] as String?,
       householdNo: row['household_no'] as String?,
       name: row['name'] as String?,
       village: row['village'] as String?,
@@ -158,6 +164,7 @@ class HouseholdEntity {
     return HouseholdEntity(
       id: fhirId ?? referenceId ?? '',
       fhirId: fhirId,
+      referenceId: referenceId,
       householdNo: str('householdNo') ?? str('household_no'),
       name: str('name') ?? str('householdName'),
       village: str('villageName') ?? str('village'),
@@ -199,6 +206,29 @@ class HouseholdDao {
         AppDatabase.tableHouseholds,
         h.toDb(),
         conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Delete locally-created placeholder rows that the server has confirmed
+  /// with a FHIR id. When enrollment succeeds, the server assigns a FHIR id
+  /// to the household; the sync bundle returns it as `id` alongside the
+  /// original `referenceId` (local UUID). Without cleanup, both rows exist →
+  /// members of the same household appear as separate households.
+  Future<void> removeLocalPlaceholders(
+      List<HouseholdEntity> incoming) async {
+    if (incoming.isEmpty) return;
+    final batch = _db.db.batch();
+    for (final h in incoming) {
+      final refId = h.referenceId;
+      if (refId == null || refId.isEmpty || refId == h.id) continue;
+      // refId != h.id → server assigned a new FHIR id; delete the local row
+      // that used refId as its primary key.
+      batch.delete(
+        AppDatabase.tableHouseholds,
+        where: 'id = ?',
+        whereArgs: [refId],
       );
     }
     await batch.commit(noResult: true);

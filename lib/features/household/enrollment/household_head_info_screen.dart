@@ -41,8 +41,6 @@ class HouseholdHeadInfoScreen extends StatefulWidget {
 
 class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   late TextEditingController _nameCtrl;
-  late TextEditingController _fatherCtrl;
-  late TextEditingController _motherCtrl;
   late TextEditingController _idNumberCtrl;
   late TextEditingController _mobileCtrl;
   late TextEditingController _dobCtrl;
@@ -67,8 +65,6 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     debugPrint('[_HouseholdHeadInfoScreenState] initState fromNidScan=${widget.fromNidScan}');
     super.initState();
     _nameCtrl = TextEditingController();
-    _fatherCtrl = TextEditingController();
-    _motherCtrl = TextEditingController();
     _idNumberCtrl = TextEditingController();
     _mobileCtrl = TextEditingController();
     _dobCtrl = TextEditingController();
@@ -108,8 +104,6 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     _nameCtrl.removeListener(_onFormChanged);
     _idNumberCtrl.removeListener(_onFormChanged);
     _nameCtrl.dispose();
-    _fatherCtrl.dispose();
-    _motherCtrl.dispose();
     _idNumberCtrl.dispose();
     _mobileCtrl.dispose();
     _dobCtrl.dispose();
@@ -182,8 +176,6 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
     controller.updateHead(
       name: _nameCtrl.text,
-      fatherName: _fatherCtrl.text.trim().isEmpty ? null : _fatherCtrl.text,
-      motherName: _motherCtrl.text.trim().isEmpty ? null : _motherCtrl.text,
       age: int.tryParse(_ageCtrl.text) ?? 0,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
@@ -239,34 +231,68 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Auto-filled-from-scan banner
+                    // Scanned NID editable card — shown when pre-filled from scan
                     if (_prefilledFromScan) ...[
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.xl,
-                          vertical: AppSpacing.lg,
-                        ),
                         decoration: BoxDecoration(
                           color: AppColors.tbSurface,
                           border: Border.all(color: AppColors.statusSuccessBorder),
                           borderRadius: BorderRadius.circular(AppRadius.field),
                         ),
-                        child: const Row(
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              Icons.auto_awesome,
-                              size: 15,
-                              color: AppColors.statusSuccessAction,
+                            Row(
+                              children: [
+                                const Icon(Icons.auto_awesome, size: 14, color: AppColors.statusSuccessAction),
+                                const SizedBox(width: 6),
+                                const Expanded(
+                                  child: Text(
+                                    'Scanned from NID — edit if needed',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.statusSuccessActionDark,
+                                    ),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => setState(() => _prefilledFromScan = false),
+                                  child: const Text(
+                                    'Clear',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.statusCritical,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                EnrollmentStrings.headPrefilledFromScan,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.statusSuccessActionDark,
+                            const SizedBox(height: 12),
+                            EnrollmentInputField(
+                              label: EnrollmentStrings.idNumberLabel,
+                              hint: EnrollmentStrings.idNumberHint,
+                              controller: _idNumberCtrl,
+                            ),
+                            const SizedBox(height: 10),
+                            EnrollmentInputField(
+                              label: EnrollmentStrings.headNameLabel,
+                              hint: EnrollmentStrings.headNameHint,
+                              controller: _nameCtrl,
+                              isRequired: true,
+                            ),
+                            const SizedBox(height: 10),
+                            GestureDetector(
+                              onTap: _selectDate,
+                              child: AbsorbPointer(
+                                child: EnrollmentInputField(
+                                  label: EnrollmentStrings.dateOfBirthLabel,
+                                  hint: EnrollmentStrings.dateOfBirthHint,
+                                  controller: _dobCtrl,
+                                  readOnly: true,
                                 ),
                               ),
                             ),
@@ -276,30 +302,16 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                       const SizedBox(height: 16),
                     ],
 
-                    // Household Head's Name
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.headNameLabel,
-                      hint: EnrollmentStrings.headNameHint,
-                      controller: _nameCtrl,
-                      isRequired: true,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Father's Name (Bangla on the card → manual entry)
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.fatherNameLabel,
-                      hint: EnrollmentStrings.fatherNameHint,
-                      controller: _fatherCtrl,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Mother's Name (Bangla on the card → manual entry)
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.motherNameLabel,
-                      hint: EnrollmentStrings.motherNameHint,
-                      controller: _motherCtrl,
-                    ),
-                    const SizedBox(height: 16),
+                    // Name field — shown only when not pre-filled from scan (card has it)
+                    if (!_prefilledFromScan) ...[
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.headNameLabel,
+                        hint: EnrollmentStrings.headNameHint,
+                        controller: _nameCtrl,
+                        isRequired: true,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
                     // ID Type
                     EnrollmentSegmentedButtons(
@@ -311,14 +323,16 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // ID Number
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.idNumberLabel,
-                      hint: EnrollmentStrings.idNumberHint,
-                      controller: _idNumberCtrl,
-                      isRequired: true,
-                    ),
-                    const SizedBox(height: 16),
+                    // ID Number — hidden when pre-filled from scan (card has it)
+                    if (!_prefilledFromScan) ...[
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.idNumberLabel,
+                        hint: EnrollmentStrings.idNumberHint,
+                        controller: _idNumberCtrl,
+                        isRequired: true,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
                     // Mobile Number + Not Available checkbox
                     if (!_mobileNotAvailable) ...[
@@ -361,19 +375,21 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Date of Birth (date picker)
-                    GestureDetector(
-                      onTap: _selectDate,
-                      child: AbsorbPointer(
-                        child: EnrollmentInputField(
-                          label: EnrollmentStrings.dateOfBirthLabel,
-                          hint: EnrollmentStrings.dateOfBirthHint,
-                          controller: _dobCtrl,
-                          readOnly: true,
+                    // Date of Birth — hidden when pre-filled from scan (card has it)
+                    if (!_prefilledFromScan) ...[
+                      GestureDetector(
+                        onTap: _selectDate,
+                        child: AbsorbPointer(
+                          child: EnrollmentInputField(
+                            label: EnrollmentStrings.dateOfBirthLabel,
+                            hint: EnrollmentStrings.dateOfBirthHint,
+                            controller: _dobCtrl,
+                            readOnly: true,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 16),
+                    ],
 
                     // Age (auto-calculated from DOB, manually editable)
                     EnrollmentInputField(

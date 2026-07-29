@@ -331,6 +331,30 @@ class MemberDao {
     await batch.commit(noResult: true);
   }
 
+  /// Delete locally-created placeholder rows that the server has now confirmed
+  /// with a FHIR primary key. When enrollment succeeds, the server assigns a
+  /// FHIR `id` to each member; the sync bundle returns it as `id` alongside
+  /// the original `referenceId` (local UUID). Without cleanup, both the local
+  /// UUID row and the new FHIR-keyed row exist → same member appears in two
+  /// separate households in getAllGroupedByHousehold.
+  Future<void> removeLocalPlaceholders(
+      List<HouseholdMemberEntity> incoming) async {
+    if (incoming.isEmpty) return;
+    final batch = _db.db.batch();
+    for (final m in incoming) {
+      final refId = m.referenceId;
+      if (refId == null || refId.isEmpty || refId == m.id) continue;
+      // refId != m.id → server assigned a new FHIR id; delete the local row
+      // that used refId as its primary key (id column).
+      batch.delete(
+        AppDatabase.tableMembers,
+        where: 'id = ?',
+        whereArgs: [refId],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   /// Get all members for a household (LOCAL query, no network).
   Future<List<HouseholdMemberEntity>> getByHouseholdId(String householdId) async {
     final rows = await _db.db.query(
@@ -475,7 +499,15 @@ class MemberDao {
     final grouped = <String, List<HouseholdMemberEntity>>{};
     for (final row in rows) {
       final member = HouseholdMemberEntity.fromDb(row);
-      final hhId = member.householdId ?? '';
+      // Prefer householdReferenceId as the canonical group key:
+      // - Locally-enrolled members: householdId = householdReferenceId = hhUUID
+      // - Server-synced members: householdId = FHIR household ID,
+      //   householdReferenceId = same hhUUID from the server response
+      // Using the referenceId merges both into the same group.
+      final hhId = (member.householdReferenceId?.isNotEmpty == true
+              ? member.householdReferenceId
+              : member.householdId) ??
+          '';
       grouped.putIfAbsent(hhId, () => []).add(member);
     }
     return grouped;

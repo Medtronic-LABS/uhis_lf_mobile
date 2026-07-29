@@ -662,7 +662,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         int.tryParse(member?.referenceId ?? '') ??
         int.tryParse(member?.id ?? '') ??
         0;
-    final memberId = member?.id;
+    final memberId = member?.referenceId?.isNotEmpty == true
+        ? member!.referenceId
+        : member?.id;
     // Mirror Android: use sub-village ID for assessment scope so that Android's
     // member-assessment-history pull (scoped to [203, 204, 206]) can find
     // Flutter-submitted assessments. Parent villageId (34) is invisible to it.

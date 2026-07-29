@@ -16,6 +16,7 @@ class EnrollmentDropdown extends StatelessWidget {
     required this.onChanged,
     this.hint = 'Select…',
     this.isRequired = false,
+    this.errorText,
   });
 
   final String label;
@@ -24,6 +25,7 @@ class EnrollmentDropdown extends StatelessWidget {
   final ValueChanged<String?> onChanged;
   final String hint;
   final bool isRequired;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -56,25 +58,19 @@ class EnrollmentDropdown extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Container(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            border: Border.all(color: AppColors.border, width: 1.5),
+            border: Border.all(
+              color: errorText != null ? AppColors.statusCritical : AppColors.border,
+              width: 1.5,
+            ),
             borderRadius: BorderRadius.circular(AppRadius.button),
           ),
-          child: DropdownButtonFormField<String>(
-            initialValue: value,
+          child: DropdownButton<String>(
+            value: options.contains(value) ? value : null,
             isExpanded: true,
-            decoration: const InputDecoration(
-              contentPadding: EdgeInsets.fromLTRB(
-                AppSpacing.xxxl,
-                AppSpacing.xl,
-                AppSpacing.xxxl,
-                AppSpacing.xl,
-              ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
+            underline: const SizedBox.shrink(),
             hint: Text(
               hint,
               style: const TextStyle(
@@ -110,6 +106,17 @@ class EnrollmentDropdown extends StatelessWidget {
             onChanged: onChanged,
           ),
         ),
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            errorText!,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: AppColors.statusCritical,
+            ),
+          ),
+        ],
       ],
     );
   }

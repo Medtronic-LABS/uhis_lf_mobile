@@ -220,7 +220,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
           // Use head's name as household name, or fallback to "Household #ID"
           final householdName = head.name != null
               ? "${head.name}'s Household"
-              : (hhId.isNotEmpty ? 'Household #$hhId' : null);
+              : (hhId.isNotEmpty ? '#$hhId' : null);
 
           items.add(
             _HouseholdItem(
@@ -809,7 +809,7 @@ class _HouseholdCard extends StatelessWidget {
         headName ??
         item.name ??
         (item.householdNo != null
-            ? 'Household #${item.householdNo}'
+            ? '#${item.householdNo}'
             : HouseholdListStrings.unnamedHousehold);
 
     return Container(
@@ -1508,7 +1508,7 @@ class _WireframeMemberRow extends StatelessWidget {
     final (badgeBg, badgeFg) = programmeBadgeColors(primaryProgrammeOf(programmes));
 
     final address = [
-      householdNo != null ? 'House #$householdNo' : null,
+      householdNo != null ? '#$householdNo' : null,
       householdName,
     ].whereType<String>().join(', ');
 

@@ -372,7 +372,7 @@ class PatientBadgeRow extends StatelessWidget {
     );
 
     final address = [
-      householdNo != null ? 'House #$householdNo' : null,
+      householdNo != null ? '#$householdNo' : null,
       householdName,
     ].whereType<String>().join(', ');
 

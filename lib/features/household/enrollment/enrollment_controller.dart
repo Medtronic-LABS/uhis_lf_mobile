@@ -62,14 +62,14 @@ class EnrollmentController extends ChangeNotifier {
   int get totalMembers => (_members.length) + (_householdHead != null ? 1 : 0);
 
   /// Initialize a new household enrollment with auto-generated household number.
-  void initializeHousehold({
+  Future<void> initializeHousehold({
     required String healthWorkerId,
     required String villageId,
     String? villageName,
     String? subVillageId,
     String? subVillageName,
-  }) {
-    final householdNumber = _generateHouseholdNumber();
+  }) async {
+    final householdNumber = await _generateHouseholdNumber();
     _household = Household(
       householdNumber: householdNumber,
       healthWorkerId: healthWorkerId,
@@ -125,8 +125,6 @@ class EnrollmentController extends ChangeNotifier {
   /// Update household head information (step 2).
   void updateHead({
     required String name,
-    String? fatherName,
-    String? motherName,
     required int age,
     required String gender,
     required String dateOfBirth,
@@ -140,8 +138,6 @@ class EnrollmentController extends ChangeNotifier {
   }) {
     _householdHead = HouseholdHeadInfo(
       name: name,
-      fatherName: fatherName,
-      motherName: motherName,
       age: age,
       gender: gender,
       dateOfBirth: dateOfBirth,
@@ -194,9 +190,6 @@ class EnrollmentController extends ChangeNotifier {
     if (_household!.numberOfMembers <= 0) {
       errors.add('Number of members must be greater than 0');
     }
-    if (_household!.houseNumber.trim().isEmpty) {
-      errors.add('House number is required');
-    }
     if (_household!.disabilityQuestion &&
         (_household!.disabilityDetails?.trim().isEmpty ?? true)) {
       errors.add('Please specify disability details');
@@ -222,6 +215,10 @@ class EnrollmentController extends ChangeNotifier {
     }
     if (_householdHead!.maritalStatus.isEmpty) {
       errors.add('Marital status is required');
+    }
+    if (_householdHead!.mobileAvailable &&
+        (_householdHead!.mobileNumber?.trim().isEmpty ?? true)) {
+      errors.add('Mobile number is required');
     }
 
     return errors;
@@ -460,13 +457,11 @@ class EnrollmentController extends ChangeNotifier {
   }
 
   /// Generate a numeric household number matching Android's fallback pattern
-  /// (System.currentTimeMillis()). Android's primary path uses HH{count+1}
-  /// which requires a per-sub-village DB count; without that lookup we use the
-  /// timestamp as the authoritative fallback, identical to Android's:
-  ///   householdEntity.householdNo = "HH${System.currentTimeMillis()}"
-  /// We store it as a numeric string so it serialises as a JSON number.
-  String _generateHouseholdNumber() {
-    return DateTime.now().millisecondsSinceEpoch.toString();
+  /// Matches Android's HouseRegistrationViewModel.generateHouseholdNumber():
+  ///   val householdNumber = "HH${currentHouseholdsCount + 1}"
+  Future<String> _generateHouseholdNumber() async {
+    final count = await _householdDao?.count() ?? 0;
+    return 'HH${count + 1}';
   }
 
   static bool _isNetworkError(DioException e) =>

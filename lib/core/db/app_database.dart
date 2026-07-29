@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 29;
+  static const int schemaVersion = 30;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -115,6 +115,7 @@ class AppDatabase {
       CREATE TABLE $tableHouseholds (
         id TEXT PRIMARY KEY,
         fhir_id TEXT,
+        reference_id TEXT,
         household_no TEXT,
         name TEXT,
         village TEXT,
@@ -1427,6 +1428,13 @@ class AppDatabase {
           rank INTEGER NOT NULL DEFAULT 0,
           synced_at INTEGER NOT NULL
         )''');
+    }
+    if (from < 30) {
+      // v30 — Add reference_id to households for local-placeholder deduplication.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableHouseholds ADD COLUMN reference_id TEXT');
+      } catch (_) {/* column already present — no-op */}
     }
   }
 
