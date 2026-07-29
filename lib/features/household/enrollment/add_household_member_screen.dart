@@ -753,7 +753,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     const SizedBox(height: 20),
 
                     // ── Q6: Marital Status — hidden for age ≤ 5 ───────────
-                    if ((int.tryParse(_ageCtrl.text) ?? 99) > 5) ...[
+                    if (_ageInYears > 5) ...[
                       SizedBox(key: _key('maritalStatus'), height: 0),
                       _QuestionLabel(number: 'Q6', text: 'Marital Status'),
                       const SizedBox(height: 10),
@@ -772,7 +772,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ],
 
                     // ── Guardian — required for members under 18 ──────────
-                    if ((int.tryParse(_ageCtrl.text) ?? 99) < 1) ...[
+                    if (_ageInYears < 1) ...[
                       SizedBox(key: _key('guardian'), height: 0),
                       _QuestionLabel(number: 'Q7', text: 'Guardian'),
                       const SizedBox(height: 10),
