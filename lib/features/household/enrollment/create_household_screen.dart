@@ -94,7 +94,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       if (_mobileCtrl.text.trim().isEmpty) 'mobile': req,
       if (_dobCtrl.text.trim().isEmpty) 'dob': 'Date of birth required',
       if (_gender == null) 'gender': req,
-      if (_maritalStatus == null) 'maritalStatus': req,
+      if ((int.tryParse(_ageCtrl.text) ?? 99) > 5 && _maritalStatus == null) 'maritalStatus': req,
     };
   }
 
@@ -321,7 +321,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       idNumber: _idType == 'Not Available' ? null : _idNumberCtrl.text,
       mobileNumber: _mobileCtrl.text,
       mobileAvailable: true,
-      maritalStatus: _maritalStatus!,
+      maritalStatus: _maritalStatus ?? '',
       disabilityStatus: _disabilityStatus ?? 'Absent',
       nidScanned: widget.fromNidScan && _prefilledFromScan,
     );
@@ -755,6 +755,11 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       hint: EnrollmentStrings.ageHint,
                       controller: _ageCtrl,
                       keyboardType: TextInputType.number,
+                      onChanged: (v) {
+                        if ((int.tryParse(v) ?? 99) <= 5) {
+                          setState(() => _maritalStatus = null);
+                        }
+                      },
                     ),
                     const SizedBox(height: 14),
 
@@ -772,20 +777,22 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    SizedBox(key: _key('maritalStatus'), height: 0),
-                    EnrollmentDropdown(
-                      label: EnrollmentStrings.maritalStatusLabel,
-                      options: EnrollmentStrings.maritalStatusesV2,
-                      value: _maritalStatus,
-                      onChanged: (v) => setState(() {
-                        _maritalStatus = v;
-                        _fieldErrors.remove('maritalStatus');
-                      }),
-                      hint: 'Select status',
-                      isRequired: true,
-                      errorText: _fieldErrors['maritalStatus'],
-                    ),
-                    const SizedBox(height: 14),
+                    if ((int.tryParse(_ageCtrl.text) ?? 99) > 5) ...[
+                      SizedBox(key: _key('maritalStatus'), height: 0),
+                      EnrollmentDropdown(
+                        label: EnrollmentStrings.maritalStatusLabel,
+                        options: EnrollmentStrings.maritalStatusesV2,
+                        value: _maritalStatus,
+                        onChanged: (v) => setState(() {
+                          _maritalStatus = v;
+                          _fieldErrors.remove('maritalStatus');
+                        }),
+                        hint: 'Select status',
+                        isRequired: true,
+                        errorText: _fieldErrors['maritalStatus'],
+                      ),
+                      const SizedBox(height: 14),
+                    ],
 
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.disabilityStatusLabel,
