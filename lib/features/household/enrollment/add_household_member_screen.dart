@@ -218,9 +218,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         final nid = data.nidNumber;
         if (nid != null) await _lookupExisting(nid);
       case NidScanStatus.notFound:
-        _showSnack(EnrollmentStrings.nidScanNotFound);
+        break;
       case NidScanStatus.error:
-        _showSnack(EnrollmentStrings.nidScanError);
+        break;
       case NidScanStatus.cancelled:
         break;
       case NidScanStatus.skipped:
@@ -436,8 +436,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       label: EnrollmentStrings.idTypeLabel,
                       options: EnrollmentStrings.idTypesV2,
                       selectedValue: _idType,
+                      allowDeselect: false,
                       onChanged: (v) => setState(() {
-                        _idType = v;
+                        _idType = v ?? 'BRN';
                         if (_idType != 'National ID') {
                           _nidScanned = false;
                           _brnCtrl.clear();

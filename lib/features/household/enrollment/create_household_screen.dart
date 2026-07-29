@@ -425,41 +425,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     const EnrollmentSectionHeader(
                       title: EnrollmentStrings.householdInfoSectionHeader,
                     ),
-                    const SizedBox(height: 12),
-
-                    // Auto-generated household number — read-only badge
-                    if (controller.household?.householdNumber != null)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.navy.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: AppColors.navy.withValues(alpha: 0.2)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.tag_rounded,
-                                  size: 14,
-                                  color: AppColors.navy.withValues(alpha: 0.7)),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Household No: ${controller.household!.householdNumber}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.navy.withValues(alpha: 0.8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
 
                     SizedBox(key: _key('ssWorker'), height: 0),
                     Builder(builder: (context) {
@@ -579,6 +545,40 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 14),
 
+                    // Auto-generated household number — read-only badge
+                    if (controller.household?.householdNumber != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.navy.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: AppColors.navy.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.tag_rounded,
+                                  size: 14,
+                                  color: AppColors.navy.withValues(alpha: 0.7)),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Household No: ${controller.household!.householdNumber}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.navy.withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 14),
+
                     SizedBox(key: _key('totalMembers'), height: 0),
                     EnrollmentInputField(
                       label: EnrollmentStrings.totalMembersLabel,
@@ -613,7 +613,8 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.disabilityAnyPersonLabel,
                       options: EnrollmentStrings.disabilityYesNo,
                       selectedValue: _hasDisability,
-                      onChanged: (v) => setState(() => _hasDisability = v),
+                      allowDeselect: false,
+                      onChanged: (v) => setState(() => _hasDisability = v ?? 'No'),
                     ),
 
                     if (_hasDisability == 'Yes') ...[
