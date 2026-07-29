@@ -182,9 +182,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
         final nid = result.data?.nidNumber;
         if (nid != null) _lookupExisting(nid);
       case NidScanStatus.notFound:
-        _showSnack(EnrollmentStrings.nidScanNotFound);
       case NidScanStatus.error:
-        _showSnack(EnrollmentStrings.nidScanError);
       case NidScanStatus.cancelled:
       case NidScanStatus.skipped:
         break;
@@ -205,12 +203,6 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     } on ApiException catch (e) {
       debugPrint('EnrollmentOverlay: patient lookup failed: $e');
     }
-  }
-
-  void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-    );
   }
 
   @override
@@ -381,23 +373,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
       case NidScanStatus.success:
         if (mounted) Navigator.of(context).pop(result);
       case NidScanStatus.notFound:
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(EnrollmentStrings.nidScanNotFound),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
       case NidScanStatus.error:
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(EnrollmentStrings.nidScanError),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
       case NidScanStatus.cancelled:
       case NidScanStatus.skipped:
         break;
