@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
@@ -89,9 +90,58 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   bool _loading = false;
   String? _error;
 
+  final SpeechToText _speech = SpeechToText();
+  bool _speechAvail = false;
+  bool _listening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _speech
+        .initialize(
+          onStatus: _onSpeechStatus,
+          onError: (_) {
+            if (mounted) _setListening(false);
+          },
+        )
+        .then((ok) {
+      if (mounted) setState(() => _speechAvail = ok);
+    });
+  }
+
+  void _onSpeechStatus(String status) {
+    if (status == 'done' || status == 'notListening') _setListening(false);
+  }
+
+  void _setListening(bool value) {
+    if (!mounted) return;
+    setState(() => _listening = value);
+  }
+
+  void _startListening() {
+    if (!_speechAvail || _listening) return;
+    _speech.listen(
+      onResult: (r) {
+        final words = r.recognizedWords;
+        _input.text = words;
+        _input.selection =
+            TextSelection.fromPosition(TextPosition(offset: words.length));
+        if (r.finalResult) _setListening(false);
+      },
+      listenOptions: SpeechListenOptions(pauseFor: const Duration(seconds: 3)),
+    );
+    _setListening(true);
+  }
+
+  Future<void> _stopListening() async {
+    await _speech.stop();
+    _setListening(false);
+  }
+
   @override
   void dispose() {
     debugPrint('[_PatientAiSheetState] dispose');
+    _speech.stop();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -457,6 +507,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   }
 
   Widget _inputBar(ColorScheme scheme, double bottomInset) {
+    final borderColor = _listening ? Colors.red : scheme.outline;
     return Container(
       padding: EdgeInsets.fromLTRB(12, 8, 12, 10 + bottomInset),
       decoration: BoxDecoration(
@@ -471,18 +522,51 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
               Expanded(
                 child: TextField(
                   controller: _input,
+                  readOnly: _listening,
+                  enabled: !_loading,
                   textInputAction: TextInputAction.send,
                   onSubmitted: _send,
                   decoration: InputDecoration(
-                    hintText: PatientAiStrings.inputHint,
+                    hintText: _listening
+                        ? AssistantStrings.voiceListening
+                        : PatientAiStrings.inputHint,
                     isDense: true,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide(color: borderColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide(color: borderColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide(
+                        color: _listening ? Colors.red : scheme.primary,
+                      ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
+              if (_speechAvail)
+                GestureDetector(
+                  onTap: _listening ? _stopListening : _startListening,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: _listening ? Colors.red : scheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _listening ? Icons.stop_rounded : Icons.mic_none_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              if (_speechAvail) const SizedBox(width: 8),
               IconButton.filled(
                 onPressed: _loading ? null : () => _send(_input.text),
                 icon: const Icon(Icons.send_rounded),
