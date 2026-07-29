@@ -358,46 +358,15 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(c.chipLine,
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-          ),
         ],
       ),
     );
   }
 
   Widget _intro(ColorScheme scheme) {
-    final c = widget.ctx;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.auto_awesome, size: 16, color: scheme.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(c.summary,
-                    style: const TextStyle(fontSize: 13, height: 1.4)),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
         Text(PatientAiStrings.intro,
             style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
         const SizedBox(height: 12),
