@@ -48,6 +48,7 @@ class PatientOrMemberData {
     this.householdHeadPhone,
     this.vitalHistory = const [],
     this.pregnancySnapshot,
+    this.enrolledAt,
   });
 
   final PatientWithProgrammes? localPatient;
@@ -72,6 +73,8 @@ class PatientOrMemberData {
   final List<MemberAssessment> localAssessments;
   final List<PatientVisit> recentVisits;
   final String? memberId;
+  /// When the member was first enrolled in the app (from local DB `created_at`).
+  final DateTime? enrolledAt;
 
   bool get hasData => localPatient != null || remoteMember != null;
 
@@ -157,6 +160,7 @@ class PatientOrMemberData {
       householdHeadPhone: householdHeadPhone ?? this.householdHeadPhone,
       vitalHistory: vitalHistory ?? this.vitalHistory,
       pregnancySnapshot: pregnancySnapshot ?? this.pregnancySnapshot,
+      enrolledAt: enrolledAt,
     );
   }
 }
@@ -396,6 +400,7 @@ class _PatientContextScreenState
       syncSvc.lastSyncedAt(),
       vitalsRepo.recentByVisit(widget.patientId).catchError((_) => <VisitVitals>[]),
       pregnancyDao.byPatient(widget.patientId).catchError((_) => null),
+      memberRepo.enrolledAtFor(widget.patientId).catchError((_) => null),
     ]);
     final resolvedMemberId = phase1[0] as String?;
     final localPatient = phase1[1] as PatientWithProgrammes?;
@@ -403,6 +408,7 @@ class _PatientContextScreenState
     final lastSync = phase1[3] as DateTime?;
     final vitalHistory = phase1[4] as List<VisitVitals>;
     final pregnancySnapshot = phase1[5] as PregnancySnapshotRow?;
+    final enrolledAt = phase1[6] as DateTime?;
     debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
         ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
@@ -472,6 +478,7 @@ class _PatientContextScreenState
         memberId: resolvedMemberId,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
+        enrolledAt: enrolledAt,
       );
       if (mounted) {
         setState(() {
@@ -557,6 +564,7 @@ class _PatientContextScreenState
         householdHeadPhone: memberHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
+        enrolledAt: enrolledAt,
       );
     }
 
@@ -633,6 +641,7 @@ class _PatientContextScreenState
         householdHeadPhone: prePassedHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
+        enrolledAt: enrolledAt,
       );
     }
 
@@ -1048,8 +1057,9 @@ const _kDotEpi      = Color(0xFF1D4ED8); // blue-700
 const _kDotTb       = Color(0xFF059669); // emerald-600
 const _kDotImci     = Color(0xFFDC2626); // red-600
 const _kDotFp       = Color(0xFF7C3AED); // violet-600
-const _kDotGeneral  = Color(0xFF6B7280); // gray-500
-const _kDotPending  = Color(0xFFEF4444); // red-500
+const _kDotGeneral     = Color(0xFF6B7280); // gray-500
+const _kDotPending     = Color(0xFFEF4444); // red-500
+const _kDotEnrollment  = Color(0xFF0891B2); // cyan-600
 
 const _kBadgeCriticalBg = Color(0xFFFEE2E2);
 const _kBadgeCriticalFg = Color(0xFFDC2626);
@@ -1115,6 +1125,14 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     case Programme.anc:
     case Programme.pw:
       emoji = '🤰';
+      if (prog == Programme.pw) {
+        // PWPROFILE is the pregnancy registration form, not a clinical visit.
+        title = PatientProfileStrings.pregnancyRegistered;
+        category = PatientProfileStrings.pregnancyRegistrationCategory;
+        dotColor = _kDotAnc;
+        description = 'Pregnant woman profile created — ANC care started';
+        break;
+      }
       final vn = raw['ancVisitNumber']?.toString()
           ?? (raw['medicalHistoryPhysicalExamination'] is Map
               ? (raw['medicalHistoryPhysicalExamination'] as Map)['ancVisitNumber']?.toString()
@@ -1541,6 +1559,25 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       entries.add(entry);
     }
   }
+
+  // Enrollment milestone — pinned at bottom (oldest event in the patient's history).
+  if (data.enrolledAt != null) {
+    entries.add(_TimelineEntry(
+      emoji: '📋',
+      title: PatientProfileStrings.enrolledInApp,
+      relativeDate: _relativeDate(data.enrolledAt!),
+      category: PatientProfileStrings.enrollmentMilestone,
+      date: data.enrolledAt!,
+      dotColor: _kDotEnrollment,
+      description: 'Patient added to Apon Sushashthya',
+      badge: 'Enrolled',
+      badgeColor: const Color(0xFFE0F2FE),
+      badgeFgColor: const Color(0xFF0369A1),
+    ));
+  }
+
+  // Sort newest-first so the enrollment milestone naturally falls at the bottom.
+  entries.sort((a, b) => b.date.compareTo(a.date));
 
   return entries;
 }
