@@ -3297,7 +3297,6 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.smartphone_rounded, size: 20),
               const SizedBox(width: 10),
@@ -3306,15 +3305,16 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
+                  color: Colors.white,
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(
                 '· ${NabaStrings.callDoctorNowBn}',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
-                  color: Colors.white.withValues(alpha: 0.85),
+                  color: Colors.white.withValues(alpha: 0.82),
                 ),
               ),
             ],
