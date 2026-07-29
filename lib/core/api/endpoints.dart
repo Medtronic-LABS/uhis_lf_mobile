@@ -230,36 +230,36 @@ class Endpoints {
   static String scribeUploadComplete(String uploadId) =>
       '/ai-scribe/upload/$uploadId/complete';
 
-  // ── Micro-coaching ────────────────────────────────────────────────────────
+  // ── Micro-coaching (spice-coaching / medtronics-api) ─────────────────────
   // Base URL: [AppConfig.coachingServiceUrl] (defaults to the shared UHIS dev
   // backend — override with --dart-define=COACHING_SERVICE_URL=... if needed).
   /// Full module + card + quiz bundle (incremental via `?since=`).
-  static const String coachingSyncModules = '/micro-coaching/sync/modules';
+  static const String coachingSyncModules = '/medtronics-api/sync/modules';
 
   /// CHW gap profile + module completions.
-  static const String coachingSyncGaps = '/micro-coaching/sync/gaps';
+  static const String coachingSyncGaps = '/medtronics-api/sync/gaps';
 
   /// Today's ordered module suggestions (gap-priority ranked).
-  static const String coachingMorningCards = '/micro-coaching/morning/cards';
+  static const String coachingMorningCards = '/medtronics-api/morning/cards';
 
   /// Ordered list of today's modules by CHW gap priority.
-  static const String coachingMorning = '/micro-coaching/morning';
+  static const String coachingMorning = '/medtronics-api/morning';
 
   /// Card-viewed / quiz-attempted telemetry events.
   static const String coachingTelemetryEvents =
-      '/micro-coaching/telemetry/events';
+      '/medtronics-api/telemetry/events';
 
   /// Coaching RAG: grounded Q&A from published module embeddings.
-  static const String coachingRagQuery = '/micro-coaching/coaching/rag-query';
+  static const String coachingRagQuery = '/medtronics-api/coaching/rag-query';
 
   /// Frequent chat questions mined from telemetry (suggestion chips).
-  static const String coachingSyncChatFaqs = '/micro-coaching/sync/chat-faqs';
+  static const String coachingSyncChatFaqs = '/medtronics-api/sync/chat-faqs';
 
   /// Published source documents (knowledge library) linked to published modules.
   static const String coachingSyncSourceDocuments =
-      '/micro-coaching/sync/source-documents/published';
+      '/medtronics-api/sync/source-documents/published';
 
   /// Presigned GET URLs for module thumbnails (batch POST, max 50 IDs).
   static const String coachingModuleThumbnails =
-      '/micro-coaching/sync/modules/presigned-thumbnails';
+      '/medtronics-api/sync/modules/presigned-thumbnails';
 }

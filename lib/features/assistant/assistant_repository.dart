@@ -56,6 +56,7 @@ class AssistantRepository {
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 45),
+      validateStatus: (s) => s != null && s < 500,
     ));
     ConsoleLog.banner(
         '[PayloadDebug] coaching-rag → $baseUrl${Endpoints.coachingRagQuery}\nq=$question');
@@ -65,6 +66,25 @@ class AssistantRepository {
         data: {'question': question, 'response_language': 'en'},
       );
       ConsoleLog.step('[PayloadDebug] coaching-rag → ${response.statusCode}');
+      final statusCode = response.statusCode ?? 0;
+      if (statusCode == 404) {
+        throw AssistantException(
+          'Coaching assistant is being set up. Please try again later.',
+          statusCode: 404,
+        );
+      }
+      if (statusCode >= 400) {
+        throw AssistantException(
+          NetworkErrorMapper.friendly(
+            DioException(
+              requestOptions: response.requestOptions,
+              response: response,
+              type: DioExceptionType.badResponse,
+            ),
+          ),
+          statusCode: statusCode,
+        );
+      }
       final data = response.data;
       if (data == null) throw const AssistantException('Empty response');
       final answer = data['answer'] as String?;
