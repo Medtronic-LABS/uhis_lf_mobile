@@ -419,7 +419,7 @@ class MissionQueueItem {
   /// so screens never inline the prefix.
   String get householdDisplay =>
       (householdNumber != null && householdNumber!.isNotEmpty)
-          ? 'House #${householdNumber!}'
+          ? '#${householdNumber!}'
           : '';
 
   /// Returns the most representative programme for routing the visit flow.

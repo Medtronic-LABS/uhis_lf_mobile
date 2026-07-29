@@ -1508,7 +1508,7 @@ class _WireframeMemberRow extends StatelessWidget {
     final (badgeBg, badgeFg) = programmeBadgeColors(primaryProgrammeOf(programmes));
 
     final address = [
-      householdNo != null ? 'House #$householdNo' : null,
+      householdNo != null ? '#$householdNo' : null,
       householdName,
     ].whereType<String>().join(', ');
 

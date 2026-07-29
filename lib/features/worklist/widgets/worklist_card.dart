@@ -88,7 +88,7 @@ class WorklistCard extends StatelessWidget {
     if (entry.householdName != null) {
       demographics.add(entry.householdName!);
     } else if (entry.householdNo != null) {
-      demographics.add('House #${entry.householdNo}');
+      demographics.add('#${entry.householdNo}');
     }
 
     return Card(

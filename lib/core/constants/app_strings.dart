@@ -1467,7 +1467,7 @@ abstract final class MissionDashboardStrings {
       ? 'কোনো রোগীর রেকর্ড নেই — শুরু করতে কেস খুলুন।'
       : 'No patient record — open the case to begin.';
   static String houseNumber(String no) =>
-      AppLocale.isBangla ? 'বাড়ি #$no' : 'House #$no';
+      '#$no';
   static String moreVisits(int n) {
     if (AppLocale.isBangla) {
       return n == 1 ? '+ আরও 1টি ভিজিট আজ' : '+ আরও $n টি ভিজিট আজ';

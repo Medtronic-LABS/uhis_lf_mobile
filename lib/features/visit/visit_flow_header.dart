@@ -89,7 +89,7 @@ class VisitFlowHeader extends StatelessWidget {
         ? '${patientName ?? '—'} $ageGender'
         : patientName ?? '—';
     final subtitle = householdId != null && householdId!.isNotEmpty
-        ? 'House #$householdId'
+        ? '#$householdId'
         : null;
 
     return Material(
