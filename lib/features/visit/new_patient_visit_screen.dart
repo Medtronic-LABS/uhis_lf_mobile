@@ -584,6 +584,35 @@ class _ServicesSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Text(
+              NewPatientVisitStrings.eligibleServicesHeader,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEDE9FE),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                NewPatientVisitStrings.eligibleServicesTag,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF7C3AED),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         _ServiceGrid(
           showPregnancySection: showPregnancySection,
           showNcd: showNcd,
