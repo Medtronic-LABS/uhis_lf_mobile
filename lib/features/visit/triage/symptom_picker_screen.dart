@@ -23,6 +23,7 @@ import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'programme_grid_sync.dart';
 import 'symptom_catalog.dart';
+import 'unified_symptom_catalog.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
 
@@ -453,15 +454,33 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   /// Keeps [_selectedProgrammes] and [_pathwayActivatedProgrammes] in sync
-  /// with the pathway engine whenever symptoms change (AI Scribe pre-tick or
-  /// manual selection). Only adds newly activated programmes — never removes
-  /// an SK selection, and never resurrects a programme in
-  /// [_skDismissedProgrammes].
+  /// whenever symptoms change (AI Scribe pre-tick or manual selection).
+  ///
+  /// Two complementary sources feed auto-selection:
+  ///   1. PathwayEngine ([vm.allPathways]) — WHO-derived rule activations.
+  ///   2. [UnifiedSymptomCatalog] direct mapping — each [UnifiedSymptomDef]
+  ///      declares the programmes it belongs to; selecting a symptom
+  ///      immediately surfaces all relevant services regardless of whether
+  ///      a PathwayEngine rule fires for that exact symptom combination.
+  ///
+  /// Only adds newly relevant programmes — never removes an SK selection, and
+  /// never resurrects a programme in [_skDismissedProgrammes].
   void _syncPathwaysToServiceGrid() {
     if (!mounted) return;
     final vm = _viewModel;
     if (vm == null) return;
+
+    // Source 1: rule-engine activations.
     final activated = vm.allPathways.map((p) => p.programme).toSet();
+
+    // Source 2: catalogue direct symptom→programme mapping.
+    // Each UnifiedSymptomDef.programmes names every service that symptom
+    // belongs to, providing finer-grained auto-selection than the rule engine.
+    for (final code in vm.selectedSymptoms) {
+      final def = UnifiedSymptomCatalog.byCode(code);
+      if (def != null) activated.addAll(def.programmes);
+    }
+
     final unseen = ProgrammeGridSync.additionsFromPathways(
       activated: activated,
       selected: _selectedProgrammes,
