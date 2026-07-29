@@ -10,6 +10,7 @@ import '../../core/debug/console_log.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/assessment_dao.dart';
+import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
@@ -685,6 +686,14 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     if (!mounted) return;
     if (result == null) return;
 
+    // Use FHIR household ID for server sync; fall back to local canonical key
+    // for unsynced households. Canonical key (_household.id) is the local
+    // sequential number and will be rejected by fhir-mapper if sent as-is.
+    final localId = _household.id ?? '';
+    final householdEntity =
+        await context.read<HouseholdDao>().getById(localId);
+    final serverHouseholdId = householdEntity?.fhirId ?? localId;
+
     final villageId = _household.members.firstOrNull?.villageId ?? '';
     final memberNames = _household.members
         .map((m) => m.name)
@@ -692,8 +701,8 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         .where((n) => n.isNotEmpty)
         .toList();
     final extra = <String, dynamic>{
-      'householdId': _household.id ?? '',
-      'householdReferenceId': _household.id ?? '',
+      'householdId': serverHouseholdId,
+      'householdReferenceId': localId,
       'householdName': _household.name ?? '',
       'householdNo': _household.householdNo ?? '',
       'villageId': villageId,
