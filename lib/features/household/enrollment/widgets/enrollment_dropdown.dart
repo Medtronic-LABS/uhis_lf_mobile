@@ -58,6 +58,7 @@ class EnrollmentDropdown extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Container(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
             border: Border.all(
@@ -66,20 +67,10 @@ class EnrollmentDropdown extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(AppRadius.button),
           ),
-          child: DropdownButtonFormField<String>(
-            initialValue: value,
+          child: DropdownButton<String>(
+            value: options.contains(value) ? value : null,
             isExpanded: true,
-            decoration: const InputDecoration(
-              contentPadding: EdgeInsets.fromLTRB(
-                AppSpacing.xxxl,
-                AppSpacing.xl,
-                AppSpacing.xxxl,
-                AppSpacing.xl,
-              ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
+            underline: const SizedBox.shrink(),
             hint: Text(
               hint,
               style: const TextStyle(
