@@ -4740,8 +4740,8 @@ abstract final class EnrollmentStrings {
   static const String householdNumberLabel = 'Household Number';
   static const String householdNumberHint = 'Auto-generated';
 
-  static const String healthWorkerLabel = 'Health Worker';
-  static const String healthWorkerHint = 'Your name';
+  static const String healthWorkerLabel = 'SS Name';
+  static const String healthWorkerHint = 'Select SS';
 
   static const String villageLabel = 'Village';
   static const String villageHint = 'Select village';
@@ -4907,10 +4907,10 @@ abstract final class EnrollmentStrings {
   static const List<String> maritalStatusesV2 = [
     'Married',
     'Single',
-    'Separated / Divorced',
-    'Widowed',
     'Unmarried',
   ];
+  static const String guardianLabel = 'Guardian';
+  static const String guardianHint = 'Select guardian from household';
   static const List<String> disabilityStatusesV2 = ['Present', 'Absent'];
   static const List<String> disabilityYesNo = ['Yes', 'No'];
   static const List<String> gendersMember = ['Male', 'Female', 'Other'];

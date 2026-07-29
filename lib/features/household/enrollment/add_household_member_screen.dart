@@ -49,11 +49,12 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   String? _disabilityStatus = 'Absent';
   bool _nidScanned = false;
   String? _ageSummary;
+  String? _guardianName;
 
   final Map<String, GlobalKey> _fieldKeys = {};
   Map<String, String?> _fieldErrors = {};
 
-  static const _validationOrder = ['name', 'gender', 'maritalStatus', 'mobile'];
+  static const _validationOrder = ['name', 'gender', 'maritalStatus', 'guardian', 'mobile'];
 
   GlobalKey _key(String name) =>
       _fieldKeys.putIfAbsent(name, GlobalKey.new);
@@ -100,6 +101,13 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     _dobCtrl = TextEditingController();
     _ageCtrl = TextEditingController();
     _mobileCtrl = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final headMobile = context.read<EnrollmentController>().householdHead?.mobileNumber;
+      if (headMobile != null && headMobile.isNotEmpty) {
+        setState(() => _mobileCtrl.text = headMobile);
+      }
+    });
   }
 
   @override
@@ -162,12 +170,14 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
     _ageCtrl.text = years.toString();
 
-    // Build human-readable breakdown for display alongside the field.
-    final parts = <String>[];
-    if (years > 0) parts.add('${years}y');
-    if (months > 0) parts.add('${months}m');
-    if (days > 0) parts.add('${days}d');
-    _ageSummary = parts.isEmpty ? '< 1 day' : parts.join(' ');
+    // Human-readable age: days if < 1 month, months if < 1 year, else years.
+    if (years == 0 && months == 0) {
+      _ageSummary = days <= 1 ? '< 1 day old' : '$days days old';
+    } else if (years == 0) {
+      _ageSummary = '$months month${months == 1 ? '' : 's'} old';
+    } else {
+      _ageSummary = months > 0 ? '$years yr ${months}m old' : '$years year${years == 1 ? '' : 's'} old';
+    }
 
     // Marital status not applicable for age ≤ 5.
     if (years <= 5) _maritalStatus = null;
@@ -264,7 +274,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
       if (_gender == null) 'gender': 'Required',
       if (maritalRequired && _maritalStatus == null) 'maritalStatus': 'Required',
-      if (_mobileCtrl.text.trim().isEmpty) 'mobile': 'Required',
+      if (ageYears < 18 && _guardianName == null) 'guardian': 'Required',
     };
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -289,6 +299,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       }
     }
 
+    final mobile = _mobileCtrl.text.trim();
     final member = HouseholdMember(
       name: _nameCtrl.text,
       age: int.tryParse(_ageCtrl.text) ?? 0,
@@ -296,16 +307,16 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       dateOfBirth: _dobCtrl.text,
       idType: _nidScanned ? 'NID' : 'BRN',
       idNumber: nid.isNotEmpty ? nid : null,
-      mobileNumber: _mobileCtrl.text,
-      mobileAvailable: true,
+      mobileNumber: mobile.isNotEmpty ? mobile : null,
+      mobileAvailable: mobile.isNotEmpty,
       maritalStatus: _maritalStatus ?? '',
       disabilityStatus: _disabilityStatus ?? 'Absent',
       relationshipToHead: 'Other',
-      // Village is already set on the household — inherit it.
       villageId: controller.household?.subVillageId?.isNotEmpty == true
           ? controller.household!.subVillageId
           : controller.household?.villageId,
       nidScanned: _nidScanned,
+      guardianName: _guardianName,
     );
 
     controller.addMember(member);
@@ -715,8 +726,37 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    // ── Q7: Disability ─────────────────────────────────────
-                    _QuestionLabel(number: 'Q7', text: 'Disability'),
+                    // ── Guardian — required for members under 18 ──────────
+                    if ((int.tryParse(_ageCtrl.text) ?? 99) < 18) ...[
+                      SizedBox(key: _key('guardian'), height: 0),
+                      _QuestionLabel(number: 'Q7', text: 'Guardian'),
+                      const SizedBox(height: 10),
+                      Consumer<EnrollmentController>(
+                        builder: (context, ctrl, _) {
+                          final guardianOptions = [
+                            if (ctrl.householdHead?.name != null)
+                              ctrl.householdHead!.name,
+                            ...ctrl.members.map((m) => m.name),
+                          ];
+                          return EnrollmentDropdown(
+                            label: EnrollmentStrings.guardianLabel,
+                            options: guardianOptions,
+                            value: _guardianName,
+                            onChanged: (v) => setState(() {
+                              _guardianName = v;
+                              _fieldErrors.remove('guardian');
+                            }),
+                            hint: EnrollmentStrings.guardianHint,
+                            isRequired: true,
+                            errorText: _fieldErrors['guardian'],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // ── Q8: Disability ─────────────────────────────────────
+                    _QuestionLabel(number: 'Q8', text: 'Disability'),
                     const SizedBox(height: 10),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.disabilityStatusLabel,
@@ -737,7 +777,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       hint: EnrollmentStrings.mobileNumberHint,
                       controller: _mobileCtrl,
                       keyboardType: TextInputType.phone,
-                      isRequired: true,
                       validator: _validatePhone,
                       onChanged: (_) => _clearError('mobile'),
                       errorText: _fieldErrors['mobile'],

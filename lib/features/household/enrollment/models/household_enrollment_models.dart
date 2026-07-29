@@ -20,6 +20,7 @@ class HouseholdMember {
     required this.relationshipToHead,
     this.villageId,
     this.nidScanned = false,
+    this.guardianName,
   });
 
   final String? id;
@@ -31,11 +32,12 @@ class HouseholdMember {
   final String? idNumber;
   final String? mobileNumber;
   final bool mobileAvailable;
-  final String maritalStatus; // 'Single', 'Married', 'Widowed', 'Divorced'
-  final String disabilityStatus; // 'None', 'Physical', 'Sensory', 'Cognitive', 'Multiple'
+  final String maritalStatus; // 'Single', 'Married', 'Unmarried'
+  final String disabilityStatus;
   final String relationshipToHead; // 'Head', 'Spouse', 'Child', 'Parent', 'Sibling', 'Other'
   final String? villageId; // Only for external members
   final bool nidScanned;
+  final String? guardianName;
 
   HouseholdMember copyWith({
     String? id,
@@ -52,6 +54,7 @@ class HouseholdMember {
     String? relationshipToHead,
     String? villageId,
     bool? nidScanned,
+    String? guardianName,
   }) {
     return HouseholdMember(
       id: id ?? this.id,
@@ -68,6 +71,7 @@ class HouseholdMember {
       relationshipToHead: relationshipToHead ?? this.relationshipToHead,
       villageId: villageId ?? this.villageId,
       nidScanned: nidScanned ?? this.nidScanned,
+      guardianName: guardianName ?? this.guardianName,
     );
   }
 
@@ -87,6 +91,7 @@ class HouseholdMember {
       'relationshipToHead': relationshipToHead,
       'villageId': villageId,
       'nidScanned': nidScanned,
+      'guardianName': guardianName,
     };
   }
 
@@ -106,6 +111,7 @@ class HouseholdMember {
       relationshipToHead: json['relationshipToHead'] as String? ?? 'Other',
       villageId: json['villageId'] as String?,
       nidScanned: json['nidScanned'] as bool? ?? false,
+      guardianName: json['guardianName'] as String?,
     );
   }
 }
@@ -143,6 +149,7 @@ class HouseholdHeadInfo extends HouseholdMember {
     String? relationshipToHead,
     String? villageId,
     bool? nidScanned,
+    String? guardianName,
   }) {
     return HouseholdHeadInfo(
       id: id ?? this.id,

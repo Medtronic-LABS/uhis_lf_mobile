@@ -436,11 +436,15 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                             orElse: () => ssWorkers.first,
                           );
                           final ssSubs = ss.subVillages;
+                          final parentVillageId = ssSubs.isNotEmpty ? ssSubs.first.villageId : null;
+                          final allVillages = context.read<UserHierarchyService>().villages ?? [];
+                          final matches = parentVillageId != null
+                              ? allVillages.where((v) => v.id == parentVillageId).toList()
+                              : <VillageRef>[];
                           setState(() {
                             _selectedSsWorker = ss;
-                            if (ssSubs.isNotEmpty) {
-                              _selectedSubVillage = ssSubs.first;
-                            }
+                            if (matches.isNotEmpty) _selectedVillage = matches.first;
+                            if (ssSubs.isNotEmpty) _selectedSubVillage = ssSubs.first;
                             _fieldErrors.remove('ssWorker');
                           });
                         },
