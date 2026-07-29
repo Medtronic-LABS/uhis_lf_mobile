@@ -4158,7 +4158,7 @@ abstract final class NabaStrings {
       'This is an AI proposal. Review and accept to proceed.';
 
   static const String callDoctorNow = 'Call a doctor now';
-  static const String callDoctorNowBn = 'ডাক্তারকে এখনই ফোন করন';
+  static const String callDoctorNowBn = 'ডাক্তারকে ফোন করন';
   static const String callDoctorOfflineHint = 'Available when online';
 
   static const String fallbackNotice =

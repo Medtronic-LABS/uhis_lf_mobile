@@ -3277,47 +3277,45 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
 
   @override
   Widget build(BuildContext context) {
-    final color = _isOnline ? _pink : const Color(0xFFCBD5E1);
+    final enabled = _isOnline;
+    final bg = enabled ? _pink : _pink.withValues(alpha: 0.35);
     return Tooltip(
-      message: _isOnline ? '' : NabaStrings.callDoctorOfflineHint,
+      message: enabled ? '' : NabaStrings.callDoctorOfflineHint,
       child: SizedBox(
         width: double.infinity,
-        child: OutlinedButton(
-          onPressed: _isOnline ? () => _onTap(context) : null,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: color,
-            side: BorderSide(color: color, width: 1.5),
-            padding: const EdgeInsets.symmetric(vertical: 14),
+        child: FilledButton(
+          onPressed: enabled ? () => _onTap(context) : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: bg,
+            disabledBackgroundColor: bg,
+            foregroundColor: Colors.white,
+            disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
             ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.phone_in_talk_rounded, size: 20, color: color),
+              const Icon(Icons.smartphone_rounded, size: 20),
               const SizedBox(width: 10),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    NabaStrings.callDoctorNow,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: color,
-                    ),
-                  ),
-                  Text(
-                    NabaStrings.callDoctorNowBn,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w400,
-                      color: color.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
+              Text(
+                NabaStrings.callDoctorNow,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '· ${NabaStrings.callDoctorNowBn}',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
               ),
             ],
           ),
@@ -3362,25 +3360,41 @@ class _BottomCtaBar extends StatelessWidget {
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: accepted ? null : onAccepted,
-                  icon: const Icon(Icons.check_rounded),
-                  label: Text(NabaStrings.acceptProposal),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFEC4899),
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: const Color(0xFFEC4899).withValues(alpha: 0.4),
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                    textStyle: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
+              // Teleconsult first — primary visual weight (pink filled)
               _TeleconsultButton(
                 patientLabel: patientLabel ?? '',
                 patientId: memberId ?? '',
+              ),
+              const SizedBox(height: 8),
+              // Accept / save — secondary (outlined navy)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: accepted ? null : onAccepted,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.navy,
+                    side: BorderSide(
+                      color: accepted
+                          ? AppColors.navy.withValues(alpha: 0.25)
+                          : AppColors.navy,
+                      width: 1.5,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text(
+                    NabaStrings.acceptProposal,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: accepted
+                          ? AppColors.navy.withValues(alpha: 0.35)
+                          : AppColors.navy,
+                    ),
+                  ),
+                ),
               ),
               if ((primaryProgramme == Programme.imci ||
                       primaryProgramme == Programme.epi) &&
