@@ -2316,14 +2316,18 @@ class _ServiceTile extends StatelessWidget {
                   ),
                 ),
                 // Emoji + label + enrolled badge
-                Center(
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(def.emoji, style: const TextStyle(fontSize: 20)),
                       const SizedBox(height: 4),
                       Text(
                         label,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
