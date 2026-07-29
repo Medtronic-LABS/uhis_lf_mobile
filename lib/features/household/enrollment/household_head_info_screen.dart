@@ -52,6 +52,35 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   String? _disabilityStatus;
   bool _mobileNotAvailable = false;
 
+  final Map<String, GlobalKey> _fieldKeys = {};
+  Map<String, String?> _fieldErrors = {};
+
+  static const _validationOrder = ['name', 'idNumber', 'gender', 'maritalStatus'];
+
+  GlobalKey _key(String name) =>
+      _fieldKeys.putIfAbsent(name, GlobalKey.new);
+
+  void _clearError(String name) {
+    if (_fieldErrors[name] != null) setState(() => _fieldErrors.remove(name));
+  }
+
+  void _scrollToFirstError() {
+    for (final k in _validationOrder) {
+      if (_fieldErrors[k] != null) {
+        final ctx = _fieldKeys[k]?.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOut,
+            alignment: 0.15,
+          );
+        }
+        return;
+      }
+    }
+  }
+
   static String? _validatePhone(String? value) {
     if (value == null || value.isEmpty) return null;
     final digits = value.replaceAll(RegExp(r'\D'), '');
@@ -70,12 +99,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     _dobCtrl = TextEditingController();
     _ageCtrl = TextEditingController();
 
-    // Rebuild the CTA enabled-state as the required text fields change.
-    _nameCtrl.addListener(_onFormChanged);
-    _idNumberCtrl.addListener(_onFormChanged);
-
-    // Prefill from the on-device NID card scan. Name / DOB / NID are read from
-    // the Latin side of the card; father & mother (Bangla) stay for the SK.
+    // Prefill from the on-device NID card scan.
     if (widget.fromNidScan) {
       if (widget.scannedNidNumber?.isNotEmpty ?? false) {
         _idNumberCtrl.text = widget.scannedNidNumber!;
@@ -101,8 +125,6 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   @override
   void dispose() {
     debugPrint('[_HouseholdHeadInfoScreenState] dispose');
-    _nameCtrl.removeListener(_onFormChanged);
-    _idNumberCtrl.removeListener(_onFormChanged);
     _nameCtrl.dispose();
     _idNumberCtrl.dispose();
     _mobileCtrl.dispose();
@@ -110,15 +132,6 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     _ageCtrl.dispose();
     super.dispose();
   }
-
-  void _onFormChanged() => setState(() {});
-
-  /// Mandatory head fields (spec: keep CTA disabled until all present).
-  bool get _isFormComplete =>
-      _nameCtrl.text.trim().isNotEmpty &&
-      _idNumberCtrl.text.trim().isNotEmpty &&
-      _gender != null &&
-      _maritalStatus != null;
 
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
@@ -161,18 +174,18 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
   void _handleNext(EnrollmentController controller) {
     debugPrint('[_HouseholdHeadInfoScreenState] _handleNext idType=$_idType gender=$_gender maritalStatus=$_maritalStatus');
-    if (_nameCtrl.text.isEmpty ||
-        _idNumberCtrl.text.isEmpty ||
-        _gender == null ||
-        _maritalStatus == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all required fields'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+    final errors = <String, String?>{
+      if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
+      if (_idNumberCtrl.text.trim().isEmpty) 'idNumber': 'Required',
+      if (_gender == null) 'gender': 'Required',
+      if (_maritalStatus == null) 'maritalStatus': 'Required',
+    };
+    if (errors.isNotEmpty) {
+      setState(() => _fieldErrors = errors);
+      _scrollToFirstError();
       return;
     }
+    setState(() => _fieldErrors = {});
 
     controller.updateHead(
       name: _nameCtrl.text,
@@ -304,11 +317,14 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
                     // Name field — shown only when not pre-filled from scan (card has it)
                     if (!_prefilledFromScan) ...[
+                      SizedBox(key: _key('name'), height: 0),
                       EnrollmentInputField(
                         label: EnrollmentStrings.headNameLabel,
                         hint: EnrollmentStrings.headNameHint,
                         controller: _nameCtrl,
                         isRequired: true,
+                        onChanged: (_) => _clearError('name'),
+                        errorText: _fieldErrors['name'],
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -325,11 +341,14 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
                     // ID Number — hidden when pre-filled from scan (card has it)
                     if (!_prefilledFromScan) ...[
+                      SizedBox(key: _key('idNumber'), height: 0),
                       EnrollmentInputField(
                         label: EnrollmentStrings.idNumberLabel,
                         hint: EnrollmentStrings.idNumberHint,
                         controller: _idNumberCtrl,
                         isRequired: true,
+                        onChanged: (_) => _clearError('idNumber'),
+                        errorText: _fieldErrors['idNumber'],
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -401,23 +420,33 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                     const SizedBox(height: 16),
 
                     // Gender
+                    SizedBox(key: _key('gender'), height: 0),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.genderLabel,
                       options: EnrollmentStrings.gendersHead,
                       selectedValue: _gender,
-                      onChanged: (v) => setState(() => _gender = v),
+                      onChanged: (v) => setState(() {
+                        _gender = v;
+                        _clearError('gender');
+                      }),
                       isRequired: true,
+                      errorText: _fieldErrors['gender'],
                     ),
                     const SizedBox(height: 16),
 
                     // Marital Status
+                    SizedBox(key: _key('maritalStatus'), height: 0),
                     EnrollmentDropdown(
                       label: EnrollmentStrings.maritalStatusLabel,
                       options: EnrollmentStrings.maritalStatusesV2,
                       value: _maritalStatus,
-                      onChanged: (v) => setState(() => _maritalStatus = v),
+                      onChanged: (v) => setState(() {
+                        _maritalStatus = v;
+                        _clearError('maritalStatus');
+                      }),
                       hint: 'Select status',
                       isRequired: true,
+                      errorText: _fieldErrors['maritalStatus'],
                     ),
                     const SizedBox(height: 16),
 
@@ -440,7 +469,6 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                   bottom: 0,
                   child: EnrollmentStickyBar(
                     label: EnrollmentStrings.createHouseholdCTA,
-                    enabled: _isFormComplete,
                     onPressed: () => _handleNext(controller),
                   ),
                 ),

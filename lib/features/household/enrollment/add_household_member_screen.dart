@@ -64,19 +64,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   final Map<String, GlobalKey> _fieldKeys = {};
   Map<String, String?> _fieldErrors = {};
 
-  static const _validationOrder = ['name', 'gender', 'maritalStatus', 'guardian', 'mobile'];
+  static const _validationOrder = ['name', 'dob', 'gender', 'maritalStatus', 'guardian', 'mobile'];
 
   GlobalKey _key(String name) =>
       _fieldKeys.putIfAbsent(name, GlobalKey.new);
-
-  bool get _isFormComplete {
-    if (_nameCtrl.text.trim().isEmpty) return false;
-    if (_gender == null) return false;
-    if (_dobCtrl.text.trim().isEmpty) return false;
-    if (_ageInYears > 5 && _maritalStatus == null) return false;
-    if (_ageInYears < 1 && _guardianName == null) return false;
-    return true;
-  }
 
   void _clearError(String name) {
     if (_fieldErrors[name] != null) setState(() => _fieldErrors.remove(name));
@@ -293,14 +284,14 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   Future<void> _handleSaveMember(EnrollmentController controller) async {
     debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
-    final ageYears = int.tryParse(_ageCtrl.text) ?? 99;
-    final maritalRequired = ageYears > 5;
+    final maritalRequired = _ageInYears > 5;
 
     final errors = <String, String?>{
       if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
+      if (_dobCtrl.text.trim().isEmpty) 'dob': 'Required',
       if (_gender == null) 'gender': 'Required',
       if (maritalRequired && _maritalStatus == null) 'maritalStatus': 'Required',
-      if (ageYears < 1 && _guardianName == null) 'guardian': 'Required',
+      if (_ageInYears < 1 && _guardianName == null) 'guardian': 'Required',
     };
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -677,16 +668,21 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
                     // ── Q3: Date of Birth — hidden when NID scanned (card has it) ──
                     if (!_nidScanned) ...[
+                      SizedBox(key: _key('dob'), height: 0),
                       _QuestionLabel(number: 'Q3', text: 'Date of Birth'),
                       const SizedBox(height: 10),
                       GestureDetector(
-                        onTap: _selectDate,
+                        onTap: () {
+                          _clearError('dob');
+                          _selectDate();
+                        },
                         child: AbsorbPointer(
                           child: EnrollmentInputField(
                             label: EnrollmentStrings.dateOfBirthLabel,
                             hint: EnrollmentStrings.dateOfBirthHint,
                             controller: _dobCtrl,
                             readOnly: true,
+                            errorText: _fieldErrors['dob'],
                           ),
                         ),
                       ),
@@ -844,7 +840,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                   bottom: 0,
                   child: EnrollmentStickyBar(
                     label: EnrollmentStrings.saveMemberCTA,
-                    enabled: _isFormComplete,
                     onPressed: () => _handleSaveMember(controller),
                   ),
                 ),
