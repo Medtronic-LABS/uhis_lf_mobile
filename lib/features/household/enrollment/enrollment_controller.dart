@@ -194,9 +194,6 @@ class EnrollmentController extends ChangeNotifier {
     if (_household!.numberOfMembers <= 0) {
       errors.add('Number of members must be greater than 0');
     }
-    if (_household!.houseNumber.trim().isEmpty) {
-      errors.add('House number is required');
-    }
     if (_household!.disabilityQuestion &&
         (_household!.disabilityDetails?.trim().isEmpty ?? true)) {
       errors.add('Please specify disability details');
@@ -222,6 +219,10 @@ class EnrollmentController extends ChangeNotifier {
     }
     if (_householdHead!.maritalStatus.isEmpty) {
       errors.add('Marital status is required');
+    }
+    if (_householdHead!.mobileAvailable &&
+        (_householdHead!.mobileNumber?.trim().isEmpty ?? true)) {
+      errors.add('Mobile number is required');
     }
 
     return errors;

@@ -4948,6 +4948,10 @@ abstract final class EnrollmentStrings {
   static const String mobileNotAvailableHint = 'Not Available';
 
   static const String nidScanButtonLabel = 'Scan NID card to read number';
+  static const String nidNumberLabel = 'NID NUMBER';
+  static const String nidNumberHint = 'Enter NID number';
+  static const String nidScannedBadge = '✓ Scanned';
+  static const String nidClearScan = 'Clear scan';
   static const String nidScanNoBrnHint =
       'If member has no NID, enter Birth Registration ID instead.';
   static String nidNumberCaptured(String number) =>

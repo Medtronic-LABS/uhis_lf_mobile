@@ -42,7 +42,6 @@ class CreateHouseholdScreen extends StatefulWidget {
 
 class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   // ── Household fields ────────────────────────────────────────────────────────
-  late TextEditingController _houseNumberCtrl;
   late TextEditingController _totalMembersCtrl;
   late TextEditingController _incomeCtrl;
   late TextEditingController _disabilityCountCtrl;
@@ -76,7 +75,6 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     debugPrint('[_CreateHouseholdScreenState] initState');
 
     // Household controllers
-    _houseNumberCtrl = TextEditingController()..addListener(_onFormChanged);
     _totalMembersCtrl = TextEditingController()..addListener(_onFormChanged);
     _incomeCtrl = TextEditingController();
     _disabilityCountCtrl = TextEditingController();
@@ -86,7 +84,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     _fatherCtrl = TextEditingController();
     _motherCtrl = TextEditingController();
     _idNumberCtrl = TextEditingController()..addListener(_onFormChanged);
-    _mobileCtrl = TextEditingController();
+    _mobileCtrl = TextEditingController()..addListener(_onFormChanged);
     _dobCtrl = TextEditingController();
     _ageCtrl = TextEditingController();
 
@@ -170,9 +168,6 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   @override
   void dispose() {
     debugPrint('[_CreateHouseholdScreenState] dispose');
-    _houseNumberCtrl
-      ..removeListener(_onFormChanged)
-      ..dispose();
     _totalMembersCtrl
       ..removeListener(_onFormChanged)
       ..dispose();
@@ -186,7 +181,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     _idNumberCtrl
       ..removeListener(_onFormChanged)
       ..dispose();
-    _mobileCtrl.dispose();
+    _mobileCtrl
+      ..removeListener(_onFormChanged)
+      ..dispose();
     _dobCtrl.dispose();
     _ageCtrl.dispose();
     super.dispose();
@@ -199,14 +196,14 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       _selectedSsWorker != null &&
       _selectedVillage != null &&
       _householdType != null &&
-      _houseNumberCtrl.text.trim().isNotEmpty &&
       _totalMembersCtrl.text.trim().isNotEmpty &&
       // Head required
       _nameCtrl.text.trim().isNotEmpty &&
       _idNumberCtrl.text.trim().isNotEmpty &&
       _gender != null &&
       _maritalStatus != null &&
-      _dobCtrl.text.trim().isNotEmpty;
+      _dobCtrl.text.trim().isNotEmpty &&
+      (_mobileNotAvailable || _mobileCtrl.text.trim().isNotEmpty);
 
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
@@ -277,7 +274,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       healthWorkerId: _selectedSsWorker?.id,
       householdType: _householdType ?? '',
       numberOfMembers: int.tryParse(_totalMembersCtrl.text) ?? 0,
-      houseNumber: _houseNumberCtrl.text,
+      houseNumber: '',
       occupation: _selectedOccupation ?? '',
       monthlyIncome: _incomeCtrl.text.isEmpty ? '0' : _incomeCtrl.text,
       disabilityQuestion: _hasDisability == 'Yes',
@@ -535,14 +532,6 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     const SizedBox(height: 14),
 
                     EnrollmentInputField(
-                      label: EnrollmentStrings.houseNumberLabel,
-                      hint: EnrollmentStrings.houseNumberHint,
-                      controller: _houseNumberCtrl,
-                      isRequired: true,
-                    ),
-                    const SizedBox(height: 14),
-
-                    EnrollmentInputField(
                       label: EnrollmentStrings.totalMembersLabel,
                       hint: EnrollmentStrings.totalMembersHint,
                       controller: _totalMembersCtrl,
@@ -690,6 +679,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                         hint: EnrollmentStrings.mobileNumberHint,
                         controller: _mobileCtrl,
                         keyboardType: TextInputType.phone,
+                        isRequired: true,
                         inputFormatters: [LengthLimitingTextInputFormatter(14)],
                       ),
                       const SizedBox(height: 8),

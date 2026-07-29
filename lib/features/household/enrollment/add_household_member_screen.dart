@@ -42,7 +42,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   late TextEditingController _dobCtrl;
   late TextEditingController _ageCtrl;
   late TextEditingController _mobileCtrl;
-  late TextEditingController _villageCtrl;
 
 
   String? _gender;
@@ -50,6 +49,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   String? _disabilityStatus = 'Absent';
   bool _mobileNotAvailable = false;
   bool _nidScanned = false;
+  String? _ageSummary;
 
   static String? _validatePhone(String? value) {
     if (value == null || value.isEmpty) return null;
@@ -72,7 +72,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     _dobCtrl = TextEditingController();
     _ageCtrl = TextEditingController();
     _mobileCtrl = TextEditingController();
-    _villageCtrl = TextEditingController();
   }
 
   @override
@@ -83,7 +82,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     _dobCtrl.dispose();
     _ageCtrl.dispose();
     _mobileCtrl.dispose();
-    _villageCtrl.dispose();
     super.dispose();
   }
 
@@ -118,12 +116,33 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   void _calculateAge(DateTime dob) {
     final now = DateTime.now();
-    int age = now.year - dob.year;
-    if (now.month < dob.month ||
-        (now.month == dob.month && now.day < dob.day)) {
-      age--;
+
+    int years = now.year - dob.year;
+    int months = now.month - dob.month;
+    int days = now.day - dob.day;
+
+    // Borrow days from previous month if negative.
+    if (days < 0) {
+      months--;
+      days += DateTime(now.year, now.month, 0).day; // last day of prev month
     }
-    _ageCtrl.text = age.toString();
+    // Borrow months from previous year if negative.
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+
+    _ageCtrl.text = years.toString();
+
+    // Build human-readable breakdown for display alongside the field.
+    final parts = <String>[];
+    if (years > 0) parts.add('${years}y');
+    if (months > 0) parts.add('${months}m');
+    if (days > 0) parts.add('${days}d');
+    _ageSummary = parts.isEmpty ? '< 1 day' : parts.join(' ');
+
+    // Marital status not applicable for age ≤ 5.
+    if (years <= 5) _maritalStatus = null;
   }
 
   Future<void> _scanNid() async {
@@ -211,7 +230,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   Future<void> _handleSaveMember(EnrollmentController controller) async {
     debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
-    if (_nameCtrl.text.isEmpty || _gender == null || _maritalStatus == null) {
+    final ageYears = int.tryParse(_ageCtrl.text) ?? 99;
+    final maritalRequired = ageYears > 5;
+    if (_nameCtrl.text.isEmpty || _gender == null || (maritalRequired && _maritalStatus == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill all required fields'),
@@ -246,11 +267,13 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       idNumber: nid.isNotEmpty ? nid : null,
       mobileNumber: _mobileNotAvailable ? null : _mobileCtrl.text,
       mobileAvailable: !_mobileNotAvailable,
-      maritalStatus: _maritalStatus!,
+      maritalStatus: _maritalStatus ?? '',
       disabilityStatus: _disabilityStatus ?? 'Absent',
       relationshipToHead: 'Other',
-      villageId:
-          _villageCtrl.text.isNotEmpty ? _villageCtrl.text : null,
+      // Village is already set on the household — inherit it.
+      villageId: controller.household?.subVillageId?.isNotEmpty == true
+          ? controller.household!.subVillageId
+          : controller.household?.villageId,
       nidScanned: _nidScanned,
     );
 
@@ -402,27 +425,49 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       ),
                     ),
 
-                    // NID scanned confirmation chip
+                    // NID editable field — shown when scan succeeded so SK
+                    // can correct OCR errors without rescanning.
                     if (_nidScanned) ...[
                       const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.xl,
-                          vertical: AppSpacing.md,
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.nidNumberLabel,
+                        hint: EnrollmentStrings.nidNumberHint,
+                        controller: _brnCtrl,
+                        keyboardType: TextInputType.number,
+                        customBorderColor: AppColors.enrollmentSuccess,
+                        labelSuffix: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              EnrollmentStrings.nidScannedBadge,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.enrollmentSuccess,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                _nidScanned = false;
+                                _brnCtrl.clear();
+                                _existingPatient = null;
+                              }),
+                              child: Text(
+                                EnrollmentStrings.nidClearScan,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textMuted,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        decoration: BoxDecoration(
-                          color: AppColors.tbSurface,
-                          border: Border.all(color: AppColors.enrollmentSuccess),
-                          borderRadius: BorderRadius.circular(AppRadius.field),
-                        ),
-                        child: Text(
-                          EnrollmentStrings.nidDetailsCaptured(_brnCtrl.text),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.enrollmentSuccess,
-                          ),
-                        ),
+                        onChanged: (value) {
+                          if (value.length >= 10) _lookupExisting(value);
+                        },
                       ),
                     ],
 
@@ -481,22 +526,23 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ],
                     const SizedBox(height: 8),
 
-                    // NID fallback note
-                    Text(
-                      EnrollmentStrings.nidScanNoBrnHint,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
+                    // BRN fallback — shown only when no NID was scanned.
+                    // After scan, _brnCtrl is already in the NID editable field above.
+                    if (!_nidScanned) ...[
+                      Text(
+                        EnrollmentStrings.nidScanNoBrnHint,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textMuted,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // BRN input (optional)
-                    EnrollmentInputField(
-                      label: 'Birth Registration Number (BRN)',
-                      hint: 'Enter BRN if no NID',
-                      controller: _brnCtrl,
-                    ),
+                      const SizedBox(height: 10),
+                      EnrollmentInputField(
+                        label: 'Birth Registration Number (BRN)',
+                        hint: 'Enter BRN if no NID',
+                        controller: _brnCtrl,
+                      ),
+                    ],
                     const SizedBox(height: 20),
 
                     // ── Q2: Name ───────────────────────────────────────────
@@ -540,7 +586,22 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       hint: EnrollmentStrings.approximateAgeHint,
                       controller: _ageCtrl,
                       keyboardType: TextInputType.number,
+                      onChanged: (v) => setState(() {
+                        _ageSummary = null;
+                        if ((int.tryParse(v) ?? 99) <= 5) _maritalStatus = null;
+                      }),
                     ),
+                    if (_ageSummary != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _ageSummary!,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.enrollmentSuccess,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 20),
 
                     // ── Q4: Gender ─────────────────────────────────────────
@@ -555,18 +616,20 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // ── Q6: Marital Status ─────────────────────────────────
-                    _QuestionLabel(number: 'Q6', text: 'Marital Status'),
-                    const SizedBox(height: 10),
-                    EnrollmentDropdown(
-                      label: EnrollmentStrings.maritalStatusLabel,
-                      options: EnrollmentStrings.maritalStatusesV2,
-                      value: _maritalStatus,
-                      onChanged: (v) =>
-                          setState(() => _maritalStatus = v),
-                      hint: 'Select status',
-                    ),
-                    const SizedBox(height: 20),
+                    // ── Q6: Marital Status — hidden for age ≤ 5 ───────────
+                    if ((int.tryParse(_ageCtrl.text) ?? 99) > 5) ...[
+                      _QuestionLabel(number: 'Q6', text: 'Marital Status'),
+                      const SizedBox(height: 10),
+                      EnrollmentDropdown(
+                        label: EnrollmentStrings.maritalStatusLabel,
+                        options: EnrollmentStrings.maritalStatusesV2,
+                        value: _maritalStatus,
+                        onChanged: (v) =>
+                            setState(() => _maritalStatus = v),
+                        hint: 'Select status',
+                      ),
+                      const SizedBox(height: 20),
+                    ],
 
                     // ── Q7: Disability ─────────────────────────────────────
                     _QuestionLabel(number: 'Q7', text: 'Disability'),
@@ -632,22 +695,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // ── Q9: Village Name ───────────────────────────────────
-                    _QuestionLabel(number: 'Q9', text: 'Village Name'),
-                    const SizedBox(height: 10),
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.memberVillageLabel,
-                      hint: EnrollmentStrings.villageMemberHint,
-                      controller: _villageCtrl,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      EnrollmentStrings.villageHelperText,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
                     const SizedBox(height: 8),
                   ],
                 ),
