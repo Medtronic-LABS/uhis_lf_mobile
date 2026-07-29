@@ -1689,7 +1689,7 @@ abstract final class MissionDashboardStrings {
   static String get bpReviewPending =>
       AppLocale.isBangla ? 'BP পর্যালোচনা মুলতুবি' : 'BP Review Pending';
   static String householdNumber(int number) =>
-      AppLocale.isBangla ? 'পরিবার #$number' : 'Household #$number';
+      '#$number';
   static String potentialServicesCount(int count) => AppLocale.isBangla
       ? 'সম্ভাব্য সেবা: $count'
       : 'Potential Services: $count';

@@ -332,7 +332,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
 
     // Fallback to "Household #ID"
     if (householdId.isNotEmpty) {
-      return 'Household #$householdId';
+      return '#$householdId';
     }
 
     return null;
