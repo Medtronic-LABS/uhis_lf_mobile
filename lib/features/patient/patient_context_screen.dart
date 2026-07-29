@@ -874,11 +874,6 @@ class _PatientContextScreenState
               onBack: () => Navigator.of(context).maybePop(),
               onRefresh: _refreshing ? null : _refresh,
             ),
-            if (data.householdId != null)
-              _SameHouseholdStrip(
-                currentPatientId: widget.patientId,
-                householdId: data.householdId!,
-              ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
