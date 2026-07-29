@@ -60,6 +60,16 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   GlobalKey _key(String name) =>
       _fieldKeys.putIfAbsent(name, GlobalKey.new);
 
+  bool get _isFormComplete {
+    if (_nameCtrl.text.trim().isEmpty) return false;
+    if (_gender == null) return false;
+    if (_dobCtrl.text.trim().isEmpty) return false;
+    final ageYears = int.tryParse(_ageCtrl.text) ?? 99;
+    if (ageYears > 5 && _maritalStatus == null) return false;
+    if (ageYears < 1 && _guardianName == null) return false;
+    return true;
+  }
+
   void _clearError(String name) {
     if (_fieldErrors[name] != null) setState(() => _fieldErrors.remove(name));
   }
@@ -807,6 +817,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                   bottom: 0,
                   child: EnrollmentStickyBar(
                     label: EnrollmentStrings.saveMemberCTA,
+                    enabled: _isFormComplete,
                     onPressed: () => _handleSaveMember(controller),
                   ),
                 ),
