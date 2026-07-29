@@ -46,6 +46,7 @@ class AddHouseholdMemberScreen extends StatefulWidget {
     this.scannedNidNumber,
     this.scannedName,
     this.scannedDateOfBirth,
+    this.initialMemberNames = const [],
   });
 
   /// When non-null, the screen operates in standalone mode: submits the member
@@ -60,6 +61,10 @@ class AddHouseholdMemberScreen extends StatefulWidget {
   final String? scannedNidNumber;
   final String? scannedName;
   final String? scannedDateOfBirth;
+
+  /// Pre-populated member names from the caller (e.g. household detail screen).
+  /// When non-empty, skips the DB query in [_loadHouseholdMembers].
+  final List<String> initialMemberNames;
 
   bool get isStandalone => existingHouseholdId != null;
 
@@ -176,23 +181,32 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         }
       });
     } else {
+      // Seed from caller-supplied names first; only hit the DB when empty.
+      if (widget.initialMemberNames.isNotEmpty) {
+        _householdMemberNames = List<String>.from(widget.initialMemberNames);
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadHouseholdMembers());
     }
   }
 
   Future<void> _loadHouseholdMembers() async {
+    if (_householdMemberNames.isNotEmpty) return; // already seeded from caller
     final hhId = widget.existingHouseholdId;
     if (hhId == null || !mounted) return;
     final dao = context.read<MemberDao>();
-    final entities = await dao.getByHouseholdId(hhId);
+    // Try household_id first, then householdReferenceId as fallback (UUID vs FHIR ID).
+    var entities = await dao.getByHouseholdId(hhId);
+    if (entities.isEmpty && widget.existingHouseholdReferenceId != null &&
+        widget.existingHouseholdReferenceId != hhId) {
+      entities = await dao.getByHouseholdId(widget.existingHouseholdReferenceId!);
+    }
     if (!mounted) return;
-    setState(() {
-      _householdMemberNames = entities
-          .map((e) => e.name)
-          .whereType<String>()
-          .where((n) => n.isNotEmpty)
-          .toList();
-    });
+    final names = entities
+        .map((e) => e.name)
+        .whereType<String>()
+        .where((n) => n.isNotEmpty)
+        .toList();
+    if (names.isNotEmpty) setState(() => _householdMemberNames = names);
   }
 
   @override

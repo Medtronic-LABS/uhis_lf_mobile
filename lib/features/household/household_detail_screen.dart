@@ -686,6 +686,11 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     if (result == null) return;
 
     final villageId = _household.members.firstOrNull?.villageId ?? '';
+    final memberNames = _household.members
+        .map((m) => m.name)
+        .whereType<String>()
+        .where((n) => n.isNotEmpty)
+        .toList();
     final extra = <String, dynamic>{
       'householdId': _household.id ?? '',
       'householdReferenceId': _household.id ?? '',
@@ -693,6 +698,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       'householdNo': _household.householdNo ?? '',
       'villageId': villageId,
       'villageName': _household.village ?? '',
+      'memberNames': memberNames,
     };
     if (result.status == NidScanStatus.success && result.data != null) {
       extra['fromNidScan'] = true;

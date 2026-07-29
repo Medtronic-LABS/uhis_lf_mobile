@@ -537,6 +537,10 @@ GoRouter buildRouter(AuthState auth) {
                   scannedNidNumber: extra['nidNumber'] as String?,
                   scannedName: extra['name'] as String?,
                   scannedDateOfBirth: extra['dateOfBirth'] as String?,
+                  initialMemberNames: (extra['memberNames'] as List?)
+                          ?.whereType<String>()
+                          .toList() ??
+                      const [],
                 ),
               );
             },
