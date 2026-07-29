@@ -1968,6 +1968,7 @@ const _kAllServiceCards = [
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🌸', label: 'FP',                programme: Programme.familyPlanning),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '💊', label: 'NCD',               programme: Programme.ncd),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🔍', label: 'Cataract',           programme: Programme.cataract),
   // Under-5 cards — shown only when ctx.isUnder5
   _ServiceCardDef(kind: _ServiceCardKind.vaccination, emoji: '💉', label: 'Vaccination'),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🧒', label: 'Child Health',      programme: Programme.imci),
