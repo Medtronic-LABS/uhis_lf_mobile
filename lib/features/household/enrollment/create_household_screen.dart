@@ -78,21 +78,6 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   GlobalKey _key(String name) =>
       _fieldKeys.putIfAbsent(name, GlobalKey.new);
 
-  bool get _isFormComplete {
-    if (_selectedSsWorker == null) return false;
-    if (_selectedVillage == null) return false;
-    if (_householdType == null) return false;
-    if (_totalMembersCtrl.text.trim().isEmpty) return false;
-    if (_nameCtrl.text.trim().isEmpty) return false;
-    if (_idType != 'Not Available' && _idNumberCtrl.text.trim().isEmpty) return false;
-    if (_mobileCtrl.text.trim().isEmpty) return false;
-    if (_dobCtrl.text.trim().isEmpty) return false;
-    if (_gender == null) return false;
-    final age = int.tryParse(_ageCtrl.text) ?? 99;
-    if (age > 5 && _maritalStatus == null) return false;
-    return true;
-  }
-
   void _clearError(String name) {
     if (_fieldErrors[name] != null) setState(() => _fieldErrors.remove(name));
   }
@@ -853,7 +838,6 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                   bottom: 0,
                   child: EnrollmentStickyBar(
                     label: EnrollmentStrings.continueArrow,
-                    enabled: _isFormComplete,
                     onPressed: () => _handleContinue(controller),
                   ),
                 ),
