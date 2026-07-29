@@ -16,7 +16,6 @@ import '../../core/time/calendar_day.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/phi_screen.dart';
 import '../../core/db/assessment_dao.dart';
-import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
@@ -66,10 +65,10 @@ class PatientOrMemberData {
   /// the patient has no pregnancy episode stored.
   final PregnancySnapshotRow? pregnancySnapshot;
 
-  /// Locally-cached assessments — union of EncounterDao history,
-  /// synced AssessmentDao rows, and sync-pending LocalAssessmentDao
-  /// drafts. Surfaces records even when the remote /medical-review/history
-  /// endpoint is unreachable or returns empty (offline-first §3.1).
+  /// Locally-cached assessments — union of synced AssessmentDao rows and
+  /// sync-pending LocalAssessmentDao drafts (pending/networkError/failed only;
+  /// success drafts are already in AssessmentDao after sync). Surfaces records
+  /// even when the remote endpoint is unreachable (offline-first §3.1).
   final List<MemberAssessment> localAssessments;
   final List<PatientVisit> recentVisits;
   final String? memberId;
@@ -239,45 +238,13 @@ class _PatientContextScreenState
     final stripped = patientId.contains('/')
         ? patientId.substring(patientId.lastIndexOf('/') + 1)
         : patientId;
-    final encounters = context.read<EncounterDao>();
     final assessments = context.read<AssessmentDao>();
     final localDrafts = context.read<LocalAssessmentDao>();
 
     final out = <MemberAssessment>[];
 
-    try {
-      final encs = await encounters.recentForPatient(stripped, limit: 50);
-      // ignore: avoid_print
-      print('[PatientContextScreen] localAssessmentsFor in=$patientId norm=$stripped encs=${encs.length}');
-      for (final e in encs) {
-        final date = DateTime.fromMillisecondsSinceEpoch(
-            e.completedAt ?? e.startedAt);
-        final prog = Programme.fromString(e.programme);
-        final serviceLabel = prog == Programme.unknown
-            ? PatientContextStrings.genericAssessmentLabel
-            : prog.wireTag;
-        out.add(MemberAssessment(
-          id: e.id,
-          type: serviceLabel,
-          date: date,
-          status: e.status.name,
-          rawJson: <String, dynamic>{
-            'programme': e.programme,
-            'status': e.status.name,
-            'serverVisitId': e.serverVisitId,
-            'encounterId': e.id,
-            'serviceProvided': serviceLabel,
-            if (e.triageData != null) ...e.triageData!,
-            if (e.vitalsData != null) ...e.vitalsData!,
-            if (e.assessmentData != null) ...e.assessmentData!,
-          },
-        ));
-      }
-    } on Object catch (e) {
-      // ignore: avoid_print
-      print('[PatientContextScreen] local encounters fetch failed: $e');
-    }
-
+    // Source 1: server-synced records from member-assessment-history.
+    // These are the canonical care history entries after a sync completes.
     try {
       final asMap = await assessments.forMany([stripped]);
       for (final row in asMap[stripped] ?? const []) {
@@ -300,6 +267,9 @@ class _PatientContextScreenState
       print('[PatientContextScreen] local assessments fetch failed: $e');
     }
 
+    // Source 2: unsent local drafts (pending / networkError / failed).
+    // Excluded: success — those are already present in Source 1 after sync
+    // completes, so including them would produce a duplicate record.
     try {
       final drafts = await localDrafts.getByPatientId(stripped);
       // ignore: avoid_print
@@ -307,6 +277,7 @@ class _PatientContextScreenState
       for (final d in drafts) {
         // ignore: avoid_print
         print('[PatientContextScreen]   draft id=${d.id} type=${d.assessmentType} syncStatus=${d.syncStatus.name} storedPatientId=${d.patientId}');
+        if (d.syncStatus == AssessmentSyncStatus.success) continue;
         out.add(MemberAssessment(
           id: d.id.toString(),
           type: d.assessmentType.toUpperCase(),
