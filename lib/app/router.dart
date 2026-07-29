@@ -39,7 +39,6 @@ import '../features/household/enrollment/household_created_screen.dart';
 import '../features/household/enrollment/add_household_member_screen.dart';
 import '../features/household/enrollment/enrollment_controller.dart';
 import '../features/household/enrollment/select_household_screen.dart';
-import '../features/household/enrollment/link_member_screen.dart';
 import '../features/consent/consent_screen.dart';
 import '../core/db/household_dao.dart';
 import '../core/db/member_dao.dart';
@@ -519,6 +518,29 @@ GoRouter buildRouter(AuthState auth) {
               child: AddHouseholdMemberScreen(),
             ),
           ),
+          GoRoute(
+            path: '/household/enrollment/link-member',
+            pageBuilder: (context, state) {
+              final extra = state.extra is Map<String, dynamic>
+                  ? state.extra as Map<String, dynamic>
+                  : <String, dynamic>{};
+              return MaterialPage(
+                key: const ValueKey('link-member'),
+                child: AddHouseholdMemberScreen(
+                  existingHouseholdId: extra['householdId'] as String?,
+                  existingHouseholdReferenceId:
+                      extra['householdReferenceId'] as String? ??
+                          extra['householdId'] as String?,
+                  existingVillageId: extra['villageId'] as String?,
+                  existingVillageName: extra['villageName'] as String?,
+                  fromNidScan: extra['fromNidScan'] == true,
+                  scannedNidNumber: extra['nidNumber'] as String?,
+                  scannedName: extra['name'] as String?,
+                  scannedDateOfBirth: extra['dateOfBirth'] as String?,
+                ),
+              );
+            },
+          ),
         ],
       ),
 
@@ -551,35 +573,6 @@ GoRouter buildRouter(AuthState auth) {
           );
         },
       ),
-      GoRoute(
-        path: '/household/enrollment/link-member',
-        pageBuilder: (context, state) {
-          final extra = state.extra is Map<String, dynamic>
-              ? state.extra as Map<String, dynamic>
-              : <String, dynamic>{};
-          return MaterialPage(
-            key: const ValueKey('link-member'),
-            child: LinkMemberScreen(
-              householdId: extra['householdId'] as String? ?? '',
-              householdReferenceId:
-                  extra['householdReferenceId'] as String? ??
-                      extra['householdId'] as String? ??
-                      '',
-              householdName: extra['householdName'] as String?,
-              householdNo: extra['householdNo'] as String?,
-              villageId: extra['villageId'] as String?,
-              villageName: extra['villageName'] as String?,
-              subVillageId: extra['subVillageId'] as String?,
-              subVillageName: extra['subVillageName'] as String?,
-              fromNidScan: extra['fromNidScan'] == true,
-              scannedNidNumber: extra['nidNumber'] as String?,
-              scannedName: extra['name'] as String?,
-              scannedDateOfBirth: extra['dateOfBirth'] as String?,
-            ),
-          );
-        },
-      ),
-
       // ─────────────────────────────────────────────────────────────────────
       // Standalone feature routes (full-screen, outside the shell)
       // ─────────────────────────────────────────────────────────────────────

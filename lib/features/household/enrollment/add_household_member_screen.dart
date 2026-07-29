@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,14 +7,19 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/api/api_repository.dart';
+import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/db/member_dao.dart';
+import '../../../core/db/patient_dao.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
 import 'enrollment_entry_sheet.dart';
+import 'enrollment_repository.dart';
 import 'nid_ocr_service.dart';
 import 'patient_lookup_repository.dart';
 import 'models/household_enrollment_models.dart';
@@ -29,7 +36,32 @@ enum _DuplicateAction { viewRecord, continueAnyway, cancel }
 /// NID scan is a purple gradient CTA button; after mock scan a green
 /// confirmation chip appears and name/DOB/gender fields are auto-filled.
 class AddHouseholdMemberScreen extends StatefulWidget {
-  const AddHouseholdMemberScreen({super.key});
+  const AddHouseholdMemberScreen({
+    super.key,
+    this.existingHouseholdId,
+    this.existingHouseholdReferenceId,
+    this.existingVillageId,
+    this.existingVillageName,
+    this.fromNidScan = false,
+    this.scannedNidNumber,
+    this.scannedName,
+    this.scannedDateOfBirth,
+  });
+
+  /// When non-null, the screen operates in standalone mode: submits the member
+  /// directly to [EnrollmentRepository.submitStandaloneMember] instead of
+  /// adding to the enrollment controller's pending batch.
+  final String? existingHouseholdId;
+  final String? existingHouseholdReferenceId;
+  final String? existingVillageId;
+  final String? existingVillageName;
+
+  final bool fromNidScan;
+  final String? scannedNidNumber;
+  final String? scannedName;
+  final String? scannedDateOfBirth;
+
+  bool get isStandalone => existingHouseholdId != null;
 
   @override
   State<AddHouseholdMemberScreen> createState() =>
@@ -60,6 +92,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   /// Unit label shown next to the age field after DOB auto-fill.
   /// Empty for manual entry (user implies years).
   String _ageUnit = '';
+
+  bool _submitting = false;
 
   final Map<String, GlobalKey> _fieldKeys = {};
   Map<String, String?> _fieldErrors = {};
@@ -104,20 +138,40 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   @override
   void initState() {
-    debugPrint('[_AddHouseholdMemberScreenState] initState');
+    debugPrint('[_AddHouseholdMemberScreenState] initState standalone=${widget.isStandalone}');
     super.initState();
     _brnCtrl = TextEditingController();
     _nameCtrl = TextEditingController();
     _dobCtrl = TextEditingController();
     _ageCtrl = TextEditingController();
     _mobileCtrl = TextEditingController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final headMobile = context.read<EnrollmentController>().householdHead?.mobileNumber;
-      if (headMobile != null && headMobile.isNotEmpty) {
-        setState(() => _mobileCtrl.text = headMobile);
+
+    // Pre-fill from NID scan when navigated here with scan data.
+    if (widget.fromNidScan) {
+      if (widget.scannedNidNumber?.isNotEmpty ?? false) {
+        _brnCtrl.text = widget.scannedNidNumber!;
+        _idType = 'National ID';
       }
-    });
+      if (widget.scannedName?.isNotEmpty ?? false) {
+        _nameCtrl.text = widget.scannedName!;
+      }
+      final dob = widget.scannedDateOfBirth;
+      if (dob != null && dob.isNotEmpty) {
+        _dobCtrl.text = dob;
+        final parsed = DateTime.tryParse(dob);
+        if (parsed != null) _calculateAge(parsed);
+      }
+    }
+
+    if (!widget.isStandalone) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final headMobile = context.read<EnrollmentController>().householdHead?.mobileNumber;
+        if (headMobile != null && headMobile.isNotEmpty) {
+          setState(() => _mobileCtrl.text = headMobile);
+        }
+      });
+    }
   }
 
   @override
@@ -276,11 +330,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     return null;
   }
 
-  void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-    );
-  }
 
   Future<void> _handleSaveMember(EnrollmentController controller) async {
     debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
@@ -336,17 +385,150 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       guardianName: _guardianName,
     );
 
-    controller.addMember(member);
+    if (widget.isStandalone) {
+      await _submitStandalone(member);
+    } else {
+      controller.addMember(member);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Member added successfully'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      context.pop();
+    }
+  }
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Member added successfully'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  /// Submits a member to an already-synced household (standalone mode).
+  /// Mirrors [LinkMemberScreen._submit] + [LinkMemberScreen._persistLocally].
+  Future<void> _submitStandalone(HouseholdMember member) async {
+    setState(() => _submitting = true);
+    try {
+      final auth = context.read<AuthRepository>();
+      final api = context.read<ApiClient>();
+      final memberDao = context.read<MemberDao>();
+      final patientDao = context.read<PatientDao>();
+      final hierarchy = context.read<UserHierarchyService>();
 
-    context.pop();
+      var effSubVillageId = widget.existingVillageId;
+      var effSubVillageName = widget.existingVillageName;
+      if (effSubVillageId == null || effSubVillageId.isEmpty) {
+        await hierarchy.prefetch();
+        final ssSubs =
+            (hierarchy.ssWorkers ?? []).expand((s) => s.subVillages).toList();
+        final topSubs = hierarchy.subVillages ?? const <SubVillageRef>[];
+        final SubVillageRef? fallback = ssSubs.isNotEmpty
+            ? ssSubs.first
+            : (topSubs.isNotEmpty ? topSubs.first : null);
+        if (fallback != null) {
+          effSubVillageId = fallback.id;
+          effSubVillageName = fallback.name;
+        }
+      }
+
+      final userId = await auth.userId() ?? 0;
+      final userFhirId = await auth.userFhirId() ?? '';
+      final orgId = await auth.organizationFhirId() ?? '';
+      final deviceId = await auth.deviceId();
+
+      final repo = EnrollmentRepository(api);
+      final canonicalVillageId = widget.existingVillageId?.isNotEmpty == true
+          ? widget.existingVillageId!
+          : effSubVillageId ?? '';
+      final canonicalVillageName = widget.existingVillageName?.isNotEmpty == true
+          ? widget.existingVillageName!
+          : effSubVillageName ?? '';
+
+      final result = await repo.submitStandaloneMember(
+        member: member,
+        householdId: widget.existingHouseholdId!,
+        householdReferenceId:
+            widget.existingHouseholdReferenceId ?? widget.existingHouseholdId!,
+        villageName: canonicalVillageName,
+        villageId: canonicalVillageId,
+        subVillageId: effSubVillageId,
+        subVillageName: effSubVillageName,
+        userId: userId,
+        userFhirId: userFhirId,
+        organizationId: orgId,
+        deviceId: deviceId,
+      );
+
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final refId = result.memberReferenceId;
+
+      await memberDao.upsertMany([
+        HouseholdMemberEntity(
+          id: refId,
+          householdId: widget.existingHouseholdId,
+          householdReferenceId:
+              widget.existingHouseholdReferenceId ?? widget.existingHouseholdId,
+          name: member.name,
+          gender: member.gender,
+          dob: member.dateOfBirth,
+          phone: member.mobileNumber,
+          nationalId: member.idNumber,
+          idType: member.idType,
+          villageId: canonicalVillageId,
+          villageName: canonicalVillageName,
+          subVillageId: effSubVillageId,
+          subVillageName: effSubVillageName,
+          maritalStatus: member.maritalStatus,
+          disability: member.disabilityStatus.toLowerCase(),
+          isHouseholdHead: false,
+          isActive: true,
+          isPregnant: false,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+          syncStatus: 'Success',
+        ),
+      ]);
+
+      await patientDao.upsertMany([
+        Patient(
+          id: refId,
+          name: member.name,
+          gender: member.gender,
+          dob: member.dateOfBirth,
+          phone: member.mobileNumber,
+          nationalId: member.idNumber,
+          villageId: canonicalVillageId,
+          villageName: canonicalVillageName,
+          householdId: widget.existingHouseholdId,
+          isActive: true,
+          updatedAt: nowMs,
+          rawJson: jsonEncode({
+            'id': refId,
+            'name': member.name,
+            'gender': member.gender,
+            'dateOfBirth': member.dateOfBirth,
+            'phoneNumber': member.mobileNumber,
+            'nationalId': member.idNumber,
+            'villageId': canonicalVillageId,
+            'houseHoldId': widget.existingHouseholdId,
+            'isActive': true,
+          }),
+        ),
+      ]);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Member added successfully')),
+      );
+      context.go('/patients/households');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add member: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   Future<_DuplicateAction> _showDuplicateDialog({
@@ -841,6 +1023,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                   child: EnrollmentStickyBar(
                     label: EnrollmentStrings.saveMemberCTA,
                     onPressed: () => _handleSaveMember(controller),
+                    loading: _submitting,
                   ),
                 ),
               ],
