@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/config/app_config.dart';
-import 'package:uhis_next/core/constants/app_strings.dart';
-import 'package:uhis_next/features/lock/lock_screen.dart';
+import 'package:leapwell/core/config/app_config.dart';
+import 'package:leapwell/core/constants/app_strings.dart';
+import 'package:leapwell/features/lock/lock_screen.dart';
 
 void main() {
   Widget buildLockContent({

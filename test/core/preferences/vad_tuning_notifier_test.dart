@@ -7,7 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:uhis_next/core/preferences/vad_tuning_notifier.dart';
+import 'package:leapwell/core/preferences/vad_tuning_notifier.dart';
 
 class _InMemorySecureStorage extends FlutterSecureStoragePlatform {
   final Map<String, String> values;

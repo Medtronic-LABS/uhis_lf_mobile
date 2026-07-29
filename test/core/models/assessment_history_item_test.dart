@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/models/assessment_history_item.dart';
+import 'package:leapwell/core/models/assessment_history_item.dart';
 
 void main() {
   group('AssessmentHistoryItem.fromJson', () {

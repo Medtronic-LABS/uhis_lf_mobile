@@ -694,7 +694,9 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         await context.read<HouseholdDao>().getById(localId);
     final serverHouseholdId = householdEntity?.fhirId ?? localId;
 
-    final villageId = _household.members.firstOrNull?.villageId ?? '';
+    final villageId = householdEntity?.villageId ??
+        _household.members.firstOrNull?.villageId ??
+        '';
     final memberNames = _household.members
         .map((m) => m.name)
         .whereType<String>()

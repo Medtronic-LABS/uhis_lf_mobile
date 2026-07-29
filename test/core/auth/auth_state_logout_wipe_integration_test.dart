@@ -13,11 +13,11 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:uhis_next/core/api/api_client.dart';
-import 'package:uhis_next/core/auth/auth_repository.dart';
-import 'package:uhis_next/core/auth/auth_state.dart';
-import 'package:uhis_next/core/auth/biometric_service.dart';
-import 'package:uhis_next/core/db/app_database.dart';
+import 'package:leapwell/core/api/api_client.dart';
+import 'package:leapwell/core/auth/auth_repository.dart';
+import 'package:leapwell/core/auth/auth_state.dart';
+import 'package:leapwell/core/auth/biometric_service.dart';
+import 'package:leapwell/core/db/app_database.dart';
 
 /// Bypasses the real network/secure-storage logout implementation so this
 /// test can isolate the DB-wipe wiring, mirroring the fake used in

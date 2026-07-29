@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:uhis_next/main.dart' as app;
-import 'package:uhis_next/core/constants/app_strings.dart';
+import 'package:leapwell/main.dart' as app;
+import 'package:leapwell/core/constants/app_strings.dart';
 
 const _kTestPin = ['1', '2', '3', '4'];
 

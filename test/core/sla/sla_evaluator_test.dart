@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/models/referral.dart';
-import 'package:uhis_next/core/models/sla.dart';
-import 'package:uhis_next/core/sla/sla_evaluator.dart';
+import 'package:leapwell/core/models/referral.dart';
+import 'package:leapwell/core/models/sla.dart';
+import 'package:leapwell/core/sla/sla_evaluator.dart';
 
 void main() {
   const evaluator = SlaEvaluator();

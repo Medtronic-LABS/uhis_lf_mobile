@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/features/visit/triage/triage_transcript_matcher.dart';
+import 'package:leapwell/features/visit/triage/triage_transcript_matcher.dart';
 
 void main() {
   group('TriageTranscriptMatcher', () {

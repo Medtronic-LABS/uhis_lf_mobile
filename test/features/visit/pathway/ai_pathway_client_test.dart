@@ -14,10 +14,10 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:uhis_next/core/db/app_database.dart';
-import 'package:uhis_next/core/models/programme.dart';
-import 'package:uhis_next/features/visit/pathway/ai_pathway_client.dart';
-import 'package:uhis_next/features/visit/pathway/pathway_engine.dart';
+import 'package:leapwell/core/db/app_database.dart';
+import 'package:leapwell/core/models/programme.dart';
+import 'package:leapwell/features/visit/pathway/ai_pathway_client.dart';
+import 'package:leapwell/features/visit/pathway/pathway_engine.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

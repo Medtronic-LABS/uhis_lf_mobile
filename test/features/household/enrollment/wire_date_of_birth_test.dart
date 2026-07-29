@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/features/household/enrollment/enrollment_repository.dart';
+import 'package:leapwell/features/household/enrollment/enrollment_repository.dart';
 
 void main() {
   group('EnrollmentRepository.wireDateOfBirth', () {

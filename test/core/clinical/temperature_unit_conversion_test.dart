@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/clinical/assessment_thresholds.dart';
-import 'package:uhis_next/core/clinical/referral_evaluator.dart';
-import 'package:uhis_next/features/visit/models/anc_assessment.dart';
+import 'package:leapwell/core/clinical/assessment_thresholds.dart';
+import 'package:leapwell/core/clinical/referral_evaluator.dart';
+import 'package:leapwell/features/visit/models/anc_assessment.dart';
 
 void main() {
   group('fahrenheitToCelsius', () {

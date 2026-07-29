@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:uhis_next/core/db/app_database.dart';
-import 'package:uhis_next/core/db/referral_dao.dart';
-import 'package:uhis_next/core/models/referral.dart';
-import 'package:uhis_next/core/models/sla.dart';
+import 'package:leapwell/core/db/app_database.dart';
+import 'package:leapwell/core/db/referral_dao.dart';
+import 'package:leapwell/core/models/referral.dart';
+import 'package:leapwell/core/models/sla.dart';
 
 void main() {
   setUpAll(() {

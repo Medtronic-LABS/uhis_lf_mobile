@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/models/programme.dart';
-import 'package:uhis_next/features/visit/triage/patient_context_builder.dart';
-import 'package:uhis_next/features/visit/triage/triage_view_model.dart';
-import 'package:uhis_next/features/visit/triage/unified_symptom_catalog.dart';
+import 'package:leapwell/core/models/programme.dart';
+import 'package:leapwell/features/visit/triage/patient_context_builder.dart';
+import 'package:leapwell/features/visit/triage/triage_view_model.dart';
+import 'package:leapwell/features/visit/triage/unified_symptom_catalog.dart';
 
 void main() {
   group('TriageViewModel Pre-Tick Scenarios', () {

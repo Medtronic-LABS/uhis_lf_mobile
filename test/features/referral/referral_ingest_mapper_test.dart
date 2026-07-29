@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/db/follow_up_dao.dart';
-import 'package:uhis_next/core/models/assessment_history_item.dart';
-import 'package:uhis_next/core/models/referral.dart';
-import 'package:uhis_next/core/referral/referral_ingest_mapper.dart';
+import 'package:leapwell/core/db/follow_up_dao.dart';
+import 'package:leapwell/core/models/assessment_history_item.dart';
+import 'package:leapwell/core/models/referral.dart';
+import 'package:leapwell/core/referral/referral_ingest_mapper.dart';
 
 void main() {
   group('ReferralIngestMapper.fromFollowUp', () {

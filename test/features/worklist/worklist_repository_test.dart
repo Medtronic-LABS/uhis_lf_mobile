@@ -1,18 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:uhis_next/core/db/app_database.dart';
-import 'package:uhis_next/core/db/assessment_dao.dart';
-import 'package:uhis_next/core/db/follow_up_dao.dart';
-import 'package:uhis_next/core/db/immunisation_dao.dart';
-import 'package:uhis_next/core/db/local_assessment_dao.dart';
-import 'package:uhis_next/core/db/patient_dao.dart';
-import 'package:uhis_next/core/db/patient_programmes_dao.dart';
-import 'package:uhis_next/core/db/sync_meta_dao.dart';
-import 'package:uhis_next/core/models/patient.dart';
-import 'package:uhis_next/core/models/programme.dart';
-import 'package:uhis_next/core/models/risk.dart';
-import 'package:uhis_next/core/risk/risk_scoring_service.dart';
-import 'package:uhis_next/features/worklist/worklist_repository.dart';
+import 'package:leapwell/core/db/app_database.dart';
+import 'package:leapwell/core/db/assessment_dao.dart';
+import 'package:leapwell/core/db/follow_up_dao.dart';
+import 'package:leapwell/core/db/immunisation_dao.dart';
+import 'package:leapwell/core/db/local_assessment_dao.dart';
+import 'package:leapwell/core/db/patient_dao.dart';
+import 'package:leapwell/core/db/patient_programmes_dao.dart';
+import 'package:leapwell/core/db/sync_meta_dao.dart';
+import 'package:leapwell/core/models/patient.dart';
+import 'package:leapwell/core/models/programme.dart';
+import 'package:leapwell/core/models/risk.dart';
+import 'package:leapwell/core/risk/risk_scoring_service.dart';
+import 'package:leapwell/features/worklist/worklist_repository.dart';
 
 void main() {
   sqfliteFfiInit();

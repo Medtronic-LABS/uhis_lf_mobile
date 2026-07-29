@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/features/realtime_asr/vad_gate.dart';
+import 'package:leapwell/features/realtime_asr/vad_gate.dart';
 
 /// Builds a constant-amplitude PCM16LE mono 16kHz buffer of [durationMs],
 /// whose RMS (and therefore VadGate's dBFS reading) equals exactly the

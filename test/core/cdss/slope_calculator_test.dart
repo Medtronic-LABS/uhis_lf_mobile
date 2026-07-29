@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/cdss/slope_calculator.dart';
-import 'package:uhis_next/core/cdss/models/cdss_inputs.dart';
+import 'package:leapwell/core/cdss/slope_calculator.dart';
+import 'package:leapwell/core/cdss/models/cdss_inputs.dart';
 
 List<BpReading> _readings(List<int> values) => [
       for (int i = 0; i < values.length; i++)

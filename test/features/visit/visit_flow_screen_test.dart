@@ -13,9 +13,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:uhis_next/core/constants/app_strings.dart';
-import 'package:uhis_next/core/models/programme.dart';
-import 'package:uhis_next/features/visit/visit_flow_screen.dart';
+import 'package:leapwell/core/constants/app_strings.dart';
+import 'package:leapwell/core/models/programme.dart';
+import 'package:leapwell/features/visit/visit_flow_screen.dart';
 
 Future<GoRouter> _pumpFlowAtStep3(WidgetTester tester) async {
   final router = GoRouter(
