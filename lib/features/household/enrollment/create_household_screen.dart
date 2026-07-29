@@ -90,7 +90,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       if (_householdType == null) 'householdType': req,
       if (_totalMembersCtrl.text.trim().isEmpty) 'totalMembers': req,
       if (_nameCtrl.text.trim().isEmpty) 'headName': req,
-      if (_idNumberCtrl.text.trim().isEmpty) 'idNumber': req,
+      if (_idType != 'Not Available' && _idNumberCtrl.text.trim().isEmpty) 'idNumber': req,
       if (_mobileCtrl.text.trim().isEmpty) 'mobile': req,
       if (_dobCtrl.text.trim().isEmpty) 'dob': 'Date of birth required',
       if (_gender == null) 'gender': req,
@@ -318,7 +318,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
       idType: _idType ?? 'BRN',
-      idNumber: _idNumberCtrl.text,
+      idNumber: _idType == 'Not Available' ? null : _idNumberCtrl.text,
       mobileNumber: _mobileCtrl.text,
       mobileAvailable: true,
       maritalStatus: _maritalStatus!,
@@ -695,12 +695,18 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.idTypeLabel,
                       options: EnrollmentStrings.idTypesV2,
                       selectedValue: _idType,
-                      onChanged: (v) => setState(() => _idType = v),
+                      onChanged: (v) => setState(() {
+                        _idType = v;
+                        if (v == 'Not Available') {
+                          _idNumberCtrl.clear();
+                          _fieldErrors.remove('idNumber');
+                        }
+                      }),
                       isRequired: true,
                     ),
                     const SizedBox(height: 14),
 
-                    if (!_prefilledFromScan) ...[
+                    if (!_prefilledFromScan && _idType != 'Not Available') ...[
                       SizedBox(key: _key('idNumber'), height: 0),
                       EnrollmentInputField(
                         label: EnrollmentStrings.idNumberLabel,

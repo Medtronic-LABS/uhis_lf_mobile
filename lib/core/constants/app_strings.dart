@@ -4914,7 +4914,7 @@ abstract final class EnrollmentStrings {
   static const List<String> disabilityStatusesV2 = ['Present', 'Absent'];
   static const List<String> disabilityYesNo = ['Yes', 'No'];
   static const List<String> gendersMember = ['Male', 'Female', 'Other'];
-  static const List<String> idTypesV2 = ['BRN', 'National ID'];
+  static const List<String> idTypesV2 = ['National ID', 'BRN', 'Not Available'];
 
   static const List<String> healthWorkerOptions = [
     'Jahnara Begum — Char Bhadra',

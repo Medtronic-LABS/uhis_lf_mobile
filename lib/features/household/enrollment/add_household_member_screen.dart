@@ -48,6 +48,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   String? _maritalStatus;
   String? _disabilityStatus = 'Absent';
   bool _nidScanned = false;
+  String _idType = 'BRN';
   String? _ageSummary;
   String? _guardianName;
 
@@ -193,6 +194,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         final data = result.data!;
         setState(() {
           _nidScanned = true;
+          _idType = 'National ID';
           _existingPatient = null;
           if (data.nidNumber != null) _brnCtrl.text = data.nidNumber!;
           if (data.name != null) _nameCtrl.text = data.name!;
@@ -305,8 +307,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       age: int.tryParse(_ageCtrl.text) ?? 0,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
-      idType: _nidScanned ? 'NID' : 'BRN',
-      idNumber: nid.isNotEmpty ? nid : null,
+      idType: _idType == 'National ID' ? 'NID' : _idType,
+      idNumber: _idType == 'Not Available' ? null : (nid.isNotEmpty ? nid : null),
       mobileNumber: mobile.isNotEmpty ? mobile : null,
       mobileAvailable: mobile.isNotEmpty,
       maritalStatus: _maritalStatus ?? '',
@@ -417,11 +419,26 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     AppSpacing.stickyBarClearance,
                   ),
                   children: [
-                    // ── Q1: National ID ────────────────────────────────────
-                    _QuestionLabel(number: 'Q1', text: 'National ID'),
+                    // ── Q1: ID Type ────────────────────────────────────────
+                    _QuestionLabel(number: 'Q1', text: 'ID Type'),
                     const SizedBox(height: 10),
+                    EnrollmentSegmentedButtons(
+                      label: EnrollmentStrings.idTypeLabel,
+                      options: EnrollmentStrings.idTypesV2,
+                      selectedValue: _idType,
+                      onChanged: (v) => setState(() {
+                        _idType = v;
+                        if (_idType != 'National ID') {
+                          _nidScanned = false;
+                          _brnCtrl.clear();
+                          _existingPatient = null;
+                        }
+                      }),
+                    ),
+                    const SizedBox(height: 14),
 
-                    // NID scan purple CTA
+                    // NID scan purple CTA — shown only for National ID
+                    if (_idType == 'National ID') ...[
                     Material(
                       borderRadius: BorderRadius.circular(AppRadius.patRow),
                       child: InkWell(
@@ -603,23 +620,16 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       ),
                     ],
                     const SizedBox(height: 8),
+                    ], // end National ID section
 
-                    // BRN fallback — shown only when no NID was scanned.
-                    // After scan, _brnCtrl is already in the NID editable field above.
-                    if (!_nidScanned) ...[
-                      Text(
-                        EnrollmentStrings.nidScanNoBrnHint,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
+                    // BRN field — shown only when ID type is BRN
+                    if (_idType == 'BRN') ...[
                       EnrollmentInputField(
                         label: 'Birth Registration Number (BRN)',
-                        hint: 'Enter BRN if no NID',
+                        hint: 'Enter BRN',
                         controller: _brnCtrl,
                       ),
+                      const SizedBox(height: 8),
                     ],
                     const SizedBox(height: 20),
 
