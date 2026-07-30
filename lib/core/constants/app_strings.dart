@@ -826,6 +826,9 @@ abstract final class PatientProfileStrings {
   static String get newbornAge => getTranslatedString('newbornAge', 'Newborn age');
   static String get breastfeeding => getTranslatedString('breastfeeding', 'Breastfeeding');
   static String get aiInsightUnavailable => getTranslatedString('aiInsightUnavailable', 'AI insight unavailable — check patient record manually');
+  static String get aiInsightNotSynced => AppLocale.isBangla
+      ? 'অফলাইন মোডে তথ্য পাওয়া যাচ্ছে না'
+      : 'Data not available in offline mode';
   static String get enrolledInApp => getTranslatedString('enrolledInApp', 'Enrolled in Apon Sushashthya');
   static String get enrollmentMilestone => getTranslatedString('enrollmentMilestone', 'Enrollment date');
   static String get pregnancyRegistered => getTranslatedString('pregnancyRegistered', 'Pregnancy Registered');

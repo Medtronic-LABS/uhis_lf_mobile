@@ -236,6 +236,23 @@ class RealtimeAsrController extends ChangeNotifier {
         },
       );
 
+      // Register the schema once, right after connecting and before any
+      // audio is captured — a backend with dynamic_form_schema_enabled on
+      // can then extract using these exact fields from the very first
+      // "extract" call. Sending it here is a pure optimization: extractNow()
+      // below still sends the same schema inline on every extract call too
+      // (unchanged), which is what makes this work against a backend that
+      // doesn't understand "init_schema" yet, and what picks up a mid-visit
+      // change in which fields are on screen.
+      final schema = _formSchema;
+      if (schema != null && schema.isNotEmpty) {
+        _send({
+          'type': 'init_schema',
+          if (assessmentType != null) 'assessmentType': assessmentType,
+          'fields': schema.map((f) => f.toJson()).toList(),
+        });
+      }
+
       final hasPerm = await _recorder.hasPermission();
       debugPrint('[RealtimeASR] recorder.hasPermission()=$hasPerm');
 
@@ -480,6 +497,15 @@ class RealtimeAsrController extends ChangeNotifier {
         _extractionCompleter?.complete();
         _extractionCompleter = null;
         notifyListeners();
+      case 'schema_ack':
+        // Reply to "init_schema" (or an inline "formSchema" on "extract") —
+        // informational only, no state to update here. Logged so a schema
+        // that's unexpectedly getting dropped in bulk is visible during
+        // development without needing to inspect backend logs.
+        debugPrint(
+          '[RealtimeASR] recv schema_ack: accepted=${msg['acceptedCount']} '
+          'dropped=${msg['droppedCount']} reasons=${msg['dropped']}',
+        );
       default:
         final data = msg['data'] as Map<String, dynamic>?;
         final transcript = data?['transcript'] as String?;
