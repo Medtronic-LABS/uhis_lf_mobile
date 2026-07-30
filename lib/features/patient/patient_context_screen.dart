@@ -42,6 +42,7 @@ import 'vitals_repository.dart';
 import '../../core/db/referral_dao.dart';
 import '../../core/models/referral.dart';
 import '../referral/referral_fetch_service.dart';
+import '../referral/referral_repository.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -490,6 +491,7 @@ class _PatientContextScreenState
       // Capture context-dependent objects before any await (avoid_build_context_synchronously).
       final referralFetchSvc = context.read<ReferralFetchService>();
       final referralDaoLocal = context.read<ReferralDao>();
+      final referralRepoLocal = context.read<ReferralRepository>();
 
       final tPhase2 = Stopwatch()..start();
       List<MemberAssessment> remoteAssessments = const [];
@@ -568,6 +570,7 @@ class _PatientContextScreenState
         liveReferrals,
         remoteAssessments,
         referralDaoLocal,
+        referralRepoLocal,
       );
 
       ConsoleLog.step('[PatientCtx] liveReferrals for timeline: ${liveReferrals.length}');
@@ -1768,6 +1771,7 @@ Future<List<Referral>> _synthesizeReferralStateFromNurseReview(
   List<Referral> referrals,
   List<MemberAssessment> assessments,
   ReferralDao dao,
+  ReferralRepository repo,
 ) async {
   const _openStates = {ReferralStatus.created, ReferralStatus.inTransit};
   final openReferrals = referrals.where((r) => _openStates.contains(r.state)).toList();
@@ -1801,6 +1805,8 @@ Future<List<Referral>> _synthesizeReferralStateFromNurseReview(
 
   try {
     await dao.upsertMany(updated.where((r) => r.state == synthesized).toList());
+    // Fire _changes.value++ so CceRepository notifies the dashboard.
+    await repo.recomputeAllAfterSync();
   } catch (e) {
     ConsoleLog.warn('[PatientCtx] referral synthesis persist failed: $e');
   }
