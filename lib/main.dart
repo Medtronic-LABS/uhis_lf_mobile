@@ -57,6 +57,8 @@ import 'features/patient/followup_repository.dart';
 import 'features/patient/member_detail_repository.dart';
 import 'features/patient/patient_repository.dart';
 import 'features/patient/vitals_repository.dart';
+import 'features/referral/referral_api_service.dart';
+import 'features/referral/referral_fetch_service.dart';
 import 'features/referral/referral_repository.dart';
 import 'features/search/global_search_repository.dart';
 import 'features/search/household_search_repository.dart';
@@ -218,6 +220,18 @@ class _UhisNextAppState extends State<UhisNextApp>
     priorityScorer: _priorityScorer,
     notificationScheduler: _repeatScheduler,
     localAssessments: _localAssessmentDao,
+  );
+
+  // ── Referral live-fetch wiring ───────────────────────────────────────────
+  // ReferralFetchService fetches POST /spice-service/patient/referral-tickets
+  // on patient context screen load so the SK sees nurse-review outcomes
+  // (patientStatus: Controlled / Uncontrolled) without waiting for a full sync.
+  late final ReferralApiService _referralApiService =
+      ReferralApiService(widget.api);
+  late final ReferralFetchService _referralFetchService = ReferralFetchService(
+    api: _referralApiService,
+    dao: _referralDao,
+    repository: _referrals,
   );
 
   // ── Mission Dashboard wiring ──────────────────────────────────────────
@@ -393,6 +407,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<WorklistRepository>.value(value: _worklist),
         Provider<PatientRepository>.value(value: _patientRepo),
         Provider<ReferralDao>.value(value: _referralDao),
+        Provider<ReferralApiService>.value(value: _referralApiService),
+        Provider<ReferralFetchService>.value(value: _referralFetchService),
         Provider<SlaEvaluator>.value(value: _slaEvaluator),
         Provider<PriorityScorer>.value(value: _priorityScorer),
         Provider<NotificationService>.value(value: _notifications),

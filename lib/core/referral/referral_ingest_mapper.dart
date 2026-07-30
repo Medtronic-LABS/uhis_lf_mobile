@@ -148,6 +148,113 @@ class ReferralIngestMapper {
     );
   }
 
+  /// From a live [ReferralData] ticket fetched via
+  /// `POST /spice-service/patient/referral-tickets`.
+  ///
+  /// Wire shape (from Spice Android `ReferralData.kt`):
+  ///   id, referredBy, phoneNumber, referredTo (site NAME — not id),
+  ///   patientStatus, referredReason, dateOfOnset, referredDate,
+  ///   referredDates: [{ id, date, type }]
+  ///
+  /// [patientStatus] after nurse medical review (NurseMedicalReviewActivity):
+  ///   "REFERRED"      → ReferralStatus.created     (open, not yet reviewed)
+  ///   "Controlled"    → ReferralStatus.closedRecovered  (nurse review: stable)
+  ///   "Uncontrolled"  → ReferralStatus.treatmentStarted (nurse review: needs care)
+  ///   "REVIEWED"      → ReferralStatus.treatmentStarted (generic reviewed state)
+  ///   anything else   → ReferralStatus.fromWireTag (handles legacy 4-state enum)
+  ///
+  /// Note: [referredTo] is a facility name string, not an integer site id.
+  /// We store it as `facilityName` in rawJson — never write to referredSiteId.
+  ///
+  /// Returns null if [ticket] has no id (malformed) — caller skips the row.
+  static Referral? fromReferralTicket(
+    Map<String, dynamic> ticket, {
+    required String patientId,
+    String? householdId,
+    String? villageId,
+  }) {
+    final ticketId = ticket['id']?.toString().trim() ?? '';
+    if (ticketId.isEmpty) {
+      // DEBUG: malformed ticket — id missing. Log and skip.
+      return null;
+    }
+
+    final rawStatus = _firstString(ticket, const [
+      'patientStatus',
+      'referralStatus',
+      'status',
+    ]);
+
+    // Map nurse-review wire values that fromWireTag doesn't know about.
+    final state = _mapPatientStatus(rawStatus);
+
+    final reason = _firstString(ticket, const [
+      'referredReason',
+      'referralReason',
+      'reason',
+    ]);
+
+    // referredTo is a site name string from the wire — never a site id.
+    final siteName = _firstString(ticket, const [
+      'referredTo',
+      'referredSiteName',
+      'facilityName',
+    ]);
+
+    final createdAtMs = _parseDateMs(ticket['referredDate']) ??
+        _parseDateMs(ticket['dateOfOnset']) ??
+        DateTime.now().millisecondsSinceEpoch;
+
+    return Referral(
+      // Stable id — distinct namespace from ref-fu-* and ref-hist-*,
+      // so upsertMany is idempotent across repeated fetches.
+      id: 'ref-ticket-$ticketId',
+      patientId: patientId,
+      householdId: householdId,
+      villageId: villageId,
+      slaTier: SlaTier.inferFromReason(reason),
+      diagnosisLabel: reason,
+      state: state,
+      createdAt: createdAtMs,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      closedAt: state.isClosed ? createdAtMs : null,
+      rawJson: jsonEncode({
+        ...ticket,
+        // Preserve site name under a stable key so Referral.facilityName
+        // getter can find it regardless of which field the server used.
+        if (siteName != null) 'facilityName': siteName,
+        // Explicitly NOT setting referredSiteId — wire gives name, not int id.
+        'source': 'referral-ticket',
+        // DEBUG: capture the raw patientStatus so logs can trace mapping.
+        '__rawPatientStatus': rawStatus,
+      }),
+    );
+  }
+
+  /// Maps nurse medical review wire values to device-side [ReferralStatus].
+  ///
+  /// The Spice Android `NurseMedicalReviewActivity` sets patientStatus to
+  /// "Controlled" or "Uncontrolled" after review — these are not in the
+  /// standard 14-state enum so we intercept them here before fromWireTag.
+  static ReferralStatus _mapPatientStatus(String? raw) {
+    switch ((raw ?? '').trim()) {
+      // Nurse review outcomes from NurseMedicalReviewActivity.
+      case 'Controlled':
+        // Patient stable after review → referral closed (recovered).
+        return ReferralStatus.closedRecovered;
+      case 'Uncontrolled':
+        // Patient still needs care → treatment is underway.
+        return ReferralStatus.treatmentStarted;
+      case 'REVIEWED':
+      case 'Reviewed':
+        // Generic reviewed state — treatment in progress.
+        return ReferralStatus.treatmentStarted;
+      default:
+        // Delegate to existing 14-state + legacy 4-state mapping.
+        return ReferralStatus.fromWireTag(raw);
+    }
+  }
+
   static bool _isOpenStatus(String? status) {
     if (status == null || status.trim().isEmpty) return false;
     final state = ReferralStatus.fromWireTag(status);
