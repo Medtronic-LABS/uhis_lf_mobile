@@ -45,6 +45,9 @@ class AssistantRepository {
   }) async {
     final coachingUrl = AppConfig.coachingServiceUrl;
     if (coachingUrl.isNotEmpty && patientContext == null) {
+      if (question.trim().length < 3) {
+        return AssistantAnswer(text: 'Please enter at least 3 characters.');
+      }
       return _askCoachingRag(question, coachingUrl);
     }
     return _askAiScribe(question, patientContext: patientContext);
@@ -63,7 +66,7 @@ class AssistantRepository {
     try {
       final response = await dio.post<Map<String, dynamic>>(
         Endpoints.coachingRagQuery,
-        data: {'question': question, 'response_language': 'en'},
+        data: {'question': question, 'response_language': 'bn'},
       );
       ConsoleLog.step('[PayloadDebug] coaching-rag → ${response.statusCode}');
       final statusCode = response.statusCode ?? 0;
