@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
+import '../../../core/db/assessment_dao.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/local_assessment_dao.dart';
@@ -331,17 +333,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         };
       }).toList();
 
-      final risks = <String>[];
-      if (followUps.any((f) => f.isOverdue)) risks.add('missed_followup');
-      final latestBp = visitsByVisit.isNotEmpty
-          ? visitsByVisit.first.readings
-                .where((r) => r.type == VitalType.bloodPressure)
-                .firstOrNull
-          : null;
-      if (latestBp?.systolic != null && latestBp!.systolic! >= 140) {
-        risks.add('elevated_bp');
-      }
-      if (visitsByVisit.length >= 3) risks.add('returning_patient');
+      final clinicalFindings = await BriefingFindingsAggregator.build(
+        patientId: widget.patientId,
+        patientCtx: patientCtx,
+        selectedProgrammes: _selectedProgrammes,
+        assessmentDao: context.read<LocalAssessmentDao>(),
+        historyAssessmentDao: context.read<AssessmentDao>(),
+        followUpRepo: followUpRepo,
+        patientDao: context.read<PatientDao>(),
+        immunisationDao: context.read<ImmunisationDao>(),
+      );
 
       final lastVisit = visitsByVisit.isNotEmpty ? visitsByVisit.first : null;
 
@@ -360,7 +361,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         if (vitalsMap != null && vitalsMap.isNotEmpty)
           'recentVitals': vitalsMap,
         'openFollowUps': followUpSummaries,
-        'riskIndicators': risks,
+        'clinicalFindings': clinicalFindings.map((f) => f.toJson()).toList(),
         if (patientCtx.gestationalWeeks != null)
           'gestationalWeeks': patientCtx.gestationalWeeks,
       };

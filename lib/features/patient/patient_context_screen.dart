@@ -19,10 +19,16 @@ import '../../core/db/assessment_dao.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/immunisation_dao.dart';
 import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
+import '../../core/db/patient_dao.dart';
+import '../../core/db/patient_programmes_dao.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
+import '../../core/clinical/briefing_rules/clinical_finding.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
+import 'followup_repository.dart';
 import 'member_detail_repository.dart';
 import 'patient_actions_row.dart';
 import 'patient_repository.dart';
@@ -31,6 +37,7 @@ import 'contact_sheet.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/widgets/gestational_age_card.dart';
 import '../../core/widgets/skeleton.dart';
+import '../visit/triage/patient_context_builder.dart';
 import 'referral_narrative.dart';
 import 'vitals_repository.dart';
 
@@ -187,6 +194,10 @@ class _PatientContextScreenState
     extends PhiScreenState<PatientContextScreen> {
   Future<PatientOrMemberData>? _future;
   bool _refreshing = false;
+  // Bumped on every successful pull-to-refresh so _AiInsightCard's Key
+  // changes, forcing it to recreate and recompute its rule-based summary
+  // against whatever fresh data the refresh pulled in.
+  int _aiInsightRefreshGen = 0;
   PatientOrMemberData? _localSnapshot;
   bool _remoteLoading = false;
 
@@ -651,7 +662,10 @@ class _PatientContextScreenState
     try {
       final data = await _fetchData();
       if (!mounted) return;
-      setState(() => _future = Future.value(data));
+      setState(() {
+        _future = Future.value(data);
+        _aiInsightRefreshGen++;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(PatientContextStrings.refreshDone)),
       );
@@ -841,9 +855,6 @@ class _PatientContextScreenState
     final gravida = ancRaw['gravida']?.toString();
     final parity = ancRaw['parity']?.toString();
 
-    // AI context summary (pure local, synchronous)
-    final aiCtx = _aiContext(data);
-
     // Status badge — overdue takes priority over risk band
     final pendingEntry = _derivePendingEntry(data);
     String? statusLabel;
@@ -892,7 +903,8 @@ class _PatientContextScreenState
                   children: [
                     // ── AI Insight card ───────────────────────────────────
                     _AiInsightCard(
-                      summary: aiCtx.summary,
+                      key: ValueKey('ai-insight-$_aiInsightRefreshGen'),
+                      patientId: widget.patientId,
                       statusLabel: statusLabel,
                       statusBg: statusBg,
                       statusFg: statusFg,
@@ -1899,12 +1911,29 @@ class _CareThreadChipRow extends StatelessWidget {
 
 // ─── AI Insight Card ───────────────────────────────────────────────────────
 
-/// Inline card showing the locally-computed patient AI summary. Content comes
-/// from [PatientAiContext.summary] — no async call, always available offline.
-/// Falls back to a muted unavailable message when the summary is empty.
-class _AiInsightCard extends StatelessWidget {
+/// Joins deterministically rule-computed [ClinicalFinding]s (same programme
+/// rule tables used by the "Before You Knock" visit briefing —
+/// `lib/core/clinical/briefing_rules/`) into one flowing-prose summary.
+/// Every rule message already ends in its own period, so a plain space-join
+/// reads as normal prose without any extra punctuation logic. Empty input
+/// returns `""`, which the card renders as the muted "unavailable" message.
+String clinicalFindingsSummary(List<ClinicalFinding> findings) =>
+    findings.map((f) => f.message).join(' ');
+
+/// Inline card showing a rule-computed patient clinical summary — purely
+/// clinical content (no age/gender/risk-band text), built by running this
+/// patient's active programmes through the same deterministic rule engine
+/// used by the AI visit briefing. Falls back to a muted unavailable message
+/// when no rule fires (or the computation fails) for this patient.
+///
+/// The status badge and "CLINICAL PRIORITY"/"WHY" block in the expanded
+/// detail view are unchanged — still driven by [riskBand]/[riskReasons],
+/// which stay app/worklist-computed exactly as before; only the summary text
+/// itself is rule-based here.
+class _AiInsightCard extends StatefulWidget {
   const _AiInsightCard({
-    required this.summary,
+    super.key,
+    required this.patientId,
     this.statusLabel,
     this.statusBg = Colors.transparent,
     this.statusFg = Colors.white,
@@ -1914,7 +1943,7 @@ class _AiInsightCard extends StatelessWidget {
     this.lastAssessedDate,
   });
 
-  final String summary;
+  final String patientId;
   final String? statusLabel;
   final Color statusBg;
   final Color statusFg;
@@ -1923,6 +1952,47 @@ class _AiInsightCard extends StatelessWidget {
   final List<String> riskReasons;
   final DateTime? lastAssessedDate;
 
+  @override
+  State<_AiInsightCard> createState() => _AiInsightCardState();
+}
+
+class _AiInsightCardState extends State<_AiInsightCard> {
+  late final Future<String> _summaryFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _summaryFuture = _computeSummary();
+  }
+
+  Future<String> _computeSummary() async {
+    try {
+      final builder = PatientContextBuilder(
+        patientDao: context.read<PatientDao>(),
+        programmesDao: context.read<PatientProgrammesDao>(),
+        pregnancyDao: context.read<PregnancySnapshotDao>(),
+        immunisationDao: context.read<ImmunisationDao>(),
+      );
+      final patientCtx = await builder.build(widget.patientId);
+      if (patientCtx == null) return '';
+      final findings = await BriefingFindingsAggregator.build(
+        patientId: widget.patientId,
+        patientCtx: patientCtx,
+        selectedProgrammes: patientCtx.activeProgrammes,
+        assessmentDao: context.read<LocalAssessmentDao>(),
+        historyAssessmentDao: context.read<AssessmentDao>(),
+        followUpRepo: context.read<FollowUpRepository>(),
+        patientDao: context.read<PatientDao>(),
+        immunisationDao: context.read<ImmunisationDao>(),
+      );
+      return clinicalFindingsSummary(findings);
+    } on Object catch (e, st) {
+      debugPrint('[AiInsightCard] findings computation failed: $e');
+      debugPrint('[AiInsightCard] $st');
+      return '';
+    }
+  }
+
   static (String, Color, Color) _bandMeta(Band b) => switch (b) {
         Band.band1 => ('Band 1 — Severe risk', AppColors.statusCriticalSurface, AppColors.statusCriticalText),
         Band.band2 => ('Band 2 — Moderate risk', AppColors.statusWarningSurface, AppColors.statusWarningText),
@@ -1930,8 +2000,12 @@ class _AiInsightCard extends StatelessWidget {
         Band.band4 => ('Band 4 — Routine', const Color(0xFFF3F4F6), AppColors.textMuted),
       };
 
-  void _showDetail(BuildContext context) {
+  void _showDetail(BuildContext context, String summary) {
     final isEmpty = summary.trim().isEmpty;
+    final riskBand = widget.riskBand;
+    final riskModifier = widget.riskModifier;
+    final riskReasons = widget.riskReasons;
+    final lastAssessedDate = widget.lastAssessedDate;
     final hasBand = riskBand != null && riskBand != Band.band4;
 
     _showCardDetail(
@@ -2052,64 +2126,90 @@ class _AiInsightCard extends StatelessWidget {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _headerRow() => Row(
+        children: [
+          const Icon(Icons.auto_awesome_rounded, size: 14, color: AppColors.aiPurpleDark),
+          const SizedBox(width: 6),
+          Text(
+            PatientProfileStrings.aiInsight,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.aiPurpleDark,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const Spacer(),
+          if (widget.statusLabel != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: widget.statusBg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                widget.statusLabel!,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: widget.statusFg,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.aiPurpleDark),
+        ],
+      );
+
+  BoxDecoration get _cardDecoration => BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.aiSurfaceStart, AppColors.aiSurfaceEnd],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.aiBorder, width: 1),
+      );
+
+  Widget _buildLoadingCard() => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        decoration: _cardDecoration,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _headerRow(),
+            const SizedBox(height: 8),
+            SkeletonAnimation(
+              builder: (context, shimmerValue) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SkeletonBox(shimmerValue: shimmerValue, height: 12, width: double.infinity),
+                  const SizedBox(height: 6),
+                  SkeletonBox(shimmerValue: shimmerValue, height: 12, width: 180),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildLoadedCard(BuildContext context, String summary) {
     final sw = Stopwatch()..start();
     final isEmpty = summary.trim().isEmpty;
     final card = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => _showDetail(context),
+      onTap: () => _showDetail(context, summary),
       child: Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.aiSurfaceStart, AppColors.aiSurfaceEnd],
-            ),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.aiBorder, width: 1),
-          ),
+          decoration: _cardDecoration,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.auto_awesome_rounded, size: 14, color: AppColors.aiPurpleDark),
-                  const SizedBox(width: 6),
-                  Text(
-                    PatientProfileStrings.aiInsight,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.aiPurpleDark,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (statusLabel != null) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: statusBg,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        statusLabel!,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: statusFg,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.aiPurpleDark),
-                ],
-              ),
+              _headerRow(),
               const SizedBox(height: 8),
               Text(
                 isEmpty ? PatientProfileStrings.aiInsightUnavailable : summary,
@@ -2128,6 +2228,19 @@ class _AiInsightCard extends StatelessWidget {
     );
     debugPrint('⏱ [PatientContext] _AiInsightCard build in ${sw.elapsedMilliseconds}ms');
     return card;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _summaryFuture,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return _buildLoadingCard();
+        }
+        return _buildLoadedCard(context, snap.data ?? '');
+      },
+    );
   }
 }
 
