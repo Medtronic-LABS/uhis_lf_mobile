@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 30;
+  static const int schemaVersion = 31;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -263,6 +263,8 @@ class AppDatabase {
         vaccine_code TEXT,
         due_at INTEGER,
         given_at INTEGER,
+        status TEXT,
+        missed_reason TEXT,
         raw_json TEXT
       )''');
     await db.execute('''
@@ -1435,6 +1437,21 @@ class AppDatabase {
         await db.execute(
             'ALTER TABLE $tableHouseholds ADD COLUMN reference_id TEXT');
       } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 31) {
+      // v31 — status/missed_reason on immunisations: the EPI "Update Status"
+      // sheet now supports recording a milestone as explicitly Missed (with
+      // a reason), not just Vaccinated. Nullable/additive — existing rows
+      // are unaffected (both default to NULL, read as "no explicit outcome
+      // recorded yet", identical to pre-migration behaviour).
+      Future<void> addCol31(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present — no-op */}
+      }
+      await addCol31('ALTER TABLE $tableImmunisations ADD COLUMN status TEXT');
+      await addCol31(
+          'ALTER TABLE $tableImmunisations ADD COLUMN missed_reason TEXT');
     }
   }
 

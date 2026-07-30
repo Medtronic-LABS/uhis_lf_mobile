@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/auth/auth_repository.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -12,6 +11,7 @@ import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
 import '../assessment_repository.dart';
 import '../triage/child_assessment_section.dart';
+import 'child_immunization_dto.dart';
 import 'epi_schedule_engine.dart';
 import 'immunisation_dto.dart';
 import 'immunisation_repository.dart';
@@ -21,7 +21,26 @@ const _kGreen = Color(0xFF16A34A);
 const _kRed = Color(0xFFDC2626);
 const _kAmber = Color(0xFFF59E0B);
 const _kGrey = Color(0xFF9CA3AF);
+const _kMissed = Color(0xFFEA580C);
 const _kRedSurface = Color(0xFFFEF2F2);
+
+/// Mirrors assets/forms/field_library.json's "childReferralFacilityType"
+/// optionsList (id + English label only — this screen has no Bangla
+/// localisation path yet).
+class _FacilityOption {
+  const _FacilityOption(this.id, this.label);
+  final String id;
+  final String label;
+}
+
+const List<_FacilityOption> _referralFacilityOptions = [
+  _FacilityOption('medicalCollegeHospital', 'Medical College Hospital'),
+  _FacilityOption('governmentHospital', 'Government Hospital'),
+  _FacilityOption('upazilaHealthComplex', 'Upazila Health Complex'),
+  _FacilityOption('privateHospital', 'Private Hospital/Clinic'),
+  _FacilityOption('hwc', 'Health & Family Welfare Center'),
+  _FacilityOption('communityClinic', 'Community Clinic'),
+];
 
 class ImmunisationTimelineScreen extends StatefulWidget {
   const ImmunisationTimelineScreen({
@@ -117,17 +136,22 @@ class _ImmunisationTimelineScreenState
           .timeout(const Duration(seconds: 5));
 
       if (dtos.isNotEmpty) {
-        // Merge local given dates to handle backend eventual consistency —
-        // a vaccine saved locally but not yet reflected in the backend response
-        // must still show as completed so subsequent milestones unlock.
+        // Merge local outcomes to handle backend eventual consistency — a
+        // vaccine recorded locally (given, or explicitly Missed) but not yet
+        // reflected in the backend response must still show that outcome so
+        // it doesn't look reverted, and so subsequent milestones unlock.
         final rowMap = await immunisationDao.forMany([widget.patientId]);
         final localGivenByName = <String, String>{};
+        final localMissedByName = <String, String>{};
         for (final r in (rowMap[widget.patientId] ?? [])) {
-          if (r.vaccineCode != null && r.givenAt != null) {
+          if (r.vaccineCode == null) continue;
+          if (r.givenAt != null) {
             localGivenByName[r.vaccineCode!] =
                 DateTime.fromMillisecondsSinceEpoch(r.givenAt!)
                     .toIso8601String()
                     .substring(0, 10);
+          } else if (r.status == 'Missed') {
+            localMissedByName[r.vaccineCode!] = r.missedReason ?? '';
           }
         }
         final effectiveDtos = dtos.map((dto) {
@@ -143,6 +167,24 @@ class _ImmunisationTimelineScreenState
               vaccinatedDate: localDate,
               doseClosureWeeks: dto.doseClosureWeeks,
               reason: dto.reason,
+              displayOrder: dto.displayOrder,
+              category: dto.category,
+              vaccineOrder: dto.vaccineOrder,
+            );
+          }
+          final localReason = localMissedByName[dto.vaccineName];
+          if (localReason != null &&
+              dto.status != 'Vaccinated' &&
+              dto.status != 'Missed') {
+            return VaccinationDetailDto(
+              id: dto.id,
+              type: dto.type,
+              value: dto.value,
+              status: 'Missed',
+              vaccineName: dto.vaccineName,
+              scheduledDate: dto.scheduledDate,
+              doseClosureWeeks: dto.doseClosureWeeks,
+              reason: localReason,
               displayOrder: dto.displayOrder,
               category: dto.category,
               vaccineOrder: dto.vaccineOrder,
@@ -208,8 +250,11 @@ class _ImmunisationTimelineScreenState
       });
 
     final milestones = <VaccineMilestone>[];
-    bool priorGroupComplete = true;
 
+    // Each vaccine's status is computed strictly from its own scheduled
+    // date / recorded outcome, independent of every other milestone -- no
+    // cross-milestone "prior must be complete first" gate. See the matching
+    // comment in EpiScheduleEngine.build() for the bug this fixes.
     for (final key in sortedKeys) {
       final groupDtos = groups[key]!;
       final first = groupDtos.first;
@@ -220,8 +265,8 @@ class _ImmunisationTimelineScreenState
         final VaccineStatus status;
         if (dto.status == 'Vaccinated') {
           status = VaccineStatus.completed;
-        } else if (!priorGroupComplete) {
-          status = VaccineStatus.locked;
+        } else if (dto.status == 'Missed') {
+          status = VaccineStatus.missed;
         } else {
           final days = scheduledDate.difference(now).inDays;
           if (days <= 0) {
@@ -244,18 +289,17 @@ class _ImmunisationTimelineScreenState
               ? DateTime.tryParse(dto.vaccinatedDate!)
               : null,
           status: status,
+          missedReason: dto.reason,
         );
       }).toList();
 
-      final milestone = VaccineMilestone(
+      milestones.add(VaccineMilestone(
         label: _milestoneLabel(first.type, first.value),
         scheduledDate: scheduledDate,
         vaccines: vaccines,
         offsetType: first.type.toLowerCase(),
         offsetValue: first.value,
-      );
-      milestones.add(milestone);
-      priorGroupComplete = milestone.allCompleted;
+      ));
     }
 
     return milestones;
@@ -533,6 +577,7 @@ class _ImmunisationTimelineScreenState
           encounterId: widget.encounterId,
           memberId: widget.memberId,
           householdId: _patient?.householdId,
+          householdMemberLocalId: widget.householdMemberLocalId,
           dob: patientDob,
           onRecorded: () {
             setState(() => _loading = true);
@@ -652,6 +697,7 @@ class _MilestoneRow extends StatelessWidget {
   Color get _labelColor {
     if (milestone.allCompleted) return _kGreen;
     if (milestone.hasDueNow) return _kRed;
+    if (milestone.hasMissed) return _kMissed;
     if (milestone.hasUpcoming) return _kAmber;
     return _kGrey;
   }
@@ -739,6 +785,14 @@ class _StatusDot extends StatelessWidget {
             size: 16, color: Colors.white),
       );
     }
+    if (milestone.hasMissed) {
+      return Container(
+        width: 28,
+        height: 28,
+        decoration: const BoxDecoration(color: _kMissed, shape: BoxShape.circle),
+        child: const Icon(Icons.event_busy_rounded, size: 14, color: Colors.white),
+      );
+    }
     if (milestone.hasUpcoming) {
       return Container(
         width: 28,
@@ -779,6 +833,7 @@ class _MilestoneContent extends StatelessWidget {
 
   Color _vaccineColor(VaccineEntry v) {
     if (v.status == VaccineStatus.completed) return _kGreen;
+    if (v.status == VaccineStatus.missed) return _kMissed;
     if (milestone.hasDueNow) return _kRed;
     if (milestone.hasUpcoming) return _kAmber;
     return _kGrey;
@@ -803,6 +858,7 @@ class _MilestoneContent extends StatelessWidget {
                   fontSize: 15,
                   color: milestone.allCompleted ||
                           milestone.hasDueNow ||
+                          milestone.hasMissed ||
                           milestone.hasUpcoming
                       ? AppColors.navy
                       : _kGrey,
@@ -815,14 +871,19 @@ class _MilestoneContent extends StatelessWidget {
                   color: _kGreen,
                   icon: Icons.check_rounded),
             if (milestone.hasDueNow)
-              _UpdateCtaButton(onTap: onUpdateStatus),
-            if (milestone.hasUpcoming && !milestone.hasDueNow)
+              _UpdateCtaButton(onTap: onUpdateStatus, color: _kRed),
+            if (!milestone.hasDueNow && milestone.hasMissed)
+              _UpdateCtaButton(onTap: onUpdateStatus, color: _kMissed),
+            if (milestone.hasUpcoming &&
+                !milestone.hasDueNow &&
+                !milestone.hasMissed)
               _StatusBadge(
                   label: EpiStrings.statusUpcoming,
                   color: _kAmber,
                   icon: Icons.schedule_rounded),
             if (!milestone.allCompleted &&
                 !milestone.hasDueNow &&
+                !milestone.hasMissed &&
                 !milestone.hasUpcoming)
               _StatusBadge(
                   label: EpiStrings.statusNotYetDue,
@@ -837,15 +898,34 @@ class _MilestoneContent extends StatelessWidget {
         ...milestone.vaccines.map(
           (v) => Padding(
             padding: const EdgeInsets.only(bottom: 3),
-            child: Text(
-              '• ${v.display}',
-              style: TextStyle(
-                fontSize: 13,
-                color: _vaccineColor(v),
-                fontWeight: milestone.hasDueNow
-                    ? FontWeight.w500
-                    : FontWeight.normal,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '• ${v.display}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: _vaccineColor(v),
+                    fontWeight: milestone.hasDueNow || milestone.hasMissed
+                        ? FontWeight.w500
+                        : FontWeight.normal,
+                  ),
+                ),
+                if (v.status == VaccineStatus.missed &&
+                    v.missedReason != null &&
+                    v.missedReason!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Text(
+                      v.missedReason!,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: _kMissed,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -859,6 +939,13 @@ class _MilestoneContent extends StatelessWidget {
                 : 'Due now',
             style: const TextStyle(
                 fontSize: 12, color: _kRed, fontWeight: FontWeight.w600),
+          ),
+        ] else if (milestone.hasMissed) ...[
+          const SizedBox(height: 4),
+          Text(
+            EpiStrings.statusMissed,
+            style: const TextStyle(
+                fontSize: 12, color: _kMissed, fontWeight: FontWeight.w600),
           ),
         ] else if (milestone.hasUpcoming &&
             !milestone.hasDueNow &&
@@ -921,8 +1008,9 @@ class _StatusBadge extends StatelessWidget {
 }
 
 class _UpdateCtaButton extends StatelessWidget {
-  const _UpdateCtaButton({required this.onTap});
+  const _UpdateCtaButton({required this.onTap, this.color = _kRed});
   final VoidCallback onTap;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -931,7 +1019,7 @@ class _UpdateCtaButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: _kRed,
+          color: color,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -1037,27 +1125,30 @@ class _UpdateStatusSheet extends StatefulWidget {
     this.encounterId,
     this.memberId,
     this.householdId,
+    this.householdMemberLocalId,
     this.dob,
   });
 
   final VaccineMilestone milestone;
   final String patientId;
 
-  /// Full patient record — provides the numeric backend [Patient.patientId]
-  /// and [Patient.villageId] for the immunisation create request.
+  /// Full patient record — provides [Patient.villageId] for the
+  /// CHILD_IMMUNIZATION assessment payload.
   final Patient? patient;
   final String patientName;
   final String ageLabel;
   final String locationLabel;
   final VoidCallback onRecorded;
 
-  /// When set, vaccine status is pushed to the backend via [ImmunisationRepository]
-  /// after saving locally. Null in standalone access; push skipped.
+  /// Visit encounter ID, carried through to the assessment payload's summary.
   final String? encounterId;
-
-  /// Required by /immunisation/create to look up the household member.
   final String? memberId;
   final String? householdId;
+
+  /// Required by [AssessmentRepository.saveAssessment] to attribute the
+  /// assessment to the right household member row. Defaults to 0 (matches
+  /// the EPI child-assessment save a few hundred lines above).
+  final int? householdMemberLocalId;
 
   /// Patient date of birth — used as the earliest selectable date administered.
   final DateTime? dob;
@@ -1067,13 +1158,24 @@ class _UpdateStatusSheet extends StatefulWidget {
 }
 
 class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
+  /// Whether the sheet is currently showing the referral flow (facility +
+  /// reason) instead of the default vaccinated flow (date + notes).
+  bool _referring = false;
+
   DateTime _givenDate = DateTime.now();
   final TextEditingController _notesCtrl = TextEditingController();
+
+  final TextEditingController _reasonCtrl = TextEditingController();
+  String? _reasonError;
+  String? _selectedFacilityId;
+  String? _facilityError;
+
   bool _saving = false;
 
   @override
   void dispose() {
     _notesCtrl.dispose();
+    _reasonCtrl.dispose();
     debugPrint('[_UpdateStatusSheetState] dispose');
     super.dispose();
   }
@@ -1085,21 +1187,34 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
     return parts.join(' · ');
   }
 
+  /// Saves the milestone's vaccines as either Vaccinated (default flow) or
+  /// Missed+referred (referral flow) — local-first, then queued for sync as
+  /// a CHILD_IMMUNIZATION assessment via offline-sync/create.
   Future<void> _save() async {
-    debugPrint('[_UpdateStatusSheetState] _save');
+    debugPrint('[_UpdateStatusSheetState] _save referring=$_referring');
+
+    if (_referring) {
+      if (_reasonCtrl.text.trim().isEmpty) {
+        setState(() => _reasonError = EpiStrings.missedReasonRequired);
+        return;
+      }
+      if (_selectedFacilityId == null) {
+        setState(() => _facilityError = EpiStrings.referralFacilityRequired);
+        return;
+      }
+    }
+
     setState(() => _saving = true);
     final immunisationDao = context.read<ImmunisationDao>();
-    final immunisationRepo = context.read<ImmunisationRepository>();
-    final authRepo = context.read<AuthRepository>();
-    try {
-      final givenMs = _givenDate.millisecondsSinceEpoch;
-      final givenIso =
-          _givenDate.toIso8601String().substring(0, 10); // "YYYY-MM-DD"
-      final dueIso = widget.milestone.scheduledDate
-          .toIso8601String()
-          .substring(0, 10);
+    final assessmentRepo = context.read<AssessmentRepository>();
 
-      // 1. Save locally first (offline-first guarantee)
+    try {
+      final givenMs = _referring ? null : _givenDate.millisecondsSinceEpoch;
+      final wireStatus = _referring ? 'Missed' : 'Vaccinated';
+      final reasonText = _referring ? _reasonCtrl.text.trim() : null;
+
+      // 1. Save locally first (offline-first guarantee) — drives the
+      // timeline's own status computation independent of sync.
       final rows = widget.milestone.vaccines.map((v) {
         return ImmunisationRow(
           id: '${widget.patientId}_${v.code}',
@@ -1107,65 +1222,118 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
           vaccineCode: v.code,
           dueAt: widget.milestone.scheduledDate.millisecondsSinceEpoch,
           givenAt: givenMs,
+          status: wireStatus,
+          missedReason: reasonText,
           rawJson: '{"vaccineName":"${v.display}"'
               ',"milestone":"${widget.milestone.label}"'
-              ',"notes":"${_notesCtrl.text.replaceAll('"', '\\"')}"'
+              '${!_referring ? ',"notes":"${_notesCtrl.text.replaceAll('"', '\\"')}"' : ''}'
               '}',
         );
       }).toList();
       await immunisationDao.upsertMany(rows);
 
-      // 2. Push to backend if in a visit context (best-effort)
-      if (widget.encounterId != null) {
-        final dtos = widget.milestone.vaccines.asMap().entries.map((e) {
-          return VaccinationDetailDto(
-            vaccineName: e.value.display,
-            type: widget.milestone.offsetType.toUpperCase(),
-            value: widget.milestone.offsetValue,
-            status: 'Vaccinated',
-            scheduledDate: dueIso,
-            vaccinatedDate: givenIso,
-            displayOrder: e.key,
-            category: e.value.category,
-            vaccineOrder: e.value.cardGroup,
-          );
-        }).toList();
+      // 2. Queue as a CHILD_IMMUNIZATION assessment for offline-sync/create.
+      final records = widget.milestone.vaccines
+          .map((v) => ChildImmunizationVaccinationRecord(
+                vaccineName: v.display,
+                status: wireStatus,
+                vaccinatedDate: _referring
+                    ? null
+                    : ChildImmunizationVaccinationRecord.dateWire(_givenDate),
+                reason: reasonText,
+              ))
+          .toList();
 
-        // Use the backend's numeric patient ID when available.
-        // widget.patientId may be a FHIR UUID — patient.patientId holds the
-        // backend integer ID that /immunisation/create actually validates.
-        final numericId =
-            widget.patient?.patientId ?? widget.patientId;
-        final spiceUserId = await authRepo.userId();
-        final userFhirId = await authRepo.userFhirId();
-        final orgFhirId = await authRepo.organizationFhirId();
-        final provenance = <String, dynamic>{
-          if (userFhirId != null && userFhirId.isNotEmpty) 'userId': userFhirId,
-          if (orgFhirId != null && orgFhirId.isNotEmpty) 'organizationId': orgFhirId,
-          if (spiceUserId != null) 'spiceUserId': spiceUserId,
-          'modifiedDate': DateTime.now().toUtc().toIso8601String(),
-        };
-        await immunisationRepo.submitVaccinations(
-          patientId: widget.patientId,
-          numericPatientId: numericId,
-          patientReference: numericId,
-          vaccines: dtos,
-          encounterId: widget.encounterId,
-          villageId: widget.patient?.villageId,
-          memberId: widget.memberId,
-          householdId: widget.householdId,
-          provenance: provenance,
-          missedReason: _notesCtrl.text.isNotEmpty ? _notesCtrl.text : null,
-        );
-      }
+      final facilityLabel = _selectedFacilityId == null
+          ? null
+          : _referralFacilityOptions
+              .firstWhere((o) => o.id == _selectedFacilityId)
+              .label;
+
+      await assessmentRepo.saveAssessment(
+        assessmentType: 'CHILD_IMMUNIZATION',
+        assessmentDetails: {
+          'vaccinations': records.map((r) => r.toJson()).toList(),
+        },
+        householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+        memberId: widget.memberId,
+        householdId: widget.householdId,
+        patientId: widget.patientId,
+        villageId: widget.patient?.villageId,
+        encounterId: widget.encounterId,
+        isReferred: _referring,
+        referredReasons: _referring && facilityLabel != null
+            ? [facilityLabel]
+            : null,
+        otherDetails: _referring && _selectedFacilityId != null
+            ? {'referralFacilityType': _selectedFacilityId}
+            : null,
+      );
+      unawaited(
+        assessmentRepo.syncPendingAssessments().then(
+          (n) => debugPrint(
+            '[ImmunisationTimeline] syncPendingAssessments → synced $n',
+          ),
+          onError: (e) => debugPrint(
+            '[ImmunisationTimeline] syncPendingAssessments ✗ $e',
+          ),
+        ),
+      );
 
       if (mounted) {
         Navigator.of(context).pop();
         widget.onRecorded();
       }
-    } on Object {
+    } on Object catch (e) {
+      debugPrint('[_UpdateStatusSheetState] save error: $e');
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Widget _statusStrip() {
+    final Color color;
+    final IconData icon;
+    final String text;
+    if (widget.milestone.hasDueNow) {
+      color = _kRed;
+      icon = Icons.warning_amber_rounded;
+      text = widget.ageLabel.isNotEmpty
+          ? 'Status: Due now · ${widget.patientName} is ${widget.ageLabel}'
+          : 'Status: Due now';
+    } else if (widget.milestone.hasMissed) {
+      color = _kMissed;
+      icon = Icons.event_busy_rounded;
+      text = 'Status: ${EpiStrings.statusMissed}';
+    } else {
+      color = _kAmber;
+      icon = Icons.schedule_rounded;
+      text = 'Status: ${EpiStrings.statusUpcoming}';
+    }
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(left: BorderSide(color: color, width: 3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1222,37 +1390,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
             ),
           ),
 
-          // Status strip
-          Container(
-            margin: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            decoration: BoxDecoration(
-              color: _kRedSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: const Border(
-                left: BorderSide(color: _kRed, width: 3),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.warning_amber_rounded,
-                    size: 16, color: _kRed),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.ageLabel.isNotEmpty
-                        ? 'Status: Due now · ${widget.patientName} is ${widget.ageLabel}'
-                        : 'Status: Due now',
-                    style: const TextStyle(
-                      color: _kRed,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _statusStrip(),
 
           Flexible(
             child: SingleChildScrollView(
@@ -1268,83 +1406,202 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
 
                   const SizedBox(height: 16),
 
-                  // Date administered
-                  _SectionLabel(EpiStrings.dateAdministered),
-                  _DateField(
-                    date: _givenDate,
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _givenDate,
-                        firstDate: widget.dob ?? DateTime(2020),
-                        lastDate: DateTime.now(),
-                      );
-                      if (picked != null) {
-                        setState(() => _givenDate = picked);
-                      }
-                    },
-                  ),
+                  if (!_referring) ...[
+                    // Date administered
+                    _SectionLabel(EpiStrings.dateAdministered),
+                    _DateField(
+                      date: _givenDate,
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _givenDate,
+                          firstDate: widget.dob ?? DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setState(() => _givenDate = picked);
+                        }
+                      },
+                    ),
 
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
-                  // Notes
-                  _SectionLabel(EpiStrings.notesOptional),
-                  TextField(
-                    controller: _notesCtrl,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      hintText: EpiStrings.notesHint,
-                      hintStyle: const TextStyle(
-                          color: AppColors.textMuted, fontSize: 13),
-                      contentPadding: const EdgeInsets.all(12),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                    // Notes
+                    _SectionLabel(EpiStrings.notesOptional),
+                    TextField(
+                      controller: _notesCtrl,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: EpiStrings.notesHint,
+                        hintStyle: const TextStyle(
+                            color: AppColors.textMuted, fontSize: 13),
+                        contentPadding: const EdgeInsets.all(12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              const BorderSide(color: Color(0xFFD1D5DB)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              const BorderSide(color: Color(0xFFD1D5DB)),
+                        ),
                       ),
                     ),
-                  ),
+                  ] else ...[
+                    // Referral facility
+                    _SectionLabel(EpiStrings.referralFacilityLabel),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: _selectedFacilityId,
+                      hint: Text(
+                        EpiStrings.referralFacilitySelectHint,
+                        style: const TextStyle(
+                            fontSize: 13, color: AppColors.textMuted),
+                      ),
+                      onChanged: (id) => setState(() {
+                        _selectedFacilityId = id;
+                        _facilityError = null;
+                      }),
+                      decoration: InputDecoration(
+                        errorText: _facilityError,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              const BorderSide(color: Color(0xFFD1D5DB)),
+                        ),
+                      ),
+                      items: _referralFacilityOptions
+                          .map((o) => DropdownMenuItem(
+                              value: o.id, child: Text(o.label)))
+                          .toList(),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Missed reason
+                    _SectionLabel(EpiStrings.missedReasonLabel),
+                    TextField(
+                      controller: _reasonCtrl,
+                      maxLines: 3,
+                      onChanged: (_) =>
+                          setState(() => _reasonError = null),
+                      decoration: InputDecoration(
+                        hintText: EpiStrings.missedReasonHint,
+                        hintStyle: const TextStyle(
+                            color: AppColors.textMuted, fontSize: 13),
+                        errorText: _reasonError,
+                        contentPadding: const EdgeInsets.all(12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              const BorderSide(color: Color(0xFFD1D5DB)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              const BorderSide(color: Color(0xFFD1D5DB)),
+                        ),
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 20),
 
-                  // Mark as completed
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _saving ? null : _save,
-                      icon: _saving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.check_rounded, size: 18),
-                      label: Text(EpiStrings.markCompleted),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _kGreen,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                  if (!_referring) ...[
+                    // Mark as complete + Refer, side by side.
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _saving ? null : _save,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.check_rounded, size: 18),
+                            label: Text(EpiStrings.markCompleted),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _kGreen,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _saving
+                                ? null
+                                : () => setState(() => _referring = true),
+                            icon: const Icon(Icons.event_busy_rounded,
+                                size: 18, color: _kMissed),
+                            label: Text(
+                              EpiStrings.referCta,
+                              style: const TextStyle(color: _kMissed),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: _kMissed),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textMuted,
+                          side: const BorderSide(color: Color(0xFFD1D5DB)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: Text(EpiStrings.cancel),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Cancel
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textMuted,
-                        side: const BorderSide(color: Color(0xFFD1D5DB)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                  ] else ...[
+                    // Confirm referral + Back.
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _saving ? null : _save,
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.event_busy_rounded, size: 18),
+                        label: Text(EpiStrings.confirmReferralCta),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _kMissed,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
                       ),
-                      child: Text(EpiStrings.cancel),
                     ),
-                  ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: _saving
+                            ? null
+                            : () => setState(() => _referring = false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textMuted,
+                          side: const BorderSide(color: Color(0xFFD1D5DB)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: Text(EpiStrings.back),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

@@ -8,9 +8,9 @@ import '../../../core/db/immunisation_dao.dart';
 enum VaccineStatus {
   completed,
   dueNow,
+  missed,
   upcoming,
   notYetDue,
-  locked,
 }
 
 /// Single vaccine entry in the timeline.
@@ -25,6 +25,7 @@ class VaccineEntry {
     required this.scheduledDate,
     this.givenDate,
     required this.status,
+    this.missedReason,
   });
 
   final String code;
@@ -36,6 +37,7 @@ class VaccineEntry {
   final DateTime scheduledDate;
   final DateTime? givenDate;
   final VaccineStatus status;
+  final String? missedReason;
 
   bool get isOverdue =>
       (status == VaccineStatus.dueNow) &&
@@ -72,6 +74,9 @@ class VaccineMilestone {
   bool get hasUpcoming =>
       vaccines.any((v) => v.status == VaccineStatus.upcoming);
 
+  bool get hasMissed =>
+      vaccines.any((v) => v.status == VaccineStatus.missed);
+
   int get overdueCount =>
       vaccines.where((v) => v.isOverdue).length;
 
@@ -99,10 +104,19 @@ class EpiScheduleEngine {
   }) async {
     final now = today ?? DateTime.now();
     final givenByCode = <String, DateTime>{};
+    final statusByCode = <String, String>{};
+    final missedReasonByCode = <String, String>{};
     for (final r in rows) {
-      if (r.vaccineCode != null && r.givenAt != null) {
+      if (r.vaccineCode == null) continue;
+      if (r.givenAt != null) {
         givenByCode[r.vaccineCode!] =
             DateTime.fromMillisecondsSinceEpoch(r.givenAt!);
+      }
+      if (r.status != null && r.status!.isNotEmpty) {
+        statusByCode[r.vaccineCode!] = r.status!;
+      }
+      if (r.missedReason != null && r.missedReason!.isNotEmpty) {
+        missedReasonByCode[r.vaccineCode!] = r.missedReason!;
       }
     }
 
@@ -112,8 +126,13 @@ class EpiScheduleEngine {
         (jsonDecode(scheduleJson) as List).cast<Map<String, dynamic>>();
 
     final milestones = <VaccineMilestone>[];
-    bool priorGroupComplete = true;
 
+    // Each vaccine's status is computed strictly from its own scheduled
+    // date / recorded outcome, independent of every other milestone --
+    // there is no cross-milestone "prior must be complete first" gate.
+    // Two milestones that are both overdue and unrecorded (e.g. "At Birth"
+    // and "6 Weeks") therefore both resolve to dueNow and are both
+    // independently actionable, instead of only the earliest one.
     for (final group in schedule) {
       final scheduledDate = _scheduledDate(dob, group);
 
@@ -122,12 +141,13 @@ class EpiScheduleEngine {
           .map((v) {
         final code = v['code'] as String;
         final givenDate = givenByCode[code];
+        final recordedStatus = statusByCode[code];
 
         final VaccineStatus status;
         if (givenDate != null) {
           status = VaccineStatus.completed;
-        } else if (!priorGroupComplete) {
-          status = VaccineStatus.locked;
+        } else if (recordedStatus == 'Missed') {
+          status = VaccineStatus.missed;
         } else {
           final daysDiff = scheduledDate.difference(now).inDays;
           if (daysDiff <= 0) {
@@ -149,18 +169,17 @@ class EpiScheduleEngine {
           scheduledDate: scheduledDate,
           givenDate: givenDate,
           status: status,
+          missedReason: missedReasonByCode[code],
         );
       }).toList();
 
-      final milestone = VaccineMilestone(
+      milestones.add(VaccineMilestone(
         label: group['milestone'] as String,
         scheduledDate: scheduledDate,
         vaccines: vaccines,
         offsetType: group['offsetType'] as String,
         offsetValue: (group['offsetValue'] as num).toInt(),
-      );
-      milestones.add(milestone);
-      priorGroupComplete = milestone.allCompleted;
+      ));
     }
 
     return milestones;

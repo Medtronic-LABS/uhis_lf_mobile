@@ -4583,6 +4583,7 @@ abstract final class EpiStrings {
   static String get statusUpcoming => getTranslatedString('statusUpcoming', 'Upcoming');
   static String get statusNotYetDue => getTranslatedString('statusNotYetDue', 'Not yet due');
   static String get statusLocked => getTranslatedString('statusLocked', 'Locked');
+  static String get statusMissed => getTranslatedString('statusMissed', 'Missed');
 
   static String get updateStatusCta => getTranslatedString('updateStatusCta', 'Update Status →');
   static String get vaccinesDueLabel => getTranslatedString('vaccinesDueLabel', 'Vaccines due at this milestone');
@@ -4594,6 +4595,16 @@ abstract final class EpiStrings {
   static String get submitCta => getTranslatedString('submitCta', 'Submit');
   static String get givenOn => getTranslatedString('givenOn', 'Given');
   static String get doneVisitCta => getTranslatedString('doneVisitCta', 'Done → Continue Visit');
+
+  static String get referCta => getTranslatedString('referCta', 'Refer');
+  static String get confirmReferralCta => getTranslatedString('confirmReferralCta', 'Confirm Referral');
+  static String get back => getTranslatedString('Epi.back', 'Back');
+  static String get referralFacilityLabel => getTranslatedString('referralFacilityLabel', 'Referral Facility');
+  static String get referralFacilitySelectHint => getTranslatedString('referralFacilitySelectHint', 'Select facility…');
+  static String get referralFacilityRequired => getTranslatedString('referralFacilityRequired', 'Please select a facility.');
+  static String get missedReasonLabel => getTranslatedString('missedReasonLabel', 'Reason for Missed Dose');
+  static String get missedReasonHint => getTranslatedString('missedReasonHint', 'e.g. Child was sick on scheduled date');
+  static String get missedReasonRequired => getTranslatedString('missedReasonRequired', 'Please enter a reason.');
 }
 
 abstract final class ChildAssessmentStrings {

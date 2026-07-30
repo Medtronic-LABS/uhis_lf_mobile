@@ -491,6 +491,7 @@ class LocalAssessmentEntity {
       // ICCM is the only non-NCD/PNC type that gets wrapped (Android explicit handling).
       'ICCM' || 'IMCI' => 'iccm',
       'FAMILY_PLANNING' || 'FP' => 'familyPlanning',
+      'CHILD_IMMUNIZATION' => 'childImmunization',
       // All others — TB, EPI, EYE_CARE, CATARACT — are flat pass-through
       // (Android OfflineSyncRepository default branch).
       _ => null,
