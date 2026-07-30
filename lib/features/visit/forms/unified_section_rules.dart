@@ -1,3 +1,4 @@
+import '../../../core/time/calendar_day.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
 
@@ -511,7 +512,9 @@ abstract final class FieldVisibilityRules {
   /// 2. A generic `condition` rule targeting this field (another field's
   ///    value equals a declared trigger value) — the common case, covers
   ///    ~96 Yes/No/Other-dependent follow-up fields.
-  /// 3. The obstetric-history progressive-disclosure chain (Gravida → Parity
+  /// 3. PW Profile LMP threshold — Android
+  ///    `AssessmentPregnantWomenRegistrationFragment` (42-day / 6-week gate).
+  /// 4. The obstetric-history progressive-disclosure chain (Gravida → Parity
   ///    → Living Children → Age of Last Child) — a separate mechanism from
   ///    (2): the field library only tags `compositeRole` (trigger/member),
   ///    the actual reveal thresholds are hand-ported here from the design
@@ -520,9 +523,9 @@ abstract final class FieldVisibilityRules {
   ///    Other `compositeGroup` values (e.g. supplement consumed/provided
   ///    pairs) are unrelated dedup metadata handled elsewhere and are not
   ///    interpreted here.
-  /// 4. ANC gestational-age / visit-number gates — only when [formType] is
+  /// 5. ANC gestational-age / visit-number gates — only when [formType] is
   ///    `anc` (must not hide NCD biometrics).
-  /// 5. The field's own declared base `visibility` ("visible"/"gone").
+  /// 6. The field's own declared base `visibility` ("visible"/"gone").
   ///
   /// [gestationalWeeks] — current GA from LMP/snapshot; null when unknown.
   /// [ancVisitNumber] — 1-based ANC visit count; null treated as visit 1 for
@@ -578,22 +581,8 @@ abstract final class FieldVisibilityRules {
     }
 
     if (field.compositeGroup == 'obstetricHistory') {
-      int asInt(String fieldId) =>
-          int.tryParse(data.getValue(fieldId)?.toString() ?? '') ?? 0;
-      switch (field.id) {
-        case 'gravida':
-          // Trigger — always visible once the section itself renders,
-          // regardless of its own base visibility (declared "gone" in the
-          // JSON, since Android reveals it via app-side composite-group
-          // handling this Flutter port doesn't otherwise have visibility into).
-          return true;
-        case 'parity':
-          return asInt('gravida') >= 2;
-        case 'livingChildren':
-          return asInt('parity') >= 1;
-        case 'ageOfLastChild':
-          return asInt('livingChildren') >= 1;
-      }
+      final chain = _obstetricChainVisibility(field.id, data);
+      if (chain != null) return chain;
     }
 
     // ANC visit/GA gates apply only inside the ANC layout — never to NCD
@@ -609,6 +598,126 @@ abstract final class FieldVisibilityRules {
     }
 
     return field.visibility != 'gone';
+  }
+
+  /// Android `PregnantWomen.LMP_THRESHOLD_DAYS` — full PW profile only after
+  /// 6 weeks (42 days) from LMP.
+  static const int lmpThresholdDays = 42;
+
+  /// Android `pregnancy_woman_profile.json` LMP `minDays` — earliest selectable
+  /// LMP is today minus this many days (~42 weeks).
+  static const int lmpMinDaysBefore = 294;
+
+  /// Android `PregnantWomen.PREGNANCY_TEST_MAX_GESTATIONAL_DAYS` (16 weeks).
+  static const int pregnancyTestMaxGestationalDays = 16 * 7;
+
+  static const Set<String> _pwTooEarlyFieldIds = {
+    'TooEarlyTitle',
+    'TooEarlyDesc1',
+    'TooEarlyDesc2',
+  };
+
+  static const Set<String> _pwAfterThresholdFieldIds = {
+    'EDDTitle',
+    'EDD',
+    'gestationalWeekTitle',
+    'gestationalWeek',
+    'gravida',
+  };
+
+  static const Set<String> _pwObstetricMemberIds = {
+    'parity',
+    'livingChildren',
+    'ageOfLastChild',
+  };
+
+  /// Whole-number reading of a count field (gravida / parity / living
+  /// children), or 0 when absent or unparseable.
+  ///
+  /// Those fields are declared `inputType: 2` in the layout manifests, so the
+  /// numeric widget stores them as doubles (`3` is entered, `3.0` is stored) —
+  /// parse as [num] so the disclosure chain still sees 3.
+  static int _countValue(CanonicalVisitData data, String fieldId) {
+    final raw = data.getValue(fieldId);
+    if (raw is num) return raw.toInt();
+    return num.tryParse(raw?.toString() ?? '')?.toInt() ?? 0;
+  }
+
+  /// Progressive disclosure for the obstetric-history chain: Gravida → Parity
+  /// → Living Children → Age of Last Child. Returns `null` for fields outside
+  /// the chain (caller falls through to base visibility).
+  static bool? _obstetricChainVisibility(
+    String fieldId,
+    CanonicalVisitData data,
+  ) {
+    switch (fieldId) {
+      case 'gravida':
+        // Trigger — always visible once the section itself renders,
+        // regardless of its own base visibility (declared "gone" in the
+        // JSON, since Android reveals it via app-side composite-group
+        // handling this Flutter port doesn't otherwise have visibility into).
+        return true;
+      case 'parity':
+        return _countValue(data, 'gravida') >= 2;
+      case 'livingChildren':
+        return _countValue(data, 'parity') >= 1;
+      case 'ageOfLastChild':
+        return _countValue(data, 'livingChildren') >= 1;
+      default:
+        return null;
+    }
+  }
+
+  /// Days since LMP (calendar days), or null when LMP is missing/unparseable.
+  /// Mirrors Android `DateUtils.getDaysDifference(lmpMillis)`.
+  static int? daysSinceLmp(CanonicalVisitData data, [DateTime? now]) {
+    final raw = data.getValue('lmp')?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    final lmp = DateTime.tryParse(raw);
+    if (lmp == null) return null;
+    return CalendarDay.daysBetween(lmp, now ?? DateTime.now());
+  }
+
+  /// True when LMP is set and fewer than [lmpThresholdDays] have elapsed.
+  static bool isPregnancyTooEarly(CanonicalVisitData data, [DateTime? now]) {
+    final days = daysSinceLmp(data, now);
+    if (days == null) return false;
+    return days < lmpThresholdDays;
+  }
+
+  /// Android AssessmentPregnantWomenRegistrationFragment LMP callback.
+  ///
+  /// Returns `null` when [fieldId] is not gated here (caller continues).
+  static bool? _pwProfileLmpVisibility({
+    required String fieldId,
+    required CanonicalVisitData data,
+  }) {
+    if (fieldId == 'lmp') return true;
+
+    final days = daysSinceLmp(data);
+    final tooEarly = days != null && days < lmpThresholdDays;
+    final lmpReady = days != null && !tooEarly;
+
+    if (_pwTooEarlyFieldIds.contains(fieldId)) {
+      return tooEarly;
+    }
+
+    if (_pwAfterThresholdFieldIds.contains(fieldId)) {
+      return lmpReady;
+    }
+
+    if (fieldId == 'pregnancyTest') {
+      // Android: show only when GA days ≤ 16 weeks (inclusive).
+      if (!lmpReady) return false;
+      return days <= pregnancyTestMaxGestationalDays;
+    }
+
+    if (_pwObstetricMemberIds.contains(fieldId)) {
+      if (!lmpReady) return false;
+      return _obstetricChainVisibility(fieldId, data);
+    }
+
+    return null;
   }
 
   /// True when the NCD symptoms multi-select includes the Android
@@ -638,8 +747,7 @@ abstract final class FieldVisibilityRules {
   }) {
     final visit = ancVisitNumber ?? 1;
     final ga = gestationalWeeks;
-    final gravida =
-        int.tryParse(data.getValue('gravida')?.toString() ?? '') ?? 0;
+    final gravida = _countValue(data, 'gravida');
 
     switch (fieldId) {
       // Flutter-only alias of urinaryAlbumin — Android ANC has albumin only.

@@ -7,11 +7,11 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:leapwell/core/api/api_client.dart';
-import 'package:leapwell/core/auth/auth_repository.dart';
-import 'package:leapwell/core/db/app_database.dart';
-import 'package:leapwell/features/training/coaching_dao.dart';
-import 'package:leapwell/features/training/coaching_repository.dart';
+import 'package:uhis_next/core/api/api_client.dart';
+import 'package:uhis_next/core/auth/auth_repository.dart';
+import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/features/training/coaching_dao.dart';
+import 'package:uhis_next/features/training/coaching_repository.dart';
 
 Future<AppDatabase> _openInMemoryDb() async {
   final rawDb = await databaseFactory.openDatabase(

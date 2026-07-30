@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/features/household/enrollment/patient_lookup_repository.dart';
+import 'package:uhis_next/features/household/enrollment/patient_lookup_repository.dart';
 
 void main() {
   group('PatientLookupRepository.firstMatch', () {

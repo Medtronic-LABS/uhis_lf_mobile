@@ -378,21 +378,22 @@ abstract final class UnifiedPayloadMapper {
   }
 
   // ── PWPROFILE ──────────────────────────────────────────────────────────────
-  // PW registration assessment — captures LMP, gravida, parity, living
-  // children, and obstetric history collected in pregnancyDetailsAndHistory.
-  // Sent as a separate assessment alongside ANC when both are selected.
+  // Android wire type is "PWPROFILE" (menu id uppercased) and the details are
+  // grouped by the form card's `family`, so _wrapDetailsForType nests this map
+  // as { "pwProfile": { "pregnancyDetailsAndHistory": {…} } }.
+  //
+  // Field IDs are the ones in Android's pregnancy_woman_profile.json:
+  // lmp / gravida / parity / livingChildren / ageOfLastChild / pregnancyTest.
+  // Counts go out as Doubles (numeric EditText), the DatePicker stores LMP as
+  // "yyyy-MM-dd'T'HH:mm:ss+00:00", and ageOfLastChild is an AgeOrDob field that
+  // always stores a date of birth rather than the age the SK typed.
   static Map<String, dynamic> _toPwProfile(CanonicalVisitData d) {
-    final lmpStr = d.getValue('lmp') as String?;
-    // Server stores and returns LMP as epoch milliseconds.
-    final lmpMs = lmpStr != null
-        ? DateTime.tryParse(lmpStr)?.millisecondsSinceEpoch
-        : null;
     return _compact({
-      if (lmpMs != null) 'lastMenstrualPeriod': lmpMs,
-      'gravida': d.getValue('gravida'),
-      'parity': d.getValue('parity'),
-      'numberOfLivingChildren': d.getValue('livingChildren'),
-      'ageOfLastChild': d.getValue('ageOfLastChild'),
+      'lmp': _asDateWire(d.getValue('lmp')),
+      'gravida': _asDoubleWire(d.getValue('gravida')),
+      'parity': _asDoubleWire(d.getValue('parity')),
+      'livingChildren': _asDoubleWire(d.getValue('livingChildren')),
+      'ageOfLastChild': _asDobWire(d.getValue('ageOfLastChild')),
       'pregnancyTest': d.getValue('pregnancyTest'),
     });
   }
@@ -902,19 +903,31 @@ abstract final class UnifiedPayloadMapper {
   }
 
   // ── Family Planning ────────────────────────────────────────────────────────
-  // Android wire type: "family_planning", flat pass-through.
-  // Form section: "clientProfileAssessment".
+  // Android wire type: "FAMILY_PLANNING", wrapped under "familyPlanning" by
+  // _wrapDetailsForType. Android collects these four fields in the
+  // "clientProfileAssessment" form section, then AssessmentViewModel lifts the
+  // section contents up one level before sync, so the section name never
+  // reaches the wire:
+  //   familyPlanning = { numberOfLivingChildren, ageOfLastChild,
+  //                      desireForChildrenInFuture, familyPlanningMethods }
+  //
+  // numberOfLivingChildren is a STRING on the wire, and familyPlanningMethods
+  // is an ARRAY even though the form renders a single-select Spinner — Android
+  // AssessmentFamilyPlanningFragment.onFormSubmit wraps the picked option in a
+  // list for backward compatibility with older stored data.
+  //
+  // ageOfLastChild is an AgeOrDob field on Android, which always stores a date
+  // of birth ("2025-01-01T00:00:00+00:00") — never the age the SK typed.
 
   static Map<String, dynamic> _toFamilyPlanning(CanonicalVisitData d) {
     return _compact({
-      'familyPlanningMethods': d.getValue('familyPlanningMethods'),
-      'desireForChildren': d.getValue('desireForChildren') ?? d.getValue('desireForChildrenInFuture'),
-      'numberOfLivingChildren': d.getValue('numberOfLivingChildren'),
-      'lastDeliveryDate': d.getValue('lastDeliveryDate'),
-      'breastfeeding': d.getValue('breastfeeding'),
-      'counsellingProvided': d.getValue('counsellingProvided'),
-      'sideEffects': d.getValue('sideEffects'),
-      'clientAssessment': d.getValue('clientAssessment'),
+      'numberOfLivingChildren':
+          d.getValue('numberOfLivingChildren')?.toString(),
+      'ageOfLastChild': _asDobWire(d.getValue('ageOfLastChild')),
+      'desireForChildrenInFuture': d.getValue('desireForChildrenInFuture') ??
+          d.getValue('desireForChildren'),
+      'familyPlanningMethods':
+          _asStringList(d.getValue('familyPlanningMethods')),
     });
   }
 

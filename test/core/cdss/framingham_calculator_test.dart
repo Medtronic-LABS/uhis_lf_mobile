@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/cdss/framingham_calculator.dart';
-import 'package:leapwell/core/cdss/models/cdss_inputs.dart';
+import 'package:uhis_next/core/cdss/framingham_calculator.dart';
+import 'package:uhis_next/core/cdss/models/cdss_inputs.dart';
 
 CdssPatientProfile _profile({
   required int age,

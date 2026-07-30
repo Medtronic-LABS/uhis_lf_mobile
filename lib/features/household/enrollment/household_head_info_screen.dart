@@ -255,7 +255,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                   ),
                   children: [
                     // ── Section header ─────────────────────────────────────
-                    const EnrollmentSectionHeader(
+                    EnrollmentSectionHeader(
                       title:
                           EnrollmentStrings.householdHeadSectionHeader,
                     ),

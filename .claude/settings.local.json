@@ -5,9 +5,17 @@
       "Bash(grep -E \"\\\\.\\(java|kt\\)$\")",
       "Bash(git -C .claude/worktrees/dashboard-leapfrog status)",
       "Bash(git -C .claude/worktrees/dashboard-leapfrog diff --stat HEAD)",
-      "Bash(git cherry-pick *)",
+      "Bash(gh pr *)",
+      "Bash(git fetch *)",
+      "Bash(git log *)",
+      "Bash(gh repo *)",
+      "Bash(gh api *)",
+      "Bash(gh auth *)",
+      "Bash(git ls-remote *)",
+      "Bash(git push *)",
       "Bash(git stash *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

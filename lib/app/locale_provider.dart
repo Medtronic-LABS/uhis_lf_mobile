@@ -15,7 +15,15 @@ class LocaleProvider extends ChangeNotifier {
   }
 
   static const _key = 'app_language';
-  static const _storage = FlutterSecureStorage();
+  // encryptedSharedPreferences: true keeps this on the same underlying store
+  // as KeyStore/AuthRepository -- with the plain-mode default, the plugin's
+  // migration step (which runs whenever an encrypted-mode instance
+  // initializes) silently relocates this key out of the plain store before
+  // this provider ever gets to read it, so the value looked lost on every
+  // cold start even though the write had succeeded.
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   AppLanguage get language => AppLocale.current;
 

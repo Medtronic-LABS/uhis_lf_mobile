@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
+import '../../../core/db/assessment_dao.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/local_assessment_dao.dart';
@@ -338,17 +340,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         };
       }).toList();
 
-      final risks = <String>[];
-      if (followUps.any((f) => f.isOverdue)) risks.add('missed_followup');
-      final latestBp = visitsByVisit.isNotEmpty
-          ? visitsByVisit.first.readings
-                .where((r) => r.type == VitalType.bloodPressure)
-                .firstOrNull
-          : null;
-      if (latestBp?.systolic != null && latestBp!.systolic! >= 140) {
-        risks.add('elevated_bp');
-      }
-      if (visitsByVisit.length >= 3) risks.add('returning_patient');
+      final clinicalFindings = await BriefingFindingsAggregator.build(
+        patientId: widget.patientId,
+        patientCtx: patientCtx,
+        selectedProgrammes: _selectedProgrammes,
+        assessmentDao: context.read<LocalAssessmentDao>(),
+        historyAssessmentDao: context.read<AssessmentDao>(),
+        followUpRepo: followUpRepo,
+        patientDao: context.read<PatientDao>(),
+        immunisationDao: context.read<ImmunisationDao>(),
+      );
 
       final lastVisit = visitsByVisit.isNotEmpty ? visitsByVisit.first : null;
 
@@ -367,7 +368,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         if (vitalsMap != null && vitalsMap.isNotEmpty)
           'recentVitals': vitalsMap,
         'openFollowUps': followUpSummaries,
-        'riskIndicators': risks,
+        'clinicalFindings': clinicalFindings.map((f) => f.toJson()).toList(),
         if (patientCtx.gestationalWeeks != null)
           'gestationalWeeks': patientCtx.gestationalWeeks,
       };
@@ -495,9 +496,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // Source 2: catalogue direct symptom→programme mapping.
     // Each UnifiedSymptomDef.programmes names every service that symptom
     // belongs to, providing finer-grained auto-selection than the rule engine.
+    // See ProgrammeGridSync.catalogProgrammesFor for why imci/epi are gated
+    // on the patient actually being under-5.
+    final isUnder5 = _patientContext?.isUnder5 == true;
     for (final code in currentSymptoms) {
       final def = UnifiedSymptomCatalog.byCode(code);
-      if (def != null) activated.addAll(def.programmes);
+      if (def == null) continue;
+      activated.addAll(ProgrammeGridSync.catalogProgrammesFor(
+        def.programmes,
+        isUnder5: isUnder5,
+      ));
     }
 
     final unseen = ProgrammeGridSync.additionsFromPathways(

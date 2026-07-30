@@ -359,7 +359,7 @@ class _ModuleCard extends StatelessWidget {
       onTap: () {
         if (module.isLocked) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(TrainingStrings.lockedSnackbar),
               behavior: SnackBarBehavior.floating,
             ),
@@ -1259,7 +1259,7 @@ class _ChatBodyState extends State<_ChatBody> {
   int _streamLen = 0;
   Timer? _streamTimer;
 
-  static const List<String> _fallbackStarters = [
+  static List<String> get _fallbackStarters => [
     AssistantStrings.suggestedMuac,
     AssistantStrings.suggestedAncDanger,
     AssistantStrings.suggestedNcd,
@@ -1440,7 +1440,7 @@ class _ChatBodyState extends State<_ChatBody> {
     final items = <Widget>[const _TodayPill()];
 
     if (_messages.isEmpty) {
-      items.add(const _AssistantBubble(
+      items.add(_AssistantBubble(
         text: AssistantStrings.welcomeMessage,
         timestamp: null,
       ));
@@ -1937,7 +1937,7 @@ class _RecordingBadgeState extends State<_RecordingBadge> with TickerProviderSta
                 ),
               ),
               const SizedBox(width: 10),
-              const Text(
+              Text(
                 AssistantStrings.voiceListening,
                 style: TextStyle(fontSize: 12, color: AppColors.textMuted),
               ),

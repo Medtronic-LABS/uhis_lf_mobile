@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/cdss/findrisc_calculator.dart';
-import 'package:leapwell/core/cdss/models/cdss_inputs.dart';
+import 'package:uhis_next/core/cdss/findrisc_calculator.dart';
+import 'package:uhis_next/core/cdss/models/cdss_inputs.dart';
 
 CdssPatientProfile _male({
   int age = 30,

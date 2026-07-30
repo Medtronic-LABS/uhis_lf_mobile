@@ -87,15 +87,15 @@ class _ConsentScreenState extends State<ConsentScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    const _ConsentSection(
+                    _ConsentSection(
                       title: ConsentStrings.section1Title,
                       body: ConsentStrings.section1Body,
                     ),
-                    const _ConsentSection(
+                    _ConsentSection(
                       title: ConsentStrings.section2Title,
                       body: ConsentStrings.section2Body,
                     ),
-                    const _ConsentSection(
+                    _ConsentSection(
                       title: ConsentStrings.section3Title,
                       body: ConsentStrings.section3Body,
                     ),

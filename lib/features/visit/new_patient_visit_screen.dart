@@ -623,7 +623,7 @@ class _ServicesSection extends StatelessWidget {
         ),
         if (!pwSelected && showPregnancySection) ...[
           const SizedBox(height: 8),
-          const Center(
+          Center(
             child: Text(
               NewPatientVisitStrings.pwHint,
               style: TextStyle(

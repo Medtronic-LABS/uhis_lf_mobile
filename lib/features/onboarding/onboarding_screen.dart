@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/theme/app_theme.dart';
 
 /// First-login onboarding screen that asks the user whether they want to
 /// enable biometric authentication and set up a fallback PIN.
@@ -113,11 +114,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.asset(
-                        'assets/images/app-logo-name.png',
-                        height: isCompact ? 48 : 64,
-                        fit: BoxFit.contain,
-                        semanticLabel: 'UHIS logo',
+                      Text(
+                        AppStrings.appName,
+                        style: TextStyle(
+                          fontFamily: AppFonts.display,
+                          fontSize: isCompact ? 28 : 36,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.pink,
+                          letterSpacing: -0.5,
+                        ),
                       ),
                       SizedBox(height: isCompact ? 24 : 40),
                       Icon(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/models/programme.dart';
-import 'package:leapwell/core/widgets/programme_tag.dart';
+import 'package:uhis_next/core/models/programme.dart';
+import 'package:uhis_next/core/widgets/programme_tag.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
       theme: ThemeData(useMaterial3: true),

@@ -6,6 +6,7 @@
 *.swp
 .buildlog/
 .history
+.venv-tools/
 
 # Environment / build-time config (keep env.example.json checked in)
 .env
@@ -15,6 +16,8 @@ env.development.json
 env.staging.json
 env.production.json
 env.local.json
+env.deployed.json
+env.physical.json
 
 # IDE
 .idea/
@@ -27,6 +30,7 @@ e2e/node_modules/
 e2e/test-results/
 e2e/report/
 e2e/playwright-report/
+store_assets/screenshots/
 
 
 
@@ -109,6 +113,7 @@ unlinked_spec.ds
 **/ios/Runner/GeneratedPluginRegistrant.*
 
 # macOS
+.DS_Store
 **/Flutter/ephemeral/
 **/Pods/
 **/macos/Flutter/GeneratedPluginRegistrant.swift

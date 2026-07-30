@@ -2,11 +2,11 @@
 /// prefill guard can be unit-tested without a real (SQLCipher) database.
 library;
 
-import 'package:leapwell/core/db/local_assessment_dao.dart';
-import 'package:leapwell/core/db/patient_dao.dart';
-import 'package:leapwell/core/db/pregnancy_snapshot_dao.dart';
-import 'package:leapwell/features/visit/assessment_repository.dart';
-import 'package:leapwell/features/visit/forms/unified_form_notifier.dart';
+import 'package:uhis_next/core/db/local_assessment_dao.dart';
+import 'package:uhis_next/core/db/patient_dao.dart';
+import 'package:uhis_next/core/db/pregnancy_snapshot_dao.dart';
+import 'package:uhis_next/features/visit/assessment_repository.dart';
+import 'package:uhis_next/features/visit/forms/unified_form_notifier.dart';
 
 /// In-memory [AssessmentDraftDao] capturing the last saved row.
 class FakeAssessmentDraftDao implements AssessmentDraftDao {

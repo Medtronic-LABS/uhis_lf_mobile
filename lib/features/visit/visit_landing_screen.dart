@@ -211,12 +211,12 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
               if (lastVisit == null) {
                 return Card(
                   color: theme.colorScheme.surfaceContainerHighest,
-                  child: const Padding(
-                    padding: EdgeInsets.all(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline),
-                        SizedBox(width: 12),
+                        const Icon(Icons.info_outline),
+                        const SizedBox(width: 12),
                         Text(VisitLandingStrings.firstVisit),
                       ],
                     ),

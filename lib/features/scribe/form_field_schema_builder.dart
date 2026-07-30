@@ -28,6 +28,8 @@ class FormFieldSchema {
     required this.label,
     this.unit,
     this.allowedValues,
+    this.allowedValueIds,
+    this.multi = false,
     this.description,
     this.clinicalContext,
   });
@@ -44,8 +46,23 @@ class FormFieldSchema {
   /// Unit of measurement (e.g., 'mmHg', 'mg/dL', 'cm').
   final String? unit;
 
-  /// Allowed values for enum types.
+  /// Allowed values for enum types, as display NAMES (e.g. `"FBS (Before Meal)"`).
+  /// Kept for backward compatibility with any backend reading only this key —
+  /// prefer [allowedValueIds] for anything that needs the canonical id.
   final List<String>? allowedValues;
+
+  /// Allowed values for enum types, as canonical option IDS (e.g. `"fbs"`) —
+  /// parallel to [allowedValues], same order, same length. This is what the
+  /// form actually stores; sending it lets the backend resolve an LLM's
+  /// answer to the correct id without needing its own copy of the option
+  /// name→id mapping.
+  final List<String>? allowedValueIds;
+
+  /// True when this field accepts multiple selected values at once (e.g. a
+  /// checklist widget) rather than exactly one. Precisely disambiguates
+  /// enum-vs-multienum for the backend gatekeeper instead of it having to
+  /// infer multiplicity from its own registry record.
+  final bool multi;
 
   /// Additional description for the AI.
   final String? description;
@@ -59,6 +76,8 @@ class FormFieldSchema {
         'label': label,
         if (unit != null) 'unit': unit,
         if (allowedValues != null) 'allowedValues': allowedValues,
+        if (allowedValueIds != null) 'allowedValueIds': allowedValueIds,
+        'multi': multi,
         if (description != null) 'description': description,
         if (clinicalContext != null) 'clinicalContext': clinicalContext,
       };
@@ -120,6 +139,10 @@ abstract final class FormFieldSchemaBuilder {
   /// `_BloodGlucoseEntryField`).
   static const _knownDualSiblingExtras = <String, Set<String>>{
     'ncd': {'glucose'},
+    // ANC renders glucoseType via the same _BloodGlucoseEntryField widget as
+    // NCD (see the class doc above) — the widget writes the numeric reading
+    // to "glucose" here too, so it needs the same exception for ANC.
+    'anc': {'glucose'},
   };
 
   /// Widget hints that carry no directly extractable value (composite,
@@ -175,9 +198,11 @@ abstract final class FormFieldSchemaBuilder {
 
     FieldType type;
     List<String>? allowedValues;
+    List<String>? allowedValueIds;
     if (field.options.isNotEmpty) {
       type = FieldType.enumType;
       allowedValues = field.options.map((o) => o.name).toList();
+      allowedValueIds = field.options.map((o) => o.id).toList();
     } else if (inputType == 3) {
       // FieldRef.inputType: 3 = number (integer).
       type = FieldType.integer;
@@ -194,6 +219,8 @@ abstract final class FormFieldSchemaBuilder {
       label: field.label,
       unit: field.unitMeasurement,
       allowedValues: allowedValues,
+      allowedValueIds: allowedValueIds,
+      multi: field.widgetHint == WidgetHint.dialogCheckbox,
     );
   }
 }

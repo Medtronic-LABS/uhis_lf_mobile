@@ -2907,14 +2907,20 @@ class _SectionCard extends StatelessWidget {
         );
 
       case WidgetHint.dateField:
-        // Follow-up is always a future date; other date fields stay
-        // past/today-only (DOB, LMP, etc.).
-        final allowFuture = def.id == 'followUpVisit';
+        // Follow-up is always a future date. Fields with disableFutureDate
+        // (or any non-follow-up date) stay past/today-only.
+        final allowFuture =
+            def.id == 'followUpVisit' && !def.disableFutureDate;
+        // Android DatePicker minDays (LMP = 294 in pregnancy_woman_profile).
+        final minDaysBefore = (def.minDays != null && def.minDays! > 0)
+            ? def.minDays
+            : (def.id == 'lmp' ? FieldVisibilityRules.lmpMinDaysBefore : null);
         return _DateField(
           key: Key('unified_form_${def.id}_input'),
           currentValue: currentValue as String?,
           onChanged: (v) => onFieldChanged(def.id, v),
           allowFuture: allowFuture,
+          minDaysBefore: minDaysBefore,
         );
 
       case WidgetHint.infoLabel:
@@ -2927,9 +2933,17 @@ class _SectionCard extends StatelessWidget {
         );
 
       case WidgetHint.textLabel:
+        // Title labels use displayLabel; value labels (EDD / gestationalWeek)
+        // have an empty label and show the computed currentValue instead.
+        final label = def.displayLabel.trim();
+        final valueText = currentValue?.toString().trim() ?? '';
+        final text = valueText.isNotEmpty
+            ? valueText
+            : (label.isNotEmpty ? label : null);
+        if (text == null) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-          child: Text(def.displayLabel, style: AppTextStyles.subText),
+          child: Text(text, style: AppTextStyles.subText),
         );
 
       case WidgetHint.bpField:
@@ -3866,6 +3880,7 @@ class _DateField extends StatefulWidget {
     required this.onChanged,
     this.currentValue,
     this.allowFuture = false,
+    this.minDaysBefore,
   });
 
   final String? currentValue;
@@ -3873,6 +3888,10 @@ class _DateField extends StatefulWidget {
 
   /// When true (e.g. follow-up visit), picker allows future dates.
   final bool allowFuture;
+
+  /// When set (e.g. LMP = 294), earliest selectable date is today minus
+  /// this many days. Null keeps the legacy lower bound (year 1900 / today).
+  final int? minDaysBefore;
 
   @override
   State<_DateField> createState() => _DateFieldState();
@@ -3923,14 +3942,19 @@ class _DateFieldState extends State<_DateField> {
       ),
       onTap: () async {
         final today = DateTime.now();
+        final todayStart = DateTime(today.year, today.month, today.day);
         final parsed = DateTime.tryParse(widget.currentValue ?? '');
-        final first = widget.allowFuture ? today : DateTime(1900);
+        final first = widget.allowFuture
+            ? todayStart
+            : (widget.minDaysBefore != null
+                ? todayStart.subtract(Duration(days: widget.minDaysBefore!))
+                : DateTime(1900));
         final last = widget.allowFuture
-            ? today.add(const Duration(days: 365 * 2))
-            : today;
+            ? todayStart.add(const Duration(days: 365 * 2))
+            : todayStart;
         var initial = parsed ?? (widget.allowFuture
-            ? today.add(const Duration(days: 28))
-            : today);
+            ? todayStart.add(const Duration(days: 28))
+            : todayStart);
         if (initial.isBefore(first)) initial = first;
         if (initial.isAfter(last)) initial = last;
         final picked = await showDatePicker(

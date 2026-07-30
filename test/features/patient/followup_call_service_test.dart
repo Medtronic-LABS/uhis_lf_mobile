@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:leapwell/core/db/app_database.dart';
-import 'package:leapwell/core/db/follow_up_dao.dart';
-import 'package:leapwell/features/patient/followup_call_service.dart';
+import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/db/follow_up_dao.dart';
+import 'package:uhis_next/features/patient/followup_call_service.dart';
 
 /// Verifies the device-side follow-up call/close lifecycle + push serializer.
 void main() {

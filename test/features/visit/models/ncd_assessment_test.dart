@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/features/visit/models/ncd_assessment.dart';
+import 'package:uhis_next/features/visit/models/ncd_assessment.dart';
 
 void main() {
   group('HtnScreening — spec §5.2.2', () {

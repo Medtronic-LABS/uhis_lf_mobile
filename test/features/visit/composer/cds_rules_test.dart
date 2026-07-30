@@ -7,9 +7,9 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:leapwell/core/constants/app_strings.dart';
-import 'package:leapwell/core/models/programme.dart';
-import 'package:leapwell/features/visit/composer/cds_rules.dart';
+import 'package:uhis_next/core/constants/app_strings.dart';
+import 'package:uhis_next/core/models/programme.dart';
+import 'package:uhis_next/features/visit/composer/cds_rules.dart';
 
 void main() {
   group('CdsRules.evaluate — golden cases', () {

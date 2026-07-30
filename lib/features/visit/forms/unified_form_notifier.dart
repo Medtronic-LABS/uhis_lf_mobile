@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:intl/intl.dart';
+
 import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
@@ -24,6 +26,7 @@ import 'canonical_visit_data.dart';
 import 'form_config.dart';
 import 'rmnch_follow_up_calculator.dart';
 import 'unified_payload_mapper.dart';
+import 'unified_section_rules.dart';
 import 'vitals_trend.dart';
 
 /// Manages in-progress canonical form state for a single visit.
@@ -309,6 +312,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final map = jsonDecode(row.fieldValues) as Map<String, dynamic>;
       _data = _data.merge(CanonicalVisitData(map));
       _restoreFieldSources(row.fieldSources);
+      // Recompute EDD / GA from stored LMP (Android LMP callback parity).
+      final draftLmp = _data.getValue('lmp');
+      if (draftLmp != null) {
+        _applyPwProfileLmpChange(draftLmp);
+      }
       notifyListeners();
     } catch (e) {
       debugPrint('[UnifiedForm] draft parse error: $e');
@@ -579,6 +587,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
     }
+    // Android AssessmentPregnantWomenRegistrationFragment: LMP drives EDD,
+    // gestational week labels, and clears obstetric fields when too early.
+    if (fieldId == 'lmp') {
+      _applyPwProfileLmpChange(value);
+    }
     // Android resets on-treatment when existing illness changes.
     if (fieldId == 'pregnantWomanExistingIllness') {
       _data = _data.setValue('pregnantWomanOnTreatment', null);
@@ -801,6 +814,50 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  static final _eddDisplayFormat = DateFormat('dd MMMM yyyy');
+
+  /// Fields Android resets when LMP is cleared or is < 6 weeks ago.
+  static const _pwLmpClearedFieldIds = {
+    'EDD',
+    'gestationalWeek',
+    'pregnancyTest',
+    'gravida',
+    'parity',
+    'livingChildren',
+    'ageOfLastChild',
+  };
+
+  /// Mirrors Android LMP callback: compute EDD + GA when ≥ 42 days; otherwise
+  /// clear the rest of the pregnancy-details fields (too-early path).
+  void _applyPwProfileLmpChange(dynamic value) {
+    final raw = value?.toString();
+    final lmp = (raw == null || raw.isEmpty) ? null : DateTime.tryParse(raw);
+    if (lmp == null) {
+      _data = _data.removeFields(_pwLmpClearedFieldIds);
+      return;
+    }
+
+    final days = CalendarDay.daysBetween(lmp, DateTime.now());
+    if (days < FieldVisibilityRules.lmpThresholdDays) {
+      _data = _data.removeFields(_pwLmpClearedFieldIds);
+      return;
+    }
+
+    final edd = lmp.add(const Duration(days: 280));
+    final weeks = days ~/ 7;
+    final remDays = days % 7;
+    _data = _data.setValue('EDD', _eddDisplayFormat.format(edd));
+    // Android formatGestationalAge(Pair): "X weeks Y days "
+    _data = _data.setValue(
+      'gestationalWeek',
+      '$weeks weeks $remDays days',
+    );
+
+    if (days > FieldVisibilityRules.pregnancyTestMaxGestationalDays) {
+      _data = _data.setValue('pregnancyTest', null);
+    }
+  }
+
   static double? _toDouble(dynamic v) {
     if (v is double) return v;
     if (v is int) return v.toDouble();
@@ -897,6 +954,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
           'src="${field.sourceSegment ?? '-'}" ----->');
       if (field.fieldId == 'height' || field.fieldId == 'weight') {
         _recomputeBmi();
+      }
+      if (field.fieldId == 'lmp') {
+        _applyPwProfileLmpChange(validated);
       }
       // The BP card renders from the flat systolic/diastolic/pulse keys,
       // not the bpLogDetails array (which the payload mapper consumes) —

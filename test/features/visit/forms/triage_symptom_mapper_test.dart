@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/features/visit/forms/triage_symptom_mapper.dart';
+import 'package:uhis_next/features/visit/forms/triage_symptom_mapper.dart';
 
 void main() {
   group('TriageSymptomMapper.prefillsFor ncd', () {
