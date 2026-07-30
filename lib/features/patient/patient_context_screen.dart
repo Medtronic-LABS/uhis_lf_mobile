@@ -2035,9 +2035,6 @@ class _AiInsightCardState extends State<_AiInsightCard> {
 
   void _showDetail(BuildContext context, String summary, {bool patientKnown = true}) {
     final isEmpty = summary.trim().isEmpty;
-    final unavailableMessage = patientKnown
-        ? PatientProfileStrings.aiInsightUnavailable
-        : PatientProfileStrings.aiInsightNotSynced;
     final riskReasons = widget.riskReasons;
     final lastAssessedDate = widget.lastAssessedDate;
 
@@ -2099,15 +2096,21 @@ class _AiInsightCardState extends State<_AiInsightCard> {
             const SizedBox(height: 16),
           ],
           // ── AI summary ───────────────────────────────────────────────────
-          Text(
-            isEmpty ? unavailableMessage : summary,
-            style: TextStyle(
-              fontSize: 14,
-              height: 1.6,
-              color: isEmpty ? AppColors.textMuted : AppColors.textStrong,
-              fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
+          if (isEmpty)
+            _unavailableText(
+              patientKnown: patientKnown,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.6,
+                color: AppColors.textMuted,
+                fontStyle: FontStyle.italic,
+              ),
+            )
+          else
+            Text(
+              summary,
+              style: const TextStyle(fontSize: 14, height: 1.6, color: AppColors.textStrong),
             ),
-          ),
         ],
       ),
     );
@@ -2183,13 +2186,36 @@ class _AiInsightCardState extends State<_AiInsightCard> {
         ),
       );
 
+  /// The empty-state message, prefixed with a wifi-off glyph when the reason
+  /// is specifically "not synced" (as opposed to a generic unavailable) —
+  /// makes the offline cause visually obvious, not just stated in text.
+  Widget _unavailableText({
+    required bool patientKnown,
+    required TextStyle style,
+    int? maxLines,
+  }) {
+    final message = patientKnown
+        ? PatientProfileStrings.aiInsightUnavailable
+        : PatientProfileStrings.aiInsightNotSynced;
+    if (patientKnown) {
+      return Text(message, maxLines: maxLines, overflow: TextOverflow.ellipsis, style: style);
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.wifi_off_rounded, size: style.fontSize, color: AppColors.textMuted),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(message, maxLines: maxLines, overflow: TextOverflow.ellipsis, style: style),
+        ),
+      ],
+    );
+  }
+
   Widget _buildLoadedCard(BuildContext context, _AiInsightResult result) {
     final sw = Stopwatch()..start();
     final summary = result.summary;
     final isEmpty = summary.trim().isEmpty;
-    final unavailableMessage = result.patientKnown
-        ? PatientProfileStrings.aiInsightUnavailable
-        : PatientProfileStrings.aiInsightNotSynced;
     final card = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _showDetail(context, summary, patientKnown: result.patientKnown),
@@ -2202,17 +2228,24 @@ class _AiInsightCardState extends State<_AiInsightCard> {
             children: [
               _headerRow(),
               const SizedBox(height: 8),
-              Text(
-                isEmpty ? unavailableMessage : summary,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.5,
-                  color: isEmpty ? AppColors.textMuted : AppColors.textStrong,
-                  fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
+              if (isEmpty)
+                _unavailableText(
+                  patientKnown: result.patientKnown,
+                  maxLines: 3,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: AppColors.textMuted,
+                    fontStyle: FontStyle.italic,
+                  ),
+                )
+              else
+                Text(
+                  summary,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, height: 1.5, color: AppColors.textStrong),
                 ),
-              ),
             ],
           ),
         ),
