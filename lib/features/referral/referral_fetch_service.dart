@@ -85,6 +85,11 @@ class ReferralFetchService {
 
     await _dao.upsertMany(rows);
 
+    // Ticket is the authoritative backend state. Remove inferred rows (ref-fu-*,
+    // ref-hist-*) so CCE shows the actual nurse review outcome, not stale
+    // "Referred" rows from follow-up / assessment history inference.
+    await _dao.deleteInferredForPatient(patientId);
+
     // Recompute SLA + priority for all open referrals.
     // This fires _changes.value++ → CceRepository.changes notifies dashboard.
     await _repo.recomputeAllAfterSync();

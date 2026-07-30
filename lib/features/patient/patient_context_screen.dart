@@ -941,13 +941,7 @@ class _PatientContextScreenState
                     ],
                     // ── Combined health history ───────────────────────────
                     _CombinedTimeline(
-                      entries: _buildTimelineEntries(
-                        data,
-                        // Tap on a referral entry navigates to ReferralDetailScreen
-                        // (/tasks/:id). The patientId is used as the route param since
-                        // ReferralDetailScreen shows all referrals for the patient.
-                        onTapReferral: (ref) => () => context.go('/tasks/${ref.patientId}'),
-                      ),
+                      entries: _buildTimelineEntries(data),
                       isLoading: remoteLoading,
                     ),
 
@@ -1314,7 +1308,11 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     // ─── NCD ──────────────────────────────────────────────────────────────
     case Programme.ncd:
       emoji = '❤️';
-      title = 'NCD Visit';
+      // Nurse medical review visits use a distinct title so the SK can
+      // distinguish them from SK-submitted NCD assessments in the timeline.
+      final isNurseReview = a.type.toUpperCase() == 'NCDMEDICALREVIEW' ||
+          a.type.toUpperCase() == 'MEDICALREVIEWVISIT';
+      title = isNurseReview ? 'Nurse Review' : 'NCD Visit';
       category = 'NCD Follow-up';
 
       final bpNCD = raw['bp']?.toString() ?? '';
@@ -1347,6 +1345,28 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       } else {
         dotColor = _kDotOk;
         description = 'Vitals within target — continue current management.';
+      }
+
+      // Nurse review outcome overrides the vitals-derived badge.
+      if (isNurseReview) {
+        final ncdStatus = raw['ncdPatientStatus']?.toString() ?? '';
+        if (ncdStatus == 'UN_CONTROLLED' || ncdStatus == 'Uncontrolled') {
+          badge = 'Uncontrolled';
+          badgeColor = _kBadgeAmberBg;
+          badgeFgColor = _kBadgeAmberFg;
+          description = 'Nurse reviewed — patient status uncontrolled. Follow-up care required.';
+        } else if (ncdStatus == 'Controlled') {
+          badge = 'Controlled';
+          badgeColor = _kBadgeGreenBg;
+          badgeFgColor = _kBadgeGreenFg;
+          dotColor = _kDotOk;
+          description = 'Nurse reviewed — patient status controlled. Continue current management.';
+        } else if (ncdStatus.isNotEmpty) {
+          badge = ncdStatus;
+          description = 'Nurse reviewed — $ncdStatus.';
+        } else {
+          badge = 'Nurse reviewed';
+        }
       }
 
     // ─── EPI / Vaccination ────────────────────────────────────────────────
@@ -1553,18 +1573,9 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
   return null;
 }
 
-/// Builds the full display timeline from [data.assessments] + rule-based entries
-/// + live referral tickets fetched from the backend.
+/// Builds the full display timeline from [data.assessments] + rule-based entries.
 /// Returns newest-first (pending entry at index 0, oldest at end).
-///
-/// [onTapReferral] produces the tap handler for each referral entry — receives
-/// the [Referral] and returns a [VoidCallback]. Referral entries have no
-/// [source] assessment so the sheet tap path is skipped; the callback navigates
-/// to ReferralDetailScreen instead.
-List<_TimelineEntry> _buildTimelineEntries(
-  PatientOrMemberData data, {
-  VoidCallback Function(Referral)? onTapReferral,
-}) {
+List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
   final entries = <_TimelineEntry>[];
 
   // Derive ANC visit ordinals from chronological order (oldest = visit 1).
@@ -1602,14 +1613,6 @@ List<_TimelineEntry> _buildTimelineEntries(
     } else {
       entries.add(entry);
     }
-  }
-
-  // Live referral entries from backend ticket fetch (nurse review outcomes).
-  // Synthesized as _TimelineEntry rows so they appear inline in the timeline.
-  // Tap navigates to ReferralDetailScreen rather than opening the assessment sheet.
-  for (final ref in data.liveReferrals) {
-    final entry = _referralToTimelineEntry(ref, onTap: onTapReferral?.call(ref));
-    if (entry != null) entries.add(entry);
   }
 
   // Enrollment milestone — pinned at bottom (oldest event in the patient's history).
