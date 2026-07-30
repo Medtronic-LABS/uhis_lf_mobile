@@ -131,6 +131,9 @@ class _PregnancyRegistrationSheetState
         updatedAt: DateTime.now().millisecondsSinceEpoch,
         lmpDate: _lmp!.millisecondsSinceEpoch,
         eddDate: _edd?.millisecondsSinceEpoch,
+        // New pregnancy episode — reset visit counters (Spice getUpdatedPregnancyDetail).
+        ancVisitNo: 0,
+        pncVisitNo: 0,
       );
       await dao.upsertOne(row);
       if (!mounted) return;

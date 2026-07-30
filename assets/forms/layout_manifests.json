@@ -259,11 +259,24 @@
     "clinicalWorkflowId": 102,
     "sections": [
       {
-        "sectionId": "outcomeType",
-        "title": "Outcome type",
+        "sectionId": "ancServicesBirthPreparedness",
+        "title": "ANC services and Birth Preparedness",
         "fieldRefs": [
           {
-            "fieldName": "Outcome type",
+            "fieldName": "No. of ANC visits conducted with other providers",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "ancVisitsOtherProviders"
+          }
+        ]
+      },
+      {
+        "sectionId": "outcomeType",
+        "title": "Pregnancy Outcome",
+        "fieldRefs": [
+          {
+            "fieldName": "Pregnancy Outcome",
+            "isMandatory": true,
             "id": "deliveryOutcomeType"
           }
         ]
@@ -274,17 +287,18 @@
         "fieldRefs": [
           {
             "fieldName": "Time of death",
+            "isMandatory": true,
             "id": "timeOfDeath"
           },
           {
             "fieldName": "Gestation month at the time of death",
             "inputType": 2,
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "gestationMonthAtDeath"
           },
           {
             "fieldName": "Cause of death",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "causeOfDeath"
           }
         ]
@@ -296,11 +310,12 @@
           {
             "fieldName": "Gestation month at the time of abortion",
             "inputType": 2,
+            "isMandatory": true,
             "id": "gestationMonthAtAbortion"
           },
           {
             "fieldName": "Type of Abortion",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "typeOfAbortion"
           }
         ]
@@ -317,43 +332,43 @@
           {
             "fieldName": "Live Birth Numbers",
             "inputType": 2,
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "liveBirthNumbers"
           },
           {
             "fieldName": "Stillbirth Numbers",
             "inputType": 2,
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "stillbirthNumbers"
           },
           {
             "fieldName": "Place of delivery",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "placeOfDelivery"
           },
           {
             "fieldName": "Date of delivery",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "dateOfDelivery"
           },
           {
             "fieldName": "Mode of Delivery",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "modeOfDelivery"
           },
           {
             "fieldName": "Birth Attendant",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "birthAttendant"
           },
           {
             "fieldName": "Any complications during delivery?",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "anyComplicationsDuringDelivery"
           },
           {
             "fieldName": "Complications during delivery",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "complicationsDuringDelivery"
           }
         ]
@@ -364,28 +379,17 @@
         "fieldRefs": [
           {
             "fieldName": "Is the baby alive?",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "babyAlive"
           },
           {
             "fieldName": "Sex",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "babySex"
           },
           {
-            "fieldName": "Birth weight (kg)",
-            "inputType": 2,
-            "isMandatory": false,
-            "id": "birthWeight"
-          },
-          {
-            "fieldName": "Essential newborn care",
-            "isMandatory": false,
-            "id": "essentialNewbornCare"
-          },
-          {
             "fieldName": "Cause of neonatal death",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "neonatalDeathCause"
           }
         ]

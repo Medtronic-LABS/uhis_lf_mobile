@@ -2641,7 +2641,8 @@
         "targetId": "causeOfDeath",
         "visibility": "visible"
       }
-    ]
+    ],
+    "isMandatory": true
   },
   "gestationMonthAtDeath": {
     "id": "gestationMonthAtDeath",
@@ -2675,7 +2676,8 @@
         "workflowId": 102,
         "workflowName": "Pregnancy Outcome"
       }
-    ]
+    ],
+    "maxLength": 2
   },
   "causeOfDeath": {
     "id": "causeOfDeath",
@@ -2915,7 +2917,9 @@
         "targetId": "counsellingNeonatalDeath",
         "visibility": "gone"
       }
-    ]
+    ],
+    "isMandatory": true,
+    "maxLength": 1
   },
   "typeOfAbortion": {
     "id": "typeOfAbortion",
@@ -3030,7 +3034,7 @@
     "errorMessage": "Please enter number of live births",
     "errorMessageCulture": "অনুগ্রহ করে জীবিত জন্মের সংখ্যা লিখুন",
     "minValue": 0,
-    "maxValue": 5,
+    "maxValue": 4,
     "isSummary": false,
     "inputType": "integer",
     "clinicalConcept": [
@@ -3047,7 +3051,8 @@
         "workflowName": "Pregnancy Outcome"
       }
     ],
-    "condition": []
+    "condition": [],
+    "maxLength": 1
   },
   "stillbirthNumbers": {
     "id": "stillbirthNumbers",
@@ -3080,7 +3085,9 @@
         "workflowId": 102,
         "workflowName": "Pregnancy Outcome"
       }
-    ]
+    ],
+    "maxValue": 4,
+    "maxLength": 1
   },
   "placeOfDelivery": {
     "id": "placeOfDelivery",
@@ -3153,6 +3160,14 @@
         "eq": "home",
         "targetId": "birthAttendant",
         "visibility": "visible"
+      },
+      {
+        "eqList": [
+          "govtHealthFacility",
+          "privateFacility"
+        ],
+        "targetId": "birthAttendant",
+        "visibility": "gone"
       }
     ]
   },
@@ -3185,7 +3200,8 @@
         "workflowId": 102,
         "workflowName": "Pregnancy Outcome"
       }
-    ]
+    ],
+    "disableFutureDate": true
   },
   "modeOfDelivery": {
     "id": "modeOfDelivery",
@@ -3251,6 +3267,21 @@
             "display": "Caesarean section"
           }
         ]
+      }
+    ],
+    "condition": [
+      {
+        "eq": "cesareanSection",
+        "targetId": "birthAttendant",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "normalDelivery",
+          "assistedDelivery"
+        ],
+        "targetId": "birthAttendant",
+        "visibility": "visible"
       }
     ]
   },
@@ -5252,8 +5283,10 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "অন্য সেবাদাতাদের সঙ্গে কতবার ANC (গর্ভকালীন স্বাস্থ্যপরিচর্যা) ভিজিট করা হয়েছে?",
+    "titleCulture": "অন্য কোন সেবাকেন্দ্র/সেবাদাতার কাছ থেকে কতবার এএনসি সেবা নিয়েছেন?",
     "errorMessage": "Please enter a valid number",
+    "errorMessageCulture": "অনুগ্রহ করে একটি বৈধ মান লিখুন",
+    "maxLength": 2,
     "minValue": 0,
     "isSummary": false,
     "inputType": "integer",
@@ -5269,6 +5302,11 @@
         "id": "anc",
         "workflowId": 4,
         "workflowName": "RMNCH"
+      },
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
       }
     ]
   },
@@ -10477,147 +10515,49 @@
   },
   "deliveryOutcomeType": {
     "id": "deliveryOutcomeType",
-    "label": "Outcome type",
-    "widgetHint": "RadioGroup",
-    "fieldName": "Outcome type",
+    "label": "Pregnancy Outcome",
+    "widgetHint": "Spinner",
+    "fieldName": "Pregnancy Outcome",
     "family": "pregnancyOutcome",
-    "orderId": 0,
+    "orderId": 1,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "ফলাফলের ধরন",
-    "options": [
+    "titleCulture": "গর্ভাবস্থার ফলাফল",
+    "errorMessage": "Please select pregnancy outcome",
+    "errorMessageCulture": "অনুগ্রহ করে গর্ভাবস্থার ফলাফল নির্বাচন করুন",
+    "optionsList": [
       {
         "id": "maternalDeath",
-        "name": "Maternal Death"
-      },
-      {
-        "id": "abortion",
-        "name": "Abortion"
+        "name": "Maternal Death",
+        "cultureValue": "মাতৃমৃত্যু"
       },
       {
         "id": "liveBirth",
-        "name": "Live birth"
+        "name": "Delivery outcome",
+        "cultureValue": "প্রসবের ফলাফল"
       },
       {
-        "id": "stillbirth",
-        "name": "Stillbirth"
+        "id": "abortion",
+        "name": "Abortion",
+        "cultureValue": "গর্ভপাত"
       }
     ],
     "condition": [
       {
-        "eqList": [
-          "liveBirth",
-          "stillbirth"
-        ],
-        "targetId": "timeOfDeath",
-        "visibility": "gone"
+        "eq": "abortion",
+        "targetId": "abortion",
+        "visibility": "visible"
       },
       {
-        "eqList": [
-          "liveBirth",
-          "stillbirth"
-        ],
-        "targetId": "gestationMonthAtDeath",
-        "visibility": "gone"
+        "eq": "maternalDeath",
+        "targetId": "maternalDeath",
+        "visibility": "visible"
       },
       {
-        "eqList": [
-          "liveBirth",
-          "stillbirth"
-        ],
-        "targetId": "causeOfDeath",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "liveBirth",
-          "stillbirth",
-          "maternalDeath"
-        ],
-        "targetId": "gestationMonthAtAbortion",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "liveBirth",
-          "stillbirth",
-          "maternalDeath"
-        ],
-        "targetId": "typeOfAbortion",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "deliveryOutcome",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "liveBirthNumbers",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "stillbirthNumbers",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "placeOfDelivery",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "dateOfDelivery",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "modeOfDelivery",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "birthAttendant",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "anyComplicationsDuringDelivery",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "complicationsDuringDelivery",
-        "visibility": "gone"
+        "eq": "liveBirth",
+        "targetId": "deliveryOutcomes",
+        "visibility": "visible"
       },
       {
         "eq": "liveBirth",
@@ -10630,18 +10570,7 @@
         "visibility": "visible"
       },
       {
-        "eq": "liveBirth",
-        "targetId": "birthWeight",
-        "visibility": "visible"
-      },
-      {
-        "eq": "liveBirth",
-        "targetId": "essentialNewbornCare",
-        "visibility": "visible"
-      },
-      {
         "eqList": [
-          "stillbirth",
           "maternalDeath",
           "abortion"
         ],
@@ -10650,7 +10579,6 @@
       },
       {
         "eqList": [
-          "stillbirth",
           "maternalDeath",
           "abortion"
         ],
@@ -10659,25 +10587,6 @@
       },
       {
         "eqList": [
-          "stillbirth",
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "birthWeight",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "stillbirth",
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "essentialNewbornCare",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "stillbirth",
           "maternalDeath",
           "abortion"
         ],
@@ -10700,28 +10609,18 @@
     "fieldName": "Is the baby alive",
     "family": "newbornDetails",
     "orderId": 1,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
     "titleCulture": "শিশু কি জীবিত?",
-    "options": [
-      {
-        "id": "yes",
-        "name": "Yes"
-      },
-      {
-        "id": "no",
-        "name": "No"
-      }
-    ],
     "condition": [
       {
-        "eq": "no",
+        "eq": "No",
         "targetId": "neonatalDeathCause",
         "visibility": "visible"
       },
       {
-        "eq": "yes",
+        "eq": "Yes",
         "targetId": "neonatalDeathCause",
         "visibility": "gone"
       }
@@ -10732,6 +10631,18 @@
         "workflowId": 102,
         "workflowName": "Pregnancy Outcome"
       }
+    ],
+    "optionsList": [
+      {
+        "id": "Yes",
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
+      },
+      {
+        "id": "No",
+        "name": "No",
+        "cultureValue": "না"
+      }
     ]
   },
   "babySex": {
@@ -10741,11 +10652,18 @@
     "fieldName": "Baby sex",
     "family": "newbornDetails",
     "orderId": 2,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
     "titleCulture": "লিঙ্গ",
-    "options": [
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ],
+    "optionsList": [
       {
         "id": "male",
         "name": "Male"
@@ -10757,13 +10675,6 @@
       {
         "id": "other",
         "name": "Other"
-      }
-    ],
-    "programmes": [
-      {
-        "id": "pregnancyOutcome",
-        "workflowId": 102,
-        "workflowName": "Pregnancy Outcome"
       }
     ]
   },
@@ -10827,7 +10738,7 @@
     "fieldName": "Cause of neonatal death",
     "family": "newbornDetails",
     "orderId": 5,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
     "titleCulture": "নবজাতক মৃত্যুর কারণ",

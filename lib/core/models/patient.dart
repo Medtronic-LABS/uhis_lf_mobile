@@ -169,4 +169,31 @@ class Patient {
     }
     return const <String>[];
   }
+
+  Patient copyWithActive(bool active) => Patient(
+        id: id,
+        patientId: patientId,
+        name: name,
+        gender: gender,
+        dob: dob,
+        phone: phone,
+        nationalId: nationalId,
+        householdId: householdId,
+        villageId: villageId,
+        villageName: villageName,
+        isActive: active,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+        rawJson: rawJson,
+        age: age,
+        riskScore: riskScore,
+        riskBand: riskBand,
+        riskModifier: riskModifier,
+        riskReasons: riskReasons,
+        riskHintLevel: riskHintLevel,
+        riskHintColor: riskHintColor,
+        redFlag: redFlag,
+        lastVisitAt: lastVisitAt,
+        nextDueAt: nextDueAt,
+        missedVisitCount: missedVisitCount,
+      );
 }
