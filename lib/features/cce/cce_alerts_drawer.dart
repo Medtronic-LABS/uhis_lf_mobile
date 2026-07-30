@@ -8,6 +8,7 @@ import '../../core/widgets/empty_state_card.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../referral/referral_repository.dart';
+import '../referral/referral_synthesis_service.dart';
 import 'cce_alert.dart';
 import 'cce_repository.dart';
 import 'widgets/cce_alert_card.dart';
@@ -33,6 +34,10 @@ class CceAlertsDrawer extends StatefulWidget {
       patients: context.read<PatientDao>(),
       households: context.read<HouseholdDao>(),
     );
+    // Fire background synthesis so CCE shows nurse-review state even before
+    // the SK has visited each patient's screen. Changes fire via
+    // ReferralRepository.changes → CceAlertsDrawer._onChanges → rebuild.
+    context.read<ReferralSynthesisService>().synthesizeAll();
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

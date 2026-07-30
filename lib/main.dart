@@ -60,6 +60,7 @@ import 'features/patient/vitals_repository.dart';
 import 'features/referral/referral_api_service.dart';
 import 'features/referral/referral_fetch_service.dart';
 import 'features/referral/referral_repository.dart';
+import 'features/referral/referral_synthesis_service.dart';
 import 'features/search/global_search_repository.dart';
 import 'features/search/household_search_repository.dart';
 import 'features/search/member_search_repository.dart';
@@ -231,6 +232,11 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final ReferralFetchService _referralFetchService = ReferralFetchService(
     api: _referralApiService,
     dao: _referralDao,
+    repository: _referrals,
+  );
+  late final ReferralSynthesisService _referralSynthesis = ReferralSynthesisService(
+    assessments: _assessmentDao,
+    referralDao: _referralDao,
     repository: _referrals,
   );
 
@@ -414,6 +420,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<NotificationService>.value(value: _notifications),
         Provider<RepeatScheduler>.value(value: _repeatScheduler),
         Provider<ReferralRepository>.value(value: _referrals),
+        Provider<ReferralSynthesisService>.value(value: _referralSynthesis),
         Provider<MissionDashboardRepository>.value(value: _missionDashboard),
         Provider<PatientDao>.value(value: _patientDao),
         Provider<HouseholdDao>.value(value: _householdDao),
