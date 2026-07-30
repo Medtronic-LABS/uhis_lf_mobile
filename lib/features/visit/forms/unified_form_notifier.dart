@@ -106,6 +106,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// server didn't supply one). Keyed by fieldId, AI-filled fields only.
   final Map<String, String?> _fieldSourceSegments = {};
 
+  /// When true, height was taken from a prior NCD/Cataract visit and must not
+  /// be edited — mirrors Spice `view.isEnabled = false` after prefill.
+  bool _heightLockedFromPrior = false;
+
   CanonicalVisitData get data => _data;
   bool get submitting => _submitting;
 
@@ -122,6 +126,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   /// Transcript quote backing an AI-filled [fieldId], when available.
   String? fieldSourceSegment(String fieldId) => _fieldSourceSegments[fieldId];
+
+  /// True when height was prefilled from a prior visit and is hard-locked.
+  bool get isHeightLockedFromPrior => _heightLockedFromPrior;
 
   /// All AI-populated fields still pending SK review (drives banner count).
   int get aiPendingCount => _fieldSources.values
@@ -152,12 +159,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Pre-seeds height and weight from the patient's most-recent prior visit
   /// when those fields are not yet filled in this visit. Called after
   /// [loadDraft] so a saved draft always wins over historical values.
+  ///
+  /// When a prior height exists, the field is hard-locked (Spice NCD behaviour)
+  /// even if a draft already held the same value.
   Future<void> preloadBiometrics() async {
     var changed = false;
-    if (_data.getValue('height') == null) {
-      final h = await _assessmentRepo.lastRecordedHeight(_patientId);
-      if (h != null) {
-        _data = _data.setValue('height', h);
+    final priorHeight = await _assessmentRepo.lastRecordedHeight(_patientId);
+    if (priorHeight != null) {
+      if (_data.getValue('height') == null) {
+        _data = _data.setValue('height', priorHeight);
+        changed = true;
+      }
+      if (!_heightLockedFromPrior) {
+        _heightLockedFromPrior = true;
         changed = true;
       }
     }
@@ -539,6 +553,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// When `height` or `weight` changes, BMI is automatically recomputed and
   /// stored under the `bmi` field so the `_InfoLabelField` stays in sync.
   void updateField(String fieldId, dynamic value) {
+    if (fieldId == 'height' && _heightLockedFromPrior) {
+      debugPrint('[UnifiedForm] height locked from prior visit — ignoring edit');
+      return;
+    }
     final valueType = value?.runtimeType ?? 'null';
     if (value is List) {
       ConsoleLog.step('[FormField] $fieldId (List[${value.length}]) = $value');
@@ -837,7 +855,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// True when the SK typed or edited this field — AI must never overwrite.
+  /// Also true for height locked from a prior NCD/Cataract visit.
   bool _isSkOwned(String fieldId) {
+    if (fieldId == 'height' && _heightLockedFromPrior) return true;
     final source = _fieldSources[fieldId];
     return source == FieldSource.manual || source == FieldSource.aiModified;
   }
