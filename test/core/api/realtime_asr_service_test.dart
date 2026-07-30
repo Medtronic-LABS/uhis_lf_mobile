@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:uhis_next/core/api/api_client.dart';
-import 'package:uhis_next/core/api/realtime_asr_service.dart';
+import 'package:leapwell/core/api/api_client.dart';
+import 'package:leapwell/core/api/realtime_asr_service.dart';
 
 /// symptomVocab is a client-authoritative symptom vocabulary sent once at WS
 /// connect time (see ai-scribe-service's app/api/realtime.py) — these tests

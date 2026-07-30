@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/models/programme.dart';
-import 'package:uhis_next/core/theme/app_theme.dart';
+import 'package:leapwell/core/models/programme.dart';
+import 'package:leapwell/core/theme/app_theme.dart';
 
 Future<BuildContext> _pumpWithTheme(WidgetTester tester, ThemeData theme) async {
   late BuildContext capturedContext;

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/features/visit/forms/canonical_visit_data.dart';
-import 'package:uhis_next/features/visit/forms/unified_payload_mapper.dart';
+import 'package:leapwell/features/visit/forms/canonical_visit_data.dart';
+import 'package:leapwell/features/visit/forms/unified_payload_mapper.dart';
 
 void main() {
   group('UnifiedPayloadMapper.decompose — eye_care', () {

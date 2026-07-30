@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/mission/mission_dashboard_service.dart';
-import 'package:uhis_next/core/mission/mission_pregnancy_facts.dart';
-import 'package:uhis_next/core/models/dashboard_tier.dart';
-import 'package:uhis_next/core/models/programme.dart';
-import 'package:uhis_next/core/models/risk.dart';
-import 'package:uhis_next/core/models/worklist_entry.dart';
+import 'package:leapwell/core/mission/mission_dashboard_service.dart';
+import 'package:leapwell/core/mission/mission_pregnancy_facts.dart';
+import 'package:leapwell/core/models/dashboard_tier.dart';
+import 'package:leapwell/core/models/programme.dart';
+import 'package:leapwell/core/models/risk.dart';
+import 'package:leapwell/core/models/worklist_entry.dart';
 
 WorklistEntry _entry({
   required String patientId,

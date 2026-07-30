@@ -496,19 +496,43 @@ class MemberDao {
       orderBy: 'household_id, name ASC',
     );
 
+    // Pass 1: build householdId → canonical key map.
+    //
+    // Members from the same household can have MIXED householdReferenceId values:
+    //   - Locally-enrolled rows: householdReferenceId = HH_UUID (always set)
+    //   - Server-synced rows that arrived WITH referenceId: householdReferenceId = HH_UUID
+    //   - Server-synced rows WITHOUT referenceId (e.g. enrolled on another device
+    //     or via another system): householdReferenceId = null
+    //
+    // Without normalization, rows with householdReferenceId = HH_UUID group under
+    // HH_UUID while rows with householdReferenceId = null group under FHIR_HH_ID,
+    // making one household appear as two separate households in the list.
+    //
+    // Fix: for every FHIR householdId, the canonical key is the first non-null
+    // householdReferenceId seen among its members; fall back to householdId
+    // only when no member in the household has a referenceId.
+    final fhirToCanonical = <String, String>{};
+    for (final row in rows) {
+      final hid = row['household_id'] as String?;
+      if (hid == null || hid.isEmpty) continue;
+      final hrid = row['household_reference_id'] as String?;
+      if (hrid != null && hrid.isNotEmpty) {
+        fhirToCanonical.putIfAbsent(hid, () => hrid);
+      } else {
+        fhirToCanonical.putIfAbsent(hid, () => hid);
+      }
+    }
+
+    // Pass 2: group using the normalized canonical key.
     final grouped = <String, List<HouseholdMemberEntity>>{};
     for (final row in rows) {
       final member = HouseholdMemberEntity.fromDb(row);
-      // Prefer householdReferenceId as the canonical group key:
-      // - Locally-enrolled members: householdId = householdReferenceId = hhUUID
-      // - Server-synced members: householdId = FHIR household ID,
-      //   householdReferenceId = same hhUUID from the server response
-      // Using the referenceId merges both into the same group.
-      final hhId = (member.householdReferenceId?.isNotEmpty == true
-              ? member.householdReferenceId
-              : member.householdId) ??
-          '';
-      grouped.putIfAbsent(hhId, () => []).add(member);
+      final hrid = member.householdReferenceId?.isNotEmpty == true
+          ? member.householdReferenceId!
+          : null;
+      final hid = member.householdId;
+      final key = hrid ?? (hid != null ? (fhirToCanonical[hid] ?? hid) : '');
+      grouped.putIfAbsent(key, () => []).add(member);
     }
     return grouped;
   }

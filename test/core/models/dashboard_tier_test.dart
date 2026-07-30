@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/models/dashboard_tier.dart';
+import 'package:leapwell/core/models/dashboard_tier.dart';
 
 void main() {
   group('DashboardTier.fromDueAt', () {

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/models/programme.dart';
-import 'package:uhis_next/core/models/risk.dart';
-import 'package:uhis_next/core/risk/risk_scoring_service.dart';
+import 'package:leapwell/core/models/programme.dart';
+import 'package:leapwell/core/models/risk.dart';
+import 'package:leapwell/core/risk/risk_scoring_service.dart';
 
 void main() {
   const service = RiskScoringService();

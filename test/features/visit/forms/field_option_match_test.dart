@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/features/visit/forms/form_config.dart';
+import 'package:leapwell/features/visit/forms/form_config.dart';
 
 void main() {
   group('FieldOption.coerceId', () {

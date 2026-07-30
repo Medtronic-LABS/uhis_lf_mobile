@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:uhis_next/core/db/app_database.dart';
-import 'package:uhis_next/core/db/bp_history_dao.dart';
+import 'package:leapwell/core/db/app_database.dart';
+import 'package:leapwell/core/db/bp_history_dao.dart';
 
 void main() {
   setUpAll(() {
