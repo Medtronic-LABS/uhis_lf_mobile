@@ -2207,6 +2207,8 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
+    "disableFutureDate": true,
+    "minDays": 294,
     "hint": "DD-MM-YYYY",
     "hintCulture": "দিন-মাস-বছর",
     "titleCulture": "শেষ মাসিক শুরুর তারিখ",
@@ -8381,6 +8383,11 @@
         "id": "ncd",
         "workflowId": 21,
         "workflowName": "NCD"
+      },
+      {
+        "id": "anc",
+        "workflowId": 4,
+        "workflowName": "RMNCH"
       }
     ],
     "optionsList": [
@@ -8458,6 +8465,11 @@
         "id": "ncd",
         "workflowId": 21,
         "workflowName": "NCD"
+      },
+      {
+        "id": "anc",
+        "workflowId": 4,
+        "workflowName": "RMNCH"
       }
     ],
     "condition": []

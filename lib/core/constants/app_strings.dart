@@ -1115,6 +1115,9 @@ abstract final class PatientProfileStrings {
   static String get aiInsightUnavailable => AppLocale.isBangla
       ? 'এআই অন্তর্দৃষ্টি অনুপলব্ধ — রোগীর রেকর্ড ম্যানুয়ালি পরীক্ষা করুন'
       : 'AI insight unavailable — check patient record manually';
+  static String get aiInsightNotSynced => AppLocale.isBangla
+      ? 'অফলাইন মোডে তথ্য পাওয়া যাচ্ছে না'
+      : 'Data not available in offline mode';
   static String get enrolledInApp =>
       AppLocale.isBangla ? 'আপন সুস্বাস্থ্যে নথিভুক্ত' : 'Enrolled in Apon Sushashthya';
   static String get enrollmentMilestone =>

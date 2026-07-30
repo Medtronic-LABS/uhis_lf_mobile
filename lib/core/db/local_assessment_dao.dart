@@ -33,6 +33,7 @@ class LocalAssessmentEntity {
     this.isReferred = false,
     this.referralStatus,
     this.referredReasons,
+    this.customStatus,
     this.followUpId,
     this.pregnancyEpisodeId,
     this.latitude = 0.0,
@@ -79,6 +80,11 @@ class LocalAssessmentEntity {
   /// List of referral reasons (JSON array).
   final String? referredReasons;
 
+  /// Programme status computed at submit time (JSON array), matching Android's
+  /// AssessmentStatusGenerator output — e.g. `["HIGH_RISK_PW"]`. Sent as
+  /// `encounter.customStatus`; null falls back to the referral-derived status.
+  final String? customStatus;
+
   /// Follow-up ID if this is a follow-up assessment.
   final int? followUpId;
 
@@ -116,6 +122,7 @@ class LocalAssessmentEntity {
         'is_referred': isReferred ? 1 : 0,
         'referral_status': referralStatus,
         'referred_reasons': referredReasons,
+        'custom_status': customStatus,
         'follow_up_id': followUpId,
         'pregnancy_episode_id': pregnancyEpisodeId,
         'latitude': latitude,
@@ -140,6 +147,7 @@ class LocalAssessmentEntity {
       isReferred: (row['is_referred'] as int?) == 1,
       referralStatus: row['referral_status'] as String?,
       referredReasons: row['referred_reasons'] as String?,
+      customStatus: row['custom_status'] as String?,
       followUpId: row['follow_up_id'] as int?,
       pregnancyEpisodeId: row['pregnancy_episode_id'] as String?,
       latitude: (row['latitude'] as num?)?.toDouble() ?? 0.0,
@@ -171,6 +179,7 @@ class LocalAssessmentEntity {
     bool? isReferred,
     String? referralStatus,
     String? referredReasons,
+    String? customStatus,
     int? followUpId,
     String? pregnancyEpisodeId,
     double? latitude,
@@ -194,6 +203,7 @@ class LocalAssessmentEntity {
         isReferred: isReferred ?? this.isReferred,
         referralStatus: referralStatus ?? this.referralStatus,
         referredReasons: referredReasons ?? this.referredReasons,
+        customStatus: customStatus ?? this.customStatus,
         followUpId: followUpId ?? this.followUpId,
         pregnancyEpisodeId: pregnancyEpisodeId ?? this.pregnancyEpisodeId,
         latitude: latitude ?? this.latitude,
@@ -275,7 +285,13 @@ class LocalAssessmentEntity {
         'visitNumber': ?visitNum,
         if (isPregnancyType) 'pregnancyEpisodeId': ?pregnancyEpisodeId,
         // Android sends customStatus list to track patient state server-side.
-        'customStatus': _buildCustomStatus(isReferred, referralStatus),
+        'customStatus': _buildCustomStatus(
+          isReferred,
+          referralStatus,
+          assessmentType,
+          wrappedDetails,
+          customStatus,
+        ),
       },
       if (followUpId != null) 'followUpId': followUpId,
       'updatedAt': updatedAt?.millisecondsSinceEpoch ?? 0,
@@ -305,21 +321,24 @@ class LocalAssessmentEntity {
   /// Android uses different strings than Flutter's internal constants:
   ///   Flutter "PNC_CHILD" → Android "PNC_NEONATE"
   ///   Flutter "CHILDHOOD_VISIT" → Android "ChildHood_Visit"
-  ///   Flutter "PWPROFILE" → Android "pwProfile"
   ///   Flutter "ICCM" / "IMCI" → Android "iccm"
   ///   Flutter "EYE_CARE" → Android "eye_care"
   ///   Flutter "CATARACT" → Android "cataract"
-  ///   Flutter "FAMILY_PLANNING" → Android "family_planning"
+  ///   Flutter "FP" → Android "FAMILY_PLANNING"
   static String _wireType(String assessmentType) {
     return switch (assessmentType.toUpperCase()) {
       'PNC_CHILD' || 'PNC_NEONATE' || 'PNC_NEONATAL' => 'PNC_NEONATE',
       'CHILDHOOD_VISIT' || 'CHILD_MENU' => 'ChildHood_Visit',
-      'PWPROFILE' || 'PW_PROFILE' => 'pwProfile',
+      // Android stores the menu id uppercased (AssessmentRepository.saveAssessment)
+      // and syncs that stored value, so "pwProfile" goes out as "PWPROFILE".
+      'PWPROFILE' || 'PW_PROFILE' => 'PWPROFILE',
       'PREGNANCY_OUTCOME' || 'PREGNANCYOUTCOME' => 'pregnancyOutcome',
       'ICCM' || 'IMCI' => 'iccm',
       'EYE_CARE' => 'eye_care',
       'CATARACT' => 'cataract',
-      'FAMILY_PLANNING' || 'FP' => 'family_planning',
+      // Android stores the FP menu id uppercased and sends the stored value, so
+      // the wire type is "FAMILY_PLANNING" (not the lowercase menu id).
+      'FAMILY_PLANNING' || 'FP' => 'FAMILY_PLANNING',
       // NCD, ANC, TB, EPI, PNC_MOTHER, PNC — pass through as-is
       String t => t,
     };
@@ -365,20 +384,72 @@ class LocalAssessmentEntity {
 
   /// Derives customStatus list from referral state, matching Android's
   /// Assessment.status field sent in offline-sync/create.
-  static List<String> _buildCustomStatus(bool isReferred, String? referralStatus) {
+  ///
+  /// A [storedStatus] written at submit time (Android AssessmentStatusGenerator
+  /// equivalent, e.g. `["HIGH_RISK_PW"]`) wins: Android reports the programme
+  /// status regardless of referral, and the referral itself already travels in
+  /// `patientStatus` and `encounter.referred`.
+  ///
+  /// Family Planning reports a programme status instead of the generic
+  /// Recovered marker, matching Android AssessmentStatusGenerator.
+  static List<String> _buildCustomStatus(
+    bool isReferred,
+    String? referralStatus,
+    String assessmentType,
+    Map<String, dynamic> details,
+    String? storedStatus,
+  ) {
+    final decoded = _decodeStatusList(storedStatus);
+    if (decoded.isNotEmpty) return decoded;
     if (isReferred) return ['Referred'];
+    final t = assessmentType.toUpperCase();
+    if (t == 'FAMILY_PLANNING' || t == 'FP') {
+      return [_familyPlanningStatus(details)];
+    }
     final s = referralStatus?.trim();
     if (s == null || s.isEmpty) return ['Recovered'];
     return [s];
+  }
+
+  static List<String> _decodeStatusList(String? encoded) {
+    if (encoded == null || encoded.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is List) {
+        return decoded
+            .map((e) => e?.toString().trim() ?? '')
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+    } catch (_) {/* not JSON — ignore and fall back */}
+    return const [];
+  }
+
+  /// Android AssessmentStatusGenerator treats an empty method list or the
+  /// explicit "none" option as not being on a modern method.
+  /// Accepts both the wrapped and legacy flat detail shapes.
+  static String _familyPlanningStatus(Map<String, dynamic> details) {
+    final wrapped = details['familyPlanning'];
+    final methods = (wrapped is Map ? wrapped['familyPlanningMethods'] : null) ??
+        details['familyPlanningMethods'];
+    final first = methods is List
+        ? (methods.isEmpty ? '' : methods.first?.toString() ?? '')
+        : methods?.toString() ?? '';
+    final value = first.trim().toLowerCase();
+    if (value.isEmpty || value == 'none') return 'NOT_USING_MODERN_FP';
+    return 'USING_MODERN_FP';
   }
 
   /// Wrap an assessment payload under the programme-specific key required by
   /// AssessmentDetailsDTO, matching Android OfflineSyncRepository.getAssessmentDetails().
   ///
   ///   ANC         → flat (Android sends ANC details unwrapped — GAP 6b fix)
+  ///   PWPROFILE   → {"pwProfile": {"pregnancyDetailsAndHistory": {...}}}
   ///   PNC_NEONATE → {"pncNeonatal": {...}, "cbs": {}} (CBS sibling required by Android)
   ///   CHILDHOOD_VISIT → {"pncChild": {...}, "cbs": {}} (CBS sibling required by Android)
-  ///   EYE_CARE / CATARACT / FAMILY_PLANNING / TB / EPI → flat (Android pass-through)
+  ///   FAMILY_PLANNING → {"familyPlanning": {...}} (Android AssessmentViewModel
+  ///                     rewrites the stored form map to this key before sync)
+  ///   EYE_CARE / CATARACT / TB / EPI → flat (Android pass-through)
   ///
   /// If `details` already contains the programme key (re-entrant call), it is
   /// returned unchanged to avoid double-wrapping.
@@ -400,18 +471,28 @@ class LocalAssessmentEntity {
       return {'pncChild': details, 'cbs': <String, dynamic>{}};
     }
 
+    // PW registration: Android groups answers by the form card's `family`, so
+    // the single "pregnancyDetailsAndHistory" card becomes an inner object.
+    if (t == 'PWPROFILE' || t == 'PW_PROFILE') {
+      if (details.containsKey('pwProfile')) return details;
+      final grouped = details.containsKey('pregnancyDetailsAndHistory')
+          ? details
+          : {'pregnancyDetailsAndHistory': details};
+      return {'pwProfile': grouped};
+    }
+
     final key = switch (t) {
       // ANC: Android sends assessmentDetails as a flat object (wrap line is
       // commented out in OfflineSyncRepository.getAssessmentDetails — GAP 6b).
       'ANC' => null,
       'NCD' => 'ncd',
       'PNC' || 'PNC_MOTHER' => 'pncMother',
-      'PWPROFILE' || 'PW_PROFILE' => 'pwProfile',
       'PREGNANCY_OUTCOME' || 'PREGNANCYOUTCOME' => 'pregnancyOutcome',
       // ICCM is the only non-NCD/PNC type that gets wrapped (Android explicit handling).
       'ICCM' || 'IMCI' => 'iccm',
-      // All others — TB, EPI, EYE_CARE, CATARACT, FAMILY_PLANNING — are flat
-      // pass-through (Android OfflineSyncRepository default branch).
+      'FAMILY_PLANNING' || 'FP' => 'familyPlanning',
+      // All others — TB, EPI, EYE_CARE, CATARACT — are flat pass-through
+      // (Android OfflineSyncRepository default branch).
       _ => null,
     };
     if (key == null || details.containsKey(key)) return details;
@@ -443,6 +524,7 @@ class LocalAssessmentDao {
         is_referred INTEGER DEFAULT 0,
         referral_status TEXT,
         referred_reasons TEXT,
+        custom_status TEXT,
         follow_up_id INTEGER,
         pregnancy_episode_id TEXT,
         latitude REAL DEFAULT 0.0,

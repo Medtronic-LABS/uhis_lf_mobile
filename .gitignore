@@ -15,6 +15,8 @@ env.development.json
 env.staging.json
 env.production.json
 env.local.json
+env.deployed.json
+env.physical.json
 
 # IDE
 .idea/
@@ -110,6 +112,7 @@ unlinked_spec.ds
 **/ios/Runner/GeneratedPluginRegistrant.*
 
 # macOS
+.DS_Store
 **/Flutter/ephemeral/
 **/Pods/
 **/macos/Flutter/GeneratedPluginRegistrant.swift

@@ -389,6 +389,8 @@ class CoachingRepository extends ChangeNotifier {
             ? [ContentBlock(type: ContentBlockType.paragraph, text: text)]
             : [];
       }
+    } else if (body is String && body.isNotEmpty) {
+      blocks = [ContentBlock(type: ContentBlockType.paragraph, text: body)];
     } else {
       blocks = [];
     }
@@ -458,9 +460,18 @@ class CoachingRepository extends ChangeNotifier {
   QuizQuestion _parseQuestion(Map<String, dynamic> raw) {
     final questionEn = _locale(raw['question'], 'en') ?? '';
     final questionBn = _locale(raw['question'], 'bn') ?? questionEn;
-    final rawOptions = (raw['options'] as List<dynamic>?) ?? [];
-    final options =
-        rawOptions.map((o) => _locale(o as Map, 'en') ?? '').toList();
+    final optionsRaw = raw['options'];
+    final List<dynamic> rawOptions;
+    if (optionsRaw is Map) {
+      // Localized dict from AI pipeline: {"bn": ["opt1", "opt2"]}
+      rawOptions = ((optionsRaw['bn'] ?? optionsRaw['en']) as List<dynamic>?) ?? [];
+    } else {
+      rawOptions = (optionsRaw as List<dynamic>?) ?? [];
+    }
+    final options = rawOptions.map((o) {
+      if (o is Map) return _locale(o, 'bn') ?? _locale(o, 'en') ?? '';
+      return o is String ? o : '';
+    }).toList();
     final correctIndices = (raw['correct_indices'] as List<dynamic>?) ?? [];
     final correctIndex =
         correctIndices.isNotEmpty ? (correctIndices.first as num).toInt() : 0;
