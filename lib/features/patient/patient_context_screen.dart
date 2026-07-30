@@ -1338,7 +1338,9 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       // distinguish them from SK-submitted NCD assessments in the timeline.
       final isNurseReview = a.type.toUpperCase() == 'NCDMEDICALREVIEW' ||
           a.type.toUpperCase() == 'MEDICALREVIEWVISIT';
-      title = isNurseReview ? 'Nurse Review' : 'NCD Visit';
+      title = isNurseReview
+          ? PatientProfileStrings.medicalReviewCompleted
+          : 'NCD Visit';
       category = 'NCD Follow-up';
 
       final bpNCD = raw['bp']?.toString() ?? '';

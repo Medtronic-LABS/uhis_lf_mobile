@@ -846,6 +846,9 @@ abstract final class PatientProfileStrings {
   // ── Live referral timeline entry ──────────────────────────────────────────
   static String get liveReferralTitle => getTranslatedString('liveReferralTitle', 'Referral');
   static String get referralCategory => getTranslatedString('referralCategory', 'Referral status');
+
+  // ── NCD nurse-review timeline entry ──────────────────────────────────────
+  static String get medicalReviewCompleted => getTranslatedString('medicalReviewCompleted', 'Medical Review Completed');
 }
 
 abstract final class ContactSheetStrings {
@@ -1106,10 +1109,10 @@ abstract final class ReferralStrings {
 
   // ── Timeline entry badges (patient context screen) ────────────────────────
   static String get badgeBreached => getTranslatedString('badgeBreached', '🔴 SLA Breached');
-  static String get badgeReviewedControlled => getTranslatedString('badgeReviewedControlled', '✅ Nurse reviewed — Controlled');
+  static String get badgeReviewedControlled => getTranslatedString('badgeReviewedControlled', '✅ Recovered');
   static String get badgeDeceased => getTranslatedString('badgeDeceased', '⚫ Deceased');
-  static String get badgeUnderTreatment => getTranslatedString('badgeUnderTreatment', '🟡 Under treatment');
-  static String get badgeAwaitingReview => getTranslatedString('badgeAwaitingReview', '⏳ Awaiting review');
+  static String get badgeUnderTreatment => getTranslatedString('badgeUnderTreatment', '🟡 On Treatment');
+  static String get badgeAwaitingReview => getTranslatedString('badgeAwaitingReview', '⏳ Referred');
 }
 
 /// AI Mission Dashboard strings (Screen 2 redesign).
