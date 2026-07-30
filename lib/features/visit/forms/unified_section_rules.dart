@@ -89,6 +89,19 @@ abstract final class UnifiedSectionRules {
     'randomBloodSugar',
   };
 
+  /// The only BG ids that collapse into each other: the BloodGlucoseEntry
+  /// widget (`glucoseType`) renders the type toggle and its numeric value
+  /// together, so the bare `glucose` EditText must not render beside it.
+  ///
+  /// PNC's `bloodSugar` selector instead *reveals* `fastingBloodSugar` /
+  /// `randomBloodSugar`. Collapsing the whole alias set dropped those two
+  /// targets from the section, leaving nothing to type into once the SK
+  /// picked Fasting or Random.
+  static const Set<String> _bloodGlucoseEntryFieldIds = {
+    'glucoseType',
+    'glucose',
+  };
+
   /// Biometrics shared by id across programmes — claimed only within a
   /// formType so NCD keeps Height/Weight/BMI even when ANC also has Weight.
   static const Set<String> _biometricFieldIds = {
@@ -132,11 +145,11 @@ abstract final class UnifiedSectionRules {
   /// Within one formType: claim BG field + aliases so BloodGlucoseEntry and
   /// bare `glucose` never both render in the same programme section.
   static void _claimBloodGlucoseLocal(String fieldId, Set<String> localClaimed) {
-    if (!_bloodGlucoseFieldIds.contains(fieldId)) {
+    if (!_bloodGlucoseEntryFieldIds.contains(fieldId)) {
       localClaimed.add(fieldId);
       return;
     }
-    localClaimed.addAll(_bloodGlucoseFieldIds);
+    localClaimed.addAll(_bloodGlucoseEntryFieldIds);
   }
 
   /// Returns ordered, deduplicated [AnnotatedFormSection]s for rendering.
@@ -381,9 +394,12 @@ abstract final class UnifiedSectionRules {
     }
 
     // pregnancyOutcome sub-sections: gated by deliveryOutcomeType selection.
-    // outcomeType is the picker itself — always shown when pregnancyOutcome active.
-    // All other sub-sections only appear once an outcome type is chosen.
-    if (section.formType == 'pregnancyOutcome' && id != 'outcomeType') {
+    // ancServicesBirthPreparedness + outcomeType always show when PO is active.
+    // deliveryOutcomes also opens for maternal death during/after delivery
+    // (Android timeOfDeath conditions).
+    if (section.formType == 'pregnancyOutcome' &&
+        id != 'outcomeType' &&
+        id != 'ancServicesBirthPreparedness') {
       final outcome = currentData.getValue('deliveryOutcomeType')?.toString();
       // ignore: avoid_print
       print('[SectionVisibility] pregnancyOutcome sub-section=$id outcome=$outcome');
@@ -394,24 +410,42 @@ abstract final class UnifiedSectionRules {
         case 'abortion':
           return outcome == 'abortion';
         case 'deliveryOutcomes':
+          if (outcome == 'liveBirth') return true;
+          if (outcome == 'maternalDeath') {
+            final tod = currentData.getValue('timeOfDeath')?.toString();
+            return tod == 'duringChildbirth' ||
+                tod == 'within42DaysAfterDelivery';
+          }
+          return false;
         case 'newbornDetails':
-          return outcome == 'liveBirth' || outcome == 'stillbirth';
+          // Spice builds baby cards from liveBirthNumbers whenever delivery
+          // outcomes are visible (live birth, or maternal death during/after).
+          final live =
+              FieldVisibilityRules._countValue(currentData, 'liveBirthNumbers');
+          if (live < 1) return false;
+          if (outcome == 'liveBirth') return true;
+          if (outcome == 'maternalDeath') {
+            final tod = currentData.getValue('timeOfDeath')?.toString();
+            return tod == 'duringChildbirth' ||
+                tod == 'within42DaysAfterDelivery';
+          }
+          return false;
         case 'counsellingAdverseEvent':
-          return true; // show counselling for all outcome types
+          return true; // summary-only fields; section kept for parity
         default:
           return true;
       }
     }
 
-    // Combined delivery visit: mother/child PNC only after a delivery-path
-    // outcome (live birth / stillbirth). Abortion and maternal death end the
-    // pregnancy episode without opening PNC (Android PregnancyCohortRules).
+    // Combined delivery visit: mother/child PNC only after a live-birth
+    // delivery path. Abortion and maternal death end the pregnancy episode
+    // without opening PNC (Android PregnancyCohortRules).
     if (activeFormTypes.contains('pregnancyOutcome') &&
         (section.formType == 'pncMother' ||
             section.formType == 'pncChild' ||
             section.formType == 'pncNeonatal')) {
       final outcome = currentData.getValue('deliveryOutcomeType')?.toString();
-      if (outcome != 'liveBirth' && outcome != 'stillbirth') {
+      if (outcome != 'liveBirth') {
         return false;
       }
     }
@@ -525,6 +559,14 @@ abstract final class FieldVisibilityRules {
     if (formType == 'pwProfile') {
       final pwGate = _pwProfileLmpVisibility(fieldId: field.id, data: data);
       if (pwGate != null) return pwGate;
+    }
+
+    // Pregnancy outcome: birth attendant only when home AND not cesarean
+    // (Android AssessmentPregnancyOutcomeFragment).
+    if (formType == 'pregnancyOutcome' && field.id == 'birthAttendant') {
+      final place = data.getValue('placeOfDelivery')?.toString();
+      final mode = data.getValue('modeOfDelivery')?.toString();
+      return place == 'home' && mode != 'cesareanSection';
     }
 
     final rules = rulesByTargetId[field.id];

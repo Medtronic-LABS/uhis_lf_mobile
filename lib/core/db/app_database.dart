@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 30;
+  static const int schemaVersion = 33;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -395,6 +395,7 @@ class AppDatabase {
         is_referred INTEGER DEFAULT 0,
         referral_status TEXT,
         referred_reasons TEXT,
+        custom_status TEXT,
         follow_up_id INTEGER,
         pregnancy_episode_id TEXT,
         latitude REAL DEFAULT 0.0,
@@ -423,7 +424,9 @@ class AppDatabase {
         updated_at INTEGER,
         edd_date INTEGER,
         lmp_date INTEGER,
-        delivery_date_millis INTEGER
+        delivery_date_millis INTEGER,
+        anc_visit_no INTEGER,
+        pnc_visit_no INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
@@ -1434,6 +1437,29 @@ class AppDatabase {
       try {
         await db.execute(
             'ALTER TABLE $tableHouseholds ADD COLUMN reference_id TEXT');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 31) {
+      // v31 — Programme-computed encounter.customStatus (e.g. HIGH_RISK_PW),
+      // evaluated at submit time where the member's DOB is available.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableLocalAssessments ADD COLUMN custom_status TEXT');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 32) {
+      // v32 — pnc_visit_no on pregnancy snapshot (Spice PregnancyDetail.pncVisitNo).
+      // Incremented on each PNC_MOTHER save; seeded from pregnancyInfos[] sync.
+      try {
+        await db.execute(
+            'ALTER TABLE $tablePregnancySnapshot ADD COLUMN pnc_visit_no INTEGER');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 33) {
+      // v33 — anc_visit_no on pregnancy snapshot (Spice PregnancyDetail.ancVisitNo).
+      try {
+        await db.execute(
+            'ALTER TABLE $tablePregnancySnapshot ADD COLUMN anc_visit_no INTEGER');
       } catch (_) {/* column already present — no-op */}
     }
   }

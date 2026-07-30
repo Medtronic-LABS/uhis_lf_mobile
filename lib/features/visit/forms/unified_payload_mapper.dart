@@ -61,17 +61,34 @@ abstract final class UnifiedPayloadMapper {
       ));
     }
 
-    if (activeFormTypes.contains('pncMother')) {
+    // On a combined delivery visit, mother/child PNC only after live birth.
+    // Abortion / maternal death end the pregnancy episode without a PNC
+    // assessment (Android: Pregnancy Outcome is a separate menu; Leapfrog
+    // seeds PNC form types for delivery visits but must not fan them out
+    // unless the outcome is liveBirth).
+    final isDeliveryVisit = activeFormTypes.contains('pregnancyOutcome');
+    final includePnc = _shouldIncludePncWithPregnancyOutcome(data, activeFormTypes);
+
+    if (includePnc && activeFormTypes.contains('pncMother')) {
       payloads.add(ProgrammePayload(
         assessmentType: 'PNC_MOTHER',
-        details: _toPncMother(data),
+        // visitNo is assigned in UnifiedFormNotifier from
+        // patient_pregnancy_snapshot.pnc_visit_no (+1). Fallback 1 only when
+        // that path missed (e.g. unit tests without a snapshot dao write).
+        details: _toPncMother(data, defaultVisitNo: isDeliveryVisit ? 1 : null),
       ));
     }
 
     // PNC_NEONATE: Android wire type is "PNC_NEONATE" (not "PNC_CHILD") wrapped
     // under "pncNeonatal" key. GAP 6 fix.
-    if (activeFormTypes.contains('pncChild') ||
-        activeFormTypes.contains('pncNeonatal')) {
+    //
+    // A delivery visit never carries one. Android's outcome submit saves only
+    // PREGNANCYOUTCOME plus the baby household member, and RMNCH.getMenuName
+    // can only ever return ANC / PNC_MOTHER / ChildHood_Visit — neonate
+    // findings arrive later as their own visit against the baby.
+    if (!isDeliveryVisit &&
+        (activeFormTypes.contains('pncChild') ||
+            activeFormTypes.contains('pncNeonatal'))) {
       payloads.add(ProgrammePayload(
         assessmentType: 'PNC_NEONATE',
         details: _toPncChild(data),
@@ -134,6 +151,16 @@ abstract final class UnifiedPayloadMapper {
     ConsoleLog.banner('[PayloadDebug] programme-payload — decompose → ${payloads.length} payloads: ${payloads.map((p) => p.assessmentType).join(', ')}');
 
     return payloads;
+  }
+
+  /// PNC rides a delivery visit only when the pregnancy outcome is a live birth.
+  /// Standalone PNC visits (no pregnancyOutcome form type) are unchanged.
+  static bool _shouldIncludePncWithPregnancyOutcome(
+    CanonicalVisitData data,
+    Set<String> activeFormTypes,
+  ) {
+    if (!activeFormTypes.contains('pregnancyOutcome')) return true;
+    return data.getValue('deliveryOutcomeType')?.toString() == 'liveBirth';
   }
 
   static void _debugLogMergedCommons(CanonicalVisitData d) {
@@ -232,8 +259,8 @@ abstract final class UnifiedPayloadMapper {
     });
 
     // ANC point-of-care:
-    //   glucoseType == 'fbs'         → bloodSugarFasting + bloodSugar: 'fasting'
-    //   glucoseType == 'rbs'/'ppbs'  → bloodSugarRandom  + bloodSugar: 'random'
+    //   glucoseType == 'fbs'/'fasting' → bloodSugarFasting + bloodSugar: 'fasting'
+    //   glucoseType == 'rbs'/'ppbs'/'random' → bloodSugarRandom + bloodSugar: 'random'
     //   hemoglobin already in medHx; hemoglobinUnit added here for POC DTO shape.
     //
     // Fan-out: union reads so the single captured glucose value populates ANC,
@@ -245,15 +272,17 @@ abstract final class UnifiedPayloadMapper {
         d.getValue('ancBloodGlucose') ??
         d.getValue('fastingBloodSugar') ??
         d.getValue('randomBloodSugar'));
-    final hasFbs = glucoseType == 'fbs' && glucoseValue != null;
-    final hasRbs = glucoseType != null && glucoseType != 'fbs' && glucoseValue != null;
+    final isFastingType = _isFastingGlucoseType(glucoseType);
+    final hasFbs = isFastingType && glucoseValue != null;
+    final hasRbs = glucoseType != null && !isFastingType && glucoseValue != null;
     final pointOfCare = _compact({
       'urinaryAlbumin': d.getValue('urinaryAlbumin'),
       'urinaryBilirubin': d.getValue('urinaryBilirubin'),
       'urinarySugar': d.getValue('urinarySugar'),
       'hemoglobin': d.getValue('hemoglobin'),
       if (d.getValue('hemoglobin') != null) 'hemoglobinUnit': 'g/dL',
-      if (glucoseType != null && glucoseValue != null) 'bloodSugar': glucoseType == 'fbs' ? 'fasting' : 'random',
+      if (glucoseType != null && glucoseValue != null)
+        'bloodSugar': isFastingType ? 'fasting' : 'random',
       if (hasFbs) 'bloodSugarFasting': glucoseValue,
       if (hasFbs) 'bloodSugarFastingUnit': d.getValue('glucoseUnit') as String? ?? 'mmol/L',
       if (hasRbs) 'bloodSugarRandom': glucoseValue,
@@ -524,8 +553,13 @@ abstract final class UnifiedPayloadMapper {
     if (glucoseNum != null) {
       // Spice-service BpLogDTO / FHIR mapper both read `glucoseValue`, not `glucose`.
       glucoseLog['glucoseValue'] = glucoseNum;
-      final glucoseType =
-          d.getValue('glucoseType') ?? d.getValue('bloodSugar');
+      // NCD wire vocabulary is fbs/rbs — translate an ANC/PNC selector value.
+      final glucoseType = d.getValue('glucoseType') ??
+          switch (d.getValue('bloodSugar')) {
+            'fasting' => 'fbs',
+            'random' => 'rbs',
+            final other => other,
+          };
       if (glucoseType != null) glucoseLog['glucoseType'] = glucoseType;
       glucoseLog['glucoseUnit'] =
           d.getValue('glucoseUnit') as String? ?? 'mmol/L';
@@ -596,7 +630,10 @@ abstract final class UnifiedPayloadMapper {
   //
   // systolic/diastolic/pulse are STRINGS on the wire (matching Android reference).
 
-  static Map<String, dynamic> _toPncMother(CanonicalVisitData d) {
+  static Map<String, dynamic> _toPncMother(
+    CanonicalVisitData d, {
+    int? defaultVisitNo,
+  }) {
     double? asNum(dynamic v) {
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v);
@@ -627,8 +664,9 @@ abstract final class UnifiedPayloadMapper {
         d.getValue('ancBloodGlucose') ??
         d.getValue('fastingBloodSugar') ??
         d.getValue('randomBloodSugar'));
-    final hasFbs = glucoseType == 'fbs' && glucoseValue != null;
-    final hasRbs = glucoseType != null && glucoseType != 'fbs' && glucoseValue != null;
+    final isFastingType = _isFastingGlucoseType(glucoseType);
+    final hasFbs = isFastingType && glucoseValue != null;
+    final hasRbs = glucoseType != null && !isFastingType && glucoseValue != null;
 
     final ifaTabletsConsumed = d.getValue('ifaTabletsConsumed') ??
         d.getValue('ifaTotalConsumed') ??
@@ -670,7 +708,7 @@ abstract final class UnifiedPayloadMapper {
       'calciumTabletsProvided': calciumTabletsProvided,
       'calciumTabletsConsumed': calciumTabletsConsumed,
       if (glucoseType != null && glucoseValue != null)
-        'bloodSugar': glucoseType == 'fbs' ? 'fasting' : 'random',
+        'bloodSugar': isFastingType ? 'fasting' : 'random',
       if (hasFbs) 'fastingBloodSugar': glucoseValue,
       if (hasFbs) 'fastingBloodSugarUnit': 'mmol/L',
       if (hasRbs) 'randomBloodSugar': glucoseValue,
@@ -699,7 +737,9 @@ abstract final class UnifiedPayloadMapper {
       if (maternal.isNotEmpty) 'maternalHealthAssessment': maternal,
       if (pregnancy.isNotEmpty) 'pregnancyHistory': pregnancy,
       if (contraception.isNotEmpty) 'postpartumContraception': contraception,
-      'visitNo': d.getValue('pncVisitNumber') ?? d.getValue('visitNo'),
+      'visitNo': d.getValue('pncVisitNumber') ??
+          d.getValue('visitNo') ??
+          defaultVisitNo,
       'daysSinceDelivery': d.getValue('daysSinceDelivery'),
     });
   }
@@ -722,69 +762,96 @@ abstract final class UnifiedPayloadMapper {
   }
 
   // ── Pregnancy Outcome ──────────────────────────────────────────────────────
-  // Android wire structure (FormResultComposer.groupValues groups by sectionId):
+  // Android wire structure (FormResultComposer groups by form card `family`):
   //   pregnancyOutcome → {
-  //     outcomeType:     { deliveryOutcomeType },
-  //     maternalDeath:   { timeOfDeath, gestationMonthAtDeath, causeOfDeath },
-  //     abortion:        { gestationMonthAtAbortion, typeOfAbortion },
-  //     deliveryOutcomes: { deliveryOutcome, liveBirthNumbers, stillbirthNumbers,
-  //                         placeOfDelivery, dateOfDelivery, modeOfDelivery,
-  //                         birthAttendant, anyComplicationsDuringDelivery,
-  //                         complicationsDuringDelivery },
-  //     newbornDetails:  [{ isBabyAlive, sex, birthWeight, essentialNewbornCare,
-  //                         causeOfNeonatalDeath }]   ← single entry from flat form
+  //     ancServicesBirthPreparedness: { ancVisitsOtherProviders },
+  //     pregnancyOutcome:  { pregnancyOutcomeType },
+  //     maternalDeath?:    { timeOfDeath, gestationMonthAtDeath, causeOfDeath },
+  //     abortion?:         { gestationMonthAtAbortion, typeOfAbortion },
+  //     deliveryOutcomes?: { liveBirthNumbers, stillbirthNumbers, … },
+  //     newbornDetails?:   [{ isBabyAlive, sex, causeOfNeonatalDeath? }]
   //   }
   // Field-ID renames (Flutter form id → Android wire key):
-  //   babyAlive        → isBabyAlive
-  //   babySex          → sex
-  //   neonatalDeathCause → causeOfNeonatalDeath
+  //   deliveryOutcomeType → pregnancyOutcomeType
+  //   babyAlive           → isBabyAlive ("Yes"/"No")
+  //   babySex             → sex
+  //   neonatalDeathCause  → causeOfNeonatalDeath
   // _wrapDetailsForType wraps this map under "pregnancyOutcome" automatically.
 
   static Map<String, dynamic> _toPregnancyOutcome(CanonicalVisitData d) {
-    // Android wire key is "pregnancyOutcomeType"; Flutter form field ID is
-    // "deliveryOutcomeType" — remap so the server receives the expected key.
-    final outcomeType = _compact({
+    // Android FormResultComposer nests pregnancyOutcomeType under the
+    // "pregnancyOutcome" card family (same name as the menu wrapper).
+    final pregnancyOutcome = _compact({
       'pregnancyOutcomeType': d.getValue('deliveryOutcomeType'),
+    });
+
+    final ancServices = _compact({
+      'ancVisitsOtherProviders':
+          _asDoubleWire(d.getValue('ancVisitsOtherProviders')),
     });
 
     final maternalDeath = _compact({
       'timeOfDeath': d.getValue('timeOfDeath'),
-      'gestationMonthAtDeath': d.getValue('gestationMonthAtDeath'),
+      'gestationMonthAtDeath':
+          _asDoubleWire(d.getValue('gestationMonthAtDeath')),
       'causeOfDeath': d.getValue('causeOfDeath'),
     });
 
     final abortion = _compact({
-      'gestationMonthAtAbortion': d.getValue('gestationMonthAtAbortion'),
+      'gestationMonthAtAbortion':
+          _asDoubleWire(d.getValue('gestationMonthAtAbortion')),
       'typeOfAbortion': d.getValue('typeOfAbortion'),
     });
 
     final deliveryOutcomes = _compact({
       'deliveryOutcome': d.getValue('deliveryOutcome'),
-      'liveBirthNumbers': d.getValue('liveBirthNumbers'),
-      'stillbirthNumbers': d.getValue('stillbirthNumbers'),
+      'liveBirthNumbers': _asDoubleWire(d.getValue('liveBirthNumbers')),
+      'stillbirthNumbers': _asDoubleWire(d.getValue('stillbirthNumbers')),
       'placeOfDelivery': d.getValue('placeOfDelivery'),
-      'dateOfDelivery': d.getValue('dateOfDelivery'),
+      'dateOfDelivery': _asDateWire(d.getValue('dateOfDelivery')),
       'modeOfDelivery': d.getValue('modeOfDelivery'),
       'birthAttendant': d.getValue('birthAttendant'),
-      'anyComplicationsDuringDelivery': d.getValue('anyComplicationsDuringDelivery'),
+      'anyComplicationsDuringDelivery':
+          d.getValue('anyComplicationsDuringDelivery'),
       'complicationsDuringDelivery': d.getValue('complicationsDuringDelivery'),
     });
 
-    final babyEntry = _compact({
-      'isBabyAlive': d.getValue('babyAlive'),
-      'sex': d.getValue('babySex'),
-      'birthWeight': d.getValue('birthWeight'),
-      'essentialNewbornCare': d.getValue('essentialNewbornCare'),
-      'causeOfNeonatalDeath': d.getValue('neonatalDeathCause'),
-    });
+    // Spice builds N baby cards from liveBirthNumbers into newbornDetails[].
+    final newborns = _newbornDetailsWire(d);
 
     return _compact(<String, dynamic>{
-      if (outcomeType.isNotEmpty) 'outcomeType': outcomeType,
+      if (ancServices.isNotEmpty) 'ancServicesBirthPreparedness': ancServices,
+      if (pregnancyOutcome.isNotEmpty) 'pregnancyOutcome': pregnancyOutcome,
       if (maternalDeath.isNotEmpty) 'maternalDeath': maternalDeath,
       if (abortion.isNotEmpty) 'abortion': abortion,
       if (deliveryOutcomes.isNotEmpty) 'deliveryOutcomes': deliveryOutcomes,
-      if (babyEntry.isNotEmpty) 'newbornDetails': [babyEntry],
+      if (newborns != null && newborns.isNotEmpty) 'newbornDetails': newborns,
     });
+  }
+
+  /// Prefer the dynamic `newbornDetails` list; fall back to legacy flat
+  /// babyAlive / babySex / neonatalDeathCause fields.
+  static List<Map<String, dynamic>>? _newbornDetailsWire(CanonicalVisitData d) {
+    final raw = d.getValue('newbornDetails');
+    if (raw is List && raw.isNotEmpty) {
+      final out = <Map<String, dynamic>>[];
+      for (final e in raw) {
+        if (e is! Map) continue;
+        final entry = _compact({
+          'isBabyAlive': _asYesNoWire(e['isBabyAlive']),
+          'sex': e['sex'],
+          'causeOfNeonatalDeath': e['causeOfNeonatalDeath'],
+        });
+        if (entry.isNotEmpty) out.add(entry);
+      }
+      return out.isEmpty ? null : out;
+    }
+    final legacy = _compact({
+      'isBabyAlive': _asYesNoWire(d.getValue('babyAlive')),
+      'sex': d.getValue('babySex'),
+      'causeOfNeonatalDeath': d.getValue('neonatalDeathCause'),
+    });
+    return legacy.isEmpty ? null : [legacy];
   }
 
   // ── Eye Care ───────────────────────────────────────────────────────────────
@@ -920,6 +987,12 @@ abstract final class UnifiedPayloadMapper {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
+  /// NCD/Cataract capture the glucose type as `fbs`/`rbs` (BloodGlucoseEntry),
+  /// ANC/PNC as `fasting`/`random` (the `bloodSugar` selector). Both vocabularies
+  /// reach the mappers through the same fan-out read.
+  static bool _isFastingGlucoseType(String? glucoseType) =>
+      glucoseType == 'fbs' || glucoseType == 'fasting';
+
   static Map<String, dynamic> _compact(Map<String, dynamic> src) {
     return Map.fromEntries(
       src.entries.where((e) => e.value != null),
@@ -962,6 +1035,17 @@ abstract final class UnifiedPayloadMapper {
     if (value == null) return null;
     if (value is num) return value.toDouble();
     return double.tryParse(value.toString().trim());
+  }
+
+  /// Normalises yes/no answers to the capitalised form Android stores for
+  /// pregnancy-outcome baby alive (`"Yes"` / `"No"`).
+  static String? _asYesNoWire(Object? value) {
+    if (value == null) return null;
+    final s = value.toString().trim().toLowerCase();
+    if (s == 'yes' || s == 'true' || s == '1') return 'Yes';
+    if (s == 'no' || s == 'false' || s == '0') return 'No';
+    final raw = value.toString().trim();
+    return raw.isEmpty ? null : raw;
   }
 
   /// Coerces a single-select answer into the list shape Android sends.

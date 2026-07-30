@@ -332,7 +332,10 @@ class LocalAssessmentEntity {
       // Android stores the menu id uppercased (AssessmentRepository.saveAssessment)
       // and syncs that stored value, so "pwProfile" goes out as "PWPROFILE".
       'PWPROFILE' || 'PW_PROFILE' => 'PWPROFILE',
-      'PREGNANCY_OUTCOME' || 'PREGNANCYOUTCOME' => 'pregnancyOutcome',
+      // Android stores the menu id uppercased (AssessmentRepository.saveAssessment)
+      // and syncs that stored value, so "pregnancyOutcome" goes out as
+      // "PREGNANCYOUTCOME".
+      'PREGNANCY_OUTCOME' || 'PREGNANCYOUTCOME' => 'PREGNANCYOUTCOME',
       'ICCM' || 'IMCI' => 'iccm',
       'EYE_CARE' => 'eye_care',
       'CATARACT' => 'cataract',
@@ -481,13 +484,21 @@ class LocalAssessmentEntity {
       return {'pwProfile': grouped};
     }
 
+    // Pregnancy outcome: Android FormResultComposer.addToMenuGroup wraps all
+    // card families under menu key "pregnancyOutcome". The mapper also nests
+    // pregnancyOutcomeType under an *inner* card named "pregnancyOutcome", so
+    // a plain containsKey check would skip the outer wrap incorrectly.
+    if (t == 'PREGNANCY_OUTCOME' || t == 'PREGNANCYOUTCOME') {
+      if (_isPregnancyOutcomeMenuWrapped(details)) return details;
+      return {'pregnancyOutcome': details};
+    }
+
     final key = switch (t) {
       // ANC: Android sends assessmentDetails as a flat object (wrap line is
       // commented out in OfflineSyncRepository.getAssessmentDetails — GAP 6b).
       'ANC' => null,
       'NCD' => 'ncd',
       'PNC' || 'PNC_MOTHER' => 'pncMother',
-      'PREGNANCY_OUTCOME' || 'PREGNANCYOUTCOME' => 'pregnancyOutcome',
       // ICCM is the only non-NCD/PNC type that gets wrapped (Android explicit handling).
       'ICCM' || 'IMCI' => 'iccm',
       'FAMILY_PLANNING' || 'FP' => 'familyPlanning',
@@ -497,6 +508,22 @@ class LocalAssessmentEntity {
     };
     if (key == null || details.containsKey(key)) return details;
     return {key: details};
+  }
+
+  /// True when [details] is already the Spice outer menu wrap
+  /// `{ pregnancyOutcome: { cardFamilies... } }`, not the mapper's flat card bag
+  /// that merely contains an inner `pregnancyOutcome` type card.
+  static bool _isPregnancyOutcomeMenuWrapped(Map<String, dynamic> details) {
+    if (details.length != 1) return false;
+    final inner = details['pregnancyOutcome'];
+    if (inner is! Map) return false;
+    return inner.containsKey('abortion') ||
+        inner.containsKey('maternalDeath') ||
+        inner.containsKey('deliveryOutcomes') ||
+        inner.containsKey('ancServicesBirthPreparedness') ||
+        inner.containsKey('newbornDetails') ||
+        inner.containsKey('counsellingAdverseEvent') ||
+        inner['pregnancyOutcome'] is Map;
   }
 }
 

@@ -6,6 +6,7 @@ import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/widgets/gestational_age_card.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/i18n/app_locale.dart';
 import '../../../core/theme/app_theme.dart';
@@ -105,6 +106,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// Loaded once after init; empty until then / for non-ANC visits.
   List<VisitVitals> _priorAncVisits = const [];
 
+  /// Completed ANC count from pregnancy snapshot (Spice ancVisitNo). When set,
+  /// preferred over counting vitals history for the 1-based visit label.
+  int? _ancVisitNoFromSnapshot;
+
   /// Weight (kg) from the patient's most-recent prior visit across ALL
   /// programme types — used for the weight-delta badge.  `null` until loaded.
   double? _lastRecordedWeight;
@@ -188,6 +193,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             setState(() => _priorAncVisits = history);
           }
         });
+        context.read<PregnancySnapshotDao>().byPatient(notifier.patientId).then((snap) {
+          if (mounted && snap?.ancVisitNo != null) {
+            setState(() => _ancVisitNoFromSnapshot = snap!.ancVisitNo);
+          }
+        });
         // Load LMP/EDD for the gestational-age card (snapshot → seed → history).
         _reloadPregnancyIfSeeded();
       }
@@ -198,8 +208,13 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   int? _effectiveGestationalWeeks(UnifiedFormNotifier notifier) =>
       notifier.gestationalWeeks ?? widget.gestationalWeeks;
 
-  /// 1-based ANC visit number from prior history (+1 for today's visit).
-  int _ancVisitNumber() => _priorAncVisits.length + 1;
+  /// 1-based ANC visit number: snapshot counter + 1 when available, else
+  /// prior vitals history length + 1 (legacy fallback).
+  int _ancVisitNumber() {
+    final stored = _ancVisitNoFromSnapshot;
+    if (stored != null) return stored + 1;
+    return _priorAncVisits.length + 1;
+  }
 
   bool _isFieldVisible(
     FieldDef field,
@@ -495,7 +510,13 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     List<AnnotatedFormSection> annotated,
   ) async {
     debugPrint('[_UnifiedFormScreenState] _onSubmit');
-    if (_config == null) return;
+    if (_config == null) {
+      _logSubmitBlocked(
+        reason: 'form config not loaded yet',
+        lines: const ['form_config.json still loading or failed to parse'],
+      );
+      return;
+    }
 
     // Strip stale values for fields that are no longer visible (e.g. Parity
     // was answered while Gravida >= 2, then Gravida was changed back to 1) so
@@ -508,6 +529,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     // Validate mandatory fields before submitting.
     final errors = _computeValidationErrors(notifier, annotated);
     if (errors.isNotEmpty) {
+      _logSubmitBlocked(
+        reason: '${errors.length} mandatory field(s) not filled',
+        lines: _describeMissingMandatory(notifier, annotated, errors),
+      );
       notifier.setValidationErrors(errors);
       // Scroll to the first section containing an error so the SK lands
       // directly on the highlighted field rather than hunting from the top.
@@ -528,7 +553,13 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     // TextFormFields; Form.validate() renders each one's message inline
     // under the offending field, so no separate snackbar is needed here.
     final rangeValid = _formKey.currentState?.validate() ?? true;
-    if (!rangeValid) return;
+    if (!rangeValid) {
+      _logSubmitBlocked(
+        reason: 'numeric value(s) out of the allowed range',
+        lines: _describeRangeFailures(notifier, annotated),
+      );
+      return;
+    }
 
     // Clear any previous errors before submitting.
     notifier.setValidationErrors(const {});
@@ -537,12 +568,106 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       await notifier.submit();
       widget.onSubmitComplete();
     } catch (e) {
+      _logSubmitBlocked(
+        reason: 'save threw an exception',
+        lines: ['$e'],
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(VisitFormStrings.saveFailed),
         backgroundColor: Theme.of(context).colorScheme.error,
       ));
     }
+  }
+
+  /// Prints why a Submit tap did not advance, framed by `***` markers so it is
+  /// easy to find in a noisy `flutter logs` stream.
+  void _logSubmitBlocked({
+    required String reason,
+    required List<String> lines,
+  }) {
+    debugPrint('********** SUBMIT BLOCKED START **********');
+    debugPrint('[SubmitBlocked] reason: $reason');
+    for (final line in lines) {
+      debugPrint('[SubmitBlocked]   $line');
+    }
+    debugPrint('*********** SUBMIT BLOCKED END ***********');
+  }
+
+  /// Human-readable "which field and where" lines for each unfilled mandatory
+  /// field, so the SK-facing snackbar count can be traced to actual field IDs.
+  List<String> _describeMissingMandatory(
+    UnifiedFormNotifier notifier,
+    List<AnnotatedFormSection> annotated,
+    Set<String> errors,
+  ) {
+    final lines = <String>[];
+    final described = <String>{};
+
+    for (final a in annotated) {
+      for (final ref in a.section.fieldRefs) {
+        if (!errors.contains(ref.id) || !described.add(ref.id)) continue;
+        final def = _config!.fields[ref.id];
+        final label = def?.label ?? ref.id;
+        final value = notifier.data.getValue(ref.id);
+        lines.add(
+          'MISSING  ${ref.id}  ("$label")  '
+          'section=${a.section.formType}/${a.section.sectionId}  '
+          'widget=${def?.widgetHint.name ?? "unknown"}  '
+          'value=${value ?? "null"}',
+        );
+      }
+    }
+
+    // Newborn card errors use synthetic ids (newbornDetails_<i>_<field>) that
+    // do not exist in the field library / section fieldRefs.
+    for (final id in errors) {
+      if (!id.startsWith('newbornDetails') || !described.add(id)) continue;
+      final parts = id.split('_');
+      if (parts.length >= 3) {
+        final babyNo = (int.tryParse(parts[1]) ?? 0) + 1;
+        lines.add('MISSING  $id  (Baby $babyNo → ${parts.sublist(2).join("_")})');
+      } else {
+        lines.add('MISSING  $id  (no baby card answered yet)');
+      }
+    }
+
+    // Anything left belongs to no rendered section, so the SK sees the "fields
+    // required" snackbar with nothing highlighted — Submit looks dead.
+    for (final id in errors) {
+      if (!described.add(id)) continue;
+      lines.add('MISSING (not rendered in any visible section)  $id');
+    }
+    return lines;
+  }
+
+  /// Re-runs the numeric range validators against current values so the log
+  /// names the offending field, not just "validation failed".
+  List<String> _describeRangeFailures(
+    UnifiedFormNotifier notifier,
+    List<AnnotatedFormSection> annotated,
+  ) {
+    final lines = <String>[];
+    final checked = <String>{};
+    for (final a in annotated) {
+      for (final ref in a.section.fieldRefs) {
+        if (!checked.add(ref.id)) continue;
+        final validator = _SectionCard._numericRangeValidator(ref.id);
+        if (validator == null) continue;
+        final raw = notifier.data.getValue(ref.id);
+        final message = validator(raw?.toString());
+        if (message == null) continue;
+        lines.add(
+          'OUT OF RANGE  ${ref.id}  value=${raw ?? "null"}  → $message',
+        );
+      }
+    }
+    if (lines.isEmpty) {
+      lines.add(
+          'an inline TextFormField validator rejected its value (check fields '
+          'showing a red message)');
+    }
+    return lines;
   }
 
   /// Returns the set of mandatory field IDs that have no value in [notifier].
@@ -552,6 +677,13 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   ) {
     final errors = <String>{};
     for (final a in annotated) {
+      // Dynamic newborn cards — validate each baby entry (Android
+      // validateBabyFields).
+      if (a.section.sectionId == 'newbornDetails' &&
+          a.section.formType == 'pregnancyOutcome') {
+        errors.addAll(_newbornValidationErrors(notifier));
+        continue;
+      }
       for (final ref in a.section.fieldRefs) {
         final def = _config!.fields[ref.id];
         if (def == null) continue;
@@ -572,6 +704,39 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     return errors;
   }
 
+  /// Per-baby required fields: isBabyAlive + sex always; cause when dead.
+  Set<String> _newbornValidationErrors(UnifiedFormNotifier notifier) {
+    final errors = <String>{};
+    final raw = notifier.data.getValue('newbornDetails');
+    if (raw is! List || raw.isEmpty) {
+      // Section is visible only when liveBirthNumbers >= 1, so an empty list
+      // means the SK hasn't answered any baby card yet.
+      errors.add('newbornDetails');
+      return errors;
+    }
+    for (var i = 0; i < raw.length; i++) {
+      final baby = raw[i];
+      if (baby is! Map) {
+        errors.add('newbornDetails_$i');
+        continue;
+      }
+      final alive = baby['isBabyAlive']?.toString().trim() ?? '';
+      final sex = baby['sex']?.toString().trim() ?? '';
+      if (alive.isEmpty) errors.add('newbornDetails_${i}_isBabyAlive');
+      if (sex.isEmpty) errors.add('newbornDetails_${i}_sex');
+      if (alive.toLowerCase() == 'no') {
+        final cause = baby['causeOfNeonatalDeath'];
+        final emptyCause = cause == null ||
+            (cause is String && cause.trim().isEmpty) ||
+            (cause is List && cause.isEmpty);
+        if (emptyCause) {
+          errors.add('newbornDetails_${i}_causeOfNeonatalDeath');
+        }
+      }
+    }
+    return errors;
+  }
+
   /// Returns or creates the [GlobalKey] for a section (by sectionId).
   GlobalKey _sectionKeyFor(String sectionId) =>
       _sectionKeys.putIfAbsent(sectionId, GlobalKey.new);
@@ -582,7 +747,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     Set<String> errors,
   ) {
     for (final a in annotated) {
-      final hasError = a.section.fieldRefs.any((r) => errors.contains(r.id));
+      final hasError = a.section.fieldRefs.any((r) => errors.contains(r.id)) ||
+          (a.section.sectionId == 'newbornDetails' &&
+              errors.any((e) => e.startsWith('newbornDetails')));
       if (!hasError) continue;
       final key = _sectionKeys['${a.section.formType}_${a.section.sectionId}'];
       final ctx = key?.currentContext;
@@ -1510,8 +1677,28 @@ class _SectionCard extends StatelessWidget {
     ),
   };
 
+  bool _isVisibleById(String fieldId) {
+    final def = config.fields[fieldId];
+    if (def == null) return false;
+    return FieldVisibilityRules.isFieldVisible(
+      field: def,
+      data: data,
+      rulesByTargetId: config.visibilityRulesByTargetId,
+      gestationalWeeks: gestationalWeeks,
+      ancVisitNumber: ancVisitNumber,
+      formType: section.formType,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Dynamic N baby cards driven by liveBirthNumbers (Android
+    // AssessmentPregnancyOutcomeFragment.updateBabySections).
+    if (section.sectionId == 'newbornDetails' &&
+        section.formType == 'pregnancyOutcome') {
+      return _buildNewbornDetailsSection(context);
+    }
+
     // Pre-compute the set of ref IDs in this section so all pair detectors
     // work regardless of field ordering.
     final sectionIds = section.fieldRefs.map((r) => r.id).toSet();
@@ -1521,9 +1708,14 @@ class _SectionCard extends StatelessWidget {
 
     final hasBpPulseTriple = hasBpPair && sectionIds.contains('pulse');
 
-    // Blood-glucose pair: fasting + random shown side-by-side (ANC/PNC forms).
+    // Blood-glucose pair: fasting + random shown side-by-side, but only while
+    // both are actually visible. PNC's `bloodSugar` selector reveals exactly
+    // one of them (Spice rmnch_pnc_visit.json), and the pair card would then
+    // swallow the very field the SK just asked for.
     final hasGlucosePair = sectionIds.contains('fastingBloodSugar') &&
-        sectionIds.contains('randomBloodSugar');
+        sectionIds.contains('randomBloodSugar') &&
+        _isVisibleById('fastingBloodSugar') &&
+        _isVisibleById('randomBloodSugar');
 
     // BloodGlucoseEntry drives both type toggle and numeric value via 'glucose'.
     // The standalone 'glucose' EditText must not render alongside it.
@@ -1727,6 +1919,197 @@ class _SectionCard extends StatelessWidget {
 
     if (!isNewEnrolment) return inner;
 
+    final bg = _newEnrolmentBg(section.formType);
+    final accent = _newEnrolmentAccent(section.formType);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent, width: 1.5),
+      ),
+      child: inner,
+    );
+  }
+
+  /// One card per live birth (isBabyAlive / sex / causeOfNeonatalDeath).
+  Widget _buildNewbornDetailsSection(BuildContext context) {
+    final notifier = context.watch<UnifiedFormNotifier>();
+    final raw = notifier.data.getValue('newbornDetails');
+    final babies = <Map<String, dynamic>>[];
+    if (raw is List) {
+      for (final e in raw) {
+        if (e is Map) babies.add(Map<String, dynamic>.from(e));
+      }
+    }
+
+    final aliveDef = config.fields['babyAlive'];
+    final sexDef = config.fields['babySex'];
+    final causeDef = config.fields['neonatalDeathCause'];
+    final aliveOptions = aliveDef?.options ??
+        const [
+          FieldOption(id: 'Yes', name: 'Yes'),
+          FieldOption(id: 'No', name: 'No'),
+        ];
+    final sexOptions = sexDef?.options ?? const [];
+    final causeOptions = causeDef?.options ?? const [];
+
+    final cards = <Widget>[];
+    for (var i = 0; i < babies.length; i++) {
+      final baby = babies[i];
+      final alive = baby['isBabyAlive']?.toString();
+      final sex = baby['sex']?.toString();
+      final causeRaw = baby['causeOfNeonatalDeath'];
+      final causeIds = causeRaw is List
+          ? causeRaw.map((e) => e.toString()).toList()
+          : (causeRaw is String && causeRaw.isNotEmpty
+              ? <String>[causeRaw]
+              : <String>[]);
+      final showCause = alive?.toLowerCase() == 'no';
+      final aliveError =
+          validationErrors.contains('newbornDetails_${i}_isBabyAlive');
+      final sexError = validationErrors.contains('newbornDetails_${i}_sex');
+      final causeError =
+          validationErrors.contains('newbornDetails_${i}_causeOfNeonatalDeath');
+
+      cards.add(Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Baby ${i + 1}',
+                style: AppTextStyles.sectionLabel,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _FieldShell(
+                label: aliveDef?.displayLabel ?? 'Is the baby alive?',
+                isMandatory: true,
+                hasError: aliveError,
+                child: RadioFormField(
+                  key: Key('unified_form_newborn_${i}_alive'),
+                  options: aliveOptions.map((o) => o.displayName).toList(),
+                  currentValue: FieldOption.find(alive, aliveOptions)
+                      ?.displayName,
+                  onChanged: (name) {
+                    if (name == null) {
+                      notifier.updateNewbornField(i, 'isBabyAlive', null);
+                      return;
+                    }
+                    notifier.updateNewbornField(
+                      i,
+                      'isBabyAlive',
+                      FieldOption.matchId(name, aliveOptions) ?? name,
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _FieldShell(
+                label: sexDef?.displayLabel ?? 'Sex',
+                isMandatory: true,
+                hasError: sexError,
+                child: RadioFormField(
+                  key: Key('unified_form_newborn_${i}_sex'),
+                  options: sexOptions.map((o) => o.displayName).toList(),
+                  currentValue:
+                      FieldOption.find(sex, sexOptions)?.displayName,
+                  onChanged: (name) {
+                    if (name == null) {
+                      notifier.updateNewbornField(i, 'sex', null);
+                      return;
+                    }
+                    notifier.updateNewbornField(
+                      i,
+                      'sex',
+                      FieldOption.matchId(name, sexOptions) ?? name,
+                    );
+                  },
+                ),
+              ),
+              if (showCause) ...[
+                const SizedBox(height: AppSpacing.md),
+                _InlineListSelectField(
+                  key: Key('unified_form_newborn_${i}_cause'),
+                  label: causeDef?.displayLabel ?? 'Cause of neonatal death',
+                  subLabel: null,
+                  isMandatory: true,
+                  hasError: causeError,
+                  options: causeOptions.map((o) => o.displayName).toList(),
+                  selectedValues: causeIds.map((sid) {
+                    return causeOptions
+                            .cast<FieldOption?>()
+                            .firstWhere(
+                              (o) => o!.id == sid || o.name == sid,
+                              orElse: () => null,
+                            )
+                            ?.displayName ??
+                        sid;
+                  }).toList(),
+                  onChanged: (names) {
+                    final ids = names.map((n) {
+                      return causeOptions
+                              .cast<FieldOption?>()
+                              .firstWhere(
+                                (o) =>
+                                    o!.displayName == n ||
+                                    o.name == n ||
+                                    o.id == n,
+                                orElse: () => null,
+                              )
+                              ?.id ??
+                          n;
+                    }).toList();
+                    notifier.updateNewbornField(
+                      i,
+                      'causeOfNeonatalDeath',
+                      ids,
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ));
+    }
+
+    if (babies.isEmpty) {
+      cards.add(Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+        child: Text(
+          'Enter number of live births to add newborn details.',
+          style: AppTextStyles.subText,
+        ),
+      ));
+    }
+
+    final inner = Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (section.title.isNotEmpty) ...[
+            Text(
+              section.title.toUpperCase(),
+              style: AppTextStyles.sectionLabel,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+          ...cards,
+        ],
+      ),
+    );
+
+    if (!isNewEnrolment) return inner;
     final bg = _newEnrolmentBg(section.formType);
     final accent = _newEnrolmentAccent(section.formType);
     return Container(
@@ -4192,35 +4575,45 @@ class _SubmitBar extends StatelessWidget {
         ),
         child: SizedBox(
           width: double.infinity,
-          child: ElevatedButton(
-            key: const Key('unified_form_submit_button'),
-            onPressed: submitting ? null : onSubmit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.pink,
-              foregroundColor: AppColors.textOnNavy,
-              disabledBackgroundColor: AppColors.pink.withValues(alpha: 0.5),
-              disabledForegroundColor: AppColors.textOnNavy,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.button),
+          // A disabled button swallows nothing, so this catches taps made
+          // while a save is still in flight — otherwise Submit looks dead
+          // with no trace in the logs.
+          child: GestureDetector(
+            onTap: submitting
+                ? () => debugPrint(
+                    '[SubmitBlocked] tapped while a previous save is still '
+                    'in flight — button disabled')
+                : null,
+            child: ElevatedButton(
+              key: const Key('unified_form_submit_button'),
+              onPressed: submitting ? null : onSubmit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.pink,
+                foregroundColor: AppColors.textOnNavy,
+                disabledBackgroundColor: AppColors.pink.withValues(alpha: 0.5),
+                disabledForegroundColor: AppColors.textOnNavy,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.button),
+                ),
+                textStyle: const TextStyle(
+                  fontFamily: AppFonts.display,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-              textStyle: const TextStyle(
-                fontFamily: AppFonts.display,
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-              ),
+              child: submitting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.textOnNavy,
+                      ),
+                    )
+                  : Text(UnifiedFormStrings.submitLabel),
             ),
-            child: submitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.textOnNavy,
-                    ),
-                  )
-                : Text(UnifiedFormStrings.submitLabel),
           ),
         ),
       ),

@@ -331,6 +331,55 @@ class MemberDao {
     await batch.commit(noResult: true);
   }
 
+  /// Mark a member active/inactive (Android updateMemberDeceasedStatus).
+  Future<void> updateActiveStatus(
+    String id, {
+    required bool isActive,
+    String syncStatus = 'NotSynced',
+  }) async {
+    await _db.db.update(
+      AppDatabase.tableMembers,
+      {
+        'is_active': isActive ? 1 : 0,
+        'sync_status': syncStatus,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Members waiting to push via offline-sync/create (new babies, etc.).
+  ///
+  /// Only rows that were locally created for createHouseHoldMember — mothers
+  /// marked inactive keep their prior sync_status and are excluded.
+  Future<List<HouseholdMemberEntity>> getUnsynced() async {
+    final rows = await _db.db.query(
+      AppDatabase.tableMembers,
+      where:
+          "(sync_status = 'NotSynced' OR sync_status = 'Pending') "
+          "AND mother_reference_id IS NOT NULL "
+          "AND mother_reference_id != ''",
+      orderBy: 'created_at ASC',
+    );
+    return rows.map(HouseholdMemberEntity.fromDb).toList();
+  }
+
+  /// Mark members as successfully synced.
+  Future<void> markSynced(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await _db.db.update(
+      AppDatabase.tableMembers,
+      {
+        'sync_status': 'Success',
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
+  }
+
   /// Delete locally-created placeholder rows that the server has now confirmed
   /// with a FHIR primary key. When enrollment succeeds, the server assigns a
   /// FHIR `id` to each member; the sync bundle returns it as `id` alongside
