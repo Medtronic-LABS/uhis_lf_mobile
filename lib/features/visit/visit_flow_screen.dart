@@ -1322,9 +1322,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             : '/home';
       case 'patient':
         return '/patients/${widget.patientId}';
-      case 'tasks':
       default:
-        return '/tasks';
+        return '/home';
     }
   }
 
