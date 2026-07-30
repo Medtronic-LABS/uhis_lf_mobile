@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/models/dashboard_tier.dart';
-import 'package:leapwell/core/models/mission_queue_item.dart';
-import 'package:leapwell/core/models/programme.dart';
-import 'package:leapwell/core/models/risk.dart';
-import 'package:leapwell/core/widgets/patient_filter_panel.dart';
+import 'package:uhis_next/core/models/dashboard_tier.dart';
+import 'package:uhis_next/core/models/mission_queue_item.dart';
+import 'package:uhis_next/core/models/programme.dart';
+import 'package:uhis_next/core/models/risk.dart';
+import 'package:uhis_next/core/widgets/patient_filter_panel.dart';
 
 MissionQueueItem _item({
   required String name,

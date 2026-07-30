@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/features/visit/forms/form_type_resolver.dart';
+import 'package:uhis_next/features/visit/forms/form_type_resolver.dart';
 
 void main() {
   group('FormTypeResolver.resolve', () {

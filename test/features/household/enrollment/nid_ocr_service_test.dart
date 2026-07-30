@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/features/household/enrollment/nid_ocr_service.dart';
+import 'package:uhis_next/features/household/enrollment/nid_ocr_service.dart';
 
 void main() {
   group('NidOcrService.extractNidNumber', () {

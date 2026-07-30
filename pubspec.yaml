@@ -1,5 +1,5 @@
-name: leapwell
-description: "LEAPWELL — Powered by Medtronic Labs for frontline health worker"
+name: uhis_next
+description: "LEAPWELL (Apon Sushashthya) — Powered by Medtronic Labs for frontline health workers"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -61,6 +61,7 @@ flutter:
     - assets/images/
     - assets/fonts/
     - assets/forms/
+    - assets/translations/
 
   fonts:
     - family: Nunito

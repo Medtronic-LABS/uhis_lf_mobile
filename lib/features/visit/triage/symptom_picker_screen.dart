@@ -496,9 +496,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // Source 2: catalogue direct symptom→programme mapping.
     // Each UnifiedSymptomDef.programmes names every service that symptom
     // belongs to, providing finer-grained auto-selection than the rule engine.
+    // See ProgrammeGridSync.catalogProgrammesFor for why imci/epi are gated
+    // on the patient actually being under-5.
+    final isUnder5 = _patientContext?.isUnder5 == true;
     for (final code in currentSymptoms) {
       final def = UnifiedSymptomCatalog.byCode(code);
-      if (def != null) activated.addAll(def.programmes);
+      if (def == null) continue;
+      activated.addAll(ProgrammeGridSync.catalogProgrammesFor(
+        def.programmes,
+        isUnder5: isUnder5,
+      ));
     }
 
     final unseen = ProgrammeGridSync.additionsFromPathways(

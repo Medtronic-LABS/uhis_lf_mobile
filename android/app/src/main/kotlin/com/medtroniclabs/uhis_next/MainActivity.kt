@@ -1,4 +1,4 @@
-package com.medtroniclabs.leapwell
+package com.medtroniclabs.uhis_next
 
 import android.os.Bundle
 import androidx.core.view.WindowCompat

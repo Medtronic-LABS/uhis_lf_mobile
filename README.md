@@ -515,7 +515,7 @@ flutter run \
 ```bash
 scripts/build_apk.sh development
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
-adb shell monkey -p com.medtroniclabs.leapwell -c android.intent.category.LAUNCHER 1
+adb shell monkey -p com.medtroniclabs.uhis_next -c android.intent.category.LAUNCHER 1
 ```
 
 ### Production APK (prod backend)

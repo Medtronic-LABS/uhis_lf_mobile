@@ -164,7 +164,7 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
                       _OutgoingBubble(text: widget.whatsappMessage!),
                     ],
                   )
-                : const Center(
+                : Center(
                     child: Text(
                       CounsellingStrings.noMessage,
                       style: TextStyle(color: AppColors.textMuted),

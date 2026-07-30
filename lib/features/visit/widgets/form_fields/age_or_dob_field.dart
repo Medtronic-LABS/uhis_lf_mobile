@@ -112,7 +112,7 @@ class _AgeOrDobFieldState extends State<AgeOrDobField> {
         ),
         const SizedBox(height: 8),
         SegmentedButton<_AgeMode>(
-          segments: const [
+          segments: [
             ButtonSegment(value: _AgeMode.age, label: Text(ComposerStrings.ageLabel)),
             ButtonSegment(value: _AgeMode.dob, label: Text(ComposerStrings.dobLabel)),
           ],

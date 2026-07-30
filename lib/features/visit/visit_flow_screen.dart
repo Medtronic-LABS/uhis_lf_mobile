@@ -2820,13 +2820,13 @@ class _AiCounsellingCard extends StatelessWidget {
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.chat_rounded,
+                        children: [
+                          const Icon(Icons.chat_rounded,
                               size: 12, color: Colors.white),
-                          SizedBox(width: 7),
+                          const SizedBox(width: 7),
                           Text(
                             NabaStrings.sendThisMessage,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,

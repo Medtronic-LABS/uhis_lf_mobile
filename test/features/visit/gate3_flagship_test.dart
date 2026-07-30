@@ -15,14 +15,14 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:leapwell/core/db/app_database.dart';
-import 'package:leapwell/core/db/local_assessment_dao.dart';
-import 'package:leapwell/core/models/programme.dart';
-import 'package:leapwell/features/visit/composer/cds_rules.dart';
-import 'package:leapwell/features/visit/composer/form_compositor.dart';
-import 'package:leapwell/features/visit/pathway/pathway_engine.dart';
-import 'package:leapwell/features/visit/submission/unified_submission_orchestrator.dart';
-import 'package:leapwell/features/visit/triage/patient_context_builder.dart';
+import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/db/local_assessment_dao.dart';
+import 'package:uhis_next/core/models/programme.dart';
+import 'package:uhis_next/features/visit/composer/cds_rules.dart';
+import 'package:uhis_next/features/visit/composer/form_compositor.dart';
+import 'package:uhis_next/features/visit/pathway/pathway_engine.dart';
+import 'package:uhis_next/features/visit/submission/unified_submission_orchestrator.dart';
+import 'package:uhis_next/features/visit/triage/patient_context_builder.dart';
 
 // ── Test DB ────────────────────────────────────────────────────────────────────
 

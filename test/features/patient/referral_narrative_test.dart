@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/features/patient/referral_narrative.dart';
+import 'package:uhis_next/features/patient/referral_narrative.dart';
 
 void main() {
   group('parseReferralReasonTokens', () {

@@ -548,10 +548,10 @@ class _TooEarlyBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('⚠', style: TextStyle(fontSize: 14)),
+          const Text('⚠', style: TextStyle(fontSize: 14)),
           SizedBox(width: 8),
           Expanded(
             child: Text(

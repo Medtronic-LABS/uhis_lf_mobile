@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/risk/clinical_vitals_from_history.dart';
+import 'package:uhis_next/core/risk/clinical_vitals_from_history.dart';
 
 void main() {
   group('ClinicalVitalsFromHistory', () {

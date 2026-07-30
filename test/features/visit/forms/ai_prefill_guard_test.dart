@@ -16,11 +16,11 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:leapwell/core/db/local_assessment_dao.dart';
-import 'package:leapwell/features/scribe/form_field_schema_builder.dart';
-import 'package:leapwell/features/scribe/models/ai_extracted_field.dart';
-import 'package:leapwell/features/visit/forms/form_config.dart';
-import 'package:leapwell/features/visit/forms/unified_form_notifier.dart';
+import 'package:uhis_next/core/db/local_assessment_dao.dart';
+import 'package:uhis_next/features/scribe/form_field_schema_builder.dart';
+import 'package:uhis_next/features/scribe/models/ai_extracted_field.dart';
+import 'package:uhis_next/features/visit/forms/form_config.dart';
+import 'package:uhis_next/features/visit/forms/unified_form_notifier.dart';
 
 import '../../../helpers/fake_form_deps.dart';
 

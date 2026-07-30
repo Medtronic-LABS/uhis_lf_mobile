@@ -4,10 +4,10 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:leapwell/core/api/api_client.dart';
-import 'package:leapwell/core/auth/auth_repository.dart';
-import 'package:leapwell/core/auth/auth_state.dart';
-import 'package:leapwell/core/auth/biometric_service.dart';
+import 'package:uhis_next/core/api/api_client.dart';
+import 'package:uhis_next/core/auth/auth_repository.dart';
+import 'package:uhis_next/core/auth/auth_state.dart';
+import 'package:uhis_next/core/auth/biometric_service.dart';
 
 /// Bypasses the real network/secure-storage logout implementation so this
 /// test can isolate AuthState's wipe-callback orchestration.

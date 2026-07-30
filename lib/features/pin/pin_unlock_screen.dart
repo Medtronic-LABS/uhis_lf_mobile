@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/theme/app_theme.dart';
 import 'pin_pad.dart';
 
 /// Dedicated PIN unlock screen. Navigated to from lock screen when user
@@ -84,11 +85,15 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (!isCompact) ...[
-                        Image.asset(
-                          'assets/images/app-logo-name.png',
-                          height: 48,
-                          fit: BoxFit.contain,
-                          semanticLabel: 'UHIS logo',
+                        Text(
+                          AppStrings.appName,
+                          style: TextStyle(
+                            fontFamily: AppFonts.display,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.pink,
+                            letterSpacing: -0.5,
+                          ),
                         ),
                         const SizedBox(height: 24),
                       ],

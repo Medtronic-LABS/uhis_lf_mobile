@@ -12,11 +12,11 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:leapwell/core/models/programme.dart';
-import 'package:leapwell/features/visit/composer/form_compositor.dart';
-import 'package:leapwell/features/visit/composer/form_section.dart';
-import 'package:leapwell/features/visit/composer/section_registry.dart';
-import 'package:leapwell/features/visit/pathway/pathway_engine.dart';
+import 'package:uhis_next/core/models/programme.dart';
+import 'package:uhis_next/features/visit/composer/form_compositor.dart';
+import 'package:uhis_next/features/visit/composer/form_section.dart';
+import 'package:uhis_next/features/visit/composer/section_registry.dart';
+import 'package:uhis_next/features/visit/pathway/pathway_engine.dart';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

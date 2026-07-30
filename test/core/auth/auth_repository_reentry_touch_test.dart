@@ -6,8 +6,8 @@ library;
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:leapwell/core/api/api_client.dart';
-import 'package:leapwell/core/auth/auth_repository.dart';
+import 'package:uhis_next/core/api/api_client.dart';
+import 'package:uhis_next/core/auth/auth_repository.dart';
 
 class _InMemorySecureStorage extends FlutterSecureStoragePlatform {
   final Map<String, String> _values = {};

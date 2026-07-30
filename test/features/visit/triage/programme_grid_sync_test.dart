@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/models/programme.dart';
-import 'package:leapwell/features/visit/triage/programme_grid_sync.dart';
+import 'package:uhis_next/core/models/programme.dart';
+import 'package:uhis_next/features/visit/triage/programme_grid_sync.dart';
 
 void main() {
   group('ProgrammeGridSync.additionsFromPathways', () {
@@ -49,6 +49,32 @@ void main() {
         isPostpartum: true,
       );
       expect(seeded, {Programme.pnc});
+    });
+  });
+
+  group('ProgrammeGridSync.catalogProgrammesFor', () {
+    test('drops imci/epi for a symptom cross-tagged with them when not under-5', () {
+      final result = ProgrammeGridSync.catalogProgrammesFor(
+        {Programme.imci, Programme.anc, Programme.tb},
+        isUnder5: false,
+      );
+      expect(result, {Programme.anc, Programme.tb});
+    });
+
+    test('keeps imci/epi for the same tag set when the patient is under-5', () {
+      final result = ProgrammeGridSync.catalogProgrammesFor(
+        {Programme.imci, Programme.anc, Programme.tb},
+        isUnder5: true,
+      );
+      expect(result, {Programme.imci, Programme.anc, Programme.tb});
+    });
+
+    test('unaffected when the symptom carries no imci/epi tag', () {
+      final result = ProgrammeGridSync.catalogProgrammesFor(
+        {Programme.ncd},
+        isUnder5: false,
+      );
+      expect(result, {Programme.ncd});
     });
   });
 

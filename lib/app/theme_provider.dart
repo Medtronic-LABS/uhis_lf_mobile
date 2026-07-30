@@ -8,7 +8,12 @@ class ThemeProvider extends ChangeNotifier {
   }
 
   static const _key = 'theme_mode';
-  static const _storage = FlutterSecureStorage();
+  // encryptedSharedPreferences: true keeps this on the same underlying store
+  // as KeyStore/AuthRepository -- see LocaleProvider's matching comment for
+  // why the plain-mode default silently lost this value on cold start.
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   ThemeMode _mode = ThemeMode.light;
 

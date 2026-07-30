@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/clinical/assessment_thresholds.dart';
+import 'package:uhis_next/core/clinical/assessment_thresholds.dart';
 
 void main() {
   group('isPlausibleTemperatureF', () {
