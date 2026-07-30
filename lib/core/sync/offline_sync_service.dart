@@ -1066,6 +1066,7 @@ class OfflineSyncService extends ChangeNotifier {
       'pregnancyDetails',
       'pregnancyDetail',
       'pwProfile',
+      'pregnancyDetailsAndHistory',
       'pregnancyProfile',
       'obstetricHistory',
       'observations',
