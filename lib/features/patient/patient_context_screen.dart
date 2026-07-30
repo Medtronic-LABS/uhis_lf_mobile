@@ -16,7 +16,6 @@ import '../../core/time/calendar_day.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/phi_screen.dart';
 import '../../core/db/assessment_dao.dart';
-import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
@@ -48,6 +47,7 @@ class PatientOrMemberData {
     this.householdHeadPhone,
     this.vitalHistory = const [],
     this.pregnancySnapshot,
+    this.enrolledAt,
   });
 
   final PatientWithProgrammes? localPatient;
@@ -65,13 +65,15 @@ class PatientOrMemberData {
   /// the patient has no pregnancy episode stored.
   final PregnancySnapshotRow? pregnancySnapshot;
 
-  /// Locally-cached assessments — union of EncounterDao history,
-  /// synced AssessmentDao rows, and sync-pending LocalAssessmentDao
-  /// drafts. Surfaces records even when the remote /medical-review/history
-  /// endpoint is unreachable or returns empty (offline-first §3.1).
+  /// Locally-cached assessments — union of synced AssessmentDao rows and
+  /// sync-pending LocalAssessmentDao drafts (pending/networkError/failed only;
+  /// success drafts are already in AssessmentDao after sync). Surfaces records
+  /// even when the remote endpoint is unreachable (offline-first §3.1).
   final List<MemberAssessment> localAssessments;
   final List<PatientVisit> recentVisits;
   final String? memberId;
+  /// When the member was first enrolled in the app (from local DB `created_at`).
+  final DateTime? enrolledAt;
 
   bool get hasData => localPatient != null || remoteMember != null;
 
@@ -157,6 +159,7 @@ class PatientOrMemberData {
       householdHeadPhone: householdHeadPhone ?? this.householdHeadPhone,
       vitalHistory: vitalHistory ?? this.vitalHistory,
       pregnancySnapshot: pregnancySnapshot ?? this.pregnancySnapshot,
+      enrolledAt: enrolledAt,
     );
   }
 }
@@ -235,45 +238,13 @@ class _PatientContextScreenState
     final stripped = patientId.contains('/')
         ? patientId.substring(patientId.lastIndexOf('/') + 1)
         : patientId;
-    final encounters = context.read<EncounterDao>();
     final assessments = context.read<AssessmentDao>();
     final localDrafts = context.read<LocalAssessmentDao>();
 
     final out = <MemberAssessment>[];
 
-    try {
-      final encs = await encounters.recentForPatient(stripped, limit: 50);
-      // ignore: avoid_print
-      print('[PatientContextScreen] localAssessmentsFor in=$patientId norm=$stripped encs=${encs.length}');
-      for (final e in encs) {
-        final date = DateTime.fromMillisecondsSinceEpoch(
-            e.completedAt ?? e.startedAt);
-        final prog = Programme.fromString(e.programme);
-        final serviceLabel = prog == Programme.unknown
-            ? PatientContextStrings.genericAssessmentLabel
-            : prog.wireTag;
-        out.add(MemberAssessment(
-          id: e.id,
-          type: serviceLabel,
-          date: date,
-          status: e.status.name,
-          rawJson: <String, dynamic>{
-            'programme': e.programme,
-            'status': e.status.name,
-            'serverVisitId': e.serverVisitId,
-            'encounterId': e.id,
-            'serviceProvided': serviceLabel,
-            if (e.triageData != null) ...e.triageData!,
-            if (e.vitalsData != null) ...e.vitalsData!,
-            if (e.assessmentData != null) ...e.assessmentData!,
-          },
-        ));
-      }
-    } on Object catch (e) {
-      // ignore: avoid_print
-      print('[PatientContextScreen] local encounters fetch failed: $e');
-    }
-
+    // Source 1: server-synced records from member-assessment-history.
+    // These are the canonical care history entries after a sync completes.
     try {
       final asMap = await assessments.forMany([stripped]);
       for (final row in asMap[stripped] ?? const []) {
@@ -296,6 +267,9 @@ class _PatientContextScreenState
       print('[PatientContextScreen] local assessments fetch failed: $e');
     }
 
+    // Source 2: unsent local drafts (pending / networkError / failed).
+    // Excluded: success — those are already present in Source 1 after sync
+    // completes, so including them would produce a duplicate record.
     try {
       final drafts = await localDrafts.getByPatientId(stripped);
       // ignore: avoid_print
@@ -303,6 +277,7 @@ class _PatientContextScreenState
       for (final d in drafts) {
         // ignore: avoid_print
         print('[PatientContextScreen]   draft id=${d.id} type=${d.assessmentType} syncStatus=${d.syncStatus.name} storedPatientId=${d.patientId}');
+        if (d.syncStatus == AssessmentSyncStatus.success) continue;
         out.add(MemberAssessment(
           id: d.id.toString(),
           type: d.assessmentType.toUpperCase(),
@@ -396,6 +371,7 @@ class _PatientContextScreenState
       syncSvc.lastSyncedAt(),
       vitalsRepo.recentByVisit(widget.patientId).catchError((_) => <VisitVitals>[]),
       pregnancyDao.byPatient(widget.patientId).catchError((_) => null),
+      memberRepo.enrolledAtFor(widget.patientId).catchError((_) => null),
     ]);
     final resolvedMemberId = phase1[0] as String?;
     final localPatient = phase1[1] as PatientWithProgrammes?;
@@ -403,6 +379,7 @@ class _PatientContextScreenState
     final lastSync = phase1[3] as DateTime?;
     final vitalHistory = phase1[4] as List<VisitVitals>;
     final pregnancySnapshot = phase1[5] as PregnancySnapshotRow?;
+    final enrolledAt = phase1[6] as DateTime?;
     debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
         ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
@@ -472,6 +449,7 @@ class _PatientContextScreenState
         memberId: resolvedMemberId,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
+        enrolledAt: enrolledAt,
       );
       if (mounted) {
         setState(() {
@@ -557,6 +535,7 @@ class _PatientContextScreenState
         householdHeadPhone: memberHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
+        enrolledAt: enrolledAt,
       );
     }
 
@@ -633,6 +612,7 @@ class _PatientContextScreenState
         householdHeadPhone: prePassedHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
+        enrolledAt: enrolledAt,
       );
     }
 
@@ -684,22 +664,20 @@ class _PatientContextScreenState
   /// structured payload the assistant answers from) out of the loaded data.
   PatientAiContext _aiContext(PatientOrMemberData data) {
     final progs = data.programmes.toList();
-    final progLabel = progs.isEmpty
-        ? '—'
-        : progs.map((p) => p.wireTag.toUpperCase()).join('/');
+
     final band = data.riskBand;
     final bandLabel = band == null ? null : 'Band ${band.index + 1}';
     final reasons = data.riskReasons;
 
     final chip = <String>[
-      progLabel,
       if (data.age != null) '${data.age}y',
+      if (data.gender != null) data.gender!,
     ].join(' · ');
 
     final summary = StringBuffer()
-      ..write('${data.age ?? '—'}'
-          '${data.gender != null ? ', ${data.gender}' : ''} · $progLabel.');
-    if (data.isPregnant) summary.write(' Pregnant.');
+      ..write('${data.age != null ? '${data.age}y' : '—'}'
+          '${data.gender != null ? ', ${data.gender}' : ''}');
+    if (data.isPregnant) summary.write('  ·  Pregnant');
 
     return PatientAiContext(
       patientId: data.patientId ?? widget.patientId,
@@ -874,11 +852,6 @@ class _PatientContextScreenState
               onBack: () => Navigator.of(context).maybePop(),
               onRefresh: _refreshing ? null : _refresh,
             ),
-            if (data.householdId != null)
-              _SameHouseholdStrip(
-                currentPatientId: widget.patientId,
-                householdId: data.householdId!,
-              ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
@@ -1055,8 +1028,9 @@ const _kDotEpi      = Color(0xFF1D4ED8); // blue-700
 const _kDotTb       = Color(0xFF059669); // emerald-600
 const _kDotImci     = Color(0xFFDC2626); // red-600
 const _kDotFp       = Color(0xFF7C3AED); // violet-600
-const _kDotGeneral  = Color(0xFF6B7280); // gray-500
-const _kDotPending  = Color(0xFFEF4444); // red-500
+const _kDotGeneral     = Color(0xFF6B7280); // gray-500
+const _kDotPending     = Color(0xFFEF4444); // red-500
+const _kDotEnrollment  = Color(0xFF0891B2); // cyan-600
 
 const _kBadgeCriticalBg = Color(0xFFFEE2E2);
 const _kBadgeCriticalFg = Color(0xFFDC2626);
@@ -1122,6 +1096,14 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     case Programme.anc:
     case Programme.pw:
       emoji = '🤰';
+      if (prog == Programme.pw) {
+        // PWPROFILE is the pregnancy registration form, not a clinical visit.
+        title = PatientProfileStrings.pregnancyRegistered;
+        category = PatientProfileStrings.pregnancyRegistrationCategory;
+        dotColor = _kDotAnc;
+        description = 'Pregnant woman profile created — ANC care started';
+        break;
+      }
       final vn = raw['ancVisitNumber']?.toString()
           ?? (raw['medicalHistoryPhysicalExamination'] is Map
               ? (raw['medicalHistoryPhysicalExamination'] as Map)['ancVisitNumber']?.toString()
@@ -1548,6 +1530,25 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       entries.add(entry);
     }
   }
+
+  // Enrollment milestone — pinned at bottom (oldest event in the patient's history).
+  if (data.enrolledAt != null) {
+    entries.add(_TimelineEntry(
+      emoji: '📋',
+      title: PatientProfileStrings.enrolledInApp,
+      relativeDate: _relativeDate(data.enrolledAt!),
+      category: PatientProfileStrings.enrollmentMilestone,
+      date: data.enrolledAt!,
+      dotColor: _kDotEnrollment,
+      description: 'Patient added to Apon Sushashthya',
+      badge: 'Enrolled',
+      badgeColor: const Color(0xFFE0F2FE),
+      badgeFgColor: const Color(0xFF0369A1),
+    ));
+  }
+
+  // Sort newest-first so the enrollment milestone naturally falls at the bottom.
+  entries.sort((a, b) => b.date.compareTo(a.date));
 
   return entries;
 }

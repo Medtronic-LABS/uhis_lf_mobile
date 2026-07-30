@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,14 +7,19 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/api/api_repository.dart';
+import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/db/member_dao.dart';
+import '../../../core/db/patient_dao.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
 import 'enrollment_entry_sheet.dart';
+import 'enrollment_repository.dart';
 import 'nid_ocr_service.dart';
 import 'patient_lookup_repository.dart';
 import 'models/household_enrollment_models.dart';
@@ -29,7 +36,37 @@ enum _DuplicateAction { viewRecord, continueAnyway, cancel }
 /// NID scan is a purple gradient CTA button; after mock scan a green
 /// confirmation chip appears and name/DOB/gender fields are auto-filled.
 class AddHouseholdMemberScreen extends StatefulWidget {
-  const AddHouseholdMemberScreen({super.key});
+  const AddHouseholdMemberScreen({
+    super.key,
+    this.existingHouseholdId,
+    this.existingHouseholdReferenceId,
+    this.existingVillageId,
+    this.existingVillageName,
+    this.fromNidScan = false,
+    this.scannedNidNumber,
+    this.scannedName,
+    this.scannedDateOfBirth,
+    this.initialMemberNames = const [],
+  });
+
+  /// When non-null, the screen operates in standalone mode: submits the member
+  /// directly to [EnrollmentRepository.submitStandaloneMember] instead of
+  /// adding to the enrollment controller's pending batch.
+  final String? existingHouseholdId;
+  final String? existingHouseholdReferenceId;
+  final String? existingVillageId;
+  final String? existingVillageName;
+
+  final bool fromNidScan;
+  final String? scannedNidNumber;
+  final String? scannedName;
+  final String? scannedDateOfBirth;
+
+  /// Pre-populated member names from the caller (e.g. household detail screen).
+  /// When non-empty, skips the DB query in [_loadHouseholdMembers].
+  final List<String> initialMemberNames;
+
+  bool get isStandalone => existingHouseholdId != null;
 
   @override
   State<AddHouseholdMemberScreen> createState() =>
@@ -46,16 +83,31 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   String? _gender;
   String? _maritalStatus;
-  String? _disabilityStatus = 'Absent';
+  String? _disabilityStatus;
   bool _nidScanned = false;
-  String _idType = 'BRN';
+  String? _idType;
   String? _ageSummary;
   String? _guardianName;
+
+  /// Names of existing household members — loaded from local DB in standalone
+  /// mode (existingHouseholdId != null) so the guardian picker is populated.
+  List<String> _householdMemberNames = [];
+
+  /// Age in whole years — used for validation and the `age` field sent to the
+  /// server. Distinct from [_ageCtrl] which shows the most human-meaningful
+  /// unit (months for babies < 1 year, days for newborns).
+  int _ageInYears = 0;
+
+  /// Unit label shown next to the age field after DOB auto-fill.
+  /// Empty for manual entry (user implies years).
+  String _ageUnit = '';
+
+  bool _submitting = false;
 
   final Map<String, GlobalKey> _fieldKeys = {};
   Map<String, String?> _fieldErrors = {};
 
-  static const _validationOrder = ['name', 'gender', 'maritalStatus', 'guardian', 'mobile'];
+  static const _validationOrder = ['name', 'dob', 'gender', 'maritalStatus', 'guardian', 'mobile'];
 
   GlobalKey _key(String name) =>
       _fieldKeys.putIfAbsent(name, GlobalKey.new);
@@ -95,20 +147,66 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   @override
   void initState() {
-    debugPrint('[_AddHouseholdMemberScreenState] initState');
+    debugPrint('[_AddHouseholdMemberScreenState] initState standalone=${widget.isStandalone}');
     super.initState();
     _brnCtrl = TextEditingController();
     _nameCtrl = TextEditingController();
     _dobCtrl = TextEditingController();
     _ageCtrl = TextEditingController();
     _mobileCtrl = TextEditingController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final headMobile = context.read<EnrollmentController>().householdHead?.mobileNumber;
-      if (headMobile != null && headMobile.isNotEmpty) {
-        setState(() => _mobileCtrl.text = headMobile);
+
+    // Pre-fill from NID scan when navigated here with scan data.
+    if (widget.fromNidScan) {
+      if (widget.scannedNidNumber?.isNotEmpty ?? false) {
+        _brnCtrl.text = widget.scannedNidNumber!;
+        _idType = 'National ID';
       }
-    });
+      if (widget.scannedName?.isNotEmpty ?? false) {
+        _nameCtrl.text = widget.scannedName!;
+      }
+      final dob = widget.scannedDateOfBirth;
+      if (dob != null && dob.isNotEmpty) {
+        _dobCtrl.text = dob;
+        final parsed = DateTime.tryParse(dob);
+        if (parsed != null) _calculateAge(parsed);
+      }
+    }
+
+    if (!widget.isStandalone) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final headMobile = context.read<EnrollmentController>().householdHead?.mobileNumber;
+        if (headMobile != null && headMobile.isNotEmpty) {
+          setState(() => _mobileCtrl.text = headMobile);
+        }
+      });
+    } else {
+      // Seed from caller-supplied names first; only hit the DB when empty.
+      if (widget.initialMemberNames.isNotEmpty) {
+        _householdMemberNames = List<String>.from(widget.initialMemberNames);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadHouseholdMembers());
+    }
+  }
+
+  Future<void> _loadHouseholdMembers() async {
+    if (_householdMemberNames.isNotEmpty) return; // already seeded from caller
+    final hhId = widget.existingHouseholdId;
+    if (hhId == null || !mounted) return;
+    final dao = context.read<MemberDao>();
+    // Try household_id first, then householdReferenceId as fallback (UUID vs FHIR ID).
+    var entities = await dao.getByHouseholdId(hhId);
+    if (entities.isEmpty && widget.existingHouseholdReferenceId != null &&
+        widget.existingHouseholdReferenceId != hhId) {
+      entities = await dao.getByHouseholdId(widget.existingHouseholdReferenceId!);
+    }
+    if (!mounted) return;
+    final names = entities
+        .map((e) => e.name)
+        .whereType<String>()
+        .where((n) => n.isNotEmpty)
+        .toList();
+    if (names.isNotEmpty) setState(() => _householdMemberNames = names);
   }
 
   @override
@@ -158,29 +256,35 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     int months = now.month - dob.month;
     int days = now.day - dob.day;
 
-    // Borrow days from previous month if negative.
     if (days < 0) {
       months--;
-      days += DateTime(now.year, now.month, 0).day; // last day of prev month
+      days += DateTime(now.year, now.month, 0).day;
     }
-    // Borrow months from previous year if negative.
     if (months < 0) {
       years--;
       months += 12;
     }
 
-    _ageCtrl.text = years.toString();
+    _ageInYears = years;
 
-    // Human-readable age: days if < 1 month, months if < 1 year, else years.
-    if (years == 0 && months == 0) {
-      _ageSummary = days <= 1 ? '< 1 day old' : '$days days old';
-    } else if (years == 0) {
+    // Mirror Android getAgeOrDobDisplay: show years ≥1, else months, else days.
+    if (years >= 1) {
+      _ageCtrl.text = years.toString();
+      _ageUnit = years == 1 ? 'year' : 'years';
+      _ageSummary = months > 0
+          ? '$years yr ${months}m old'
+          : '$years year${years == 1 ? '' : 's'} old';
+    } else if (months > 0) {
+      _ageCtrl.text = months.toString();
+      _ageUnit = months == 1 ? 'month' : 'months';
       _ageSummary = '$months month${months == 1 ? '' : 's'} old';
     } else {
-      _ageSummary = months > 0 ? '$years yr ${months}m old' : '$years year${years == 1 ? '' : 's'} old';
+      final d = days < 1 ? 1 : days;
+      _ageCtrl.text = d.toString();
+      _ageUnit = d == 1 ? 'day' : 'days';
+      _ageSummary = days < 1 ? '< 1 day old' : '$days days old';
     }
 
-    // Marital status not applicable for age ≤ 5.
     if (years <= 5) _maritalStatus = null;
   }
 
@@ -208,9 +312,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         final nid = data.nidNumber;
         if (nid != null) await _lookupExisting(nid);
       case NidScanStatus.notFound:
-        _showSnack(EnrollmentStrings.nidScanNotFound);
+        break;
       case NidScanStatus.error:
-        _showSnack(EnrollmentStrings.nidScanError);
+        break;
       case NidScanStatus.cancelled:
         break;
       case NidScanStatus.skipped:
@@ -261,22 +365,17 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     return null;
   }
 
-  void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-    );
-  }
 
   Future<void> _handleSaveMember(EnrollmentController controller) async {
     debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
-    final ageYears = int.tryParse(_ageCtrl.text) ?? 99;
-    final maritalRequired = ageYears > 5;
+    final maritalRequired = _ageInYears > 5;
 
     final errors = <String, String?>{
       if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
+      if (_dobCtrl.text.trim().isEmpty) 'dob': 'Required',
       if (_gender == null) 'gender': 'Required',
       if (maritalRequired && _maritalStatus == null) 'maritalStatus': 'Required',
-      if (ageYears < 1 && _guardianName == null) 'guardian': 'Required',
+      if (_ageInYears < 1 && _guardianName == null) 'guardian': 'Required',
     };
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -304,10 +403,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     final mobile = _mobileCtrl.text.trim();
     final member = HouseholdMember(
       name: _nameCtrl.text,
-      age: int.tryParse(_ageCtrl.text) ?? 0,
+      age: _ageInYears,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
-      idType: _idType == 'National ID' ? 'NID' : _idType,
+      idType: _idType == 'National ID' ? 'NID' : (_idType ?? 'BRN'),
       idNumber: _idType == 'Not Available' ? null : (nid.isNotEmpty ? nid : null),
       mobileNumber: mobile.isNotEmpty ? mobile : null,
       mobileAvailable: mobile.isNotEmpty,
@@ -321,17 +420,150 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       guardianName: _guardianName,
     );
 
-    controller.addMember(member);
+    if (widget.isStandalone) {
+      await _submitStandalone(member);
+    } else {
+      controller.addMember(member);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Member added successfully'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      context.pop();
+    }
+  }
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Member added successfully'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  /// Submits a member to an already-synced household (standalone mode).
+  /// Mirrors [LinkMemberScreen._submit] + [LinkMemberScreen._persistLocally].
+  Future<void> _submitStandalone(HouseholdMember member) async {
+    setState(() => _submitting = true);
+    try {
+      final auth = context.read<AuthRepository>();
+      final api = context.read<ApiClient>();
+      final memberDao = context.read<MemberDao>();
+      final patientDao = context.read<PatientDao>();
+      final hierarchy = context.read<UserHierarchyService>();
 
-    context.pop();
+      var effSubVillageId = widget.existingVillageId;
+      var effSubVillageName = widget.existingVillageName;
+      if (effSubVillageId == null || effSubVillageId.isEmpty) {
+        await hierarchy.prefetch();
+        final ssSubs =
+            (hierarchy.ssWorkers ?? []).expand((s) => s.subVillages).toList();
+        final topSubs = hierarchy.subVillages ?? const <SubVillageRef>[];
+        final SubVillageRef? fallback = ssSubs.isNotEmpty
+            ? ssSubs.first
+            : (topSubs.isNotEmpty ? topSubs.first : null);
+        if (fallback != null) {
+          effSubVillageId = fallback.id;
+          effSubVillageName = fallback.name;
+        }
+      }
+
+      final userId = await auth.userId() ?? 0;
+      final userFhirId = await auth.userFhirId() ?? '';
+      final orgId = await auth.organizationFhirId() ?? '';
+      final deviceId = await auth.deviceId();
+
+      final repo = EnrollmentRepository(api);
+      final canonicalVillageId = widget.existingVillageId?.isNotEmpty == true
+          ? widget.existingVillageId!
+          : effSubVillageId ?? '';
+      final canonicalVillageName = widget.existingVillageName?.isNotEmpty == true
+          ? widget.existingVillageName!
+          : effSubVillageName ?? '';
+
+      final result = await repo.submitStandaloneMember(
+        member: member,
+        householdId: widget.existingHouseholdId!,
+        householdReferenceId:
+            widget.existingHouseholdReferenceId ?? widget.existingHouseholdId!,
+        villageName: canonicalVillageName,
+        villageId: canonicalVillageId,
+        subVillageId: effSubVillageId,
+        subVillageName: effSubVillageName,
+        userId: userId,
+        userFhirId: userFhirId,
+        organizationId: orgId,
+        deviceId: deviceId,
+      );
+
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final refId = result.memberReferenceId;
+
+      await memberDao.upsertMany([
+        HouseholdMemberEntity(
+          id: refId,
+          householdId: widget.existingHouseholdId,
+          householdReferenceId:
+              widget.existingHouseholdReferenceId ?? widget.existingHouseholdId,
+          name: member.name,
+          gender: member.gender,
+          dob: member.dateOfBirth,
+          phone: member.mobileNumber,
+          nationalId: member.idNumber,
+          idType: member.idType,
+          villageId: canonicalVillageId,
+          villageName: canonicalVillageName,
+          subVillageId: effSubVillageId,
+          subVillageName: effSubVillageName,
+          maritalStatus: member.maritalStatus,
+          disability: member.disabilityStatus.toLowerCase(),
+          isHouseholdHead: false,
+          isActive: true,
+          isPregnant: false,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+          syncStatus: 'Success',
+        ),
+      ]);
+
+      await patientDao.upsertMany([
+        Patient(
+          id: refId,
+          name: member.name,
+          gender: member.gender,
+          dob: member.dateOfBirth,
+          phone: member.mobileNumber,
+          nationalId: member.idNumber,
+          villageId: canonicalVillageId,
+          villageName: canonicalVillageName,
+          householdId: widget.existingHouseholdId,
+          isActive: true,
+          updatedAt: nowMs,
+          rawJson: jsonEncode({
+            'id': refId,
+            'name': member.name,
+            'gender': member.gender,
+            'dateOfBirth': member.dateOfBirth,
+            'phoneNumber': member.mobileNumber,
+            'nationalId': member.idNumber,
+            'villageId': canonicalVillageId,
+            'houseHoldId': widget.existingHouseholdId,
+            'isActive': true,
+          }),
+        ),
+      ]);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Member added successfully')),
+      );
+      context.go('/patients/households');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add member: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   Future<_DuplicateAction> _showDuplicateDialog({
@@ -426,8 +658,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       label: EnrollmentStrings.idTypeLabel,
                       options: EnrollmentStrings.idTypesV2,
                       selectedValue: _idType,
+                      allowDeselect: false,
                       onChanged: (v) => setState(() {
-                        _idType = v;
+                        _idType = v ?? 'BRN';
                         if (_idType != 'National ID') {
                           _nidScanned = false;
                           _brnCtrl.clear();
@@ -558,6 +791,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                                   hint: EnrollmentStrings.dateOfBirthHint,
                                   controller: _dobCtrl,
                                   readOnly: true,
+                                  isRequired: true,
                                 ),
                               ),
                             ),
@@ -652,16 +886,22 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
                     // ── Q3: Date of Birth — hidden when NID scanned (card has it) ──
                     if (!_nidScanned) ...[
+                      SizedBox(key: _key('dob'), height: 0),
                       _QuestionLabel(number: 'Q3', text: 'Date of Birth'),
                       const SizedBox(height: 10),
                       GestureDetector(
-                        onTap: _selectDate,
+                        onTap: () {
+                          _clearError('dob');
+                          _selectDate();
+                        },
                         child: AbsorbPointer(
                           child: EnrollmentInputField(
                             label: EnrollmentStrings.dateOfBirthLabel,
                             hint: EnrollmentStrings.dateOfBirthHint,
                             controller: _dobCtrl,
                             readOnly: true,
+                            isRequired: true,
+                            errorText: _fieldErrors['dob'],
                           ),
                         ),
                       ),
@@ -682,9 +922,21 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       hint: EnrollmentStrings.approximateAgeHint,
                       controller: _ageCtrl,
                       keyboardType: TextInputType.number,
+                      labelSuffix: _ageUnit.isNotEmpty
+                          ? Text(
+                              '($_ageUnit)',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textMuted,
+                              ),
+                            )
+                          : null,
                       onChanged: (v) => setState(() {
                         _ageSummary = null;
+                        _ageUnit = '';
                         final years = int.tryParse(v) ?? 99;
+                        _ageInYears = years;
                         if (years <= 5) _maritalStatus = null;
                         if (years >= 1) _guardianName = null;
                       }),
@@ -720,7 +972,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     const SizedBox(height: 20),
 
                     // ── Q6: Marital Status — hidden for age ≤ 5 ───────────
-                    if ((int.tryParse(_ageCtrl.text) ?? 99) > 5) ...[
+                    if (_ageInYears > 5) ...[
                       SizedBox(key: _key('maritalStatus'), height: 0),
                       _QuestionLabel(number: 'Q6', text: 'Marital Status'),
                       const SizedBox(height: 10),
@@ -733,37 +985,52 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                           _fieldErrors.remove('maritalStatus');
                         }),
                         hint: 'Select status',
+                        isRequired: true,
                         errorText: _fieldErrors['maritalStatus'],
                       ),
                       const SizedBox(height: 20),
                     ],
 
-                    // ── Guardian — required for members under 18 ──────────
-                    if ((int.tryParse(_ageCtrl.text) ?? 99) < 1) ...[
+                    // ── Guardian — required for members under 1 year ──────
+                    if (_ageInYears < 1) ...[
                       SizedBox(key: _key('guardian'), height: 0),
                       _QuestionLabel(number: 'Q7', text: 'Guardian'),
                       const SizedBox(height: 10),
-                      Consumer<EnrollmentController>(
-                        builder: (context, ctrl, _) {
-                          final guardianOptions = [
-                            if (ctrl.householdHead?.name != null)
-                              ctrl.householdHead!.name,
-                            ...ctrl.members.map((m) => m.name),
-                          ];
-                          return EnrollmentDropdown(
-                            label: EnrollmentStrings.guardianLabel,
-                            options: guardianOptions,
-                            value: _guardianName,
-                            onChanged: (v) => setState(() {
-                              _guardianName = v;
-                              _fieldErrors.remove('guardian');
-                            }),
-                            hint: EnrollmentStrings.guardianHint,
-                            isRequired: true,
-                            errorText: _fieldErrors['guardian'],
-                          );
-                        },
-                      ),
+                      if (widget.isStandalone)
+                        EnrollmentDropdown(
+                          label: EnrollmentStrings.guardianLabel,
+                          options: _householdMemberNames,
+                          value: _guardianName,
+                          onChanged: (v) => setState(() {
+                            _guardianName = v;
+                            _fieldErrors.remove('guardian');
+                          }),
+                          hint: EnrollmentStrings.guardianHint,
+                          isRequired: true,
+                          errorText: _fieldErrors['guardian'],
+                        )
+                      else
+                        Consumer<EnrollmentController>(
+                          builder: (context, ctrl, _) {
+                            final guardianOptions = [
+                              if (ctrl.householdHead?.name != null)
+                                ctrl.householdHead!.name,
+                              ...ctrl.members.map((m) => m.name),
+                            ];
+                            return EnrollmentDropdown(
+                              label: EnrollmentStrings.guardianLabel,
+                              options: guardianOptions,
+                              value: _guardianName,
+                              onChanged: (v) => setState(() {
+                                _guardianName = v;
+                                _fieldErrors.remove('guardian');
+                              }),
+                              hint: EnrollmentStrings.guardianHint,
+                              isRequired: true,
+                              errorText: _fieldErrors['guardian'],
+                            );
+                          },
+                        ),
                       const SizedBox(height: 20),
                     ],
 
@@ -808,6 +1075,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                   child: EnrollmentStickyBar(
                     label: EnrollmentStrings.saveMemberCTA,
                     onPressed: () => _handleSaveMember(controller),
+                    loading: _submitting,
                   ),
                 ),
               ],

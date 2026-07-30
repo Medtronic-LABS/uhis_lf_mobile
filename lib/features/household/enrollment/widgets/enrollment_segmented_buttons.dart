@@ -14,6 +14,7 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
     required this.selectedValue,
     required this.onChanged,
     this.isRequired = false,
+    this.allowDeselect = true,
     this.errorText,
     super.key,
   });
@@ -21,8 +22,9 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
   final String label;
   final List<String> options;
   final String? selectedValue;
-  final ValueChanged<String> onChanged;
+  final ValueChanged<String?> onChanged;
   final bool isRequired;
+  final bool allowDeselect;
   final String? errorText;
 
   @override
@@ -79,7 +81,9 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
                       right: index < options.length - 1 ? AppSpacing.xs : 0,
                     ),
                     child: GestureDetector(
-                      onTap: () => onChanged(option),
+                      onTap: () => onChanged(
+                        (allowDeselect && isSelected) ? null : option,
+                      ),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
                         padding: const EdgeInsets.symmetric(

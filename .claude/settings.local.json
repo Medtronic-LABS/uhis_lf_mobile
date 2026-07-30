@@ -52,6 +52,7 @@
       "Read(//opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home/bin/**)",
       "Read(//Users/amresh/labs/UHIS/leapfrog-setup/**)",
       "Bash(emulator -list-avds)",
+      "Bash(git cherry-pick *)",
       "Bash(git checkout *)"
     ]
   }

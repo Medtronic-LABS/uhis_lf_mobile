@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/db/member_dao.dart';
 import '../../../core/debug/console_log.dart';
@@ -60,7 +59,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   late TextEditingController _dobCtrl;
   late TextEditingController _ageCtrl;
 
-  String? _idType = 'BRN';
+  String? _idType;
   String? _gender;
   String? _maritalStatus;
   String? _disabilityStatus;
@@ -152,61 +151,20 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       }
     }
 
-    // Initialise the household controller after first build
+    // Initialise the household controller after first build.
+    // Always reset so a second enrollment in the same session starts fresh —
+    // the ShellRoute keeps the same EnrollmentController alive across navigations.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final controller = context.read<EnrollmentController>();
-      if (controller.household == null) {
-        final auth = context.read<AuthRepository>();
-        final hierarchy = context.read<UserHierarchyService>();
+      controller.reset();
+      final hierarchy = context.read<UserHierarchyService>();
 
-        // Ensure static-data has been fetched before reading the lists.
-        // prefetch() is a no-op if already loaded; safe to await here.
-        await hierarchy.prefetch();
-        if (!mounted) return;
-
-        final userId = await auth.userId();
-        if (!mounted) return;
-        final villages = hierarchy.villages ?? [];
-        final subVillages = hierarchy.subVillages ?? [];
-
-        final firstVillage = villages.isNotEmpty ? villages.first : null;
-        // Prefer the first sub-village that belongs to the chosen village;
-        // fall back to the global first only if none map to it.
-        final matchingSubs = firstVillage == null
-            ? subVillages
-            : subVillages
-                .where((sv) => sv.villageId == firstVillage.id)
-                .toList();
-        final firstSubVillage = matchingSubs.isNotEmpty
-            ? matchingSubs.first
-            : (subVillages.isNotEmpty ? subVillages.first : null);
-
-        if (!mounted) return;
-        // Auto-select first SS worker from the SK's assigned SS list.
-        final ssWorkers = hierarchy.ssWorkers ?? [];
-        final firstSs = ssWorkers.isNotEmpty ? ssWorkers.first : null;
-        // The SS worker's own sub-villages are the authoritative pull scope;
-        // prefer them over the village-filtered top-level list.
-        final ssSeedSub = (firstSs != null && firstSs.subVillages.isNotEmpty)
-            ? firstSs.subVillages.first
-            : firstSubVillage;
-        setState(() {
-          _selectedSsWorker = firstSs;
-          // Seed the dropdown selections so a valid village + sub-village are
-          // sent even when the SK does not manually change them.
-          _selectedVillage = firstVillage;
-          _selectedSubVillage = ssSeedSub;
-        });
-        await controller.initializeHousehold(
-          healthWorkerId: _selectedSsWorker?.id ?? userId?.toString() ?? '',
-          villageId: firstVillage?.id.toString() ?? '',
-          villageName: firstVillage?.name,
-          subVillageId: firstSubVillage?.id.toString(),
-          subVillageName: firstSubVillage?.name,
-        );
-      }
+      await hierarchy.prefetch();
+      if (!mounted) return;
+      setState(() {}); // trigger rebuild so dropdowns populate their option lists
     });
+
   }
 
   @override
@@ -539,6 +497,40 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 14),
 
+                    // Auto-generated household number — read-only badge
+                    if (controller.household?.householdNumber != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.navy.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: AppColors.navy.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.tag_rounded,
+                                  size: 14,
+                                  color: AppColors.navy.withValues(alpha: 0.7)),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Household No: ${controller.household!.householdNumber}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.navy.withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 14),
+
                     SizedBox(key: _key('totalMembers'), height: 0),
                     EnrollmentInputField(
                       label: EnrollmentStrings.totalMembersLabel,
@@ -573,7 +565,8 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.disabilityAnyPersonLabel,
                       options: EnrollmentStrings.disabilityYesNo,
                       selectedValue: _hasDisability,
-                      onChanged: (v) => setState(() => _hasDisability = v),
+                      allowDeselect: false,
+                      onChanged: (v) => setState(() => _hasDisability = v ?? 'No'),
                     ),
 
                     if (_hasDisability == 'Yes') ...[
@@ -667,6 +660,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                                   hint: EnrollmentStrings.dateOfBirthHint,
                                   controller: _dobCtrl,
                                   readOnly: true,
+                                  isRequired: true,
                                   errorText: _fieldErrors['dob'],
                                 ),
                               ),
@@ -743,6 +737,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                             hint: EnrollmentStrings.dateOfBirthHint,
                             controller: _dobCtrl,
                             readOnly: true,
+                            isRequired: true,
                             errorText: _fieldErrors['dob'],
                           ),
                         ),

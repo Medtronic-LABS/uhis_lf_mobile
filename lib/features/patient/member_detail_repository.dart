@@ -291,6 +291,17 @@ class MemberDetailRepository extends ApiRepository {
   ///
   /// For local-only / test data with no village context the call returns an
   /// empty list rather than throwing; callers can degrade gracefully.
+  /// Returns the local DB creation timestamp for the member identified by
+  /// [patientId] — this represents when the patient was enrolled in the app.
+  /// Returns null when the member is not found locally or has no creation date.
+  Future<DateTime?> enrolledAtFor(String patientId) async {
+    if (_memberDao == null) return null;
+    final entity = await _memberDao.getById(patientId) ??
+        await _memberDao.getByPatientId(patientId);
+    if (entity?.createdAt == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(entity!.createdAt!);
+  }
+
   Future<List<MemberAssessment>> getMemberAssessments(
     String memberId, {
     String? villageId,

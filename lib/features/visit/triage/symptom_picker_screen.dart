@@ -23,6 +23,7 @@ import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'programme_grid_sync.dart';
 import 'symptom_catalog.dart';
+import 'unified_symptom_catalog.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
 
@@ -115,10 +116,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// engine — rendered with the ✦ sparkle in the card.
   final Set<Programme> _pathwayActivatedProgrammes = {};
 
-  /// Programmes the SK explicitly turned off this visit. Pathway sync must
-  /// not resurrect these — otherwise deselecting NCD (etc.) is immediately
-  /// undone when symptoms/AI refresh pathway activation.
+  /// Programmes the SK explicitly turned off this visit. Pathway-engine and
+  /// background AI syncs must not resurrect these. However, an explicit
+  /// symptom selection that directly maps to a dismissed programme lifts the
+  /// dismissal (the SK is signalling clinical intent).
   final Set<Programme> _skDismissedProgrammes = {};
+
+  /// Shadow of [TriageViewModel.selectedSymptoms] from the last sync cycle.
+  /// Used to detect newly added symptoms so we can lift dismissals for their
+  /// catalogue-mapped programmes before re-running the service grid sync.
+  Set<String> _lastKnownSymptoms = {};
 
   /// PW meta-flag — gates ANC. Auto-true when patient already has PW/ANC registered.
   bool _isPW = false;
@@ -453,15 +460,46 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   /// Keeps [_selectedProgrammes] and [_pathwayActivatedProgrammes] in sync
-  /// with the pathway engine whenever symptoms change (AI Scribe pre-tick or
-  /// manual selection). Only adds newly activated programmes — never removes
-  /// an SK selection, and never resurrects a programme in
-  /// [_skDismissedProgrammes].
+  /// whenever symptoms change (AI Scribe pre-tick or manual selection).
+  ///
+  /// Two complementary sources feed auto-selection:
+  ///   1. PathwayEngine ([vm.allPathways]) — WHO-derived rule activations.
+  ///   2. [UnifiedSymptomCatalog] direct mapping — each [UnifiedSymptomDef]
+  ///      declares the programmes it belongs to; selecting a symptom
+  ///      immediately surfaces all relevant services regardless of whether
+  ///      a PathwayEngine rule fires for that exact symptom combination.
+  ///
+  /// Dismissal lift: when a symptom is *newly added* (not in [_lastKnownSymptoms]),
+  /// its catalogue-mapped programmes are removed from [_skDismissedProgrammes]
+  /// before the sync runs. Explicit symptom selection is a clinical signal that
+  /// overrides a prior card dismissal; background pathway/AI refreshes do not.
   void _syncPathwaysToServiceGrid() {
     if (!mounted) return;
     final vm = _viewModel;
     if (vm == null) return;
+
+    final currentSymptoms = vm.selectedSymptoms;
+
+    // Lift dismissal for programmes mapped to newly added symptoms.
+    // Only additions trigger this — removals leave dismissed state intact.
+    final newlyAdded = currentSymptoms.difference(_lastKnownSymptoms);
+    for (final code in newlyAdded) {
+      final def = UnifiedSymptomCatalog.byCode(code);
+      if (def != null) _skDismissedProgrammes.removeAll(def.programmes);
+    }
+    _lastKnownSymptoms = Set.from(currentSymptoms);
+
+    // Source 1: rule-engine activations.
     final activated = vm.allPathways.map((p) => p.programme).toSet();
+
+    // Source 2: catalogue direct symptom→programme mapping.
+    // Each UnifiedSymptomDef.programmes names every service that symptom
+    // belongs to, providing finer-grained auto-selection than the rule engine.
+    for (final code in currentSymptoms) {
+      final def = UnifiedSymptomCatalog.byCode(code);
+      if (def != null) activated.addAll(def.programmes);
+    }
+
     final unseen = ProgrammeGridSync.additionsFromPathways(
       activated: activated,
       selected: _selectedProgrammes,
@@ -1476,6 +1514,36 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
 
   static String? _sectionLabel(Programme? p) => null;
 
+  /// Chips flow across the full width and re-wrap as the space allows; a label
+  /// too long for a whole row is ellipsised instead of overflowing.
+  Widget _chipWrap(List<String> codes) {
+    final vm = widget.vm;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : double.infinity;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final code in codes)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: _PickerChip(
+                  key: ValueKey('triage_chip_$code'),
+                  code: code,
+                  isSelected: vm.isSelected(code),
+                  isAi: vm.isScribePreTick(code),
+                  onTap: () => _toggleSymptom(code),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -1625,27 +1693,15 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                   ),
                 ),
             ] else if (isSearching)
-              // Search results — flat natural-width wrap.
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: gridSections
-                    .expand((s) => s.$2)
-                    .toSet()
-                    .map(
-                      (code) => _PickerChip(
-                        key: ValueKey('triage_chip_$code'),
-                        code: code,
-                        isSelected: selected.contains(code),
-                        isAi: vm.isScribePreTick(code),
-                        onTap: () => _toggleSymptom(code),
-                      ),
-                    )
-                    .toList(),
-              )
+              // Search results — one flat wrap of the matches.
+              _chipWrap(gridSections.expand((s) => s.$2).toSet().toList())
+            else if (gridSections.every((s) => s.$1 == null || s.$1!.isEmpty))
+              // No section headers to draw — flow every service's symptoms as
+              // a single block so chips keep filling each row.
+              _chipWrap(gridSections.expand((s) => s.$2).toSet().toList())
             else
               // Per-service sections: each enrolled programme gets its own
-              // labeled chip block; chips wrap naturally within the block.
+              // labeled chip block; chips wrap within the block.
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -1664,23 +1720,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                         ),
                         const SizedBox(height: 6),
                       ],
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: section.$2
-                            .map(
-                              (code) => _PickerChip(
-                                key: ValueKey(
-                                  'triage_chip_${section.$1}_$code',
-                                ),
-                                code: code,
-                                isSelected: selected.contains(code),
-                                isAi: vm.isScribePreTick(code),
-                                onTap: () => _toggleSymptom(code),
-                              ),
-                            )
-                            .toList(),
-                      ),
+                      _chipWrap(section.$2),
                       const SizedBox(height: 14),
                     ],
                 ],
@@ -1760,22 +1800,6 @@ class _SelectedSymptomRow extends StatelessWidget {
               label,
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: _rowText,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Color(0x99FFFFFF), // rgba(255,255,255,0.6)
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: Text(
-              isAi ? 'AI detected' : 'Standard',
-              style: const TextStyle(
-                fontSize: 9,
                 fontWeight: FontWeight.w700,
                 color: _rowText,
               ),
@@ -1865,12 +1889,16 @@ class _PickerChip extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
               ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
                 ),
               ),
             ],
@@ -2174,101 +2202,90 @@ class _ServiceTile extends StatelessWidget {
         : AppColors.navy;
 
     return Semantics(
-      button: true,
-      selected: isSelected,
-      enabled: !isLocked,
-      label: isSelected
-          ? TriageStrings.deselectProgrammeA11y(label)
-          : TriageStrings.selectProgrammeA11y(label),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Opacity(
-          opacity: isLocked ? 0.40 : 1.0,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: borderColor, width: borderWidth),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0A000000),
-                  blurRadius: 4,
-                  offset: Offset(0, 1),
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                // Selection circle — top-right
-                Positioned(
-                  top: 7,
-                  right: 7,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 140),
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected ? AppColors.navy : Colors.transparent,
-                      border: Border.all(
-                        color: isSelected
-                            ? AppColors.navy
-                            : const Color(0xFFD1D5DB),
-                        width: 1.5,
+            button: true,
+            selected: isSelected,
+            enabled: !isLocked,
+            label: isSelected
+                ? TriageStrings.deselectProgrammeA11y(label)
+                : TriageStrings.selectProgrammeA11y(label),
+            child: GestureDetector(
+              onTap: onTap,
+              child: Opacity(
+                opacity: isLocked ? 0.40 : 1.0,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: borderColor, width: borderWidth),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0A000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
                       ),
-                    ),
-                    child: isSelected
-                        ? const Icon(
-                            Icons.check_rounded,
-                            size: 13,
-                            color: Colors.white,
-                          )
-                        : null,
+                    ],
                   ),
-                ),
-                // Emoji + label + AI added — Positioned.fill so Column
-                // gets tight constraints and mainAxisAlignment.center works.
-                Positioned.fill(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(def.emoji, style: const TextStyle(fontSize: 28)),
-                        const SizedBox(height: 6),
-                        Text(
-                          label,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: labelColor,
-                          ),
-                        ),
-                        if (isPathwaySuggested && isSelected) ...[
-                          const SizedBox(height: 2),
-                          const Text(
-                            'AI added',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF6B63D4),
+                  child: Stack(
+                    children: [
+                      // Selection circle — top-right
+                      Positioned(
+                        top: 7,
+                        right: 7,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 140),
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isSelected ? AppColors.navy : Colors.transparent,
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.navy
+                                  : const Color(0xFFD1D5DB),
+                              width: 1.5,
                             ),
                           ),
-                        ],
-                      ],
-                    ),
+                          child: isSelected
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  size: 13,
+                                  color: Colors.white,
+                                )
+                              : null,
+                        ),
+                      ),
+                      // Emoji + label — Positioned.fill so Column
+                      // gets tight constraints and mainAxisAlignment.center works.
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(def.emoji, style: const TextStyle(fontSize: 28)),
+                              const SizedBox(height: 6),
+                              Text(
+                                label,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: labelColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 }

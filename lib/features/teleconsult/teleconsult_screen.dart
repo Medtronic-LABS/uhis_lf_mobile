@@ -104,6 +104,20 @@ class TeleconsultScreen extends StatelessWidget {
                     label: Text(TeleconsultStrings.smsAction),
                   ),
                 ),
+                const SizedBox(height: AppSpacing.h5xl),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.navy,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.xl),
+                    ),
+                    child: Text(TeleconsultStrings.doneButton),
+                  ),
+                ),
               ],
             ),
           ),

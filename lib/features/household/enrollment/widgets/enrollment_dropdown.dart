@@ -58,7 +58,7 @@ class EnrollmentDropdown extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
+          padding: const EdgeInsets.only(left: AppSpacing.xxxl),
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
             border: Border.all(
@@ -67,43 +67,65 @@ class EnrollmentDropdown extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(AppRadius.button),
           ),
-          child: DropdownButton<String>(
-            value: options.contains(value) ? value : null,
-            isExpanded: true,
-            underline: const SizedBox.shrink(),
-            hint: Text(
-              hint,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textMuted,
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButton<String>(
+                  value: options.contains(value) ? value : null,
+                  isExpanded: true,
+                  underline: const SizedBox.shrink(),
+                  hint: Text(
+                    hint,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  icon: value != null && options.contains(value)
+                      ? const SizedBox.shrink()
+                      : const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: AppColors.textMuted,
+                          size: 20,
+                        ),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
+                  ),
+                  dropdownColor: AppColors.cardSurface,
+                  borderRadius: BorderRadius.circular(AppRadius.button),
+                  items: options
+                      .map(
+                        (opt) => DropdownMenuItem<String>(
+                          value: opt,
+                          child: Text(
+                            opt,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: onChanged,
+                ),
               ),
-            ),
-            icon: const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: AppColors.textMuted,
-              size: 20,
-            ),
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textPrimary,
-            ),
-            dropdownColor: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(AppRadius.button),
-            items: options
-                .map(
-                  (opt) => DropdownMenuItem<String>(
-                    value: opt,
-                    child: Text(
-                      opt,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textPrimary,
-                      ),
+              if (value != null && options.contains(value))
+                GestureDetector(
+                  onTap: () => onChanged(null),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: AppColors.textMuted.withValues(alpha: 0.7),
                     ),
                   ),
                 )
-                .toList(),
-            onChanged: onChanged,
+              else
+                const SizedBox(width: AppSpacing.xxxl),
+            ],
           ),
         ),
         if (errorText != null) ...[

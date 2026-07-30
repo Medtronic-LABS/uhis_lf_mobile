@@ -411,6 +411,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             validationErrors: notifier.validationErrors,
             onFieldChanged: notifier.updateField,
             previousWeight: _lastRecordedWeight,
+            heightReadOnly: notifier.isHeightLockedFromPrior,
             gestationalWeeks: effectiveGa,
             ancVisitNumber: _ancVisitNumber(),
             isNewEnrolment: isNew,
@@ -1423,6 +1424,7 @@ class _SectionCard extends StatelessWidget {
     required this.validationErrors,
     required this.onFieldChanged,
     this.previousWeight,
+    this.heightReadOnly = false,
     this.gestationalWeeks,
     this.ancVisitNumber = 1,
     this.isNewEnrolment = false,
@@ -1437,6 +1439,9 @@ class _SectionCard extends StatelessWidget {
   /// Weight (kg) from the patient's most-recent prior ANC visit — used to
   /// compute the weight-delta badge.  `null` when unavailable.
   final double? previousWeight;
+
+  /// When true, height was prefilled from a prior visit and cannot be edited.
+  final bool heightReadOnly;
 
   /// Patient's current gestational age in weeks — used to compute the
   /// fundal-height expected value and lag/ahead badge.  `null` when unknown.
@@ -2098,8 +2103,10 @@ class _SectionCard extends StatelessWidget {
                   key: Key('unified_form_${heightRef.id}_input'),
                   isDecimal: true,
                   unit: 'cm',
+                  readOnly: heightReadOnly,
                   initialValue: data.getValue(heightRef.id)?.toString(),
                   onChanged: (v) {
+                    if (heightReadOnly) return;
                     if (v == null || v.isEmpty) {
                       onFieldChanged(heightRef.id, null);
                     } else {
@@ -3302,6 +3309,7 @@ class _NumericField extends StatefulWidget {
     this.unit,
     this.hint,
     this.validator,
+    this.readOnly = false,
   });
 
   final bool isDecimal;
@@ -3310,6 +3318,7 @@ class _NumericField extends StatefulWidget {
   final String? unit;
   final String? hint;
   final FormFieldValidator<String>? validator;
+  final bool readOnly;
 
   @override
   State<_NumericField> createState() => _NumericFieldState();
@@ -3357,8 +3366,11 @@ class _NumericFieldState extends State<_NumericField> {
 
   @override
   Widget build(BuildContext context) {
+    final readOnly = widget.readOnly;
     return TextFormField(
       controller: _ctrl,
+      readOnly: readOnly,
+      enabled: !readOnly,
       // Use the plain number keyboard for ALL numeric fields — even decimal
       // ones.  Some Android keyboards in currency/decimal mode auto-insert a
       // decimal point when `decimal: true` is set, causing "190" to appear
@@ -3373,12 +3385,21 @@ class _NumericFieldState extends State<_NumericField> {
         else
           FilteringTextInputFormatter.digitsOnly,
       ],
-      style: Theme.of(context).textTheme.bodyMedium,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: readOnly
+                ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)
+                : null,
+          ),
       decoration: _filledInputDecoration(
         hintText: widget.hint,
         suffixText: widget.unit,
+      ).copyWith(
+        fillColor: readOnly
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
+                .withValues(alpha: 0.55)
+            : null,
       ),
-      onChanged: widget.onChanged,
+      onChanged: readOnly ? null : widget.onChanged,
       validator: widget.validator,
     );
   }

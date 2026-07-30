@@ -211,7 +211,7 @@ class VisitCompleteScreen extends StatelessWidget {
                   // Create referral — only when referral is recommended
                   if (referralRecommended) ...[
                     OutlinedButton(
-                      onPressed: () => context.go('/tasks'),
+                      onPressed: () => context.go('/home'),
                       child: Text(VisitCompleteStrings.createReferral),
                     ),
                     const SizedBox(height: AppSpacing.xl),

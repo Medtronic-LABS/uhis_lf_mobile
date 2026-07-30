@@ -1115,6 +1115,14 @@ abstract final class PatientProfileStrings {
   static String get aiInsightUnavailable => AppLocale.isBangla
       ? 'এআই অন্তর্দৃষ্টি অনুপলব্ধ — রোগীর রেকর্ড ম্যানুয়ালি পরীক্ষা করুন'
       : 'AI insight unavailable — check patient record manually';
+  static String get enrolledInApp =>
+      AppLocale.isBangla ? 'আপন সুস্বাস্থ্যে নথিভুক্ত' : 'Enrolled in Apon Sushashthya';
+  static String get enrollmentMilestone =>
+      AppLocale.isBangla ? 'নথিভুক্তির তারিখ' : 'Enrollment date';
+  static String get pregnancyRegistered =>
+      AppLocale.isBangla ? 'গর্ভাবস্থা নিবন্ধিত' : 'Pregnancy Registered';
+  static String get pregnancyRegistrationCategory =>
+      AppLocale.isBangla ? 'গর্ভাবস্থা নিবন্ধন' : 'Pregnancy Registration';
   static String get trendsTitle => AppLocale.isBangla ? 'প্রবণতা' : 'Trends';
   static String get bpChartLabel => AppLocale.isBangla ? 'রক্তচাপ' : 'Blood Pressure';
   static String get bgChartLabel => AppLocale.isBangla ? 'রক্তের শর্করা' : 'Blood Glucose';
@@ -4157,6 +4165,10 @@ abstract final class NabaStrings {
   static const String proposalNote =
       'This is an AI proposal. Review and accept to proceed.';
 
+  static const String callDoctorNow = 'Call a doctor now';
+  static const String callDoctorNowBn = 'ডাক্তারকে ফোন করন';
+  static const String callDoctorOfflineHint = 'Available when online';
+
   static const String fallbackNotice =
       'AI service was unavailable. Care plan is based on clinical guidelines. '
       'Review and adjust based on your assessment.';
@@ -4174,6 +4186,7 @@ abstract final class TeleconsultStrings {
       'The SK can initiate a call directly from a completed visit.';
   static const String callAction = 'Start Video Call';
   static const String smsAction = 'Send SMS to Doctor';
+  static const String doneButton = 'Done';
 }
 
 /// Counselling messages placeholder screen strings.
