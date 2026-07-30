@@ -274,9 +274,14 @@ class _PatientContextScreenState
             ? DateTime.now()
             : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
         final prog = Programme.fromString(row.kind ?? '');
-        final typeLabel = prog == Programme.unknown
-            ? (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase()
-            : prog.wireTag;
+        // Preserve nurse-review subtypes so _assessmentToEntry can detect them via isNurseReview.
+        // Without this, 'ncdmedicalreview' → Programme.ncd → wireTag='NCD', losing the subtype.
+        final kindUpper = (row.kind ?? '').toUpperCase();
+        final typeLabel = (kindUpper == 'NCDMEDICALREVIEW' || kindUpper == 'MEDICALREVIEWVISIT')
+            ? kindUpper
+            : (prog == Programme.unknown
+                ? (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase()
+                : prog.wireTag);
         out.add(MemberAssessment(
           id: row.id,
           type: typeLabel,
@@ -482,23 +487,44 @@ class _PatientContextScreenState
 
       // Phase 2: householdName (always local) + remote assessments (skipped
       // when sync is fresh — avoids a ~900ms round-trip for data already in DB).
+      // Capture context-dependent objects before any await (avoid_build_context_synchronously).
+      final referralFetchSvc = context.read<ReferralFetchService>();
+      final referralDaoLocal = context.read<ReferralDao>();
+
       final tPhase2 = Stopwatch()..start();
       List<MemberAssessment> remoteAssessments = const [];
       if (skipRemote) {
-        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
-        final info = await _householdInfo(localPatient.patient.householdId);
+        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName + referral fetch only');
+        // Referral fetch still runs: nurse review outcome may have changed since last sync.
+        final skipResults = await Future.wait([
+          _householdInfo(localPatient.patient.householdId),
+          referralFetchSvc
+              .fetchAndPersist(
+                patientId: widget.patientId,
+                memberId: resolvedMemberId,
+                householdId: localPatient.patient.householdId,
+                villageId: localPatient.patient.villageId,
+              )
+              .catchError((_) => 0),
+        ]);
+        final info = skipResults[0] as ({String? name, String? headPhone});
+        final referralFetchCount = skipResults[1] as int;
+        ConsoleLog.step('[PatientCtx] referral fetch ingested $referralFetchCount ticket(s) (skip-remote path)');
+        final liveReferrals = await referralDaoLocal
+            .forPatient(widget.patientId)
+            .catchError((_) => <Referral>[]);
+        ConsoleLog.step('[PatientCtx] liveReferrals for timeline: ${liveReferrals.length}');
         if (mounted) setState(() => _remoteLoading = false);
         ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
             ' remoteSkipped=true total=${t0.elapsedMilliseconds}ms');
-        return localOnly.copyWith(householdName: info.name, householdHeadPhone: info.headPhone);
+        return localOnly.copyWith(
+          householdName: info.name,
+          householdHeadPhone: info.headPhone,
+          liveReferrals: liveReferrals,
+        );
       }
 
       ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdInfo + referral fetch');
-
-      // Capture context-dependent objects before await to satisfy
-      // avoid_build_context_synchronously lint rule.
-      final referralFetchSvc = context.read<ReferralFetchService>();
-      final referralDaoLocal = context.read<ReferralDao>();
 
       final phase2Results = await Future.wait([
         memberRepo

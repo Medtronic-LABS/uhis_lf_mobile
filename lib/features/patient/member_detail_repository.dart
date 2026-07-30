@@ -62,6 +62,8 @@ class MemberAssessment {
 
   static String _normalizeType(String type) {
     final upper = type.toUpperCase();
+    // Preserve nurse-review subtypes so PatientContextScreen can render them distinctly.
+    if (upper == 'NCDMEDICALREVIEW' || upper == 'MEDICALREVIEWVISIT') return upper;
     if (upper.contains('ANC') || upper.contains('PREGNANCY')) return 'ANC';
     if (upper.contains('IMCI') || upper.contains('ICCM') || upper.contains('UNDER_FIVE') || upper.contains('UNDER_2')) return 'IMCI';
     if (upper.contains('PNC')) return 'PNC';
