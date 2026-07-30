@@ -555,9 +555,20 @@ class _PatientContextScreenState
       ConsoleLog.step('[PatientCtx] referral fetch ingested $referralFetchCount ticket(s)');
 
       // Load persisted referral rows (may include newly fetched tickets).
-      final liveReferrals = await referralDaoLocal
+      var liveReferrals = await referralDaoLocal
           .forPatient(widget.patientId)
           .catchError((_) => <Referral>[]);
+
+      // Backend does NOT update patientStatus on the referral ticket when the
+      // nurse completes a medical review. Synthesize: if any open referral
+      // (created/inTransit) exists and remoteAssessments contains a
+      // ncdmedicalreview/medicalreviewvisit entry with ncdPatientStatus, derive
+      // the device state from the nurse's outcome and re-persist so CCE updates.
+      liveReferrals = await _synthesizeReferralStateFromNurseReview(
+        liveReferrals,
+        remoteAssessments,
+        referralDaoLocal,
+      );
 
       ConsoleLog.step('[PatientCtx] liveReferrals for timeline: ${liveReferrals.length}');
 
@@ -1740,6 +1751,61 @@ _TimelineEntry? _referralToTimelineEntry(
     onTap: onTap,
     // source intentionally null — no MemberAssessment backing this entry.
   );
+}
+
+/// Synthesizes referral device state from nurse medical-review assessments when
+/// the backend referral ticket `patientStatus` is still `"Referred"` (open).
+///
+/// The UHIS backend does NOT update the referral ticket when a nurse completes
+/// a medical review — patientStatus stays "Referred" indefinitely. We bridge
+/// this gap by checking `remoteAssessments` for ncdmedicalreview entries and
+/// deriving the device state from `ncdPatientStatus`:
+///   CONTROLLED   → ReferralStatus.closedRecovered  (CCE green, "Recovered")
+///   UN_CONTROLLED → ReferralStatus.treatmentStarted (CCE amber, "On Treatment")
+///
+/// Mutated rows are persisted so the CCE drawer also reflects the update.
+Future<List<Referral>> _synthesizeReferralStateFromNurseReview(
+  List<Referral> referrals,
+  List<MemberAssessment> assessments,
+  ReferralDao dao,
+) async {
+  const _openStates = {ReferralStatus.created, ReferralStatus.inTransit};
+  final openReferrals = referrals.where((r) => _openStates.contains(r.state)).toList();
+  if (openReferrals.isEmpty) return referrals;
+
+  // Find the most-recent nurse review assessment with an ncdPatientStatus.
+  MemberAssessment? nurseReview;
+  for (final a in assessments) {
+    final upper = a.type.toUpperCase();
+    if (upper != 'NCDMEDICALREVIEW' && upper != 'MEDICALREVIEWVISIT') continue;
+    final ncdStatus = (a.rawJson['ncdPatientStatus'] as String? ?? '').trim();
+    if (ncdStatus.isEmpty) continue;
+    if (nurseReview == null || a.date.isAfter(nurseReview.date)) nurseReview = a;
+  }
+  if (nurseReview == null) return referrals;
+
+  final ncdStatus = (nurseReview.rawJson['ncdPatientStatus'] as String? ?? '').toUpperCase();
+  final synthesized = ncdStatus == 'CONTROLLED'
+      ? ReferralStatus.closedRecovered
+      : ReferralStatus.treatmentStarted;
+
+  ConsoleLog.step(
+    '[PatientCtx] synthesize referral state: ncdPatientStatus=$ncdStatus → ${synthesized.wireTag}',
+  );
+
+  // Persist synthesized state for open referrals so CCE reflects nurse review.
+  final updated = referrals.map((r) {
+    if (!_openStates.contains(r.state)) return r;
+    return r.copyWith(state: synthesized);
+  }).toList();
+
+  try {
+    await dao.upsertMany(updated.where((r) => r.state == synthesized).toList());
+  } catch (e) {
+    ConsoleLog.warn('[PatientCtx] referral synthesis persist failed: $e');
+  }
+
+  return updated;
 }
 
 /// Unpacks the `{kind, raw}` envelope written by AssessmentDao so that
