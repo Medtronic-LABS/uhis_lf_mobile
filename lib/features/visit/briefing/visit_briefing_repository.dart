@@ -27,9 +27,11 @@ class VisitBriefingRepository {
   final AiResponseCacheDao? _cache;
 
   // Cache namespace — bump when the API response shape changes so rows
-  // written by the old client are ignored. Last bump: invalidate DEV_SKIP_AUTH
-  // mock responses cached while the backend ignored client-supplied context.
-  static const String _kindBriefing = 'visit-briefing.v4';
+  // written by the old client are ignored. Last bump: request payload now
+  // sends 'clinicalFindings' (rule-computed) instead of the old ad-hoc
+  // 'riskIndicators' list — a breaking change to what the backend prompt
+  // produces.
+  static const String _kindBriefing = 'visit-briefing.v5';
   static const String _kindSummary = 'patient-summary.v3';
 
   /// Returns the Dio instance and path pair to use for a given remote path.
