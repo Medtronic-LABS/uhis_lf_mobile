@@ -53,7 +53,22 @@
       "Read(//Users/amresh/labs/UHIS/leapfrog-setup/**)",
       "Bash(emulator -list-avds)",
       "Bash(git cherry-pick *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(adb *)",
+      "Bash(flutter test *)",
+      "Bash(npx playwright *)",
+      "Read(//Users/amresh/Library/Caches/ms-playwright/**)",
+      "Bash(nohup flutter run -d web-server --web-port 5050 --dart-define=API_BASE_URL=https://spice-dev-backend.uhis.labsplatform.com/)",
+      "Bash(kill 96196)",
+      "Bash(pkill -f \"flutter run -d web-server\")",
+      "Bash(LF_MOBILE_BASE_URL=http://localhost:5050 LF_USER=hyper_sk LF_PASS=Spice123 npx playwright test tests/02-login.spec.ts --reporter=list)",
+      "Bash(git restore *)",
+      "Bash(curl *)",
+      "Bash(/opt/homebrew/share/android-commandlinetools/cmdline-tools/latest/bin/sdkmanager --list_installed)",
+      "Read(//opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home/**)",
+      "Bash(git check-ignore *)",
+      "Bash(nohup emulator -avd tablet7in -no-snapshot-load -no-boot-anim)",
+      "Bash(echo \"launched pid $!\")"
     ]
   }
 }

@@ -211,7 +211,7 @@ class AuthRepository {
     // ignore: avoid_print
     print('[Auth] Login response: ${resp.statusCode}');
     if (resp.statusCode != 200 && resp.statusCode != 302) {
-      throw AuthException('Invalid credentials');
+      throw AuthException(extractLoginErrorMessage(resp.data) ?? 'Invalid credentials');
     }
     await _storage.write(key: _kUsername, value: username);
     // Persist hash for offline password verification (Spice Android parity).
@@ -707,6 +707,27 @@ class AuthException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+/// Extracts the backend's `message` field from a login response body so the
+/// real failure reason (e.g. "Account locked due to multiple invalid login
+/// attempts.") reaches the user instead of being discarded in favour of a
+/// generic string. Handles both a decoded [Map] and the raw JSON [String]
+/// Dio's web adapter returns. Returns null when the body carries no usable
+/// message, so callers can fall back to their own default.
+String? extractLoginErrorMessage(dynamic data) {
+  var body = data;
+  if (body is String && body.isNotEmpty) {
+    try {
+      body = jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+  if (body is Map && body['message'] is String && (body['message'] as String).isNotEmpty) {
+    return body['message'] as String;
+  }
+  return null;
 }
 
 class UserProfileSummary {

@@ -77,6 +77,11 @@ class NetworkErrorMapper {
     if (typeName == 'DioException' || typeName.startsWith('DioException')) {
       return _fromDio(e);
     }
+    if (typeName == 'AuthException') {
+      // ignore: avoid_dynamic_calls
+      final message = (e as dynamic).message as String?;
+      if (message != null && message.isNotEmpty) return message;
+    }
     return _generic();
   }
 

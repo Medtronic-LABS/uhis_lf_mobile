@@ -32,10 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final last = auth.username;
     if (last != null) {
       _userCtl.text = last;
-    } else {
-      _userCtl.text = 'hyper_sk';
     }
-    if (_passCtl.text.isEmpty) _passCtl.text = 'Spice123';
     // Capture and clear any pending auth error (e.g. session expired) so it
     // shows as a persistent banner rather than a dismissible snackbar.
     final pending = auth.error;
