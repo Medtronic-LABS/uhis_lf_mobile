@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 /// ANSI-coloured step tracing for local dev consoles (`flutter run` terminal,
@@ -16,4 +18,12 @@ class ConsoleLog {
   static void success(String message) => debugPrint('$_green$message$_reset');
   static void warn(String message) => debugPrint('$_yellow$message$_reset');
   static void banner(String message) => debugPrint('$_magenta$message$_reset');
+
+  /// Logs [message] followed by [data] pretty-printed as indented JSON --
+  /// for the outbound-payload debug traces described in CLAUDE.md's
+  /// "Debug Design — Payload Logging" section.
+  static void json(String message, Object? data) {
+    debugPrint('$_magenta$message$_reset');
+    debugPrint(const JsonEncoder.withIndent('  ').convert(data));
+  }
 }
