@@ -231,7 +231,11 @@ class CceAlert {
       s == ReferralStatus.closedDeceased;
 
   static CceSeverity _severity(Referral r, DateTime now) {
-    if (r.state.isClosed) return CceSeverity.completed;
+    // treatmentStarted = nurse reviewed (management plan started). SK's referral
+    // task is complete — show as done, not an active SLA countdown.
+    if (r.state.isClosed || r.state == ReferralStatus.treatmentStarted) {
+      return CceSeverity.completed;
+    }
     if (r.breachedSince != null) return CceSeverity.breached;
 
     // Pick the deadline that matters for the current stage: treatment window
@@ -269,7 +273,9 @@ class CceAlert {
       case CceSeverity.onTrack:
         return _CceCopy.onTrackBadge;
       case CceSeverity.completed:
-        return _CceCopy.completedBadge;
+        return r.state == ReferralStatus.treatmentStarted
+            ? _CceCopy.reviewedBadge
+            : _CceCopy.completedBadge;
     }
   }
 
@@ -317,6 +323,9 @@ class CceAlert {
         if (arrived && !treated) return _CceCopy.atFacilityOnTrack;
         return _CceCopy.onTrackLine;
       case CceSeverity.completed:
+        if (r.state == ReferralStatus.treatmentStarted) {
+          return _CceCopy.nurseReviewedLine(_dateShort(r.updatedAt));
+        }
         final closed = r.closedAt ?? r.updatedAt;
         if (r.state == ReferralStatus.closedDeceased) {
           return _CceCopy.closedDeceased(_dateShort(closed));
@@ -333,7 +342,9 @@ class CceAlert {
   ) {
     final tags = <String>[];
     if (severity == CceSeverity.completed) {
-      tags.add(_CceCopy.tagCareComplete);
+      tags.add(r.state == ReferralStatus.treatmentStarted
+          ? _CceCopy.tagUnderCare
+          : _CceCopy.tagCareComplete);
     } else if (arrived && !treated) {
       tags.add(_CceCopy.tagAtFacility);
     } else if (severity == CceSeverity.breached && !arrived) {
@@ -384,11 +395,16 @@ class CceAlert {
             : (notArrivedBreach ? CceStepState.missed : CceStepState.pending),
       ),
       CceJourneyStep(
-        label:
-            treated ? _CceCopy.stepTreated : _CceCopy.stepTreatment,
-        sublabel: r.state == ReferralStatus.closedRecovered
-            ? _CceCopy.stepDischarged
-            : (treated ? _CceCopy.stepInProgress : _CceCopy.stepPending),
+        label: r.state == ReferralStatus.treatmentStarted
+            ? _CceCopy.stepUnderCare
+            : (r.state == ReferralStatus.closedRecovered
+                ? _CceCopy.stepReviewed
+                : (treated ? _CceCopy.stepTreated : _CceCopy.stepTreatment)),
+        sublabel: r.state == ReferralStatus.treatmentStarted
+            ? _CceCopy.stepUncontrolled
+            : (r.state == ReferralStatus.closedRecovered
+                ? _CceCopy.stepControlled
+                : (treated ? _CceCopy.stepInProgress : _CceCopy.stepPending)),
         state: treated ? CceStepState.done : CceStepState.pending,
       ),
     ];
@@ -454,6 +470,7 @@ abstract final class _CceCopy {
   static const String attentionBadge = 'Needs attention';
   static const String onTrackBadge = 'On track';
   static const String completedBadge = 'Completed';
+  static const String reviewedBadge = 'Nurse Reviewed';
 
   static const String slaEmergencyWindow = '6 hours';
   static const String slaUrgentWindow = '24 hours';
@@ -469,8 +486,16 @@ abstract final class _CceCopy {
   static const String stepTreated = 'Treated';
   static const String stepInProgress = 'In progress';
   static const String stepDischarged = 'Discharged';
+  // NCD-specific journey steps — chronic conditions are never "treated/discharged".
+  static const String stepUnderCare = 'Under Care';
+  static const String stepReviewed = 'Reviewed';
+  static const String stepUncontrolled = 'Uncontrolled';
+  static const String stepControlled = 'Controlled';
 
   static const String tagCareComplete = 'Care completed';
+  static const String tagUnderCare = 'Under nurse care';
+  static String nurseReviewedLine(String date) =>
+      'Nurse reviewed $date · management plan active';
   static const String tagAtFacility = 'At facility';
   static const String tagNotCheckedIn = 'Not checked in';
   static const String tagTransportBarrier = 'Transport barrier?';

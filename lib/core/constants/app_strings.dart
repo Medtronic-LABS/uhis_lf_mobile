@@ -829,7 +829,8 @@ abstract final class PatientProfileStrings {
   static String get aiInsightNotSynced => AppLocale.isBangla
       ? 'অফলাইন মোডে তথ্য পাওয়া যাচ্ছে না'
       : 'Data not available in offline mode';
-  static String get enrolledInApp => getTranslatedString('enrolledInApp', 'Enrolled in Apon Sushashthya');
+  static String get enrolledInApp => getTranslatedString('enrolledInApp', 'Enrolled in Leapwell');
+  static String enrolledByWorker(String name) => getTranslatedString('enrolledByWorker', 'Patient registered in Leapwell by {name}', params: {'name': name});
   static String get enrollmentMilestone => getTranslatedString('enrollmentMilestone', 'Enrollment date');
   static String get pregnancyRegistered => getTranslatedString('pregnancyRegistered', 'Pregnancy Registered');
   static String get pregnancyRegistrationCategory => getTranslatedString('pregnancyRegistrationCategory', 'Pregnancy Registration');
@@ -842,6 +843,13 @@ abstract final class PatientProfileStrings {
   static String get spO2ChartLabel => getTranslatedString('spO2ChartLabel', 'SpO₂');
   static String get haemoglobinChartLabel => getTranslatedString('haemoglobinChartLabel', 'Haemoglobin');
   static String get tempChartLabel => getTranslatedString('tempChartLabel', 'Temperature');
+
+  // ── Live referral timeline entry ──────────────────────────────────────────
+  static String get liveReferralTitle => getTranslatedString('liveReferralTitle', 'Referral');
+  static String get referralCategory => getTranslatedString('referralCategory', 'Referral status');
+
+  // ── NCD nurse-review timeline entry ──────────────────────────────────────
+  static String get medicalReviewCompleted => getTranslatedString('medicalReviewCompleted', 'Medical Review Completed');
 }
 
 abstract final class ContactSheetStrings {
@@ -1099,6 +1107,13 @@ abstract final class ReferralStrings {
   static String get outcomeDeceasedSubtitle => getTranslatedString('outcomeDeceasedSubtitle', 'Patient passed away');
   static String get outcomeUpdated => getTranslatedString('outcomeUpdated', 'Status updated');
   static String get outcomeUpdateFailed => getTranslatedString('outcomeUpdateFailed', 'Could not update status — please try again');
+
+  // ── Timeline entry badges (patient context screen) ────────────────────────
+  static String get badgeBreached => getTranslatedString('badgeBreached', '🔴 SLA Breached');
+  static String get badgeReviewedControlled => getTranslatedString('badgeReviewedControlled', '✅ Controlled');
+  static String get badgeDeceased => getTranslatedString('badgeDeceased', '⚫ Deceased');
+  static String get badgeUnderTreatment => getTranslatedString('badgeUnderTreatment', '🟡 Under Care');
+  static String get badgeAwaitingReview => getTranslatedString('badgeAwaitingReview', '⏳ Referred');
 }
 
 /// AI Mission Dashboard strings (Screen 2 redesign).

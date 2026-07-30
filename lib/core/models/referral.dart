@@ -395,6 +395,7 @@ class Referral {
     int? escalationLevel,
     int? updatedAt,
     int? closedAt,
+    String? rawJson,
   }) =>
       Referral(
         id: id,
@@ -416,7 +417,7 @@ class Referral {
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         closedAt: closedAt ?? this.closedAt,
-        rawJson: rawJson,
+        rawJson: rawJson ?? this.rawJson,
       );
 
   static int? _parseDateMs(Object? v) {

@@ -1,24 +1,89 @@
-import 'package:flutter/foundation.dart';
-
 import '../../core/api/api_repository.dart';
+import '../../core/api/endpoints.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/models/referral.dart';
 
-/// Referral API service — all mutating endpoints removed from approved API set.
-/// Referral status is read-only, sourced from followUps[].referralStatus in
-/// the fetch-synced-data bundle. Creation/update will be re-added once
-/// offline-sync/create gains a referrals[] field.
+/// Referral API service.
+///
+/// [fetchReferrals] calls POST /spice-service/patient/referral-tickets to
+/// retrieve live referral ticket status — including nurse medical review
+/// outcome (patientStatus: "Controlled" | "Uncontrolled") set by
+/// NurseMedicalReviewActivity in Spice Android.
+///
+/// Mutating endpoints (create/update/escalate) remain disabled — those
+/// actions go through the offline-sync bundle.
 class ReferralApiService extends ApiRepository {
   ReferralApiService(super.api);
 
-  /// Referral data comes from the offline sync bundle (followUps[].referralStatus).
-  /// No network call — returns empty list.
+  /// Fetch referral tickets for [patientId] from the spice-service.
+  ///
+  /// Called on patient context screen load so the SK sees the latest
+  /// nurse-review outcome without waiting for the next full sync.
+  ///
+  /// Returns empty list on any error — caller degrades to SQLite snapshot.
+  ///
+  /// DEBUG: logs full request body and response status via [ConsoleLog].
   Future<List<Map<String, dynamic>>> fetchReferrals({
     required String patientId,
-    int? limit,
-    int? offset,
+    String? memberId,
+    String? ticketId,
+    String? type,
   }) async {
-    debugPrint('[ReferralApiService] disabled — not in approved API set');
-    return const [];
+    final body = <String, dynamic>{
+      'patientId': patientId,
+      if (memberId != null) 'memberId': memberId,
+      if (ticketId != null) 'ticketId': ticketId,
+      if (type != null) 'type': type,
+    };
+
+    // DEBUG: log full request before POST so payload can be diffed against
+    // the Spice Android reference without a proxy.
+    ConsoleLog.banner('[PayloadDebug] referral-ticket-fetch: ${body.toString()}');
+
+    try {
+      final response = await postOk(
+        Endpoints.referralTicketDetails,
+        data: body,
+        action: 'fetchReferralTickets',
+      );
+
+      ConsoleLog.step(
+        '[PayloadDebug] referral-ticket-fetch → response type: ${response.runtimeType}',
+      );
+
+      // /spice-service/patient/referral-tickets returns a single ReferralData
+      // entity: {"status":true,"entity":{...ReferralData...}}
+      // extractList handles entityList/data arrays but NOT a bare entity map.
+      // Extract the single entity and wrap it so the rest of the pipeline
+      // is uniform (List<Map>).
+      List<Map<String, dynamic>> tickets;
+      if (response is Map && response['entity'] is Map) {
+        final entity = Map<String, dynamic>.from(response['entity'] as Map);
+        tickets = [entity];
+        ConsoleLog.step('[ReferralApiService] single-entity response — extracted entity');
+      } else {
+        // Fallback: some environments may return a list variant.
+        final list = extractList(response);
+        tickets = list.whereType<Map<String, dynamic>>().toList(growable: false);
+      }
+
+      // DEBUG: log count and first ticket for quick field inspection.
+      ConsoleLog.step(
+        '[ReferralApiService] fetchReferrals patientId=$patientId → ${tickets.length} ticket(s)',
+      );
+      if (tickets.isNotEmpty) {
+        ConsoleLog.step('[ReferralApiService] first ticket keys: ${tickets.first.keys.toList()}');
+        ConsoleLog.step('[ReferralApiService] patientStatus=${tickets.first['patientStatus']}');
+      }
+
+      return tickets;
+    } on ApiException catch (e) {
+      ConsoleLog.warn('[ReferralApiService] fetchReferrals ApiException: $e');
+      return const [];
+    } catch (e) {
+      ConsoleLog.warn('[ReferralApiService] fetchReferrals unexpected error: $e');
+      return const [];
+    }
   }
 
   Future<String?> createReferral({
@@ -30,7 +95,7 @@ class ReferralApiService extends ApiRepository {
     SlaTier? slaTier,
     String? notes,
   }) async {
-    debugPrint('[ReferralApiService] createReferral disabled');
+    ConsoleLog.step('[ReferralApiService] createReferral disabled');
     return null;
   }
 
@@ -41,7 +106,7 @@ class ReferralApiService extends ApiRepository {
     String? reason,
     String? actor,
   }) async {
-    debugPrint('[ReferralApiService] updateReferralStatus disabled');
+    ConsoleLog.step('[ReferralApiService] updateReferralStatus disabled');
     return false;
   }
 
@@ -51,7 +116,7 @@ class ReferralApiService extends ApiRepository {
     required int currentLevel,
     String? reason,
   }) async {
-    debugPrint('[ReferralApiService] escalateReferral disabled');
+    ConsoleLog.step('[ReferralApiService] escalateReferral disabled');
     return false;
   }
 
@@ -61,7 +126,7 @@ class ReferralApiService extends ApiRepository {
     required String note,
     String? actor,
   }) async {
-    debugPrint('[ReferralApiService] addReferralNote disabled');
+    ConsoleLog.step('[ReferralApiService] addReferralNote disabled');
     return false;
   }
 
@@ -84,7 +149,7 @@ class ReferralApiService extends ApiRepository {
     String? type,
     String? notes,
   }) async {
-    debugPrint('[ReferralApiService] createFollowUp disabled');
+    ConsoleLog.step('[ReferralApiService] createFollowUp disabled');
     return false;
   }
 }

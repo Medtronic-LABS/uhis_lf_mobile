@@ -39,6 +39,10 @@ import '../../core/widgets/skeleton.dart';
 import '../visit/triage/patient_context_builder.dart';
 import 'referral_narrative.dart';
 import 'vitals_repository.dart';
+import '../../core/db/referral_dao.dart';
+import '../../core/models/referral.dart';
+import '../referral/referral_fetch_service.dart';
+import '../referral/referral_repository.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -55,6 +59,7 @@ class PatientOrMemberData {
     this.vitalHistory = const [],
     this.pregnancySnapshot,
     this.enrolledAt,
+    this.liveReferrals = const [],
   });
 
   final PatientWithProgrammes? localPatient;
@@ -81,6 +86,11 @@ class PatientOrMemberData {
   final String? memberId;
   /// When the member was first enrolled in the app (from local DB `created_at`).
   final DateTime? enrolledAt;
+  /// Live referral tickets fetched from POST /spice-service/patient/referral-tickets.
+  /// Populated in _fetchData Phase 2 via ReferralFetchService; empty list when
+  /// offline or the endpoint returns nothing. Displayed as synthetic _TimelineEntry
+  /// rows so the SK sees nurse medical review outcomes without a full sync.
+  final List<Referral> liveReferrals;
 
   bool get hasData => localPatient != null || remoteMember != null;
 
@@ -153,6 +163,7 @@ class PatientOrMemberData {
     String? householdHeadPhone,
     List<VisitVitals>? vitalHistory,
     PregnancySnapshotRow? pregnancySnapshot,
+    List<Referral>? liveReferrals,
   }) {
     return PatientOrMemberData(
       localPatient: localPatient,
@@ -167,6 +178,7 @@ class PatientOrMemberData {
       vitalHistory: vitalHistory ?? this.vitalHistory,
       pregnancySnapshot: pregnancySnapshot ?? this.pregnancySnapshot,
       enrolledAt: enrolledAt,
+      liveReferrals: liveReferrals ?? this.liveReferrals,
     );
   }
 }
@@ -263,9 +275,14 @@ class _PatientContextScreenState
             ? DateTime.now()
             : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
         final prog = Programme.fromString(row.kind ?? '');
-        final typeLabel = prog == Programme.unknown
-            ? (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase()
-            : prog.wireTag;
+        // Preserve nurse-review subtypes so _assessmentToEntry can detect them via isNurseReview.
+        // Without this, 'ncdmedicalreview' → Programme.ncd → wireTag='NCD', losing the subtype.
+        final kindUpper = (row.kind ?? '').toUpperCase();
+        final typeLabel = (kindUpper == 'NCDMEDICALREVIEW' || kindUpper == 'MEDICALREVIEWVISIT')
+            ? kindUpper
+            : (prog == Programme.unknown
+                ? (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase()
+                : prog.wireTag);
         out.add(MemberAssessment(
           id: row.id,
           type: typeLabel,
@@ -471,18 +488,46 @@ class _PatientContextScreenState
 
       // Phase 2: householdName (always local) + remote assessments (skipped
       // when sync is fresh — avoids a ~900ms round-trip for data already in DB).
+      // Capture context-dependent objects before any await (avoid_build_context_synchronously).
+      final referralFetchSvc = context.read<ReferralFetchService>();
+      final referralDaoLocal = context.read<ReferralDao>();
+      final referralRepoLocal = context.read<ReferralRepository>();
+
       final tPhase2 = Stopwatch()..start();
       List<MemberAssessment> remoteAssessments = const [];
       if (skipRemote) {
-        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
-        final info = await _householdInfo(localPatient.patient.householdId);
+        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName + referral fetch only');
+        // Referral fetch still runs: nurse review outcome may have changed since last sync.
+        final skipResults = await Future.wait([
+          _householdInfo(localPatient.patient.householdId),
+          referralFetchSvc
+              .fetchAndPersist(
+                patientId: widget.patientId,
+                memberId: resolvedMemberId,
+                householdId: localPatient.patient.householdId,
+                villageId: localPatient.patient.villageId,
+              )
+              .catchError((_) => 0),
+        ]);
+        final info = skipResults[0] as ({String? name, String? headPhone});
+        final referralFetchCount = skipResults[1] as int;
+        ConsoleLog.step('[PatientCtx] referral fetch ingested $referralFetchCount ticket(s) (skip-remote path)');
+        final liveReferrals = await referralDaoLocal
+            .forPatient(widget.patientId)
+            .catchError((_) => <Referral>[]);
+        ConsoleLog.step('[PatientCtx] liveReferrals for timeline: ${liveReferrals.length}');
         if (mounted) setState(() => _remoteLoading = false);
         ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
             ' remoteSkipped=true total=${t0.elapsedMilliseconds}ms');
-        return localOnly.copyWith(householdName: info.name, householdHeadPhone: info.headPhone);
+        return localOnly.copyWith(
+          householdName: info.name,
+          householdHeadPhone: info.headPhone,
+          liveReferrals: liveReferrals,
+        );
       }
 
-      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdInfo');
+      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdInfo + referral fetch');
+
       final phase2Results = await Future.wait([
         memberRepo
             .getMemberAssessments(
@@ -493,9 +538,46 @@ class _PatientContextScreenState
             )
             .catchError((_) => <MemberAssessment>[]),
         _householdInfo(localPatient.patient.householdId),
+        // Fetch live referral tickets (nurse review outcome) in parallel.
+        // Upserts to SQLite + triggers SLA recompute + CCE auto-refresh.
+        // Errors swallowed — screen falls back to existing SQLite snapshot.
+        referralFetchSvc
+            .fetchAndPersist(
+              patientId: widget.patientId,
+              memberId: resolvedMemberId,
+              householdId: localPatient.patient.householdId,
+              villageId: localPatient.patient.villageId,
+            )
+            .catchError((_) => 0),
       ]);
       remoteAssessments = phase2Results[0] as List<MemberAssessment>;
       final householdInfo = phase2Results[1] as ({String? name, String? headPhone});
+      // Referral fetch count at index 2 — used only for debug logging.
+      final referralFetchCount = phase2Results[2] as int;
+      ConsoleLog.step('[PatientCtx] referral fetch ingested $referralFetchCount ticket(s)');
+      ConsoleLog.step('[PatientCtx] remoteAssessments=${remoteAssessments.length} types=${remoteAssessments.map((a) => a.type).join(",")}');
+
+      // Load persisted referral rows (may include newly fetched tickets).
+      var liveReferrals = await referralDaoLocal
+          .forPatient(widget.patientId)
+          .catchError((_) => <Referral>[]);
+
+      ConsoleLog.step('[PatientCtx] liveReferrals states=${liveReferrals.map((r) => r.state.wireTag).join(",")}');
+
+      // Backend does NOT update patientStatus on the referral ticket when the
+      // nurse completes a medical review. Synthesize: if any open referral
+      // (created/inTransit) exists and remoteAssessments contains a
+      // ncdmedicalreview/medicalreviewvisit entry with ncdPatientStatus, derive
+      // the device state from the nurse's outcome and re-persist so CCE updates.
+      liveReferrals = await _synthesizeReferralStateFromNurseReview(
+        liveReferrals,
+        remoteAssessments,
+        referralDaoLocal,
+        referralRepoLocal,
+      );
+
+      ConsoleLog.step('[PatientCtx] liveReferrals for timeline: ${liveReferrals.length}');
+
       // ignore: avoid_print
       print('[PatientContextScreen] Found ${remoteAssessments.length} remote assessments');
 
@@ -505,6 +587,7 @@ class _PatientContextScreenState
         remoteAssessments: remoteAssessments,
         householdName: householdInfo.name,
         householdHeadPhone: householdInfo.headPhone,
+        liveReferrals: liveReferrals,
       );
     }
 
@@ -971,6 +1054,7 @@ class _TimelineEntry {
     this.isPending = false,
     this.programme,
     this.source,
+    this.onTap,
   });
 
   final String emoji;
@@ -987,6 +1071,9 @@ class _TimelineEntry {
   final Programme? programme;
   /// Original assessment for tap-to-detail; null for synthetic entries.
   final MemberAssessment? source;
+  /// Custom tap handler for synthetic entries that have no [source] assessment.
+  /// Used by referral timeline entries to navigate to ReferralDetailScreen.
+  final VoidCallback? onTap;
 
   _TimelineEntry copyWith({String? title}) => _TimelineEntry(
         emoji: emoji,
@@ -1002,6 +1089,7 @@ class _TimelineEntry {
         isPending: isPending,
         programme: programme,
         source: source,
+        onTap: onTap,
       );
 }
 
@@ -1263,7 +1351,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     // ─── NCD ──────────────────────────────────────────────────────────────
     case Programme.ncd:
       emoji = '❤️';
-      title = 'NCD Visit';
+      // Nurse medical review visits use a distinct title so the SK can
+      // distinguish them from SK-submitted NCD assessments in the timeline.
+      final isNurseReview = a.type.toUpperCase() == 'NCDMEDICALREVIEW' ||
+          a.type.toUpperCase() == 'MEDICALREVIEWVISIT';
+      title = isNurseReview
+          ? PatientProfileStrings.medicalReviewCompleted
+          : 'NCD Visit';
       category = 'NCD Follow-up';
 
       final bpNCD = raw['bp']?.toString() ?? '';
@@ -1296,6 +1390,28 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       } else {
         dotColor = _kDotOk;
         description = 'Vitals within target — continue current management.';
+      }
+
+      // Nurse review outcome overrides the vitals-derived badge.
+      if (isNurseReview) {
+        final ncdStatus = raw['ncdPatientStatus']?.toString() ?? '';
+        if (ncdStatus == 'UN_CONTROLLED' || ncdStatus == 'Uncontrolled') {
+          badge = 'Uncontrolled';
+          badgeColor = _kBadgeAmberBg;
+          badgeFgColor = _kBadgeAmberFg;
+          description = 'Nurse reviewed — patient status uncontrolled. Follow-up care required.';
+        } else if (ncdStatus == 'Controlled') {
+          badge = 'Controlled';
+          badgeColor = _kBadgeGreenBg;
+          badgeFgColor = _kBadgeGreenFg;
+          dotColor = _kDotOk;
+          description = 'Nurse reviewed — patient status controlled. Continue current management.';
+        } else if (ncdStatus.isNotEmpty) {
+          badge = ncdStatus;
+          description = 'Nurse reviewed — $ncdStatus.';
+        } else {
+          badge = 'Nurse reviewed';
+        }
       }
 
     // ─── EPI / Vaccination ────────────────────────────────────────────────
@@ -1533,7 +1649,33 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       .firstOrNull
       ?.id;
 
+  // Build a set of calendar days that have a NCDMEDICALREVIEW entry so we can
+  // suppress the paired MEDICALREVIEWVISIT shell entry (same visit, no clinical
+  // data — observations: null). Showing both produces a duplicate "Medical Review
+  // Completed" row with an empty badge, which confuses SKs.
+  final ncdReviewDays = data.assessments
+      .where((a) => a.type.toUpperCase() == 'NCDMEDICALREVIEW')
+      .map((a) => CalendarDay.startOf(a.date))
+      .toSet();
+
   for (final a in data.assessments) {
+    // Skip MEDICALREVIEWVISIT shell entries when a richer NCDMEDICALREVIEW entry
+    // exists on the same calendar day — both render "Medical Review Completed"
+    // but NCDMEDICALREVIEW carries vitals + ncdPatientStatus.
+    if (a.type.toUpperCase() == 'MEDICALREVIEWVISIT' &&
+        ncdReviewDays.contains(CalendarDay.startOf(a.date))) {
+      continue;
+    }
+    // Skip enrollment-type entries — already represented by the enrollment
+    // milestone pinned at the bottom from data.enrolledAt.
+    if (a.type.toLowerCase() == 'enrollment') continue;
+    // Skip unknown-programme entries with no clinical payload — they render as
+    // "General visit" with no useful information for the SK.
+    if (Programme.fromString(a.type) == Programme.unknown &&
+        (a.notes == null || a.notes!.isEmpty) &&
+        (a.status == null || a.status!.isEmpty)) {
+      continue;
+    }
     final showAsReferral = latestReferredId == null || a.id == latestReferredId;
     final entry = _assessmentToEntry(a, showAsReferral: showAsReferral);
     final ordinal = ancOrdinal[a.id];
@@ -1544,8 +1686,19 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
     }
   }
 
+  // Live referral entries — nurse review outcomes fetched from backend ticket.
+  // These are synthetic entries showing the SK what happened after referral.
+  for (final ref in data.liveReferrals) {
+    final entry = _referralToTimelineEntry(ref);
+    if (entry != null) entries.add(entry);
+  }
+
   // Enrollment milestone — pinned at bottom (oldest event in the patient's history).
   if (data.enrolledAt != null) {
+    final enrollmentItem = data.assessments
+        .where((a) => a.type.toLowerCase() == 'enrollment')
+        .firstOrNull;
+    final enrollerName = enrollmentItem?.rawJson['serviceProvidedByName'] as String?;
     entries.add(_TimelineEntry(
       emoji: '📋',
       title: PatientProfileStrings.enrolledInApp,
@@ -1553,7 +1706,9 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       category: PatientProfileStrings.enrollmentMilestone,
       date: data.enrolledAt!,
       dotColor: _kDotEnrollment,
-      description: 'Patient added to Apon Sushashthya',
+      description: enrollerName != null && enrollerName.isNotEmpty
+          ? PatientProfileStrings.enrolledByWorker(enrollerName)
+          : PatientProfileStrings.enrolledByWorker('community health worker'),
       badge: 'Enrolled',
       badgeColor: const Color(0xFFE0F2FE),
       badgeFgColor: const Color(0xFF0369A1),
@@ -1564,6 +1719,184 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
   entries.sort((a, b) => b.date.compareTo(a.date));
 
   return entries;
+}
+
+/// Converts a persisted [Referral] (from backend ticket fetch) into a display
+/// [_TimelineEntry] for the patient timeline.
+///
+/// Dot color follows SLA state:
+///   red    → SLA breached ([Referral.breachedSince] != null)
+///   green  → closed/recovered (nurse reviewed: Controlled)
+///   amber  → open, in-transit or awaiting review
+///
+/// Returns null if the entry would duplicate an existing assessment entry
+/// (closed referrals from assessment history are already shown via [_assessmentToEntry]).
+_TimelineEntry? _referralToTimelineEntry(
+  Referral ref, {
+  VoidCallback? onTap,
+}) {
+  final reason = ref.diagnosisLabel ?? '';
+  final facility = ref.facilityName ?? '';
+  final createdAt = DateTime.fromMillisecondsSinceEpoch(ref.createdAt);
+
+  // Determine dot + badge colors from SLA state.
+  final Color dotColor;
+  final Color badgeBg;
+  final Color badgeFg;
+  final String badge;
+
+  if (ref.breachedSince != null) {
+    // SLA window breached — show red with overdue marker.
+    dotColor = _kDotCritical;
+    badgeBg = _kBadgeCriticalBg;
+    badgeFg = _kBadgeCriticalFg;
+    badge = ReferralStrings.badgeBreached;
+  } else if (ref.state == ReferralStatus.closedRecovered) {
+    // Nurse reviewed: Controlled → referral closed successfully.
+    dotColor = _kDotOk;
+    badgeBg = _kBadgeGreenBg;
+    badgeFg = _kBadgeGreenFg;
+    badge = ReferralStrings.badgeReviewedControlled;
+  } else if (ref.state == ReferralStatus.closedDeceased) {
+    dotColor = _kDotCritical;
+    badgeBg = _kBadgeCriticalBg;
+    badgeFg = _kBadgeCriticalFg;
+    badge = ReferralStrings.badgeDeceased;
+  } else if (ref.state == ReferralStatus.treatmentStarted) {
+    // Nurse reviewed: Uncontrolled / REVIEWED → still receiving care.
+    dotColor = _kDotModerate;
+    badgeBg = _kBadgeAmberBg;
+    badgeFg = _kBadgeAmberFg;
+    badge = ReferralStrings.badgeUnderTreatment;
+  } else {
+    // Open — awaiting nurse review.
+    dotColor = _kDotModerate;
+    badgeBg = _kBadgeAmberBg;
+    badgeFg = _kBadgeAmberFg;
+    badge = ReferralStrings.badgeAwaitingReview;
+  }
+
+  final descParts = <String>[
+    if (reason.isNotEmpty) reason,
+    if (facility.isNotEmpty) '→ $facility',
+  ];
+
+  return _TimelineEntry(
+    emoji: '📤',
+    title: PatientProfileStrings.liveReferralTitle,
+    relativeDate: _relativeDate(createdAt),
+    category: PatientProfileStrings.referralCategory,
+    date: createdAt,
+    dotColor: dotColor,
+    badge: badge,
+    badgeColor: badgeBg,
+    badgeFgColor: badgeFg,
+    description: descParts.isEmpty ? null : descParts.join(' · '),
+    isPending: ref.breachedSince != null,
+    onTap: onTap,
+    // source intentionally null — no MemberAssessment backing this entry.
+  );
+}
+
+/// Synthesizes referral device state from nurse medical-review assessments when
+/// the backend referral ticket `patientStatus` is still `"Referred"` (open).
+///
+/// The UHIS backend does NOT update the referral ticket when a nurse completes
+/// a medical review — patientStatus stays "Referred" indefinitely. We bridge
+/// this gap by checking `remoteAssessments` for ncdmedicalreview entries and
+/// deriving the device state from `ncdPatientStatus`:
+///   CONTROLLED   → ReferralStatus.closedRecovered  (CCE green, "Recovered")
+///   UN_CONTROLLED → ReferralStatus.treatmentStarted (CCE amber, "On Treatment")
+///
+/// Mutated rows are persisted so the CCE drawer also reflects the update.
+Future<List<Referral>> _synthesizeReferralStateFromNurseReview(
+  List<Referral> referrals,
+  List<MemberAssessment> assessments,
+  ReferralDao dao,
+  ReferralRepository repo,
+) async {
+  // Find most-recent nurse review assessment with ncdPatientStatus.
+  // ncdPatientStatus is nested under rawJson['observations'] — use _normalizeRaw.
+  MemberAssessment? nurseReview;
+  String nurseNcdStatus = '';
+  for (final a in assessments) {
+    final upper = a.type.toUpperCase();
+    if (upper != 'NCDMEDICALREVIEW' && upper != 'MEDICALREVIEWVISIT') continue;
+    final flat = _normalizeRaw(a.rawJson);
+    final s = (flat['ncdPatientStatus'] as String? ?? '').trim();
+    if (s.isEmpty) continue;
+    if (nurseReview == null || a.date.isAfter(nurseReview.date)) {
+      nurseReview = a;
+      nurseNcdStatus = s;
+    }
+  }
+  if (nurseReview == null) return referrals;
+
+  final ncdStatus = nurseNcdStatus.toUpperCase();
+  final synthesized = ncdStatus == 'CONTROLLED'
+      ? ReferralStatus.closedRecovered
+      : ReferralStatus.treatmentStarted;
+
+  // Facility where nurse review was conducted. Not on the referral ticket
+  // (referredTo is null), but available in the assessment's facilityName.
+  // Patch into referral rawJson so CceAlert subtitle shows "{facility} · {diagnosis}".
+  final nurseFlat = _normalizeRaw(nurseReview.rawJson);
+  final reviewFacility = (nurseFlat['facilityName'] as String? ?? '').trim();
+
+  ConsoleLog.step(
+    '[PatientCtx] synthesize referral state: ncdPatientStatus=$ncdStatus → ${synthesized.wireTag}'
+    '${reviewFacility.isNotEmpty ? " facility=$reviewFacility" : ""}',
+  );
+
+  const _openStates = {ReferralStatus.created, ReferralStatus.inTransit};
+
+  String? _patchFacility(String? rawJson) {
+    if (reviewFacility.isEmpty) return rawJson;
+    try {
+      final raw = rawJson != null
+          ? Map<String, dynamic>.from(jsonDecode(rawJson) as Map)
+          : <String, dynamic>{};
+      final hasFacility =
+          (raw['facilityName'] as String? ?? '').trim().isNotEmpty ||
+          (raw['referredTo'] as String? ?? '').trim().isNotEmpty;
+      if (hasFacility) return rawJson;
+      raw['facilityName'] = reviewFacility;
+      return jsonEncode(raw);
+    } catch (_) {
+      return rawJson;
+    }
+  }
+
+  // Apply to ALL referrals:
+  //   - open (created/inTransit): synthesize state + patch facility
+  //   - already synthesized (treatmentStarted/closedRecovered): patch facility only
+  //     (state was preserved by fetchAndPersist, but facility may not be set yet)
+  final updated = referrals.map((r) {
+    final needsStateUpdate = _openStates.contains(r.state);
+    final patchedRaw = _patchFacility(r.rawJson);
+    final rawChanged = patchedRaw != r.rawJson;
+    if (!needsStateUpdate && !rawChanged) return r;
+    return r.copyWith(
+      state: needsStateUpdate ? synthesized : null,
+      rawJson: patchedRaw,
+    );
+  }).toList();
+
+  try {
+    final dirty = updated.where((r) =>
+        _openStates.contains(
+            referrals.firstWhere((orig) => orig.id == r.id).state) ||
+        r.rawJson !=
+            referrals.firstWhere((orig) => orig.id == r.id).rawJson).toList();
+    if (dirty.isNotEmpty) {
+      await dao.upsertMany(dirty);
+      await repo.recomputeAllAfterSync();
+    }
+  } catch (e) {
+    ConsoleLog.warn('[PatientCtx] referral synthesis persist failed: $e');
+  }
+
+  return updated;
 }
 
 /// Unpacks the `{kind, raw}` envelope written by AssessmentDao so that
@@ -3942,9 +4275,11 @@ class _TimelineEntryCard extends StatelessWidget {
     final isPending = entry.isPending;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      // source-based entries → assessment detail sheet
+      // onTap-based entries  → custom handler (e.g. referral detail screen)
       onTap: entry.source != null
           ? () => _TimelineEventSheet.show(context, entry.source!)
-          : null,
+          : entry.onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3986,7 +4321,7 @@ class _TimelineEntryCard extends StatelessWidget {
                   color: AppColors.textMuted,
                 ),
               ),
-              if (entry.source != null) ...[
+              if (entry.source != null || entry.onTap != null) ...[
                 const SizedBox(width: 2),
                 Icon(
                   Icons.chevron_right_rounded,

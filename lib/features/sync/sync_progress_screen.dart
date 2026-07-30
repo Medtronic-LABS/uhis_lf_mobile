@@ -13,6 +13,7 @@ import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../referral/referral_repository.dart';
+import '../referral/referral_synthesis_service.dart';
 import '../training/coaching_repository.dart';
 import '../visit/assessment_repository.dart';
 import '../worklist/worklist_repository.dart';
@@ -155,6 +156,10 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       // CCE: score SLA / priority on referrals just ingested from sync.
       if (!mounted) return;
       await context.read<ReferralRepository>().recomputeAllAfterSync();
+      // Synthesize state for open referrals from freshly-synced assessment
+      // history — no patient screen visit required.
+      if (!mounted) return;
+      await context.read<ReferralSynthesisService>().synthesizeAll();
       
       if (!mounted) return;
       setState(() => _preparingMessage = SyncStrings.preparingDashboard);

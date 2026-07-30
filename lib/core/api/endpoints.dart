@@ -71,6 +71,14 @@ class Endpoints {
   static const String referralTicketFetch =
       '/spice-service/patient-transfer/list';
 
+  /// Fetch referral ticket details including nurse medical review outcome.
+  /// POST body: { patientId, ticketId?, memberId?, type? }
+  /// Returns patientStatus: "Referred" | "Controlled" | "Uncontrolled"
+  /// after nurse review via NurseMedicalReviewActivity.
+  /// Postman: patient-referral-ticket-controller → getReferralTicket.
+  static const String referralTicketDetails =
+      '/spice-service/patient/referral-tickets';
+
   // ── Spice: pregnancy details ──────────────────────────────────────────────
   /// Create ANC pregnancy episode record for a new pregnancy.
   static const String pregnancyDetailsCreate =

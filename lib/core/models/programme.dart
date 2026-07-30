@@ -90,6 +90,8 @@ enum Programme {
       case 'DM':
       case 'DIABETES_MELLITUS':
       case 'CVD':
+      case 'NCDMEDICALREVIEW':
+      case 'MEDICALREVIEWVISIT':
         return Programme.ncd;
       case 'TB':
       case 'TUBERCULOSIS':

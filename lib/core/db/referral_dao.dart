@@ -43,6 +43,18 @@ class ReferralDao {
     return Referral.fromDb(rows.first);
   }
 
+  /// Deletes all inferred referral rows (from follow-ups and assessment history)
+  /// for [patientId], keeping only backend-ticket rows (`ref-ticket-*`) and
+  /// local-assessment drafts (`ref-assess-*`). Called after a live ticket fetch
+  /// so the CCE shows the authoritative backend state, not stale inferred rows.
+  Future<void> deleteInferredForPatient(String patientId) async {
+    await _db.db.delete(
+      AppDatabase.tableReferrals,
+      where: "patient_id = ? AND (id LIKE 'ref-fu-%' OR id LIKE 'ref-hist-%')",
+      whereArgs: [patientId],
+    );
+  }
+
   Future<List<Referral>> forPatient(String patientId) async {
     final rows = await _db.db.query(
       AppDatabase.tableReferrals,
