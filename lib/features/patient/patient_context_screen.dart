@@ -873,6 +873,7 @@ class _PatientContextScreenState
                     _AiInsightCard(
                       key: ValueKey('ai-insight-$_aiInsightRefreshGen'),
                       patientId: widget.patientId,
+                      data: data,
                       statusLabel: statusLabel,
                       statusBg: statusBg,
                       statusFg: statusFg,
@@ -1929,6 +1930,7 @@ class _AiInsightCard extends StatefulWidget {
   const _AiInsightCard({
     super.key,
     required this.patientId,
+    required this.data,
     this.statusLabel,
     this.statusBg = Colors.transparent,
     this.statusFg = Colors.white,
@@ -1937,6 +1939,9 @@ class _AiInsightCard extends StatefulWidget {
   });
 
   final String patientId;
+  /// Carries the `remoteMember`/merged-assessments fallback this screen
+  /// already has for a patient not yet synced to this device's local DB.
+  final PatientOrMemberData data;
   final String? statusLabel;
   final Color statusBg;
   final Color statusFg;
@@ -1947,8 +1952,21 @@ class _AiInsightCard extends StatefulWidget {
   State<_AiInsightCard> createState() => _AiInsightCardState();
 }
 
+/// [summary] is the joined clinical-findings text (may be empty).
+/// [patientKnown] distinguishes *why* it's empty: false means we couldn't
+/// establish even basic identity/context for this patient (no local
+/// `patients` row and no pre-passed remote data) — almost always because
+/// the device hasn't synced this patient's record yet, not a computation
+/// failure — so the card should say so instead of the generic "unavailable"
+/// message.
+class _AiInsightResult {
+  const _AiInsightResult({required this.summary, required this.patientKnown});
+  final String summary;
+  final bool patientKnown;
+}
+
 class _AiInsightCardState extends State<_AiInsightCard> {
-  late final Future<String> _summaryFuture;
+  late final Future<_AiInsightResult> _summaryFuture;
 
   @override
   void initState() {
@@ -1956,7 +1974,7 @@ class _AiInsightCardState extends State<_AiInsightCard> {
     _summaryFuture = _computeSummary();
   }
 
-  Future<String> _computeSummary() async {
+  Future<_AiInsightResult> _computeSummary() async {
     try {
       final builder = PatientContextBuilder(
         patientDao: context.read<PatientDao>(),
@@ -1964,8 +1982,11 @@ class _AiInsightCardState extends State<_AiInsightCard> {
         pregnancyDao: context.read<PregnancySnapshotDao>(),
         immunisationDao: context.read<ImmunisationDao>(),
       );
-      final patientCtx = await builder.build(widget.patientId);
-      if (patientCtx == null) return '';
+      var patientCtx = await builder.build(widget.patientId);
+      patientCtx ??= _fallbackPatientContext(widget.data);
+      if (patientCtx == null) {
+        return const _AiInsightResult(summary: '', patientKnown: false);
+      }
       final findings = await BriefingFindingsAggregator.build(
         patientId: widget.patientId,
         patientCtx: patientCtx,
@@ -1975,17 +1996,48 @@ class _AiInsightCardState extends State<_AiInsightCard> {
         followUpRepo: context.read<FollowUpRepository>(),
         patientDao: context.read<PatientDao>(),
         immunisationDao: context.read<ImmunisationDao>(),
+        remoteAssessments: widget.data.assessments,
       );
-      return clinicalFindingsSummary(findings);
+      return _AiInsightResult(
+        summary: clinicalFindingsSummary(findings),
+        patientKnown: true,
+      );
     } on Object catch (e, st) {
       debugPrint('[AiInsightCard] findings computation failed: $e');
       debugPrint('[AiInsightCard] $st');
-      return '';
+      return const _AiInsightResult(summary: '', patientKnown: false);
     }
   }
 
-  void _showDetail(BuildContext context, String summary) {
+  /// Minimal [PatientContext] built from whatever identity data this screen
+  /// already has (`remoteMember`/pre-passed household data) when this device
+  /// has no local `patients` row for this patient at all — the "online but
+  /// not yet locally synced" case. Returns null when even that's unavailable
+  /// (`data.hasData` false), which is the genuine no-data-anywhere case.
+  PatientContext? _fallbackPatientContext(PatientOrMemberData data) {
+    if (!data.hasData) return null;
+    final ageYears = data.age;
+    final gender = data.gender?.toUpperCase().trim();
+    final sex = gender == 'M' || gender == 'MALE'
+        ? Sex.male
+        : gender == 'F' || gender == 'FEMALE'
+            ? Sex.female
+            : Sex.unknown;
+    return PatientContext(
+      patientId: widget.patientId,
+      ageMonths: ageYears != null ? ageYears * 12 : 0,
+      ageKnown: ageYears != null,
+      sex: sex,
+      isPregnant: data.isPregnant,
+      activeProgrammes: data.programmes,
+    );
+  }
+
+  void _showDetail(BuildContext context, String summary, {bool patientKnown = true}) {
     final isEmpty = summary.trim().isEmpty;
+    final unavailableMessage = patientKnown
+        ? PatientProfileStrings.aiInsightUnavailable
+        : PatientProfileStrings.aiInsightNotSynced;
     final riskReasons = widget.riskReasons;
     final lastAssessedDate = widget.lastAssessedDate;
 
@@ -2048,7 +2100,7 @@ class _AiInsightCardState extends State<_AiInsightCard> {
           ],
           // ── AI summary ───────────────────────────────────────────────────
           Text(
-            isEmpty ? PatientProfileStrings.aiInsightUnavailable : summary,
+            isEmpty ? unavailableMessage : summary,
             style: TextStyle(
               fontSize: 14,
               height: 1.6,
@@ -2131,12 +2183,16 @@ class _AiInsightCardState extends State<_AiInsightCard> {
         ),
       );
 
-  Widget _buildLoadedCard(BuildContext context, String summary) {
+  Widget _buildLoadedCard(BuildContext context, _AiInsightResult result) {
     final sw = Stopwatch()..start();
+    final summary = result.summary;
     final isEmpty = summary.trim().isEmpty;
+    final unavailableMessage = result.patientKnown
+        ? PatientProfileStrings.aiInsightUnavailable
+        : PatientProfileStrings.aiInsightNotSynced;
     final card = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => _showDetail(context, summary),
+      onTap: () => _showDetail(context, summary, patientKnown: result.patientKnown),
       child: Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -2147,7 +2203,7 @@ class _AiInsightCardState extends State<_AiInsightCard> {
               _headerRow(),
               const SizedBox(height: 8),
               Text(
-                isEmpty ? PatientProfileStrings.aiInsightUnavailable : summary,
+                isEmpty ? unavailableMessage : summary,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -2167,13 +2223,16 @@ class _AiInsightCardState extends State<_AiInsightCard> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
+    return FutureBuilder<_AiInsightResult>(
       future: _summaryFuture,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return _buildLoadingCard();
         }
-        return _buildLoadedCard(context, snap.data ?? '');
+        return _buildLoadedCard(
+          context,
+          snap.data ?? const _AiInsightResult(summary: '', patientKnown: true),
+        );
       },
     );
   }

@@ -11,6 +11,7 @@ import 'package:leapwell/core/db/local_assessment_dao.dart';
 import 'package:leapwell/core/db/patient_dao.dart';
 import 'package:leapwell/core/models/programme.dart';
 import 'package:leapwell/features/patient/followup_repository.dart';
+import 'package:leapwell/features/patient/member_detail_repository.dart';
 import 'package:leapwell/features/visit/triage/patient_context_builder.dart';
 
 void main() {
@@ -373,6 +374,113 @@ void main() {
       // No local, no history → latest stays null → evaluateAncFindings
       // returns const [] (no visit at all yet), not a fabricated routine msg.
       expect(findings, isEmpty);
+    });
+  });
+
+  group('BriefingFindingsAggregator.build — remoteAssessments fallback (never-synced patient)', () {
+    test('no local ANC row, no history, but remoteAssessments has BP → remote-derived finding fires', () async {
+      final db = await openTestDb();
+      addTearDown(db.close);
+      final assessmentDao = LocalAssessmentDao(db);
+      final patientDao = PatientDao(db);
+      final immunisationDao = ImmunisationDao(db);
+      final followUpRepo = FollowUpRepository(await ApiClient.create());
+
+      final findings = await BriefingFindingsAggregator.build(
+        patientId: 'p1',
+        patientCtx: patientCtx(activeProgrammes: {Programme.anc}),
+        selectedProgrammes: {Programme.anc},
+        assessmentDao: assessmentDao,
+        historyAssessmentDao: AssessmentDao(db),
+        followUpRepo: followUpRepo,
+        patientDao: patientDao,
+        immunisationDao: immunisationDao,
+        remoteAssessments: [
+          MemberAssessment(
+            id: 'remote-1',
+            type: 'ANC',
+            date: DateTime.now(),
+            rawJson: const {
+              'observations': {'systolic': 150, 'diastolic': 95},
+            },
+          ),
+        ],
+      );
+
+      expect(findings.map((f) => f.code), contains('anc.highBp'));
+    });
+
+    test('history row exists → remoteAssessments never consulted, even if present', () async {
+      final db = await openTestDb();
+      addTearDown(db.close);
+      final assessmentDao = LocalAssessmentDao(db);
+      final patientDao = PatientDao(db);
+      final immunisationDao = ImmunisationDao(db);
+      final followUpRepo = FollowUpRepository(await ApiClient.create());
+
+      // History row: normal BP, no concerns.
+      await insertHistoryAssessment(db,
+          patientId: 'p1',
+          kind: 'ANC',
+          observations: {'systolic': 110, 'diastolic': 70},
+          occurredAt: 1000);
+
+      final findings = await BriefingFindingsAggregator.build(
+        patientId: 'p1',
+        patientCtx: patientCtx(activeProgrammes: {Programme.anc}),
+        selectedProgrammes: {Programme.anc},
+        assessmentDao: assessmentDao,
+        historyAssessmentDao: AssessmentDao(db),
+        followUpRepo: followUpRepo,
+        patientDao: patientDao,
+        immunisationDao: immunisationDao,
+        // Remote row: high BP — must NOT be used since history data exists.
+        remoteAssessments: [
+          MemberAssessment(
+            id: 'remote-1',
+            type: 'ANC',
+            date: DateTime.now(),
+            rawJson: const {
+              'observations': {'systolic': 160, 'diastolic': 100},
+            },
+          ),
+        ],
+      );
+
+      expect(findings.map((f) => f.code), isNot(contains('anc.highBp')));
+      expect(findings.map((f) => f.code), contains('anc.routine'));
+    });
+
+    test('no local, no history, remoteAssessments has severe-anaemia PNC Hb → remote-derived finding fires', () async {
+      final db = await openTestDb();
+      addTearDown(db.close);
+      final assessmentDao = LocalAssessmentDao(db);
+      final patientDao = PatientDao(db);
+      final immunisationDao = ImmunisationDao(db);
+      final followUpRepo = FollowUpRepository(await ApiClient.create());
+
+      final findings = await BriefingFindingsAggregator.build(
+        patientId: 'p1',
+        patientCtx: patientCtx(activeProgrammes: {Programme.pnc}),
+        selectedProgrammes: {Programme.pnc},
+        assessmentDao: assessmentDao,
+        historyAssessmentDao: AssessmentDao(db),
+        followUpRepo: followUpRepo,
+        patientDao: patientDao,
+        immunisationDao: immunisationDao,
+        remoteAssessments: [
+          MemberAssessment(
+            id: 'remote-1',
+            type: 'PNC',
+            date: DateTime.now(),
+            rawJson: const {
+              'observations': {'hemoglobin': 6.5},
+            },
+          ),
+        ],
+      );
+
+      expect(findings.map((f) => f.code), contains('pnc.severeAnaemia'));
     });
   });
 }

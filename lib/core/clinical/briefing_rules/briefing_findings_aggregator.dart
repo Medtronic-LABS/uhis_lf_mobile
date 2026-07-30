@@ -14,6 +14,7 @@ import '../../db/local_assessment_dao.dart';
 import '../../db/patient_dao.dart';
 import '../../models/programme.dart';
 import '../../../features/patient/followup_repository.dart';
+import '../../../features/patient/member_detail_repository.dart';
 import '../../../features/visit/immunisation/epi_schedule_engine.dart';
 import '../../../features/visit/triage/patient_context_builder.dart';
 import 'anc_briefing_rules.dart';
@@ -36,6 +37,11 @@ class BriefingFindingsAggregator {
     required FollowUpRepository followUpRepo,
     required PatientDao patientDao,
     required ImmunisationDao immunisationDao,
+    // Third fallback tier — `PatientOrMemberData.assessments` (merged
+    // local-cache + live-fetched history) for a patient this device hasn't
+    // locally synced yet. Only consulted when local rows AND
+    // `historyAssessmentDao` both come back empty for a programme.
+    List<MemberAssessment> remoteAssessments = const [],
   }) async {
     final findings = <ClinicalFinding>[];
 
@@ -61,6 +67,11 @@ class BriefingFindingsAggregator {
         if (vitals.isNotEmpty) latest = ancMapFromVitals(vitals[0]);
         if (vitals.length > 1) previous = ancMapFromVitals(vitals[1]);
       }
+      if (latest == null) {
+        final vitals = vitalsFromMemberAssessments(remoteAssessments, 'ANC');
+        if (vitals.isNotEmpty) latest = ancMapFromVitals(vitals[0]);
+        if (vitals.length > 1) previous = ancMapFromVitals(vitals[1]);
+      }
       findings.addAll(evaluateAncFindings(
         latest: latest,
         previous: previous,
@@ -78,6 +89,10 @@ class BriefingFindingsAggregator {
         final vitals = vitalsHistoryFor(await loadHistoryRows(), 'PNC');
         if (vitals.isNotEmpty) latest = pncMapFromVitals(vitals[0]);
       }
+      if (latest == null) {
+        final vitals = vitalsFromMemberAssessments(remoteAssessments, 'PNC');
+        if (vitals.isNotEmpty) latest = pncMapFromVitals(vitals[0]);
+      }
       findings.addAll(evaluatePncFindings(
         latest: latest,
         pncVisitCount: pncRows.length,
@@ -91,6 +106,11 @@ class BriefingFindingsAggregator {
       var previous = _detailsAt(ncdRows, 1);
       if (latest == null) {
         final vitals = vitalsHistoryFor(await loadHistoryRows(), 'NCD');
+        if (vitals.isNotEmpty) latest = ncdMapFromVitals(vitals[0]);
+        if (vitals.length > 1) previous = ncdMapFromVitals(vitals[1]);
+      }
+      if (latest == null) {
+        final vitals = vitalsFromMemberAssessments(remoteAssessments, 'NCD');
         if (vitals.isNotEmpty) latest = ncdMapFromVitals(vitals[0]);
         if (vitals.length > 1) previous = ncdMapFromVitals(vitals[1]);
       }

@@ -22,6 +22,7 @@ library;
 import '../../db/assessment_dao.dart';
 import '../../models/risk.dart';
 import '../../risk/clinical_vitals_from_history.dart';
+import '../../../features/patient/member_detail_repository.dart';
 
 /// Up to the 2 most recent parseable [ClinicalVitals] for [assessmentType]
 /// (matched case-insensitively as a substring of `AssessmentRow.kind`, since
@@ -40,6 +41,33 @@ List<ClinicalVitals> vitalsHistoryFor(
     final vitals = ClinicalVitalsFromHistory.fromRawJson(
       row.rawJson,
       assessmentType: row.kind,
+    );
+    if (vitals == null) continue;
+    result.add(vitals);
+    if (result.length >= 2) break;
+  }
+  return result;
+}
+
+/// Same as [vitalsHistoryFor] but for [MemberAssessment] — the shape used by
+/// `PatientOrMemberData.assessments` (merged local-cache + live-fetched
+/// history). Hits the same `member-assessment-history` endpoint as
+/// `AssessmentDao`, so `MemberAssessment.rawJson` (already a decoded map,
+/// unlike `AssessmentRow.rawJson`'s JSON string) carries the same
+/// `observations` shape `ClinicalVitalsFromHistory` already parses.
+/// [assessments] must already be ordered newest-first (as
+/// `PatientOrMemberData.assessments` returns them).
+List<ClinicalVitals> vitalsFromMemberAssessments(
+  List<MemberAssessment> assessments,
+  String assessmentType,
+) {
+  final needle = assessmentType.toUpperCase();
+  final result = <ClinicalVitals>[];
+  for (final a in assessments) {
+    if (!a.type.toUpperCase().contains(needle)) continue;
+    final vitals = ClinicalVitalsFromHistory.fromMap(
+      a.rawJson,
+      assessmentType: a.type,
     );
     if (vitals == null) continue;
     result.add(vitals);

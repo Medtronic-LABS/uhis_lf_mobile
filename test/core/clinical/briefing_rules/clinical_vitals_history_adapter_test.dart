@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:leapwell/core/clinical/briefing_rules/clinical_vitals_history_adapter.dart';
 import 'package:leapwell/core/db/assessment_dao.dart';
 import 'package:leapwell/core/models/risk.dart';
+import 'package:leapwell/features/patient/member_detail_repository.dart';
 
 void main() {
   group('vitalsHistoryFor', () {
@@ -46,6 +47,68 @@ void main() {
         AssessmentRow(id: '1', patientId: 'p1', kind: 'NCD', occurredAt: 1000, rawJson: '{"systolic": 150}'),
       ];
       expect(vitalsHistoryFor(rows, 'ANC'), isEmpty);
+    });
+  });
+
+  group('vitalsFromMemberAssessments', () {
+    MemberAssessment assessment(String type, Map<String, dynamic> rawJson) =>
+        MemberAssessment(id: 'a-$type', type: type, date: DateTime.now(), rawJson: rawJson);
+
+    test('matches type case-insensitively and reads the observations map', () {
+      final assessments = [
+        assessment('PNC', const {
+          'observations': {'hemoglobin': 9.0},
+        }),
+        assessment('NCD', const {
+          'observations': {'systolic': 150},
+        }),
+      ];
+      final pnc = vitalsFromMemberAssessments(assessments, 'PNC');
+      expect(pnc, hasLength(1));
+      expect(pnc.first.hemoglobin, 9.0);
+
+      final ncd = vitalsFromMemberAssessments(assessments, 'NCD');
+      expect(ncd, hasLength(1));
+      expect(ncd.first.systolicBp, 150);
+    });
+
+    test('returns at most 2 entries, in the order given', () {
+      final assessments = [
+        assessment('ANC', const {
+          'observations': {'systolic': 140},
+        }),
+        assessment('ANC', const {
+          'observations': {'systolic': 130},
+        }),
+        assessment('ANC', const {
+          'observations': {'systolic': 120},
+        }),
+      ];
+      final vitals = vitalsFromMemberAssessments(assessments, 'ANC');
+      expect(vitals, hasLength(2));
+      expect(vitals[0].systolicBp, 140);
+      expect(vitals[1].systolicBp, 130);
+    });
+
+    test('skips assessments that fail to parse into any recognisable clinical field', () {
+      final assessments = [
+        assessment('ANC', const {'observations': <String, dynamic>{}}),
+        assessment('ANC', const {
+          'observations': {'systolic': 130},
+        }),
+      ];
+      final vitals = vitalsFromMemberAssessments(assessments, 'ANC');
+      expect(vitals, hasLength(1));
+      expect(vitals.first.systolicBp, 130);
+    });
+
+    test('no matching type → empty', () {
+      final assessments = [
+        assessment('NCD', const {
+          'observations': {'systolic': 150},
+        }),
+      ];
+      expect(vitalsFromMemberAssessments(assessments, 'ANC'), isEmpty);
     });
   });
 
