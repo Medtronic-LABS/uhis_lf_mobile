@@ -25,7 +25,7 @@ class AllModulesScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text(TrainingStrings.allModulesTitle),
+        title: Text(TrainingStrings.allModulesTitle),
         backgroundColor: _kSpiceBlue,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -68,7 +68,7 @@ class _AllModulesTile extends StatelessWidget {
           onTap: () {
             if (module.isLocked) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
+                SnackBar(
                   content: Text(TrainingStrings.lockedSnackbar),
                   behavior: SnackBarBehavior.floating,
                 ),

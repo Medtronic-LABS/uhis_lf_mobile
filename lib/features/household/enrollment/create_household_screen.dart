@@ -374,7 +374,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                   ),
                   children: [
                     // ── Section 1: Household Information ───────────────────
-                    const EnrollmentSectionHeader(
+                    EnrollmentSectionHeader(
                       title: EnrollmentStrings.householdInfoSectionHeader,
                     ),
                     const SizedBox(height: 16),
@@ -588,7 +588,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     const SizedBox(height: 24),
 
                     // ── Section 2: Household Head ──────────────────────────
-                    const EnrollmentSectionHeader(
+                    EnrollmentSectionHeader(
                       title: EnrollmentStrings.householdHeadSectionHeader,
                     ),
                     const SizedBox(height: 16),

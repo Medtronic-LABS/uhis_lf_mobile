@@ -6,6 +6,7 @@
 *.swp
 .buildlog/
 .history
+.venv-tools/
 
 # Environment / build-time config (keep env.example.json checked in)
 .env

@@ -1,4 +1,4 @@
-# RELEASE_PLAN.md — Apon Sushashthya (uhis_lf_mobile) — First Play Store Submission
+# RELEASE_PLAN.md — LEAPWELL (uhis_lf_mobile) — First Play Store Submission
 
 **Status as of this session:** signing is real, a release App Bundle has been built, ABI-trimmed, and
 verified, the app is renamed for the listing, screenshot capture and release automation (local script +
@@ -10,8 +10,10 @@ Decisions locked in for this plan (confirmed with the requester):
 - **Play Console account**: Organization (Workspace-verified) → no forced 14-day closed-testing gate;
   Internal testing can promote directly to Production.
 - **applicationId**: kept as `com.medtroniclabs.uhis_next` (see §1).
-- **App / listing name**: **Apon Sushashthya** (manifest label + pubspec description updated this
-  session; Play listing title should use this too).
+- **App / listing name**: **LEAPWELL**, approved by BRAC alongside "Apon Sushashthya" — LEAPWELL is
+  the primary name for recall, with Apon Sushashthya used as the tagline shown beneath it at startup
+  (manifest label + pubspec description updated; Play listing title should use LEAPWELL too, with
+  Apon Sushashthya as the subtitle/tagline in the listing copy).
 - **Keystore**: generated this session (see §2).
 - **minSdk**: reconfirmed 24 as the practical floor — not lowered (see §3).
 - **Privacy policy**: reuse the existing UHIS corporate policy link as-is, accepting the known risk
@@ -28,8 +30,8 @@ Decisions locked in for this plan (confirmed with the requester):
 |---|---|---|
 | `applicationId` / `namespace` | `com.medtroniclabs.uhis_next` | `android/app/build.gradle.kts:8,21`. **Not** a placeholder (`com.example.*`) and distinct from the reference app `org.medtroniclabs.uhis`. It does not literally match the `org.medtroniclabs.*` namespace originally specified — flagged and explicitly kept as-is per confirmation, since it's real, unique, and already wired through the Kotlin source path (`android/app/src/main/kotlin/com/medtroniclabs/uhis_next/MainActivity.kt`). **This is now permanent** — Play Console locks the applicationId forever after the first upload. |
 | Dart package name (`pubspec.yaml` `name:`) | `uhis_next` | Internal identifier only (Dart imports, build artifact naming) — invisible to end users and to Play Store. Deliberately **not** renamed; doing so would mean touching every import in the codebase for zero user-facing benefit. |
-| App display name (`android:label`) | `Apon Sushashthya` | **Changed this session** from `UHIS Next` — `android/app/src/main/AndroidManifest.xml:59`. |
-| `pubspec.yaml` description | `Apon Sushashthya (আপন সুস্বাস্থ্য) — Powered by Medtronic Labs for frontline health workers` | **Changed this session** from `UHIS Next — Powered by Medtronic Labs for frontline health worker`. |
+| App display name (`android:label`) | `LEAPWELL` | **Changed this session** from `Apon Sushashthya` — `android/app/src/main/AndroidManifest.xml:59`. Both names are BRAC-approved; LEAPWELL is primary, Apon Sushashthya is the startup tagline. |
+| `pubspec.yaml` description | `LEAPWELL (Apon Sushashthya) — Powered by Medtronic Labs for frontline health workers` | **Changed this session** from `Apon Sushashthya (আপন সুস্বাস্থ্য) — Powered by Medtronic Labs for frontline health workers`. |
 | `versionName` / `versionCode` | `1.0.0` / `1` | `pubspec.yaml:4` (`version: 1.0.0+1`), consistent with a true first release. |
 | Icon | Custom flat PNGs in `mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher.png` (3.5–17KB each) | Real branded icons (replaced Flutter's default icon in a prior commit), **not** Flutter template defaults. |
 | Adaptive icon (`mipmap-anydpi-v26/`) | **Absent** | Only legacy flat icons exist — no foreground/background layered adaptive icon. Not a submission blocker (Play still accepts legacy icons), but Play's pre-launch report will likely flag it as a recommendation. **Needs a designer to produce separate foreground/background layers** — nothing to generate from the current single flattened PNG without introducing visual regressions, so left out of this session's scope. |
@@ -146,10 +148,10 @@ drafting an app-specific policy modeled on this one's structure — flagging so 
 
 Copy-paste starting points; replace bracketed items with real decisions.
 
-- **App title**: `Apon Sushashthya`
-- **Short description** (≤80 chars): `AI-assisted offline app for community health workers` (54 chars)
+- **App title**: `LEAPWELL`
+- **Short description** (≤80 chars): `LEAPWELL (Apon Sushashthya) — AI-assisted app for community health workers` (76 chars)
 - **Full description** (≤4000 chars) — draft:
-  > Apon Sushashthya (আপন সুস্বাস্থ্য) is an offline-first mobile companion for community health workers (Shasthya Kormi) delivering household-centered primary care in the field. It supports antenatal, postnatal, non-communicable disease, tuberculosis, and child health visits with a guided, three-step visit flow: symptom check, vitals and clinical assessment, and an AI-assisted recommendation with clinical decision support.
+  > LEAPWELL (Apon Sushashthya / আপন সুস্বাস্থ্য) is an offline-first mobile companion for community health workers (Shasthya Kormi) delivering household-centered primary care in the field. It supports antenatal, postnatal, non-communicable disease, tuberculosis, and child health visits with a guided, three-step visit flow: symptom check, vitals and clinical assessment, and an AI-assisted recommendation with clinical decision support.
   >
   > Built for low-connectivity environments, all patient data is captured and encrypted on-device and synchronizes automatically when a connection is available. An on-device AI Scribe transcribes the consultation to help pre-fill visit forms, always reviewed and confirmed by the health worker before saving — nothing is recorded without consent, and every AI suggestion is a proposal, never an automatic action.
   >

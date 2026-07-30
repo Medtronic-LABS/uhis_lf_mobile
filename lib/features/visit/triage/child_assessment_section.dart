@@ -403,8 +403,8 @@ class _WeightField extends StatelessWidget {
                 fillColor: Colors.white,
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
               child: Text(
                 ChildAssessmentStrings.q7Unit,
                 style: TextStyle(

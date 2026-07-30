@@ -812,7 +812,7 @@ class _SplashScreenState extends State<_SplashScreen>
               _fade(
                 fade: _titleFade, slide: _titleSlide,
                 child: Text(
-                  LockStrings.aponSushashthya,
+                  LockStrings.leapwell,
                   style: TextStyle(
                     fontFamily: AppFonts.display,
                     fontSize: 26,
@@ -822,7 +822,19 @@ class _SplashScreenState extends State<_SplashScreen>
                   ),
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
+              _fade(
+                fade: _bnFade, slide: _bnSlide,
+                child: Text(
+                  LockStrings.aponSushashthya,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
               _fade(
                 fade: _bnFade, slide: _bnSlide,
                 child: Text(

@@ -89,6 +89,7 @@ Future<void> main() async {
   // Offline-first: never fetch fonts from the network. Falls back to bundled
   // assets (if declared in pubspec fonts:) then to system fonts.
   GoogleFonts.config.allowRuntimeFetching = false;
+  await loadTranslations();
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();

@@ -7,6 +7,7 @@ import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../../core/theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.fromLock = false});
@@ -136,11 +137,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 32),
-                    Image.asset(
-                      'assets/images/app-logo-name.png',
-                      height: 56,
-                      fit: BoxFit.contain,
-                      semanticLabel: 'UHIS logo',
+                    Center(
+                      child: Text(
+                        AppStrings.appName,
+                        style: TextStyle(
+                          fontFamily: AppFonts.display,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.pink,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 32),
                     if (_bannerMessage != null)
