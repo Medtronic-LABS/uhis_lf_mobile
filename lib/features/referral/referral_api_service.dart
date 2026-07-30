@@ -51,15 +51,29 @@ class ReferralApiService extends ApiRepository {
         '[PayloadDebug] referral-ticket-fetch → response type: ${response.runtimeType}',
       );
 
-      final list = extractList(response);
-      final tickets = list.whereType<Map<String, dynamic>>().toList(growable: false);
+      // /spice-service/patient/referral-tickets returns a single ReferralData
+      // entity: {"status":true,"entity":{...ReferralData...}}
+      // extractList handles entityList/data arrays but NOT a bare entity map.
+      // Extract the single entity and wrap it so the rest of the pipeline
+      // is uniform (List<Map>).
+      List<Map<String, dynamic>> tickets;
+      if (response is Map && response['entity'] is Map) {
+        final entity = Map<String, dynamic>.from(response['entity'] as Map);
+        tickets = [entity];
+        ConsoleLog.step('[ReferralApiService] single-entity response — extracted entity');
+      } else {
+        // Fallback: some environments may return a list variant.
+        final list = extractList(response);
+        tickets = list.whereType<Map<String, dynamic>>().toList(growable: false);
+      }
 
       // DEBUG: log count and first ticket for quick field inspection.
       ConsoleLog.step(
         '[ReferralApiService] fetchReferrals patientId=$patientId → ${tickets.length} ticket(s)',
       );
       if (tickets.isNotEmpty) {
-        ConsoleLog.step('[ReferralApiService] first ticket: ${tickets.first}');
+        ConsoleLog.step('[ReferralApiService] first ticket keys: ${tickets.first.keys.toList()}');
+        ConsoleLog.step('[ReferralApiService] patientStatus=${tickets.first['patientStatus']}');
       }
 
       return tickets;

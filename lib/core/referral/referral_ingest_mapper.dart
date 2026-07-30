@@ -243,7 +243,9 @@ class ReferralIngestMapper {
         // Patient stable after review → referral closed (recovered).
         return ReferralStatus.closedRecovered;
       case 'Uncontrolled':
+      case 'UN_CONTROLLED':
         // Patient still needs care → treatment is underway.
+        // Wire: NurseMedicalReviewActivity sends "UN_CONTROLLED" (confirmed logcat 2026-07-30).
         return ReferralStatus.treatmentStarted;
       case 'REVIEWED':
       case 'Reviewed':
