@@ -56,7 +56,7 @@
     </queries>
     
     <application
-        android:label="UHIS Next"
+        android:label="Apon Sushashthya"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
