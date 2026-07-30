@@ -53,6 +53,19 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
   void initState() {
     super.initState();
     _reload();
+    // Refresh when synthesis updates a referral state or facility patch lands —
+    // synthesis fires referralRepo._changes.value++ after upsert.
+    widget.repository.changes.addListener(_onChanges);
+  }
+
+  @override
+  void dispose() {
+    widget.repository.changes.removeListener(_onChanges);
+    super.dispose();
+  }
+
+  void _onChanges() {
+    if (mounted) setState(_reload);
   }
 
   void _reload() {
