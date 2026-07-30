@@ -830,6 +830,7 @@ abstract final class PatientProfileStrings {
       ? 'অফলাইন মোডে তথ্য পাওয়া যাচ্ছে না'
       : 'Data not available in offline mode';
   static String get enrolledInApp => getTranslatedString('enrolledInApp', 'Enrolled in Leapwell');
+  static String enrolledByWorker(String name) => getTranslatedString('enrolledByWorker', 'Patient registered in Leapwell by {name}', params: {'name': name});
   static String get enrollmentMilestone => getTranslatedString('enrollmentMilestone', 'Enrollment date');
   static String get pregnancyRegistered => getTranslatedString('pregnancyRegistered', 'Pregnancy Registered');
   static String get pregnancyRegistrationCategory => getTranslatedString('pregnancyRegistrationCategory', 'Pregnancy Registration');

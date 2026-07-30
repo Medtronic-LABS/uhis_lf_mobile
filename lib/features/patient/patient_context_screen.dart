@@ -1695,6 +1695,10 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
 
   // Enrollment milestone — pinned at bottom (oldest event in the patient's history).
   if (data.enrolledAt != null) {
+    final enrollmentItem = data.assessments
+        .where((a) => a.type.toLowerCase() == 'enrollment')
+        .firstOrNull;
+    final enrollerName = enrollmentItem?.rawJson['serviceProvidedByName'] as String?;
     entries.add(_TimelineEntry(
       emoji: '📋',
       title: PatientProfileStrings.enrolledInApp,
@@ -1702,7 +1706,9 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       category: PatientProfileStrings.enrollmentMilestone,
       date: data.enrolledAt!,
       dotColor: _kDotEnrollment,
-      description: 'Patient registered in Leapwell by community health worker',
+      description: enrollerName != null && enrollerName.isNotEmpty
+          ? PatientProfileStrings.enrolledByWorker(enrollerName)
+          : PatientProfileStrings.enrolledByWorker('community health worker'),
       badge: 'Enrolled',
       badgeColor: const Color(0xFFE0F2FE),
       badgeFgColor: const Color(0xFF0369A1),
