@@ -1659,10 +1659,21 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       .toSet();
 
   for (final a in data.assessments) {
-    // Skip the MEDICALREVIEWVISIT check-in entry when a richer NCDMEDICALREVIEW
-    // entry exists on the same calendar day — the clinical entry has all the data.
+    // Skip MEDICALREVIEWVISIT shell entries when a richer NCDMEDICALREVIEW entry
+    // exists on the same calendar day — both render "Medical Review Completed"
+    // but NCDMEDICALREVIEW carries vitals + ncdPatientStatus.
     if (a.type.toUpperCase() == 'MEDICALREVIEWVISIT' &&
         ncdReviewDays.contains(CalendarDay.startOf(a.date))) {
+      continue;
+    }
+    // Skip enrollment-type entries — already represented by the enrollment
+    // milestone pinned at the bottom from data.enrolledAt.
+    if (a.type.toLowerCase() == 'enrollment') continue;
+    // Skip unknown-programme entries with no clinical payload — they render as
+    // "General visit" with no useful information for the SK.
+    if (Programme.fromString(a.type) == Programme.unknown &&
+        (a.notes == null || a.notes!.isEmpty) &&
+        (a.status == null || a.status!.isEmpty)) {
       continue;
     }
     final showAsReferral = latestReferredId == null || a.id == latestReferredId;
@@ -1798,13 +1809,8 @@ Future<List<Referral>> _synthesizeReferralStateFromNurseReview(
   ReferralDao dao,
   ReferralRepository repo,
 ) async {
-  const _openStates = {ReferralStatus.created, ReferralStatus.inTransit};
-  final openReferrals = referrals.where((r) => _openStates.contains(r.state)).toList();
-  if (openReferrals.isEmpty) return referrals;
-
-  // Find the most-recent nurse review assessment with an ncdPatientStatus.
-  // ncdPatientStatus is nested under rawJson['observations'] — use _normalizeRaw
-  // to flatten it to the top level (same as _assessmentToEntry does).
+  // Find most-recent nurse review assessment with ncdPatientStatus.
+  // ncdPatientStatus is nested under rawJson['observations'] — use _normalizeRaw.
   MemberAssessment? nurseReview;
   String nurseNcdStatus = '';
   for (final a in assessments) {
@@ -1825,8 +1831,9 @@ Future<List<Referral>> _synthesizeReferralStateFromNurseReview(
       ? ReferralStatus.closedRecovered
       : ReferralStatus.treatmentStarted;
 
-  // Extract facility where nurse review was conducted — not on the referral ticket
-  // (referredTo is null), but available in the assessment's facilityName field.
+  // Facility where nurse review was conducted. Not on the referral ticket
+  // (referredTo is null), but available in the assessment's facilityName.
+  // Patch into referral rawJson so CceAlert subtitle shows "{facility} · {diagnosis}".
   final nurseFlat = _normalizeRaw(nurseReview.rawJson);
   final reviewFacility = (nurseFlat['facilityName'] as String? ?? '').trim();
 
@@ -1835,34 +1842,50 @@ Future<List<Referral>> _synthesizeReferralStateFromNurseReview(
     '${reviewFacility.isNotEmpty ? " facility=$reviewFacility" : ""}',
   );
 
-  // Persist synthesized state for open referrals so CCE reflects nurse review.
-  // Also patch facilityName from the nurse review into rawJson so CceAlert card
-  // subtitle shows "{facility} · {diagnosis}" matching the Spice Android reference.
-  final updated = referrals.map((r) {
-    if (!_openStates.contains(r.state)) return r;
-    String? patchedRaw = r.rawJson;
-    if (reviewFacility.isNotEmpty) {
-      try {
-        final raw = r.rawJson != null
-            ? Map<String, dynamic>.from(jsonDecode(r.rawJson!) as Map)
-            : <String, dynamic>{};
-        // Only patch if the referral ticket itself has no facility info.
-        final hasFacility =
-            (raw['facilityName'] as String? ?? '').trim().isNotEmpty ||
-            (raw['referredTo'] as String? ?? '').trim().isNotEmpty;
-        if (!hasFacility) {
-          raw['facilityName'] = reviewFacility;
-          patchedRaw = jsonEncode(raw);
-        }
-      } catch (_) {}
+  const _openStates = {ReferralStatus.created, ReferralStatus.inTransit};
+
+  String? _patchFacility(String? rawJson) {
+    if (reviewFacility.isEmpty) return rawJson;
+    try {
+      final raw = rawJson != null
+          ? Map<String, dynamic>.from(jsonDecode(rawJson) as Map)
+          : <String, dynamic>{};
+      final hasFacility =
+          (raw['facilityName'] as String? ?? '').trim().isNotEmpty ||
+          (raw['referredTo'] as String? ?? '').trim().isNotEmpty;
+      if (hasFacility) return rawJson;
+      raw['facilityName'] = reviewFacility;
+      return jsonEncode(raw);
+    } catch (_) {
+      return rawJson;
     }
-    return r.copyWith(state: synthesized, rawJson: patchedRaw);
+  }
+
+  // Apply to ALL referrals:
+  //   - open (created/inTransit): synthesize state + patch facility
+  //   - already synthesized (treatmentStarted/closedRecovered): patch facility only
+  //     (state was preserved by fetchAndPersist, but facility may not be set yet)
+  final updated = referrals.map((r) {
+    final needsStateUpdate = _openStates.contains(r.state);
+    final patchedRaw = _patchFacility(r.rawJson);
+    final rawChanged = patchedRaw != r.rawJson;
+    if (!needsStateUpdate && !rawChanged) return r;
+    return r.copyWith(
+      state: needsStateUpdate ? synthesized : null,
+      rawJson: patchedRaw,
+    );
   }).toList();
 
   try {
-    await dao.upsertMany(updated.where((r) => r.state == synthesized).toList());
-    // Fire _changes.value++ so CceRepository notifies the dashboard.
-    await repo.recomputeAllAfterSync();
+    final dirty = updated.where((r) =>
+        _openStates.contains(
+            referrals.firstWhere((orig) => orig.id == r.id).state) ||
+        r.rawJson !=
+            referrals.firstWhere((orig) => orig.id == r.id).rawJson).toList();
+    if (dirty.isNotEmpty) {
+      await dao.upsertMany(dirty);
+      await repo.recomputeAllAfterSync();
+    }
   } catch (e) {
     ConsoleLog.warn('[PatientCtx] referral synthesis persist failed: $e');
   }
