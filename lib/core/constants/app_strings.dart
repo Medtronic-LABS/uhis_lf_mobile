@@ -829,7 +829,7 @@ abstract final class PatientProfileStrings {
   static String get aiInsightNotSynced => AppLocale.isBangla
       ? 'অফলাইন মোডে তথ্য পাওয়া যাচ্ছে না'
       : 'Data not available in offline mode';
-  static String get enrolledInApp => getTranslatedString('enrolledInApp', 'Enrolled in Apon Sushashthya');
+  static String get enrolledInApp => getTranslatedString('enrolledInApp', 'Enrolled in Leapwell');
   static String get enrollmentMilestone => getTranslatedString('enrollmentMilestone', 'Enrollment date');
   static String get pregnancyRegistered => getTranslatedString('pregnancyRegistered', 'Pregnancy Registered');
   static String get pregnancyRegistrationCategory => getTranslatedString('pregnancyRegistrationCategory', 'Pregnancy Registration');

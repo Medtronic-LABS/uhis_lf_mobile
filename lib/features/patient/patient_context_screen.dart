@@ -1702,7 +1702,7 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       category: PatientProfileStrings.enrollmentMilestone,
       date: data.enrolledAt!,
       dotColor: _kDotEnrollment,
-      description: 'Patient added to Apon Sushashthya',
+      description: 'Patient registered in Leapwell by community health worker',
       badge: 'Enrolled',
       badgeColor: const Color(0xFFE0F2FE),
       badgeFgColor: const Color(0xFF0369A1),
