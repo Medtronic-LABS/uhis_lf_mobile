@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:intl/intl.dart';
+
 import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
@@ -11,6 +13,8 @@ import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/models/json_read.dart';
 import '../../../core/models/referral.dart';
+import '../../../core/risk/pw_risk_factors.dart';
+import '../../../core/time/calendar_day.dart';
 import '../../referral/referral_repository.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
@@ -19,6 +23,7 @@ import 'canonical_visit_data.dart';
 import 'form_config.dart';
 import 'rmnch_follow_up_calculator.dart';
 import 'unified_payload_mapper.dart';
+import 'unified_section_rules.dart';
 import 'vitals_trend.dart';
 
 /// Manages in-progress canonical form state for a single visit.
@@ -304,6 +309,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final map = jsonDecode(row.fieldValues) as Map<String, dynamic>;
       _data = _data.merge(CanonicalVisitData(map));
       _restoreFieldSources(row.fieldSources);
+      // Recompute EDD / GA from stored LMP (Android LMP callback parity).
+      final draftLmp = _data.getValue('lmp');
+      if (draftLmp != null) {
+        _applyPwProfileLmpChange(draftLmp);
+      }
       notifyListeners();
     } catch (e) {
       debugPrint('[UnifiedForm] draft parse error: $e');
@@ -574,6 +584,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
     }
+    // Android AssessmentPregnantWomenRegistrationFragment: LMP drives EDD,
+    // gestational week labels, and clears obstetric fields when too early.
+    if (fieldId == 'lmp') {
+      _applyPwProfileLmpChange(value);
+    }
     // Android resets on-treatment when existing illness changes.
     if (fieldId == 'pregnantWomanExistingIllness') {
       _data = _data.setValue('pregnantWomanOnTreatment', null);
@@ -661,6 +676,50 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (h != null && h > 0 && w != null && w > 0) {
       final bmi = w / ((h / 100) * (h / 100));
       _data = _data.setValue('bmi', double.parse(bmi.toStringAsFixed(1)));
+    }
+  }
+
+  static final _eddDisplayFormat = DateFormat('dd MMMM yyyy');
+
+  /// Fields Android resets when LMP is cleared or is < 6 weeks ago.
+  static const _pwLmpClearedFieldIds = {
+    'EDD',
+    'gestationalWeek',
+    'pregnancyTest',
+    'gravida',
+    'parity',
+    'livingChildren',
+    'ageOfLastChild',
+  };
+
+  /// Mirrors Android LMP callback: compute EDD + GA when ≥ 42 days; otherwise
+  /// clear the rest of the pregnancy-details fields (too-early path).
+  void _applyPwProfileLmpChange(dynamic value) {
+    final raw = value?.toString();
+    final lmp = (raw == null || raw.isEmpty) ? null : DateTime.tryParse(raw);
+    if (lmp == null) {
+      _data = _data.removeFields(_pwLmpClearedFieldIds);
+      return;
+    }
+
+    final days = CalendarDay.daysBetween(lmp, DateTime.now());
+    if (days < FieldVisibilityRules.lmpThresholdDays) {
+      _data = _data.removeFields(_pwLmpClearedFieldIds);
+      return;
+    }
+
+    final edd = lmp.add(const Duration(days: 280));
+    final weeks = days ~/ 7;
+    final remDays = days % 7;
+    _data = _data.setValue('EDD', _eddDisplayFormat.format(edd));
+    // Android formatGestationalAge(Pair): "X weeks Y days "
+    _data = _data.setValue(
+      'gestationalWeek',
+      '$weeks weeks $remDays days',
+    );
+
+    if (days > FieldVisibilityRules.pregnancyTestMaxGestationalDays) {
+      _data = _data.setValue('pregnancyTest', null);
     }
   }
 
@@ -760,6 +819,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
           'src="${field.sourceSegment ?? '-'}" ----->');
       if (field.fieldId == 'height' || field.fieldId == 'weight') {
         _recomputeBmi();
+      }
+      if (field.fieldId == 'lmp') {
+        _applyPwProfileLmpChange(validated);
       }
       // The BP card renders from the flat systolic/diastolic/pulse keys,
       // not the bpLogDetails array (which the payload mapper consumes) —
@@ -977,6 +1039,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
       ConsoleLog.step('[ReferralFacility] form submit — referralFacility=${_data.getValue('referralFacility')} referralFacilityType=${_data.getValue('referralFacilityType')} → _lastReferralFacility=$_lastReferralFacility');
 
       final savedIds = <String>[];
+      final pwStatus = payloads.any((p) => p.assessmentType == 'PWPROFILE')
+          ? PwRiskFactors.status(
+              pregnancyHistory: payloads
+                  .firstWhere((p) => p.assessmentType == 'PWPROFILE')
+                  .details,
+              dateOfBirth: await _patientDateOfBirth(),
+            )
+          : null;
+
       for (final payload in payloads) {
         ConsoleLog.banner(
           '[PayloadDebug] submit — ${payload.assessmentType} payload:\n'
@@ -993,6 +1064,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
           encounterId: _encounterId,
           isReferred: isReferred,
           referredReasons: referredReasons.isEmpty ? null : referredReasons,
+          customStatus:
+              payload.assessmentType == 'PWPROFILE' ? pwStatus : null,
           pregnancyEpisodeId: _pregnancyEpisodeId,
         );
         savedIds.add(id);
@@ -1017,6 +1090,30 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _submitting = false;
       notifyListeners();
     }
+  }
+
+  /// Member DOB for the PW age-risk rules. Falls back to the stored age when
+  /// no birth date was synced; returns null when neither is known, which makes
+  /// [PwRiskFactors] skip the age rules rather than guess.
+  Future<DateTime?> _patientDateOfBirth() async {
+    if (_patientId.isEmpty) return null;
+    try {
+      final patient = await _patientDao.byId(_patientId);
+      if (patient == null) return null;
+      final dob = patient.dob;
+      if (dob != null && dob.isNotEmpty) {
+        final parsed = DateTime.tryParse(dob);
+        if (parsed != null) return parsed;
+      }
+      final age = patient.age;
+      if (age != null && age > 0) {
+        final now = DateTime.now();
+        return DateTime(now.year - age, now.month, now.day);
+      }
+    } catch (e) {
+      debugPrint('[UnifiedForm] DOB lookup failed: $e');
+    }
+    return null;
   }
 
   /// Creates a local [Referral] for CCE when this visit was referred.

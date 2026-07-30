@@ -1334,7 +1334,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       title = 'Family Planning';
       category = 'Family Planning';
       dotColor = _kDotFp;
-      final fpM = raw['familyPlanningMethods']?.toString() ?? '';
+      final fpM = _rawStr(raw['familyPlanningMethods']) ?? '';
       description = fpM.isNotEmpty ? 'Method: $fpM' : null;
 
     // ─── General / Unknown ────────────────────────────────────────────────
@@ -1577,6 +1577,14 @@ Map<String, dynamic> _unpackRaw(Map<String, dynamic> rawJson) {
 String? _rawStr(dynamic v) {
   if (v == null) return null;
   if (v is String) return v;
+  // Multi-select answers arrive as lists (familyPlanningMethods, ncdSymptoms,
+  // complicationsDuringDelivery); join them rather than showing "[a, b]".
+  if (v is List) {
+    return v
+        .map((e) => e?.toString().trim() ?? '')
+        .where((e) => e.isNotEmpty)
+        .join(', ');
+  }
   return v.toString();
 }
 
@@ -1591,6 +1599,18 @@ Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) {
   // Step 1 — flatten 'observations' and 'assessmentDetails' sub-maps (API format).
   for (final subKey in const ['observations', 'assessmentDetails']) {
     final sub = raw[subKey];
+    if (sub is Map) {
+      for (final e in sub.entries) {
+        out.putIfAbsent(e.key.toString(), () => e.value);
+      }
+    }
+  }
+
+  // Step 1b — programme wrappers sit one level inside 'assessmentDetails'
+  // (FAMILY_PLANNING sends { familyPlanning: { … } }), so flatten them now that
+  // step 1 has lifted the wrapper to the top level.
+  for (final subKey in const ['familyPlanning', 'family_planning']) {
+    final sub = out[subKey];
     if (sub is Map) {
       for (final e in sub.entries) {
         out.putIfAbsent(e.key.toString(), () => e.value);
@@ -3913,9 +3933,9 @@ class _TimelineEventSheet extends StatelessWidget {
 
     final entries = <MapEntry<String, String>>[];
     void addIfPresent(String key, String label) {
-      final v = raw[key];
-      if (v != null && v.toString().isNotEmpty) {
-        entries.add(MapEntry(label, v.toString()));
+      final v = _rawStr(raw[key]);
+      if (v != null && v.isNotEmpty) {
+        entries.add(MapEntry(label, v));
       }
     }
     // ── Vitals (all programmes) ────────────────────────────────────────────

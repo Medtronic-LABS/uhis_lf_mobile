@@ -273,6 +273,8 @@ class FieldDef {
     this.infoTitle,
     this.isInfoVisible = false,
     this.isSummary = false,
+    this.minDays,
+    this.disableFutureDate = false,
   });
 
   final String id;
@@ -337,6 +339,14 @@ class FieldDef {
   /// "also include on the summary screen" — the field still renders on fill.
   final bool isSummary;
 
+  /// Android DatePicker `minDays` — earliest selectable date is today minus
+  /// this many days (e.g. LMP = 294). Null = no lower bound beyond defaults.
+  final int? minDays;
+
+  /// Android DatePicker `disableFutureDate` — when true, last selectable
+  /// date is today (past/today-only).
+  final bool disableFutureDate;
+
   factory FieldDef.fromJson(String id, Map<String, dynamic> json) {
     final rawHint = json['widgetHint'] as String?;
     final optionsList = ((json['optionsList'] ?? json['options']) as List<dynamic>? ?? [])
@@ -372,6 +382,8 @@ class FieldDef {
       infoTitle: json['infoTitle'] as String?,
       isInfoVisible: json['isInfo'] == 'visible',
       isSummary: json['isSummary'] as bool? ?? false,
+      minDays: (json['minDays'] as num?)?.toInt(),
+      disableFutureDate: json['disableFutureDate'] as bool? ?? false,
     );
   }
 }
