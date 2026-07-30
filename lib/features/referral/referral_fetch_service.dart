@@ -75,15 +75,28 @@ class ReferralFetchService {
       return 0;
     }
 
-    // DEBUG: log each ingested referral state for field-level tracing.
+    // Preserve synthesized state: backend always returns patientStatus="Referred"
+    // (state=created) even after nurse medical review. If we already synthesized
+    // a post-created state (e.g. treatmentStarted, closedRecovered) from the
+    // nurse review, keep it — don't let the stale backend response overwrite it.
+    final rowsToUpsert = <Referral>[];
     for (final r in rows) {
-      ConsoleLog.step(
-        '[ReferralFetchService] ingest id=${r.id} state=${r.state.wireTag} '
-        'slaTier=${r.slaTier.wireTag} diagnosis=${r.diagnosisLabel}',
-      );
+      final existing = await _dao.byId(r.id);
+      if (existing != null && existing.state != ReferralStatus.created) {
+        rowsToUpsert.add(r.copyWith(state: existing.state));
+        ConsoleLog.step(
+          '[ReferralFetchService] preserved state=${existing.state.wireTag} for id=${r.id}',
+        );
+      } else {
+        ConsoleLog.step(
+          '[ReferralFetchService] ingest id=${r.id} state=${r.state.wireTag} '
+          'slaTier=${r.slaTier.wireTag} diagnosis=${r.diagnosisLabel}',
+        );
+        rowsToUpsert.add(r);
+      }
     }
 
-    await _dao.upsertMany(rows);
+    await _dao.upsertMany(rowsToUpsert);
 
     // Ticket is the authoritative backend state. Remove inferred rows (ref-fu-*,
     // ref-hist-*) so CCE shows the actual nurse review outcome, not stale

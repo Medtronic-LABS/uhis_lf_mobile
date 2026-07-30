@@ -1109,9 +1109,9 @@ abstract final class ReferralStrings {
 
   // ── Timeline entry badges (patient context screen) ────────────────────────
   static String get badgeBreached => getTranslatedString('badgeBreached', '🔴 SLA Breached');
-  static String get badgeReviewedControlled => getTranslatedString('badgeReviewedControlled', '✅ Recovered');
+  static String get badgeReviewedControlled => getTranslatedString('badgeReviewedControlled', '✅ Controlled');
   static String get badgeDeceased => getTranslatedString('badgeDeceased', '⚫ Deceased');
-  static String get badgeUnderTreatment => getTranslatedString('badgeUnderTreatment', '🟡 On Treatment');
+  static String get badgeUnderTreatment => getTranslatedString('badgeUnderTreatment', '🟡 Under Care');
   static String get badgeAwaitingReview => getTranslatedString('badgeAwaitingReview', '⏳ Referred');
 }
 

@@ -555,11 +555,14 @@ class _PatientContextScreenState
       // Referral fetch count at index 2 — used only for debug logging.
       final referralFetchCount = phase2Results[2] as int;
       ConsoleLog.step('[PatientCtx] referral fetch ingested $referralFetchCount ticket(s)');
+      ConsoleLog.step('[PatientCtx] remoteAssessments=${remoteAssessments.length} types=${remoteAssessments.map((a) => a.type).join(",")}');
 
       // Load persisted referral rows (may include newly fetched tickets).
       var liveReferrals = await referralDaoLocal
           .forPatient(widget.patientId)
           .catchError((_) => <Referral>[]);
+
+      ConsoleLog.step('[PatientCtx] liveReferrals states=${liveReferrals.map((r) => r.state.wireTag).join(",")}');
 
       // Backend does NOT update patientStatus on the referral ticket when the
       // nurse completes a medical review. Synthesize: if any open referral
@@ -1646,7 +1649,22 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       .firstOrNull
       ?.id;
 
+  // Build a set of calendar days that have a NCDMEDICALREVIEW entry so we can
+  // suppress the paired MEDICALREVIEWVISIT shell entry (same visit, no clinical
+  // data — observations: null). Showing both produces a duplicate "Medical Review
+  // Completed" row with an empty badge, which confuses SKs.
+  final ncdReviewDays = data.assessments
+      .where((a) => a.type.toUpperCase() == 'NCDMEDICALREVIEW')
+      .map((a) => CalendarDay.startOf(a.date))
+      .toSet();
+
   for (final a in data.assessments) {
+    // Skip the MEDICALREVIEWVISIT check-in entry when a richer NCDMEDICALREVIEW
+    // entry exists on the same calendar day — the clinical entry has all the data.
+    if (a.type.toUpperCase() == 'MEDICALREVIEWVISIT' &&
+        ncdReviewDays.contains(CalendarDay.startOf(a.date))) {
+      continue;
+    }
     final showAsReferral = latestReferredId == null || a.id == latestReferredId;
     final entry = _assessmentToEntry(a, showAsReferral: showAsReferral);
     final ordinal = ancOrdinal[a.id];
@@ -1655,6 +1673,13 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
     } else {
       entries.add(entry);
     }
+  }
+
+  // Live referral entries — nurse review outcomes fetched from backend ticket.
+  // These are synthetic entries showing the SK what happened after referral.
+  for (final ref in data.liveReferrals) {
+    final entry = _referralToTimelineEntry(ref);
+    if (entry != null) entries.add(entry);
   }
 
   // Enrollment milestone — pinned at bottom (oldest event in the patient's history).
@@ -1778,17 +1803,24 @@ Future<List<Referral>> _synthesizeReferralStateFromNurseReview(
   if (openReferrals.isEmpty) return referrals;
 
   // Find the most-recent nurse review assessment with an ncdPatientStatus.
+  // ncdPatientStatus is nested under rawJson['observations'] — use _normalizeRaw
+  // to flatten it to the top level (same as _assessmentToEntry does).
   MemberAssessment? nurseReview;
+  String nurseNcdStatus = '';
   for (final a in assessments) {
     final upper = a.type.toUpperCase();
     if (upper != 'NCDMEDICALREVIEW' && upper != 'MEDICALREVIEWVISIT') continue;
-    final ncdStatus = (a.rawJson['ncdPatientStatus'] as String? ?? '').trim();
-    if (ncdStatus.isEmpty) continue;
-    if (nurseReview == null || a.date.isAfter(nurseReview.date)) nurseReview = a;
+    final flat = _normalizeRaw(a.rawJson);
+    final s = (flat['ncdPatientStatus'] as String? ?? '').trim();
+    if (s.isEmpty) continue;
+    if (nurseReview == null || a.date.isAfter(nurseReview.date)) {
+      nurseReview = a;
+      nurseNcdStatus = s;
+    }
   }
   if (nurseReview == null) return referrals;
 
-  final ncdStatus = (nurseReview.rawJson['ncdPatientStatus'] as String? ?? '').toUpperCase();
+  final ncdStatus = nurseNcdStatus.toUpperCase();
   final synthesized = ncdStatus == 'CONTROLLED'
       ? ReferralStatus.closedRecovered
       : ReferralStatus.treatmentStarted;

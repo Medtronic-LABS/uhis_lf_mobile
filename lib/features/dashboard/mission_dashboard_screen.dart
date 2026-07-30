@@ -68,6 +68,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Cached reference to mission repository for change listening.
   MissionDashboardRepository? _missionRepo;
   bool _missionListenerAdded = false;
+  ReferralRepository? _referralRepo;
+  bool _referralListenerAdded = false;
   
   // Flag to track if data needs refresh when widget becomes visible.
   bool _pendingRefresh = false;
@@ -131,6 +133,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _missionListenerAdded = true;
       _missionRepo!.changes.addListener(_onMissionChanges);
     }
+    _referralRepo = context.read<ReferralRepository>();
+    if (!_referralListenerAdded) {
+      _referralListenerAdded = true;
+      _referralRepo!.changes.addListener(_refreshNotificationCount);
+    }
     _refreshNotificationCount();
   }
 
@@ -153,6 +160,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     debugPrint('[_DashboardScreenState] dispose');
     _globalSearchDebounce?.cancel();
     _missionRepo?.changes.removeListener(_onMissionChanges);
+    _referralRepo?.changes.removeListener(_refreshNotificationCount);
     super.dispose();
   }
 
