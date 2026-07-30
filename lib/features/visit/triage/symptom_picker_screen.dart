@@ -1476,6 +1476,36 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
 
   static String? _sectionLabel(Programme? p) => null;
 
+  /// Chips flow across the full width and re-wrap as the space allows; a label
+  /// too long for a whole row is ellipsised instead of overflowing.
+  Widget _chipWrap(List<String> codes) {
+    final vm = widget.vm;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : double.infinity;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final code in codes)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: _PickerChip(
+                  key: ValueKey('triage_chip_$code'),
+                  code: code,
+                  isSelected: vm.isSelected(code),
+                  isAi: vm.isScribePreTick(code),
+                  onTap: () => _toggleSymptom(code),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -1625,27 +1655,15 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                   ),
                 ),
             ] else if (isSearching)
-              // Search results — flat natural-width wrap.
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: gridSections
-                    .expand((s) => s.$2)
-                    .toSet()
-                    .map(
-                      (code) => _PickerChip(
-                        key: ValueKey('triage_chip_$code'),
-                        code: code,
-                        isSelected: selected.contains(code),
-                        isAi: vm.isScribePreTick(code),
-                        onTap: () => _toggleSymptom(code),
-                      ),
-                    )
-                    .toList(),
-              )
+              // Search results — one flat wrap of the matches.
+              _chipWrap(gridSections.expand((s) => s.$2).toSet().toList())
+            else if (gridSections.every((s) => s.$1 == null || s.$1!.isEmpty))
+              // No section headers to draw — flow every service's symptoms as
+              // a single block so chips keep filling each row.
+              _chipWrap(gridSections.expand((s) => s.$2).toSet().toList())
             else
               // Per-service sections: each enrolled programme gets its own
-              // labeled chip block; chips wrap naturally within the block.
+              // labeled chip block; chips wrap within the block.
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -1664,23 +1682,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                         ),
                         const SizedBox(height: 6),
                       ],
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: section.$2
-                            .map(
-                              (code) => _PickerChip(
-                                key: ValueKey(
-                                  'triage_chip_${section.$1}_$code',
-                                ),
-                                code: code,
-                                isSelected: selected.contains(code),
-                                isAi: vm.isScribePreTick(code),
-                                onTap: () => _toggleSymptom(code),
-                              ),
-                            )
-                            .toList(),
-                      ),
+                      _chipWrap(section.$2),
                       const SizedBox(height: 14),
                     ],
                 ],
@@ -1865,12 +1867,16 @@ class _PickerChip extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
               ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
                 ),
               ),
             ],
