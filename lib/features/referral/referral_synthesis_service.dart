@@ -10,12 +10,18 @@ import 'referral_repository.dart';
 ///
 /// The backend never updates `patientStatus` on a referral ticket after a
 /// nurse completes a medical review — it stays "Referred". This service
-/// bridges that gap by reading NCDMEDICALREVIEW rows from the local
-/// AssessmentDao (written during offline sync) and deriving state:
-///   CONTROLLED   → ReferralStatus.closedRecovered
-///   UN_CONTROLLED → ReferralStatus.treatmentStarted
+/// bridges that gap by reading assessment rows from the local AssessmentDao
+/// (written during offline sync) and deriving state:
 ///
-/// Also patches `facilityName` from the nurse review into the referral
+/// NCD (NCDMEDICALREVIEW / MEDICALREVIEWVISIT):
+///   ncdPatientStatus=CONTROLLED   → ReferralStatus.closedRecovered
+///   ncdPatientStatus=UN_CONTROLLED → ReferralStatus.treatmentStarted
+///
+/// ANC / PNC / PW / other (referralStatus field on any assessment row):
+///   Recovered   → ReferralStatus.closedRecovered
+///   OnTreatment → ReferralStatus.treatmentStarted
+///
+/// Also patches `facilityName` from the review row into the referral
 /// rawJson so the CCE card subtitle shows "{facility} · {diagnosis}".
 ///
 /// Call sites (no patient screen required):
@@ -34,6 +40,8 @@ class ReferralSynthesisService {
   final ReferralDao _dao;
   final ReferralRepository _repo;
 
+  static const _ncdReviewKinds = {'NCDMEDICALREVIEW', 'MEDICALREVIEWVISIT'};
+
   /// Synthesize state for all open referrals from local assessment DB.
   /// Returns count of referrals updated.
   Future<int> synthesizeAll() async {
@@ -50,11 +58,12 @@ class ReferralSynthesisService {
       for (final referral in open) {
         final rows = byPatient[referral.patientId] ?? [];
 
+        // ── Pass 1: NCD — look for nurse medical review with ncdPatientStatus ──
         AssessmentRow? nurseReview;
         String ncdStatus = '';
         for (final row in rows) {
           final kind = (row.kind ?? '').toUpperCase();
-          if (kind != 'NCDMEDICALREVIEW' && kind != 'MEDICALREVIEWVISIT') continue;
+          if (!_ncdReviewKinds.contains(kind)) continue;
           final flat = _flatten(row.rawJson);
           final s = (flat['ncdPatientStatus'] as String? ?? '').trim();
           if (s.isEmpty) continue;
@@ -64,16 +73,51 @@ class ReferralSynthesisService {
             ncdStatus = s;
           }
         }
-        if (nurseReview == null) continue;
 
-        final synthesized = ncdStatus.toUpperCase() == 'CONTROLLED'
-            ? ReferralStatus.closedRecovered
-            : ReferralStatus.treatmentStarted;
+        ReferralStatus? synthesized;
+        String? facility;
 
-        final nurseFlat = _flatten(nurseReview.rawJson);
-        final facility = (nurseFlat['facilityName'] as String? ?? '').trim();
-        final patchedRaw = _patchFacility(referral.rawJson, facility);
+        if (nurseReview != null) {
+          synthesized = ncdStatus.toUpperCase() == 'CONTROLLED'
+              ? ReferralStatus.closedRecovered
+              : ReferralStatus.treatmentStarted;
+          final nurseFlat = _flatten(nurseReview.rawJson);
+          facility = (nurseFlat['facilityName'] as String? ?? '').trim();
+          if (facility.isEmpty) facility = null;
+        } else {
+          // ── Pass 2: ANC / PNC / PW / other — referralStatus on assessment row ──
+          AssessmentRow? latestWithStatus;
+          String referralStatus = '';
+          for (final row in rows) {
+            final kind = (row.kind ?? '').toUpperCase();
+            if (_ncdReviewKinds.contains(kind)) continue;
+            final flat = _flatten(row.rawJson);
+            final s = (flat['referralStatus'] as String? ?? '').trim();
+            if (s.isEmpty) continue;
+            if (latestWithStatus == null ||
+                (row.occurredAt ?? 0) > (latestWithStatus.occurredAt ?? 0)) {
+              latestWithStatus = row;
+              referralStatus = s;
+            }
+          }
+          if (latestWithStatus != null) {
+            final upper = referralStatus.toUpperCase();
+            if (upper == 'RECOVERED') {
+              synthesized = ReferralStatus.closedRecovered;
+            } else if (upper == 'ONTREATMENT' || upper == 'ON_TREATMENT') {
+              synthesized = ReferralStatus.treatmentStarted;
+            }
+            if (synthesized != null) {
+              final flat = _flatten(latestWithStatus.rawJson);
+              final f = (flat['facilityName'] as String? ?? '').trim();
+              if (f.isNotEmpty) facility = f;
+            }
+          }
+        }
 
+        if (synthesized == null) continue;
+
+        final patchedRaw = _patchFacility(referral.rawJson, facility ?? '');
         final stateChanged = openStates.contains(referral.state);
         final rawChanged = patchedRaw != referral.rawJson;
         if (!stateChanged && !rawChanged) continue;
