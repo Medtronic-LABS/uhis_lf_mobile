@@ -1825,14 +1825,38 @@ Future<List<Referral>> _synthesizeReferralStateFromNurseReview(
       ? ReferralStatus.closedRecovered
       : ReferralStatus.treatmentStarted;
 
+  // Extract facility where nurse review was conducted — not on the referral ticket
+  // (referredTo is null), but available in the assessment's facilityName field.
+  final nurseFlat = _normalizeRaw(nurseReview.rawJson);
+  final reviewFacility = (nurseFlat['facilityName'] as String? ?? '').trim();
+
   ConsoleLog.step(
-    '[PatientCtx] synthesize referral state: ncdPatientStatus=$ncdStatus → ${synthesized.wireTag}',
+    '[PatientCtx] synthesize referral state: ncdPatientStatus=$ncdStatus → ${synthesized.wireTag}'
+    '${reviewFacility.isNotEmpty ? " facility=$reviewFacility" : ""}',
   );
 
   // Persist synthesized state for open referrals so CCE reflects nurse review.
+  // Also patch facilityName from the nurse review into rawJson so CceAlert card
+  // subtitle shows "{facility} · {diagnosis}" matching the Spice Android reference.
   final updated = referrals.map((r) {
     if (!_openStates.contains(r.state)) return r;
-    return r.copyWith(state: synthesized);
+    String? patchedRaw = r.rawJson;
+    if (reviewFacility.isNotEmpty) {
+      try {
+        final raw = r.rawJson != null
+            ? Map<String, dynamic>.from(jsonDecode(r.rawJson!) as Map)
+            : <String, dynamic>{};
+        // Only patch if the referral ticket itself has no facility info.
+        final hasFacility =
+            (raw['facilityName'] as String? ?? '').trim().isNotEmpty ||
+            (raw['referredTo'] as String? ?? '').trim().isNotEmpty;
+        if (!hasFacility) {
+          raw['facilityName'] = reviewFacility;
+          patchedRaw = jsonEncode(raw);
+        }
+      } catch (_) {}
+    }
+    return r.copyWith(state: synthesized, rawJson: patchedRaw);
   }).toList();
 
   try {
