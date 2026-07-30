@@ -10,6 +10,7 @@ import '../../core/debug/console_log.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/assessment_dao.dart';
+import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
@@ -21,6 +22,9 @@ import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
+import 'enrollment/enrollment_entry_sheet.dart';
+import 'enrollment/nid_ocr_service.dart';
+import 'enrollment/widgets/enrollment_sticky_bar.dart';
 import '../visit/widgets/mission_queue_card.dart';
 
 /// Full details of a household member for display.
@@ -272,8 +276,10 @@ class HouseholdDetailData {
       id: str('id'),
       name: str('name'),
       householdNo: str('householdNo'),
-      village: str('village'),
-      subVillage: str('subVillage'),
+      // Prefer explicit name key; fall back to the raw 'village' field which
+      // may carry either a name or a numeric ID depending on the API path.
+      village: str('villageName') ?? str('village'),
+      subVillage: str('subVillageName') ?? str('subVillage'),
       memberCount: memberCount ?? memberList.length,
       latitude: lat,
       longitude: lng,
@@ -332,7 +338,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
 
     // Fallback to "Household #ID"
     if (householdId.isNotEmpty) {
-      return 'Household #$householdId';
+      return '#$householdId';
     }
 
     return null;
@@ -408,9 +414,25 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     } catch (_) {}
   }
 
-  /// Resolves village name, SS name, and last-visit date for households that
-  /// arrive pre-loaded with members (list-screen → detail navigation). Avoids
-  /// a redundant full member fetch when the roster is already in hand.
+  /// Resolves a village display name from an ordered list of candidate
+  /// ID/name values. Tries each candidate as an ID against the hierarchy's
+  /// sub-villages then top-level villages; returns the first match found.
+  /// If no ID matches (e.g. candidate is already a human-readable name),
+  /// returns the first non-null candidate unchanged.
+  String? _resolveVillageDisplayName(
+    UserHierarchyService hierarchy,
+    List<String?> candidates,
+  ) {
+    for (final id in candidates.whereType<String>()) {
+      final name =
+          hierarchy.subVillages?.where((sv) => sv.id == id).firstOrNull?.name ??
+          hierarchy.villages?.where((v) => v.id == id).firstOrNull?.name;
+      if (name != null) return name;
+    }
+    // No ID matched — first non-null candidate may already be a name string.
+    return candidates.whereType<String>().firstOrNull;
+  }
+
   /// Resolves village name, SS name, and last-visit date for households that
   /// arrive pre-loaded with members (list-screen → detail navigation). Avoids
   /// a redundant full member fetch when the roster is already in hand.
@@ -421,19 +443,13 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     final patientDao = context.read<PatientDao>();
     await hierarchy.prefetch();
 
-    // Village ID → human-readable name. Check subVillages first (more specific),
-    // then fall back to top-level villages.
-    final rawVillage = _household.village;
-    final villageName = rawVillage == null
-        ? null
-        : hierarchy.subVillages
-                ?.where((sv) => sv.id == rawVillage)
-                .firstOrNull
-                ?.name ??
-            hierarchy.villages
-                ?.where((v) => v.id == rawVillage)
-                .firstOrNull
-                ?.name;
+    // Resolve village name using household field first, then member sub-village
+    // and village IDs as fallbacks — covers cases where the household entity
+    // stores only a numeric villageId while the name lives in the hierarchy.
+    final villageName = _resolveVillageDisplayName(hierarchy, [
+      _household.village,
+      _household.members.firstOrNull?.villageId,
+    ]);
 
     // SS name from first member's DB entity (pre-loaded HouseholdMemberData
     // doesn't carry shasthyaShebikaId — must re-query).
@@ -459,7 +475,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     }
 
     ConsoleLog.banner('[HouseholdDetail] _enrichMeta'
-        ' village=${villageName ?? rawVillage} ssName=$ssName lastVisit=$lastVisitAt');
+        ' village=$villageName ssName=$ssName lastVisit=$lastVisitAt');
 
     if (!mounted) return;
     setState(() {
@@ -526,13 +542,18 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
           members: enriched,
           householdId: householdId,
         );
+        final resolvedVillage = _resolveVillageDisplayName(hierarchy, [
+          _household.village,
+          localMembers.first.subVillageId,
+          localMembers.first.villageId,
+        ]);
         if (!mounted) return;
         setState(() {
           _household = HouseholdDetailData(
             id: _household.id,
             name: derivedName,
             householdNo: _household.householdNo,
-            village: _household.village,
+            village: resolvedVillage,
             subVillage: _household.subVillage,
             memberCount: enriched.length,
             latitude: _household.latitude,
@@ -570,13 +591,19 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
           members: enriched,
           householdId: householdId,
         );
+        final resolvedVillage = _resolveVillageDisplayName(hierarchy, [
+          updated.village,
+          localMembers.firstOrNull?.subVillageId,
+          localMembers.firstOrNull?.villageId,
+          enriched.firstOrNull?.villageId,
+        ]);
         if (!mounted) return;
         setState(() {
           _household = HouseholdDetailData(
             id: updated.id,
             name: derivedName,
             householdNo: updated.householdNo,
-            village: updated.village,
+            village: resolvedVillage,
             subVillage: updated.subVillage,
             // Trust the loaded member list, not the API's own count field —
             // matches the local-cache path so `memberCount` means the same
@@ -674,6 +701,49 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
 
   HouseholdDetailData get household => _household;
 
+  /// Opens the NID scanner (same modal as during enrollment add-member flow).
+  /// On scan success or skip → navigate to LinkMemberScreen pre-filled with
+  /// this household's data.
+  Future<void> _addMember() async {
+    final result = await showNidScannerForMember(context);
+    if (!mounted) return;
+    if (result == null) return;
+
+    // Use FHIR household ID for server sync; fall back to local canonical key
+    // for unsynced households. Canonical key (_household.id) is the local
+    // sequential number and will be rejected by fhir-mapper if sent as-is.
+    final localId = _household.id ?? '';
+    final householdEntity =
+        await context.read<HouseholdDao>().getById(localId);
+    final serverHouseholdId = householdEntity?.fhirId ?? localId;
+
+    final villageId = householdEntity?.villageId ??
+        _household.members.firstOrNull?.villageId ??
+        '';
+    final memberNames = _household.members
+        .map((m) => m.name)
+        .whereType<String>()
+        .where((n) => n.isNotEmpty)
+        .toList();
+    final extra = <String, dynamic>{
+      'householdId': serverHouseholdId,
+      'householdReferenceId': localId,
+      'householdName': _household.name ?? '',
+      'householdNo': _household.householdNo ?? '',
+      'villageId': villageId,
+      'villageName': _household.village ?? '',
+      'memberNames': memberNames,
+    };
+    if (result.status == NidScanStatus.success && result.data != null) {
+      extra['fromNidScan'] = true;
+      extra['nidNumber'] = result.data!.nidNumber;
+      extra['name'] = result.data!.name;
+      extra['dateOfBirth'] = result.data!.dateOfBirth;
+    }
+    if (!mounted) return;
+    context.push('/household/enrollment/link-member', extra: extra);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -684,6 +754,10 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       ),
       child: Scaffold(
         backgroundColor: AppColors.canvas,
+        bottomNavigationBar: EnrollmentStickyBar(
+          label: 'Add Member',
+          onPressed: _addMember,
+        ),
         body: SafeArea(
           top: false,
           bottom: false,

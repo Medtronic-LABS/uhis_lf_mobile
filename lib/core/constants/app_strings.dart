@@ -24,7 +24,7 @@ import '../models/dashboard_tier.dart';
 abstract final class AppStrings {
   AppStrings._();
 
-  static const String appName = 'UHIS Next';
+  static const String appName = 'LEAPWELL';
   static const String appTagline = 'MedtronicLabs · Frontline Health';
   static const String poweredBy = 'Powered by Medtronic Labs';
 
@@ -624,7 +624,7 @@ abstract final class OnboardingStrings {
   static String get title => AppLocale.isBangla ? 'আপনার অ্যাকাউন্ট সুরক্ষিত করুন' : 'Secure Your Account';
   static String get subtitle => AppLocale.isBangla
       ? 'আপনার ডিভাইসের বায়োমেট্রিক্স ও ব্যাকআপ পিন ব্যবহার করে ইউএইচআইএস নেক্সটে দ্রুত ও নিরাপদ প্রবেশাধিকার সেট আপ করুন।'
-      : 'Set up quick, secure access to UHIS Next using your device\'s biometrics and a backup PIN.';
+      : 'Set up quick, secure access to LEAPWELL using your device\'s biometrics and a backup PIN.';
 
   static String get biometricFeatureTitle => AppLocale.isBangla ? 'ডিভাইস আনলক' : 'Device Unlock';
   static String get biometricFeatureDesc => AppLocale.isBangla
@@ -1115,6 +1115,14 @@ abstract final class PatientProfileStrings {
   static String get aiInsightUnavailable => AppLocale.isBangla
       ? 'এআই অন্তর্দৃষ্টি অনুপলব্ধ — রোগীর রেকর্ড ম্যানুয়ালি পরীক্ষা করুন'
       : 'AI insight unavailable — check patient record manually';
+  static String get enrolledInApp =>
+      AppLocale.isBangla ? 'আপন সুস্বাস্থ্যে নথিভুক্ত' : 'Enrolled in Apon Sushashthya';
+  static String get enrollmentMilestone =>
+      AppLocale.isBangla ? 'নথিভুক্তির তারিখ' : 'Enrollment date';
+  static String get pregnancyRegistered =>
+      AppLocale.isBangla ? 'গর্ভাবস্থা নিবন্ধিত' : 'Pregnancy Registered';
+  static String get pregnancyRegistrationCategory =>
+      AppLocale.isBangla ? 'গর্ভাবস্থা নিবন্ধন' : 'Pregnancy Registration';
   static String get trendsTitle => AppLocale.isBangla ? 'প্রবণতা' : 'Trends';
   static String get bpChartLabel => AppLocale.isBangla ? 'রক্তচাপ' : 'Blood Pressure';
   static String get bgChartLabel => AppLocale.isBangla ? 'রক্তের শর্করা' : 'Blood Glucose';
@@ -1433,7 +1441,7 @@ abstract final class MissionDashboardStrings {
   // ── HTML Dashboard composition ───────────────────────────────────────────
   static String aiSortedVisits(int n) => AppLocale.isBangla
       ? 'এআই রাতারাতি আপনার $n টি ভিজিট সাজিয়েছে'
-      : 'sorted your $n visits overnight';
+      : 'Sorted your $n visits overnight';
   static String get visitsToday =>
       AppLocale.isBangla ? 'আজকের ভিজিট' : 'Visits today';
 
@@ -1467,7 +1475,7 @@ abstract final class MissionDashboardStrings {
       ? 'কোনো রোগীর রেকর্ড নেই — শুরু করতে কেস খুলুন।'
       : 'No patient record — open the case to begin.';
   static String houseNumber(String no) =>
-      AppLocale.isBangla ? 'বাড়ি #$no' : 'House #$no';
+      '#$no';
   static String moreVisits(int n) {
     if (AppLocale.isBangla) {
       return n == 1 ? '+ আরও 1টি ভিজিট আজ' : '+ আরও $n টি ভিজিট আজ';
@@ -1491,8 +1499,8 @@ abstract final class MissionDashboardStrings {
       return n == 1 ? '✦ সাজানো 1 টি ভিজিট আজ' : '✦ সাজানো $n টি ভিজিট আজ';
     }
     return n == 1
-        ? '✦ sorted 1 visit today'
-        : '✦ sorted $n visits today';
+        ? '✦ 1 visit today'
+        : '✦ $n visits today';
   }
   static String get actionVisitNow =>
       AppLocale.isBangla ? 'এখনই ভিজিট করুন' : 'Visit now';
@@ -1689,7 +1697,7 @@ abstract final class MissionDashboardStrings {
   static String get bpReviewPending =>
       AppLocale.isBangla ? 'BP পর্যালোচনা মুলতুবি' : 'BP Review Pending';
   static String householdNumber(int number) =>
-      AppLocale.isBangla ? 'পরিবার #$number' : 'Household #$number';
+      '#$number';
   static String potentialServicesCount(int count) => AppLocale.isBangla
       ? 'সম্ভাব্য সেবা: $count'
       : 'Potential Services: $count';
@@ -3861,13 +3869,10 @@ abstract final class SymptomPickerStrings {
   // ── Status bar above CTA ────────────────────────────────────────────────
   static String symptomsSelectedStatus(int n) =>
       '$n ${n == 1 ? 'symptom' : 'symptoms'} selected';
-  static String servicesOpeningStatus(int count, List<String> labels) {
+  static String servicesOpeningStatus(List<String> labels) {
     if (labels.isEmpty) return '';
-    final caps = labels.map((l) => l.toUpperCase()).toList();
-    if (caps.length == 1) return 'This visit will cover ${caps[0]} screening';
-    final joined = caps.sublist(0, caps.length - 1).join(', ') +
-        ' & ${caps.last}';
-    return 'This visit will cover $joined';
+    if (labels.length == 1) return labels[0];
+    return '${labels.sublist(0, labels.length - 1).join(', ')} & ${labels.last}';
   }
 
   // ── Other symptoms free-text ─────────────────────────────────────────────
@@ -4160,6 +4165,10 @@ abstract final class NabaStrings {
   static const String proposalNote =
       'This is an AI proposal. Review and accept to proceed.';
 
+  static const String callDoctorNow = 'Call a doctor now';
+  static const String callDoctorNowBn = 'ডাক্তারকে ফোন করন';
+  static const String callDoctorOfflineHint = 'Available when online';
+
   static const String fallbackNotice =
       'AI service was unavailable. Care plan is based on clinical guidelines. '
       'Review and adjust based on your assessment.';
@@ -4177,6 +4186,7 @@ abstract final class TeleconsultStrings {
       'The SK can initiate a call directly from a completed visit.';
   static const String callAction = 'Start Video Call';
   static const String smsAction = 'Send SMS to Doctor';
+  static const String doneButton = 'Done';
 }
 
 /// Counselling messages placeholder screen strings.
@@ -4743,8 +4753,8 @@ abstract final class EnrollmentStrings {
   static const String householdNumberLabel = 'Household Number';
   static const String householdNumberHint = 'Auto-generated';
 
-  static const String healthWorkerLabel = 'Health Worker';
-  static const String healthWorkerHint = 'Your name';
+  static const String healthWorkerLabel = 'SS Name';
+  static const String healthWorkerHint = 'Select SS';
 
   static const String villageLabel = 'Village';
   static const String villageHint = 'Select village';
@@ -4910,14 +4920,14 @@ abstract final class EnrollmentStrings {
   static const List<String> maritalStatusesV2 = [
     'Married',
     'Single',
-    'Separated / Divorced',
-    'Widowed',
     'Unmarried',
   ];
+  static const String guardianLabel = 'Guardian';
+  static const String guardianHint = 'Select guardian from household';
   static const List<String> disabilityStatusesV2 = ['Present', 'Absent'];
   static const List<String> disabilityYesNo = ['Yes', 'No'];
   static const List<String> gendersMember = ['Male', 'Female', 'Other'];
-  static const List<String> idTypesV2 = ['BRN', 'National ID'];
+  static const List<String> idTypesV2 = ['National ID', 'BRN', 'Not Available'];
 
   static const List<String> healthWorkerOptions = [
     'Jahnara Begum — Char Bhadra',
@@ -4948,6 +4958,10 @@ abstract final class EnrollmentStrings {
   static const String mobileNotAvailableHint = 'Not Available';
 
   static const String nidScanButtonLabel = 'Scan NID card to read number';
+  static const String nidNumberLabel = 'NID NUMBER';
+  static const String nidNumberHint = 'Enter NID number';
+  static const String nidScannedBadge = '✓ Scanned';
+  static const String nidClearScan = 'Clear scan';
   static const String nidScanNoBrnHint =
       'If member has no NID, enter Birth Registration ID instead.';
   static String nidNumberCaptured(String number) =>

@@ -231,8 +231,8 @@ class Endpoints {
       '/ai-scribe/upload/$uploadId/complete';
 
   // ── Micro-coaching (spice-coaching / medtronics-api) ─────────────────────
-  // Hosted separately from the UHIS gateway; base URL is
-  // [AppConfig.coachingServiceUrl] (`--dart-define=COACHING_SERVICE_URL=...`).
+  // Base URL: [AppConfig.coachingServiceUrl] (defaults to the shared UHIS dev
+  // backend — override with --dart-define=COACHING_SERVICE_URL=... if needed).
   /// Full module + card + quiz bundle (incremental via `?since=`).
   static const String coachingSyncModules = '/medtronics-api/sync/modules';
 

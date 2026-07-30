@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/clinical/briefing_rules/child_immunization_briefing_rules.dart';
-import 'package:uhis_next/features/visit/immunisation/epi_schedule_engine.dart';
+import 'package:leapwell/core/clinical/briefing_rules/child_immunization_briefing_rules.dart';
+import 'package:leapwell/features/visit/immunisation/epi_schedule_engine.dart';
 
 VaccineEntry _entry({
   required String code,

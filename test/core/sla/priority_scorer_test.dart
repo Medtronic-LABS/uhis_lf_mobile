@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/models/referral.dart';
-import 'package:uhis_next/core/models/sla.dart';
-import 'package:uhis_next/core/sla/priority_scorer.dart';
+import 'package:leapwell/core/models/referral.dart';
+import 'package:leapwell/core/models/sla.dart';
+import 'package:leapwell/core/sla/priority_scorer.dart';
 
 void main() {
   const scorer = PriorityScorer();

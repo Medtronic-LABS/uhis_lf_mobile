@@ -331,6 +331,30 @@ class MemberDao {
     await batch.commit(noResult: true);
   }
 
+  /// Delete locally-created placeholder rows that the server has now confirmed
+  /// with a FHIR primary key. When enrollment succeeds, the server assigns a
+  /// FHIR `id` to each member; the sync bundle returns it as `id` alongside
+  /// the original `referenceId` (local UUID). Without cleanup, both the local
+  /// UUID row and the new FHIR-keyed row exist → same member appears in two
+  /// separate households in getAllGroupedByHousehold.
+  Future<void> removeLocalPlaceholders(
+      List<HouseholdMemberEntity> incoming) async {
+    if (incoming.isEmpty) return;
+    final batch = _db.db.batch();
+    for (final m in incoming) {
+      final refId = m.referenceId;
+      if (refId == null || refId.isEmpty || refId == m.id) continue;
+      // refId != m.id → server assigned a new FHIR id; delete the local row
+      // that used refId as its primary key (id column).
+      batch.delete(
+        AppDatabase.tableMembers,
+        where: 'id = ?',
+        whereArgs: [refId],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   /// Get all members for a household (LOCAL query, no network).
   Future<List<HouseholdMemberEntity>> getByHouseholdId(String householdId) async {
     final rows = await _db.db.query(
@@ -472,11 +496,43 @@ class MemberDao {
       orderBy: 'household_id, name ASC',
     );
 
+    // Pass 1: build householdId → canonical key map.
+    //
+    // Members from the same household can have MIXED householdReferenceId values:
+    //   - Locally-enrolled rows: householdReferenceId = HH_UUID (always set)
+    //   - Server-synced rows that arrived WITH referenceId: householdReferenceId = HH_UUID
+    //   - Server-synced rows WITHOUT referenceId (e.g. enrolled on another device
+    //     or via another system): householdReferenceId = null
+    //
+    // Without normalization, rows with householdReferenceId = HH_UUID group under
+    // HH_UUID while rows with householdReferenceId = null group under FHIR_HH_ID,
+    // making one household appear as two separate households in the list.
+    //
+    // Fix: for every FHIR householdId, the canonical key is the first non-null
+    // householdReferenceId seen among its members; fall back to householdId
+    // only when no member in the household has a referenceId.
+    final fhirToCanonical = <String, String>{};
+    for (final row in rows) {
+      final hid = row['household_id'] as String?;
+      if (hid == null || hid.isEmpty) continue;
+      final hrid = row['household_reference_id'] as String?;
+      if (hrid != null && hrid.isNotEmpty) {
+        fhirToCanonical.putIfAbsent(hid, () => hrid);
+      } else {
+        fhirToCanonical.putIfAbsent(hid, () => hid);
+      }
+    }
+
+    // Pass 2: group using the normalized canonical key.
     final grouped = <String, List<HouseholdMemberEntity>>{};
     for (final row in rows) {
       final member = HouseholdMemberEntity.fromDb(row);
-      final hhId = member.householdId ?? '';
-      grouped.putIfAbsent(hhId, () => []).add(member);
+      final hrid = member.householdReferenceId?.isNotEmpty == true
+          ? member.householdReferenceId!
+          : null;
+      final hid = member.householdId;
+      final key = hrid ?? (hid != null ? (fhirToCanonical[hid] ?? hid) : '');
+      grouped.putIfAbsent(key, () => []).add(member);
     }
     return grouped;
   }

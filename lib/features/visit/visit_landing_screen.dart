@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/models/programme.dart';
 import 'encounter_repository.dart';
 import 'household_repository.dart';
@@ -88,7 +89,21 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
     setState(() => _starting = true);
 
     final controller = context.read<VisitController>();
+    final memberDao = context.read<MemberDao>();
     final programme = widget.data?.programme ?? Programme.unknown;
+
+    // Resolve numeric member ID so offline-sync/create has a valid referenceId.
+    // Without this, the FHIR mapper falls back to Group/{householdId} which may
+    // not exist in HAPI, producing a 400.
+    final member = await memberDao.getByPatientId(widget.patientId);
+    final memberId = member?.referenceId?.isNotEmpty == true
+        ? member!.referenceId
+        : member?.id;
+    final householdMemberLocalId =
+        int.tryParse(member?.referenceId ?? '') ??
+        int.tryParse(member?.id ?? '') ??
+        0;
+    final villageId = member?.subVillageId ?? member?.villageId;
 
     final encounterId = await startOrResumeVisit(
       context,
@@ -107,16 +122,18 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
       // Pass origin through to triage for return navigation
       final origin = widget.data?.origin;
       final originParam = origin != null ? '?origin=$origin' : '';
-      debugPrint('[VisitLanding] navigating to triage with origin=$origin');
+      debugPrint('[VisitLanding] navigating to triage with origin=$origin memberId=$memberId householdMemberLocalId=$householdMemberLocalId');
       context.go(
         '/patients/visit/$encounterId/flow$originParam',
         extra: {
           'patientId': widget.patientId,
           'patientName': widget.data?.patientName,
-          'memberId': null,
+          'memberId': memberId,
           'householdId': widget.data?.householdId,
           'patientAge': widget.data?.patientAge,
           'patientGender': widget.data?.patientGender,
+          'householdMemberLocalId': householdMemberLocalId,
+          'villageId': villageId,
         },
       );
     } else {

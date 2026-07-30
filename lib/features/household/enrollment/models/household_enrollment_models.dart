@@ -8,8 +8,6 @@ class HouseholdMember {
   HouseholdMember({
     this.id,
     required this.name,
-    this.fatherName,
-    this.motherName,
     required this.age,
     required this.gender,
     required this.dateOfBirth,
@@ -22,16 +20,11 @@ class HouseholdMember {
     required this.relationshipToHead,
     this.villageId,
     this.nidScanned = false,
+    this.guardianName,
   });
 
   final String? id;
   final String name;
-
-  /// Father's name — printed in Bangla on the NID, so entered manually.
-  final String? fatherName;
-
-  /// Mother's name — printed in Bangla on the NID, so entered manually.
-  final String? motherName;
   final int age;
   final String gender; // 'Male', 'Female', 'Other'
   final String dateOfBirth; // ISO 8601 string (YYYY-MM-DD)
@@ -39,17 +32,16 @@ class HouseholdMember {
   final String? idNumber;
   final String? mobileNumber;
   final bool mobileAvailable;
-  final String maritalStatus; // 'Single', 'Married', 'Widowed', 'Divorced'
-  final String disabilityStatus; // 'None', 'Physical', 'Sensory', 'Cognitive', 'Multiple'
+  final String maritalStatus; // 'Single', 'Married', 'Unmarried'
+  final String disabilityStatus;
   final String relationshipToHead; // 'Head', 'Spouse', 'Child', 'Parent', 'Sibling', 'Other'
   final String? villageId; // Only for external members
   final bool nidScanned;
+  final String? guardianName;
 
   HouseholdMember copyWith({
     String? id,
     String? name,
-    String? fatherName,
-    String? motherName,
     int? age,
     String? gender,
     String? dateOfBirth,
@@ -62,12 +54,11 @@ class HouseholdMember {
     String? relationshipToHead,
     String? villageId,
     bool? nidScanned,
+    String? guardianName,
   }) {
     return HouseholdMember(
       id: id ?? this.id,
       name: name ?? this.name,
-      fatherName: fatherName ?? this.fatherName,
-      motherName: motherName ?? this.motherName,
       age: age ?? this.age,
       gender: gender ?? this.gender,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
@@ -80,6 +71,7 @@ class HouseholdMember {
       relationshipToHead: relationshipToHead ?? this.relationshipToHead,
       villageId: villageId ?? this.villageId,
       nidScanned: nidScanned ?? this.nidScanned,
+      guardianName: guardianName ?? this.guardianName,
     );
   }
 
@@ -87,8 +79,6 @@ class HouseholdMember {
     return {
       'id': id,
       'name': name,
-      'fatherName': fatherName,
-      'motherName': motherName,
       'age': age,
       'gender': gender,
       'dateOfBirth': dateOfBirth,
@@ -101,6 +91,7 @@ class HouseholdMember {
       'relationshipToHead': relationshipToHead,
       'villageId': villageId,
       'nidScanned': nidScanned,
+      'guardianName': guardianName,
     };
   }
 
@@ -108,8 +99,6 @@ class HouseholdMember {
     return HouseholdMember(
       id: json['id'] as String?,
       name: json['name'] as String? ?? '',
-      fatherName: json['fatherName'] as String?,
-      motherName: json['motherName'] as String?,
       age: json['age'] as int? ?? 0,
       gender: json['gender'] as String? ?? 'Other',
       dateOfBirth: json['dateOfBirth'] as String? ?? '',
@@ -122,6 +111,7 @@ class HouseholdMember {
       relationshipToHead: json['relationshipToHead'] as String? ?? 'Other',
       villageId: json['villageId'] as String?,
       nidScanned: json['nidScanned'] as bool? ?? false,
+      guardianName: json['guardianName'] as String?,
     );
   }
 }
@@ -129,8 +119,6 @@ class HouseholdMember {
 class HouseholdHeadInfo extends HouseholdMember {
   HouseholdHeadInfo({
     required super.name,
-    super.fatherName,
-    super.motherName,
     required super.age,
     required super.gender,
     required super.dateOfBirth,
@@ -149,8 +137,6 @@ class HouseholdHeadInfo extends HouseholdMember {
   HouseholdHeadInfo copyWith({
     String? id,
     String? name,
-    String? fatherName,
-    String? motherName,
     int? age,
     String? gender,
     String? dateOfBirth,
@@ -163,12 +149,11 @@ class HouseholdHeadInfo extends HouseholdMember {
     String? relationshipToHead,
     String? villageId,
     bool? nidScanned,
+    String? guardianName,
   }) {
     return HouseholdHeadInfo(
       id: id ?? this.id,
       name: name ?? this.name,
-      fatherName: fatherName ?? this.fatherName,
-      motherName: motherName ?? this.motherName,
       age: age ?? this.age,
       gender: gender ?? this.gender,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,

@@ -302,20 +302,6 @@ class FormPrefillResult {
       1,
       250,
     );
-    tryAdd(
-      'hba1c',
-      // Dart RegExp is picky with mixed Devanagari/Bangla alternations —
-      // keep this permissive (keyword then nearest number within ~40 chars).
-      RegExp(
-        r'(?:hba1c|hb\s*a\s*1\s*c|(?:এইচ|एच)).{0,40}?'
-        r'(\d+(?:[.,]\d+)?)',
-        caseSensitive: false,
-        unicode: true,
-      ),
-      3,
-      20,
-    );
-
     if (extra.isEmpty) return this;
     return FormPrefillResult(
       fields: [...fields, ...extra],

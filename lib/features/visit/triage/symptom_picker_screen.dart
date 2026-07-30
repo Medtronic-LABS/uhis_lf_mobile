@@ -25,6 +25,7 @@ import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'programme_grid_sync.dart';
 import 'symptom_catalog.dart';
+import 'unified_symptom_catalog.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
 
@@ -117,10 +118,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// engine — rendered with the ✦ sparkle in the card.
   final Set<Programme> _pathwayActivatedProgrammes = {};
 
-  /// Programmes the SK explicitly turned off this visit. Pathway sync must
-  /// not resurrect these — otherwise deselecting NCD (etc.) is immediately
-  /// undone when symptoms/AI refresh pathway activation.
+  /// Programmes the SK explicitly turned off this visit. Pathway-engine and
+  /// background AI syncs must not resurrect these. However, an explicit
+  /// symptom selection that directly maps to a dismissed programme lifts the
+  /// dismissal (the SK is signalling clinical intent).
   final Set<Programme> _skDismissedProgrammes = {};
+
+  /// Shadow of [TriageViewModel.selectedSymptoms] from the last sync cycle.
+  /// Used to detect newly added symptoms so we can lift dismissals for their
+  /// catalogue-mapped programmes before re-running the service grid sync.
+  Set<String> _lastKnownSymptoms = {};
 
   /// PW meta-flag — gates ANC. Auto-true when patient already has PW/ANC registered.
   bool _isPW = false;
@@ -454,15 +461,46 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   /// Keeps [_selectedProgrammes] and [_pathwayActivatedProgrammes] in sync
-  /// with the pathway engine whenever symptoms change (AI Scribe pre-tick or
-  /// manual selection). Only adds newly activated programmes — never removes
-  /// an SK selection, and never resurrects a programme in
-  /// [_skDismissedProgrammes].
+  /// whenever symptoms change (AI Scribe pre-tick or manual selection).
+  ///
+  /// Two complementary sources feed auto-selection:
+  ///   1. PathwayEngine ([vm.allPathways]) — WHO-derived rule activations.
+  ///   2. [UnifiedSymptomCatalog] direct mapping — each [UnifiedSymptomDef]
+  ///      declares the programmes it belongs to; selecting a symptom
+  ///      immediately surfaces all relevant services regardless of whether
+  ///      a PathwayEngine rule fires for that exact symptom combination.
+  ///
+  /// Dismissal lift: when a symptom is *newly added* (not in [_lastKnownSymptoms]),
+  /// its catalogue-mapped programmes are removed from [_skDismissedProgrammes]
+  /// before the sync runs. Explicit symptom selection is a clinical signal that
+  /// overrides a prior card dismissal; background pathway/AI refreshes do not.
   void _syncPathwaysToServiceGrid() {
     if (!mounted) return;
     final vm = _viewModel;
     if (vm == null) return;
+
+    final currentSymptoms = vm.selectedSymptoms;
+
+    // Lift dismissal for programmes mapped to newly added symptoms.
+    // Only additions trigger this — removals leave dismissed state intact.
+    final newlyAdded = currentSymptoms.difference(_lastKnownSymptoms);
+    for (final code in newlyAdded) {
+      final def = UnifiedSymptomCatalog.byCode(code);
+      if (def != null) _skDismissedProgrammes.removeAll(def.programmes);
+    }
+    _lastKnownSymptoms = Set.from(currentSymptoms);
+
+    // Source 1: rule-engine activations.
     final activated = vm.allPathways.map((p) => p.programme).toSet();
+
+    // Source 2: catalogue direct symptom→programme mapping.
+    // Each UnifiedSymptomDef.programmes names every service that symptom
+    // belongs to, providing finer-grained auto-selection than the rule engine.
+    for (final code in currentSymptoms) {
+      final def = UnifiedSymptomCatalog.byCode(code);
+      if (def != null) activated.addAll(def.programmes);
+    }
+
     final unseen = ProgrammeGridSync.additionsFromPathways(
       activated: activated,
       selected: _selectedProgrammes,
@@ -915,52 +953,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (_selectedProgrammes.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  SymptomPickerStrings.servicesOpeningStatus(
-                                    _selectedProgrammes.length,
-                                    _selectedProgrammes
-                                        .map((p) => p.wireTag)
-                                        .toList(),
-                                  ),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppColors.navy,
-                                  ),
-                                ),
-                                if (vm.activatedPathways.isNotEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.only(top: 2),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.auto_awesome_rounded,
-                                          size: 11,
-                                          color: Color(0xFF7C3AED),
-                                        ),
-                                        SizedBox(width: 3),
-                                        Text(
-                                          'AI selected',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Color(0xFF7C3AED),
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-
                         // ── Under-5 CTA — driven by vaccination + child-health selection
                         if (_patientContext!.isUnder5) ...[
                           const SizedBox(height: 4),
@@ -1672,11 +1664,10 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                   ),
                 ),
             ] else if (isSearching)
-              // Search results — flat wrap, no headers.
+              // Search results — flat natural-width wrap.
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
                 children: gridSections
                     .expand((s) => s.$2)
                     .toSet()
@@ -1692,7 +1683,8 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                     .toList(),
               )
             else
-              // Default grid — one Wrap per programme section with a label.
+              // Per-service sections: each enrolled programme gets its own
+              // labeled chip block; chips wrap naturally within the block.
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -1701,12 +1693,12 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                     if (section.$2.isNotEmpty) ...[
                       if (section.$1 != null && section.$1!.isNotEmpty) ...[
                         Text(
-                          section.$1!,
+                          section.$1!.toUpperCase(),
                           style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
                             color: AppColors.textMuted,
-                            letterSpacing: 0.5,
+                            letterSpacing: 1.0,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -1714,7 +1706,6 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        alignment: WrapAlignment.spaceBetween,
                         children: section.$2
                             .map(
                               (code) => _PickerChip(
@@ -1729,7 +1720,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                             )
                             .toList(),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 14),
                     ],
                 ],
               ),
@@ -1808,22 +1799,6 @@ class _SelectedSymptomRow extends StatelessWidget {
               label,
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: _rowText,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Color(0x99FFFFFF), // rgba(255,255,255,0.6)
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: Text(
-              isAi ? 'AI detected' : 'Standard',
-              style: const TextStyle(
-                fontSize: 9,
                 fontWeight: FontWeight.w700,
                 color: _rowText,
               ),
@@ -1970,6 +1945,7 @@ const _kAllServiceCards = [
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🌸', label: 'FP',                programme: Programme.familyPlanning),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '💊', label: 'NCD',               programme: Programme.ncd),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
+  _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🔍', label: 'Cataract',           programme: Programme.cataract),
   // Under-5 cards — shown only when ctx.isUnder5
   _ServiceCardDef(kind: _ServiceCardKind.vaccination, emoji: '💉', label: 'Vaccination'),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🧒', label: 'Child Health',      programme: Programme.imci),
@@ -2045,17 +2021,6 @@ class _InlineServiceSelector extends StatelessWidget {
     }).toList();
   }
 
-  String _enrolledLabel(_ServiceCardDef card) {
-    if (card.isPW) return 'Registered';
-    switch (card.programme) {
-      case Programme.anc:
-      case Programme.pnc:
-        return 'Completed visit';
-      default:
-        return TriageStrings.enrolledBadge;
-    }
-  }
-
   String _cardLabel(_ServiceCardDef card) {
     if (card.isRMNCH) {
       final ctx = patientContext;
@@ -2072,10 +2037,13 @@ class _InlineServiceSelector extends StatelessWidget {
     if (card.programme == Programme.imci) return false;
     final ctx = patientContext;
     final pregnant = ctx.isPregnant && !ctx.isPostpartum;
-    if (card.isPW) return isDelivery || !pregnant;
+    // PW: starts a new pregnancy registration — never requires prior pregnancy record.
+    // Blocked only during delivery visit or when already postpartum.
+    if (card.isPW) return isDelivery || ctx.isPostpartum;
     if (card.programme == Programme.anc) {
-      // ANC requires PW registration first; also blocked if ANC already done today.
-      return !isPW || isDelivery || !pregnant || ancVisitedToday;
+      // ANC requires PW selection first; also blocked if ANC already done today.
+      // !pregnant removed: SK may start ANC for a new pregnancy (no prior PW record).
+      return !isPW || isDelivery || ancVisitedToday;
     }
     if (card.isDelivery) return !pregnant;
     if (card.programme == Programme.pnc) return !ctx.isPostpartum;
@@ -2188,10 +2156,6 @@ class _InlineServiceSelector extends StatelessWidget {
                     label: _cardLabel(c),
                     isSelected: _isCardSelected(c),
                     isLocked: _isLocked(c),
-                    isEnrolled: (c.programme != null &&
-                            enrolledProgrammes.contains(c.programme)) ||
-                        (c.isPW && enrolledProgrammes.contains(Programme.anc)),
-                    enrolledLabel: _enrolledLabel(c),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
                     onTap: () => _handleTap(context, c),
@@ -2209,8 +2173,6 @@ class _ServiceTile extends StatelessWidget {
     required this.label,
     required this.isSelected,
     required this.isLocked,
-    required this.isEnrolled,
-    required this.enrolledLabel,
     required this.isPathwaySuggested,
     required this.onTap,
   });
@@ -2219,142 +2181,106 @@ class _ServiceTile extends StatelessWidget {
   final String label;
   final bool isSelected;
   final bool isLocked;
-
-  /// Patient is already enrolled in this programme from past visits.
-  /// Shows an programme-specific badge; the card remains selectable for this visit.
-  final bool isEnrolled;
-
-  /// Badge text when [isEnrolled] is true. Defaults to "Enrolled" for most
-  /// programmes; ANC/PNC use "Completed ANC"/"Completed PNC" etc.
-  final String enrolledLabel;
-
   final bool isPathwaySuggested;
   final VoidCallback onTap;
 
-  static const _enrolledBadgeBg = Color(0xFFE5E7EB);
-  static const _enrolledBadgeText = Color(0xFF6B7280);
-
   @override
   Widget build(BuildContext context) {
-    final Color bg = Colors.white;
+    final Color bg = isSelected
+        ? AppColors.navy.withValues(alpha: 0.04)
+        : Colors.white;
     final Color borderColor =
         isSelected ? AppColors.navy : const Color(0xFFE5E7EB);
-    final double borderWidth = isSelected ? 1.5 : 1;
+    final double borderWidth = isSelected ? 2.0 : 1.0;
     final Color labelColor = isLocked
-        ? AppColors.navy.withValues(alpha: 0.55)
+        ? AppColors.navy.withValues(alpha: 0.45)
         : AppColors.navy;
 
     return Semantics(
-      button: true,
-      selected: isSelected,
-      enabled: !isLocked,
-      label: isEnrolled
-          ? TriageStrings.enrolledProgrammeA11y(label)
-          : (isSelected
-              ? TriageStrings.deselectProgrammeA11y(label)
-              : TriageStrings.selectProgrammeA11y(label)),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Opacity(
-          opacity: isLocked ? 0.45 : 1.0,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderColor, width: borderWidth),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0A000000),
-                  blurRadius: 4,
-                  offset: Offset(0, 1),
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                // ✦ sparkle — pathway-engine suggested
-                if (isPathwaySuggested && isSelected)
-                  Positioned(
-                    top: 5,
-                    left: 6,
-                    child: Text(
-                      '✦',
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: AppColors.navy.withValues(alpha: 0.45),
+            button: true,
+            selected: isSelected,
+            enabled: !isLocked,
+            label: isSelected
+                ? TriageStrings.deselectProgrammeA11y(label)
+                : TriageStrings.selectProgrammeA11y(label),
+            child: GestureDetector(
+              onTap: onTap,
+              child: Opacity(
+                opacity: isLocked ? 0.40 : 1.0,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: borderColor, width: borderWidth),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0A000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
                       ),
-                    ),
+                    ],
                   ),
-                // Checkmark — follows visit selection, not enrolment alone
-                Positioned(
-                  top: 5,
-                  right: 6,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 140),
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected ? AppColors.navy : Colors.transparent,
-                      border: Border.all(
-                        color: isSelected
-                            ? AppColors.navy
-                            : const Color(0xFFD1D5DB),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: isSelected
-                        ? const Icon(
-                            Icons.check_rounded,
-                            size: 10,
-                            color: Colors.white,
-                          )
-                        : null,
-                  ),
-                ),
-                // Emoji + label + enrolled badge
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Stack(
                     children: [
-                      Text(def.emoji, style: const TextStyle(fontSize: 20)),
-                      const SizedBox(height: 4),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
-                          color: labelColor,
-                        ),
-                      ),
-                      if (isEnrolled) ...[
-                        const SizedBox(height: 3),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
+                      // Selection circle — top-right
+                      Positioned(
+                        top: 7,
+                        right: 7,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 140),
+                          width: 22,
+                          height: 22,
                           decoration: BoxDecoration(
-                            color: _enrolledBadgeBg,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            enrolledLabel,
-                            style: TextStyle(
-                              fontSize: 8,
-                              fontWeight: FontWeight.w700,
-                              color: _enrolledBadgeText,
+                            shape: BoxShape.circle,
+                            color: isSelected ? AppColors.navy : Colors.transparent,
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.navy
+                                  : const Color(0xFFD1D5DB),
+                              width: 1.5,
                             ),
                           ),
+                          child: isSelected
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  size: 13,
+                                  color: Colors.white,
+                                )
+                              : null,
                         ),
-                      ],
+                      ),
+                      // Emoji + label — Positioned.fill so Column
+                      // gets tight constraints and mainAxisAlignment.center works.
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(def.emoji, style: const TextStyle(fontSize: 28)),
+                              const SizedBox(height: 6),
+                              Text(
+                                label,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: labelColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 }

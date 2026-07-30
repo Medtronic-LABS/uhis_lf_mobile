@@ -1,8 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/features/visit/forms/canonical_visit_data.dart';
-import 'package:uhis_next/features/visit/forms/form_config.dart';
-import 'package:uhis_next/features/visit/forms/unified_section_rules.dart';
+import 'package:leapwell/features/visit/forms/canonical_visit_data.dart';
+import 'package:leapwell/features/visit/forms/form_config.dart';
+import 'package:leapwell/features/visit/forms/unified_section_rules.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

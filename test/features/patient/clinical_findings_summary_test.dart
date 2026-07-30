@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/clinical/briefing_rules/clinical_finding.dart';
-import 'package:uhis_next/features/patient/patient_context_screen.dart';
+import 'package:leapwell/core/clinical/briefing_rules/clinical_finding.dart';
+import 'package:leapwell/features/patient/patient_context_screen.dart';
 
 void main() {
   group('clinicalFindingsSummary', () {

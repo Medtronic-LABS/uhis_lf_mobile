@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/db/member_dao.dart';
 import '../../../core/debug/console_log.dart';
@@ -42,7 +41,6 @@ class CreateHouseholdScreen extends StatefulWidget {
 
 class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   // ── Household fields ────────────────────────────────────────────────────────
-  late TextEditingController _houseNumberCtrl;
   late TextEditingController _totalMembersCtrl;
   late TextEditingController _incomeCtrl;
   late TextEditingController _disabilityCountCtrl;
@@ -56,19 +54,65 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
   // ── Head fields ─────────────────────────────────────────────────────────────
   late TextEditingController _nameCtrl;
-  late TextEditingController _fatherCtrl;
-  late TextEditingController _motherCtrl;
   late TextEditingController _idNumberCtrl;
   late TextEditingController _mobileCtrl;
   late TextEditingController _dobCtrl;
   late TextEditingController _ageCtrl;
 
-  String? _idType = 'BRN';
+  String? _idType;
   String? _gender;
   String? _maritalStatus;
   String? _disabilityStatus;
-  bool _mobileNotAvailable = false;
   bool _prefilledFromScan = false;
+
+  // ── Validation ──────────────────────────────────────────────────────────────
+  final Map<String, GlobalKey> _fieldKeys = {};
+  Map<String, String?> _fieldErrors = {};
+
+  static const _validationOrder = [
+    'ssWorker', 'village', 'householdType', 'totalMembers',
+    'headName', 'idNumber', 'mobile', 'dob', 'gender', 'maritalStatus',
+  ];
+
+  GlobalKey _key(String name) =>
+      _fieldKeys.putIfAbsent(name, GlobalKey.new);
+
+  void _clearError(String name) {
+    if (_fieldErrors[name] != null) setState(() => _fieldErrors.remove(name));
+  }
+
+  Map<String, String?> _runValidation() {
+    const req = 'Required';
+    return {
+      if (_selectedSsWorker == null) 'ssWorker': req,
+      if (_selectedVillage == null) 'village': req,
+      if (_householdType == null) 'householdType': req,
+      if (_totalMembersCtrl.text.trim().isEmpty) 'totalMembers': req,
+      if (_nameCtrl.text.trim().isEmpty) 'headName': req,
+      if (_idType != 'Not Available' && _idNumberCtrl.text.trim().isEmpty) 'idNumber': req,
+      if (_mobileCtrl.text.trim().isEmpty) 'mobile': req,
+      if (_dobCtrl.text.trim().isEmpty) 'dob': 'Date of birth required',
+      if (_gender == null) 'gender': req,
+      if ((int.tryParse(_ageCtrl.text) ?? 99) > 5 && _maritalStatus == null) 'maritalStatus': req,
+    };
+  }
+
+  void _scrollToFirstError() {
+    for (final k in _validationOrder) {
+      if (_fieldErrors[k] != null) {
+        final ctx = _fieldKeys[k]?.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOut,
+            alignment: 0.15,
+          );
+        }
+        return;
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -76,16 +120,13 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     debugPrint('[_CreateHouseholdScreenState] initState');
 
     // Household controllers
-    _houseNumberCtrl = TextEditingController()..addListener(_onFormChanged);
-    _totalMembersCtrl = TextEditingController()..addListener(_onFormChanged);
+    _totalMembersCtrl = TextEditingController();
     _incomeCtrl = TextEditingController();
     _disabilityCountCtrl = TextEditingController();
 
     // Head controllers
-    _nameCtrl = TextEditingController()..addListener(_onFormChanged);
-    _fatherCtrl = TextEditingController();
-    _motherCtrl = TextEditingController();
-    _idNumberCtrl = TextEditingController()..addListener(_onFormChanged);
+    _nameCtrl = TextEditingController();
+    _idNumberCtrl = TextEditingController();
     _mobileCtrl = TextEditingController();
     _dobCtrl = TextEditingController();
     _ageCtrl = TextEditingController();
@@ -110,103 +151,35 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       }
     }
 
-    // Initialise the household controller after first build
+    // Initialise the household controller after first build.
+    // Always reset so a second enrollment in the same session starts fresh —
+    // the ShellRoute keeps the same EnrollmentController alive across navigations.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final controller = context.read<EnrollmentController>();
-      if (controller.household == null) {
-        final auth = context.read<AuthRepository>();
-        final hierarchy = context.read<UserHierarchyService>();
+      controller.reset();
+      final hierarchy = context.read<UserHierarchyService>();
 
-        // Ensure static-data has been fetched before reading the lists.
-        // prefetch() is a no-op if already loaded; safe to await here.
-        await hierarchy.prefetch();
-        if (!mounted) return;
-
-        final userId = await auth.userId();
-        if (!mounted) return;
-        final villages = hierarchy.villages ?? [];
-        final subVillages = hierarchy.subVillages ?? [];
-
-        final firstVillage = villages.isNotEmpty ? villages.first : null;
-        // Prefer the first sub-village that belongs to the chosen village;
-        // fall back to the global first only if none map to it.
-        final matchingSubs = firstVillage == null
-            ? subVillages
-            : subVillages
-                .where((sv) => sv.villageId == firstVillage.id)
-                .toList();
-        final firstSubVillage = matchingSubs.isNotEmpty
-            ? matchingSubs.first
-            : (subVillages.isNotEmpty ? subVillages.first : null);
-
-        if (!mounted) return;
-        // Auto-select first SS worker from the SK's assigned SS list.
-        final ssWorkers = hierarchy.ssWorkers ?? [];
-        final firstSs = ssWorkers.isNotEmpty ? ssWorkers.first : null;
-        // The SS worker's own sub-villages are the authoritative pull scope;
-        // prefer them over the village-filtered top-level list.
-        final ssSeedSub = (firstSs != null && firstSs.subVillages.isNotEmpty)
-            ? firstSs.subVillages.first
-            : firstSubVillage;
-        setState(() {
-          _selectedSsWorker = firstSs;
-          // Seed the dropdown selections so a valid village + sub-village are
-          // sent even when the SK does not manually change them.
-          _selectedVillage = firstVillage;
-          _selectedSubVillage = ssSeedSub;
-        });
-        controller.initializeHousehold(
-          healthWorkerId: _selectedSsWorker?.id ?? userId?.toString() ?? '',
-          villageId: firstVillage?.id.toString() ?? '',
-          villageName: firstVillage?.name,
-          subVillageId: firstSubVillage?.id.toString(),
-          subVillageName: firstSubVillage?.name,
-        );
-      }
+      await hierarchy.prefetch();
+      if (!mounted) return;
+      setState(() {}); // trigger rebuild so dropdowns populate their option lists
     });
+
   }
 
   @override
   void dispose() {
     debugPrint('[_CreateHouseholdScreenState] dispose');
-    _houseNumberCtrl
-      ..removeListener(_onFormChanged)
-      ..dispose();
-    _totalMembersCtrl
-      ..removeListener(_onFormChanged)
-      ..dispose();
+    _totalMembersCtrl.dispose();
     _incomeCtrl.dispose();
     _disabilityCountCtrl.dispose();
-    _nameCtrl
-      ..removeListener(_onFormChanged)
-      ..dispose();
-    _fatherCtrl.dispose();
-    _motherCtrl.dispose();
-    _idNumberCtrl
-      ..removeListener(_onFormChanged)
-      ..dispose();
+    _nameCtrl.dispose();
+    _idNumberCtrl.dispose();
     _mobileCtrl.dispose();
     _dobCtrl.dispose();
     _ageCtrl.dispose();
     super.dispose();
   }
-
-  void _onFormChanged() => setState(() {});
-
-  bool get _isFormComplete =>
-      // Household required
-      _selectedSsWorker != null &&
-      _selectedVillage != null &&
-      _householdType != null &&
-      _houseNumberCtrl.text.trim().isNotEmpty &&
-      _totalMembersCtrl.text.trim().isNotEmpty &&
-      // Head required
-      _nameCtrl.text.trim().isNotEmpty &&
-      _idNumberCtrl.text.trim().isNotEmpty &&
-      _gender != null &&
-      _maritalStatus != null &&
-      _dobCtrl.text.trim().isNotEmpty;
 
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
@@ -229,6 +202,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       setState(() {
         _dobCtrl.text = DateFormat('yyyy-MM-dd').format(picked);
         _calculateAge(picked);
+        _fieldErrors.remove('dob');
       });
     }
   }
@@ -244,6 +218,13 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   }
 
   Future<void> _handleContinue(EnrollmentController controller) async {
+    final errors = _runValidation();
+    if (errors.isNotEmpty) {
+      setState(() => _fieldErrors = errors);
+      _scrollToFirstError();
+      return;
+    }
+    setState(() => _fieldErrors = {});
     debugPrint('[_CreateHouseholdScreenState] _handleContinue householdType=$_householdType ssWorker=${_selectedSsWorker?.id} village=${_selectedVillage?.id} fromNidScan=${widget.fromNidScan}');
     // Guarantee a valid sub-village even if the SK never opened the dropdown.
     // Android scopes member/assessment sync to sub-village IDs, so a household
@@ -277,7 +258,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       healthWorkerId: _selectedSsWorker?.id,
       householdType: _householdType ?? '',
       numberOfMembers: int.tryParse(_totalMembersCtrl.text) ?? 0,
-      houseNumber: _houseNumberCtrl.text,
+      houseNumber: '',
       occupation: _selectedOccupation ?? '',
       monthlyIncome: _incomeCtrl.text.isEmpty ? '0' : _incomeCtrl.text,
       disabilityQuestion: _hasDisability == 'Yes',
@@ -291,28 +272,26 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
     controller.updateHead(
       name: _nameCtrl.text,
-      fatherName: _fatherCtrl.text.trim().isEmpty ? null : _fatherCtrl.text,
-      motherName: _motherCtrl.text.trim().isEmpty ? null : _motherCtrl.text,
       age: int.tryParse(_ageCtrl.text) ?? 0,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
       idType: _idType ?? 'BRN',
-      idNumber: _idNumberCtrl.text,
-      mobileNumber: _mobileNotAvailable ? null : _mobileCtrl.text,
-      mobileAvailable: !_mobileNotAvailable,
-      maritalStatus: _maritalStatus!,
+      idNumber: _idType == 'Not Available' ? null : _idNumberCtrl.text,
+      mobileNumber: _mobileCtrl.text,
+      mobileAvailable: true,
+      maritalStatus: _maritalStatus ?? '',
       disabilityStatus: _disabilityStatus ?? 'Absent',
       nidScanned: widget.fromNidScan && _prefilledFromScan,
     );
 
-    final errors = [
+    final controllerErrors = [
       ...controller.validateHouseholdForm(),
       ...controller.validateHeadForm(),
     ];
-    if (errors.isNotEmpty) {
+    if (controllerErrors.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(errors.first),
+          content: Text(controllerErrors.first),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -400,6 +379,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 16),
 
+                    SizedBox(key: _key('ssWorker'), height: 0),
                     Builder(builder: (context) {
                       final hierarchy =
                           context.watch<UserHierarchyService>();
@@ -413,25 +393,27 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                             (s) => s.name == name,
                             orElse: () => ssWorkers.first,
                           );
-                          // The chosen SS worker defines the caseload scope:
-                          // its assigned sub-villages are exactly the IDs the
-                          // SK's sync pulls are scoped to. Re-seed the
-                          // sub-village selection from this SS so the enrolled
-                          // member is guaranteed to be visible in the Spice app.
                           final ssSubs = ss.subVillages;
+                          final parentVillageId = ssSubs.isNotEmpty ? ssSubs.first.villageId : null;
+                          final allVillages = context.read<UserHierarchyService>().villages ?? [];
+                          final matches = parentVillageId != null
+                              ? allVillages.where((v) => v.id == parentVillageId).toList()
+                              : <VillageRef>[];
                           setState(() {
                             _selectedSsWorker = ss;
-                            if (ssSubs.isNotEmpty) {
-                              _selectedSubVillage = ssSubs.first;
-                            }
+                            if (matches.isNotEmpty) _selectedVillage = matches.first;
+                            if (ssSubs.isNotEmpty) _selectedSubVillage = ssSubs.first;
+                            _fieldErrors.remove('ssWorker');
                           });
                         },
                         hint: EnrollmentStrings.healthWorkerHint,
                         isRequired: true,
+                        errorText: _fieldErrors['ssWorker'],
                       );
                     }),
                     const SizedBox(height: 14),
 
+                    SizedBox(key: _key('village'), height: 0),
                     Builder(builder: (context) {
                       final hierarchy =
                           context.watch<UserHierarchyService>();
@@ -445,11 +427,6 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                             (v) => v.name == name,
                             orElse: () => villages.first,
                           );
-                          // Auto-select the first sub-village belonging to the
-                          // chosen village. A member must carry a valid
-                          // sub-village ID (Android scopes member/assessment
-                          // pulls to sub-village IDs) — leaving it null sends 0
-                          // and makes the record invisible in the Spice app.
                           final subs = (hierarchy.subVillages ?? [])
                               .where((sv) => sv.villageId == village.id)
                               .toList();
@@ -457,10 +434,12 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                             _selectedVillage = village;
                             _selectedSubVillage =
                                 subs.isNotEmpty ? subs.first : null;
+                            _fieldErrors.remove('village');
                           });
                         },
                         hint: EnrollmentStrings.villageHint,
                         isRequired: true,
+                        errorText: _fieldErrors['village'],
                       );
                     }),
                     const SizedBox(height: 14),
@@ -504,50 +483,63 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       );
                     }),
 
+                    SizedBox(key: _key('householdType'), height: 0),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.householdTypeLabel,
                       options: EnrollmentStrings.householdTypesV2,
                       selectedValue: _householdType,
-                      onChanged: (v) => setState(() => _householdType = v),
+                      onChanged: (v) => setState(() {
+                        _householdType = v;
+                        _fieldErrors.remove('householdType');
+                      }),
                       isRequired: true,
+                      errorText: _fieldErrors['householdType'],
                     ),
                     const SizedBox(height: 14),
 
-                    if (controller.household != null)
-                      EnrollmentInputField(
-                        label: EnrollmentStrings.householdNumberLabel,
-                        controller: TextEditingController(
-                          text: controller.household!.householdNumber,
-                        ),
-                        readOnly: true,
-                        customBorderColor: AppColors.statusSuccessBorder,
-                        customFillColor: AppColors.tbSurface,
-                        customTextColor: AppColors.statusSuccessAction,
-                        labelSuffix: Text(
-                          EnrollmentStrings.autoGeneratedSuffix,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.statusSuccessAction,
-                            fontWeight: FontWeight.w500,
+                    // Auto-generated household number — read-only badge
+                    if (controller.household?.householdNumber != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.navy.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: AppColors.navy.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.tag_rounded,
+                                  size: 14,
+                                  color: AppColors.navy.withValues(alpha: 0.7)),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Household No: ${controller.household!.householdNumber}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.navy.withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     const SizedBox(height: 14),
 
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.houseNumberLabel,
-                      hint: EnrollmentStrings.houseNumberHint,
-                      controller: _houseNumberCtrl,
-                      isRequired: true,
-                    ),
-                    const SizedBox(height: 14),
-
+                    SizedBox(key: _key('totalMembers'), height: 0),
                     EnrollmentInputField(
                       label: EnrollmentStrings.totalMembersLabel,
                       hint: EnrollmentStrings.totalMembersHint,
                       controller: _totalMembersCtrl,
                       keyboardType: TextInputType.number,
                       isRequired: true,
+                      onChanged: (_) => _clearError('totalMembers'),
+                      errorText: _fieldErrors['totalMembers'],
                     ),
                     const SizedBox(height: 14),
 
@@ -573,7 +565,8 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.disabilityAnyPersonLabel,
                       options: EnrollmentStrings.disabilityYesNo,
                       selectedValue: _hasDisability,
-                      onChanged: (v) => setState(() => _hasDisability = v),
+                      allowDeselect: false,
+                      onChanged: (v) => setState(() => _hasDisability = v ?? 'No'),
                     ),
 
                     if (_hasDisability == 'Yes') ...[
@@ -600,35 +593,75 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // NID scan pre-fill banner
+                    // Scanned NID editable card
                     if (_prefilledFromScan) ...[
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.xl,
-                          vertical: AppSpacing.lg,
-                        ),
                         decoration: BoxDecoration(
                           color: AppColors.tbSurface,
-                          border:
-                              Border.all(color: AppColors.statusSuccessBorder),
+                          border: Border.all(color: AppColors.statusSuccessBorder),
                           borderRadius: BorderRadius.circular(AppRadius.field),
                         ),
-                        child: const Row(
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              Icons.auto_awesome,
-                              size: 15,
-                              color: AppColors.statusSuccessAction,
+                            Row(
+                              children: [
+                                const Icon(Icons.auto_awesome, size: 14, color: AppColors.statusSuccessAction),
+                                const SizedBox(width: 6),
+                                const Expanded(
+                                  child: Text(
+                                    'Scanned from NID — edit if needed',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.statusSuccessActionDark,
+                                    ),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => setState(() => _prefilledFromScan = false),
+                                  child: const Text(
+                                    'Clear',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.statusCritical,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                EnrollmentStrings.headPrefilledFromScan,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.statusSuccessActionDark,
+                            const SizedBox(height: 12),
+                            EnrollmentInputField(
+                              label: EnrollmentStrings.idNumberLabel,
+                              hint: EnrollmentStrings.idNumberHint,
+                              controller: _idNumberCtrl,
+                              onChanged: (_) => _clearError('idNumber'),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(key: _key('headName'), height: 0),
+                            EnrollmentInputField(
+                              label: EnrollmentStrings.headNameLabel,
+                              hint: EnrollmentStrings.headNameHint,
+                              controller: _nameCtrl,
+                              isRequired: true,
+                              onChanged: (_) => _clearError('headName'),
+                              errorText: _fieldErrors['headName'],
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(key: _key('dob'), height: 0),
+                            GestureDetector(
+                              onTap: _selectDate,
+                              child: AbsorbPointer(
+                                child: EnrollmentInputField(
+                                  label: EnrollmentStrings.dateOfBirthLabel,
+                                  hint: EnrollmentStrings.dateOfBirthHint,
+                                  controller: _dobCtrl,
+                                  readOnly: true,
+                                  isRequired: true,
+                                  errorText: _fieldErrors['dob'],
                                 ),
                               ),
                             ),
@@ -638,137 +671,123 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       const SizedBox(height: 14),
                     ],
 
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.headNameLabel,
-                      hint: EnrollmentStrings.headNameHint,
-                      controller: _nameCtrl,
-                      isRequired: true,
-                    ),
-                    const SizedBox(height: 14),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: EnrollmentInputField(
-                            label: EnrollmentStrings.fatherNameLabel,
-                            hint: 'Father\'s name',
-                            controller: _fatherCtrl,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: EnrollmentInputField(
-                            label: EnrollmentStrings.motherNameLabel,
-                            hint: 'Mother\'s name',
-                            controller: _motherCtrl,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
+                    // Name field — shown only when not pre-filled from scan
+                    if (!_prefilledFromScan) ...[
+                      SizedBox(key: _key('headName'), height: 0),
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.headNameLabel,
+                        hint: EnrollmentStrings.headNameHint,
+                        controller: _nameCtrl,
+                        isRequired: true,
+                        onChanged: (_) => _clearError('headName'),
+                        errorText: _fieldErrors['headName'],
+                      ),
+                      const SizedBox(height: 14),
+                    ],
 
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.idTypeLabel,
                       options: EnrollmentStrings.idTypesV2,
                       selectedValue: _idType,
-                      onChanged: (v) => setState(() => _idType = v),
+                      onChanged: (v) => setState(() {
+                        _idType = v;
+                        if (v == 'Not Available') {
+                          _idNumberCtrl.clear();
+                          _fieldErrors.remove('idNumber');
+                        }
+                      }),
                       isRequired: true,
                     ),
                     const SizedBox(height: 14),
+
+                    if (!_prefilledFromScan && _idType != 'Not Available') ...[
+                      SizedBox(key: _key('idNumber'), height: 0),
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.idNumberLabel,
+                        hint: EnrollmentStrings.idNumberHint,
+                        controller: _idNumberCtrl,
+                        isRequired: true,
+                        onChanged: (_) => _clearError('idNumber'),
+                        errorText: _fieldErrors['idNumber'],
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    SizedBox(key: _key('mobile'), height: 0),
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.mobileNumberLabel,
+                      hint: EnrollmentStrings.mobileNumberHint,
+                      controller: _mobileCtrl,
+                      keyboardType: TextInputType.phone,
+                      isRequired: true,
+                      onChanged: (_) => _clearError('mobile'),
+                      errorText: _fieldErrors['mobile'],
+                      inputFormatters: [LengthLimitingTextInputFormatter(14)],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Date of Birth — hidden when pre-filled from scan (card has it)
+                    if (!_prefilledFromScan) ...[
+                      SizedBox(key: _key('dob'), height: 0),
+                      GestureDetector(
+                        onTap: _selectDate,
+                        child: AbsorbPointer(
+                          child: EnrollmentInputField(
+                            label: EnrollmentStrings.dateOfBirthLabel,
+                            hint: EnrollmentStrings.dateOfBirthHint,
+                            controller: _dobCtrl,
+                            readOnly: true,
+                            isRequired: true,
+                            errorText: _fieldErrors['dob'],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
 
                     EnrollmentInputField(
-                      label: EnrollmentStrings.idNumberLabel,
-                      hint: EnrollmentStrings.idNumberHint,
-                      controller: _idNumberCtrl,
-                      isRequired: true,
+                      label: EnrollmentStrings.ageLabel,
+                      hint: EnrollmentStrings.ageHint,
+                      controller: _ageCtrl,
+                      keyboardType: TextInputType.number,
+                      onChanged: (v) {
+                        if ((int.tryParse(v) ?? 99) <= 5) {
+                          setState(() => _maritalStatus = null);
+                        }
+                      },
                     ),
                     const SizedBox(height: 14),
 
-                    if (!_mobileNotAvailable) ...[
-                      EnrollmentInputField(
-                        label: EnrollmentStrings.mobileNumberLabel,
-                        hint: EnrollmentStrings.mobileNumberHint,
-                        controller: _mobileCtrl,
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [LengthLimitingTextInputFormatter(14)],
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: _mobileNotAvailable,
-                            onChanged: (v) => setState(
-                              () => _mobileNotAvailable = v ?? false,
-                            ),
-                            activeColor: AppColors.navy,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          EnrollmentStrings.mobileNotAvailableHint,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: _selectDate,
-                            child: AbsorbPointer(
-                              child: EnrollmentInputField(
-                                label: EnrollmentStrings.dateOfBirthLabel,
-                                hint: EnrollmentStrings.dateOfBirthHint,
-                                controller: _dobCtrl,
-                                readOnly: true,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: EnrollmentInputField(
-                            label: EnrollmentStrings.ageLabel,
-                            hint: EnrollmentStrings.ageHint,
-                            controller: _ageCtrl,
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
+                    SizedBox(key: _key('gender'), height: 0),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.genderLabel,
                       options: EnrollmentStrings.gendersHead,
                       selectedValue: _gender,
-                      onChanged: (v) => setState(() => _gender = v),
+                      onChanged: (v) => setState(() {
+                        _gender = v;
+                        _fieldErrors.remove('gender');
+                      }),
                       isRequired: true,
+                      errorText: _fieldErrors['gender'],
                     ),
                     const SizedBox(height: 14),
 
-                    EnrollmentDropdown(
-                      label: EnrollmentStrings.maritalStatusLabel,
-                      options: EnrollmentStrings.maritalStatusesV2,
-                      value: _maritalStatus,
-                      onChanged: (v) => setState(() => _maritalStatus = v),
-                      hint: 'Select status',
-                      isRequired: true,
-                    ),
-                    const SizedBox(height: 14),
+                    if ((int.tryParse(_ageCtrl.text) ?? 99) > 5) ...[
+                      SizedBox(key: _key('maritalStatus'), height: 0),
+                      EnrollmentDropdown(
+                        label: EnrollmentStrings.maritalStatusLabel,
+                        options: EnrollmentStrings.maritalStatusesV2,
+                        value: _maritalStatus,
+                        onChanged: (v) => setState(() {
+                          _maritalStatus = v;
+                          _fieldErrors.remove('maritalStatus');
+                        }),
+                        hint: 'Select status',
+                        isRequired: true,
+                        errorText: _fieldErrors['maritalStatus'],
+                      ),
+                      const SizedBox(height: 14),
+                    ],
 
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.disabilityStatusLabel,
@@ -788,7 +807,6 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                   bottom: 0,
                   child: EnrollmentStickyBar(
                     label: EnrollmentStrings.continueArrow,
-                    enabled: _isFormComplete,
                     onPressed: () => _handleContinue(controller),
                   ),
                 ),

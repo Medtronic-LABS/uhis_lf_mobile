@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/features/visit/forms/vitals_trend.dart';
+import 'package:leapwell/features/visit/forms/vitals_trend.dart';
 
 void main() {
   group('VitalsTrendAnalyzer', () {

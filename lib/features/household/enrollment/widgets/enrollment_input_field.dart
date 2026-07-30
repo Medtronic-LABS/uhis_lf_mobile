@@ -27,6 +27,7 @@ class EnrollmentInputField extends StatefulWidget {
     this.minLines = 1,
     this.keyboardType = TextInputType.text,
     this.validator,
+    this.errorText,
     this.readOnly = false,
     this.customBorderColor,
     this.customFillColor,
@@ -47,6 +48,9 @@ class EnrollmentInputField extends StatefulWidget {
   final int minLines;
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
+  /// External error text injected by parent on submit-time validation.
+  /// Takes precedence over the internal [_error] set on blur.
+  final String? errorText;
   final bool readOnly;
   final List<TextInputFormatter>? inputFormatters;
 
@@ -96,7 +100,8 @@ class _EnrollmentInputFieldState extends State<EnrollmentInputField> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = _error != null
+    final effectiveError = widget.errorText ?? _error;
+    final borderColor = effectiveError != null
         ? AppColors.statusCritical
         : widget.customBorderColor != null
             ? widget.customBorderColor!
@@ -186,10 +191,10 @@ class _EnrollmentInputFieldState extends State<EnrollmentInputField> {
             ),
           ),
         ),
-        if (_error != null) ...[
+        if (effectiveError != null) ...[
           const SizedBox(height: 6),
           Text(
-            _error!,
+            effectiveError,
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w400,

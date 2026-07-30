@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/models/json_read.dart';
+import 'package:leapwell/core/models/json_read.dart';
 
 void main() {
   group('JsonRead.asDateTime / firstDateTime', () {

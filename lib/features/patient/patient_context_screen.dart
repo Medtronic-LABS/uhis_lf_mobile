@@ -16,7 +16,6 @@ import '../../core/time/calendar_day.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/phi_screen.dart';
 import '../../core/db/assessment_dao.dart';
-import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/immunisation_dao.dart';
@@ -55,6 +54,7 @@ class PatientOrMemberData {
     this.householdHeadPhone,
     this.vitalHistory = const [],
     this.pregnancySnapshot,
+    this.enrolledAt,
   });
 
   final PatientWithProgrammes? localPatient;
@@ -72,13 +72,15 @@ class PatientOrMemberData {
   /// the patient has no pregnancy episode stored.
   final PregnancySnapshotRow? pregnancySnapshot;
 
-  /// Locally-cached assessments — union of EncounterDao history,
-  /// synced AssessmentDao rows, and sync-pending LocalAssessmentDao
-  /// drafts. Surfaces records even when the remote /medical-review/history
-  /// endpoint is unreachable or returns empty (offline-first §3.1).
+  /// Locally-cached assessments — union of synced AssessmentDao rows and
+  /// sync-pending LocalAssessmentDao drafts (pending/networkError/failed only;
+  /// success drafts are already in AssessmentDao after sync). Surfaces records
+  /// even when the remote endpoint is unreachable (offline-first §3.1).
   final List<MemberAssessment> localAssessments;
   final List<PatientVisit> recentVisits;
   final String? memberId;
+  /// When the member was first enrolled in the app (from local DB `created_at`).
+  final DateTime? enrolledAt;
 
   bool get hasData => localPatient != null || remoteMember != null;
 
@@ -164,6 +166,7 @@ class PatientOrMemberData {
       householdHeadPhone: householdHeadPhone ?? this.householdHeadPhone,
       vitalHistory: vitalHistory ?? this.vitalHistory,
       pregnancySnapshot: pregnancySnapshot ?? this.pregnancySnapshot,
+      enrolledAt: enrolledAt,
     );
   }
 }
@@ -246,45 +249,13 @@ class _PatientContextScreenState
     final stripped = patientId.contains('/')
         ? patientId.substring(patientId.lastIndexOf('/') + 1)
         : patientId;
-    final encounters = context.read<EncounterDao>();
     final assessments = context.read<AssessmentDao>();
     final localDrafts = context.read<LocalAssessmentDao>();
 
     final out = <MemberAssessment>[];
 
-    try {
-      final encs = await encounters.recentForPatient(stripped, limit: 50);
-      // ignore: avoid_print
-      print('[PatientContextScreen] localAssessmentsFor in=$patientId norm=$stripped encs=${encs.length}');
-      for (final e in encs) {
-        final date = DateTime.fromMillisecondsSinceEpoch(
-            e.completedAt ?? e.startedAt);
-        final prog = Programme.fromString(e.programme);
-        final serviceLabel = prog == Programme.unknown
-            ? PatientContextStrings.genericAssessmentLabel
-            : prog.wireTag;
-        out.add(MemberAssessment(
-          id: e.id,
-          type: serviceLabel,
-          date: date,
-          status: e.status.name,
-          rawJson: <String, dynamic>{
-            'programme': e.programme,
-            'status': e.status.name,
-            'serverVisitId': e.serverVisitId,
-            'encounterId': e.id,
-            'serviceProvided': serviceLabel,
-            if (e.triageData != null) ...e.triageData!,
-            if (e.vitalsData != null) ...e.vitalsData!,
-            if (e.assessmentData != null) ...e.assessmentData!,
-          },
-        ));
-      }
-    } on Object catch (e) {
-      // ignore: avoid_print
-      print('[PatientContextScreen] local encounters fetch failed: $e');
-    }
-
+    // Source 1: server-synced records from member-assessment-history.
+    // These are the canonical care history entries after a sync completes.
     try {
       final asMap = await assessments.forMany([stripped]);
       for (final row in asMap[stripped] ?? const []) {
@@ -307,6 +278,9 @@ class _PatientContextScreenState
       print('[PatientContextScreen] local assessments fetch failed: $e');
     }
 
+    // Source 2: unsent local drafts (pending / networkError / failed).
+    // Excluded: success — those are already present in Source 1 after sync
+    // completes, so including them would produce a duplicate record.
     try {
       final drafts = await localDrafts.getByPatientId(stripped);
       // ignore: avoid_print
@@ -314,6 +288,7 @@ class _PatientContextScreenState
       for (final d in drafts) {
         // ignore: avoid_print
         print('[PatientContextScreen]   draft id=${d.id} type=${d.assessmentType} syncStatus=${d.syncStatus.name} storedPatientId=${d.patientId}');
+        if (d.syncStatus == AssessmentSyncStatus.success) continue;
         out.add(MemberAssessment(
           id: d.id.toString(),
           type: d.assessmentType.toUpperCase(),
@@ -407,6 +382,7 @@ class _PatientContextScreenState
       syncSvc.lastSyncedAt(),
       vitalsRepo.recentByVisit(widget.patientId).catchError((_) => <VisitVitals>[]),
       pregnancyDao.byPatient(widget.patientId).catchError((_) => null),
+      memberRepo.enrolledAtFor(widget.patientId).catchError((_) => null),
     ]);
     final resolvedMemberId = phase1[0] as String?;
     final localPatient = phase1[1] as PatientWithProgrammes?;
@@ -414,6 +390,7 @@ class _PatientContextScreenState
     final lastSync = phase1[3] as DateTime?;
     final vitalHistory = phase1[4] as List<VisitVitals>;
     final pregnancySnapshot = phase1[5] as PregnancySnapshotRow?;
+    final enrolledAt = phase1[6] as DateTime?;
     debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
         ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
@@ -483,6 +460,7 @@ class _PatientContextScreenState
         memberId: resolvedMemberId,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
+        enrolledAt: enrolledAt,
       );
       if (mounted) {
         setState(() {
@@ -568,6 +546,7 @@ class _PatientContextScreenState
         householdHeadPhone: memberHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
+        enrolledAt: enrolledAt,
       );
     }
 
@@ -644,6 +623,7 @@ class _PatientContextScreenState
         householdHeadPhone: prePassedHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
+        enrolledAt: enrolledAt,
       );
     }
 
@@ -698,27 +678,20 @@ class _PatientContextScreenState
   /// structured payload the assistant answers from) out of the loaded data.
   PatientAiContext _aiContext(PatientOrMemberData data) {
     final progs = data.programmes.toList();
-    final progLabel = progs.isEmpty
-        ? '—'
-        : progs.map((p) => p.wireTag.toUpperCase()).join('/');
+
     final band = data.riskBand;
     final bandLabel = band == null ? null : 'Band ${band.index + 1}';
     final reasons = data.riskReasons;
 
     final chip = <String>[
-      progLabel,
       if (data.age != null) '${data.age}y',
-      if (bandLabel != null) bandLabel,
+      if (data.gender != null) data.gender!,
     ].join(' · ');
 
     final summary = StringBuffer()
-      ..write('${data.age ?? '—'}'
-          '${data.gender != null ? ', ${data.gender}' : ''} · $progLabel.');
-    if (bandLabel != null) {
-      summary.write(
-          ' $bandLabel${reasons.isNotEmpty ? ' — ${reasons.first}' : ''}.');
-    }
-    if (data.isPregnant) summary.write(' Pregnant.');
+      ..write('${data.age != null ? '${data.age}y' : '—'}'
+          '${data.gender != null ? ', ${data.gender}' : ''}');
+    if (data.isPregnant) summary.write('  ·  Pregnant');
 
     return PatientAiContext(
       patientId: data.patientId ?? widget.patientId,
@@ -890,11 +863,6 @@ class _PatientContextScreenState
               onBack: () => Navigator.of(context).maybePop(),
               onRefresh: _refreshing ? null : _refresh,
             ),
-            if (data.householdId != null)
-              _SameHouseholdStrip(
-                currentPatientId: widget.patientId,
-                householdId: data.householdId!,
-              ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
@@ -908,8 +876,6 @@ class _PatientContextScreenState
                       statusLabel: statusLabel,
                       statusBg: statusBg,
                       statusFg: statusFg,
-                      riskBand: data.riskBand,
-                      riskModifier: data.riskModifier,
                       riskReasons: data.riskReasons,
                       lastAssessedDate: data.assessments.isNotEmpty ? data.assessments.first.date : null,
                     ),
@@ -1074,8 +1040,9 @@ const _kDotEpi      = Color(0xFF1D4ED8); // blue-700
 const _kDotTb       = Color(0xFF059669); // emerald-600
 const _kDotImci     = Color(0xFFDC2626); // red-600
 const _kDotFp       = Color(0xFF7C3AED); // violet-600
-const _kDotGeneral  = Color(0xFF6B7280); // gray-500
-const _kDotPending  = Color(0xFFEF4444); // red-500
+const _kDotGeneral     = Color(0xFF6B7280); // gray-500
+const _kDotPending     = Color(0xFFEF4444); // red-500
+const _kDotEnrollment  = Color(0xFF0891B2); // cyan-600
 
 const _kBadgeCriticalBg = Color(0xFFFEE2E2);
 const _kBadgeCriticalFg = Color(0xFFDC2626);
@@ -1141,6 +1108,14 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     case Programme.anc:
     case Programme.pw:
       emoji = '🤰';
+      if (prog == Programme.pw) {
+        // PWPROFILE is the pregnancy registration form, not a clinical visit.
+        title = PatientProfileStrings.pregnancyRegistered;
+        category = PatientProfileStrings.pregnancyRegistrationCategory;
+        dotColor = _kDotAnc;
+        description = 'Pregnant woman profile created — ANC care started';
+        break;
+      }
       final vn = raw['ancVisitNumber']?.toString()
           ?? (raw['medicalHistoryPhysicalExamination'] is Map
               ? (raw['medicalHistoryPhysicalExamination'] as Map)['ancVisitNumber']?.toString()
@@ -1568,6 +1543,25 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
     }
   }
 
+  // Enrollment milestone — pinned at bottom (oldest event in the patient's history).
+  if (data.enrolledAt != null) {
+    entries.add(_TimelineEntry(
+      emoji: '📋',
+      title: PatientProfileStrings.enrolledInApp,
+      relativeDate: _relativeDate(data.enrolledAt!),
+      category: PatientProfileStrings.enrollmentMilestone,
+      date: data.enrolledAt!,
+      dotColor: _kDotEnrollment,
+      description: 'Patient added to Apon Sushashthya',
+      badge: 'Enrolled',
+      badgeColor: const Color(0xFFE0F2FE),
+      badgeFgColor: const Color(0xFF0369A1),
+    ));
+  }
+
+  // Sort newest-first so the enrollment milestone naturally falls at the bottom.
+  entries.sort((a, b) => b.date.compareTo(a.date));
+
   return entries;
 }
 
@@ -1926,10 +1920,11 @@ String clinicalFindingsSummary(List<ClinicalFinding> findings) =>
 /// used by the AI visit briefing. Falls back to a muted unavailable message
 /// when no rule fires (or the computation fails) for this patient.
 ///
-/// The status badge and "CLINICAL PRIORITY"/"WHY" block in the expanded
-/// detail view are unchanged — still driven by [riskBand]/[riskReasons],
-/// which stay app/worklist-computed exactly as before; only the summary text
-/// itself is rule-based here.
+/// The status badge and "WHY" risk-reasons block in the expanded detail
+/// view are unchanged — still driven by [statusLabel]/[riskReasons], which
+/// stay app/worklist-computed exactly as before. Band/modifier are never
+/// shown to the SK at all (see the CLINICAL PRIORITY block's removal
+/// upstream) — only the summary text itself is rule-based here.
 class _AiInsightCard extends StatefulWidget {
   const _AiInsightCard({
     super.key,
@@ -1937,8 +1932,6 @@ class _AiInsightCard extends StatefulWidget {
     this.statusLabel,
     this.statusBg = Colors.transparent,
     this.statusFg = Colors.white,
-    this.riskBand,
-    this.riskModifier,
     this.riskReasons = const [],
     this.lastAssessedDate,
   });
@@ -1947,8 +1940,6 @@ class _AiInsightCard extends StatefulWidget {
   final String? statusLabel;
   final Color statusBg;
   final Color statusFg;
-  final Band? riskBand;
-  final Modifier? riskModifier;
   final List<String> riskReasons;
   final DateTime? lastAssessedDate;
 
@@ -1993,20 +1984,10 @@ class _AiInsightCardState extends State<_AiInsightCard> {
     }
   }
 
-  static (String, Color, Color) _bandMeta(Band b) => switch (b) {
-        Band.band1 => ('Band 1 — Severe risk', AppColors.statusCriticalSurface, AppColors.statusCriticalText),
-        Band.band2 => ('Band 2 — Moderate risk', AppColors.statusWarningSurface, AppColors.statusWarningText),
-        Band.band3 => ('Band 3 — Mild risk', const Color(0xFFEFF6FF), AppColors.navy),
-        Band.band4 => ('Band 4 — Routine', const Color(0xFFF3F4F6), AppColors.textMuted),
-      };
-
   void _showDetail(BuildContext context, String summary) {
     final isEmpty = summary.trim().isEmpty;
-    final riskBand = widget.riskBand;
-    final riskModifier = widget.riskModifier;
     final riskReasons = widget.riskReasons;
     final lastAssessedDate = widget.lastAssessedDate;
-    final hasBand = riskBand != null && riskBand != Band.band4;
 
     _showCardDetail(
       context,
@@ -2016,10 +1997,10 @@ class _AiInsightCardState extends State<_AiInsightCard> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Clinical priority block ───────────────────────────────────────
-          if (hasBand) ...[
+          if (riskReasons.isNotEmpty) ...[
+            const SizedBox(height: 12),
             const Text(
-              'CLINICAL PRIORITY',
+              'WHY',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
@@ -2028,85 +2009,39 @@ class _AiInsightCardState extends State<_AiInsightCard> {
               ),
             ),
             const SizedBox(height: 8),
-            Builder(builder: (ctx) {
-              final (label, bg, fg) = _bandMeta(riskBand!);
-              return Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: bg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(label,
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
-                  ),
-                  if (riskModifier != null && riskModifier != Modifier.none)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(8),
+            ...riskReasons.map((r) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.only(top: 6, right: 8),
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: AppColors.textMid,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                      child: Text(
-                        riskModifier == Modifier.a
-                            ? '+a  Additional clinical risk'
-                            : '+b  Follow-up overdue',
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMid),
+                      Expanded(
+                        child: Text(r,
+                            style: const TextStyle(
+                                fontSize: 13, height: 1.5, color: AppColors.textStrong)),
                       ),
-                    ),
-                ],
-              );
-            }),
-            if (riskReasons.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text(
-                'WHY',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...riskReasons.map((r) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.only(top: 6, right: 8),
-                          width: 5,
-                          height: 5,
-                          decoration: BoxDecoration(
-                            color: AppColors.textMid,
-                            shape: BoxShape.circle,
+                      if (lastAssessedDate != null) ...[
+                        const SizedBox(width: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            _relativeDate(lastAssessedDate!),
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.textMuted, height: 1.5),
                           ),
                         ),
-                        Expanded(
-                          child: Text(r,
-                              style: const TextStyle(
-                                  fontSize: 13, height: 1.5, color: AppColors.textStrong)),
-                        ),
-                        if (lastAssessedDate != null) ...[
-                          const SizedBox(width: 8),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 3),
-                            child: Text(
-                              _relativeDate(lastAssessedDate!),
-                              style: const TextStyle(
-                                  fontSize: 11, color: AppColors.textMuted, height: 1.5),
-                            ),
-                          ),
-                        ],
                       ],
-                    ),
-                  )),
-            ],
+                    ],
+                  ),
+                )),
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 16),
@@ -4636,12 +4571,6 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
               ],
             ),
           ),
-        // ── Clinical Risk ────────────────────────────────────────────────
-        if (d.riskBand != null) ...[
-          const SizedBox(height: 10),
-          _buildRiskCard(scheme),
-        ],
-
         // ── Scheduling / Next Due ─────────────────────────────────────────
         if (d.localPatient?.patient.nextDueAt != null ||
             d.localPatient?.patient.lastVisitAt != null) ...[
@@ -4655,109 +4584,6 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
           _buildVitalsCard(context, scheme, vitals),
         ],
       ],
-    );
-  }
-
-  // ── Risk Band ──────────────────────────────────────────────────────────────
-
-  Widget _buildRiskCard(ColorScheme scheme) {
-    final band = widget.data.riskBand;
-    if (band == null) return const SizedBox.shrink();
-    final modifier = widget.data.riskModifier;
-    final reasons = widget.data.riskReasons;
-
-    Color bgColor;
-    Color textColor;
-    String bandLabel;
-    switch (band) {
-      case Band.band1:
-        bgColor = AppColors.statusCriticalSurface;
-        textColor = AppColors.statusCriticalText;
-        bandLabel = 'Band 1 · Severe';
-      case Band.band2:
-        bgColor = AppColors.statusWarningSurface;
-        textColor = AppColors.statusWarningText;
-        bandLabel = 'Band 2 · Moderate';
-      case Band.band3:
-        bgColor = const Color(0xFFEFF6FF);
-        textColor = AppColors.navy;
-        bandLabel = 'Band 3 · Mild';
-      case Band.band4:
-        bgColor = const Color(0xFFF3F4F6);
-        textColor = AppColors.textMuted;
-        bandLabel = 'Band 4 · Routine';
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.monitor_heart_outlined, size: 16, color: scheme.primary),
-                const SizedBox(width: 6),
-                Text('Clinical Risk',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(bandLabel,
-                      style: TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w700, color: textColor)),
-                ),
-                if (modifier != null && modifier != Modifier.none) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: scheme.secondaryContainer,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      modifier == Modifier.a ? '+a  Additional risk' : '+b  Overdue',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onSecondaryContainer),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            if (reasons.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...reasons.map((r) => Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('• ',
-                            style: TextStyle(color: textColor, fontSize: 12)),
-                        Expanded(
-                          child: Text(r,
-                              style: TextStyle(
-                                  fontSize: 12, color: scheme.onSurfaceVariant)),
-                        ),
-                      ],
-                    ),
-                  )),
-            ],
-          ],
-        ),
-      ),
     );
   }
 

@@ -14,14 +14,18 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
     required this.selectedValue,
     required this.onChanged,
     this.isRequired = false,
+    this.allowDeselect = true,
+    this.errorText,
     super.key,
   });
 
   final String label;
   final List<String> options;
   final String? selectedValue;
-  final ValueChanged<String> onChanged;
+  final ValueChanged<String?> onChanged;
   final bool isRequired;
+  final bool allowDeselect;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +60,10 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
         Container(
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            border: Border.all(color: AppColors.border, width: 1.5),
+            border: Border.all(
+              color: errorText != null ? AppColors.statusCritical : AppColors.border,
+              width: 1.5,
+            ),
             borderRadius: BorderRadius.circular(AppRadius.button),
           ),
           padding: const EdgeInsets.all(AppSpacing.xs),
@@ -74,7 +81,9 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
                       right: index < options.length - 1 ? AppSpacing.xs : 0,
                     ),
                     child: GestureDetector(
-                      onTap: () => onChanged(option),
+                      onTap: () => onChanged(
+                        (allowDeselect && isSelected) ? null : option,
+                      ),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
                         padding: const EdgeInsets.symmetric(
@@ -113,6 +122,17 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
             ),
           ),
         ),
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            errorText!,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: AppColors.statusCritical,
+            ),
+          ),
+        ],
       ],
     );
   }

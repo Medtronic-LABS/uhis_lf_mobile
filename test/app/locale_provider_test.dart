@@ -6,8 +6,8 @@ library;
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:uhis_next/app/locale_provider.dart';
-import 'package:uhis_next/core/i18n/app_locale.dart';
+import 'package:leapwell/app/locale_provider.dart';
+import 'package:leapwell/core/i18n/app_locale.dart';
 
 class _InMemorySecureStorage extends FlutterSecureStoragePlatform {
   final Map<String, String> values;

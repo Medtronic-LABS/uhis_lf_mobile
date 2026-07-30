@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/core/clinical/briefing_rules/clinical_vitals_history_adapter.dart';
-import 'package:uhis_next/core/db/assessment_dao.dart';
-import 'package:uhis_next/core/models/risk.dart';
+import 'package:leapwell/core/clinical/briefing_rules/clinical_vitals_history_adapter.dart';
+import 'package:leapwell/core/db/assessment_dao.dart';
+import 'package:leapwell/core/models/risk.dart';
 
 void main() {
   group('vitalsHistoryFor', () {

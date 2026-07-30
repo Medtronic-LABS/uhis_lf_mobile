@@ -16,6 +16,7 @@ class EnrollmentDropdown extends StatelessWidget {
     required this.onChanged,
     this.hint = 'Select…',
     this.isRequired = false,
+    this.errorText,
   });
 
   final String label;
@@ -24,6 +25,7 @@ class EnrollmentDropdown extends StatelessWidget {
   final ValueChanged<String?> onChanged;
   final String hint;
   final bool isRequired;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -56,60 +58,87 @@ class EnrollmentDropdown extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Container(
+          padding: const EdgeInsets.only(left: AppSpacing.xxxl),
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            border: Border.all(color: AppColors.border, width: 1.5),
+            border: Border.all(
+              color: errorText != null ? AppColors.statusCritical : AppColors.border,
+              width: 1.5,
+            ),
             borderRadius: BorderRadius.circular(AppRadius.button),
           ),
-          child: DropdownButtonFormField<String>(
-            initialValue: value,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              contentPadding: EdgeInsets.fromLTRB(
-                AppSpacing.xxxl,
-                AppSpacing.xl,
-                AppSpacing.xxxl,
-                AppSpacing.xl,
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButton<String>(
+                  value: options.contains(value) ? value : null,
+                  isExpanded: true,
+                  underline: const SizedBox.shrink(),
+                  hint: Text(
+                    hint,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  icon: value != null && options.contains(value)
+                      ? const SizedBox.shrink()
+                      : const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: AppColors.textMuted,
+                          size: 20,
+                        ),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
+                  ),
+                  dropdownColor: AppColors.cardSurface,
+                  borderRadius: BorderRadius.circular(AppRadius.button),
+                  items: options
+                      .map(
+                        (opt) => DropdownMenuItem<String>(
+                          value: opt,
+                          child: Text(
+                            opt,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: onChanged,
+                ),
               ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
-            hint: Text(
-              hint,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textMuted,
-              ),
-            ),
-            icon: const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: AppColors.textMuted,
-              size: 20,
-            ),
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textPrimary,
-            ),
-            dropdownColor: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(AppRadius.button),
-            items: options
-                .map(
-                  (opt) => DropdownMenuItem<String>(
-                    value: opt,
-                    child: Text(
-                      opt,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textPrimary,
-                      ),
+              if (value != null && options.contains(value))
+                GestureDetector(
+                  onTap: () => onChanged(null),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: AppColors.textMuted.withValues(alpha: 0.7),
                     ),
                   ),
                 )
-                .toList(),
-            onChanged: onChanged,
+              else
+                const SizedBox(width: AppSpacing.xxxl),
+            ],
           ),
         ),
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            errorText!,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: AppColors.statusCritical,
+            ),
+          ),
+        ],
       ],
     );
   }

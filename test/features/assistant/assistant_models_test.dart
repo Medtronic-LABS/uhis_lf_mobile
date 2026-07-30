@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uhis_next/features/assistant/assistant_models.dart';
+import 'package:leapwell/features/assistant/assistant_models.dart';
 
 /// The action allowlist is safety-critical: the LLM may only *select* from a
 /// fixed set, and any unknown value must fold to a no-op so a stray/injected
