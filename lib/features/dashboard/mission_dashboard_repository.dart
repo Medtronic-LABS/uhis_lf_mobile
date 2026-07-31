@@ -600,6 +600,7 @@ class MissionDashboardRepository {
     if (_assessments != null) {
       const ncdAlertStatuses = {
         'UNCONTROLLED_BP',
+        'UNCONTROLLED_BG',
         'UNCONTROLLED_BLOOD_SUGAR',
         'UNCONTROLLED_CHOLESTEROL',
         'IRREGULAR_MEDICATION',

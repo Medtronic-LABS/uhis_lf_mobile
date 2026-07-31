@@ -565,6 +565,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     notifier.setValidationErrors(const {});
 
     try {
+      // Option ids stored by the widgets are translated to their wire `value`
+      // codes during submit — the mapper needs the field library to do that.
+      notifier.fieldDefs = _config!.fields;
       await notifier.submit();
       widget.onSubmitComplete();
     } catch (e) {
@@ -2949,12 +2952,14 @@ class _SectionCard extends StatelessWidget {
       case WidgetHint.bpField:
         // Render a systolic / diastolic pair. Stores value as a list of
         // reading maps to match Android's bpLogDetails wire format.
+        // Spice ncd.json / cataract.json set showPulse: false.
         final readings = (currentValue is List)
             ? currentValue.cast<Map<String, dynamic>>()
             : <Map<String, dynamic>>[];
         return _BpReadingField(
           key: Key('unified_form_${def.id}_bp'),
           readings: readings,
+          showPulse: false,
           onChanged: (v) => onFieldChanged(def.id, v),
         );
 
@@ -3975,20 +3980,23 @@ class _DateFieldState extends State<_DateField> {
 
 /// Multi-reading BP widget matching Android's `bpLogDetails` wire format.
 ///
-/// Supports up to 3 readings (Android parity). Each row captures systolic,
-/// diastolic, and pulse. Stores value as `List<Map<String, dynamic>>`:
+/// Supports up to 3 readings (Android parity). Each row captures systolic and
+/// diastolic; pulse is optional ([showPulse], false on Spice BD NCD/cataract).
+/// Stores value as `List<Map<String, dynamic>>`:
 /// `[{'systolic': 120, 'diastolic': 80, 'pulse': 72}, ...]`.
 class _BpReadingField extends StatefulWidget {
   const _BpReadingField({
     super.key,
     required this.readings,
     required this.onChanged,
+    this.showPulse = false,
   });
 
   static const int _maxReadings = 3;
 
   final List<Map<String, dynamic>> readings;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
+  final bool showPulse;
 
   @override
   State<_BpReadingField> createState() => _BpReadingFieldState();
@@ -4067,8 +4075,10 @@ class _BpReadingFieldState extends State<_BpReadingField> {
       final reading = <String, dynamic>{};
       if (sys != null) reading['systolic'] = sys;
       if (dia != null) reading['diastolic'] = dia;
-      final pulse = int.tryParse(p.text);
-      if (pulse != null) reading['pulse'] = pulse;
+      if (widget.showPulse) {
+        final pulse = int.tryParse(p.text);
+        if (pulse != null) reading['pulse'] = pulse;
+      }
       out.add(reading);
     }
     widget.onChanged(out);
@@ -4132,6 +4142,7 @@ class _BpReadingFieldState extends State<_BpReadingField> {
             sysCtrl: _rows[i].$1,
             diaCtrl: _rows[i].$2,
             pulseCtrl: _rows[i].$3,
+            showPulse: widget.showPulse,
             onChanged: (_) => _emit(),
           ),
           if (i < _rows.length - 1) const SizedBox(height: 10),
@@ -4154,19 +4165,21 @@ class _BpReadingFieldState extends State<_BpReadingField> {
   }
 }
 
-/// Single systolic / diastolic / pulse row inside [_BpReadingField].
+/// Single systolic / diastolic / optional pulse row inside [_BpReadingField].
 class _BpReadingRow extends StatelessWidget {
   const _BpReadingRow({
     required this.sysCtrl,
     required this.diaCtrl,
     required this.pulseCtrl,
     required this.onChanged,
+    this.showPulse = false,
   });
 
   final TextEditingController sysCtrl;
   final TextEditingController diaCtrl;
   final TextEditingController pulseCtrl;
   final ValueChanged<void> onChanged;
+  final bool showPulse;
 
   @override
   Widget build(BuildContext context) {
@@ -4202,16 +4215,18 @@ class _BpReadingRow extends StatelessWidget {
             validator: _SectionCard._numericRangeValidator('diastolic'),
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          flex: 3,
-          child: _bpCell(
-            context,
-            caption: UnifiedFormStrings.bpPulseLabel,
-            controller: pulseCtrl,
-            suffixText: UnifiedFormStrings.bpPulseUnit,
+        if (showPulse) ...[
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 3,
+            child: _bpCell(
+              context,
+              caption: UnifiedFormStrings.bpPulseLabel,
+              controller: pulseCtrl,
+              suffixText: UnifiedFormStrings.bpPulseUnit,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

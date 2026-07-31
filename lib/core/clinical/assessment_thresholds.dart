@@ -87,6 +87,14 @@ const double ncdControlledRbsMax = 11.0;
 const double ncdUncontrolledFbs = 7.1;
 const double ncdUncontrolledRbs = 11.1;
 
+// ── BD NCD first-visit referral thresholds (AssessmentDefinedParams) ──
+const double ncdFirstVisitFbsReferralMmol = 7.0;
+const double ncdFirstVisitRbsReferralMmol = 11.1;
+const double ncdFollowUpFbsReferralMmol = 7.0;
+const double ncdFollowUpRbsReferralMmol = 10.0;
+/// Glucose above this (mmol/L) → Upazila Health Complex instead of CC.
+const double ncdUpazilaGlucoseMmol = 15.0;
+
 // ── NCD screening glucose bounds ──
 const double fbsScreeningNormal = 6.1;
 const double fbsScreeningMax = 15.0;
