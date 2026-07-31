@@ -10,6 +10,7 @@ import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
@@ -23,7 +24,9 @@ import '../referral/referral_repository.dart';
 import '../worklist/worklist_repository.dart';
 import 'pathway/pathway_engine.dart';
 import 'assessment_repository.dart';
+import 'forms/canonical_visit_data.dart';
 import 'forms/form_type_resolver.dart';
+import 'forms/pregnancy_outcome_side_effects.dart';
 import 'forms/unified_form_notifier.dart';
 import 'forms/unified_form_screen.dart';
 import 'visit_controller.dart';
@@ -47,6 +50,7 @@ class VisitFormScreen extends StatefulWidget {
     this.villageId,
     this.householdMemberLocalId,
     this.patientAge,
+    this.ageInMonths,
     this.gestationalWeeks,
     this.lmpMs,
     this.eddMs,
@@ -67,6 +71,9 @@ class VisitFormScreen extends StatefulWidget {
   final String? villageId;
   final int? householdMemberLocalId;
   final int? patientAge;
+
+  /// Whole months from DOB — childhood visit age bands / weight validation.
+  final int? ageInMonths;
   final int? gestationalWeeks;
 
   /// LMP / EDD epoch-ms from pregnancy snapshot (VisitFlow) — seeds the ANC
@@ -310,6 +317,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         gestationalWeeks: widget.gestationalWeeks,
         lmpMs: widget.lmpMs,
         eddMs: widget.eddMs,
+        ageInMonths: widget.ageInMonths,
         enrolledFormTypes: enrolledFormTypes,
         confirmedSymptoms: widget.confirmedSymptoms,
         aiPickedSymptoms: widget.aiPickedSymptoms,
@@ -336,6 +344,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     final encounterDao = ctx.read<EncounterDao>();
     final assessmentRepo = ctx.read<AssessmentRepository>();
     final patientDao = ctx.read<PatientDao>();
+    final memberDao = ctx.read<MemberDao>();
     final worklistRepo = ctx.read<WorklistRepository>();
     final progDao = ctx.read<PatientProgrammesDao>();
     final pregnancySnapshotDao = ctx.read<PregnancySnapshotDao>();
@@ -393,7 +402,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
             // After PREGNANCY_OUTCOME submission: flip snapshot to postpartum
             // so next visit correctly shows PNC (not ANC).
             // Mirrors Android PregnancyCohortRules: dateOfDelivery set → isPostpartum.
-            if (patientId != null && widget.isDeliveryVisit) {
+            final hasPregnancyOutcome =
+                fieldValues.containsKey('deliveryOutcomeType') ||
+                    widget.isDeliveryVisit;
+            if (patientId != null && hasPregnancyOutcome) {
               final deliveryRaw = fieldValues['dateOfDelivery']
                   ?? fieldValues['deliveryDate'];
               final deliveryMs = deliveryRaw is String
@@ -416,10 +428,31 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
                 lmpDate: existing?.lmpDate,
                 deliveryDateMillis: deliveryMs
                     ?? DateTime.now().millisecondsSinceEpoch,
+                // Keep visit counters across the postpartum transition.
+                ancVisitNo: existing?.ancVisitNo,
+                pncVisitNo: existing?.pncVisitNo,
               );
               await pregnancySnapshotDao.upsertOne(updated);
               debugPrint('[VisitForm] pregnancy snapshot → postpartum '
                   'deliveryMs=$deliveryMs patientId=$patientId');
+            }
+
+            // Android AssessmentViewModel.savePregnancyOutcomeDetails:
+            // register live babies + mark mother inactive on maternal death.
+            if (hasPregnancyOutcome) {
+              try {
+                await PregnancyOutcomeSideEffects(
+                  memberDao: memberDao,
+                  patientDao: patientDao,
+                ).apply(
+                  data: CanonicalVisitData(fieldValues),
+                  motherMemberId: widget.memberId,
+                  motherPatientId: widget.patientId,
+                  householdId: widget.householdId,
+                );
+              } catch (e) {
+                debugPrint('[VisitForm] pregnancy outcome side effects ✗ $e');
+              }
             }
 
             debugPrint('[VisitForm] triggering syncPendingAssessments');

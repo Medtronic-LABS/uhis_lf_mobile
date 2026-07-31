@@ -11,9 +11,11 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
 import '../patient/followup_call_service.dart';
+import 'forms/pregnancy_outcome_side_effects.dart';
 import 'forms/vitals_trend.dart';
 
 /// Repository for offline-first assessment management matching Android pattern.
@@ -32,11 +34,13 @@ class AssessmentRepository extends ChangeNotifier {
     required AuthRepository auth,
     AssessmentDao? historyDao,
     FollowUpCallService? followUpCalls,
+    MemberDao? memberDao,
   })  : _dao = dao,
         _api = api,
         _auth = auth,
         _historyDao = historyDao,
-        _followUpCalls = followUpCalls;
+        _followUpCalls = followUpCalls,
+        _memberDao = memberDao;
 
   final LocalAssessmentDao _dao;
   final ApiClient _api;
@@ -47,6 +51,8 @@ class AssessmentRepository extends ChangeNotifier {
   // Pending follow-up call attempts ride the same offline-sync/create push.
   // Null in unit tests where the follow-up DB isn't wired.
   final FollowUpCallService? _followUpCalls;
+  // New household members (e.g. live-birth babies) ride the same push.
+  final MemberDao? _memberDao;
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -73,6 +79,7 @@ class AssessmentRepository extends ChangeNotifier {
     bool isReferred = false,
     String? referralStatus,
     List<String>? referredReasons,
+    List<String>? customStatus,
     String? pregnancyEpisodeId,
     int? followUpId,
     double latitude = 0.0,
@@ -81,10 +88,16 @@ class AssessmentRepository extends ChangeNotifier {
   }) async {
     final id = const Uuid().v4();
     final now = DateTime.now();
+    final type = assessmentType.toUpperCase();
     final resolvedEpisodeId = pregnancyEpisodeId ??
-        (assessmentType.toUpperCase() == 'ANC' ||
-                assessmentType.toUpperCase() == 'PNC' ||
-                assessmentType.toUpperCase() == 'PWPROFILE'
+        (type == 'ANC' ||
+                type == 'PNC' ||
+                type == 'PNC_MOTHER' ||
+                type == 'PNC_NEONATE' ||
+                type == 'PNC_CHILD' ||
+                type == 'PWPROFILE' ||
+                type == 'PREGNANCY_OUTCOME' ||
+                type == 'PREGNANCYOUTCOME'
             ? const Uuid().v4()
             : null);
 
@@ -109,6 +122,9 @@ class AssessmentRepository extends ChangeNotifier {
       referralStatus: isReferred ? 'Referred' : (referralStatus ?? 'Recovered'),
       referredReasons:
           referredReasons != null ? jsonEncode(referredReasons) : null,
+      customStatus: (customStatus != null && customStatus.isNotEmpty)
+          ? jsonEncode(customStatus)
+          : null,
       followUpId: followUpId,
       pregnancyEpisodeId: resolvedEpisodeId,
       latitude: latitude,
@@ -265,6 +281,31 @@ class AssessmentRepository extends ChangeNotifier {
     // member assessments we send everything in the top-level assessments[] array;
     // the server builds MemberAssessmentFollowUpMap from encounter.memberId +
     // encounter.householdId + provenance on each assessment.
+    // Live-birth babies registered after pregnancy outcome ride this array.
+    var householdMemberPayloads = <Map<String, dynamic>>[];
+    var pushedMemberIds = <String>[];
+    if (_memberDao != null) {
+      try {
+        final pendingMembers = await _memberDao.getUnsynced();
+        if (pendingMembers.isNotEmpty) {
+          householdMemberPayloads = pendingMembers
+              .map(
+                (m) => PregnancyOutcomeSideEffects.toHouseholdMemberWire(
+                  entity: m,
+                  provenance: provenance.toJson(),
+                ),
+              )
+              .toList();
+          pushedMemberIds = pendingMembers.map((m) => m.id).toList();
+          debugPrint(
+              '[AssessmentSync] attaching ${householdMemberPayloads.length} '
+              'pending household member(s)');
+        }
+      } catch (e) {
+        debugPrint('[AssessmentSync] household-member serialize skipped: $e');
+      }
+    }
+
     debugPrint('[AssessmentSync] assessments[${assessmentPayloads.length}]:');
 
     // Build create request matching Android's OfflineSyncRepository.getRequestObject().
@@ -278,7 +319,7 @@ class AssessmentRepository extends ChangeNotifier {
       'syncMode': syncMode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'households': <Map<String, dynamic>>[],
-      'householdMembers': <Map<String, dynamic>>[],
+      'householdMembers': householdMemberPayloads,
       'assessments': assessmentPayloads,
       'followUps': followUpPayloads,
       'householdMemberLinks': <Map<String, dynamic>>[],
@@ -286,7 +327,17 @@ class AssessmentRepository extends ChangeNotifier {
       'rxBuddies': <Map<String, dynamic>>[],
     };
 
-    ConsoleLog.banner('[PayloadDebug] sync-create\n${request.toString()}');
+    debugPrint(
+        '********** OFFLINE-SYNC CREATE PAYLOAD START **********');
+    ConsoleLog.json(
+      '[PayloadDebug] sync-create → ${Endpoints.offlineSyncCreate} '
+      '(requestId=$requestId, ${assessmentPayloads.length} assessment(s), '
+      '${followUpPayloads.length} follow-up(s), '
+      '${householdMemberPayloads.length} household member(s))',
+      request,
+    );
+    debugPrint(
+        '*********** OFFLINE-SYNC CREATE PAYLOAD END ***********');
     debugPrint('[AssessmentSync] POST ${Endpoints.offlineSyncCreate}');
     try {
       final response = await _api.dio.post<Map<String, dynamic>>(
@@ -317,6 +368,17 @@ class AssessmentRepository extends ChangeNotifier {
               await _followUpCalls.markPushed(pushedFollowUpIds);
             } catch (e) {
               debugPrint('[AssessmentSync] follow-up markPushed skipped: $e');
+            }
+          }
+          if (pushedMemberIds.isNotEmpty && _memberDao != null) {
+            try {
+              await _memberDao.markSynced(pushedMemberIds);
+              debugPrint(
+                  '[AssessmentSync] Marked ${pushedMemberIds.length} '
+                  'household member(s) as synced');
+            } catch (e) {
+              debugPrint(
+                  '[AssessmentSync] household-member markSynced skipped: $e');
             }
           }
           return ids.length;
@@ -382,37 +444,159 @@ class AssessmentRepository extends ChangeNotifier {
     return _dao.getById(id);
   }
 
-  /// Most-recent locally-saved weight reading for [patientId] from ANY visit
-  /// type.  Returns `null` when no prior visit has a weight value.
+  /// True when the patient already has a prior NCD assessment (local or
+  /// synced history). Used for BD first-visit vs follow-up referral paths.
+  Future<bool> hasPriorNcdAssessment(String patientId) async {
+    if (patientId.isEmpty) return false;
+    final localRows = await _dao.getByPatientId(patientId);
+    if (localRows.any((r) => r.assessmentType.toUpperCase() == 'NCD')) {
+      return true;
+    }
+    if (_historyDao == null) return false;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = historyMap[patientId] ?? const [];
+    return rows.any((r) => _isNcdKind(r.kind?.toUpperCase() ?? ''));
+  }
+
+  /// Number of childhood visits already recorded for [patientId], across this
+  /// device's unsynced rows and synced history. Spice keeps the same counter in
+  /// `PregnancyDetail.childVisitNo` and submits `childVisitNo + 1` as
+  /// `pncChild.visitNo`.
+  Future<int> priorChildhoodVisitCount(String patientId) async {
+    if (patientId.isEmpty) return 0;
+    final localRows = await _dao.getByPatientId(patientId);
+    var count = localRows
+        .where((r) => _isChildhoodVisitKind(r.assessmentType.toUpperCase()))
+        .length;
+    if (_historyDao == null) return count;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = historyMap[patientId] ?? const [];
+    count += rows
+        .where((r) => _isChildhoodVisitKind(r.kind?.toUpperCase() ?? ''))
+        .length;
+    return count;
+  }
+
+  /// Most-recent weight (kg) for [patientId].
   ///
-  /// Used by the Step 2 weight-delta badge to show "Last: X kg" regardless of
-  /// whether the patient's most recent visit was ANC, NCD, PNC, or any other
-  /// programme.  Rows are read newest-first; the first non-null weight wins.
+  /// Order matches prior-visit biometrics for NCD: this device's
+  /// `local_assessments` first (unsynced visits are not in history yet), then
+  /// synced `assessments` rows. NCD local rows store weight under `biometric`.
   Future<double?> lastRecordedWeight(String patientId) async {
+    return _lastRecordedBiometric(patientId, _BiometricKind.weight);
+  }
+
+  /// Most-recent height (cm) for [patientId].
+  ///
+  /// Same local-then-history order as [lastRecordedWeight]. Used to prefill and
+  /// lock height on a subsequent NCD visit (Spice parity).
+  Future<double?> lastRecordedHeight(String patientId) async {
+    return _lastRecordedBiometric(patientId, _BiometricKind.height);
+  }
+
+  Future<double?> _lastRecordedBiometric(
+    String patientId,
+    _BiometricKind kind,
+  ) async {
     if (patientId.isEmpty) return null;
-    final rows = await _dao.getByPatientId(patientId); // newest-first
-    for (final row in rows) {
-      final snap = _snapshotFromAnc(row.assessmentDetails, row.createdAt);
-      if (snap.weight != null) return snap.weight;
+
+    // 1. Local NCD rows first — includes visits not yet pushed / not yet in
+    //    the assessments history cache.
+    final localRows = await _dao.getByPatientId(patientId); // newest-first
+    for (final row in localRows) {
+      if (row.assessmentType.toUpperCase() != 'NCD') continue;
+      final v = _biometricFromLocalDetails(row.assessmentDetails, kind);
+      if (v != null) return v;
+    }
+    // Other local programme types (ANC etc.) as a fallback for the weight badge.
+    if (kind == _BiometricKind.weight) {
+      for (final row in localRows) {
+        if (row.assessmentType.toUpperCase() == 'NCD') continue;
+        final v = _biometricFromLocalDetails(row.assessmentDetails, kind);
+        if (v != null) return v;
+      }
+    }
+
+    // 2. Synced history — NCD (and Cataract, matching Spice) observations.
+    if (_historyDao == null) return null;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final historyRows = List<AssessmentRow>.from(
+      historyMap[patientId] ?? const [],
+    )..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    for (final row in historyRows) {
+      final kindTag = row.kind?.toUpperCase() ?? '';
+      if (!_isNcdKind(kindTag) && !_isCataractKind(kindTag)) continue;
+      final v = _biometricFromHistoryRaw(row.rawJson, kind);
+      if (v != null) return v;
     }
     return null;
   }
 
-  /// Most-recent locally-saved height reading for [patientId] from ANY visit
-  /// type. Returns `null` when no prior visit has a height value.
-  Future<double?> lastRecordedHeight(String patientId) async {
-    if (patientId.isEmpty) return null;
-    final rows = await _dao.getByPatientId(patientId); // newest-first
-    for (final row in rows) {
-      try {
-        final map = jsonDecode(row.assessmentDetails) as Map<String, dynamic>;
-        final raw = map['height'];
-        if (raw == null) continue;
-        final h = raw is num ? raw.toDouble() : double.tryParse(raw.toString());
-        if (h != null && h > 0) return h;
-      } catch (_) {}
+  /// Height/weight from a locally saved assessment_details blob.
+  /// NCD stores them under `biometric` (legacy rows may still use `bpLog`).
+  static double? _biometricFromLocalDetails(
+    String detailsJson,
+    _BiometricKind kind,
+  ) {
+    Map<String, dynamic> map;
+    try {
+      map = jsonDecode(detailsJson) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+    final key = kind == _BiometricKind.height ? 'height' : 'weight';
+    final candidates = <dynamic>[
+      map[key],
+      if (map['biometric'] is Map) (map['biometric'] as Map)[key],
+      if (map['bpLog'] is Map) (map['bpLog'] as Map)[key],
+      if (map['ncd'] is Map) ...[
+        (map['ncd'] as Map)[key],
+        if ((map['ncd'] as Map)['biometric'] is Map)
+          ((map['ncd'] as Map)['biometric'] as Map)[key],
+        if ((map['ncd'] as Map)['bpLog'] is Map)
+          ((map['ncd'] as Map)['bpLog'] as Map)[key],
+      ],
+      if (map['medicalHistoryPhysicalExamination'] is Map)
+        (map['medicalHistoryPhysicalExamination'] as Map)[key],
+    ];
+    for (final raw in candidates) {
+      final v = _positiveDouble(raw);
+      if (v != null) return v;
     }
     return null;
+  }
+
+  /// Height/weight from a synced assessments.raw_json row (observations.*).
+  static double? _biometricFromHistoryRaw(
+    String rawJson,
+    _BiometricKind kind,
+  ) {
+    Map<String, dynamic> raw;
+    try {
+      raw = jsonDecode(rawJson) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+    final key = kind == _BiometricKind.height ? 'height' : 'weight';
+    final obs = raw['observations'];
+    final candidates = <dynamic>[
+      if (obs is Map) obs[key],
+      raw[key],
+      if (raw['bpLog'] is Map) (raw['bpLog'] as Map)[key],
+      if (raw['assessmentDetails'] is Map) (raw['assessmentDetails'] as Map)[key],
+    ];
+    for (final rawVal in candidates) {
+      final v = _positiveDouble(rawVal);
+      if (v != null) return v;
+    }
+    return null;
+  }
+
+  static double? _positiveDouble(dynamic raw) {
+    if (raw == null) return null;
+    final v = raw is num ? raw.toDouble() : double.tryParse(raw.toString().trim());
+    if (v == null || v <= 0) return null;
+    return v;
   }
 
   /// Prior locally-saved ANC visits for [patientId] as trend snapshots,
@@ -647,8 +831,14 @@ class AssessmentRepository extends ChangeNotifier {
         final raw = jsonDecode(jsonStr) as Map<String, dynamic>;
         final flat = _flattenMap(raw, subObjects);
         final result = <String, dynamic>{};
+        // Methods are an array on the wire, but the form renders a
+        // single-select Spinner — hand back the first option so the prefilled
+        // value matches an option id rather than a stringified list.
         final methods = flat['familyPlanningMethods'];
-        if (methods != null) result['familyPlanningMethods'] = methods;
+        final method = methods is List
+            ? (methods.isEmpty ? null : methods.first)
+            : methods;
+        if (method != null) result['familyPlanningMethods'] = method;
         // Wire name is desireForChildren; form field is desireForChildrenInFuture.
         final desire = flat['desireForChildrenInFuture'] ?? flat['desireForChildren'];
         if (desire != null) result['desireForChildrenInFuture'] = desire;
@@ -800,6 +990,13 @@ class AssessmentRepository extends ChangeNotifier {
   static bool _isNcdKind(String kind) =>
       kind.contains('NCD') || kind.contains('HYPERTENSION') || kind.contains('DIABETES');
 
+  static bool _isCataractKind(String kind) => kind.contains('CATARACT');
+
+  /// Matches the local type (`CHILDHOOD_VISIT`) and the Spice wire /history
+  /// spellings (`ChildHood_Visit`, `CHILD_MENU`).
+  static bool _isChildhoodVisitKind(String kind) =>
+      kind.contains('CHILDHOOD') || kind == 'CHILD_MENU';
+
   static bool _isPncMotherKind(String kind) =>
       kind.contains('PNC') && !kind.contains('CHILD') && !kind.contains('NEONAT');
 
@@ -816,8 +1013,7 @@ class AssessmentRepository extends ChangeNotifier {
       final raw = jsonDecode(rawJson) as Map<String, dynamic>;
       // Flatten sub-objects that may carry the LMP key.
       // Server uses different wrappers for ANC vs PWPROFILE assessment types.
-      final flat = <String, dynamic>{...raw};
-      for (final sub in const [
+      const wrappers = [
         'observations',
         'assessmentDetails',
         'medicalHistoryPhysicalExamination',
@@ -825,13 +1021,25 @@ class AssessmentRepository extends ChangeNotifier {
         'medicalHistory',
         'pregnancyDetails',
         'pwProfile',
+        'pregnancyDetailsAndHistory',
         'clinicalDetails',
         'pregnancyProfile',
         'obstetricHistory',
-      ]) {
-        if (raw[sub] is Map) {
-          flat.addAll((raw[sub] as Map).cast<String, dynamic>());
+      ];
+      // PWPROFILE nests two levels deep
+      // (assessmentDetails → pwProfile → pregnancyDetailsAndHistory), so lift
+      // repeatedly until no wrapper is left.
+      var flat = <String, dynamic>{...raw};
+      for (var depth = 0; depth < 3; depth++) {
+        final next = <String, dynamic>{...flat};
+        for (final sub in wrappers) {
+          final nested = flat[sub];
+          if (nested is Map) {
+            next.addAll(nested.cast<String, dynamic>());
+          }
         }
+        if (next.length == flat.length) break;
+        flat = next;
       }
 
       // ISO strings or epoch millis (int / numeric string) under common keys.
@@ -1027,6 +1235,8 @@ class AssessmentRepository extends ChangeNotifier {
 }
 
 enum _OfflineSyncPollResult { success, failed, inProgress }
+
+enum _BiometricKind { height, weight }
 
 class SaveAssessmentResult {
   const SaveAssessmentResult({

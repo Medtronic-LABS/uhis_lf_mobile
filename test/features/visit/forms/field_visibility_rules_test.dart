@@ -6,9 +6,9 @@ library;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:leapwell/features/visit/forms/canonical_visit_data.dart';
-import 'package:leapwell/features/visit/forms/form_config.dart';
-import 'package:leapwell/features/visit/forms/unified_section_rules.dart';
+import 'package:uhis_next/features/visit/forms/canonical_visit_data.dart';
+import 'package:uhis_next/features/visit/forms/form_config.dart';
+import 'package:uhis_next/features/visit/forms/unified_section_rules.dart';
 
 FieldDef _fieldDef(String id, Map<String, dynamic> json) =>
     FieldDef.fromJson(id, json);
@@ -109,11 +109,11 @@ void main() {
       expect(
         FieldVisibilityRules.isFieldVisible(
           field: medicationFrequencyBg,
-          data: const CanonicalVisitData({'isBeforeDiabetesDiagnosis': 'Yes'}),
+          data: const CanonicalVisitData({'isBeforeDiabetesDiagnosis': 'yes'}),
           rulesByTargetId: config.visibilityRulesByTargetId,
         ),
         isTrue,
-        reason: 'reveals once isBeforeDiabetesDiagnosis is answered Yes',
+        reason: 'reveals once isBeforeDiabetesDiagnosis is answered yes',
       );
     });
 
@@ -122,24 +122,34 @@ void main() {
     // NCD fix above) found 12 more fields with the identical problem — base
     // visibility "gone" with either no incoming condition at all, or a
     // condition whose driver field is absent from the field's own formType.
-    test('pncMother Counseling & Education and pncChild core fields are visible', () async {
+    test('pncChild age-banded fields follow Spice childhood visit bands', () async {
       final config = await FormConfig.load(rootBundle);
       const emptyData = CanonicalVisitData();
 
-      for (final entry in [
-        // pncChild keeps isSummary fields on fill (Android CHILDHOOD_VISIT).
-        ('hrsBreastFed', 'pncChild'),
-        ('monthAdditionalFeedGiven', 'pncChild'),
-        ('childBreastFeeding', 'pncChild'),
-        ('additionalFood24Hrs', 'pncChild'),
-        ('receivedVaccine', 'pncChild'),
-        ('dewormingMedicine', 'pncChild'),
-        ('cvdRisk', 'cataract'),
-        ('isPregnant', 'enrollment'),
-        ('referralFacility', 'pncMother'),
-      ]) {
-        final id = entry.$1;
-        final formType = entry.$2;
+      bool visible(String id, {int? ageInMonths}) {
+        return FieldVisibilityRules.isFieldVisible(
+          field: config.fields[id]!,
+          data: emptyData,
+          rulesByTargetId: config.visibilityRulesByTargetId,
+          formType: 'pncChild',
+          ageInMonths: ageInMonths,
+        );
+      }
+
+      expect(visible('hrsBreastFed', ageInMonths: 2), isTrue);
+      expect(visible('hrsBreastFed', ageInMonths: 5), isFalse);
+      expect(visible('monthAdditionalFeedGiven', ageInMonths: 8), isTrue);
+      expect(visible('monthAdditionalFeedGiven', ageInMonths: 12), isFalse);
+      expect(visible('childBreastFeeding', ageInMonths: 12), isTrue);
+      expect(visible('receivedVaccine', ageInMonths: 19), isTrue);
+      expect(visible('childFeedLast24Hrs', ageInMonths: 19), isFalse);
+      expect(visible('childFeedLast24Hrs', ageInMonths: 10), isTrue);
+      // Without age: hide band extras, keep feed question.
+      expect(visible('hrsBreastFed'), isFalse);
+      expect(visible('childFeedLast24Hrs'), isTrue);
+
+      for (final id in ['isPregnant', 'referralFacility']) {
+        final formType = id == 'isPregnant' ? 'enrollment' : 'pncMother';
         final field = config.fields[id];
         expect(field, isNotNull, reason: '$id should exist in field_library.json');
         expect(
@@ -152,6 +162,19 @@ void main() {
           isTrue,
           reason: '$id should be visible with no prior answers',
         );
+      }
+
+      // cvdRisk is deliberately absent from every layout — the Framingham
+      // calculator is not wired into the cataract NCD path, so the label would
+      // only ever render its empty placeholder.
+      for (final entry in config.forms.entries) {
+        for (final section in entry.value) {
+          expect(
+            section.fieldRefs.map((r) => r.id),
+            isNot(contains('cvdRisk')),
+            reason: '${entry.key}/${section.sectionId} must not show CVD risk',
+          );
+        }
       }
 
       // pncMother counselling text is Android isSummary → fill-form-hidden.

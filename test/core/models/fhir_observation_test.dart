@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/models/fhir_observation.dart';
+import 'package:uhis_next/core/models/fhir_observation.dart';
 
 Map<String, dynamic> _bp(String systolic, String diastolic) => {
       'resourceType': 'Observation',

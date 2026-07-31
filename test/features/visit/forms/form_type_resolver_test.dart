@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/features/visit/forms/form_type_resolver.dart';
+import 'package:uhis_next/features/visit/forms/form_type_resolver.dart';
 
 void main() {
   group('FormTypeResolver.resolve', () {
@@ -17,9 +17,13 @@ void main() {
       ]);
     });
 
-    test('non-delivery expands pnc without pregnancyOutcome', () {
+    test('non-delivery expands pnc to mother only', () {
       final types = FormTypeResolver.resolve(['pnc', 'ncd']);
-      expect(types, ['pncMother', 'pncChild', 'ncd']);
+      expect(types, ['pncMother', 'ncd']);
+    });
+
+    test('imci resolves to childhood visit formType', () {
+      expect(FormTypeResolver.resolve(['imci']), ['pncChild']);
     });
   });
 }

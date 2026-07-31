@@ -139,9 +139,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// a second ANC visit on the same calendar day.
   bool _ancVisitedToday = false;
 
-  /// Under-5 only: whether the SK has explicitly tapped the Vaccination card.
-  /// Starts false so the card shows unselected; tap toggles it.
-  bool _vaccinationSelected = false;
+  /// Under-5 only: vaccination is always included for a child visit — Step 2
+  /// of the visit flow shows the vaccination timeline regardless, so this
+  /// was never really a user choice. Forced true whenever the card would
+  /// render (the card itself is only ever shown for under-5 patients); the
+  /// getter naturally evaluates false for non-under5 patients, for whom the
+  /// card never renders and this value has no effect.
+  bool get _vaccinationSelected => _patientContext?.isUnder5 ?? false;
 
   @override
   void initState() {
@@ -496,9 +500,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // Source 2: catalogue direct symptom→programme mapping.
     // Each UnifiedSymptomDef.programmes names every service that symptom
     // belongs to, providing finer-grained auto-selection than the rule engine.
+    // See ProgrammeGridSync.catalogProgrammesFor for why imci/epi are gated
+    // on the patient actually being under-5.
+    final isUnder5 = _patientContext?.isUnder5 == true;
     for (final code in currentSymptoms) {
       final def = UnifiedSymptomCatalog.byCode(code);
-      if (def != null) activated.addAll(def.programmes);
+      if (def == null) continue;
+      activated.addAll(ProgrammeGridSync.catalogProgrammesFor(
+        def.programmes,
+        isUnder5: isUnder5,
+      ));
     }
 
     final unseen = ProgrammeGridSync.additionsFromPathways(
@@ -541,11 +552,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         },
       );
     });
-  }
-
-  /// Toggles the vaccination card selection state (under-5).
-  void _onVaccinationToggle() {
-    setState(() => _vaccinationSelected = !_vaccinationSelected);
   }
 
   /// Advances to the vaccination visit step.
@@ -939,9 +945,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         onDeliveryToggle: _onDeliveryToggle,
                         onVaccination: _onVaccination,
                         vaccinationSelected: _vaccinationSelected,
-                        onVaccinationToggle: widget.onAdvance != null
-                            ? _onVaccinationToggle
-                            : null,
+                        vaccinationLocked: widget.onAdvance != null,
                       ),
                     ),
                   ),
@@ -1515,6 +1519,36 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
 
   static String? _sectionLabel(Programme? p) => null;
 
+  /// Chips flow across the full width and re-wrap as the space allows; a label
+  /// too long for a whole row is ellipsised instead of overflowing.
+  Widget _chipWrap(List<String> codes) {
+    final vm = widget.vm;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : double.infinity;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final code in codes)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: _PickerChip(
+                  key: ValueKey('triage_chip_$code'),
+                  code: code,
+                  isSelected: vm.isSelected(code),
+                  isAi: vm.isScribePreTick(code),
+                  onTap: () => _toggleSymptom(code),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -1664,27 +1698,15 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                   ),
                 ),
             ] else if (isSearching)
-              // Search results — flat natural-width wrap.
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: gridSections
-                    .expand((s) => s.$2)
-                    .toSet()
-                    .map(
-                      (code) => _PickerChip(
-                        key: ValueKey('triage_chip_$code'),
-                        code: code,
-                        isSelected: selected.contains(code),
-                        isAi: vm.isScribePreTick(code),
-                        onTap: () => _toggleSymptom(code),
-                      ),
-                    )
-                    .toList(),
-              )
+              // Search results — one flat wrap of the matches.
+              _chipWrap(gridSections.expand((s) => s.$2).toSet().toList())
+            else if (gridSections.every((s) => s.$1 == null || s.$1!.isEmpty))
+              // No section headers to draw — flow every service's symptoms as
+              // a single block so chips keep filling each row.
+              _chipWrap(gridSections.expand((s) => s.$2).toSet().toList())
             else
               // Per-service sections: each enrolled programme gets its own
-              // labeled chip block; chips wrap naturally within the block.
+              // labeled chip block; chips wrap within the block.
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -1703,23 +1725,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                         ),
                         const SizedBox(height: 6),
                       ],
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: section.$2
-                            .map(
-                              (code) => _PickerChip(
-                                key: ValueKey(
-                                  'triage_chip_${section.$1}_$code',
-                                ),
-                                code: code,
-                                isSelected: selected.contains(code),
-                                isAi: vm.isScribePreTick(code),
-                                onTap: () => _toggleSymptom(code),
-                              ),
-                            )
-                            .toList(),
-                      ),
+                      _chipWrap(section.$2),
                       const SizedBox(height: 14),
                     ],
                 ],
@@ -1888,12 +1894,16 @@ class _PickerChip extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
               ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
                 ),
               ),
             ],
@@ -1965,7 +1975,7 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.onDeliveryToggle,
     required this.onVaccination,
     this.vaccinationSelected = false,
-    this.onVaccinationToggle,
+    this.vaccinationLocked = false,
   });
 
   final PatientContext patientContext;
@@ -1983,12 +1993,18 @@ class _InlineServiceSelector extends StatelessWidget {
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
-  /// Whether the SK has selected the Vaccination card (under-5 only).
+  /// Whether the Vaccination card shows as selected (under-5 only) — always
+  /// true whenever the card renders, since vaccination is no longer a
+  /// genuine choice; see [vaccinationLocked].
   final bool vaccinationSelected;
 
-  /// Called when SK toggles the Vaccination card. Replaces the old direct-
-  /// navigation [onVaccination] tap — selection is now decoupled from the CTA.
-  final VoidCallback? onVaccinationToggle;
+  /// True when embedded in the visit flow — the Vaccination card renders
+  /// pre-selected and non-interactive (vaccination always happens for a
+  /// child visit regardless of this card), so tapping it explains why
+  /// instead of toggling anything. False for standalone (non-embedded) use,
+  /// where the card tap still pushes the immunisation route directly via
+  /// [onVaccination] — that legacy path is unaffected.
+  final bool vaccinationLocked;
 
   /// Legacy — kept for standalone (non-embedded) use where the card tap
   /// still pushes the immunisation route directly.
@@ -2033,7 +2049,7 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   bool _isLocked(_ServiceCardDef card) {
-    if (card.isVaccination) return false;
+    if (card.isVaccination) return vaccinationLocked;
     if (card.programme == Programme.imci) return false;
     final ctx = patientContext;
     final pregnant = ctx.isPregnant && !ctx.isPostpartum;
@@ -2068,11 +2084,19 @@ class _InlineServiceSelector extends StatelessWidget {
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
     if (card.isVaccination) {
-      // Embedded in visit flow — toggle selection; CTA drives the advance.
-      // Standalone (no toggle callback) — navigate directly as before.
-      if (onVaccinationToggle != null) {
-        onVaccinationToggle!();
+      if (vaccinationLocked) {
+        // Embedded in visit flow — vaccination always happens for a child
+        // visit regardless of this card, so there's nothing to toggle;
+        // explain why instead.
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Text(TriageStrings.vaccinationDefaultHint),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ));
       } else {
+        // Standalone (non-embedded) use — legacy direct navigation, unaffected.
         onVaccination();
       }
       return;

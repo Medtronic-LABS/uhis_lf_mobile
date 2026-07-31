@@ -5,7 +5,7 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:leapwell/core/db/app_database.dart';
+import 'package:uhis_next/core/db/app_database.dart';
 
 Future<AppDatabase> _openInMemoryDb() async {
   final rawDb = await databaseFactory.openDatabase(

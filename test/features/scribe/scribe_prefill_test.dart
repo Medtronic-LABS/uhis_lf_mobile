@@ -13,16 +13,16 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:leapwell/core/db/app_database.dart';
-import 'package:leapwell/core/db/local_assessment_dao.dart';
-import 'package:leapwell/core/models/programme.dart';
-import 'package:leapwell/features/scribe/form_field_schema_builder.dart';
-import 'package:leapwell/features/scribe/models/ai_extracted_field.dart';
-import 'package:leapwell/features/visit/composer/section_registry.dart';
-import 'package:leapwell/features/visit/composer/sectioned_assessment_screen.dart';
-import 'package:leapwell/features/visit/pathway/pathway_engine.dart';
-import 'package:leapwell/features/visit/triage/patient_context_builder.dart';
-import 'package:leapwell/features/visit/triage/triage_view_model.dart';
+import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/db/local_assessment_dao.dart';
+import 'package:uhis_next/core/models/programme.dart';
+import 'package:uhis_next/features/scribe/form_field_schema_builder.dart';
+import 'package:uhis_next/features/scribe/models/ai_extracted_field.dart';
+import 'package:uhis_next/features/visit/composer/section_registry.dart';
+import 'package:uhis_next/features/visit/composer/sectioned_assessment_screen.dart';
+import 'package:uhis_next/features/visit/pathway/pathway_engine.dart';
+import 'package:uhis_next/features/visit/triage/patient_context_builder.dart';
+import 'package:uhis_next/features/visit/triage/triage_view_model.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

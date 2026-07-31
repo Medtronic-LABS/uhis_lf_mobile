@@ -131,6 +131,9 @@ class _PregnancyRegistrationSheetState
         updatedAt: DateTime.now().millisecondsSinceEpoch,
         lmpDate: _lmp!.millisecondsSinceEpoch,
         eddDate: _edd?.millisecondsSinceEpoch,
+        // New pregnancy episode — reset visit counters (Spice getUpdatedPregnancyDetail).
+        ancVisitNo: 0,
+        pncVisitNo: 0,
       );
       await dao.upsertOne(row);
       if (!mounted) return;
@@ -253,33 +256,33 @@ class _PregnancyRegistrationSheetState
                   const SizedBox(height: 10),
                   const _TooEarlyBanner(),
                 ],
-                const SizedBox(height: 24),
-                _SectionHeader(PregnancyRegStrings.sectionHistory),
-                const SizedBox(height: 12),
-                _StepperField(
-                  label: PregnancyRegStrings.gravidaLabel,
-                  value: _gravida,
-                  min: 1,
-                  max: 12,
-                  valueLabel: _gravida == 1
-                      ? PregnancyRegStrings.firstPregnancy
-                      : '$_gravida',
-                  onChanged: (v) => setState(() => _gravida = v),
-                ),
-                const SizedBox(height: 12),
-                _StepperField(
-                  label: PregnancyRegStrings.parityLabel,
-                  value: _parity,
-                  min: 0,
-                  max: 11,
-                  valueLabel: '$_parity',
-                  onChanged: (v) => setState(() => _parity = v),
-                ),
-                if (_gravida > 4) ...[
-                  const SizedBox(height: 8),
-                  _WarningChip(PregnancyRegStrings.multiparaWarning),
-                ],
                 if (!_tooEarly) ...[
+                  const SizedBox(height: 24),
+                  _SectionHeader(PregnancyRegStrings.sectionHistory),
+                  const SizedBox(height: 12),
+                  _StepperField(
+                    label: PregnancyRegStrings.gravidaLabel,
+                    value: _gravida,
+                    min: 1,
+                    max: 12,
+                    valueLabel: _gravida == 1
+                        ? PregnancyRegStrings.firstPregnancy
+                        : '$_gravida',
+                    onChanged: (v) => setState(() => _gravida = v),
+                  ),
+                  const SizedBox(height: 12),
+                  _StepperField(
+                    label: PregnancyRegStrings.parityLabel,
+                    value: _parity,
+                    min: 0,
+                    max: 11,
+                    valueLabel: '$_parity',
+                    onChanged: (v) => setState(() => _parity = v),
+                  ),
+                  if (_gravida > 4) ...[
+                    const SizedBox(height: 8),
+                    _WarningChip(PregnancyRegStrings.multiparaWarning),
+                  ],
                   const SizedBox(height: 24),
                   _SectionHeader(PregnancyRegStrings.sectionRisk),
                   const SizedBox(height: 12),
@@ -548,10 +551,10 @@ class _TooEarlyBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('⚠', style: TextStyle(fontSize: 14)),
+          const Text('⚠', style: TextStyle(fontSize: 14)),
           SizedBox(width: 8),
           Expanded(
             child: Text(

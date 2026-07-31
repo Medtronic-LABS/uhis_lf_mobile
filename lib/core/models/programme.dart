@@ -59,6 +59,12 @@ enum Programme {
       case 'ICCM_UNDER_5':
       case 'ICCM_UNDER_2':
       case 'UNDER_5':
+      // Spice Childhood Visit / Child Health card (formType pncChild).
+      case 'CHILDHOOD_VISIT':
+      case 'CHILDHOODVISIT':
+      case 'CHILD_MENU':
+      case 'PNCCHILD':
+      case 'PNC_CHILD':
         return Programme.imci;
       case 'ANC':
       case 'PREGNANCY':
@@ -73,15 +79,11 @@ enum Programme {
       case 'PREGNANCY_OUTCOME':
       case 'PREGNANCYOUTCOME':
       // Expanded form-type names used by the unified Step 2 form
-      // (visit_form_screen._toFormTypes expands pnc → pncMother + pncChild).
+      // (FormTypeResolver expands pnc → pncMother; child is its own menu).
       case 'PNCMOTHER':
       case 'PNC_MOTHER':
-      case 'PNCCHILD':
-      case 'PNC_CHILD':
       case 'PNC_NEONATE':
       case 'PNCNEONATAL':
-      case 'CHILDHOOD_VISIT':
-      case 'CHILDHOODVISIT':
         return Programme.pnc;
       case 'NCD':
       case 'HYPERTENSION':

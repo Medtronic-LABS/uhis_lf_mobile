@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/models/risk.dart';
+import 'package:uhis_next/core/models/risk.dart';
 
 void main() {
   group('prioritySortChain helpers', () {

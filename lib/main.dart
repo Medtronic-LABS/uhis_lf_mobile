@@ -89,6 +89,7 @@ Future<void> main() async {
   // Offline-first: never fetch fonts from the network. Falls back to bundled
   // assets (if declared in pubspec fonts:) then to system fonts.
   GoogleFonts.config.allowRuntimeFetching = false;
+  await loadTranslations();
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();
@@ -244,6 +245,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     auth: widget.authRepo,
     historyDao: _assessmentDao,
     followUpCalls: _followUpCallService,
+    memberDao: _memberDao,
   );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
   late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);
@@ -288,6 +290,17 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Reset sync progress so the next user's /sync screen does not see
     // isComplete=true from the previous session and skip their cold sync.
     widget.authState.registerLogoutHook(_sync.resetProgress);
+    // Best-effort flush of any still-pending assessment writes before the
+    // DB wipe below destroys their local row — without this, an outcome
+    // recorded shortly before logout (or while offline) that hasn't reached
+    // the backend yet is lost permanently: gone locally, never pushed.
+    // Bounded so a slow/offline network can't hang logout.
+    widget.authState.registerPreWipeHook(
+      () => _assessmentRepo
+          .syncPendingAssessments()
+          .timeout(const Duration(seconds: 10))
+          .then((_) {}, onError: (_) {}),
+    );
   }
 
   Future<void> _bootstrapNotifications() async {

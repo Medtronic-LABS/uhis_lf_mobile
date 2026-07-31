@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/time/calendar_day.dart';
+import 'package:uhis_next/core/time/calendar_day.dart';
 
 void main() {
   group('CalendarDay.daysBetween', () {

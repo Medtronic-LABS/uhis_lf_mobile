@@ -2207,6 +2207,8 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
+    "disableFutureDate": true,
+    "minDays": 294,
     "hint": "DD-MM-YYYY",
     "hintCulture": "দিন-মাস-বছর",
     "titleCulture": "শেষ মাসিক শুরুর তারিখ",
@@ -2641,7 +2643,8 @@
         "targetId": "causeOfDeath",
         "visibility": "visible"
       }
-    ]
+    ],
+    "isMandatory": true
   },
   "gestationMonthAtDeath": {
     "id": "gestationMonthAtDeath",
@@ -2675,7 +2678,8 @@
         "workflowId": 102,
         "workflowName": "Pregnancy Outcome"
       }
-    ]
+    ],
+    "maxLength": 2
   },
   "causeOfDeath": {
     "id": "causeOfDeath",
@@ -2915,7 +2919,9 @@
         "targetId": "counsellingNeonatalDeath",
         "visibility": "gone"
       }
-    ]
+    ],
+    "isMandatory": true,
+    "maxLength": 1
   },
   "typeOfAbortion": {
     "id": "typeOfAbortion",
@@ -3030,7 +3036,7 @@
     "errorMessage": "Please enter number of live births",
     "errorMessageCulture": "অনুগ্রহ করে জীবিত জন্মের সংখ্যা লিখুন",
     "minValue": 0,
-    "maxValue": 5,
+    "maxValue": 4,
     "isSummary": false,
     "inputType": "integer",
     "clinicalConcept": [
@@ -3047,7 +3053,8 @@
         "workflowName": "Pregnancy Outcome"
       }
     ],
-    "condition": []
+    "condition": [],
+    "maxLength": 1
   },
   "stillbirthNumbers": {
     "id": "stillbirthNumbers",
@@ -3080,7 +3087,9 @@
         "workflowId": 102,
         "workflowName": "Pregnancy Outcome"
       }
-    ]
+    ],
+    "maxValue": 4,
+    "maxLength": 1
   },
   "placeOfDelivery": {
     "id": "placeOfDelivery",
@@ -3153,6 +3162,14 @@
         "eq": "home",
         "targetId": "birthAttendant",
         "visibility": "visible"
+      },
+      {
+        "eqList": [
+          "govtHealthFacility",
+          "privateFacility"
+        ],
+        "targetId": "birthAttendant",
+        "visibility": "gone"
       }
     ]
   },
@@ -3185,7 +3202,8 @@
         "workflowId": 102,
         "workflowName": "Pregnancy Outcome"
       }
-    ]
+    ],
+    "disableFutureDate": true
   },
   "modeOfDelivery": {
     "id": "modeOfDelivery",
@@ -3251,6 +3269,21 @@
             "display": "Caesarean section"
           }
         ]
+      }
+    ],
+    "condition": [
+      {
+        "eq": "cesareanSection",
+        "targetId": "birthAttendant",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "normalDelivery",
+          "assistedDelivery"
+        ],
+        "targetId": "birthAttendant",
+        "visibility": "visible"
       }
     ]
   },
@@ -5252,8 +5285,10 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "অন্য সেবাদাতাদের সঙ্গে কতবার ANC (গর্ভকালীন স্বাস্থ্যপরিচর্যা) ভিজিট করা হয়েছে?",
+    "titleCulture": "অন্য কোন সেবাকেন্দ্র/সেবাদাতার কাছ থেকে কতবার এএনসি সেবা নিয়েছেন?",
     "errorMessage": "Please enter a valid number",
+    "errorMessageCulture": "অনুগ্রহ করে একটি বৈধ মান লিখুন",
+    "maxLength": 2,
     "minValue": 0,
     "isSummary": false,
     "inputType": "integer",
@@ -5269,6 +5304,11 @@
         "id": "anc",
         "workflowId": 4,
         "workflowName": "RMNCH"
+      },
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
       }
     ]
   },
@@ -6066,6 +6106,43 @@
         "workflowName": "RMNCH"
       }
     ],
+    "optionsList": [
+      {
+        "id": "mothersBreastMilk",
+        "name": "Mother's breast milk",
+        "cultureValue": "মায়ের দুধ"
+      },
+      {
+        "id": "cowgoatMilk",
+        "name": "Cow/Goat milk",
+        "cultureValue": "গরু-ছাগলের দুধ"
+      },
+      {
+        "id": "formulaMilk",
+        "name": "Formula milk",
+        "cultureValue": "ফর্মুলা দুধ"
+      },
+      {
+        "id": "semolina",
+        "name": "Semolina",
+        "cultureValue": "সুজি"
+      },
+      {
+        "id": "ricePowder",
+        "name": "Rice powder",
+        "cultureValue": "চালের গুঁড়া"
+      },
+      {
+        "id": "familyFood",
+        "name": "Family Food",
+        "cultureValue": "পারিবারিক খাবার"
+      },
+      {
+        "id": "other",
+        "name": "Other",
+        "cultureValue": "অন্যান্য"
+      }
+    ],
     "condition": [
       {
         "eq": "other",
@@ -6520,6 +6597,63 @@
         "id": "pncChild",
         "workflowId": 4,
         "workflowName": "RMNCH"
+      }
+    ],
+    "optionsList": [
+      {
+        "id": "convulsion",
+        "name": "Convulsion",
+        "cultureValue": "খিঁচুনি"
+      },
+      {
+        "id": "rapidBreathing",
+        "name": "Rapid breathing",
+        "cultureValue": "দ্রুত শ্বাসপ্রশ্বাস"
+      },
+      {
+        "id": "fever",
+        "name": "Fever",
+        "cultureValue": "জ্বর"
+      },
+      {
+        "id": "lethargy",
+        "name": "Lethargy",
+        "cultureValue": "অবসাদ"
+      },
+      {
+        "id": "unableToSuckMilk",
+        "name": "Unable to suck milk",
+        "cultureValue": "দুধ চুষতে অক্ষম"
+      },
+      {
+        "id": "redUmbilicus",
+        "name": "Red umbilicus",
+        "cultureValue": "নাভি লাল"
+      },
+      {
+        "id": "skinRash",
+        "name": "Skin rash",
+        "cultureValue": "চর্মরোগ"
+      },
+      {
+        "id": "eyeProblem",
+        "name": "Eye problem",
+        "cultureValue": "চোখের সমস্যা"
+      },
+      {
+        "id": "cannotStandWalk",
+        "name": "Cannot stand/walk",
+        "cultureValue": "দাঁড়াতে/হাঁটতে পারে না"
+      },
+      {
+        "id": "cannotBalance",
+        "name": "Cannot balance",
+        "cultureValue": "ভারসাম্য রাখতে পারে না"
+      },
+      {
+        "id": "cannotSpeak",
+        "name": "Cannot speak",
+        "cultureValue": "কথা বলতে পারে না"
       }
     ],
     "condition": []
@@ -6985,23 +7119,23 @@
     ],
     "optionsList": [
       {
-        "id": "+1.00",
+        "id": "1.0",
         "name": "+1.00"
       },
       {
-        "id": "+1.50",
+        "id": "1.5",
         "name": "+1.50"
       },
       {
-        "id": "+2.00",
+        "id": "2.0",
         "name": "+2.00"
       },
       {
-        "id": "+2.50",
+        "id": "2.5",
         "name": "+2.50"
       },
       {
-        "id": "+3.00",
+        "id": "3.0",
         "name": "+3.00"
       }
     ],
@@ -7054,7 +7188,7 @@
     ],
     "optionsList": [
       {
-        "id": "Yes",
+        "id": "yes",
         "name": "Yes",
         "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
@@ -7066,7 +7200,7 @@
         ]
       },
       {
-        "id": "No",
+        "id": "no",
         "name": "No",
         "cultureValue": "না",
         "clinicalConcept": [
@@ -7082,6 +7216,11 @@
       {
         "eq": "yes",
         "targetId": "typeOfGlass",
+        "visibility": "visible"
+      },
+      {
+        "eq": "no",
+        "targetId": "ncdServiceProvided",
         "visibility": "visible"
       }
     ]
@@ -7121,12 +7260,12 @@
     ],
     "optionsList": [
       {
-        "id": "biFocal",
+        "id": "bf",
         "name": "Bi Focal",
         "cultureValue": "বাই-ফোকাল"
       },
       {
-        "id": "singleVision",
+        "id": "sv",
         "name": "Single Vision",
         "cultureValue": "সিঙ্গেল ভিশন"
       }
@@ -7177,12 +7316,12 @@
     ],
     "optionsList": [
       {
-        "id": "Metal",
+        "id": "metal",
         "name": "Metal",
         "cultureValue": "মেটাল"
       },
       {
-        "id": "Plastic",
+        "id": "plastic",
         "name": "Plastic",
         "cultureValue": "প্লাস্টিক"
       }
@@ -7233,7 +7372,7 @@
     ],
     "optionsList": [
       {
-        "id": "Yes",
+        "id": "yes",
         "name": "Yes",
         "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
@@ -7245,7 +7384,7 @@
         ]
       },
       {
-        "id": "No",
+        "id": "no",
         "name": "No",
         "cultureValue": "না",
         "clinicalConcept": [
@@ -7260,8 +7399,8 @@
     "condition": [
       {
         "eqList": [
-          "Yes",
-          "No"
+          "yes",
+          "no"
         ],
         "targetId": "ncdServiceProvided",
         "visibility": "visible"
@@ -7303,26 +7442,26 @@
     ],
     "optionsList": [
       {
-        "id": "upazilaHealthComplex",
-        "name": "Upazila Health Complex",
-        "cultureValue": "উপজেলা স্বাস্থ্য কমপ্লেক্স",
+        "id": "visionCenter",
+        "name": "Vision Center",
+        "cultureValue": "ভিশন সেন্টার",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
             "code": "257622000",
-            "display": "Upazila Health Complex"
+            "display": "Vision Center"
           }
         ]
       },
       {
-        "id": "districtHospital",
-        "name": "District Hospital",
-        "cultureValue": "জেলা সদর হাসপাতাল",
+        "id": "pspCamp",
+        "name": "PSP Camp",
+        "cultureValue": "পিএসপি ক্যাম্প",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
             "code": "257622000",
-            "display": "District Hospital"
+            "display": "PSP Camp"
           }
         ]
       },
@@ -7339,7 +7478,7 @@
         ]
       },
       {
-        "id": "govtPrivateSpecializedHospital",
+        "id": "govtPrivateHospital",
         "name": "Govt/Private Specialized Hospital",
         "cultureValue": "সরকারি/বেসরকারি বিশেষায়িত হাসপাতাল"
       },
@@ -7352,9 +7491,12 @@
     "condition": [
       {
         "eqList": [
+          "visionCenter",
+          "pspCamp",
           "upazilaHealthComplex",
           "districtHospital",
           "medicalCollegeHospital",
+          "govtPrivateHospital",
           "govtPrivateSpecializedHospital",
           "others"
         ],
@@ -7413,7 +7555,7 @@
         "cultureValue": "হৃদরোগ"
       },
       {
-        "id": "Eye Pressure",
+        "id": "eyePressure",
         "name": "Eye Pressure",
         "cultureValue": "চোঁখের প্রেসার"
       },
@@ -7438,7 +7580,7 @@
           "hypertension",
           "asthma",
           "heartDisease",
-          "Eye Pressure",
+          "eyePressure",
           "noProblem"
         ],
         "targetId": "patientReferredForOperation",
@@ -7448,9 +7590,9 @@
   },
   "patientReferredForOperation": {
     "id": "patientReferredForOperation",
-    "label": "Has the patient is referred for operation?",
+    "label": "Has the patient been referred for operation?",
     "widgetHint": "SingleSelectionView",
-    "fieldName": "Has the patient is referred for operation?",
+    "fieldName": "Has the patient been referred for operation?",
     "family": "cataract",
     "orderId": 2.0,
     "isMandatory": true,
@@ -7477,7 +7619,7 @@
     ],
     "optionsList": [
       {
-        "id": "Yes",
+        "id": "yes",
         "name": "Yes",
         "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
@@ -7489,7 +7631,7 @@
         ]
       },
       {
-        "id": "No",
+        "id": "no",
         "name": "No",
         "cultureValue": "না",
         "clinicalConcept": [
@@ -7503,12 +7645,12 @@
     ],
     "condition": [
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "operationName",
         "visibility": "visible"
       },
       {
-        "eq": "No",
+        "eq": "no",
         "targetId": "reason",
         "visibility": "visible"
       }
@@ -7556,7 +7698,7 @@
         ]
       },
       {
-        "id": "DCT",
+        "id": "dct",
         "name": "DCT",
         "cultureValue": "ডিসিটি/নেত্রনালী",
         "clinicalConcept": [
@@ -7568,7 +7710,7 @@
         ]
       },
       {
-        "id": "DCR",
+        "id": "dcr",
         "name": "DCR",
         "cultureValue": "ডিসিআর/নেত্রনালী",
         "clinicalConcept": [
@@ -7737,7 +7879,7 @@
     ],
     "optionsList": [
       {
-        "id": "Yes",
+        "id": "yes",
         "name": "Yes",
         "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
@@ -7749,7 +7891,7 @@
         ]
       },
       {
-        "id": "No",
+        "id": "no",
         "name": "No",
         "cultureValue": "না",
         "clinicalConcept": [
@@ -7764,8 +7906,8 @@
     "condition": [
       {
         "eqList": [
-          "Yes",
-          "No"
+          "yes",
+          "no"
         ],
         "targetId": "ncdServiceProvided",
         "visibility": "visible"
@@ -7805,7 +7947,7 @@
     ],
     "optionsList": [
       {
-        "id": "Yes",
+        "id": "yes",
         "name": "Yes",
         "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
@@ -7817,7 +7959,7 @@
         ]
       },
       {
-        "id": "No",
+        "id": "no",
         "name": "No",
         "cultureValue": "না",
         "clinicalConcept": [
@@ -7831,72 +7973,72 @@
     ],
     "condition": [
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "bpLog",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "isBeforeHtnDiagnosis",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "bpLogDetails",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "isRegularSmoker",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "glucoseLog",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "isBeforeDiabetesDiagnosis",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "glucoseType",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "glucose",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "bioMetrics",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "height",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "weight",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "bmi",
         "visibility": "visible"
       },
       {
-        "eq": "No",
+        "eq": "no",
         "targetId": "referralInformation",
         "visibility": "visible"
       },
       {
-        "eq": "No",
+        "eq": "no",
         "targetId": "whoReferredThisPerson",
         "visibility": "visible"
       }
@@ -7958,7 +8100,7 @@
     ],
     "optionsList": [
       {
-        "id": "Yes",
+        "id": "yes",
         "name": "Yes",
         "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
@@ -7970,7 +8112,7 @@
         ]
       },
       {
-        "id": "No",
+        "id": "no",
         "name": "No",
         "cultureValue": "না",
         "clinicalConcept": [
@@ -7984,7 +8126,7 @@
     ],
     "condition": [
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "medicationFrequencyBp",
         "visibility": "visible"
       }
@@ -7992,15 +8134,15 @@
   },
   "medicationFrequencyBp": {
     "id": "medicationFrequencyBp",
-    "label": "Are you taking BP medication regularly?",
+    "label": "Are you taking medication regularly?",
     "widgetHint": "Spinner",
-    "fieldName": "Are you taking BP medication regularly?",
+    "fieldName": "Are you taking medication regularly?",
     "family": "bpLog",
     "orderId": 3.0,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "আপনি কি নিয়মিত রক্তচাপের ঔষধ খাচ্ছেন?",
+    "titleCulture": "আপনি কি নিয়মিত ঔষধ খাচ্ছেন?",
     "errorMessage": "Please select the medication",
     "localDataCache": "conditions",
     "isNeededDefault": true,
@@ -8025,7 +8167,7 @@
     ],
     "optionsList": [
       {
-        "id": "Yes",
+        "id": "yes",
         "name": "Yes",
         "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
@@ -8037,7 +8179,7 @@
         ]
       },
       {
-        "id": "No",
+        "id": "no",
         "name": "No",
         "cultureValue": "না",
         "clinicalConcept": [
@@ -8052,7 +8194,7 @@
     "condition": [
       {
         "eqList": [
-          "Yes",
+          "yes",
           "Need basis (When feel unwell)"
         ],
         "targetId": "medicationTakenDaysBp",
@@ -8248,7 +8390,7 @@
     ],
     "optionsList": [
       {
-        "id": "Yes",
+        "id": "yes",
         "name": "Yes",
         "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
@@ -8260,7 +8402,7 @@
         ]
       },
       {
-        "id": "No",
+        "id": "no",
         "name": "No",
         "cultureValue": "না",
         "clinicalConcept": [
@@ -8274,7 +8416,7 @@
     ],
     "condition": [
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "medicationFrequencyBg",
         "visibility": "visible"
       }
@@ -8282,15 +8424,15 @@
   },
   "medicationFrequencyBg": {
     "id": "medicationFrequencyBg",
-    "label": "Are you taking diabetes medication regularly?",
+    "label": "Are you taking medication regularly?",
     "widgetHint": "Spinner",
-    "fieldName": "Are you taking diabetes medication regularly?",
+    "fieldName": "Are you taking medication regularly?",
     "family": "glucoseLog",
     "orderId": 3.0,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "আপনি কি নিয়মিত ডায়াবেটিসের ঔষধ খাচ্ছেন?",
+    "titleCulture": "আপনি কি নিয়মিত ঔষধ খাচ্ছেন?",
     "errorMessage": "Please select the medication",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -8314,7 +8456,7 @@
     ],
     "optionsList": [
       {
-        "id": "Yes",
+        "id": "yes",
         "name": "Yes",
         "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
@@ -8326,7 +8468,7 @@
         ]
       },
       {
-        "id": "No",
+        "id": "no",
         "name": "No",
         "cultureValue": "না",
         "clinicalConcept": [
@@ -8341,7 +8483,7 @@
     "condition": [
       {
         "eqList": [
-          "Yes",
+          "yes",
           "Need basis (When feel unwell)"
         ],
         "targetId": "medicationTakenDaysBg",
@@ -8542,7 +8684,7 @@
         ]
       },
       {
-        "id": "Patient to Patient",
+        "id": "patientToPatient",
         "name": "Patient to Patient",
         "cultureValue": "পেশেন্ট টু পেশেন্ট",
         "clinicalConcept": [
@@ -8554,7 +8696,7 @@
         ]
       },
       {
-        "id": "Volunteer",
+        "id": "volunteer",
         "name": "Volunteer",
         "cultureValue": "ভলান্টিয়ার",
         "clinicalConcept": [
@@ -8566,7 +8708,7 @@
         ]
       },
       {
-        "id": "Other",
+        "id": "other",
         "name": "Other",
         "cultureValue": "অন্যান্য",
         "clinicalConcept": [
@@ -10487,147 +10629,49 @@
   },
   "deliveryOutcomeType": {
     "id": "deliveryOutcomeType",
-    "label": "Outcome type",
-    "widgetHint": "RadioGroup",
-    "fieldName": "Outcome type",
+    "label": "Pregnancy Outcome",
+    "widgetHint": "Spinner",
+    "fieldName": "Pregnancy Outcome",
     "family": "pregnancyOutcome",
-    "orderId": 0,
+    "orderId": 1,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "ফলাফলের ধরন",
-    "options": [
+    "titleCulture": "গর্ভাবস্থার ফলাফল",
+    "errorMessage": "Please select pregnancy outcome",
+    "errorMessageCulture": "অনুগ্রহ করে গর্ভাবস্থার ফলাফল নির্বাচন করুন",
+    "optionsList": [
       {
         "id": "maternalDeath",
-        "name": "Maternal Death"
-      },
-      {
-        "id": "abortion",
-        "name": "Abortion"
+        "name": "Maternal Death",
+        "cultureValue": "মাতৃমৃত্যু"
       },
       {
         "id": "liveBirth",
-        "name": "Live birth"
+        "name": "Delivery outcome",
+        "cultureValue": "প্রসবের ফলাফল"
       },
       {
-        "id": "stillbirth",
-        "name": "Stillbirth"
+        "id": "abortion",
+        "name": "Abortion",
+        "cultureValue": "গর্ভপাত"
       }
     ],
     "condition": [
       {
-        "eqList": [
-          "liveBirth",
-          "stillbirth"
-        ],
-        "targetId": "timeOfDeath",
-        "visibility": "gone"
+        "eq": "abortion",
+        "targetId": "abortion",
+        "visibility": "visible"
       },
       {
-        "eqList": [
-          "liveBirth",
-          "stillbirth"
-        ],
-        "targetId": "gestationMonthAtDeath",
-        "visibility": "gone"
+        "eq": "maternalDeath",
+        "targetId": "maternalDeath",
+        "visibility": "visible"
       },
       {
-        "eqList": [
-          "liveBirth",
-          "stillbirth"
-        ],
-        "targetId": "causeOfDeath",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "liveBirth",
-          "stillbirth",
-          "maternalDeath"
-        ],
-        "targetId": "gestationMonthAtAbortion",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "liveBirth",
-          "stillbirth",
-          "maternalDeath"
-        ],
-        "targetId": "typeOfAbortion",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "deliveryOutcome",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "liveBirthNumbers",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "stillbirthNumbers",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "placeOfDelivery",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "dateOfDelivery",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "modeOfDelivery",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "birthAttendant",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "anyComplicationsDuringDelivery",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "complicationsDuringDelivery",
-        "visibility": "gone"
+        "eq": "liveBirth",
+        "targetId": "deliveryOutcomes",
+        "visibility": "visible"
       },
       {
         "eq": "liveBirth",
@@ -10640,18 +10684,7 @@
         "visibility": "visible"
       },
       {
-        "eq": "liveBirth",
-        "targetId": "birthWeight",
-        "visibility": "visible"
-      },
-      {
-        "eq": "liveBirth",
-        "targetId": "essentialNewbornCare",
-        "visibility": "visible"
-      },
-      {
         "eqList": [
-          "stillbirth",
           "maternalDeath",
           "abortion"
         ],
@@ -10660,7 +10693,6 @@
       },
       {
         "eqList": [
-          "stillbirth",
           "maternalDeath",
           "abortion"
         ],
@@ -10669,25 +10701,6 @@
       },
       {
         "eqList": [
-          "stillbirth",
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "birthWeight",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "stillbirth",
-          "maternalDeath",
-          "abortion"
-        ],
-        "targetId": "essentialNewbornCare",
-        "visibility": "gone"
-      },
-      {
-        "eqList": [
-          "stillbirth",
           "maternalDeath",
           "abortion"
         ],
@@ -10710,28 +10723,18 @@
     "fieldName": "Is the baby alive",
     "family": "newbornDetails",
     "orderId": 1,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
     "titleCulture": "শিশু কি জীবিত?",
-    "options": [
-      {
-        "id": "yes",
-        "name": "Yes"
-      },
-      {
-        "id": "no",
-        "name": "No"
-      }
-    ],
     "condition": [
       {
-        "eq": "no",
+        "eq": "No",
         "targetId": "neonatalDeathCause",
         "visibility": "visible"
       },
       {
-        "eq": "yes",
+        "eq": "Yes",
         "targetId": "neonatalDeathCause",
         "visibility": "gone"
       }
@@ -10742,6 +10745,18 @@
         "workflowId": 102,
         "workflowName": "Pregnancy Outcome"
       }
+    ],
+    "optionsList": [
+      {
+        "id": "Yes",
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
+      },
+      {
+        "id": "No",
+        "name": "No",
+        "cultureValue": "না"
+      }
     ]
   },
   "babySex": {
@@ -10751,11 +10766,18 @@
     "fieldName": "Baby sex",
     "family": "newbornDetails",
     "orderId": 2,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
     "titleCulture": "লিঙ্গ",
-    "options": [
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ],
+    "optionsList": [
       {
         "id": "male",
         "name": "Male"
@@ -10767,13 +10789,6 @@
       {
         "id": "other",
         "name": "Other"
-      }
-    ],
-    "programmes": [
-      {
-        "id": "pregnancyOutcome",
-        "workflowId": 102,
-        "workflowName": "Pregnancy Outcome"
       }
     ]
   },
@@ -10837,7 +10852,7 @@
     "fieldName": "Cause of neonatal death",
     "family": "newbornDetails",
     "orderId": 5,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
     "titleCulture": "নবজাতক মৃত্যুর কারণ",
@@ -10921,22 +10936,22 @@
     ],
     "condition": [
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "hasCoughLastedLonger",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "hasNightSweats",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "hasTbFever",
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "hasWeightLoss",
         "visibility": "visible"
       }

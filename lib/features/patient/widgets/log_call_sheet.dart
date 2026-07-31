@@ -38,7 +38,7 @@ class LogCallSheet extends StatefulWidget {
 }
 
 class _LogCallSheetState extends State<LogCallSheet> {
-  static const _outcomes = <(String, String)>[
+  static List<(String, String)> get _outcomes => [
     (FollowUpCallStatus.successful, FollowUpCallStrings.outcomeSuccessful),
     (FollowUpCallStatus.unsuccessful, FollowUpCallStrings.outcomeUnsuccessful),
     (FollowUpCallStatus.wrongNumber, FollowUpCallStrings.outcomeWrongNumber),
@@ -92,7 +92,7 @@ class _LogCallSheetState extends State<LogCallSheet> {
           TextField(
             controller: _reasonCtrl,
             enabled: !_saving,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: FollowUpCallStrings.reasonLabel,
               hintText: FollowUpCallStrings.reasonHint,
               border: OutlineInputBorder(),

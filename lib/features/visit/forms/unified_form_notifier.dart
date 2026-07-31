@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/referral_evaluator.dart';
@@ -11,14 +13,23 @@ import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/models/json_read.dart';
 import '../../../core/models/referral.dart';
+import '../../../core/risk/anc_status.dart';
+import '../../../core/risk/cataract_status.dart';
+import '../../../core/risk/eye_care_status.dart';
+import '../../../core/risk/ncd_status.dart';
+import '../../../core/risk/pregnancy_outcome_status.dart';
+import '../../../core/risk/pw_risk_factors.dart';
+import '../../../core/time/calendar_day.dart';
 import '../../referral/referral_repository.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
 import '../models/anc_assessment.dart';
 import 'canonical_visit_data.dart';
+import 'childhood_visit.dart';
 import 'form_config.dart';
 import 'rmnch_follow_up_calculator.dart';
 import 'unified_payload_mapper.dart';
+import 'unified_section_rules.dart';
 import 'vitals_trend.dart';
 
 /// Manages in-progress canonical form state for a single visit.
@@ -106,6 +117,35 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// server didn't supply one). Keyed by fieldId, AI-filled fields only.
   final Map<String, String?> _fieldSourceSegments = {};
 
+  /// When true, height was taken from a prior NCD/Cataract visit and must not
+  /// be edited — mirrors Spice `view.isEnabled = false` after prefill.
+  bool _heightLockedFromPrior = false;
+
+  /// Field library, supplied by the form screen once `field_library.json` is
+  /// parsed. Used at submit time to translate stored option ids into the wire
+  /// `value` codes Spice sends (see [_withWireOptionValues]), and to clear
+  /// fields a condition has just hidden (see [_clearHiddenDependents]).
+  Map<String, FieldDef> _fieldDefs = const {};
+  Map<String, List<FieldVisibilityRule>> _visibilityRules = const {};
+
+  /// driver fieldId → every fieldId its `condition` array targets.
+  final Map<String, Set<String>> _conditionTargets = {};
+
+  set formConfig(FormConfig config) {
+    _fieldDefs = config.fields;
+    _visibilityRules = config.visibilityRulesByTargetId;
+    _conditionTargets.clear();
+    for (final def in config.fields.values) {
+      for (final condition in def.conditions) {
+        _conditionTargets
+            .putIfAbsent(def.id, () => <String>{})
+            .add(condition.targetId);
+      }
+    }
+  }
+  /// `value` codes Spice sends (see [_withWireOptionValues]).
+  set fieldDefs(Map<String, FieldDef> defs) => _fieldDefs = defs;
+
   CanonicalVisitData get data => _data;
   bool get submitting => _submitting;
 
@@ -122,6 +162,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   /// Transcript quote backing an AI-filled [fieldId], when available.
   String? fieldSourceSegment(String fieldId) => _fieldSourceSegments[fieldId];
+
+  /// True when height was prefilled from a prior visit and is hard-locked.
+  bool get isHeightLockedFromPrior => _heightLockedFromPrior;
 
   /// All AI-populated fields still pending SK review (drives banner count).
   int get aiPendingCount => _fieldSources.values
@@ -152,12 +195,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Pre-seeds height and weight from the patient's most-recent prior visit
   /// when those fields are not yet filled in this visit. Called after
   /// [loadDraft] so a saved draft always wins over historical values.
+  ///
+  /// When a prior height exists, the field is hard-locked (Spice NCD behaviour)
+  /// even if a draft already held the same value.
   Future<void> preloadBiometrics() async {
     var changed = false;
-    if (_data.getValue('height') == null) {
-      final h = await _assessmentRepo.lastRecordedHeight(_patientId);
-      if (h != null) {
-        _data = _data.setValue('height', h);
+    final priorHeight = await _assessmentRepo.lastRecordedHeight(_patientId);
+    if (priorHeight != null) {
+      if (_data.getValue('height') == null) {
+        _data = _data.setValue('height', priorHeight);
+        changed = true;
+      }
+      if (!_heightLockedFromPrior) {
+        _heightLockedFromPrior = true;
         changed = true;
       }
     }
@@ -290,6 +340,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final map = jsonDecode(row.fieldValues) as Map<String, dynamic>;
       _data = _data.merge(CanonicalVisitData(map));
       _restoreFieldSources(row.fieldSources);
+      // Recompute EDD / GA from stored LMP (Android LMP callback parity).
+      final draftLmp = _data.getValue('lmp');
+      if (draftLmp != null) {
+        _applyPwProfileLmpChange(draftLmp);
+      }
       notifyListeners();
     } catch (e) {
       debugPrint('[UnifiedForm] draft parse error: $e');
@@ -539,6 +594,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// When `height` or `weight` changes, BMI is automatically recomputed and
   /// stored under the `bmi` field so the `_InfoLabelField` stays in sync.
   void updateField(String fieldId, dynamic value) {
+    if (fieldId == 'height' && _heightLockedFromPrior) {
+      debugPrint('[UnifiedForm] height locked from prior visit — ignoring edit');
+      return;
+    }
     final valueType = value?.runtimeType ?? 'null';
     if (value is List) {
       ConsoleLog.step('[FormField] $fieldId (List[${value.length}]) = $value');
@@ -555,6 +614,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
             : FieldSource.manual;
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
+    }
+    // Android AssessmentPregnantWomenRegistrationFragment: LMP drives EDD,
+    // gestational week labels, and clears obstetric fields when too early.
+    if (fieldId == 'lmp') {
+      _applyPwProfileLmpChange(value);
     }
     // Android resets on-treatment when existing illness changes.
     if (fieldId == 'pregnantWomanExistingIllness') {
@@ -577,9 +641,192 @@ class UnifiedFormNotifier extends ChangeNotifier {
     // either widget updates the other (pulse already did this; sys/dia
     // were missing — SK reported only pulse mirrored).
     _mirrorBpAcrossProgrammes(fieldId, value);
-    if (fieldId == 'deliveryOutcomeType') {
-      debugPrint('[DeliveryOutcome] updateField deliveryOutcomeType=$value → notifyListeners');
+    if (fieldId == 'liveBirthNumbers') {
+      _resizeNewbornDetails(value);
     }
+    if (fieldId == 'deliveryOutcomeType') {
+      debugPrint(
+          '[DeliveryOutcome] updateField deliveryOutcomeType=$value → notifyListeners');
+      _resetPregnancyOutcomeBranches(value?.toString());
+    }
+    if (fieldId == 'timeOfDeath') {
+      if (value?.toString() == 'beforeDelivery') {
+        // Death before delivery hides the whole delivery-outcome branch.
+        _clearPregnancyOutcomeFields(_deliveryOutcomeFieldIds);
+        _data = _data.setValue('newbornDetails', null);
+      } else {
+        // Death during/after delivery re-opens delivery + baby cards.
+        _resizeNewbornDetails(_data.getValue('liveBirthNumbers'));
+      }
+    }
+    _clearHiddenDependents(fieldId);
+    notifyListeners();
+    _saveDraft();
+  }
+
+  /// Drops the values of every field this edit has just hidden, then cascades
+  /// into their own dependents.
+  ///
+  /// Android `FormGenerator.setViewVisibility(resetValue = true)` calls
+  /// `resetChildViews` whenever a `condition` hides a view, so a de-selected
+  /// branch leaves nothing behind. Without this, switching Eye Test Outcome
+  /// from Presbyopia to No Problem would hide the glasses chain but still
+  /// submit the Glass Power / Type of Glass / Type of Frame answers.
+  void _clearHiddenDependents(String driverId, [Set<String>? seen]) {
+    final targets = _conditionTargets[driverId];
+    if (targets == null) return;
+    final visited = seen ?? <String>{driverId};
+    for (final targetId in targets) {
+      if (!visited.add(targetId)) continue;
+      if (_visibleByConditionRules(targetId)) continue;
+      if (_data.getValue(targetId) != null) {
+        _data = _data.removeFields({targetId});
+        _fieldSources.remove(targetId);
+        _fieldSourceSegments.remove(targetId);
+      }
+      _clearHiddenDependents(targetId, visited);
+    }
+  }
+
+  /// The `condition`-rule half of [FieldVisibilityRules.isFieldVisible].
+  ///
+  /// Fields with no rule targeting them are reported visible so the
+  /// programme-specific gates evaluated in the widget layer (ANC gestational
+  /// age, PW profile LMP, obstetric chain) are never second-guessed here —
+  /// those hide fields without a de-selected driver to clear them.
+  bool _visibleByConditionRules(String fieldId) {
+    // The Gravida → Parity → Living Children → Age of Last Child chain is
+    // resolved by its own branch in isFieldVisible, which runs *after* the
+    // rules layer — reading the rules alone would under-report it as hidden.
+    if (_fieldDefs[fieldId]?.compositeGroup == 'obstetricHistory') return true;
+    final rules = _visibilityRules[fieldId];
+    if (rules == null || rules.isEmpty) return true;
+    for (final rule in rules) {
+      if (rule.matches(_data.getValue(rule.driverId))) {
+        return rule.visibility == 'visible';
+      }
+    }
+    final anyDriverSet =
+        rules.any((r) => _data.getValue(r.driverId) != null);
+    if (anyDriverSet && rules.every((r) => r.visibility == 'visible')) {
+      return false;
+    }
+    return _fieldDefs[fieldId]?.visibility != 'gone';
+  }
+
+  static const Set<String> _maternalDeathFieldIds = {
+    'timeOfDeath',
+    'gestationMonthAtDeath',
+    'causeOfDeath',
+  };
+
+  static const Set<String> _abortionFieldIds = {
+    'gestationMonthAtAbortion',
+    'typeOfAbortion',
+  };
+
+  static const Set<String> _deliveryOutcomeFieldIds = {
+    'deliveryOutcome',
+    'liveBirthNumbers',
+    'stillbirthNumbers',
+    'placeOfDelivery',
+    'dateOfDelivery',
+    'modeOfDelivery',
+    'birthAttendant',
+    'anyComplicationsDuringDelivery',
+    'complicationsDuringDelivery',
+  };
+
+  /// Android `AssessmentPregnancyOutcomeFragment` calls
+  /// `formGenerator.resetChildViews` on every branch it hides. Values left
+  /// behind by a de-selected branch keep driving their own `condition` rules —
+  /// `gestationMonthAtAbortion >= 1` and `timeOfDeath == beforeDelivery` both
+  /// declare every delivery-outcome field `gone` — so re-selecting "Delivery
+  /// outcome" would render the section with no fields at all.
+  void _resetPregnancyOutcomeBranches(String? outcome) {
+    final stale = <String>{
+      if (outcome != 'maternalDeath') ..._maternalDeathFieldIds,
+      if (outcome != 'abortion') ..._abortionFieldIds,
+      if (outcome == 'abortion') ..._deliveryOutcomeFieldIds,
+    };
+    _clearPregnancyOutcomeFields(stale);
+
+    if (outcome == 'abortion') {
+      _data = _data.setValue('newbornDetails', null);
+    } else {
+      _resizeNewbornDetails(_data.getValue('liveBirthNumbers'));
+    }
+  }
+
+  void _clearPregnancyOutcomeFields(Set<String> fieldIds) {
+    if (fieldIds.isEmpty) return;
+    _data = _data.removeFields(fieldIds);
+    for (final id in fieldIds) {
+      _fieldSources.remove(id);
+    }
+  }
+
+  /// Android `AssessmentPregnancyOutcomeFragment.updateBabySections` — keep
+  /// `newbornDetails` list length in sync with `liveBirthNumbers` (max 4).
+  static const int maxNewbornCards = 4;
+
+  void _resizeNewbornDetails(dynamic rawCount) {
+    final parsed = rawCount is num
+        ? rawCount.toInt()
+        : int.tryParse(rawCount?.toString().trim() ?? '') ?? 0;
+    final count = parsed.clamp(0, maxNewbornCards);
+
+    final existingRaw = _data.getValue('newbornDetails');
+    final existing = <Map<String, dynamic>>[];
+    if (existingRaw is List) {
+      for (final e in existingRaw) {
+        if (e is Map) {
+          existing.add(Map<String, dynamic>.from(e));
+        }
+      }
+    }
+
+    if (count == 0) {
+      _data = _data.setValue('newbornDetails', null);
+      return;
+    }
+
+    while (existing.length < count) {
+      existing.add(<String, dynamic>{});
+    }
+    if (existing.length > count) {
+      existing.removeRange(count, existing.length);
+    }
+    _data = _data.setValue('newbornDetails', existing);
+  }
+
+  /// Updates one baby entry inside `newbornDetails` and notifies listeners.
+  void updateNewbornField(int babyIndex, String key, dynamic value) {
+    final existingRaw = _data.getValue('newbornDetails');
+    final list = <Map<String, dynamic>>[];
+    if (existingRaw is List) {
+      for (final e in existingRaw) {
+        if (e is Map) {
+          list.add(Map<String, dynamic>.from(e));
+        }
+      }
+    }
+    while (list.length <= babyIndex) {
+      list.add(<String, dynamic>{});
+    }
+    final entry = Map<String, dynamic>.from(list[babyIndex]);
+    if (value == null || (value is String && value.trim().isEmpty)) {
+      entry.remove(key);
+    } else {
+      entry[key] = value;
+    }
+    // Spice clears cause when baby is marked alive.
+    if (key == 'isBabyAlive' &&
+        value?.toString().toLowerCase() == 'yes') {
+      entry.remove('causeOfNeonatalDeath');
+    }
+    list[babyIndex] = entry;
+    _data = _data.setValue('newbornDetails', list);
     notifyListeners();
     _saveDraft();
   }
@@ -643,6 +890,50 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (h != null && h > 0 && w != null && w > 0) {
       final bmi = w / ((h / 100) * (h / 100));
       _data = _data.setValue('bmi', double.parse(bmi.toStringAsFixed(1)));
+    }
+  }
+
+  static final _eddDisplayFormat = DateFormat('dd MMMM yyyy');
+
+  /// Fields Android resets when LMP is cleared or is < 6 weeks ago.
+  static const _pwLmpClearedFieldIds = {
+    'EDD',
+    'gestationalWeek',
+    'pregnancyTest',
+    'gravida',
+    'parity',
+    'livingChildren',
+    'ageOfLastChild',
+  };
+
+  /// Mirrors Android LMP callback: compute EDD + GA when ≥ 42 days; otherwise
+  /// clear the rest of the pregnancy-details fields (too-early path).
+  void _applyPwProfileLmpChange(dynamic value) {
+    final raw = value?.toString();
+    final lmp = (raw == null || raw.isEmpty) ? null : DateTime.tryParse(raw);
+    if (lmp == null) {
+      _data = _data.removeFields(_pwLmpClearedFieldIds);
+      return;
+    }
+
+    final days = CalendarDay.daysBetween(lmp, DateTime.now());
+    if (days < FieldVisibilityRules.lmpThresholdDays) {
+      _data = _data.removeFields(_pwLmpClearedFieldIds);
+      return;
+    }
+
+    final edd = lmp.add(const Duration(days: 280));
+    final weeks = days ~/ 7;
+    final remDays = days % 7;
+    _data = _data.setValue('EDD', _eddDisplayFormat.format(edd));
+    // Android formatGestationalAge(Pair): "X weeks Y days "
+    _data = _data.setValue(
+      'gestationalWeek',
+      '$weeks weeks $remDays days',
+    );
+
+    if (days > FieldVisibilityRules.pregnancyTestMaxGestationalDays) {
+      _data = _data.setValue('pregnancyTest', null);
     }
   }
 
@@ -743,6 +1034,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
       if (field.fieldId == 'height' || field.fieldId == 'weight') {
         _recomputeBmi();
       }
+      if (field.fieldId == 'lmp') {
+        _applyPwProfileLmpChange(validated);
+      }
       // The BP card renders from the flat systolic/diastolic/pulse keys,
       // not the bpLogDetails array (which the payload mapper consumes) —
       // mirror the latest reading so the fill is visible on-screen.
@@ -837,7 +1131,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// True when the SK typed or edited this field — AI must never overwrite.
+  /// Also true for height locked from a prior NCD/Cataract visit.
   bool _isSkOwned(String fieldId) {
+    if (fieldId == 'height' && _heightLockedFromPrior) return true;
     final source = _fieldSources[fieldId];
     return source == FieldSource.manual || source == FieldSource.aiModified;
   }
@@ -929,27 +1225,127 @@ class UnifiedFormNotifier extends ChangeNotifier {
   ///
   /// Returns list of saved local IDs. Throws on DB error.
   Future<List<String>> submit() async {
-    if (_submitting) return const [];
+    if (_submitting) {
+      debugPrint('[SubmitBlocked] submit() ignored — a save is already running');
+      return const [];
+    }
     _submitting = true;
     _submitError = null;
     notifyListeners();
 
     try {
-      // For NCD: auto-set referralFacilityType from the user's default site
-      // when no form field has supplied it. Android auto-sets this from
-      // SecuredPreference.DEFAULT_SITE_ID at submit time.
-      if (_defaultReferralSiteId != null &&
-          _activeFormTypes.contains('ncd') &&
-          _data.getValue('referralFacilityType') == null) {
-        _data = _data.setValue('referralFacilityType', _defaultReferralSiteId);
+      // Spice: pregnancyDetail.ancVisitNo / pncVisitNo → next visit number
+      // stamped onto the payload before save, then written back.
+      int? assignedAncVisitNo;
+      if (_activeFormTypes.contains('anc') &&
+          _data.getValue('ancVisitNumber') == null &&
+          _data.getValue('visitNo') == null) {
+        assignedAncVisitNo =
+            await _pregnancySnapshotDao.nextAncVisitNo(_patientId);
+        _data = _data.setValue('ancVisitNumber', assignedAncVisitNo);
+        debugPrint(
+            '[AncVisitNo] assigned visitNo=$assignedAncVisitNo '
+            'patient=$_patientId');
+      }
+
+      final willEmitPnc = _activeFormTypes.contains('pncMother') &&
+          (!_activeFormTypes.contains('pregnancyOutcome') ||
+              _data.getValue('deliveryOutcomeType')?.toString() == 'liveBirth');
+      int? assignedPncVisitNo;
+      if (willEmitPnc && _data.getValue('pncVisitNumber') == null) {
+        assignedPncVisitNo =
+            await _pregnancySnapshotDao.nextPncVisitNo(_patientId);
+        _data = _data.setValue('pncVisitNumber', assignedPncVisitNo);
+        debugPrint(
+            '[PncVisitNo] assigned visitNo=$assignedPncVisitNo '
+            'patient=$_patientId');
+      }
+
+      // BD NCD: first visit uses threshold referral; follow-up uses color band.
+      // Facility type is "Community Clinic" / "Upazila Health Complex" — never
+      // the org FHIR id (that belongs in summary.referredSiteId for CC only).
+      final isNcdFollowUp = (_activeFormTypes.contains('ncd') ||
+              (_activeFormTypes.contains('cataract') &&
+                  _data.getValue('ncdServiceProvided')
+                          ?.toString()
+                          .toLowerCase() ==
+                      'yes'))
+          ? await _assessmentRepo.hasPriorNcdAssessment(_patientId)
+          : false;
+
+      final (isReferred, referredReasons) =
+          _computeReferral(isNcdFollowUp: isNcdFollowUp);
+
+      Map<String, dynamic>? ncdOtherDetails;
+      final cataractNcdProvided = _activeFormTypes.contains('cataract') &&
+          _data.getValue('ncdServiceProvided')?.toString().toLowerCase() ==
+              'yes';
+      if ((_activeFormTypes.contains('ncd') || cataractNcdProvided) &&
+          isReferred) {
+        final avg = UnifiedPayloadMapper.ncdAvgBp(_data);
+        final glVal = _asDoubleField('glucoseValue') ??
+            _asDoubleField('glucose') ??
+            _asDoubleField('fastingBloodSugar') ??
+            _asDoubleField('randomBloodSugar');
+        final facilityType = NcdStatus.resolveFacilityType(
+          isFollowUpVisit: isNcdFollowUp,
+          referredReasons: referredReasons,
+          avgSystolic: avg.systolic,
+          avgDiastolic: avg.diastolic,
+          glucoseMmol: glVal,
+        );
+        _data = _data.setValue('referralFacilityType', facilityType);
+        ncdOtherDetails = NcdStatus.referredSummary(
+          referralFacilityType: facilityType,
+          referredSiteId: _defaultReferralSiteId,
+        );
+      }
+
+      // Spice BDEyeCareAssessmentSummaryFragment stamps the reporting
+      // organisation onto every eye care assessment, referred or not.
+      final eyeCareOtherDetails = _defaultReferralSiteId?.isNotEmpty == true
+          ? {'referredSite': _defaultReferralSiteId}
+          : null;
+
+      // Childhood visit: Spice stamps summary.nextVisitDate from birth + age
+      // band (AssessmentViewModel, ChildHood_Visit menu).
+      Map<String, dynamic>? childhoodOtherDetails;
+      if (_activeFormTypes.contains('pncChild')) {
+        if (_data.getValue('childVisitNumber') == null) {
+          // Spice pregnancyDetail.childVisitNo + 1 → pncChild.visitNo.
+          final prior =
+              await _assessmentRepo.priorChildhoodVisitCount(_patientId);
+          _data = _data.setValue('childVisitNumber', prior + 1);
+          debugPrint('[ChildVisitNo] assigned visitNo=${prior + 1} '
+              'patient=$_patientId');
+        }
+        final dob = await _patientDateOfBirth();
+        if (dob != null) {
+          final months = ChildhoodVisit.ageInMonths(dob);
+          if (months <= ChildhoodVisit.maxVisitMonth) {
+            final next = ChildhoodVisit.nextVisitDate(
+              ageInMonths: months,
+              birthDate: dob,
+            );
+            if (next != null) {
+              childhoodOtherDetails = {
+                'nextVisitDate': ChildhoodVisit.formatNextVisitDate(next),
+              };
+            }
+          }
+        }
       }
 
       final payloads = UnifiedPayloadMapper.decompose(
-        _data,
+        _withWireOptionValues(_data),
         _activeFormTypes.toSet(),
       );
+      if (payloads.isEmpty) {
+        debugPrint(
+            '[SubmitBlocked] no assessment payloads produced for form types '
+            '${_activeFormTypes.toList()} — nothing will be saved or synced');
+      }
 
-      final (isReferred, referredReasons) = _computeReferral();
       _lastIsReferred = isReferred;
       _lastReferredReasons = referredReasons;
       _lastReferralFacility = _data.getValue('referralFacility') as String? ??
@@ -957,6 +1353,70 @@ class UnifiedFormNotifier extends ChangeNotifier {
       ConsoleLog.step('[ReferralFacility] form submit — referralFacility=${_data.getValue('referralFacility')} referralFacilityType=${_data.getValue('referralFacilityType')} → _lastReferralFacility=$_lastReferralFacility');
 
       final savedIds = <String>[];
+      final pwStatus = payloads.any((p) => p.assessmentType == 'PWPROFILE')
+          ? PwRiskFactors.status(
+              pregnancyHistory: payloads
+                  .firstWhere((p) => p.assessmentType == 'PWPROFILE')
+                  .details,
+              dateOfBirth: await _patientDateOfBirth(),
+            )
+          : null;
+      final poStatus = payloads.any((p) =>
+              p.assessmentType == 'PREGNANCY_OUTCOME' ||
+              p.assessmentType == 'PREGNANCYOUTCOME')
+          ? PregnancyOutcomeStatus.status(
+              payloads
+                  .firstWhere((p) =>
+                      p.assessmentType == 'PREGNANCY_OUTCOME' ||
+                      p.assessmentType == 'PREGNANCYOUTCOME')
+                  .details,
+            )
+          : null;
+      // Spice's NCD branch appends the eye problem / glasses tokens after the
+      // BP/BG ones, dropping NO_EYE_PROBLEM so a clean eye check doesn't
+      // dilute the NCD statuses.
+      final ncdStatus = payloads.any((p) => p.assessmentType == 'NCD')
+          ? [
+              ...NcdStatus.status(
+                isReferred: isReferred,
+                referredReasons: referredReasons,
+              ),
+              ...EyeCareStatus.status(
+                _eyeCareCardOf(payloads, 'NCD'),
+                skipNoProblem: true,
+              ),
+            ]
+          : null;
+      final eyeCareStatus = payloads.any((p) => p.assessmentType == 'EYE_CARE')
+          ? EyeCareStatus.status(_eyeCareCardOf(payloads, 'EYE_CARE'))
+          : null;
+      final cataractStatus = payloads.any((p) => p.assessmentType == 'CATARACT')
+          ? CataractStatus.status(
+              _cataractCardOf(payloads),
+              referredReasons: referredReasons,
+            )
+          : null;
+      final ancStatus = payloads.any((p) => p.assessmentType == 'ANC')
+          ? AncStatus.status(
+              payloads.firstWhere((p) => p.assessmentType == 'ANC').details,
+            )
+          : null;
+
+      // One pregnancy episode across PO + PNC assessments in the same visit.
+      final sharedPregnancyEpisodeId = _pregnancyEpisodeId ??
+          (payloads.any((p) {
+            final t = p.assessmentType.toUpperCase();
+            return t == 'PREGNANCY_OUTCOME' ||
+                t == 'PREGNANCYOUTCOME' ||
+                t == 'PNC_MOTHER' ||
+                t == 'PNC_NEONATE' ||
+                t == 'PNC_CHILD' ||
+                t == 'ANC' ||
+                t == 'PWPROFILE';
+          })
+              ? const Uuid().v4()
+              : null);
+
       for (final payload in payloads) {
         ConsoleLog.banner(
           '[PayloadDebug] submit — ${payload.assessmentType} payload:\n'
@@ -973,9 +1433,68 @@ class UnifiedFormNotifier extends ChangeNotifier {
           encounterId: _encounterId,
           isReferred: isReferred,
           referredReasons: referredReasons.isEmpty ? null : referredReasons,
-          pregnancyEpisodeId: _pregnancyEpisodeId,
+          customStatus: payload.assessmentType == 'PWPROFILE'
+              ? pwStatus
+              : (payload.assessmentType == 'PREGNANCY_OUTCOME' ||
+                      payload.assessmentType == 'PREGNANCYOUTCOME')
+                  ? (poStatus == null || poStatus.isEmpty ? null : poStatus)
+                  : payload.assessmentType == 'NCD'
+                      ? (ncdStatus == null || ncdStatus.isEmpty
+                          ? null
+                          : ncdStatus)
+                      : payload.assessmentType == 'ANC'
+                          ? ancStatus
+                          : payload.assessmentType == 'EYE_CARE'
+                              ? (eyeCareStatus == null || eyeCareStatus.isEmpty
+                                  ? null
+                                  : eyeCareStatus)
+                              : payload.assessmentType == 'CATARACT'
+                                  ? (cataractStatus == null ||
+                                          cataractStatus.isEmpty
+                                      ? null
+                                      : cataractStatus)
+                                  : null,
+          pregnancyEpisodeId: sharedPregnancyEpisodeId,
+          otherDetails: switch (payload.assessmentType) {
+            'NCD' => ncdOtherDetails,
+            'CATARACT' => cataractNcdProvided ? ncdOtherDetails : null,
+            'EYE_CARE' => eyeCareOtherDetails,
+            'CHILDHOOD_VISIT' => childhoodOtherDetails,
+            _ => null,
+          },
         );
         savedIds.add(id);
+      }
+
+      // Persist completed ANC / PNC counts (Spice PregnancyDetail.*VisitNo).
+      if (payloads.any((p) => p.assessmentType.toUpperCase() == 'ANC')) {
+        final raw = assignedAncVisitNo ??
+            _data.getValue('ancVisitNumber') ??
+            _data.getValue('visitNo');
+        final completed = _asPositiveInt(raw);
+        if (completed != null) {
+          try {
+            await _pregnancySnapshotDao.setAncVisitNo(_patientId, completed);
+            debugPrint(
+                '[AncVisitNo] persisted ancVisitNo=$completed patient=$_patientId');
+          } catch (e) {
+            debugPrint('[AncVisitNo] persist skipped: $e');
+          }
+        }
+      }
+      if (payloads.any((p) => p.assessmentType.toUpperCase() == 'PNC_MOTHER')) {
+        final raw = assignedPncVisitNo ??
+            _data.getValue('pncVisitNumber');
+        final completed = _asPositiveInt(raw);
+        if (completed != null) {
+          try {
+            await _pregnancySnapshotDao.setPncVisitNo(_patientId, completed);
+            debugPrint(
+                '[PncVisitNo] persisted pncVisitNo=$completed patient=$_patientId');
+          } catch (e) {
+            debugPrint('[PncVisitNo] persist skipped: $e');
+          }
+        }
       }
 
       // CCE: bridge referred assessments into the local referrals table so
@@ -997,6 +1516,113 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _submitting = false;
       notifyListeners();
     }
+  }
+
+  static int? _asPositiveInt(Object? raw) {
+    final n = switch (raw) {
+      final int v => v,
+      final num v => v.toInt(),
+      final String s => int.tryParse(s.trim()),
+      _ => null,
+    };
+    if (n == null || n <= 0) return null;
+    return n;
+  }
+
+  /// The `eyeCare` card body of a programme payload — the standalone eye care
+  /// details and the NCD details both nest it under the same key.
+  static Map<String, dynamic>? _eyeCareCardOf(
+    List<ProgrammePayload> payloads,
+    String assessmentType,
+  ) {
+    for (final payload in payloads) {
+      if (payload.assessmentType != assessmentType) continue;
+      final card = payload.details['eyeCare'];
+      if (card is Map<String, dynamic>) return card;
+    }
+    return null;
+  }
+
+  /// Inner Eye Problems card from a CATARACT programme payload
+  /// (`details.cataract` before the outer menu wrap is applied at sync).
+  static Map<String, dynamic>? _cataractCardOf(
+    List<ProgrammePayload> payloads,
+  ) {
+    for (final payload in payloads) {
+      if (payload.assessmentType != 'CATARACT') continue;
+      final card = payload.details['cataract'];
+      if (card is Map<String, dynamic>) return card;
+    }
+    return null;
+  }
+
+  /// Multi-select fields Spice sends as option `value` codes (e.g.
+  /// `"shortnessOfBreath"`) rather than the numeric option ids the widgets
+  /// store. Translation happens only on the way to the payload so form
+  /// visibility rules keyed on option ids/names keep working.
+  static const Set<String> _wireOptionValueFields = {'ncdSymptoms'};
+
+  CanonicalVisitData _withWireOptionValues(CanonicalVisitData data) {
+    var out = data;
+    for (final fieldId in _wireOptionValueFields) {
+      final raw = data.getValue(fieldId);
+      if (raw is! List || raw.isEmpty) continue;
+      final options = _fieldDefs[fieldId]?.options ?? const <FieldOption>[];
+      if (options.isEmpty) continue;
+      final mapped = raw.map((entry) {
+        final id = FieldOption.coerceId(entry);
+        for (final option in options) {
+          if (option.id == id) return option.wireValue;
+        }
+        return entry;
+      }).toList();
+      out = out.setValue(fieldId, mapped);
+    }
+    return out;
+  }
+
+  /// Non-empty NCD symptom ids/names for referral (Spice getSymptomsList).
+  static List<String> _ncdSymptomIds(Object? raw) {
+    if (raw is! List || raw.isEmpty) return const [];
+    final out = <String>[];
+    for (final item in raw) {
+      if (item is Map) {
+        final name = item['name']?.toString() ?? item['id']?.toString();
+        if (name != null && name.isNotEmpty) out.add(name);
+      } else {
+        final s = item.toString().trim();
+        if (s.isNotEmpty &&
+            s.toLowerCase() != 'none' &&
+            s.toLowerCase() != 'nosymptoms') {
+          out.add(s);
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Member DOB for the PW age-risk rules. Falls back to the stored age when
+  /// no birth date was synced; returns null when neither is known, which makes
+  /// [PwRiskFactors] skip the age rules rather than guess.
+  Future<DateTime?> _patientDateOfBirth() async {
+    if (_patientId.isEmpty) return null;
+    try {
+      final patient = await _patientDao.byId(_patientId);
+      if (patient == null) return null;
+      final dob = patient.dob;
+      if (dob != null && dob.isNotEmpty) {
+        final parsed = DateTime.tryParse(dob);
+        if (parsed != null) return parsed;
+      }
+      final age = patient.age;
+      if (age != null && age > 0) {
+        final now = DateTime.now();
+        return DateTime(now.year - age, now.month, now.day);
+      }
+    } catch (e) {
+      debugPrint('[UnifiedForm] DOB lookup failed: $e');
+    }
+    return null;
   }
 
   /// Creates a local [Referral] for CCE when this visit was referred.
@@ -1032,19 +1658,21 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  double? _asDoubleField(String k) {
+    final v = _data.getValue(k);
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v);
+    return null;
+  }
+
   /// Runs clinical evaluators against current form data and returns
   /// `(isReferred, referredReasons)`.  Called inside [submit] so every
   /// saved [LocalAssessmentEntity] carries the correct referral flag.
-  (bool, List<String>) _computeReferral() {
+  (bool, List<String>) _computeReferral({bool isNcdFollowUp = false}) {
     bool referred = false;
     final reasons = <String>[];
 
-    double? asDouble(String k) {
-      final v = _data.getValue(k);
-      if (v is num) return v.toDouble();
-      if (v is String) return double.tryParse(v);
-      return null;
-    }
+    double? asDouble(String k) => _asDoubleField(k);
 
     // The `temperature` field is captured in °F (field_library.json
     // `unitMeasurement: "°F"`), but every referral evaluator's fever
@@ -1055,8 +1683,13 @@ class UnifiedFormNotifier extends ChangeNotifier {
       return f == null ? null : fahrenheitToCelsius(f);
     }
 
-    final sys = asDouble('systolic') ?? asDouble('bloodPressureSystolic');
-    final dia = asDouble('diastolic') ?? asDouble('bloodPressureDiastolic');
+    final avgBp = UnifiedPayloadMapper.ncdAvgBp(_data);
+    final sys = avgBp.systolic?.toDouble() ??
+        asDouble('systolic') ??
+        asDouble('bloodPressureSystolic');
+    final dia = avgBp.diastolic?.toDouble() ??
+        asDouble('diastolic') ??
+        asDouble('bloodPressureDiastolic');
     final glucoseType = _data.getValue('glucoseType') as String?;
     final glVal = asDouble('glucoseValue') ??
         asDouble('glucose') ??
@@ -1066,18 +1699,24 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
     debugPrint('[Referral] inputs: sys=$sys dia=$dia glVal=$glVal glucoseType=$glucoseType isFbs=$isFbs activeTypes=$_activeFormTypes');
 
-    if (_activeFormTypes.contains('ncd')) {
-      final result = NcdReferralEvaluator.evaluate(
+    if (_activeFormTypes.contains('ncd') ||
+        (_activeFormTypes.contains('cataract') &&
+            _data.getValue('ncdServiceProvided')?.toString().toLowerCase() ==
+                'yes')) {
+      final symptoms = _ncdSymptomIds(_data.getValue('ncdSymptoms'));
+      final result = NcdReferralEvaluator.evaluateBdNcd(
+        isFollowUpVisit: isNcdFollowUp,
+        useNcdRiskAlgorithm: isNcdFollowUp,
         systolic: sys,
         diastolic: dia,
-        fastingGlucoseMmol: isFbs ? glVal : null,
-        randomGlucoseMmol: !isFbs ? glVal : null,
+        glucoseMmol: glVal,
+        glucoseType: glucoseType,
         hba1cPercent: asDouble('hba1c'),
-        symptoms:
-            (_data.getValue('ncdSymptoms') as List?)?.cast<String>() ??
-                const [],
+        symptoms: symptoms,
       );
-      debugPrint('[Referral][NCD] required=${result.isReferralRequired}  reasons=${result.referralReasons}');
+      debugPrint(
+          '[Referral][NCD] followUp=$isNcdFollowUp required=${result.isReferralRequired} '
+          'reasons=${result.referralReasons}');
       if (result.isReferralRequired) {
         referred = true;
         reasons.addAll(result.referralReasons);
@@ -1085,6 +1724,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
 
     if (_activeFormTypes.contains('anc')) {
+      // Spice calculateRMNCHReferralResult: refer when summary has high-risk
+      // and/or gaps; referredReasons use LABEL_* + " - ANC Visit N".
       final ancAssessment = AncAssessment(
         medicalHistoryPhysicalExamination: MedicalHistoryPhysicalExamination(
           bloodPressureSystolic: sys?.toInt(),
@@ -1100,22 +1741,63 @@ class UnifiedFormNotifier extends ChangeNotifier {
           urinaryAlbumin: _data.getValue('urinaryAlbumin') as String?,
           urinaryBilirubin: _data.getValue('urinaryBilirubin') as String?,
           urinarySugar: _data.getValue('urinarySugar') as String?,
+          bloodSugarFasting: isFbs ? glVal : null,
+          bloodSugarRandom: !isFbs ? glVal : null,
         ),
-        gestationalWeeks: asDouble('gestationalAge')?.toInt(),
+        dangerSignsRiskIdentification: DangerSignsRiskIdentification(
+          dangerSignsExperienced12:
+              (_data.getValue('dangerSignsExperienced12') as List?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
+          dangerSignsExperienced13To27:
+              (_data.getValue('dangerSignsExperienced13To27') as List?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
+          dangerSignsExperienced28To40:
+              (_data.getValue('dangerSignsExperienced28To40') as List?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
+        ),
+        gestationalWeeks: asDouble('gestationalAge')?.toInt() ??
+            asDouble('gestationalWeeks')?.toInt(),
       );
       final result = AncReferralEvaluator.evaluate(
         ancAssessment,
         temperatureCelsius: temperatureCelsius(),
         pulseBpm: asDouble('pulse')?.toInt(),
       );
-      debugPrint('[Referral][ANC] required=${result.isReferralRequired}  emergency=${result.emergencyConditions}  nonEmergency=${result.nonEmergencyConditions}');
-      if (result.isReferralRequired) {
-        referred = true;
-        reasons.addAll([
-          ...result.emergencyConditions,
-          ...result.nonEmergencyConditions,
-        ]);
-      }
+      final gaps = AncReferralEvaluator.evaluateGaps(
+        gestationalAgeWeeks:
+            asDouble('gestationalAge') ?? asDouble('gestationalWeeks'),
+        ttTdCompleted: _data.getValue('ttTdCompleted') as String?,
+        ultrasound: _data.getValue('ultrasound') as String?,
+        ancFromMedicalDoctor: _data.getValue('ancFromMedicalDoctor') as String?,
+        facilityIdentifiedForDelivery:
+            _data.getValue('facilityIdentifiedForDelivery') as String?,
+        ifaTotalConsumed: asDouble('ifaTotalConsumed')?.toInt() ??
+            asDouble('ifaTabletsConsumed')?.toInt(),
+        calciumTotalConsumed: asDouble('calciumTotalConsumed')?.toInt() ??
+            asDouble('calciumTabletsConsumed')?.toInt(),
+        ancVisitCount: asDouble('ancVisitNumber')?.toInt() ??
+            asDouble('visitNo')?.toInt(),
+      );
+      final hasHighRisk = result.isReferralRequired;
+      final hasGaps = gaps.hasGaps;
+      debugPrint(
+          '[Referral][ANC] highRisk=$hasHighRisk gaps=$hasGaps '
+          'emergency=${result.emergencyConditions} '
+          'nonEmergency=${result.nonEmergencyConditions} gapsList=${gaps.gaps}');
+      if (hasHighRisk || hasGaps) referred = true;
+      reasons.addAll(
+        AncStatus.referredReasons(
+          hasHighRisk: hasHighRisk,
+          hasGaps: hasGaps,
+          visitNo: _data.getValue('ancVisitNumber') ?? _data.getValue('visitNo'),
+        ),
+      );
     }
 
     if (_activeFormTypes.contains('pncMother')) {
@@ -1138,6 +1820,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
           ...result.urgentConditions,
           ...result.nonUrgentConditions,
         ]);
+      }
+    }
+
+    // Childhood visit: SK-selected childReferral (Spice anyIllness → referral).
+    if (_activeFormTypes.contains('pncChild')) {
+      final childRef = _data.getValue('childReferral')?.toString().toLowerCase();
+      if (childRef == 'yes') {
+        referred = true;
+        reasons.add('Child illness referral');
       }
     }
 

@@ -1,4 +1,6 @@
+import '../../../core/time/calendar_day.dart';
 import 'canonical_visit_data.dart';
+import 'childhood_visit.dart';
 import 'form_config.dart';
 
 /// Section-group tag attached to each [FormSection] in the result of
@@ -88,6 +90,19 @@ abstract final class UnifiedSectionRules {
     'randomBloodSugar',
   };
 
+  /// The only BG ids that collapse into each other: the BloodGlucoseEntry
+  /// widget (`glucoseType`) renders the type toggle and its numeric value
+  /// together, so the bare `glucose` EditText must not render beside it.
+  ///
+  /// PNC's `bloodSugar` selector instead *reveals* `fastingBloodSugar` /
+  /// `randomBloodSugar`. Collapsing the whole alias set dropped those two
+  /// targets from the section, leaving nothing to type into once the SK
+  /// picked Fasting or Random.
+  static const Set<String> _bloodGlucoseEntryFieldIds = {
+    'glucoseType',
+    'glucose',
+  };
+
   /// Biometrics shared by id across programmes — claimed only within a
   /// formType so NCD keeps Height/Weight/BMI even when ANC also has Weight.
   static const Set<String> _biometricFieldIds = {
@@ -131,11 +146,11 @@ abstract final class UnifiedSectionRules {
   /// Within one formType: claim BG field + aliases so BloodGlucoseEntry and
   /// bare `glucose` never both render in the same programme section.
   static void _claimBloodGlucoseLocal(String fieldId, Set<String> localClaimed) {
-    if (!_bloodGlucoseFieldIds.contains(fieldId)) {
+    if (!_bloodGlucoseEntryFieldIds.contains(fieldId)) {
       localClaimed.add(fieldId);
       return;
     }
-    localClaimed.addAll(_bloodGlucoseFieldIds);
+    localClaimed.addAll(_bloodGlucoseEntryFieldIds);
   }
 
   /// Returns ordered, deduplicated [AnnotatedFormSection]s for rendering.
@@ -380,9 +395,12 @@ abstract final class UnifiedSectionRules {
     }
 
     // pregnancyOutcome sub-sections: gated by deliveryOutcomeType selection.
-    // outcomeType is the picker itself — always shown when pregnancyOutcome active.
-    // All other sub-sections only appear once an outcome type is chosen.
-    if (section.formType == 'pregnancyOutcome' && id != 'outcomeType') {
+    // ancServicesBirthPreparedness + outcomeType always show when PO is active.
+    // deliveryOutcomes also opens for maternal death during/after delivery
+    // (Android timeOfDeath conditions).
+    if (section.formType == 'pregnancyOutcome' &&
+        id != 'outcomeType' &&
+        id != 'ancServicesBirthPreparedness') {
       final outcome = currentData.getValue('deliveryOutcomeType')?.toString();
       // ignore: avoid_print
       print('[SectionVisibility] pregnancyOutcome sub-section=$id outcome=$outcome');
@@ -393,30 +411,55 @@ abstract final class UnifiedSectionRules {
         case 'abortion':
           return outcome == 'abortion';
         case 'deliveryOutcomes':
+          if (outcome == 'liveBirth') return true;
+          if (outcome == 'maternalDeath') {
+            final tod = currentData.getValue('timeOfDeath')?.toString();
+            return tod == 'duringChildbirth' ||
+                tod == 'within42DaysAfterDelivery';
+          }
+          return false;
         case 'newbornDetails':
-          return outcome == 'liveBirth' || outcome == 'stillbirth';
+          // Spice builds baby cards from liveBirthNumbers whenever delivery
+          // outcomes are visible (live birth, or maternal death during/after).
+          final live =
+              FieldVisibilityRules._countValue(currentData, 'liveBirthNumbers');
+          if (live < 1) return false;
+          if (outcome == 'liveBirth') return true;
+          if (outcome == 'maternalDeath') {
+            final tod = currentData.getValue('timeOfDeath')?.toString();
+            return tod == 'duringChildbirth' ||
+                tod == 'within42DaysAfterDelivery';
+          }
+          return false;
         case 'counsellingAdverseEvent':
-          return true; // show counselling for all outcome types
+          return true; // summary-only fields; section kept for parity
         default:
           return true;
       }
     }
 
-    // Combined delivery visit: mother/child PNC only after a delivery-path
-    // outcome (live birth / stillbirth). Abortion and maternal death end the
-    // pregnancy episode without opening PNC (Android PregnancyCohortRules).
+    // Combined delivery visit: mother/child PNC only after a live-birth
+    // delivery path. Abortion and maternal death end the pregnancy episode
+    // without opening PNC (Android PregnancyCohortRules).
     if (activeFormTypes.contains('pregnancyOutcome') &&
         (section.formType == 'pncMother' ||
             section.formType == 'pncChild' ||
             section.formType == 'pncNeonatal')) {
       final outcome = currentData.getValue('deliveryOutcomeType')?.toString();
-      if (outcome != 'liveBirth' && outcome != 'stillbirth') {
+      if (outcome != 'liveBirth') {
         return false;
       }
     }
 
-    // pncChild / pncNeonatal: child alive field must be 'yes'.
+    // pncChild / pncNeonatal: child alive field must be 'yes' when riding a
+    // mother PNC / delivery visit. Standalone Childhood Visit (Child Health
+    // card → formType pncChild only) has no isChildAlive field — always show.
     if (id == 'pncChild' || id == 'pncNeonatal') {
+      final withMotherContext = activeFormTypes.contains('pncMother') ||
+          activeFormTypes.contains('pregnancyOutcome');
+      if (id == 'pncChild' && !withMotherContext) {
+        return true;
+      }
       final alive = currentData.getValue('isChildAlive') ??
           currentData.getValue('babyAlive');
       return alive == 'yes' ||
@@ -477,7 +520,9 @@ abstract final class FieldVisibilityRules {
   /// 2. A generic `condition` rule targeting this field (another field's
   ///    value equals a declared trigger value) — the common case, covers
   ///    ~96 Yes/No/Other-dependent follow-up fields.
-  /// 3. The obstetric-history progressive-disclosure chain (Gravida → Parity
+  /// 3. PW Profile LMP threshold — Android
+  ///    `AssessmentPregnantWomenRegistrationFragment` (42-day / 6-week gate).
+  /// 4. The obstetric-history progressive-disclosure chain (Gravida → Parity
   ///    → Living Children → Age of Last Child) — a separate mechanism from
   ///    (2): the field library only tags `compositeRole` (trigger/member),
   ///    the actual reveal thresholds are hand-ported here from the design
@@ -486,9 +531,9 @@ abstract final class FieldVisibilityRules {
   ///    Other `compositeGroup` values (e.g. supplement consumed/provided
   ///    pairs) are unrelated dedup metadata handled elsewhere and are not
   ///    interpreted here.
-  /// 4. ANC gestational-age / visit-number gates — only when [formType] is
+  /// 5. ANC gestational-age / visit-number gates — only when [formType] is
   ///    `anc` (must not hide NCD biometrics).
-  /// 5. The field's own declared base `visibility` ("visible"/"gone").
+  /// 6. The field's own declared base `visibility` ("visible"/"gone").
   ///
   /// [gestationalWeeks] — current GA from LMP/snapshot; null when unknown.
   /// [ancVisitNumber] — 1-based ANC visit count; null treated as visit 1 for
@@ -501,6 +546,7 @@ abstract final class FieldVisibilityRules {
     int? gestationalWeeks,
     int? ancVisitNumber,
     String? formType,
+    int? ageInMonths,
   }) {
     if (field.isSummary &&
         formType != null &&
@@ -514,34 +560,67 @@ abstract final class FieldVisibilityRules {
       return _ncdSymptomsIncludeAnyNewOrWorsening(data);
     }
 
+    // Childhood visit: Spice exclusive age bands (showHideOptionsForChildHealth).
+    // Age-gated fields are base-visible in the library so other consumers are
+    // unaffected; this formType gate hides them outside the matching band.
+    if (formType == 'pncChild') {
+      final childhoodGate =
+          ChildhoodVisit.fieldVisible(field.id, ageInMonths);
+      if (childhoodGate != null) return childhoodGate;
+    }
+
+    // Cataract: Spice keeps NCD vitals `gone` until ncdServiceProvided=yes.
+    // Those fields share the library with standalone NCD (base visibility
+    // `visible`), so without this formType gate they render on every cataract
+    // visit. Secondary gates (medicationFrequency ← prior diagnosis) still
+    // run through the generic rules below once NCD service is Yes.
+    if (formType == 'cataract') {
+      final cataractGate = _cataractNcdVisibility(field.id, data);
+      if (cataractGate != null) return cataractGate;
+    }
+
+    // PW Profile owns its LMP threshold and obstetric-history disclosure
+    // (Android AssessmentPregnantWomenRegistrationFragment). Evaluated before
+    // the generic rules so a cross-programme condition — e.g. Family
+    // Planning's numberOfLivingChildren targeting ageOfLastChild — cannot
+    // reveal a PW field the Android form keeps hidden.
+    if (formType == 'pwProfile') {
+      final pwGate = _pwProfileLmpVisibility(fieldId: field.id, data: data);
+      if (pwGate != null) return pwGate;
+    }
+
+    // Pregnancy outcome: birth attendant only when home AND not cesarean
+    // (Android AssessmentPregnancyOutcomeFragment).
+    if (formType == 'pregnancyOutcome' && field.id == 'birthAttendant') {
+      final place = data.getValue('placeOfDelivery')?.toString();
+      final mode = data.getValue('modeOfDelivery')?.toString();
+      return place == 'home' && mode != 'cesareanSection';
+    }
+
     final rules = rulesByTargetId[field.id];
     if (rules != null && rules.isNotEmpty) {
       for (final rule in rules) {
-        final driverValue = data.getValue(rule.driverId)?.toString();
+        final driverValue = data.getValue(rule.driverId);
         if (rule.matches(driverValue)) {
           return rule.visibility == 'visible';
         }
+      }
+      // Driver answered but no reveal/hide rule matched. Spice keeps
+      // condition-gated fields gone until a parent fires — so when every
+      // targeting rule is a "become visible" gate and at least one driver is
+      // set, stay hidden. (Standalone NCD leaves ncdServiceProvided unset, so
+      // those fields still fall through to their base `visible`.)
+      final anyDriverSet =
+          rules.any((r) => data.getValue(r.driverId) != null);
+      if (anyDriverSet && rules.every((r) => r.visibility == 'visible')) {
+        return false;
       }
       // No rule's trigger value matched — fall through to base visibility.
     }
 
     if (field.compositeGroup == 'obstetricHistory') {
-      int asInt(String fieldId) =>
-          int.tryParse(data.getValue(fieldId)?.toString() ?? '') ?? 0;
-      switch (field.id) {
-        case 'gravida':
-          // Trigger — always visible once the section itself renders,
-          // regardless of its own base visibility (declared "gone" in the
-          // JSON, since Android reveals it via app-side composite-group
-          // handling this Flutter port doesn't otherwise have visibility into).
-          return true;
-        case 'parity':
-          return asInt('gravida') >= 2;
-        case 'livingChildren':
-          return asInt('parity') >= 1;
-        case 'ageOfLastChild':
-          return asInt('livingChildren') >= 1;
-      }
+      final chain = _obstetricChainVisibility(field.id, data);
+      if (chain != null) return chain;
     }
 
     // ANC visit/GA gates apply only inside the ANC layout — never to NCD
@@ -557,6 +636,152 @@ abstract final class FieldVisibilityRules {
     }
 
     return field.visibility != 'gone';
+  }
+
+  /// Fields Spice reveals only when `ncdServiceProvided == yes` on cataract.
+  static const Set<String> _cataractNcdYesFieldIds = {
+    'height',
+    'weight',
+    'bmi',
+    'isBeforeHtnDiagnosis',
+    'medicationFrequencyBp',
+    'bpLogDetails',
+    'isRegularSmoker',
+    'isBeforeDiabetesDiagnosis',
+    'medicationFrequencyBg',
+    'glucoseType',
+    'glucose',
+  };
+
+  /// Returns an explicit visibility override for cataract NCD-gated fields,
+  /// or `null` when the field is not gated (caller continues as usual).
+  static bool? _cataractNcdVisibility(String fieldId, CanonicalVisitData data) {
+    if (!_cataractNcdYesFieldIds.contains(fieldId)) return null;
+    final ncd = data.getValue('ncdServiceProvided')?.toString().toLowerCase();
+    if (ncd != 'yes') return false;
+    // ncdServiceProvided=yes — let secondary condition rules decide
+    // (e.g. medicationFrequencyBp needs isBeforeHtnDiagnosis=yes).
+    return null;
+  }
+
+  /// Android `PregnantWomen.LMP_THRESHOLD_DAYS` — full PW profile only after
+  /// 6 weeks (42 days) from LMP.
+  static const int lmpThresholdDays = 42;
+
+  /// Android `pregnancy_woman_profile.json` LMP `minDays` — earliest selectable
+  /// LMP is today minus this many days (~42 weeks).
+  static const int lmpMinDaysBefore = 294;
+
+  /// Android `PregnantWomen.PREGNANCY_TEST_MAX_GESTATIONAL_DAYS` (16 weeks).
+  static const int pregnancyTestMaxGestationalDays = 16 * 7;
+
+  static const Set<String> _pwTooEarlyFieldIds = {
+    'TooEarlyTitle',
+    'TooEarlyDesc1',
+    'TooEarlyDesc2',
+  };
+
+  static const Set<String> _pwAfterThresholdFieldIds = {
+    'EDDTitle',
+    'EDD',
+    'gestationalWeekTitle',
+    'gestationalWeek',
+    'gravida',
+  };
+
+  static const Set<String> _pwObstetricMemberIds = {
+    'parity',
+    'livingChildren',
+    'ageOfLastChild',
+  };
+
+  /// Whole-number reading of a count field (gravida / parity / living
+  /// children), or 0 when absent or unparseable.
+  ///
+  /// Those fields are declared `inputType: 2` in the layout manifests, so the
+  /// numeric widget stores them as doubles (`3` is entered, `3.0` is stored) —
+  /// parse as [num] so the disclosure chain still sees 3.
+  static int _countValue(CanonicalVisitData data, String fieldId) {
+    final raw = data.getValue(fieldId);
+    if (raw is num) return raw.toInt();
+    return num.tryParse(raw?.toString() ?? '')?.toInt() ?? 0;
+  }
+
+  /// Progressive disclosure for the obstetric-history chain: Gravida → Parity
+  /// → Living Children → Age of Last Child. Returns `null` for fields outside
+  /// the chain (caller falls through to base visibility).
+  static bool? _obstetricChainVisibility(
+    String fieldId,
+    CanonicalVisitData data,
+  ) {
+    switch (fieldId) {
+      case 'gravida':
+        // Trigger — always visible once the section itself renders,
+        // regardless of its own base visibility (declared "gone" in the
+        // JSON, since Android reveals it via app-side composite-group
+        // handling this Flutter port doesn't otherwise have visibility into).
+        return true;
+      case 'parity':
+        return _countValue(data, 'gravida') >= 2;
+      case 'livingChildren':
+        return _countValue(data, 'parity') >= 1;
+      case 'ageOfLastChild':
+        return _countValue(data, 'livingChildren') >= 1;
+      default:
+        return null;
+    }
+  }
+
+  /// Days since LMP (calendar days), or null when LMP is missing/unparseable.
+  /// Mirrors Android `DateUtils.getDaysDifference(lmpMillis)`.
+  static int? daysSinceLmp(CanonicalVisitData data, [DateTime? now]) {
+    final raw = data.getValue('lmp')?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    final lmp = DateTime.tryParse(raw);
+    if (lmp == null) return null;
+    return CalendarDay.daysBetween(lmp, now ?? DateTime.now());
+  }
+
+  /// True when LMP is set and fewer than [lmpThresholdDays] have elapsed.
+  static bool isPregnancyTooEarly(CanonicalVisitData data, [DateTime? now]) {
+    final days = daysSinceLmp(data, now);
+    if (days == null) return false;
+    return days < lmpThresholdDays;
+  }
+
+  /// Android AssessmentPregnantWomenRegistrationFragment LMP callback.
+  ///
+  /// Returns `null` when [fieldId] is not gated here (caller continues).
+  static bool? _pwProfileLmpVisibility({
+    required String fieldId,
+    required CanonicalVisitData data,
+  }) {
+    if (fieldId == 'lmp') return true;
+
+    final days = daysSinceLmp(data);
+    final tooEarly = days != null && days < lmpThresholdDays;
+    final lmpReady = days != null && !tooEarly;
+
+    if (_pwTooEarlyFieldIds.contains(fieldId)) {
+      return tooEarly;
+    }
+
+    if (_pwAfterThresholdFieldIds.contains(fieldId)) {
+      return lmpReady;
+    }
+
+    if (fieldId == 'pregnancyTest') {
+      // Android: show only when GA days ≤ 16 weeks (inclusive).
+      if (!lmpReady) return false;
+      return days <= pregnancyTestMaxGestationalDays;
+    }
+
+    if (_pwObstetricMemberIds.contains(fieldId)) {
+      if (!lmpReady) return false;
+      return _obstetricChainVisibility(fieldId, data);
+    }
+
+    return null;
   }
 
   /// True when the NCD symptoms multi-select includes the Android
@@ -586,8 +811,7 @@ abstract final class FieldVisibilityRules {
   }) {
     final visit = ancVisitNumber ?? 1;
     final ga = gestationalWeeks;
-    final gravida =
-        int.tryParse(data.getValue('gravida')?.toString() ?? '') ?? 0;
+    final gravida = _countValue(data, 'gravida');
 
     switch (fieldId) {
       // Flutter-only alias of urinaryAlbumin — Android ANC has albumin only.

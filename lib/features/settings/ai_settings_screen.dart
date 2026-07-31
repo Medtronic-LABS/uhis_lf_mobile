@@ -90,7 +90,7 @@ class _VadTuningBody extends StatelessWidget {
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        const _WhiteCard(
+        _WhiteCard(
           child: Text(
             AiSettingsStrings.sectionDescription,
             style: TextStyle(
@@ -108,7 +108,7 @@ class _VadTuningBody extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     AiSettingsStrings.sectionHeader,
                     style: TextStyle(
                       fontSize: 11,
@@ -119,7 +119,7 @@ class _VadTuningBody extends StatelessWidget {
                   ),
                   GestureDetector(
                     onTap: () => notifier.resetToDefaults(),
-                    child: const Text(
+                    child: Text(
                       AiSettingsStrings.widgetsResetToDefaults,
                       style: TextStyle(
                         fontSize: 11.5,
@@ -246,7 +246,7 @@ class _AiWidgetTogglesCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 AiSettingsStrings.widgetsSectionHeader,
                 style: TextStyle(
                   fontSize: 11,
@@ -257,7 +257,7 @@ class _AiWidgetTogglesCard extends StatelessWidget {
               ),
               GestureDetector(
                 onTap: () => togglesNotifier.resetToDefaults(),
-                child: const Text(
+                child: Text(
                   AiSettingsStrings.widgetsResetToDefaults,
                   style: TextStyle(
                     fontSize: 11.5,
@@ -269,7 +269,7 @@ class _AiWidgetTogglesCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             AiSettingsStrings.widgetsSectionDescription,
             style: TextStyle(
               fontSize: 12.5,
@@ -293,7 +293,7 @@ class _AiWidgetTogglesCard extends StatelessWidget {
             )),
           ),
           const Divider(height: 18),
-          const _StepHeader(AiSettingsStrings.step1Header),
+          _StepHeader(AiSettingsStrings.step1Header),
           _ToggleRow(
             label: AiSettingsStrings.step1SummaryLabel,
             description: AiSettingsStrings.step1SummaryDesc,
@@ -306,14 +306,14 @@ class _AiWidgetTogglesCard extends StatelessWidget {
             value: t.step1AsrEnabled,
             onChanged: (v) => save(t.copyWith(step1AsrEnabled: v)),
           ),
-          const _StepHeader(AiSettingsStrings.step2Header),
+          _StepHeader(AiSettingsStrings.step2Header),
           _ToggleRow(
             label: AiSettingsStrings.step2AsrLabel,
             description: AiSettingsStrings.step2AsrDesc,
             value: t.step2AsrEnabled,
             onChanged: (v) => save(t.copyWith(step2AsrEnabled: v)),
           ),
-          const _StepHeader(AiSettingsStrings.step3Header),
+          _StepHeader(AiSettingsStrings.step3Header),
           _ToggleRow(
             label: AiSettingsStrings.step3SummaryLabel,
             description: AiSettingsStrings.step3SummaryDesc,

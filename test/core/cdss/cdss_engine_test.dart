@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/cdss/cdss_engine.dart';
-import 'package:leapwell/core/cdss/models/cdss_inputs.dart';
+import 'package:uhis_next/core/cdss/cdss_engine.dart';
+import 'package:uhis_next/core/cdss/models/cdss_inputs.dart';
 
 CdssPatientProfile _ncdProfile({
   int age = 55,

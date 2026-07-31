@@ -46,6 +46,8 @@ import 'pathway/pathway_engine.dart';
 import '../patient/followup_call_service.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
+import 'forms/childhood_visit.dart';
+import 'immunisation/epi_visit_summary.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
 import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
@@ -160,6 +162,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// ANC or PNC visit number for the header badge (1-based). Null until loaded.
   int? _visitNumber;
 
+  /// After immunization on a combined Child Health + Vaccination visit, show
+  /// the childhood visit form next (immunization timeline itself is unchanged).
+  bool _childhoodFormAfterVaccination = false;
+
   @override
   void initState() {
     super.initState();
@@ -189,21 +195,44 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     final progs = programmes ?? widget.seedProgrammes;
     final isAnc = progs.contains(Programme.anc);
     final isPnc = progs.contains(Programme.pnc);
-    if (!isAnc && !isPnc) return;
+    final isChildhood = progs.contains(Programme.imci);
+    if (!isAnc && !isPnc && !isChildhood) return;
     try {
       int count;
-      if (isAnc) {
-        final history = await context
+      if (isChildhood && !isAnc && !isPnc) {
+        count = await context
             .read<AssessmentRepository>()
-            .ancVitalsHistory(widget.patientId);
-        count = history.length;
+            .priorChildhoodVisitCount(widget.patientId);
+      } else if (isAnc) {
+        // Prefer the persisted Spice-style counter; fall back to vitals history
+        // length if the snapshot has never been seeded.
+        final snap = await context
+            .read<PregnancySnapshotDao>()
+            .byPatient(widget.patientId);
+        if (snap?.ancVisitNo != null) {
+          count = snap!.ancVisitNo!;
+        } else {
+          final history = await context
+              .read<AssessmentRepository>()
+              .ancVitalsHistory(widget.patientId);
+          count = history.length;
+        }
       } else {
-        final rows = await context
-            .read<LocalAssessmentDao>()
-            .getByPatientId(widget.patientId);
-        count = rows
-            .where((r) => r.assessmentType.toUpperCase() == 'PNC_MOTHER')
-            .length;
+        // Prefer the persisted Spice-style counter; fall back to counting
+        // local PNC_MOTHER rows if the snapshot has never been seeded.
+        final snap = await context
+            .read<PregnancySnapshotDao>()
+            .byPatient(widget.patientId);
+        if (snap?.pncVisitNo != null) {
+          count = snap!.pncVisitNo!;
+        } else {
+          final rows = await context
+              .read<LocalAssessmentDao>()
+              .getByPatientId(widget.patientId);
+          count = rows
+              .where((r) => r.assessmentType.toUpperCase() == 'PNC_MOTHER')
+              .length;
+        }
       }
       if (mounted) setState(() => _visitNumber = count + 1);
     } catch (e) {
@@ -342,6 +371,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   List<String> _referredReasons = const [];
   String? _referralFacility;
 
+  /// Vaccine-aware summary from Step 2's vaccination timeline, when this
+  /// visit included one — feeds Step 3's EPI-specific recommendation content.
+  EpiVisitSummary? _epiVisitSummary;
+
   /// True once triage (Step 1) has been submitted. Blocks back-navigation to
   /// Step 1 from Step 2+ — re-entering triage would create a duplicate assessment.
   ///
@@ -363,10 +396,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     if (dob != null && dob.isNotEmpty) {
       try {
         final birth = DateTime.parse(dob);
-        final now = DateTime.now();
-        final months = (now.year - birth.year) * 12 +
-            (now.month - birth.month) -
-            (now.day < birth.day ? 1 : 0);
+        final months = ChildhoodVisit.ageInMonths(birth);
         if (months < 24) {
           return '$months month${months == 1 ? '' : 's'}';
         }
@@ -378,6 +408,19 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     if (age == null) return null;
     if (age < 2) return '< 2 yrs';
     return '$age yrs';
+  }
+
+  /// Whole months from DOB (Spice childhood visit age bands). Falls back to
+  /// years×12 when DOB is missing.
+  int? get _ageInMonths {
+    final dob = _patientDob;
+    if (dob != null && dob.isNotEmpty) {
+      try {
+        return ChildhoodVisit.ageInMonths(DateTime.parse(dob));
+      } catch (_) {}
+    }
+    if (_patientAge != null) return _patientAge! * 12;
+    return null;
   }
 
   /// True when the patient is under-5 or confirmed programmes contain EPI/IMCI.
@@ -510,13 +553,50 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
         );
       case 1:
-        // Child visits always route through _Step2Vaccination (vaccination
-        // timeline + optional ChildAssessmentSection). "Child Health" card
-        // maps to ChildAssessmentSection (weight, breastfeeding, congenital
-        // defect), NOT the ICCM sick-child form. The vaccination timeline is
-        // shown regardless so the SK can update the schedule in the same visit.
+        // Under-5 / EPI / Child Health routing.
+        // Immunization timeline is unchanged; Childhood Visit (pncChild form)
+        // is separate from the prototype ChildAssessmentSection.
         if (_isChildVisit) {
           final hasImci = _confirmedProgrammes.contains(Programme.imci);
+          final hasEpi = _confirmedProgrammes.contains(Programme.epi);
+
+          Widget childhoodForm() {
+            return _Step2VitalsForm(
+              key: ValueKey('flow-step2-childhood-${widget.visitId}'),
+              visitId: widget.visitId,
+              patientId: widget.patientId,
+              memberId: widget.memberId,
+              householdId: widget.householdId,
+              villageId: widget.villageId,
+              householdMemberLocalId: _householdMemberLocalId,
+              patientAge: widget.patientAge,
+              ageInMonths: _ageInMonths,
+              pathwayNames: const ['imci'],
+              confirmedSymptoms: _confirmedSymptoms.toList(),
+              aiPickedSymptoms: _aiPickedSymptoms,
+              enrolledProgrammes: const {},
+              onAdvance: (prog, referred, reasons, facility) {
+                setState(() {
+                  _primaryProgramme = Programme.imci;
+                  _referralRecommended = referred;
+                  _referredReasons = reasons;
+                  _referralFacility = facility;
+                  _step = 2;
+                });
+              },
+            );
+          }
+
+          // Child Health only → childhood visit form (skip immunization).
+          if (hasImci && !hasEpi) {
+            return childhoodForm();
+          }
+
+          // Combined visit: immunization first, then childhood form.
+          if (hasImci && _childhoodFormAfterVaccination) {
+            return childhoodForm();
+          }
+
           return _Step2Vaccination(
             key: ValueKey('flow-step2-vacc-${widget.visitId}'),
             patientId: widget.patientId,
@@ -525,10 +605,11 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             memberId: widget.memberId,
             householdMemberLocalId: _householdMemberLocalId,
             showChildAssessment: hasImci,
-            onAdvance: () {
+            onAdvance: (summary) {
               setState(() {
-                _primaryProgramme = Programme.imci;
-                _referralRecommended = false;
+                _epiVisitSummary = summary;
+                _primaryProgramme = hasImci ? Programme.imci : Programme.epi;
+                _referralRecommended = summary.referralWarranted;
                 _step = 2;
               });
             },
@@ -589,6 +670,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           referralRecommended: _referralRecommended,
           referredReasons: _referredReasons,
           referralFacility: _referralFacility,
+          epiVisitSummary: _epiVisitSummary,
           memberId: widget.memberId,
           householdId: widget.householdId,
           origin: widget.origin ?? 'patients',
@@ -802,6 +884,7 @@ class _Step1Symptoms extends StatelessWidget {
 /// Thin host for [VisitFormScreen] in the same pattern as Step 1.
 class _Step2VitalsForm extends StatelessWidget {
   const _Step2VitalsForm({
+    super.key,
     required this.visitId,
     required this.patientId,
     required this.onAdvance,
@@ -810,6 +893,7 @@ class _Step2VitalsForm extends StatelessWidget {
     this.villageId,
     this.householdMemberLocalId,
     this.patientAge,
+    this.ageInMonths,
     this.gestationalWeeks,
     this.lmpMs,
     this.eddMs,
@@ -829,6 +913,7 @@ class _Step2VitalsForm extends StatelessWidget {
   final String? villageId;
   final int? householdMemberLocalId;
   final int? patientAge;
+  final int? ageInMonths;
   final int? gestationalWeeks;
   final int? lmpMs;
   final int? eddMs;
@@ -859,6 +944,7 @@ class _Step2VitalsForm extends StatelessWidget {
       villageId: villageId,
       householdMemberLocalId: householdMemberLocalId,
       patientAge: patientAge,
+      ageInMonths: ageInMonths,
       gestationalWeeks: gestationalWeeks,
       lmpMs: lmpMs,
       eddMs: eddMs,
@@ -894,7 +980,7 @@ class _Step2Vaccination extends StatefulWidget {
 
   final String patientId;
   final String? patientName;
-  final VoidCallback onAdvance;
+  final void Function(EpiVisitSummary summary) onAdvance;
 
   /// The visit encounter ID — forwarded to [ImmunisationTimelineScreen] so
   /// vaccine updates can be pushed to the backend via [ImmunisationRepository].
@@ -1262,6 +1348,7 @@ class _Step3AiReco extends StatefulWidget {
     this.memberId,
     this.householdId,
     this.referralFacility,
+    this.epiVisitSummary,
   });
 
   final String visitId;
@@ -1283,6 +1370,11 @@ class _Step3AiReco extends StatefulWidget {
   final String? householdId;
   final String origin;
   final String? referralFacility;
+
+  /// Vaccine-aware summary from Step 2's vaccination timeline — null unless
+  /// this visit included one. Feeds the EPI branch of the rule-based
+  /// recommendation fallback (see [_Step3AiRecoState._ruleBasedNaba]).
+  final EpiVisitSummary? epiVisitSummary;
 
   @override
   State<_Step3AiReco> createState() => _Step3AiRecoState();
@@ -1670,6 +1762,16 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final hasPnc = progs.contains(Programme.pnc);
     final hasImci = progs.contains(Programme.imci);
     final hasTb = progs.contains(Programme.tb);
+    // confirmedProgrammes is deliberately emptied for a vaccination-only tap
+    // (SymptomPickerScreen._onVaccination's vaccinationOnly:true — see its
+    // comment: "so auto-activated IMCI pathway does not trigger the child
+    // health form"), so Programme.epi never lands in that set for exactly
+    // the visit type this method is meant to recognize. primaryProgramme is
+    // already correctly Programme.epi for that same case (VisitFlowScreen's
+    // _Step2Vaccination.onAdvance), so check both.
+    final hasEpi = progs.contains(Programme.epi) ||
+        widget.primaryProgramme == Programme.epi;
+    final epi = widget.epiVisitSummary;
 
     final actions = <NabaNextAction>[];
     final counselling = <String>[];
@@ -1782,6 +1884,37 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       ));
     }
 
+    if (hasEpi && epi != null && epi.overdueCount > 0) {
+      actions.add(NabaNextAction(
+        priority: 1,
+        action: EpiVisitRecoStrings.catchUpAction(epi.overdueVaccineNames),
+        urgency: 'Now',
+        programme: 'EPI',
+      ));
+      counselling.addAll(EpiVisitRecoStrings.counsellingLines(epi));
+      followUp.add(NabaFollowUpItem(
+        activity: EpiVisitRecoStrings.followUpActivity(
+            epi.nextMilestoneLabel, epi.nextMilestoneVaccineNames),
+        timeline: epi.nextMilestoneLabel ?? 'Routine',
+        programme: 'EPI',
+        resolvedDate: epi.nextMilestoneDate,
+      ));
+    } else if (hasEpi) {
+      actions.add(const NabaNextAction(
+        priority: 1,
+        action: 'All scheduled vaccines are up to date for this visit.',
+        urgency: 'Routine',
+        programme: 'EPI',
+      ));
+      followUp.add(NabaFollowUpItem(
+        activity: EpiVisitRecoStrings.followUpActivity(
+            epi?.nextMilestoneLabel, epi?.nextMilestoneVaccineNames ?? const []),
+        timeline: epi?.nextMilestoneLabel ?? 'Routine',
+        programme: 'EPI',
+        resolvedDate: epi?.nextMilestoneDate,
+      ));
+    }
+
     if (actions.isEmpty) {
       actions.add(const NabaNextAction(
         priority: 1,
@@ -1818,18 +1951,23 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                         ? 'Child assessed for fever, respiratory rate, and hydration. IMCI classification applied.'
                         : hasTb
                             ? 'TB treatment adherence reviewed. Continuing directly observed therapy (DOT).'
-                            : 'Vital signs assessed. Routine care plan generated per clinical guidelines.',
+                            : hasEpi && epi != null
+                                ? EpiVisitRecoStrings.visitSummary(epi)
+                                : 'Vital signs assessed. Routine care plan generated per clinical guidelines.',
       ),
       nextActions: actions,
       counselling: counselling,
       followUp: followUp,
       whatsappSummary: _ruleBasedWhatsAppMessage(),
       referralRecommendation: widget.referralRecommended
-          ? const NabaReferralRecommendation(
+          ? NabaReferralRecommendation(
               required_: true,
               destination: 'Upazila Health Complex',
               urgency: 'Today',
-              reason: 'Referral recommended based on clinical assessment',
+              reason: (hasEpi && epi != null && epi.overdueCount > 0)
+                  ? EpiVisitRecoStrings.referralReason(
+                      epi.currentMilestoneLabel, epi.overdueVaccineNames)
+                  : 'Referral recommended based on clinical assessment',
             )
           : null,
     );
@@ -1842,6 +1980,11 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final hasPnc = progs.contains(Programme.pnc);
     final hasImci = progs.contains(Programme.imci);
     final hasTb = progs.contains(Programme.tb);
+    // See the matching comment in _ruleBasedNaba() — confirmedProgrammes is
+    // empty for a vaccination-only tap, so primaryProgramme is also checked.
+    final hasEpi = progs.contains(Programme.epi) ||
+        widget.primaryProgramme == Programme.epi;
+    final epi = widget.epiVisitSummary;
 
     final buf = StringBuffer();
     buf.writeln('Hello! Your health worker visited you today.');
@@ -1913,7 +2056,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       buf.writeln('*Next TB check: in 2 weeks.*');
     }
 
-    if (!hasAnc && !hasNcd && !hasPnc && !hasImci && !hasTb) {
+    if (hasEpi && epi != null) {
+      buf.writeln();
+      buf.writeln(EpiVisitRecoStrings.whatsappMessage(epi));
+    }
+
+    if (!hasAnc && !hasNcd && !hasPnc && !hasImci && !hasTb && !hasEpi) {
       buf.writeln();
       buf.writeln('*Routine health visit completed.*');
       buf.writeln('Continue your medications and attend your next scheduled visit.');
@@ -1937,6 +2085,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         Programme.ncd => 'NCD Visit — Guideline Care Plan',
         Programme.imci => 'Child Health Visit — Guideline Care Plan',
         Programme.tb => 'TB Follow-up — Guideline Care Plan',
+        Programme.epi => EpiVisitRecoStrings.visitSummaryTitle,
         _ => 'Visit — Guideline Care Plan',
       };
 
@@ -2523,17 +2672,23 @@ class _ReferralAlertCard extends StatelessWidget {
   final String reason;
   final String urgency;
 
-  // Maps raw API camelCase referral keys → human-readable labels (fallback path).
+  // Maps raw API referral keys → human-readable labels (fallback path).
+  // Includes Spice ReferredReason / ANC LABEL_* strings and legacy camelCase keys.
   static const _reasonLabels = <String, String>{
-    'bloodPressure':  'High blood pressure',
-    'bloodGlucose':   'High blood glucose',
-    'symptoms':       'Reported symptoms',
-    'hbLevel':        'Low haemoglobin',
-    'weight':         'Abnormal weight',
-    'urineProtein':   'Urine protein detected',
-    'dangerSigns':    'Danger signs present',
-    'bmi':            'Abnormal BMI',
-    'gestationalAge': 'Gestational age concern',
+    'High risk pregnant woman': 'High-risk pregnant woman',
+    'Gaps in ANC':            'Gaps in antenatal care',
+    'High BP':                'High blood pressure',
+    'High BG':                'High blood glucose',
+    'Symptoms':               'Reported symptoms',
+    'bloodPressure':          'High blood pressure',
+    'bloodGlucose':           'High blood glucose',
+    'symptoms':               'Reported symptoms',
+    'hbLevel':                'Low haemoglobin',
+    'weight':                 'Abnormal weight',
+    'urineProtein':           'Urine protein detected',
+    'dangerSigns':            'Danger signs present',
+    'bmi':                    'Abnormal BMI',
+    'gestationalAge':         'Gestational age concern',
   };
 
   @override
@@ -2820,13 +2975,13 @@ class _AiCounsellingCard extends StatelessWidget {
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.chat_rounded,
+                        children: [
+                          const Icon(Icons.chat_rounded,
                               size: 12, color: Colors.white),
-                          SizedBox(width: 7),
+                          const SizedBox(width: 7),
                           Text(
                             NabaStrings.sendThisMessage,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
@@ -2994,6 +3149,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   /// Public static helper so _Step3AiRecoState can compute the default date
   /// for a follow-up item without needing to instantiate the widget.
   static DateTime resolveDate(NabaFollowUpItem item) {
+    if (item.resolvedDate != null) return item.resolvedDate!;
     final t = item.timeline.toLowerCase();
     final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
     if (!isUrgentDays) {
@@ -3018,6 +3174,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   /// screen's primary programme, and finally the item's own timeline for other
   /// programmes.  The SK can still override via the date picker.
   DateTime _initialDate() {
+    if (widget.item.resolvedDate != null) return widget.item.resolvedDate!;
     final t = widget.item.timeline.toLowerCase();
     final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
     if (!isUrgentDays) {

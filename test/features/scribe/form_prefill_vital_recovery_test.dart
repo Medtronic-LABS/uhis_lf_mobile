@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/features/scribe/models/ai_extracted_field.dart';
+import 'package:uhis_next/features/scribe/models/ai_extracted_field.dart';
 
 void main() {
   group('FormPrefillResult.withRecoveredVitals', () {

@@ -41,6 +41,11 @@ enum WidgetHint {
         return WidgetHint.radioGroup;
       case 'DialogCheckbox':
         return WidgetHint.dialogCheckbox;
+      // Android renders MultiSelectSpinner as a dropdown with checkable rows
+      // and stores List<optionId> — same contract as DialogCheckbox here
+      // (FormGenerator.createMultiSelectSpinner).
+      case 'MultiSelectSpinner':
+        return WidgetHint.dialogCheckbox;
       case 'Spinner':
         return WidgetHint.spinner;
       case 'bloodGlucose':
@@ -78,6 +83,7 @@ class FieldOption {
     required this.id,
     required this.name,
     this.cultureValue,
+    this.value,
   });
 
   final String id;
@@ -87,6 +93,14 @@ class FieldOption {
 
   /// Bengali option label from `"cultureValue"`.
   final String? cultureValue;
+
+  /// Wire code from `"value"` (e.g. `shortnessOfBreath`), when the option
+  /// declares one. Spice sends this — not the numeric `id` — for multi-select
+  /// fields such as `ncdSymptoms`.
+  final String? value;
+
+  /// Value to send on the wire: [value] when declared, else the [id].
+  String get wireValue => (value != null && value!.isNotEmpty) ? value! : id;
 
   /// Locale-pure label for UI: Bangla when available in Bangla mode, else English.
   String get displayName {
@@ -103,6 +117,7 @@ class FieldOption {
         id: json['id']?.toString() ?? '',
         name: json['name']?.toString() ?? '',
         cultureValue: json['cultureValue']?.toString(),
+        value: json['value']?.toString(),
       );
 
   /// Coerce a stored field value to the string id form used by option widgets.
@@ -233,14 +248,21 @@ class FieldCondition {
   final num? greaterThanOrEqual;
 
   /// True when the driver's current value matches this condition's trigger.
-  bool matches(String? driverValue) {
+  ///
+  /// Multi-select drivers store a [List] of option ids — Spice reveals the
+  /// target when **any** selected id matches `eq` / sits in `eqList`.
+  bool matches(dynamic driverValue) {
     if (driverValue == null) return false;
+    if (driverValue is List) {
+      return driverValue.any(matches);
+    }
+    final asString = driverValue.toString();
     if (greaterThanOrEqual != null) {
-      final n = num.tryParse(driverValue);
+      final n = num.tryParse(asString);
       return n != null && n >= greaterThanOrEqual!;
     }
-    if (eq != null) return driverValue == eq;
-    return eqList.contains(driverValue);
+    if (eq != null) return asString == eq;
+    return eqList.contains(asString);
   }
 
   factory FieldCondition.fromJson(Map<String, dynamic> json) {
@@ -275,14 +297,21 @@ class FieldVisibilityRule {
   final num? greaterThanOrEqual;
 
   /// True when the driver's current value matches this rule's trigger.
-  bool matches(String? driverValue) {
+  ///
+  /// Multi-select drivers store a [List] of option ids — Spice reveals the
+  /// target when **any** selected id matches `eq` / sits in `eqList`.
+  bool matches(dynamic driverValue) {
     if (driverValue == null) return false;
+    if (driverValue is List) {
+      return driverValue.any(matches);
+    }
+    final asString = driverValue.toString();
     if (greaterThanOrEqual != null) {
-      final n = num.tryParse(driverValue);
+      final n = num.tryParse(asString);
       return n != null && n >= greaterThanOrEqual!;
     }
-    if (eq != null) return driverValue == eq;
-    return eqList.contains(driverValue);
+    if (eq != null) return asString == eq;
+    return eqList.contains(asString);
   }
 }
 
@@ -305,6 +334,8 @@ class FieldDef {
     this.infoTitle,
     this.isInfoVisible = false,
     this.isSummary = false,
+    this.minDays,
+    this.disableFutureDate = false,
   });
 
   final String id;
@@ -369,6 +400,38 @@ class FieldDef {
   /// "also include on the summary screen" — the field still renders on fill.
   final bool isSummary;
 
+  /// Android DatePicker `minDays` — earliest selectable date is today minus
+  /// this many days (e.g. LMP = 294). Null = no lower bound beyond defaults.
+  final int? minDays;
+
+  /// Android DatePicker `disableFutureDate` — when true, last selectable
+  /// date is today (past/today-only).
+  final bool disableFutureDate;
+
+  /// This definition with [options] swapped in — used to apply a layout's
+  /// [FieldRef.options] override without mutating the shared library entry.
+  FieldDef withOptions(List<FieldOption> options) => FieldDef(
+        id: id,
+        label: label,
+        widgetHint: widgetHint,
+        isMandatory: isMandatory,
+        options: options,
+        programmeIds: programmeIds,
+        unitMeasurement: unitMeasurement,
+        hintText: hintText,
+        labelCulture: labelCulture,
+        family: family,
+        visibility: visibility,
+        conditions: conditions,
+        compositeGroup: compositeGroup,
+        compositeRole: compositeRole,
+        infoTitle: infoTitle,
+        isInfoVisible: isInfoVisible,
+        isSummary: isSummary,
+        minDays: minDays,
+        disableFutureDate: disableFutureDate,
+      );
+
   factory FieldDef.fromJson(String id, Map<String, dynamic> json) {
     final rawHint = json['widgetHint'] as String?;
     final optionsList = ((json['optionsList'] ?? json['options']) as List<dynamic>? ?? [])
@@ -404,6 +467,8 @@ class FieldDef {
       infoTitle: json['infoTitle'] as String?,
       isInfoVisible: json['isInfo'] == 'visible',
       isSummary: json['isSummary'] as bool? ?? false,
+      minDays: (json['minDays'] as num?)?.toInt(),
+      disableFutureDate: json['disableFutureDate'] as bool? ?? false,
     );
   }
 }
@@ -414,6 +479,7 @@ class FieldRef {
     required this.isMandatory,
     required this.inputType,
     this.fieldName,
+    this.options,
   });
 
   final String id;
@@ -427,14 +493,29 @@ class FieldRef {
   /// diabetes medication) wins over the shared field_library label.
   final String? fieldName;
 
+  /// Optional layout override for the field's `optionsList`.
+  ///
+  /// `field_library.json` holds one entry per field id, but Spice ships one
+  /// JSON per form and the same id can carry different options in each — e.g.
+  /// `referPlace` offers Vision Center / PSP Camp in `eye_care.json` and
+  /// `ncd.json`, but Upazila Health Complex / District Hospital in
+  /// `cataract.json`. The library keeps the common list; a layout that
+  /// diverges declares its own here.
+  final List<FieldOption>? options;
+
   factory FieldRef.fromJson(Map<String, dynamic> json) {
     final rawName = (json['fieldName'] as String?)?.trim();
+    final rawOptions = json['optionsList'] as List<dynamic>?;
     return FieldRef(
       id: json['id'] as String? ?? '',
       isMandatory: json['isMandatory'] as bool? ?? false,
       // inputType may be double (e.g. 8192.0) in some JSON tooling exports
       inputType: (json['inputType'] as num?)?.toInt() ?? 0,
       fieldName: (rawName == null || rawName.isEmpty) ? null : rawName,
+      options: rawOptions
+          ?.whereType<Map<String, dynamic>>()
+          .map(FieldOption.fromJson)
+          .toList(),
     );
   }
 }

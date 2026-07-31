@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:leapwell/core/db/app_database.dart';
-import 'package:leapwell/core/db/pregnancy_snapshot_dao.dart';
-import 'package:leapwell/core/mission/mission_pregnancy_facts.dart';
+import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/db/pregnancy_snapshot_dao.dart';
+import 'package:uhis_next/core/mission/mission_pregnancy_facts.dart';
 
 void main() {
   setUpAll(() {
@@ -149,6 +149,82 @@ void main() {
 
       final factsOnly = await dao.getAll();
       expect(factsOnly['p1']?.isNearTermAnc, isTrue);
+    });
+  });
+
+  group('PregnancySnapshotDao.pncVisitNo', () {
+    test('nextPncVisitNo is 1 when unset, then increments after set', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      expect(await dao.nextPncVisitNo('p1'), 1);
+      await dao.setPncVisitNo('p1', 1);
+      expect(await dao.nextPncVisitNo('p1'), 2);
+      await dao.setPncVisitNo('p1', 2);
+      expect(await dao.nextPncVisitNo('p1'), 3);
+      expect((await dao.byPatient('p1'))?.pncVisitNo, 2);
+    });
+
+    test('merge keeps the higher of server vs local pncVisitNo', () {
+      final prior = {
+        'p1': PregnancySnapshotRow(
+          patientId: 'p1',
+          facts: const PregnancyFacts(),
+          pncVisitNo: 3,
+        ),
+      };
+      final incoming = [
+        PregnancySnapshotRow(
+          patientId: 'p1',
+          facts: const PregnancyFacts(isPostpartumWindow: true),
+          pncVisitNo: 1,
+        ),
+      ];
+
+      final merged = PregnancySnapshotDao.mergePreservingDates(
+        incoming: incoming,
+        prior: prior,
+      );
+
+      expect(merged.first.pncVisitNo, 3);
+      expect(merged.first.facts.isPostpartumWindow, isTrue);
+    });
+  });
+
+  group('PregnancySnapshotDao.ancVisitNo', () {
+    test('nextAncVisitNo is 1 when unset, then increments after set', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      expect(await dao.nextAncVisitNo('p1'), 1);
+      await dao.setAncVisitNo('p1', 1);
+      expect(await dao.nextAncVisitNo('p1'), 2);
+      expect((await dao.byPatient('p1'))?.ancVisitNo, 1);
+    });
+
+    test('merge keeps the higher of server vs local ancVisitNo', () {
+      final prior = {
+        'p1': PregnancySnapshotRow(
+          patientId: 'p1',
+          facts: const PregnancyFacts(),
+          ancVisitNo: 4,
+        ),
+      };
+      final incoming = [
+        PregnancySnapshotRow(
+          patientId: 'p1',
+          facts: const PregnancyFacts(isNearTermAnc: true),
+          ancVisitNo: 2,
+        ),
+      ];
+
+      final merged = PregnancySnapshotDao.mergePreservingDates(
+        incoming: incoming,
+        prior: prior,
+      );
+
+      expect(merged.first.ancVisitNo, 4);
+      expect(merged.first.facts.isNearTermAnc, isTrue);
     });
   });
 }

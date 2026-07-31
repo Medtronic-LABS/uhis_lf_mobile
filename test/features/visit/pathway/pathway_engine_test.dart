@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/models/programme.dart';
-import 'package:leapwell/features/visit/pathway/pathway_engine.dart';
-import 'package:leapwell/features/visit/triage/patient_context_builder.dart';
+import 'package:uhis_next/core/models/programme.dart';
+import 'package:uhis_next/features/visit/pathway/pathway_engine.dart';
+import 'package:uhis_next/features/visit/triage/patient_context_builder.dart';
 
 void main() {
   group('PathwayEngine', () {

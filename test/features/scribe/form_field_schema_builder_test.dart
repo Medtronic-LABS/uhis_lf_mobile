@@ -7,8 +7,8 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:leapwell/features/scribe/form_field_schema_builder.dart';
-import 'package:leapwell/features/visit/forms/form_config.dart';
+import 'package:uhis_next/features/scribe/form_field_schema_builder.dart';
+import 'package:uhis_next/features/visit/forms/form_config.dart';
 
 FormConfig _buildConfig({
   required Map<String, FieldDef> fields,

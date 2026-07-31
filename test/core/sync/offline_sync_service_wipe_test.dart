@@ -9,16 +9,16 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:leapwell/core/api/api_client.dart';
-import 'package:leapwell/core/auth/auth_repository.dart';
-import 'package:leapwell/core/db/app_database.dart';
-import 'package:leapwell/core/db/assessment_dao.dart';
-import 'package:leapwell/core/db/follow_up_dao.dart';
-import 'package:leapwell/core/db/immunisation_dao.dart';
-import 'package:leapwell/core/db/patient_dao.dart';
-import 'package:leapwell/core/db/patient_programmes_dao.dart';
-import 'package:leapwell/core/db/sync_meta_dao.dart';
-import 'package:leapwell/core/sync/offline_sync_service.dart';
+import 'package:uhis_next/core/api/api_client.dart';
+import 'package:uhis_next/core/auth/auth_repository.dart';
+import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/db/assessment_dao.dart';
+import 'package:uhis_next/core/db/follow_up_dao.dart';
+import 'package:uhis_next/core/db/immunisation_dao.dart';
+import 'package:uhis_next/core/db/patient_dao.dart';
+import 'package:uhis_next/core/db/patient_programmes_dao.dart';
+import 'package:uhis_next/core/db/sync_meta_dao.dart';
+import 'package:uhis_next/core/sync/offline_sync_service.dart';
 
 class _NoUserIdAuthRepository extends AuthRepository {
   _NoUserIdAuthRepository(super.api);

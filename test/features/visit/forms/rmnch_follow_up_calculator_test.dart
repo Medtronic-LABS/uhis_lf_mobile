@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/features/visit/forms/rmnch_follow_up_calculator.dart';
+import 'package:uhis_next/features/visit/forms/rmnch_follow_up_calculator.dart';
 
 void main() {
   group('RmnchFollowUpCalculator', () {

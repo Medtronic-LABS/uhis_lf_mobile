@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/errors/domain_exceptions.dart';
+import 'package:uhis_next/core/errors/domain_exceptions.dart';
 
 void main() {
   group('DomainException hierarchy', () {

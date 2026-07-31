@@ -242,11 +242,15 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                 mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo
-                Image.asset(
-                  'assets/images/app-logo-name.png',
-                  height: 64,
-                  fit: BoxFit.contain,
-                  semanticLabel: 'UHIS logo',
+                Text(
+                  AppStrings.appName,
+                  style: TextStyle(
+                    fontFamily: AppFonts.display,
+                    fontSize: 36,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.pink,
+                    letterSpacing: -0.5,
+                  ),
                 ),
               
               const SizedBox(height: 48),

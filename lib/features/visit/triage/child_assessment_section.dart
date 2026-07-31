@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
+import '../immunisation/epi_schedule_engine.dart' show referralFacilityOptions;
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -10,6 +11,7 @@ class ChildAssessmentData {
   ChildAssessmentData({
     this.congenitalDefect,
     this.weightKg,
+    List<String>? feedLast24h,
     this.isBreastfeeding,
     this.additionalFoodLast24h,
     this.vaccinesReceived,
@@ -18,10 +20,12 @@ class ChildAssessmentData {
     List<String>? complications,
     this.referralMade,
     this.referralPlace,
-  }) : complications = complications ?? const [];
+  })  : feedLast24h = feedLast24h ?? const [],
+        complications = complications ?? const [];
 
   bool? congenitalDefect;
   double? weightKg;
+  List<String> feedLast24h;
   bool? isBreastfeeding;
   bool? additionalFoodLast24h;
   bool? vaccinesReceived;
@@ -34,6 +38,7 @@ class ChildAssessmentData {
   ChildAssessmentData copyWith({
     bool? congenitalDefect,
     double? weightKg,
+    List<String>? feedLast24h,
     bool? isBreastfeeding,
     bool? additionalFoodLast24h,
     bool? vaccinesReceived,
@@ -42,11 +47,13 @@ class ChildAssessmentData {
     List<String>? complications,
     bool? referralMade,
     String? referralPlace,
+    bool clearReferralMade = false,
     bool clearReferralPlace = false,
   }) =>
       ChildAssessmentData(
         congenitalDefect: congenitalDefect ?? this.congenitalDefect,
         weightKg: weightKg ?? this.weightKg,
+        feedLast24h: feedLast24h ?? this.feedLast24h,
         isBreastfeeding: isBreastfeeding ?? this.isBreastfeeding,
         additionalFoodLast24h:
             additionalFoodLast24h ?? this.additionalFoodLast24h,
@@ -54,13 +61,15 @@ class ChildAssessmentData {
         dewormingTaken: dewormingTaken ?? this.dewormingTaken,
         anyIllness: anyIllness ?? this.anyIllness,
         complications: complications ?? this.complications,
-        referralMade: referralMade ?? this.referralMade,
+        referralMade:
+            clearReferralMade ? null : (referralMade ?? this.referralMade),
         referralPlace: clearReferralPlace ? null : (referralPlace ?? this.referralPlace),
       );
 
   Map<String, dynamic> toJson() => {
         if (congenitalDefect != null) 'congenitalDefect': congenitalDefect,
         if (weightKg != null) 'weightKg': weightKg,
+        if (feedLast24h.isNotEmpty) 'feedLast24h': feedLast24h,
         if (isBreastfeeding != null) 'isBreastfeeding': isBreastfeeding,
         if (additionalFoodLast24h != null)
           'additionalFoodLast24h': additionalFoodLast24h,
@@ -71,6 +80,15 @@ class ChildAssessmentData {
         if (referralMade != null) 'referralMade': referralMade,
         if (referralPlace != null) 'referralPlace': referralPlace,
       };
+}
+
+/// Android enforces a 0–30 kg range for a childhood-visit weight
+/// (`FormGenerator.kt`'s Double parsing bound for this field); returns an
+/// error message when [kg] falls outside it, or null when valid/absent.
+String? childWeightRangeError(double? kg) {
+  if (kg == null) return null;
+  if (kg < 0 || kg > 30) return ChildAssessmentStrings.q7RangeError;
+  return null;
 }
 
 // ── Widget ────────────────────────────────────────────────────────────────────
@@ -154,10 +172,19 @@ class _ChildAssessmentSectionState extends State<ChildAssessmentSection> {
           // Q7: Weight
           _WeightField(
             controller: _weightCtrl,
+            errorText: childWeightRangeError(d.weightKg),
             onChanged: (v) {
               final parsed = double.tryParse(v);
               _emit(d.copyWith(weightKg: parsed));
             },
+          ),
+          const SizedBox(height: 14),
+
+          // Q7b: What was the child fed in the last 24 hours — always visible,
+          // mandatory (Android orderId 4, between weight and breastfeeding).
+          _FeedOptionsPicker(
+            selected: d.feedLast24h,
+            onChanged: (ids) => _emit(d.copyWith(feedLast24h: ids)),
           ),
           const SizedBox(height: 14),
 
@@ -193,7 +220,9 @@ class _ChildAssessmentSectionState extends State<ChildAssessmentSection> {
           ),
           const SizedBox(height: 14),
 
-          // Q12: Any illness/complications
+          // Q12: Any illness/complications — clearing this also clears the
+          // conditional Q13/Q14/Q15 answers it gates, same as Q14's own
+          // onChanged already clears Q15 when set back to "No".
           _YesNoQuestion(
             label: ChildAssessmentStrings.q12Label,
             value: d.anyIllness,
@@ -201,6 +230,8 @@ class _ChildAssessmentSectionState extends State<ChildAssessmentSection> {
               d.copyWith(
                 anyIllness: v,
                 complications: v == true ? d.complications : [],
+                clearReferralMade: v != true,
+                clearReferralPlace: v != true,
               ),
             ),
           ),
@@ -215,25 +246,29 @@ class _ChildAssessmentSectionState extends State<ChildAssessmentSection> {
           ],
           const SizedBox(height: 14),
 
-          // Q14: Referral made
-          _YesNoQuestion(
-            label: ChildAssessmentStrings.q14Label,
-            value: d.referralMade,
-            onChanged: (v) => _emit(
-              d.copyWith(
-                referralMade: v,
-                clearReferralPlace: v == false,
+          // Q14: Referral made — conditional on Q12 = Yes (Android: only shown
+          // when anyIllness == "yes"). Clearing anyIllness clears this answer
+          // too, mirroring how Q12's own onChanged already clears complications.
+          if (d.anyIllness == true) ...[
+            _YesNoQuestion(
+              label: ChildAssessmentStrings.q14Label,
+              value: d.referralMade,
+              onChanged: (v) => _emit(
+                d.copyWith(
+                  referralMade: v,
+                  clearReferralPlace: v == false,
+                ),
               ),
             ),
-          ),
 
-          // Q15: Referral place — conditional on Q14 = Yes
-          if (d.referralMade == true) ...[
-            const SizedBox(height: 14),
-            _ReferralPlacePicker(
-              value: d.referralPlace,
-              onChanged: (place) => _emit(d.copyWith(referralPlace: place)),
-            ),
+            // Q15: Referral place — conditional on Q14 = Yes
+            if (d.referralMade == true) ...[
+              const SizedBox(height: 14),
+              _ReferralPlacePicker(
+                value: d.referralPlace,
+                onChanged: (place) => _emit(d.copyWith(referralPlace: place)),
+              ),
+            ],
           ],
         ],
       ),
@@ -344,10 +379,12 @@ class _WeightField extends StatelessWidget {
   const _WeightField({
     required this.controller,
     required this.onChanged,
+    this.errorText,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -386,6 +423,7 @@ class _WeightField extends StatelessWidget {
                 hintText: ChildAssessmentStrings.q7Hint,
                 hintStyle: const TextStyle(
                     fontSize: 13, color: Color(0xFF9CA3AF)),
+                errorText: errorText,
                 contentPadding: const EdgeInsets.fromLTRB(12, 10, 40, 10),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -403,8 +441,8 @@ class _WeightField extends StatelessWidget {
                 fillColor: Colors.white,
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
               child: Text(
                 ChildAssessmentStrings.q7Unit,
                 style: TextStyle(
@@ -415,6 +453,85 @@ class _WeightField extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _FeedOptionsPicker extends StatelessWidget {
+  const _FeedOptionsPicker({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  /// Wire ids (`ChildAssessmentStrings.feedLast24hOptionIds`), not labels.
+  final List<String> selected;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RichText(
+          text: TextSpan(
+            text: ChildAssessmentStrings.q7bLabel,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF374151),
+            ),
+            children: const [
+              TextSpan(
+                text: ' *',
+                style: TextStyle(color: Color(0xFFEF4444)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 7),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: ChildAssessmentStrings.feedLast24hOptionIds.map((id) {
+            final active = selected.contains(id);
+            return GestureDetector(
+              onTap: () {
+                final next = List<String>.from(selected);
+                if (active) {
+                  next.remove(id);
+                } else {
+                  next.add(id);
+                }
+                onChanged(next);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                decoration: BoxDecoration(
+                  color: active ? const Color(0xFFEEF0FF) : Colors.white,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                    color: active
+                        ? const Color(0xFF6B63D4)
+                        : const Color(0xFFE5E7EB),
+                  ),
+                ),
+                child: Text(
+                  ChildAssessmentStrings.feedLast24hOptionLabel(id),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: active
+                        ? const Color(0xFF3D3599)
+                        : const Color(0xFF9CA3AF),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ],
     );
@@ -561,8 +678,8 @@ class _ReferralPlacePicker extends StatelessWidget {
             filled: true,
             fillColor: Colors.white,
           ),
-          items: ChildAssessmentStrings.referralPlaces
-              .map((place) => DropdownMenuItem(value: place, child: Text(place)))
+          items: referralFacilityOptions
+              .map((o) => DropdownMenuItem(value: o.id, child: Text(o.label)))
               .toList(),
         ),
       ],

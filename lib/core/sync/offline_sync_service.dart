@@ -691,6 +691,17 @@ class OfflineSyncService extends ChangeNotifier {
         updatedAt: nowMs,
         eddDate: eddMs,
         lmpDate: lmpMs,
+        // Spice PregnancyDetails.ancVisitNo / pncVisitNo.
+        ancVisitNo: JsonRead.firstInt(flat, const [
+          'ancVisitNo',
+          'anc_visit_no',
+          'ancVisitNumber',
+        ]),
+        pncVisitNo: JsonRead.firstInt(flat, const [
+          'pncVisitNo',
+          'pnc_visit_no',
+          'pncVisitNumber',
+        ]),
       ));
     }
     final withLmp =
@@ -1066,6 +1077,7 @@ class OfflineSyncService extends ChangeNotifier {
       'pregnancyDetails',
       'pregnancyDetail',
       'pwProfile',
+      'pregnancyDetailsAndHistory',
       'pregnancyProfile',
       'obstetricHistory',
       'observations',

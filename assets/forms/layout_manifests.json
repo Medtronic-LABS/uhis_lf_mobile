@@ -259,11 +259,24 @@
     "clinicalWorkflowId": 102,
     "sections": [
       {
-        "sectionId": "outcomeType",
-        "title": "Outcome type",
+        "sectionId": "ancServicesBirthPreparedness",
+        "title": "ANC services and Birth Preparedness",
         "fieldRefs": [
           {
-            "fieldName": "Outcome type",
+            "fieldName": "No. of ANC visits conducted with other providers",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "ancVisitsOtherProviders"
+          }
+        ]
+      },
+      {
+        "sectionId": "outcomeType",
+        "title": "Pregnancy Outcome",
+        "fieldRefs": [
+          {
+            "fieldName": "Pregnancy Outcome",
+            "isMandatory": true,
             "id": "deliveryOutcomeType"
           }
         ]
@@ -274,17 +287,18 @@
         "fieldRefs": [
           {
             "fieldName": "Time of death",
+            "isMandatory": true,
             "id": "timeOfDeath"
           },
           {
             "fieldName": "Gestation month at the time of death",
             "inputType": 2,
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "gestationMonthAtDeath"
           },
           {
             "fieldName": "Cause of death",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "causeOfDeath"
           }
         ]
@@ -296,11 +310,12 @@
           {
             "fieldName": "Gestation month at the time of abortion",
             "inputType": 2,
+            "isMandatory": true,
             "id": "gestationMonthAtAbortion"
           },
           {
             "fieldName": "Type of Abortion",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "typeOfAbortion"
           }
         ]
@@ -317,43 +332,43 @@
           {
             "fieldName": "Live Birth Numbers",
             "inputType": 2,
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "liveBirthNumbers"
           },
           {
             "fieldName": "Stillbirth Numbers",
             "inputType": 2,
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "stillbirthNumbers"
           },
           {
             "fieldName": "Place of delivery",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "placeOfDelivery"
           },
           {
             "fieldName": "Date of delivery",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "dateOfDelivery"
           },
           {
             "fieldName": "Mode of Delivery",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "modeOfDelivery"
           },
           {
             "fieldName": "Birth Attendant",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "birthAttendant"
           },
           {
             "fieldName": "Any complications during delivery?",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "anyComplicationsDuringDelivery"
           },
           {
             "fieldName": "Complications during delivery",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "complicationsDuringDelivery"
           }
         ]
@@ -364,28 +379,17 @@
         "fieldRefs": [
           {
             "fieldName": "Is the baby alive?",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "babyAlive"
           },
           {
             "fieldName": "Sex",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "babySex"
           },
           {
-            "fieldName": "Birth weight (kg)",
-            "inputType": 2,
-            "isMandatory": false,
-            "id": "birthWeight"
-          },
-          {
-            "fieldName": "Essential newborn care",
-            "isMandatory": false,
-            "id": "essentialNewbornCare"
-          },
-          {
             "fieldName": "Cause of neonatal death",
-            "isMandatory": false,
+            "isMandatory": true,
             "id": "neonatalDeathCause"
           }
         ]
@@ -638,11 +642,18 @@
             "isMandatory": false
           },
           {
+            "id": "height",
+            "fieldName": "Height (cm)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
             "id": "weight",
             "fieldName": "Weight (kg)",
             "inputType": 8192,
             "isMandatory": false
           },
+          "bmi",
           {
             "id": "edema",
             "fieldName": "Edema",
@@ -799,76 +810,62 @@
         "title": "Child Details",
         "fieldRefs": [
           {
-            "fieldName": "Congenital defect",
             "isMandatory": false,
             "id": "congenitalDefect"
           },
           {
-            "fieldName": "Weight",
-            "inputType": 8192,
+            "inputType": 2,
             "isMandatory": false,
             "id": "weight"
           },
           {
-            "fieldName": "What was fed in the last 24 hours",
             "isMandatory": false,
             "id": "childFeedLast24Hrs"
           },
           {
-            "fieldName": "Other Feed",
             "inputType": 96,
             "isMandatory": false,
             "id": "otherChildFeed"
           },
           {
-            "fieldName": "Breast feed after birth in hrs",
             "inputType": 2,
             "isMandatory": false,
             "id": "hrsBreastFed"
           },
           {
-            "fieldName": "Additional food started month",
             "inputType": 2,
             "isMandatory": false,
             "id": "monthAdditionalFeedGiven"
           },
           {
-            "fieldName": "Breast feeding",
             "isMandatory": false,
             "id": "childBreastFeeding"
           },
           {
-            "fieldName": "Additional Food in 24 Hrs",
             "isMandatory": false,
             "id": "additionalFood24Hrs"
           },
           {
-            "fieldName": "Received vaccines",
             "isMandatory": false,
             "id": "receivedVaccine"
           },
           {
-            "fieldName": "Deworming medication",
             "isMandatory": false,
             "id": "dewormingMedicine"
           },
           {
-            "fieldName": "Illness/Complications",
             "isMandatory": false,
             "id": "anyIllness"
           },
           {
-            "fieldName": "Specify Complications",
             "isMandatory": false,
             "id": "childIllnessType"
           },
           {
-            "fieldName": "Referred",
             "isMandatory": false,
             "id": "childReferral"
           },
           {
-            "fieldName": "Referral place",
             "isMandatory": false,
             "id": "childReferralFacilityType"
           }
@@ -952,7 +949,34 @@
           {
             "fieldName": "Refer place",
             "isMandatory": false,
-            "id": "referPlace"
+            "id": "referPlace",
+            "optionsList": [
+              {
+                "id": "upazilaHealthComplex",
+                "name": "Upazila Health Complex",
+                "cultureValue": "উপজেলা স্বাস্থ্য কমপ্লেক্স"
+              },
+              {
+                "id": "districtHospital",
+                "name": "District Hospital",
+                "cultureValue": "জেলা সদর হাসপাতাল"
+              },
+              {
+                "id": "medicalCollegeHospital",
+                "name": "Medical College Hospital",
+                "cultureValue": "মেডিকেল কলেজ হাসপাতাল"
+              },
+              {
+                "id": "govtPrivateSpecializedHospital",
+                "name": "Govt/Private Specialized Hospital",
+                "cultureValue": "সরকারি/বেসরকারি বিশেষায়িত হাসপাতাল"
+              },
+              {
+                "id": "others",
+                "name": "Others",
+                "cultureValue": "অন্যান্য"
+              }
+            ]
           },
           {
             "fieldName": "History of other Diseases",
@@ -960,7 +984,7 @@
             "id": "historyOfOtherDiseases"
           },
           {
-            "fieldName": "Has the patient is referred for operation?",
+            "fieldName": "Has the patient been referred for operation?",
             "isMandatory": false,
             "id": "patientReferredForOperation"
           },
@@ -991,27 +1015,9 @@
         "title": "Blood Pressure & Vitals",
         "fieldRefs": [
           {
-            "fieldName": "Height",
-            "inputType": 8192.0,
-            "isMandatory": false,
-            "id": "height"
-          },
-          {
-            "fieldName": "Weight",
-            "inputType": 8192.0,
-            "isMandatory": false,
-            "id": "weight"
-          },
-          "bmi",
-          {
             "fieldName": "Have you been diagnosed with High Blood Pressure or Hypertension before?",
             "isMandatory": false,
             "id": "isBeforeHtnDiagnosis"
-          },
-          {
-            "fieldName": "Are you taking medication regularly?",
-            "isMandatory": false,
-            "id": "medicationFrequencyBp"
           },
           {
             "fieldName": "Blood Pressure",
@@ -1019,11 +1025,28 @@
             "id": "bpLogDetails"
           },
           {
+            "fieldName": "Are you taking medication regularly?",
+            "isMandatory": false,
+            "id": "medicationFrequencyBp"
+          },
+          {
+            "fieldName": "Height (in cm)",
+            "inputType": 8192.0,
+            "isMandatory": false,
+            "id": "height"
+          },
+          {
+            "fieldName": "Weight (in kg)",
+            "inputType": 8192.0,
+            "isMandatory": false,
+            "id": "weight"
+          },
+          "bmi",
+          {
             "fieldName": "Are you smoking or consuming tobacco in the past 12 months?",
             "isMandatory": false,
             "id": "isRegularSmoker"
-          },
-          "cvdRisk"
+          }
         ]
       },
       {
@@ -1118,13 +1141,8 @@
       },
       {
         "sectionId": "symptomsLog",
-        "title": "Symptoms & Compliance",
+        "title": "Symptoms",
         "fieldRefs": [
-          {
-            "id": "compliance",
-            "fieldName": "Medication compliance",
-            "isMandatory": false
-          },
           {
             "id": "hasSymptoms",
             "fieldName": "Has symptoms",
@@ -1166,6 +1184,47 @@
             "fieldName": "Blood Glucose",
             "inputType": 8192,
             "isMandatory": false
+          }
+        ]
+      },
+      {
+        "sectionId": "eyeCare",
+        "title": "Eye Care",
+        "fieldRefs": [
+          {
+            "fieldName": "Eye Test Outcome",
+            "isMandatory": false,
+            "id": "eyeTestOutcome"
+          },
+          {
+            "fieldName": "Glass Power",
+            "isMandatory": false,
+            "id": "glassPower"
+          },
+          {
+            "fieldName": "Have the glasses been sold?",
+            "isMandatory": false,
+            "id": "haveTheGlassesBeenSold"
+          },
+          {
+            "fieldName": "Type of Glass",
+            "isMandatory": false,
+            "id": "typeOfGlass"
+          },
+          {
+            "fieldName": "Type of Frame",
+            "isMandatory": false,
+            "id": "typeOfFrame"
+          },
+          {
+            "fieldName": "First time user?",
+            "isMandatory": false,
+            "id": "firstTimeUser"
+          },
+          {
+            "fieldName": "Refer Place",
+            "isMandatory": false,
+            "id": "referPlace"
           }
         ]
       }

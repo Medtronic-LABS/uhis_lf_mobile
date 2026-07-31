@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/models/patient.dart';
-import 'package:leapwell/core/models/referral.dart';
-import 'package:leapwell/features/cce/cce_alert.dart';
+import 'package:uhis_next/core/models/patient.dart';
+import 'package:uhis_next/core/models/referral.dart';
+import 'package:uhis_next/features/cce/cce_alert.dart';
 
 /// Unit tests for the CCE derivation — the pure mapping from a 14-state
 /// [ReferralStatus] + SLA bookkeeping onto the wireframe's severity / journey /

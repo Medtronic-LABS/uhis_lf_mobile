@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/api/api_client.dart';
@@ -8,15 +7,20 @@ import '../../../core/api/endpoints.dart';
 import '../../../core/db/immunisation_dao.dart';
 import 'immunisation_dto.dart';
 
-/// Repository for the EPI immunisation feature.
+/// Repository for the EPI immunisation feature — read path only.
 ///
 /// Mirrors the Android SPICE app's ImmunisationViewModel API contract:
 ///   POST /spice-service/immunisation/list   — fetch schedule (seeds local DB)
-///   POST /spice-service/immunisation/create — push vaccine status updates
 ///   POST /spice-service/immunisation/summary-create — push visit summary
 ///
-/// Offline-first: all writes persist to [ImmunisationDao] first; the network
-/// call is best-effort and silent on failure so the SK flow is never blocked.
+/// Recording a vaccine's outcome (Vaccinated/Missed + referral) no longer
+/// pushes here — see ImmunisationTimelineScreen's _UpdateStatusSheet, which
+/// syncs via AssessmentRepository.saveAssessment(assessmentType:
+/// 'CHILD_IMMUNIZATION') → POST /offline-service/offline-sync/create,
+/// the same offline-first queued/retried pipeline every other assessment
+/// type uses, replacing the old best-effort/silent-fail submitVaccinations().
+///
+/// Offline-first: fetchSchedule's writes persist to [ImmunisationDao] first.
 class ImmunisationRepository {
   ImmunisationRepository(this._api, this._dao);
 
@@ -80,66 +84,6 @@ class ImmunisationRepository {
 
     await _dao.upsertMany(rows);
     return dtos;
-  }
-
-  // ── Submit vaccinations ───────────────────────────────────────────────────
-
-  /// Pushes updated vaccine statuses to the backend.
-  ///
-  /// [vaccines] must already reflect the new status ('Vaccinated' etc.).
-  /// Call this after [ImmunisationDao.upsertMany] so local state is consistent
-  /// even when the network call fails.
-  Future<void> submitVaccinations({
-    required String patientId,
-    required String patientReference,
-    required List<VaccinationDetailDto> vaccines,
-    String? encounterId,
-    String? missedReason,
-    String? villageId,
-    String? memberId,
-    String? householdId,
-    Map<String, dynamic>? provenance,
-    // Numeric backend patient ID — separate from the FHIR route ID.
-    // Use patient.patientId when available; falls back to patientId parse.
-    String? numericPatientId,
-  }) async {
-    final resolvedNumericId =
-        int.tryParse(numericPatientId ?? '') ?? int.tryParse(patientId) ?? 0;
-
-    final encounter = MedicalReviewEncounterDto(
-      patientReference: patientReference,
-      patientId: resolvedNumericId,
-      villageId: villageId,
-      memberId: memberId,
-      householdId: householdId,
-      provenance: provenance,
-    );
-
-    final body = ImmunisationCreateRequestDto(
-      immunisationList: vaccines,
-      encounter: encounter,
-      missedReason: missedReason,
-    ).toJson();
-
-    debugPrint(
-      '[ImmunisationRepository] submitVaccinations request: '
-      'patientId=$resolvedNumericId patientReference=$patientReference '
-      'vaccines=${vaccines.length}',
-    );
-
-    try {
-      final resp = await _api.dio.post(Endpoints.immunisationCreate, data: body);
-      debugPrint(
-        '[ImmunisationRepository] submitVaccinations: HTTP ${resp.statusCode}',
-      );
-    } on DioException catch (e) {
-      debugPrint(
-        '[ImmunisationRepository] submitVaccinations network error: '
-        '${e.message} status=${e.response?.statusCode} body=${e.response?.data}',
-      );
-    } on Object catch (e) {
-      debugPrint('[ImmunisationRepository] submitVaccinations error: $e');
-    }
   }
 
   // ── Summary ───────────────────────────────────────────────────────────────
