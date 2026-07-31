@@ -11,6 +11,7 @@ import '../../../core/db/member_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/services/location_service.dart';
+import 'enrollment_id_number.dart';
 import 'enrollment_repository.dart';
 import 'models/household_enrollment_models.dart';
 
@@ -81,8 +82,7 @@ class EnrollmentController extends ChangeNotifier {
       numberOfMembers: 0,
       houseNumber: '',
       occupation: '',
-      monthlyIncome: '<10000',
-      disabilityQuestion: false,
+      monthlyIncomeRange: '',
     );
     _error = null;
     notifyListeners();
@@ -95,15 +95,20 @@ class EnrollmentController extends ChangeNotifier {
     int? numberOfMembers,
     String? houseNumber,
     String? occupation,
-    String? monthlyIncome,
-    bool? disabilityQuestion,
-    String? disabilityDetails,
+    String? otherOccupation,
+    String? monthlyIncomeRange,
+    int? disabilityPersonsCount,
     String? villageId,
     String? villageName,
     String? subVillageId,
     String? subVillageName,
   }) {
-    if (_household == null) return;
+    if (_household == null) {
+      debugPrint('[EnrollmentController] updateHousehold ignored — no active '
+          'household (initializeHousehold was never called, or reset() ran '
+          'after it). Form input will not reach validation.');
+      return;
+    }
 
     _household = _household!.copyWith(
       healthWorkerId: healthWorkerId,
@@ -111,9 +116,9 @@ class EnrollmentController extends ChangeNotifier {
       numberOfMembers: numberOfMembers,
       houseNumber: houseNumber,
       occupation: occupation,
-      monthlyIncome: monthlyIncome,
-      disabilityQuestion: disabilityQuestion,
-      disabilityDetails: disabilityDetails,
+      otherOccupation: otherOccupation,
+      monthlyIncomeRange: monthlyIncomeRange,
+      disabilityPersonsCount: disabilityPersonsCount,
       villageId: villageId,
       villageName: villageName,
       subVillageId: subVillageId,
@@ -131,6 +136,7 @@ class EnrollmentController extends ChangeNotifier {
     required String idType,
     String? idNumber,
     String? mobileNumber,
+    String? phoneNumberCategory,
     bool? mobileAvailable,
     required String maritalStatus,
     required String disabilityStatus,
@@ -144,6 +150,7 @@ class EnrollmentController extends ChangeNotifier {
       idType: idType,
       idNumber: idNumber,
       mobileNumber: mobileNumber,
+      phoneNumberCategory: phoneNumberCategory,
       mobileAvailable: mobileAvailable ?? true,
       maritalStatus: maritalStatus,
       disabilityStatus: disabilityStatus,
@@ -180,9 +187,20 @@ class EnrollmentController extends ChangeNotifier {
     final errors = <String>[];
 
     if (_household == null) {
+      debugPrint('[EnrollmentController] validateHouseholdForm — household is '
+          'null; initializeHousehold() must run before the form is submitted');
       errors.add('Household not initialized');
       return errors;
     }
+
+    debugPrint('[EnrollmentController] validateHouseholdForm '
+        'no=${_household!.householdNumber} '
+        'type="${_household!.householdType}" '
+        'members=${_household!.numberOfMembers} '
+        'occupation="${_household!.occupation}" '
+        'incomeRange="${_household!.monthlyIncomeRange}" '
+        'village=${_household!.villageId} '
+        'subVillage=${_household!.subVillageId}');
 
     if (_household!.householdType.isEmpty) {
       errors.add('Household type is required');
@@ -190,9 +208,12 @@ class EnrollmentController extends ChangeNotifier {
     if (_household!.numberOfMembers <= 0) {
       errors.add('Number of members must be greater than 0');
     }
-    if (_household!.disabilityQuestion &&
-        (_household!.disabilityDetails?.trim().isEmpty ?? true)) {
-      errors.add('Please specify disability details');
+    if (_household!.monthlyIncomeRange.isEmpty) {
+      errors.add('Monthly income range is required');
+    }
+    if (_household!.occupation == 'Other' &&
+        _household!.otherOccupation.trim().isEmpty) {
+      errors.add('Please specify the occupation');
     }
 
     return errors;
@@ -210,8 +231,18 @@ class EnrollmentController extends ChangeNotifier {
     if (_householdHead!.name.trim().isEmpty) {
       errors.add('Head name is required');
     }
-    if (_householdHead!.idNumber?.trim().isEmpty ?? true) {
-      errors.add('ID number is required');
+    if (_householdHead!.idType.trim().isEmpty) {
+      errors.add('ID type is required');
+    }
+    // "Not Available" hides the number field in Spice, so it must not be
+    // demanded here either.
+    final headIdError = EnrollmentIdNumber.validate(
+      _householdHead!.idType,
+      _householdHead!.idNumber,
+      requiredMessage: 'ID number is required',
+    );
+    if (headIdError != null) {
+      errors.add(headIdError);
     }
     if (_householdHead!.maritalStatus.isEmpty) {
       errors.add('Marital status is required');
@@ -237,8 +268,13 @@ class EnrollmentController extends ChangeNotifier {
     if (member.dateOfBirth.isEmpty) {
       errors.add('Date of birth is required');
     }
-    if (member.idNumber?.trim().isEmpty ?? true) {
-      errors.add('ID number is required');
+    final memberIdError = EnrollmentIdNumber.validate(
+      member.idType,
+      member.idNumber,
+      requiredMessage: 'ID number is required',
+    );
+    if (memberIdError != null) {
+      errors.add(memberIdError);
     }
     if (!member.mobileAvailable &&
         (member.mobileNumber?.trim().isEmpty ?? true)) {

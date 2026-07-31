@@ -168,10 +168,10 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                                       Expanded(
                                         child: _DetailCell(
                                           label: EnrollmentStrings
-                                              .detailLabelHouseNo,
-                                          value: household.houseNumber.isEmpty
+                                              .detailLabelHouseholdType,
+                                          value: household.householdType.isEmpty
                                               ? '—'
-                                              : household.houseNumber,
+                                              : household.householdType,
                                         ),
                                       ),
                                     ],
@@ -183,7 +183,11 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                                         child: _DetailCell(
                                           label: EnrollmentStrings
                                               .detailLabelVillage,
-                                          value: 'Char Bhadra',
+                                          value: household
+                                                  .subVillageName?.isNotEmpty ==
+                                              true
+                                              ? household.subVillageName!
+                                              : (household.villageName ?? '—'),
                                         ),
                                       ),
                                       Expanded(
