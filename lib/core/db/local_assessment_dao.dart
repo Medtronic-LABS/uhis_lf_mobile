@@ -232,9 +232,7 @@ class LocalAssessmentEntity {
         jsonDecode(assessmentDetails) as Map<String, dynamic>;
 
     // Mapper produces a flat structure; _wrapDetailsForType adds the programme key
-    // required by AssessmentDetailsDTO (e.g. NCD → {"ncd": ...}).
-    // NOTE: ANC is the exception — Android sends ANC details as a flat object,
-    // so _wrapDetailsForType returns it unwrapped (GAP 6b fix).
+    // required by AssessmentDetailsDTO (e.g. NCD → {"ncd": ...}, ANC → {"anc": ...}).
     final wrappedDetails = _wrapDetailsForType(assessmentType, details);
 
     // visitNumber — server sequences ANC/PNC/RMNCH visits by this field.
@@ -270,7 +268,9 @@ class LocalAssessmentEntity {
       'peerSupervisorId': ?peerSupervisorId,
       // Android sends a joined String, not a JSON array.
       'referredReasons': _joinedReferredReasons(referredReasons),
-      if (otherDetails != null) 'summary': jsonDecode(otherDetails!),
+      // otherDetails may stash Flutter-only keys (e.g. encounterId) — strip
+      // before emitting the Spice top-level `summary`.
+      if (_wireSummary(otherDetails) case final summary?) 'summary': summary,
       'encounter': {
         'householdId': householdId,
         'memberId': memberId,
@@ -299,6 +299,21 @@ class LocalAssessmentEntity {
 
     ConsoleLog.banner('[PayloadDebug] assessment-payload ($wireType)\n${request.toString()}');
     return request;
+  }
+
+  /// Decodes [otherDetails] into the wire `summary`, dropping internal keys
+  /// that must not leave the device (notably `encounterId`).
+  static Map<String, dynamic>? _wireSummary(String? otherDetails) {
+    if (otherDetails == null || otherDetails.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(otherDetails);
+      if (decoded is! Map) return null;
+      final summary = Map<String, dynamic>.from(decoded);
+      summary.remove('encounterId');
+      return summary.isEmpty ? null : summary;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Joins a JSON-encoded `List<String>` into the ", "-delimited string format
@@ -352,17 +367,17 @@ class LocalAssessmentEntity {
     final t = type.toUpperCase();
     String? raw;
     if (t == 'ANC') {
-      // Top-level visitNo (current mapper output)
-      raw = d['visitNo']?.toString();
+      // Prefer Spice nested anc.visitNo (wire / already-wrapped rows); fall
+      // back to the flat mapper output stored in assessment_details.
+      if (d['anc'] is Map) {
+        final anc = d['anc'] as Map;
+        raw = anc['visitNo']?.toString() ?? anc['ancVisitNumber']?.toString();
+      }
+      raw ??= d['visitNo']?.toString();
       raw ??= d['ancVisitNumber']?.toString();
-      // Nested: medicalHistoryPhysicalExamination.ancVisitNumber
       raw ??= (d['medicalHistoryPhysicalExamination'] is Map
           ? (d['medicalHistoryPhysicalExamination'] as Map)['ancVisitNumber']
               ?.toString()
-          : null);
-      // Double-wrapped legacy
-      raw ??= (d['anc'] is Map
-          ? (d['anc'] as Map)['ancVisitNumber']?.toString()
           : null);
     } else if (t == 'PNC' || t == 'PNC_MOTHER') {
       raw = d['visitNo']?.toString() ?? d['pncVisitNumber']?.toString();
@@ -444,7 +459,7 @@ class LocalAssessmentEntity {
   /// Wrap an assessment payload under the programme-specific key required by
   /// AssessmentDetailsDTO, matching Android OfflineSyncRepository.getAssessmentDetails().
   ///
-  ///   ANC         → flat (Android sends ANC details unwrapped — GAP 6b fix)
+  ///   ANC         → {"anc": {...}} (FormResultComposer.addToMenuGroup)
   ///   PWPROFILE   → {"pwProfile": {"pregnancyDetailsAndHistory": {...}}}
   ///   PNC_NEONATE → {"pncNeonatal": {...}, "cbs": {}} (CBS sibling required by Android)
   ///   CHILDHOOD_VISIT → {"pncChild": {...}, "cbs": {}} (CBS sibling required by Android)
@@ -502,9 +517,10 @@ class LocalAssessmentEntity {
     }
 
     final key = switch (t) {
-      // ANC: Android sends assessmentDetails as a flat object (wrap line is
-      // commented out in OfflineSyncRepository.getAssessmentDetails — GAP 6b).
-      'ANC' => null,
+      // ANC: FormResultComposer.addToMenuGroup wraps under lowercase "anc".
+      // The old "GAP 6b" comment misread a commented CBS inject — Android still
+      // nests the family groups under assessmentDetails.anc.
+      'ANC' => 'anc',
       'NCD' => 'ncd',
       'PNC' || 'PNC_MOTHER' => 'pncMother',
       // ICCM is the only non-NCD/PNC type that gets wrapped (Android explicit handling).
@@ -514,6 +530,8 @@ class LocalAssessmentEntity {
       // nests the eyeCare / generalInformation card families under the menu id.
       'EYE_CARE' => 'eye_care',
       // All others — TB, EPI — are flat pass-through
+      'CHILD_IMMUNIZATION' => 'childImmunization',
+      // All others — TB, EPI, EYE_CARE, CATARACT — are flat pass-through
       // (Android OfflineSyncRepository default branch).
       _ => null,
     };
@@ -558,45 +576,6 @@ class LocalAssessmentDao {
   final AppDatabase _db;
 
   static const String tableName = 'local_assessments';
-
-  /// Create the local_assessments table (call during DB migration).
-  static Future<void> createTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS $tableName (
-        id TEXT PRIMARY KEY,
-        household_member_local_id INTEGER NOT NULL,
-        member_id TEXT,
-        household_id TEXT,
-        patient_id TEXT,
-        village_id TEXT,
-        assessment_type TEXT NOT NULL,
-        assessment_details TEXT NOT NULL,
-        other_details TEXT,
-        is_referred INTEGER DEFAULT 0,
-        referral_status TEXT,
-        referred_reasons TEXT,
-        custom_status TEXT,
-        follow_up_id INTEGER,
-        pregnancy_episode_id TEXT,
-        latitude REAL DEFAULT 0.0,
-        longitude REAL DEFAULT 0.0,
-        sync_status TEXT DEFAULT 'pending',
-        fhir_id TEXT,
-        created_at INTEGER,
-        updated_at INTEGER
-      )
-    ''');
-
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_local_assessments_patient 
-      ON $tableName (patient_id)
-    ''');
-
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_local_assessments_sync 
-      ON $tableName (sync_status)
-    ''');
-  }
 
   /// Save a new local assessment.
   Future<void> insert(LocalAssessmentEntity entity) async {
@@ -884,7 +863,8 @@ class LocalAssessmentDao {
         }
         final gLog = map['glucoseLog'];
         if (gLog is Map) {
-          flat['glucoseValue'] ??= gLog['glucose'];
+          // Spice BD wire uses `glucose`; accept legacy `glucoseValue` too.
+          flat['glucoseValue'] ??= gLog['glucose'] ?? gLog['glucoseValue'];
           flat['glucoseType'] ??= gLog['glucoseType'];
         }
       } else if (type == 'PNC_MOTHER' || type == 'PNC') {

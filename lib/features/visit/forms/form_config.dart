@@ -83,6 +83,7 @@ class FieldOption {
     required this.id,
     required this.name,
     this.cultureValue,
+    this.value,
   });
 
   final String id;
@@ -92,6 +93,14 @@ class FieldOption {
 
   /// Bengali option label from `"cultureValue"`.
   final String? cultureValue;
+
+  /// Wire code from `"value"` (e.g. `shortnessOfBreath`), when the option
+  /// declares one. Spice sends this — not the numeric `id` — for multi-select
+  /// fields such as `ncdSymptoms`.
+  final String? value;
+
+  /// Value to send on the wire: [value] when declared, else the [id].
+  String get wireValue => (value != null && value!.isNotEmpty) ? value! : id;
 
   /// Locale-pure label for UI: Bangla when available in Bangla mode, else English.
   String get displayName {
@@ -108,6 +117,7 @@ class FieldOption {
         id: json['id']?.toString() ?? '',
         name: json['name']?.toString() ?? '',
         cultureValue: json['cultureValue']?.toString(),
+        value: json['value']?.toString(),
       );
 
   /// Coerce a stored field value to the string id form used by option widgets.

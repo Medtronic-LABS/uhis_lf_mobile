@@ -2541,17 +2541,23 @@ class _ReferralAlertCard extends StatelessWidget {
   final String reason;
   final String urgency;
 
-  // Maps raw API camelCase referral keys → human-readable labels (fallback path).
+  // Maps raw API referral keys → human-readable labels (fallback path).
+  // Includes Spice ReferredReason / ANC LABEL_* strings and legacy camelCase keys.
   static const _reasonLabels = <String, String>{
-    'bloodPressure':  'High blood pressure',
-    'bloodGlucose':   'High blood glucose',
-    'symptoms':       'Reported symptoms',
-    'hbLevel':        'Low haemoglobin',
-    'weight':         'Abnormal weight',
-    'urineProtein':   'Urine protein detected',
-    'dangerSigns':    'Danger signs present',
-    'bmi':            'Abnormal BMI',
-    'gestationalAge': 'Gestational age concern',
+    'High risk pregnant woman': 'High-risk pregnant woman',
+    'Gaps in ANC':            'Gaps in antenatal care',
+    'High BP':                'High blood pressure',
+    'High BG':                'High blood glucose',
+    'Symptoms':               'Reported symptoms',
+    'bloodPressure':          'High blood pressure',
+    'bloodGlucose':           'High blood glucose',
+    'symptoms':               'Reported symptoms',
+    'hbLevel':                'Low haemoglobin',
+    'weight':                 'Abnormal weight',
+    'urineProtein':           'Urine protein detected',
+    'dangerSigns':            'Danger signs present',
+    'bmi':                    'Abnormal BMI',
+    'gestationalAge':         'Gestational age concern',
   };
 
   @override
