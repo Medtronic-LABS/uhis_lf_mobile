@@ -518,6 +518,7 @@ class LocalAssessmentEntity {
       // ICCM is the only non-NCD/PNC type that gets wrapped (Android explicit handling).
       'ICCM' || 'IMCI' => 'iccm',
       'FAMILY_PLANNING' || 'FP' => 'familyPlanning',
+      'CHILD_IMMUNIZATION' => 'childImmunization',
       // All others — TB, EPI, EYE_CARE, CATARACT — are flat pass-through
       // (Android OfflineSyncRepository default branch).
       _ => null,
@@ -550,45 +551,6 @@ class LocalAssessmentDao {
   final AppDatabase _db;
 
   static const String tableName = 'local_assessments';
-
-  /// Create the local_assessments table (call during DB migration).
-  static Future<void> createTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS $tableName (
-        id TEXT PRIMARY KEY,
-        household_member_local_id INTEGER NOT NULL,
-        member_id TEXT,
-        household_id TEXT,
-        patient_id TEXT,
-        village_id TEXT,
-        assessment_type TEXT NOT NULL,
-        assessment_details TEXT NOT NULL,
-        other_details TEXT,
-        is_referred INTEGER DEFAULT 0,
-        referral_status TEXT,
-        referred_reasons TEXT,
-        custom_status TEXT,
-        follow_up_id INTEGER,
-        pregnancy_episode_id TEXT,
-        latitude REAL DEFAULT 0.0,
-        longitude REAL DEFAULT 0.0,
-        sync_status TEXT DEFAULT 'pending',
-        fhir_id TEXT,
-        created_at INTEGER,
-        updated_at INTEGER
-      )
-    ''');
-
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_local_assessments_patient 
-      ON $tableName (patient_id)
-    ''');
-
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_local_assessments_sync 
-      ON $tableName (sync_status)
-    ''');
-  }
 
   /// Save a new local assessment.
   Future<void> insert(LocalAssessmentEntity entity) async {

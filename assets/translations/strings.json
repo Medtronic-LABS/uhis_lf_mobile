@@ -7680,8 +7680,8 @@
   "en": "Checked in"
  },
  "statusCompleted": {
-  "bn": "দেওয়া হয়েছে",
-  "en": "Given"
+  "bn": "সম্পন্ন",
+  "en": "Completed"
  },
  "statusDischarged": {
   "bn": "ছাড়পত্র দেওয়া হয়েছে",
@@ -8521,7 +8521,7 @@
  },
  "updateStatusCta": {
   "bn": "অবস্থা আপডেট করুন →",
-  "en": "Update Status →"
+  "en": "Update status →"
  },
  "updateSyncNote": {
   "bn": "CCE এই আপডেট প্রতিষ্ঠান ও সুপারভাইজারের কাছে সিঙ্ক করবে",

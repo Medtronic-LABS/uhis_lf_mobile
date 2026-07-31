@@ -100,4 +100,52 @@ void main() {
     expect(authState.status, AuthStatus.signedOut,
         reason: 'sign-out must not be blocked by a hook failure');
   });
+
+  test('logout() runs pre-wipe hooks before the local-data wipe callback',
+      () async {
+    final order = <String>[];
+    final authState = AuthState(
+      repo,
+      biometric,
+      onWipeLocalData: () async {
+        order.add('wipe');
+      },
+    );
+    authState.registerPreWipeHook(() async {
+      order.add('preWipe');
+    });
+
+    await authState.logout();
+
+    expect(order, ['preWipe', 'wipe'],
+        reason: 'a pending assessment write must get a chance to flush to '
+            'the backend before its local row is truncated');
+  });
+
+  test('logout() still completes and signs out if a pre-wipe hook throws',
+      () async {
+    final authState = AuthState(repo, biometric);
+    authState.registerPreWipeHook(() => throw Exception('flush failed'));
+
+    await authState.logout();
+
+    expect(authState.status, AuthStatus.signedOut,
+        reason: 'sign-out must not be blocked by a flush failure');
+  });
+
+  test('logout() still completes and signs out if a pre-wipe hook hangs',
+      () async {
+    final authState = AuthState(repo, biometric);
+    authState.registerPreWipeHook(
+      () => Future<void>.delayed(const Duration(milliseconds: 50))
+          .timeout(const Duration(milliseconds: 1))
+          .catchError((_) {}),
+    );
+
+    await authState.logout();
+
+    expect(authState.status, AuthStatus.signedOut,
+        reason: 'a slow/offline flush must not hang logout — callers are '
+            'expected to bound their own hook, mirrored here');
+  });
 }

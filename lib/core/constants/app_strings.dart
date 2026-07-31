@@ -4584,13 +4584,17 @@ abstract final class EpiStrings {
   static String overdueBanner(int count) =>
       '$count ${count == 1 ? 'vaccine' : 'vaccines'} overdue · Action needed today.';
 
-  static String get statusCompleted => getTranslatedString('statusCompleted', 'Given');
+  static String get statusCompleted => getTranslatedString('statusCompleted', 'Completed');
   static String get statusDueNow => getTranslatedString('statusDueNow', 'Due now');
   static String get statusUpcoming => getTranslatedString('statusUpcoming', 'Upcoming');
   static String get statusNotYetDue => getTranslatedString('statusNotYetDue', 'Not yet due');
   static String get statusLocked => getTranslatedString('statusLocked', 'Locked');
+  static String get statusMissed => getTranslatedString('statusMissed', 'Missed');
+  static String get statusReferred => getTranslatedString('statusReferred', 'Referred');
+  static String get referredToFacilityLabel => getTranslatedString('referredToFacilityLabel', 'Referred to facility');
+  static String get missedReasonInlineLabel => getTranslatedString('missedReasonInlineLabel', 'Reason');
 
-  static String get updateStatusCta => getTranslatedString('updateStatusCta', 'Update Status →');
+  static String get updateStatusCta => getTranslatedString('updateStatusCta', 'Update status →');
   static String get vaccinesDueLabel => getTranslatedString('vaccinesDueLabel', 'Vaccines due at this milestone');
   static String get dateAdministered => getTranslatedString('dateAdministered', 'Date Administered');
   static String get notesOptional => getTranslatedString('notesOptional', 'Notes (Optional)');
@@ -4600,6 +4604,16 @@ abstract final class EpiStrings {
   static String get submitCta => getTranslatedString('submitCta', 'Submit');
   static String get givenOn => getTranslatedString('givenOn', 'Given');
   static String get doneVisitCta => getTranslatedString('doneVisitCta', 'Done → Continue Visit');
+
+  static String get referCta => getTranslatedString('referCta', 'Refer to facility');
+  static String get confirmReferralCta => getTranslatedString('confirmReferralCta', 'Confirm Referral');
+  static String get back => getTranslatedString('Epi.back', 'Back');
+  static String get referralFacilityLabel => getTranslatedString('referralFacilityLabel', 'Referral Facility');
+  static String get referralFacilitySelectHint => getTranslatedString('referralFacilitySelectHint', 'Select facility…');
+  static String get referralFacilityRequired => getTranslatedString('referralFacilityRequired', 'Please select a facility.');
+  static String get missedReasonLabel => getTranslatedString('missedReasonLabel', 'Reason for Missed Dose');
+  static String get missedReasonHint => getTranslatedString('missedReasonHint', 'e.g. Child was sick on scheduled date');
+  static String get missedReasonRequired => getTranslatedString('missedReasonRequired', 'Please enter a reason.');
 }
 
 abstract final class ChildAssessmentStrings {

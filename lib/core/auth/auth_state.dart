@@ -36,6 +36,22 @@ class AuthState extends ChangeNotifier {
   void registerLogoutHook(void Function() hook) {
     _logoutHooks.add(hook);
   }
+
+  // Best-effort flushes to run BEFORE the local DB wipe — e.g. pushing any
+  // still-`pending` assessment writes so they reach the backend before
+  // their local row is truncated. Without this, a write made shortly
+  // before logout (or while offline) can be silently lost forever: gone
+  // locally, never received by the backend, so nothing can restore it on
+  // the next login. Same registration pattern as [registerLogoutHook].
+  final List<Future<void> Function()> _preWipeHooks = [];
+
+  /// Registers a callback to run during [logout], before the local DB wipe.
+  /// Use this to flush any pending offline-sync writes. Each hook is
+  /// expected to bound its own duration (e.g. via `.timeout(...)`) — a slow
+  /// or offline hook must not be able to hang logout.
+  void registerPreWipeHook(Future<void> Function() hook) {
+    _preWipeHooks.add(hook);
+  }
   AuthStatus _status = AuthStatus.unknown;
   String? _username;
   String? _error;
@@ -382,9 +398,20 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    ConsoleLog.step('🔐 [AuthState] logout() Step 1/4 — ending server session...');
+    ConsoleLog.step('🔐 [AuthState] logout() Step 1/5 — ending server session...');
     await _repo.logout();
-    ConsoleLog.step('🔐 [AuthState] logout() Step 2/4 — truncating local database...');
+    ConsoleLog.step(
+        '🔐 [AuthState] logout() Step 2/5 — flushing ${_preWipeHooks.length} pending sync(s)...');
+    for (final hook in _preWipeHooks) {
+      try {
+        await hook();
+      } catch (e) {
+        ConsoleLog.warn('[AuthState] pre-wipe flush hook failed: $e');
+        // Non-fatal — same reasoning as the DB wipe below: sign-out must
+        // complete regardless of whether a flush succeeded.
+      }
+    }
+    ConsoleLog.step('🔐 [AuthState] logout() Step 3/5 — truncating local database...');
     if (_onWipeLocalData != null) {
       try {
         await _onWipeLocalData();
@@ -394,10 +421,10 @@ class AuthState extends ChangeNotifier {
       }
     } else {
       ConsoleLog.warn(
-          '[AuthState] logout() Step 2/4 — no wipe callback configured, skipped.');
+          '[AuthState] logout() Step 3/5 — no wipe callback configured, skipped.');
     }
     ConsoleLog.step(
-        '🔐 [AuthState] logout() Step 3/4 — clearing ${_logoutHooks.length} in-memory cache(s)...');
+        '🔐 [AuthState] logout() Step 4/5 — clearing ${_logoutHooks.length} in-memory cache(s)...');
     for (final hook in _logoutHooks) {
       try {
         hook();
@@ -410,7 +437,7 @@ class AuthState extends ChangeNotifier {
     _locked = false;
     _biometricEnabled = false;
     _pinEnabled = false;
-    ConsoleLog.success('✅ [AuthState] logout() Step 4/4 — signed out.');
+    ConsoleLog.success('✅ [AuthState] logout() Step 5/5 — signed out.');
     // Defer to avoid build scope conflicts
     _scheduleNotify();
   }
