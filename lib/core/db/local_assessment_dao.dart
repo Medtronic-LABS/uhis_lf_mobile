@@ -462,7 +462,11 @@ class LocalAssessmentEntity {
   ///   ANC         → {"anc": {...}} (FormResultComposer.addToMenuGroup)
   ///   PWPROFILE   → {"pwProfile": {"pregnancyDetailsAndHistory": {...}}}
   ///   PNC_NEONATE → {"pncNeonatal": {...}, "cbs": {}} (CBS sibling required by Android)
-  ///   CHILDHOOD_VISIT → {"pncChild": {...}, "cbs": {}} (CBS sibling required by Android)
+  ///   CHILDHOOD_VISIT → {"pncChild": {...}} — no "cbs" sibling: Android's
+  ///                     OfflineSyncRepository only moves a "cbs" key into
+  ///                     pncChild.cbs when one is already present, and nothing
+  ///                     in the childhood-visit form ever populates it, so real
+  ///                     production traffic for this type never sends "cbs" at all.
   ///   FAMILY_PLANNING → {"familyPlanning": {...}} (Android AssessmentViewModel
   ///                     rewrites the stored form map to this key before sync)
   ///   EYE_CARE    → {"eye_care": {"eyeCare": {...}, "generalInformation": {...}}}
@@ -486,7 +490,7 @@ class LocalAssessmentEntity {
     }
     if (t == 'CHILDHOOD_VISIT' || t == 'CHILD_MENU') {
       if (details.containsKey('pncChild')) return details;
-      return {'pncChild': details, 'cbs': <String, dynamic>{}};
+      return {'pncChild': details};
     }
 
     // PW registration: Android groups answers by the form card's `family`, so

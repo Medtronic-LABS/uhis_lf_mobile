@@ -4616,6 +4616,7 @@ abstract final class EpiStrings {
   static String get missedReasonLabel => getTranslatedString('missedReasonLabel', 'Reason for Missed Dose');
   static String get missedReasonHint => getTranslatedString('missedReasonHint', 'e.g. Child was sick on scheduled date');
   static String get missedReasonRequired => getTranslatedString('missedReasonRequired', 'Please enter a reason.');
+  static String get childAssessmentSaveError => getTranslatedString('childAssessmentSaveError', 'Could not save the Child Health form. Please try again.');
 }
 
 /// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral
@@ -4681,6 +4682,8 @@ abstract final class ChildAssessmentStrings {
   static String get q7Label => getTranslatedString('q7Label', 'Weight');
   static String get q7Unit => getTranslatedString('q7Unit', 'kg');
   static String get q7Hint => getTranslatedString('q7Hint', 'e.g. 6.5');
+  static String get q7RangeError => getTranslatedString('q7RangeError', 'Weight must be between 0 and 30 kg');
+  static String get q7bLabel => getTranslatedString('q7bLabel', 'What was the child fed in the last 24 hours?');
   static String get q8Label => getTranslatedString('q8Label', 'Is the child breastfeeding?');
   static String get q9Label => getTranslatedString('q9Label', 'In the past 24 hours, was the child given additional food?');
   static String get q10Label => getTranslatedString('q10Label', 'Has the child received vaccines?');
@@ -4702,14 +4705,33 @@ abstract final class ChildAssessmentStrings {
     'Cannot speak two meaningful words',
   ];
 
-  static const List<String> referralPlaces = [
-    'Medical College Hospital',
-    'Government Hospital',
-    'Upazila Health Complex',
-    'Private Hospital/Clinic',
-    'Health & Family Welfare Center',
-    'Community Clinic',
+  // Wire ids (Android rmnch_childhood_visit.json "childFeedLast24Hrs" optionsList
+  // "value" fields, in declared order) — not display strings, so they must be
+  // sent as-is in the childFeedLast24Hrs payload, not the translated label.
+  static const List<String> feedLast24hOptionIds = [
+    'mothersBreastMilk',
+    'cowgoatMilk',
+    'formulaMilk',
+    'semolina',
+    'ricePowder',
+    'familyFood',
+    'other',
   ];
+
+  static const Map<String, String> _feedLast24hFallbackLabels = {
+    'mothersBreastMilk': "Mother's breast milk",
+    'cowgoatMilk': 'Cow/Goat milk',
+    'formulaMilk': 'Formula milk',
+    'semolina': 'Semolina',
+    'ricePowder': 'Rice powder',
+    'familyFood': 'Family Food',
+    'other': 'Other',
+  };
+
+  static String feedLast24hOptionLabel(String id) => getTranslatedString(
+        'feedOption_$id',
+        _feedLast24hFallbackLabels[id] ?? id,
+      );
 }
 
 /// Care Coordination Engine (CCE) — the referral SLA alert drawer.

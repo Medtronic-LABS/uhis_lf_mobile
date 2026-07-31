@@ -589,32 +589,57 @@ class _ImmunisationTimelineScreenState
               ? EpiStrings.doneVisitCta
               : EpiStrings.submitCta,
           onSubmit: () async {
-            final assessmentRepo = context.read<AssessmentRepository>();
+            final data = _childAssessmentData;
+            // Android's wire ids for every yes/no question are the literal
+            // strings "yes"/"no", not booleans (AssessmentDefinedParams.kt).
+            String? yesNo(bool? v) => v == null ? null : (v ? 'yes' : 'no');
+            // Android field ids (rmnch_childhood_visit.json /
+            // AssessmentDefinedParams.kt) — do not match the Dart property
+            // names above; see docs/step2_child_health_wire_contract_gap_analysis.md.
             final details = <String, dynamic>{
-              if (_childAssessmentData.congenitalDefect != null)
-                'congenitalDefect': _childAssessmentData.congenitalDefect,
-              if (_childAssessmentData.weightKg != null)
-                'weightKg': _childAssessmentData.weightKg,
-              if (_childAssessmentData.isBreastfeeding != null)
-                'isBreastfeeding': _childAssessmentData.isBreastfeeding,
-              if (_childAssessmentData.additionalFoodLast24h != null)
-                'additionalFoodLast24h':
-                    _childAssessmentData.additionalFoodLast24h,
-              if (_childAssessmentData.vaccinesReceived != null)
-                'vaccinesReceived': _childAssessmentData.vaccinesReceived,
-              if (_childAssessmentData.dewormingTaken != null)
-                'dewormingTaken': _childAssessmentData.dewormingTaken,
-              if (_childAssessmentData.anyIllness != null)
-                'anyIllness': _childAssessmentData.anyIllness,
-              if (_childAssessmentData.complications.isNotEmpty)
-                'complications': _childAssessmentData.complications,
-              if (_childAssessmentData.referralMade != null)
-                'referralMade': _childAssessmentData.referralMade,
-              if (_childAssessmentData.referralPlace != null)
-                'referralPlace': _childAssessmentData.referralPlace,
+              if (data.congenitalDefect != null)
+                'congenitalDefect': yesNo(data.congenitalDefect),
+              if (data.weightKg != null) 'weight': data.weightKg,
+              if (data.feedLast24h.isNotEmpty)
+                'childFeedLast24Hrs': data.feedLast24h,
+              if (data.isBreastfeeding != null)
+                'childBreastFeeding': yesNo(data.isBreastfeeding),
+              if (data.additionalFoodLast24h != null)
+                'additionalFood24Hrs': yesNo(data.additionalFoodLast24h),
+              if (data.vaccinesReceived != null)
+                'receivedVaccine': yesNo(data.vaccinesReceived),
+              if (data.dewormingTaken != null)
+                'dewormingMedicine': yesNo(data.dewormingTaken),
+              if (data.anyIllness != null)
+                'anyIllness': yesNo(data.anyIllness),
+              // childIllnessType option ids are server-issued (Android's
+              // getFormMetadata) and not available locally — known limitation,
+              // sends our display labels as a best-effort placeholder.
+              if (data.complications.isNotEmpty)
+                'childIllnessType': data.complications,
+              if (data.referralMade != null)
+                'childReferral': yesNo(data.referralMade),
+              // referralPlace already stores the facility id (not the label) —
+              // see _ReferralPlacePicker.
+              if (data.referralPlace != null)
+                'childReferralFacilityType': data.referralPlace,
             };
+
+            if (details.isEmpty) {
+              // Nothing entered — don't save/sync an empty child assessment;
+              // still advance the visit.
+              final onComplete = widget.onVisitComplete;
+              if (onComplete != null) {
+                onComplete(buildEpiVisitSummary(_milestones!));
+              } else if (mounted) {
+                context.pop();
+              }
+              return;
+            }
+
+            final assessmentRepo = context.read<AssessmentRepository>();
             debugPrint(
-              '[ImmunisationTimeline] saving EPI child assessment '
+              '[ImmunisationTimeline] saving CHILDHOOD_VISIT assessment '
               '(householdMemberLocalId=${widget.householdMemberLocalId ?? 0}): '
               '$details',
             );
@@ -627,22 +652,21 @@ class _ImmunisationTimelineScreenState
             }
             try {
               await assessmentRepo.saveAssessment(
-                assessmentType: 'EPI',
+                assessmentType: 'CHILDHOOD_VISIT',
                 assessmentDetails: details,
                 householdMemberLocalId: widget.householdMemberLocalId ?? 0,
                 memberId: widget.memberId,
                 patientId: widget.patientId,
                 villageId: _patient?.villageId,
                 encounterId: widget.encounterId,
-                isReferred: _childAssessmentData.referralMade ?? false,
+                isReferred: data.referralMade ?? false,
                 referredReasons:
-                    _childAssessmentData.referralMade == true &&
-                            _childAssessmentData.referralPlace != null
-                        ? [_childAssessmentData.referralPlace!]
+                    data.referralMade == true && data.referralPlace != null
+                        ? [data.referralPlace!]
                         : null,
               );
               debugPrint(
-                '[ImmunisationTimeline] EPI assessment queued for sync',
+                '[ImmunisationTimeline] CHILDHOOD_VISIT assessment queued for sync',
               );
               debugPrint(
                 '[ImmunisationTimeline] triggering syncPendingAssessments',
@@ -659,8 +683,15 @@ class _ImmunisationTimelineScreenState
               );
             } on Object catch (e) {
               debugPrint(
-                '[ImmunisationTimeline] EPI assessment save error: $e',
+                '[ImmunisationTimeline] CHILDHOOD_VISIT assessment save error: $e',
               );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(EpiStrings.childAssessmentSaveError),
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                ));
+              }
+              return;
             }
             final onComplete = widget.onVisitComplete;
             if (onComplete != null) {

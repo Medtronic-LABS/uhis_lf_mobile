@@ -6383,6 +6383,38 @@
   "bn": "কেজি",
   "en": "kg"
  },
+ "q7bLabel": {
+  "bn": "গত ২৪ ঘন্টায় শিশুকে কী কী খাওয়ানো হয়েছে?",
+  "en": "What was the child fed in the last 24 hours?"
+ },
+ "feedOption_mothersBreastMilk": {
+  "bn": "মায়ের দুধ",
+  "en": "Mother's breast milk"
+ },
+ "feedOption_cowgoatMilk": {
+  "bn": "গরু-ছাগলের দুধ",
+  "en": "Cow/Goat milk"
+ },
+ "feedOption_formulaMilk": {
+  "bn": "ফর্মুলা দুধ",
+  "en": "Formula milk"
+ },
+ "feedOption_semolina": {
+  "bn": "সুজি",
+  "en": "Semolina"
+ },
+ "feedOption_ricePowder": {
+  "bn": "চালের গুঁড়া",
+  "en": "Rice powder"
+ },
+ "feedOption_familyFood": {
+  "bn": "পারিবারিক খাবার",
+  "en": "Family Food"
+ },
+ "feedOption_other": {
+  "bn": "অন্যান্য",
+  "en": "Other"
+ },
  "q8Label": {
   "bn": "শিশু বুকের দুধ খায়?",
   "en": "Is the child breastfeeding?"
