@@ -50,6 +50,7 @@ class VisitFormScreen extends StatefulWidget {
     this.villageId,
     this.householdMemberLocalId,
     this.patientAge,
+    this.ageInMonths,
     this.gestationalWeeks,
     this.lmpMs,
     this.eddMs,
@@ -70,6 +71,9 @@ class VisitFormScreen extends StatefulWidget {
   final String? villageId;
   final int? householdMemberLocalId;
   final int? patientAge;
+
+  /// Whole months from DOB — childhood visit age bands / weight validation.
+  final int? ageInMonths;
   final int? gestationalWeeks;
 
   /// LMP / EDD epoch-ms from pregnancy snapshot (VisitFlow) — seeds the ANC
@@ -313,6 +317,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         gestationalWeeks: widget.gestationalWeeks,
         lmpMs: widget.lmpMs,
         eddMs: widget.eddMs,
+        ageInMonths: widget.ageInMonths,
         enrolledFormTypes: enrolledFormTypes,
         confirmedSymptoms: widget.confirmedSymptoms,
         aiPickedSymptoms: widget.aiPickedSymptoms,

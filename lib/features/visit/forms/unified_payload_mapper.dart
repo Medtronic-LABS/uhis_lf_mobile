@@ -83,19 +83,23 @@ abstract final class UnifiedPayloadMapper {
       ));
     }
 
-    // PNC_NEONATE: Android wire type is "PNC_NEONATE" (not "PNC_CHILD") wrapped
-    // under "pncNeonatal" key. GAP 6 fix.
-    //
-    // A delivery visit never carries one. Android's outcome submit saves only
-    // PREGNANCYOUTCOME plus the baby household member, and RMNCH.getMenuName
-    // can only ever return ANC / PNC_MOTHER / ChildHood_Visit — neonate
-    // findings arrive later as their own visit against the baby.
-    if (!isDeliveryVisit &&
-        (activeFormTypes.contains('pncChild') ||
-            activeFormTypes.contains('pncNeonatal'))) {
+    // Childhood Visit: Spice wire type ChildHood_Visit, details under pncChild.
+    // Child Health card resolves imci → pncChild. Delivery seeds pncChild for
+    // UI only and must not emit a childhood assessment (Android outcome submit
+    // saves PREGNANCYOUTCOME + baby member; childhood is a later visit).
+    if (!isDeliveryVisit && activeFormTypes.contains('pncChild')) {
+      payloads.add(ProgrammePayload(
+        assessmentType: 'CHILDHOOD_VISIT',
+        details: _toChildhoodVisit(data),
+      ));
+    }
+
+    // PNC_NEONATE: Android wire type "PNC_NEONATE", wrapped under "pncNeonatal".
+    // Separate from childhood visit — neonate findings against the baby.
+    if (!isDeliveryVisit && activeFormTypes.contains('pncNeonatal')) {
       payloads.add(ProgrammePayload(
         assessmentType: 'PNC_NEONATE',
-        details: _toPncChild(data),
+        details: _toPncNeonatal(data),
       ));
     }
 
@@ -848,11 +852,39 @@ abstract final class UnifiedPayloadMapper {
     });
   }
 
+  // ── Childhood Visit (CHILDHOOD_VISIT → ChildHood_Visit) ───────────────────
+  // Field ids match Spice rmnch_childhood_visit.json / pncChild family.
+  // DAO wraps under {"pncChild": {...}, "cbs": {}}.
+
+  static Map<String, dynamic> _toChildhoodVisit(CanonicalVisitData d) {
+    return _compact({
+      // Spice AssessmentRMNCHFragment stamps pncChild.visitNo before save;
+      // OfflineSyncRepository reads it back into encounter.visitNumber.
+      // UnifiedFormNotifier assigns childVisitNumber; 1 only when that path
+      // missed (e.g. unit tests calling decompose directly).
+      'visitNo': d.getValue('childVisitNumber') ?? d.getValue('visitNo') ?? 1,
+      'congenitalDefect': d.getValue('congenitalDefect'),
+      'weight': _asDoubleWire(d.getValue('weight')),
+      'childFeedLast24Hrs': d.getValue('childFeedLast24Hrs'),
+      'otherChildFeed': d.getValue('otherChildFeed'),
+      'hrsBreastFed': _asDoubleWire(d.getValue('hrsBreastFed')),
+      'monthAdditionalFeedGiven': d.getValue('monthAdditionalFeedGiven'),
+      'childBreastFeeding': d.getValue('childBreastFeeding'),
+      'additionalFood24Hrs': d.getValue('additionalFood24Hrs'),
+      'receivedVaccine': d.getValue('receivedVaccine'),
+      'dewormingMedicine': d.getValue('dewormingMedicine'),
+      'anyIllness': d.getValue('anyIllness'),
+      'childIllnessType': d.getValue('childIllnessType'),
+      'childReferral': d.getValue('childReferral'),
+      'childReferralFacilityType': d.getValue('childReferralFacilityType'),
+    });
+  }
+
   // ── PNC Neonate (PNC_NEONATE wire type) ───────────────────────────────────
   // Android wraps under "pncNeonatal" key; _wrapDetailsForType handles that.
   // visitNo is extracted by _extractVisitNumber in local_assessment_dao.dart.
 
-  static Map<String, dynamic> _toPncChild(CanonicalVisitData d) {
+  static Map<String, dynamic> _toPncNeonatal(CanonicalVisitData d) {
     return _compact({
       'visitNo': d.getValue('pncNeonateVisitNumber') ?? d.getValue('visitNo'),
       'isChildAlive': d.getValue('isChildAlive'),

@@ -1,5 +1,6 @@
 import '../../../core/time/calendar_day.dart';
 import 'canonical_visit_data.dart';
+import 'childhood_visit.dart';
 import 'form_config.dart';
 
 /// Section-group tag attached to each [FormSection] in the result of
@@ -450,8 +451,15 @@ abstract final class UnifiedSectionRules {
       }
     }
 
-    // pncChild / pncNeonatal: child alive field must be 'yes'.
+    // pncChild / pncNeonatal: child alive field must be 'yes' when riding a
+    // mother PNC / delivery visit. Standalone Childhood Visit (Child Health
+    // card → formType pncChild only) has no isChildAlive field — always show.
     if (id == 'pncChild' || id == 'pncNeonatal') {
+      final withMotherContext = activeFormTypes.contains('pncMother') ||
+          activeFormTypes.contains('pregnancyOutcome');
+      if (id == 'pncChild' && !withMotherContext) {
+        return true;
+      }
       final alive = currentData.getValue('isChildAlive') ??
           currentData.getValue('babyAlive');
       return alive == 'yes' ||
@@ -538,6 +546,7 @@ abstract final class FieldVisibilityRules {
     int? gestationalWeeks,
     int? ancVisitNumber,
     String? formType,
+    int? ageInMonths,
   }) {
     if (field.isSummary &&
         formType != null &&
@@ -549,6 +558,15 @@ abstract final class FieldVisibilityRules {
     // checkbox is selected — not merely when hasSymptoms == Yes.
     if (field.id == 'newWorseningSymptoms') {
       return _ncdSymptomsIncludeAnyNewOrWorsening(data);
+    }
+
+    // Childhood visit: Spice exclusive age bands (showHideOptionsForChildHealth).
+    // Age-gated fields are base-visible in the library so other consumers are
+    // unaffected; this formType gate hides them outside the matching band.
+    if (formType == 'pncChild') {
+      final childhoodGate =
+          ChildhoodVisit.fieldVisible(field.id, ageInMonths);
+      if (childhoodGate != null) return childhoodGate;
     }
 
     // Cataract: Spice keeps NCD vitals `gone` until ncdServiceProvided=yes.

@@ -46,6 +46,7 @@ import 'pathway/pathway_engine.dart';
 import '../patient/followup_call_service.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
+import 'forms/childhood_visit.dart';
 import 'immunisation/epi_visit_summary.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
 import 'programme_selection/programme_selection_screen.dart';
@@ -161,6 +162,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// ANC or PNC visit number for the header badge (1-based). Null until loaded.
   int? _visitNumber;
 
+  /// After immunization on a combined Child Health + Vaccination visit, show
+  /// the childhood visit form next (immunization timeline itself is unchanged).
+  bool _childhoodFormAfterVaccination = false;
+
   @override
   void initState() {
     super.initState();
@@ -190,10 +195,15 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     final progs = programmes ?? widget.seedProgrammes;
     final isAnc = progs.contains(Programme.anc);
     final isPnc = progs.contains(Programme.pnc);
-    if (!isAnc && !isPnc) return;
+    final isChildhood = progs.contains(Programme.imci);
+    if (!isAnc && !isPnc && !isChildhood) return;
     try {
       int count;
-      if (isAnc) {
+      if (isChildhood && !isAnc && !isPnc) {
+        count = await context
+            .read<AssessmentRepository>()
+            .priorChildhoodVisitCount(widget.patientId);
+      } else if (isAnc) {
         // Prefer the persisted Spice-style counter; fall back to vitals history
         // length if the snapshot has never been seeded.
         final snap = await context
@@ -386,10 +396,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     if (dob != null && dob.isNotEmpty) {
       try {
         final birth = DateTime.parse(dob);
-        final now = DateTime.now();
-        final months = (now.year - birth.year) * 12 +
-            (now.month - birth.month) -
-            (now.day < birth.day ? 1 : 0);
+        final months = ChildhoodVisit.ageInMonths(birth);
         if (months < 24) {
           return '$months month${months == 1 ? '' : 's'}';
         }
@@ -401,6 +408,19 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     if (age == null) return null;
     if (age < 2) return '< 2 yrs';
     return '$age yrs';
+  }
+
+  /// Whole months from DOB (Spice childhood visit age bands). Falls back to
+  /// years×12 when DOB is missing.
+  int? get _ageInMonths {
+    final dob = _patientDob;
+    if (dob != null && dob.isNotEmpty) {
+      try {
+        return ChildhoodVisit.ageInMonths(DateTime.parse(dob));
+      } catch (_) {}
+    }
+    if (_patientAge != null) return _patientAge! * 12;
+    return null;
   }
 
   /// True when the patient is under-5 or confirmed programmes contain EPI/IMCI.
@@ -533,13 +553,50 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
         );
       case 1:
-        // Child visits always route through _Step2Vaccination (vaccination
-        // timeline + optional ChildAssessmentSection). "Child Health" card
-        // maps to ChildAssessmentSection (weight, breastfeeding, congenital
-        // defect), NOT the ICCM sick-child form. The vaccination timeline is
-        // shown regardless so the SK can update the schedule in the same visit.
+        // Under-5 / EPI / Child Health routing.
+        // Immunization timeline is unchanged; Childhood Visit (pncChild form)
+        // is separate from the prototype ChildAssessmentSection.
         if (_isChildVisit) {
           final hasImci = _confirmedProgrammes.contains(Programme.imci);
+          final hasEpi = _confirmedProgrammes.contains(Programme.epi);
+
+          Widget childhoodForm() {
+            return _Step2VitalsForm(
+              key: ValueKey('flow-step2-childhood-${widget.visitId}'),
+              visitId: widget.visitId,
+              patientId: widget.patientId,
+              memberId: widget.memberId,
+              householdId: widget.householdId,
+              villageId: widget.villageId,
+              householdMemberLocalId: _householdMemberLocalId,
+              patientAge: widget.patientAge,
+              ageInMonths: _ageInMonths,
+              pathwayNames: const ['imci'],
+              confirmedSymptoms: _confirmedSymptoms.toList(),
+              aiPickedSymptoms: _aiPickedSymptoms,
+              enrolledProgrammes: const {},
+              onAdvance: (prog, referred, reasons, facility) {
+                setState(() {
+                  _primaryProgramme = Programme.imci;
+                  _referralRecommended = referred;
+                  _referredReasons = reasons;
+                  _referralFacility = facility;
+                  _step = 2;
+                });
+              },
+            );
+          }
+
+          // Child Health only → childhood visit form (skip immunization).
+          if (hasImci && !hasEpi) {
+            return childhoodForm();
+          }
+
+          // Combined visit: immunization first, then childhood form.
+          if (hasImci && _childhoodFormAfterVaccination) {
+            return childhoodForm();
+          }
+
           return _Step2Vaccination(
             key: ValueKey('flow-step2-vacc-${widget.visitId}'),
             patientId: widget.patientId,
@@ -827,6 +884,7 @@ class _Step1Symptoms extends StatelessWidget {
 /// Thin host for [VisitFormScreen] in the same pattern as Step 1.
 class _Step2VitalsForm extends StatelessWidget {
   const _Step2VitalsForm({
+    super.key,
     required this.visitId,
     required this.patientId,
     required this.onAdvance,
@@ -835,6 +893,7 @@ class _Step2VitalsForm extends StatelessWidget {
     this.villageId,
     this.householdMemberLocalId,
     this.patientAge,
+    this.ageInMonths,
     this.gestationalWeeks,
     this.lmpMs,
     this.eddMs,
@@ -854,6 +913,7 @@ class _Step2VitalsForm extends StatelessWidget {
   final String? villageId;
   final int? householdMemberLocalId;
   final int? patientAge;
+  final int? ageInMonths;
   final int? gestationalWeeks;
   final int? lmpMs;
   final int? eddMs;
@@ -884,6 +944,7 @@ class _Step2VitalsForm extends StatelessWidget {
       villageId: villageId,
       householdMemberLocalId: householdMemberLocalId,
       patientAge: patientAge,
+      ageInMonths: ageInMonths,
       gestationalWeeks: gestationalWeeks,
       lmpMs: lmpMs,
       eddMs: eddMs,

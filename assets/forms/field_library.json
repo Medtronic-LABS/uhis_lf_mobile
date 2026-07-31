@@ -6106,6 +6106,43 @@
         "workflowName": "RMNCH"
       }
     ],
+    "optionsList": [
+      {
+        "id": "mothersBreastMilk",
+        "name": "Mother's breast milk",
+        "cultureValue": "মায়ের দুধ"
+      },
+      {
+        "id": "cowgoatMilk",
+        "name": "Cow/Goat milk",
+        "cultureValue": "গরু-ছাগলের দুধ"
+      },
+      {
+        "id": "formulaMilk",
+        "name": "Formula milk",
+        "cultureValue": "ফর্মুলা দুধ"
+      },
+      {
+        "id": "semolina",
+        "name": "Semolina",
+        "cultureValue": "সুজি"
+      },
+      {
+        "id": "ricePowder",
+        "name": "Rice powder",
+        "cultureValue": "চালের গুঁড়া"
+      },
+      {
+        "id": "familyFood",
+        "name": "Family Food",
+        "cultureValue": "পারিবারিক খাবার"
+      },
+      {
+        "id": "other",
+        "name": "Other",
+        "cultureValue": "অন্যান্য"
+      }
+    ],
     "condition": [
       {
         "eq": "other",
@@ -6560,6 +6597,63 @@
         "id": "pncChild",
         "workflowId": 4,
         "workflowName": "RMNCH"
+      }
+    ],
+    "optionsList": [
+      {
+        "id": "convulsion",
+        "name": "Convulsion",
+        "cultureValue": "খিঁচুনি"
+      },
+      {
+        "id": "rapidBreathing",
+        "name": "Rapid breathing",
+        "cultureValue": "দ্রুত শ্বাসপ্রশ্বাস"
+      },
+      {
+        "id": "fever",
+        "name": "Fever",
+        "cultureValue": "জ্বর"
+      },
+      {
+        "id": "lethargy",
+        "name": "Lethargy",
+        "cultureValue": "অবসাদ"
+      },
+      {
+        "id": "unableToSuckMilk",
+        "name": "Unable to suck milk",
+        "cultureValue": "দুধ চুষতে অক্ষম"
+      },
+      {
+        "id": "redUmbilicus",
+        "name": "Red umbilicus",
+        "cultureValue": "নাভি লাল"
+      },
+      {
+        "id": "skinRash",
+        "name": "Skin rash",
+        "cultureValue": "চর্মরোগ"
+      },
+      {
+        "id": "eyeProblem",
+        "name": "Eye problem",
+        "cultureValue": "চোখের সমস্যা"
+      },
+      {
+        "id": "cannotStandWalk",
+        "name": "Cannot stand/walk",
+        "cultureValue": "দাঁড়াতে/হাঁটতে পারে না"
+      },
+      {
+        "id": "cannotBalance",
+        "name": "Cannot balance",
+        "cultureValue": "ভারসাম্য রাখতে পারে না"
+      },
+      {
+        "id": "cannotSpeak",
+        "name": "Cannot speak",
+        "cultureValue": "কথা বলতে পারে না"
       }
     ],
     "condition": []
