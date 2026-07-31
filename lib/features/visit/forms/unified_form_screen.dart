@@ -277,7 +277,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     debugPrint('[_UnifiedFormScreenState] _loadConfig');
     try {
       final cfg = await FormConfig.loadAndCache(rootBundle);
-      if (mounted) setState(() { _config = cfg; _configLoading = false; });
+      if (!mounted) return;
+      // The notifier needs the library to clear fields a condition has just
+      // hidden, and to translate option ids to wire values at submit.
+      context.read<UnifiedFormNotifier>().formConfig = cfg;
+      setState(() { _config = cfg; _configLoading = false; });
     } catch (e, st) {
       debugPrint('[UnifiedForm] FormConfig.load failed: $e\n$st');
       if (mounted) setState(() { _configError = e; _configLoading = false; });
@@ -567,6 +571,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     try {
       // Option ids stored by the widgets are translated to their wire `value`
       // codes during submit — the mapper needs the field library to do that.
+      notifier.formConfig = _config!;
       notifier.fieldDefs = _config!.fields;
       await notifier.submit();
       widget.onSubmitComplete();
@@ -1787,8 +1792,11 @@ class _SectionCard extends StatelessWidget {
     for (final ref in section.fieldRefs) {
       if (consumedIds.contains(ref.id)) continue;
 
-      final def = config.fields[ref.id];
-      if (def == null) continue;
+      final libraryDef = config.fields[ref.id];
+      if (libraryDef == null) continue;
+      final def = ref.options != null
+          ? libraryDef.withOptions(ref.options!)
+          : libraryDef;
       final visible = FieldVisibilityRules.isFieldVisible(
         field: def,
         data: data,
@@ -1901,6 +1909,12 @@ class _SectionCard extends StatelessWidget {
       // ignore: avoid_print
       print('[FieldRender] pregnancyOutcome.${section.sectionId} '
           'rendered=${fieldWidgets.length}/${section.fieldRefs.length} fields');
+    }
+
+    // Spice CardViews with every child gone are not drawn — skip empty
+    // section chrome (cataract BP/glucose/referral before their gates fire).
+    if (fieldWidgets.isEmpty) {
+      return const SizedBox.shrink();
     }
 
     final inner = Padding(
