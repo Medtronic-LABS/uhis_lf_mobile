@@ -701,8 +701,7 @@ abstract final class UnifiedPayloadMapper {
         d.getValue('generalInformation') as Map<String, dynamic>? ??
             const <String, dynamic>{};
     final eyeCare =
-        d.getValue('eyeCare') as Map<String, dynamic>? ??
-            const <String, dynamic>{};
+        d.getValue('eyeCare') as Map<String, dynamic>? ?? _eyeCareCard(d);
 
     return {
       if (symptomsLog.isNotEmpty) 'symptomsLog': symptomsLog,
@@ -960,14 +959,30 @@ abstract final class UnifiedPayloadMapper {
   }
 
   // ── Eye Care ───────────────────────────────────────────────────────────────
-  // Android wire type: "eye_care", flat pass-through (no wrapper key).
-  // Form section: "eyeCare" in layout_manifests.json — field IDs must match
-  // field_library / layout_manifests (eyeTestOutcome, glassPower, …), not the
-  // older visualAcuity* placeholders that left every sync as `{}`.
+  // Android wire type: "eye_care". FormResultComposer groups the answers by
+  // their card family and addToMenuGroup wraps the result under the menu id, so
+  // the details are { eyeCare: {...}, generalInformation: {...} } — the outer
+  // "eye_care" key is added by LocalAssessmentEntity._wrapDetailsForType.
+  //
+  // `generalInformation` holds camp_type, which Spice only reveals for FO/PO
+  // users (AssessmentViewModel.revealBdCampFields). It has no Flutter
+  // equivalent yet, but createGroup() emits the empty card either way.
 
   static Map<String, dynamic> _toEyeCare(CanonicalVisitData d) {
+    return {
+      'eyeCare': _eyeCareCard(d),
+      'generalInformation': const <String, dynamic>{},
+    };
+  }
+
+  /// The `eyeCare` card body, shared by the standalone `eye_care` assessment
+  /// and the eyeCare family Spice's NCD form carries (ncd.json familyOrder 5).
+  static Map<String, dynamic> _eyeCareCard(CanonicalVisitData d) {
+    // Android AssessmentViewModel.getAssessmentDetails rewrites the single
+    // selection into a one-element list and drops the singular key.
+    final outcome = d.getValue('eyeTestOutcome')?.toString();
     return _compact({
-      'eyeTestOutcome': d.getValue('eyeTestOutcome'),
+      if (outcome != null && outcome.isNotEmpty) 'eyeTestOutcomes': [outcome],
       'glassPower': d.getValue('glassPower'),
       'haveTheGlassesBeenSold': d.getValue('haveTheGlassesBeenSold'),
       'typeOfGlass': d.getValue('typeOfGlass'),
@@ -978,33 +993,127 @@ abstract final class UnifiedPayloadMapper {
   }
 
   // ── Cataract ───────────────────────────────────────────────────────────────
-  // Android wire type: "cataract", flat pass-through.
-  // Form sections: "cataract" + "bpLog" + "glucoseLog" + "referralInformation".
+  // Android FormResultComposer groups card families under menu key "cataract",
+  // then AssessmentViewModel renames eyeDisease → eyeTestOutcomes and, when
+  // NCD vitals were captured, nests bpLog / glucoseLog under sibling "ncd".
 
   static Map<String, dynamic> _toCataract(CanonicalVisitData d) {
+    final ncd = _cataractNcdCard(d);
+    return {
+      'generalInformation': _cataractGeneralInformation(d),
+      'cataract': _cataractCard(d),
+      if (ncd != null) 'ncd': ncd,
+      if (_referralInformationCard(d) case final referral?)
+        'referralInformation': referral,
+    };
+  }
+
+  static Map<String, dynamic> _cataractGeneralInformation(CanonicalVisitData d) {
+    final camp = d.getValue('camp_date');
+    if (camp == null || camp.toString().isEmpty) {
+      return const <String, dynamic>{};
+    }
+    return {'camp_date': camp};
+  }
+
+  /// Inner `cataract` card body. Spice rewrites the multi-select `eyeDisease`
+  /// into `eyeTestOutcomes` before sync; we emit the transformed key directly.
+  static Map<String, dynamic> _cataractCard(CanonicalVisitData d) {
+    return _compact({
+      'eyeTestOutcomes': _asStringList(d.getValue('eyeDisease')),
+      'glassPower': d.getValue('glassPower'),
+      'haveTheGlassesBeenSold': d.getValue('haveTheGlassesBeenSold'),
+      'typeOfGlass': d.getValue('typeOfGlass'),
+      'typeOfFrame': d.getValue('typeOfFrame'),
+      'firstTimeUser': d.getValue('firstTimeUser'),
+      'referPlace': d.getValue('referPlace'),
+      'historyOfOtherDiseases':
+          _asStringList(d.getValue('historyOfOtherDiseases')),
+      'patientReferredForOperation':
+          d.getValue('patientReferredForOperation'),
+      'operationName': _asStringList(d.getValue('operationName')),
+      'reason': _asStringList(d.getValue('reason')),
+      'pseudophakiaPostCataractSurgery':
+          d.getValue('pseudophakiaPostCataractSurgery'),
+      'ncdServiceProvided': d.getValue('ncdServiceProvided'),
+    });
+  }
+
+  /// Spice nests vitals under `cataract.ncd` when NCD service was provided.
+  /// Height/weight/bmi live inside `bpLog` (not a separate biometric card).
+  /// `isBeforeHtnDiagnosis` / `isBeforeDiabetesDiagnosis` are booleans.
+  static Map<String, dynamic>? _cataractNcdCard(CanonicalVisitData d) {
+    if (d.getValue('ncdServiceProvided')?.toString().toLowerCase() != 'yes') {
+      return null;
+    }
+
     double? asNum(dynamic v) {
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v);
       return null;
     }
 
-    return _compact({
-      // Cataract-specific.
-      'cataractType': d.getValue('cataractType'),
-      'cataractGrade': d.getValue('cataractGrade'),
-      'visualAcuityRight': d.getValue('visualAcuityRight'),
-      'visualAcuityLeft': d.getValue('visualAcuityLeft'),
-      'referredForCataractSurgery': d.getValue('referredForCataractSurgery'),
-      'cataractReferralFacility': d.getValue('cataractReferralFacility'),
-      // Biometrics (cataract form includes BP and glucose).
-      'systolic': asNum(d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'))?.toInt().toString(),
-      'diastolic': asNum(d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'))?.toInt().toString(),
-      'weight': asNum(d.getValue('weight')),
-      'height': asNum(d.getValue('height')),
-      'bmi': asNum(d.getValue('bmi')),
-      'glucoseValue': asNum(d.getValue('glucoseValue') ?? d.getValue('glucose')),
-      'glucoseType': d.getValue('glucoseType'),
-    });
+    bool? toBool(dynamic v) {
+      if (v == null) return null;
+      if (v is bool) return v;
+      final s = v.toString().trim().toLowerCase();
+      if (s == 'yes' || s == 'true' || s == '1') return true;
+      if (s == 'no' || s == 'false' || s == '0') return false;
+      return null;
+    }
+
+    final bpLog = <String, dynamic>{};
+    final bpDetails = _ncdBpDetails(d);
+    if (bpDetails.isNotEmpty) {
+      final avg = ncdAvgBp(d);
+      bpLog['avgSystolic'] = avg.systolic;
+      bpLog['avgDiastolic'] = avg.diastolic;
+      bpLog['avgBloodPressure'] = '${avg.systolic}/${avg.diastolic}';
+      bpLog['bpLogDetails'] = bpDetails;
+    }
+    final height = asNum(d.getValue('height'));
+    final weight = asNum(d.getValue('weight'));
+    final bmi = asNum(d.getValue('bmi'));
+    if (height != null) bpLog['height'] = height;
+    if (weight != null) bpLog['weight'] = weight;
+    if (bmi != null) bpLog['bmi'] = bmi;
+    final htn = toBool(d.getValue('isBeforeHtnDiagnosis'));
+    if (htn != null) bpLog['isBeforeHtnDiagnosis'] = htn;
+    final smoker = toBool(d.getValue('isRegularSmoker'));
+    if (smoker != null) bpLog['isRegularSmoker'] = smoker;
+    final medBp = d.getValue('medicationFrequencyBp');
+    if (medBp != null) bpLog['medicationFrequencyBp'] = medBp;
+
+    final glucoseLog = <String, dynamic>{};
+    final glucoseNum = asNum(d.getValue('glucoseValue') ?? d.getValue('glucose'));
+    if (glucoseNum != null) {
+      glucoseLog['glucose'] = glucoseNum;
+      final glucoseType = d.getValue('glucoseType');
+      if (glucoseType != null) glucoseLog['glucoseType'] = glucoseType;
+      glucoseLog['glucoseUnit'] =
+          d.getValue('glucoseUnit') as String? ?? 'mmol/L';
+      glucoseLog['glucoseDateTime'] =
+          d.getValue('glucoseDateTime') as String? ??
+              _localIsoWithOffset(DateTime.now());
+    }
+    final dm = toBool(d.getValue('isBeforeDiabetesDiagnosis'));
+    if (dm != null) glucoseLog['isBeforeDiabetesDiagnosis'] = dm;
+    final medBg = d.getValue('medicationFrequencyBg');
+    if (medBg != null) glucoseLog['medicationFrequencyBg'] = medBg;
+
+    final ncd = <String, dynamic>{
+      if (bpLog.isNotEmpty) 'bpLog': bpLog,
+      if (glucoseLog.isNotEmpty) 'glucoseLog': glucoseLog,
+      if (d.getValue('referralFacilityType') != null)
+        'referralFacilityType': d.getValue('referralFacilityType'),
+    };
+    return ncd.isEmpty ? null : ncd;
+  }
+
+  static Map<String, dynamic>? _referralInformationCard(CanonicalVisitData d) {
+    final who = d.getValue('whoReferredThisPerson');
+    if (who == null || who.toString().isEmpty) return null;
+    return {'whoReferredThisPerson': who};
   }
 
   // ── Family Planning ────────────────────────────────────────────────────────

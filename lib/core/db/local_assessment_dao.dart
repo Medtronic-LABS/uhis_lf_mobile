@@ -338,7 +338,6 @@ class LocalAssessmentEntity {
   ///   Flutter "CHILDHOOD_VISIT" → Android "ChildHood_Visit"
   ///   Flutter "ICCM" / "IMCI" → Android "iccm"
   ///   Flutter "EYE_CARE" → Android "eye_care"
-  ///   Flutter "CATARACT" → Android "cataract"
   ///   Flutter "FP" → Android "FAMILY_PLANNING"
   static String _wireType(String assessmentType) {
     return switch (assessmentType.toUpperCase()) {
@@ -353,11 +352,10 @@ class LocalAssessmentEntity {
       'PREGNANCY_OUTCOME' || 'PREGNANCYOUTCOME' => 'PREGNANCYOUTCOME',
       'ICCM' || 'IMCI' => 'iccm',
       'EYE_CARE' => 'eye_care',
-      'CATARACT' => 'cataract',
       // Android stores the FP menu id uppercased and sends the stored value, so
       // the wire type is "FAMILY_PLANNING" (not the lowercase menu id).
       'FAMILY_PLANNING' || 'FP' => 'FAMILY_PLANNING',
-      // NCD, ANC, TB, EPI, PNC_MOTHER, PNC — pass through as-is
+      // CATARACT, NCD, ANC, TB, EPI, PNC_MOTHER, PNC — pass through as-is
       String t => t,
     };
   }
@@ -467,7 +465,9 @@ class LocalAssessmentEntity {
   ///   CHILDHOOD_VISIT → {"pncChild": {...}, "cbs": {}} (CBS sibling required by Android)
   ///   FAMILY_PLANNING → {"familyPlanning": {...}} (Android AssessmentViewModel
   ///                     rewrites the stored form map to this key before sync)
-  ///   EYE_CARE / CATARACT / TB / EPI → flat (Android pass-through)
+  ///   EYE_CARE    → {"eye_care": {"eyeCare": {...}, "generalInformation": {...}}}
+  ///   CATARACT    → {"cataract": {"generalInformation": {}, "cataract": {...}, ...}}
+  ///   TB / EPI → flat (Android pass-through)
   ///
   /// If `details` already contains the programme key (re-entrant call), it is
   /// returned unchanged to avoid double-wrapping.
@@ -508,6 +508,14 @@ class LocalAssessmentEntity {
       return {'pregnancyOutcome': details};
     }
 
+    // Cataract: FormResultComposer wraps under menu key "cataract", and the
+    // Eye Problems card family is also named "cataract" — same double-key
+    // pattern as pregnancy outcome.
+    if (t == 'CATARACT') {
+      if (_isCataractMenuWrapped(details)) return details;
+      return {'cataract': details};
+    }
+
     final key = switch (t) {
       // ANC: FormResultComposer.addToMenuGroup wraps under lowercase "anc".
       // The old "GAP 6b" comment misread a commented CBS inject — Android still
@@ -518,6 +526,10 @@ class LocalAssessmentEntity {
       // ICCM is the only non-NCD/PNC type that gets wrapped (Android explicit handling).
       'ICCM' || 'IMCI' => 'iccm',
       'FAMILY_PLANNING' || 'FP' => 'familyPlanning',
+      // Eye care: FormResultComposer.addToMenuGroup(menuType = "eye_care")
+      // nests the eyeCare / generalInformation card families under the menu id.
+      'EYE_CARE' => 'eye_care',
+      // All others — TB, EPI — are flat pass-through
       'CHILD_IMMUNIZATION' => 'childImmunization',
       // All others — TB, EPI, EYE_CARE, CATARACT — are flat pass-through
       // (Android OfflineSyncRepository default branch).
@@ -525,6 +537,19 @@ class LocalAssessmentEntity {
     };
     if (key == null || details.containsKey(key)) return details;
     return {key: details};
+  }
+
+  /// True when [details] is already the Spice outer menu wrap
+  /// `{ cataract: { generalInformation / cataract card / … } }`, not the
+  /// mapper's card bag that merely contains an inner `cataract` family.
+  static bool _isCataractMenuWrapped(Map<String, dynamic> details) {
+    if (details.length != 1) return false;
+    final inner = details['cataract'];
+    if (inner is! Map) return false;
+    return inner.containsKey('generalInformation') ||
+        inner.containsKey('referralInformation') ||
+        inner.containsKey('ncd') ||
+        inner['cataract'] is Map;
   }
 
   /// True when [details] is already the Spice outer menu wrap
