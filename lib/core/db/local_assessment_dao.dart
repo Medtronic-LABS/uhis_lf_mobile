@@ -285,13 +285,18 @@ class LocalAssessmentEntity {
         'visitNumber': ?visitNum,
         if (isPregnancyType) 'pregnancyEpisodeId': ?pregnancyEpisodeId,
         // Android sends customStatus list to track patient state server-side.
-        'customStatus': _buildCustomStatus(
-          isReferred,
-          referralStatus,
-          assessmentType,
-          wrappedDetails,
-          customStatus,
-        ),
+        // Omitted entirely when the programme has no status to report — Android
+        // sends `entity.status`, which is null for workflows
+        // AssessmentStatusGenerator does not evaluate (e.g. ChildHood_Visit).
+        if (_buildCustomStatus(
+              isReferred,
+              referralStatus,
+              assessmentType,
+              wrappedDetails,
+              customStatus,
+            )
+            case final status? when status.isNotEmpty)
+          'customStatus': status,
       },
       if (followUpId != null) 'followUpId': followUpId,
       'updatedAt': updatedAt?.millisecondsSinceEpoch ?? 0,
@@ -408,7 +413,11 @@ class LocalAssessmentEntity {
   ///
   /// Family Planning reports a programme status instead of the generic
   /// Recovered marker, matching Android AssessmentStatusGenerator.
-  static List<String> _buildCustomStatus(
+  ///
+  /// Returns null when the programme reports no status at all — Android's
+  /// generator has no `pncChild` branch, so a childhood visit syncs with
+  /// `customStatus` absent rather than a synthesised "Recovered".
+  static List<String>? _buildCustomStatus(
     bool isReferred,
     String? referralStatus,
     String assessmentType,
@@ -417,8 +426,9 @@ class LocalAssessmentEntity {
   ) {
     final decoded = _decodeStatusList(storedStatus);
     if (decoded.isNotEmpty) return decoded;
-    if (isReferred) return ['Referred'];
     final t = assessmentType.toUpperCase();
+    if (t == 'CHILDHOOD_VISIT' || t == 'CHILD_MENU') return null;
+    if (isReferred) return ['Referred'];
     if (t == 'FAMILY_PLANNING' || t == 'FP') {
       return [_familyPlanningStatus(details)];
     }

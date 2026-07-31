@@ -12,6 +12,7 @@ import '../../../core/i18n/app_locale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
+import 'childhood_visit.dart';
 import 'form_config.dart';
 import 'form_field_visuals.dart';
 import '../../scribe/form_field_schema_builder.dart';
@@ -48,6 +49,7 @@ class UnifiedFormScreen extends StatefulWidget {
     this.gestationalWeeks,
     this.lmpMs,
     this.eddMs,
+    this.ageInMonths,
     this.enrolledFormTypes = const [],
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
@@ -68,6 +70,10 @@ class UnifiedFormScreen extends StatefulWidget {
   /// lookup races or is keyed under memberId.
   final int? lmpMs;
   final int? eddMs;
+
+  /// Child's age in whole months (from DOB). Drives childhood-visit age bands
+  /// and weight validation. Null when unknown / not a child visit.
+  final int? ageInMonths;
 
   /// FormType keys of programmes the patient is already enrolled in.
   /// These sections render after the Vitals group and before recommended ones.
@@ -228,6 +234,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       gestationalWeeks: _effectiveGestationalWeeks(notifier),
       ancVisitNumber: _ancVisitNumber(),
       formType: formType,
+      ageInMonths: widget.ageInMonths,
     );
   }
 
@@ -433,6 +440,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             heightReadOnly: notifier.isHeightLockedFromPrior,
             gestationalWeeks: effectiveGa,
             ancVisitNumber: _ancVisitNumber(),
+            ageInMonths: widget.ageInMonths,
             isNewEnrolment: isNew,
           ));
         }
@@ -660,7 +668,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     for (final a in annotated) {
       for (final ref in a.section.fieldRefs) {
         if (!checked.add(ref.id)) continue;
-        final validator = _SectionCard._numericRangeValidator(ref.id);
+        final validator = _SectionCard._numericRangeValidator(
+          ref.id,
+          formType: a.section.formType,
+          ageInMonths: widget.ageInMonths,
+        );
         if (validator == null) continue;
         final raw = notifier.data.getValue(ref.id);
         final message = validator(raw?.toString());
@@ -1602,6 +1614,7 @@ class _SectionCard extends StatelessWidget {
     this.heightReadOnly = false,
     this.gestationalWeeks,
     this.ancVisitNumber = 1,
+    this.ageInMonths,
     this.isNewEnrolment = false,
   });
 
@@ -1624,6 +1637,9 @@ class _SectionCard extends StatelessWidget {
 
   /// 1-based ANC visit count for Android visit-number field gates.
   final int ancVisitNumber;
+
+  /// Child age in whole months — childhood visit age bands / weight range.
+  final int? ageInMonths;
 
   /// True when this section belongs to a newly enrolled programme.
   /// Renders with a tinted background + accent border.
@@ -1695,6 +1711,7 @@ class _SectionCard extends StatelessWidget {
       gestationalWeeks: gestationalWeeks,
       ancVisitNumber: ancVisitNumber,
       formType: section.formType,
+      ageInMonths: ageInMonths,
     );
   }
 
@@ -1804,6 +1821,7 @@ class _SectionCard extends StatelessWidget {
         gestationalWeeks: gestationalWeeks,
         ancVisitNumber: ancVisitNumber,
         formType: section.formType,
+        ageInMonths: ageInMonths,
       );
       if (section.formType == 'pregnancyOutcome') {
         // ignore: avoid_print
@@ -2691,7 +2709,24 @@ class _SectionCard extends StatelessWidget {
 
   /// Returns a range validator for known clinical numeric fields.
   /// Returns null (no validation) for fields not in the list.
-  static FormFieldValidator<String>? _numericRangeValidator(String fieldId) {
+  static FormFieldValidator<String>? _numericRangeValidator(
+    String fieldId, {
+    String? formType,
+    int? ageInMonths,
+  }) {
+    if (fieldId == 'weight' && formType == 'pncChild') {
+      final range = ChildhoodVisit.weightRangeKg(ageInMonths);
+      if (range == null) return null;
+      final (minW, maxW) = range;
+      return (v) {
+        if (v == null || v.isEmpty) return null;
+        final n = double.tryParse(v);
+        if (n == null || n < minW || n > maxW) {
+          return 'Enter a weight between $minW and $maxW kg';
+        }
+        return null;
+      };
+    }
     switch (fieldId) {
       case 'fastingBloodSugar':
       case 'randomBloodSugar':
@@ -2792,7 +2827,8 @@ class _SectionCard extends StatelessWidget {
         // Canonical store uses list of option ids; inline list works with display names.
         // ANC on-treatment options are derived from selected illnesses
         // (Android AssessmentRMNCHFragment.onCheckBoxDialogueClicked).
-        final effectiveOptions = def.id == 'pregnantWomanOnTreatment'
+        // Childhood illness options are age-filtered (Spice childIllnessType).
+        var effectiveOptions = def.id == 'pregnantWomanOnTreatment'
             ? FieldVisibilityRules.ancOnTreatmentOptions(
                 illnessField:
                     config.fields['pregnantWomanExistingIllness'] ?? def,
@@ -2800,6 +2836,13 @@ class _SectionCard extends StatelessWidget {
                 data: data,
               )
             : def.options;
+        if (def.id == 'childIllnessType' && ageInMonths != null) {
+          final excluded =
+              ChildhoodVisit.illnessOptionIdsExcluded(ageInMonths!);
+          effectiveOptions = effectiveOptions
+              .where((o) => !excluded.contains(o.id))
+              .toList();
+        }
         final storedIds = (currentValue is List)
             ? currentValue.cast<String>()
             : <String>[];
@@ -2920,7 +2963,11 @@ class _SectionCard extends StatelessWidget {
               onFieldChanged(def.id, parsed ?? v);
             }
           },
-          validator: _numericRangeValidator(def.id),
+          validator: _numericRangeValidator(
+            def.id,
+            formType: section.formType,
+            ageInMonths: ageInMonths,
+          ),
         );
 
       case WidgetHint.dateField:

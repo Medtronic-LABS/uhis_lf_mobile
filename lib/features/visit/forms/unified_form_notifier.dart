@@ -25,6 +25,7 @@ import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
 import '../models/anc_assessment.dart';
 import 'canonical_visit_data.dart';
+import 'childhood_visit.dart';
 import 'form_config.dart';
 import 'rmnch_follow_up_calculator.dart';
 import 'unified_payload_mapper.dart';
@@ -1306,6 +1307,35 @@ class UnifiedFormNotifier extends ChangeNotifier {
           ? {'referredSite': _defaultReferralSiteId}
           : null;
 
+      // Childhood visit: Spice stamps summary.nextVisitDate from birth + age
+      // band (AssessmentViewModel, ChildHood_Visit menu).
+      Map<String, dynamic>? childhoodOtherDetails;
+      if (_activeFormTypes.contains('pncChild')) {
+        if (_data.getValue('childVisitNumber') == null) {
+          // Spice pregnancyDetail.childVisitNo + 1 → pncChild.visitNo.
+          final prior =
+              await _assessmentRepo.priorChildhoodVisitCount(_patientId);
+          _data = _data.setValue('childVisitNumber', prior + 1);
+          debugPrint('[ChildVisitNo] assigned visitNo=${prior + 1} '
+              'patient=$_patientId');
+        }
+        final dob = await _patientDateOfBirth();
+        if (dob != null) {
+          final months = ChildhoodVisit.ageInMonths(dob);
+          if (months <= ChildhoodVisit.maxVisitMonth) {
+            final next = ChildhoodVisit.nextVisitDate(
+              ageInMonths: months,
+              birthDate: dob,
+            );
+            if (next != null) {
+              childhoodOtherDetails = {
+                'nextVisitDate': ChildhoodVisit.formatNextVisitDate(next),
+              };
+            }
+          }
+        }
+      }
+
       final payloads = UnifiedPayloadMapper.decompose(
         _withWireOptionValues(_data),
         _activeFormTypes.toSet(),
@@ -1429,6 +1459,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
             'NCD' => ncdOtherDetails,
             'CATARACT' => cataractNcdProvided ? ncdOtherDetails : null,
             'EYE_CARE' => eyeCareOtherDetails,
+            'CHILDHOOD_VISIT' => childhoodOtherDetails,
             _ => null,
           },
         );
@@ -1789,6 +1820,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
           ...result.urgentConditions,
           ...result.nonUrgentConditions,
         ]);
+      }
+    }
+
+    // Childhood visit: SK-selected childReferral (Spice anyIllness → referral).
+    if (_activeFormTypes.contains('pncChild')) {
+      final childRef = _data.getValue('childReferral')?.toString().toLowerCase();
+      if (childRef == 'yes') {
+        referred = true;
+        reasons.add('Child illness referral');
       }
     }
 

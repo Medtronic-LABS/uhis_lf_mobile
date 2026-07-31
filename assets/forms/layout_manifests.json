@@ -810,76 +810,62 @@
         "title": "Child Details",
         "fieldRefs": [
           {
-            "fieldName": "Congenital defect",
             "isMandatory": false,
             "id": "congenitalDefect"
           },
           {
-            "fieldName": "Weight",
-            "inputType": 8192,
+            "inputType": 2,
             "isMandatory": false,
             "id": "weight"
           },
           {
-            "fieldName": "What was fed in the last 24 hours",
             "isMandatory": false,
             "id": "childFeedLast24Hrs"
           },
           {
-            "fieldName": "Other Feed",
             "inputType": 96,
             "isMandatory": false,
             "id": "otherChildFeed"
           },
           {
-            "fieldName": "Breast feed after birth in hrs",
             "inputType": 2,
             "isMandatory": false,
             "id": "hrsBreastFed"
           },
           {
-            "fieldName": "Additional food started month",
             "inputType": 2,
             "isMandatory": false,
             "id": "monthAdditionalFeedGiven"
           },
           {
-            "fieldName": "Breast feeding",
             "isMandatory": false,
             "id": "childBreastFeeding"
           },
           {
-            "fieldName": "Additional Food in 24 Hrs",
             "isMandatory": false,
             "id": "additionalFood24Hrs"
           },
           {
-            "fieldName": "Received vaccines",
             "isMandatory": false,
             "id": "receivedVaccine"
           },
           {
-            "fieldName": "Deworming medication",
             "isMandatory": false,
             "id": "dewormingMedicine"
           },
           {
-            "fieldName": "Illness/Complications",
             "isMandatory": false,
             "id": "anyIllness"
           },
           {
-            "fieldName": "Specify Complications",
             "isMandatory": false,
             "id": "childIllnessType"
           },
           {
-            "fieldName": "Referred",
             "isMandatory": false,
             "id": "childReferral"
           },
           {
-            "fieldName": "Referral place",
             "isMandatory": false,
             "id": "childReferralFacilityType"
           }
