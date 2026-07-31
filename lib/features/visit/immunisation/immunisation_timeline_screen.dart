@@ -16,6 +16,7 @@ import '../assessment_repository.dart';
 import '../triage/child_assessment_section.dart';
 import 'child_immunization_dto.dart';
 import 'epi_schedule_engine.dart';
+import 'epi_visit_summary.dart';
 import 'immunisation_dto.dart';
 import 'immunisation_repository.dart';
 
@@ -57,9 +58,12 @@ class ImmunisationTimelineScreen extends StatefulWidget {
   final String? dob;
 
   /// When non-null, the submit bar label changes to "Done → Continue Visit"
-  /// and this callback is invoked after [context.pop()] so the visit flow can
-  /// advance to Step 3. Standalone access leaves this null (behaviour unchanged).
-  final VoidCallback? onVisitComplete;
+  /// and this callback is invoked with the computed [EpiVisitSummary] instead
+  /// of popping this route — this screen is embedded in place inside
+  /// [VisitFlowScreen]'s Step 2, so popping here would pop the enclosing
+  /// visit-flow route instead of advancing to Step 3. Standalone access
+  /// leaves this null, in which case submitting still pops as before.
+  final void Function(EpiVisitSummary summary)? onVisitComplete;
 
   /// Visit encounter ID — passed through to [_UpdateStatusSheet] so vaccine
   /// status updates can be pushed to the backend via [ImmunisationRepository].
@@ -659,8 +663,11 @@ class _ImmunisationTimelineScreenState
               );
             }
             final onComplete = widget.onVisitComplete;
-            if (mounted) context.pop();
-            onComplete?.call();
+            if (onComplete != null) {
+              onComplete(buildEpiVisitSummary(_milestones!));
+            } else if (mounted) {
+              context.pop();
+            }
           },
         ),
       ],

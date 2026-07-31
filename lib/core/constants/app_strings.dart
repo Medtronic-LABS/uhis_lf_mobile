@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 
+import '../../features/visit/immunisation/epi_visit_summary.dart';
 import '../i18n/app_locale.dart';
 import '../models/dashboard_tier.dart';
 
@@ -4614,6 +4615,61 @@ abstract final class EpiStrings {
   static String get missedReasonLabel => getTranslatedString('missedReasonLabel', 'Reason for Missed Dose');
   static String get missedReasonHint => getTranslatedString('missedReasonHint', 'e.g. Child was sick on scheduled date');
   static String get missedReasonRequired => getTranslatedString('missedReasonRequired', 'Please enter a reason.');
+}
+
+/// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral
+/// reason, counselling, and follow-up text built from an [EpiVisitSummary].
+abstract final class EpiVisitRecoStrings {
+  EpiVisitRecoStrings._();
+
+  static String get visitSummaryTitle => getTranslatedString(
+      'EpiVisitReco.visitSummaryTitle', 'Vaccination Visit — Guideline Care Plan');
+
+  static String visitSummary(EpiVisitSummary epi) => epi.overdueCount > 0
+      ? '${epi.overdueCount} ${epi.overdueCount == 1 ? 'vaccine' : 'vaccines'} '
+          'overdue — ${epi.currentMilestoneLabel} doses due now.'
+      : 'All scheduled vaccines are up to date for this visit.';
+
+  static String referralReason(String currentMilestoneLabel, List<String> names) =>
+      '$currentMilestoneLabel doses overdue — ${_andJoin(names)} are due now.';
+
+  static String catchUpAction(List<String> names) =>
+      'All ${names.length} can be given in ONE visit — ${_andJoin(names)}.';
+
+  static List<String> counsellingLines(EpiVisitSummary epi) => [
+        '${epi.overdueCount} ${epi.overdueCount == 1 ? 'vaccine' : 'vaccines'} '
+            'overdue — ${epi.currentMilestoneLabel} doses are due now.',
+        'All ${epi.overdueVaccineNames.length} can be given in ONE visit — '
+            '${_andJoin(epi.overdueVaccineNames)}.',
+        if (epi.nextMilestoneLabel != null)
+          'Next milestone: ${epi.nextMilestoneLabel} — '
+              '${_andJoin(epi.nextMilestoneVaccineNames)}.',
+        'Return at once if: high fever, rash, or breathing difficulty of any kind.',
+      ];
+
+  static String followUpActivity(String? label, List<String> names) => label == null
+      ? 'Routine vaccination follow-up'
+      : '$label milestone — ${_andJoin(names)}';
+
+  static String whatsappMessage(EpiVisitSummary epi) {
+    final next = epi.nextMilestoneLabel != null
+        ? ' Next milestone: ${epi.nextMilestoneLabel} — '
+            '${_andJoin(epi.nextMilestoneVaccineNames)}.'
+        : '';
+    if (epi.overdueCount == 0) {
+      return 'All scheduled vaccines are up to date.$next';
+    }
+    return '${epi.overdueCount} ${epi.overdueCount == 1 ? 'vaccine' : 'vaccines'} '
+        'overdue — ${epi.currentMilestoneLabel} doses are due now. '
+        'All can be given in ONE visit — ${_andJoin(epi.overdueVaccineNames)}.$next '
+        'Return at once if: high fever, rash, or breathing difficulty of any kind.';
+  }
+
+  static String _andJoin(List<String> items) {
+    if (items.isEmpty) return '';
+    if (items.length == 1) return items.first;
+    return '${items.sublist(0, items.length - 1).join(', ')} & ${items.last}';
+  }
 }
 
 abstract final class ChildAssessmentStrings {

@@ -292,11 +292,21 @@ class NabaFollowUpItem {
     required this.activity,
     required this.timeline,
     this.programme,
+    this.resolvedDate,
   });
 
   final String activity;
   final String timeline;
   final String? programme;
+
+  /// Exact date to pre-fill in the follow-up date picker, when already known
+  /// precisely (e.g. EPI's next milestone date) — checked first by
+  /// `_FollowUpDateRowState.resolveDate()`/`_initialDate()` ahead of the
+  /// programme-day-offset / timeline-regex heuristics used for every other
+  /// programme. Never populated by [fromJson] — the backend NABA response has
+  /// no equivalent field, so AI-path items always fall back to timeline-based
+  /// resolution unchanged.
+  final DateTime? resolvedDate;
 
   factory NabaFollowUpItem.fromJson(Map<String, dynamic> j) => NabaFollowUpItem(
         activity: j['activity'] as String? ?? '',
