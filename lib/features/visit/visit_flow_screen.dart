@@ -46,6 +46,7 @@ import 'pathway/pathway_engine.dart';
 import '../patient/followup_call_service.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
+import 'immunisation/epi_visit_summary.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
 import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
@@ -360,6 +361,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   List<String> _referredReasons = const [];
   String? _referralFacility;
 
+  /// Vaccine-aware summary from Step 2's vaccination timeline, when this
+  /// visit included one — feeds Step 3's EPI-specific recommendation content.
+  EpiVisitSummary? _epiVisitSummary;
+
   /// True once triage (Step 1) has been submitted. Blocks back-navigation to
   /// Step 1 from Step 2+ — re-entering triage would create a duplicate assessment.
   ///
@@ -543,10 +548,11 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             memberId: widget.memberId,
             householdMemberLocalId: _householdMemberLocalId,
             showChildAssessment: hasImci,
-            onAdvance: () {
+            onAdvance: (summary) {
               setState(() {
-                _primaryProgramme = Programme.imci;
-                _referralRecommended = false;
+                _epiVisitSummary = summary;
+                _primaryProgramme = hasImci ? Programme.imci : Programme.epi;
+                _referralRecommended = summary.referralWarranted;
                 _step = 2;
               });
             },
@@ -607,6 +613,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           referralRecommended: _referralRecommended,
           referredReasons: _referredReasons,
           referralFacility: _referralFacility,
+          epiVisitSummary: _epiVisitSummary,
           memberId: widget.memberId,
           householdId: widget.householdId,
           origin: widget.origin ?? 'patients',
@@ -912,7 +919,7 @@ class _Step2Vaccination extends StatefulWidget {
 
   final String patientId;
   final String? patientName;
-  final VoidCallback onAdvance;
+  final void Function(EpiVisitSummary summary) onAdvance;
 
   /// The visit encounter ID — forwarded to [ImmunisationTimelineScreen] so
   /// vaccine updates can be pushed to the backend via [ImmunisationRepository].
@@ -1280,6 +1287,7 @@ class _Step3AiReco extends StatefulWidget {
     this.memberId,
     this.householdId,
     this.referralFacility,
+    this.epiVisitSummary,
   });
 
   final String visitId;
@@ -1301,6 +1309,11 @@ class _Step3AiReco extends StatefulWidget {
   final String? householdId;
   final String origin;
   final String? referralFacility;
+
+  /// Vaccine-aware summary from Step 2's vaccination timeline — null unless
+  /// this visit included one. Feeds the EPI branch of the rule-based
+  /// recommendation fallback (see [_Step3AiRecoState._ruleBasedNaba]).
+  final EpiVisitSummary? epiVisitSummary;
 
   @override
   State<_Step3AiReco> createState() => _Step3AiRecoState();
@@ -1688,6 +1701,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final hasPnc = progs.contains(Programme.pnc);
     final hasImci = progs.contains(Programme.imci);
     final hasTb = progs.contains(Programme.tb);
+    final hasEpi = progs.contains(Programme.epi);
+    final epi = widget.epiVisitSummary;
 
     final actions = <NabaNextAction>[];
     final counselling = <String>[];
@@ -1800,6 +1815,37 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       ));
     }
 
+    if (hasEpi && epi != null && epi.overdueCount > 0) {
+      actions.add(NabaNextAction(
+        priority: 1,
+        action: EpiVisitRecoStrings.catchUpAction(epi.overdueVaccineNames),
+        urgency: 'Now',
+        programme: 'EPI',
+      ));
+      counselling.addAll(EpiVisitRecoStrings.counsellingLines(epi));
+      followUp.add(NabaFollowUpItem(
+        activity: EpiVisitRecoStrings.followUpActivity(
+            epi.nextMilestoneLabel, epi.nextMilestoneVaccineNames),
+        timeline: epi.nextMilestoneLabel ?? 'Routine',
+        programme: 'EPI',
+        resolvedDate: epi.nextMilestoneDate,
+      ));
+    } else if (hasEpi) {
+      actions.add(const NabaNextAction(
+        priority: 1,
+        action: 'All scheduled vaccines are up to date for this visit.',
+        urgency: 'Routine',
+        programme: 'EPI',
+      ));
+      followUp.add(NabaFollowUpItem(
+        activity: EpiVisitRecoStrings.followUpActivity(
+            epi?.nextMilestoneLabel, epi?.nextMilestoneVaccineNames ?? const []),
+        timeline: epi?.nextMilestoneLabel ?? 'Routine',
+        programme: 'EPI',
+        resolvedDate: epi?.nextMilestoneDate,
+      ));
+    }
+
     if (actions.isEmpty) {
       actions.add(const NabaNextAction(
         priority: 1,
@@ -1836,18 +1882,23 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                         ? 'Child assessed for fever, respiratory rate, and hydration. IMCI classification applied.'
                         : hasTb
                             ? 'TB treatment adherence reviewed. Continuing directly observed therapy (DOT).'
-                            : 'Vital signs assessed. Routine care plan generated per clinical guidelines.',
+                            : hasEpi && epi != null
+                                ? EpiVisitRecoStrings.visitSummary(epi)
+                                : 'Vital signs assessed. Routine care plan generated per clinical guidelines.',
       ),
       nextActions: actions,
       counselling: counselling,
       followUp: followUp,
       whatsappSummary: _ruleBasedWhatsAppMessage(),
       referralRecommendation: widget.referralRecommended
-          ? const NabaReferralRecommendation(
+          ? NabaReferralRecommendation(
               required_: true,
               destination: 'Upazila Health Complex',
               urgency: 'Today',
-              reason: 'Referral recommended based on clinical assessment',
+              reason: (hasEpi && epi != null && epi.overdueCount > 0)
+                  ? EpiVisitRecoStrings.referralReason(
+                      epi.currentMilestoneLabel, epi.overdueVaccineNames)
+                  : 'Referral recommended based on clinical assessment',
             )
           : null,
     );
@@ -1860,6 +1911,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final hasPnc = progs.contains(Programme.pnc);
     final hasImci = progs.contains(Programme.imci);
     final hasTb = progs.contains(Programme.tb);
+    final hasEpi = progs.contains(Programme.epi);
+    final epi = widget.epiVisitSummary;
 
     final buf = StringBuffer();
     buf.writeln('Hello! Your health worker visited you today.');
@@ -1931,7 +1984,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       buf.writeln('*Next TB check: in 2 weeks.*');
     }
 
-    if (!hasAnc && !hasNcd && !hasPnc && !hasImci && !hasTb) {
+    if (hasEpi && epi != null) {
+      buf.writeln();
+      buf.writeln(EpiVisitRecoStrings.whatsappMessage(epi));
+    }
+
+    if (!hasAnc && !hasNcd && !hasPnc && !hasImci && !hasTb && !hasEpi) {
       buf.writeln();
       buf.writeln('*Routine health visit completed.*');
       buf.writeln('Continue your medications and attend your next scheduled visit.');
@@ -1955,6 +2013,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         Programme.ncd => 'NCD Visit — Guideline Care Plan',
         Programme.imci => 'Child Health Visit — Guideline Care Plan',
         Programme.tb => 'TB Follow-up — Guideline Care Plan',
+        Programme.epi => EpiVisitRecoStrings.visitSummaryTitle,
         _ => 'Visit — Guideline Care Plan',
       };
 
@@ -3018,6 +3077,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   /// Public static helper so _Step3AiRecoState can compute the default date
   /// for a follow-up item without needing to instantiate the widget.
   static DateTime resolveDate(NabaFollowUpItem item) {
+    if (item.resolvedDate != null) return item.resolvedDate!;
     final t = item.timeline.toLowerCase();
     final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
     if (!isUrgentDays) {
@@ -3042,6 +3102,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   /// screen's primary programme, and finally the item's own timeline for other
   /// programmes.  The SK can still override via the date picker.
   DateTime _initialDate() {
+    if (widget.item.resolvedDate != null) return widget.item.resolvedDate!;
     final t = widget.item.timeline.toLowerCase();
     final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
     if (!isUrgentDays) {
