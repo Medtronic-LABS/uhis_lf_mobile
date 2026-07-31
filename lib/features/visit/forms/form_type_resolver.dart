@@ -6,9 +6,9 @@ abstract final class FormTypeResolver {
   /// Rules:
   /// - Delivery visit → `pregnancyOutcome` first, then `pncMother`/`pncChild`,
   ///   then any other selected programmes (ANC/PW excluded — cleared at triage).
-  /// - `pnc`  → `pncMother` + `pncChild`
+  /// - `pnc`  → `pncMother` (Spice mother PNC; childhood is a separate menu)
   /// - `pw`   → `pwProfile`
-  /// - `imci` → `iccm`
+  /// - `imci` → `pncChild` (Spice Childhood Visit / Child Health card)
   /// - others → passed through (with eyeCare / familyPlanning wire aliases)
   static List<String> resolve(
     List<String> programmeNames, {
@@ -29,9 +29,9 @@ abstract final class FormTypeResolver {
       }
       switch (p) {
         case 'pnc':
-          out.addAll(['pncMother', 'pncChild']);
+          out.add('pncMother');
         case 'imci':
-          out.add('iccm');
+          out.add('pncChild');
         case 'pw':
           // PW registration — show only the pwProfile layout.
           out.add('pwProfile');

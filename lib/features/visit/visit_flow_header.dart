@@ -32,7 +32,8 @@ class VisitFlowHeader extends StatelessWidget {
   final String? ageDisplay;
   final String? householdId;
   final String? patientGender;
-  /// 1-based ANC/PNC visit number — appended to the programme badge.
+  /// 1-based ANC / PNC / childhood visit number — appended to the programme
+  /// badge, mirroring Spice's "(Visit N)" service history label.
   final int? visitNumber;
   final Programme primaryProgramme;
   /// Programme keys active in the current visit — shown as pills on step 2.
@@ -197,7 +198,8 @@ class VisitFlowHeader extends StatelessWidget {
                             activeFormTypes.first.toUpperCase();
                         final label = visitNumber != null &&
                                 (primary == Programme.anc ||
-                                    primary == Programme.pnc)
+                                    primary == Programme.pnc ||
+                                    primary == Programme.imci)
                             ? '$baseName $visitNumber'
                             : baseName;
                         return Row(

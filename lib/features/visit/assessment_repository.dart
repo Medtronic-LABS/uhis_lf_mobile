@@ -458,6 +458,25 @@ class AssessmentRepository extends ChangeNotifier {
     return rows.any((r) => _isNcdKind(r.kind?.toUpperCase() ?? ''));
   }
 
+  /// Number of childhood visits already recorded for [patientId], across this
+  /// device's unsynced rows and synced history. Spice keeps the same counter in
+  /// `PregnancyDetail.childVisitNo` and submits `childVisitNo + 1` as
+  /// `pncChild.visitNo`.
+  Future<int> priorChildhoodVisitCount(String patientId) async {
+    if (patientId.isEmpty) return 0;
+    final localRows = await _dao.getByPatientId(patientId);
+    var count = localRows
+        .where((r) => _isChildhoodVisitKind(r.assessmentType.toUpperCase()))
+        .length;
+    if (_historyDao == null) return count;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = historyMap[patientId] ?? const [];
+    count += rows
+        .where((r) => _isChildhoodVisitKind(r.kind?.toUpperCase() ?? ''))
+        .length;
+    return count;
+  }
+
   /// Most-recent weight (kg) for [patientId].
   ///
   /// Order matches prior-visit biometrics for NCD: this device's
@@ -972,6 +991,11 @@ class AssessmentRepository extends ChangeNotifier {
       kind.contains('NCD') || kind.contains('HYPERTENSION') || kind.contains('DIABETES');
 
   static bool _isCataractKind(String kind) => kind.contains('CATARACT');
+
+  /// Matches the local type (`CHILDHOOD_VISIT`) and the Spice wire /history
+  /// spellings (`ChildHood_Visit`, `CHILD_MENU`).
+  static bool _isChildhoodVisitKind(String kind) =>
+      kind.contains('CHILDHOOD') || kind == 'CHILD_MENU';
 
   static bool _isPncMotherKind(String kind) =>
       kind.contains('PNC') && !kind.contains('CHILD') && !kind.contains('NEONAT');
