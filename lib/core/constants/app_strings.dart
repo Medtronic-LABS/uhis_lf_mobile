@@ -2109,6 +2109,7 @@ abstract final class TriageStrings {
   static String get deliveryHint => getTranslatedString('deliveryHint', 'Pregnancy Outcome documents the birth this visit and clears ANC');
   static String get ancDeliveryConflictHint => getTranslatedString('ancDeliveryConflictHint', '⚠ ANC is unavailable on a pregnancy-outcome visit — deselect Pregnancy Outcome first');
   static String get pncOnlyPostpartumHint => getTranslatedString('pncOnlyPostpartumHint', '⚠ Mother PNC is available after delivery — use Pregnancy Outcome now');
+  static String get vaccinationDefaultHint => getTranslatedString('vaccinationDefaultHint', 'Vaccination is always included for this visit — only Child Health is optional');
 
   static String selectProgrammeA11y(String label) => getTranslatedString('selectProgrammeA11y', 'Select {label}', params: {'label': '$label'});
   static String deselectProgrammeA11y(String label) => getTranslatedString('deselectProgrammeA11y', 'Deselect {label}', params: {'label': '$label'});

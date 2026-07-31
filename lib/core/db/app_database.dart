@@ -70,7 +70,7 @@ class AppDatabase {
         password: key,
         version: schemaVersion,
         onCreate: createSchema,
-        onUpgrade: _onUpgrade,
+        onUpgrade: onUpgrade,
       );
       return AppDatabase._(db);
     } on DatabaseException catch (e) {
@@ -86,7 +86,7 @@ class AppDatabase {
           password: key,
           version: schemaVersion,
           onCreate: createSchema,
-          onUpgrade: _onUpgrade,
+          onUpgrade: onUpgrade,
         );
         return AppDatabase._(db);
       }
@@ -550,7 +550,7 @@ class AppDatabase {
 
     // v26 — Clinical record tables: screenings, NCD medical reviews,
     // diagnoses, treatment details, and Rx-Buddy check-ins. Mirrors the
-    // _onUpgrade v26 block below — fresh installs must get these tables
+    // onUpgrade v26 block below — fresh installs must get these tables
     // here too, not just devices upgrading from an older schema version.
     await db.execute('''
       CREATE TABLE $tableScreenings (
@@ -644,7 +644,11 @@ class AppDatabase {
         'CREATE INDEX idx_rx_buddy_sync ON $tableRxBuddyCheckins(sync_status)');
   }
 
-  static Future<void> _onUpgrade(Database db, int from, int to) async {
+  /// Runs the incremental migration chain. Exposed (not private) so tests
+  /// can drive it directly against an in-memory FFI database, the same
+  /// reason [createSchema] is public — [AppDatabase.open]'s real SQLCipher
+  /// path isn't usable from a plain `flutter test` environment.
+  static Future<void> onUpgrade(Database db, int from, int to) async {
     if (from < 2) {
       // Add risk + programme columns to the existing patients row.
       // SQLite has no IF NOT EXISTS for ADD COLUMN, so each ALTER is wrapped
