@@ -139,9 +139,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// a second ANC visit on the same calendar day.
   bool _ancVisitedToday = false;
 
-  /// Under-5 only: whether the SK has explicitly tapped the Vaccination card.
-  /// Starts false so the card shows unselected; tap toggles it.
-  bool _vaccinationSelected = false;
+  /// Under-5 only: vaccination is always included for a child visit — Step 2
+  /// of the visit flow shows the vaccination timeline regardless, so this
+  /// was never really a user choice. Forced true whenever the card would
+  /// render (the card itself is only ever shown for under-5 patients); the
+  /// getter naturally evaluates false for non-under5 patients, for whom the
+  /// card never renders and this value has no effect.
+  bool get _vaccinationSelected => _patientContext?.isUnder5 ?? false;
 
   @override
   void initState() {
@@ -550,11 +554,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     });
   }
 
-  /// Toggles the vaccination card selection state (under-5).
-  void _onVaccinationToggle() {
-    setState(() => _vaccinationSelected = !_vaccinationSelected);
-  }
-
   /// Advances to the vaccination visit step.
   ///
   /// In embedded mode (inside VisitFlowScreen): fires [onAdvance] with
@@ -946,9 +945,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         onDeliveryToggle: _onDeliveryToggle,
                         onVaccination: _onVaccination,
                         vaccinationSelected: _vaccinationSelected,
-                        onVaccinationToggle: widget.onAdvance != null
-                            ? _onVaccinationToggle
-                            : null,
+                        vaccinationLocked: widget.onAdvance != null,
                       ),
                     ),
                   ),
@@ -1978,7 +1975,7 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.onDeliveryToggle,
     required this.onVaccination,
     this.vaccinationSelected = false,
-    this.onVaccinationToggle,
+    this.vaccinationLocked = false,
   });
 
   final PatientContext patientContext;
@@ -1996,12 +1993,18 @@ class _InlineServiceSelector extends StatelessWidget {
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
-  /// Whether the SK has selected the Vaccination card (under-5 only).
+  /// Whether the Vaccination card shows as selected (under-5 only) — always
+  /// true whenever the card renders, since vaccination is no longer a
+  /// genuine choice; see [vaccinationLocked].
   final bool vaccinationSelected;
 
-  /// Called when SK toggles the Vaccination card. Replaces the old direct-
-  /// navigation [onVaccination] tap — selection is now decoupled from the CTA.
-  final VoidCallback? onVaccinationToggle;
+  /// True when embedded in the visit flow — the Vaccination card renders
+  /// pre-selected and non-interactive (vaccination always happens for a
+  /// child visit regardless of this card), so tapping it explains why
+  /// instead of toggling anything. False for standalone (non-embedded) use,
+  /// where the card tap still pushes the immunisation route directly via
+  /// [onVaccination] — that legacy path is unaffected.
+  final bool vaccinationLocked;
 
   /// Legacy — kept for standalone (non-embedded) use where the card tap
   /// still pushes the immunisation route directly.
@@ -2046,7 +2049,7 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   bool _isLocked(_ServiceCardDef card) {
-    if (card.isVaccination) return false;
+    if (card.isVaccination) return vaccinationLocked;
     if (card.programme == Programme.imci) return false;
     final ctx = patientContext;
     final pregnant = ctx.isPregnant && !ctx.isPostpartum;
@@ -2081,11 +2084,19 @@ class _InlineServiceSelector extends StatelessWidget {
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
     if (card.isVaccination) {
-      // Embedded in visit flow — toggle selection; CTA drives the advance.
-      // Standalone (no toggle callback) — navigate directly as before.
-      if (onVaccinationToggle != null) {
-        onVaccinationToggle!();
+      if (vaccinationLocked) {
+        // Embedded in visit flow — vaccination always happens for a child
+        // visit regardless of this card, so there's nothing to toggle;
+        // explain why instead.
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Text(TriageStrings.vaccinationDefaultHint),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ));
       } else {
+        // Standalone (non-embedded) use — legacy direct navigation, unaffected.
         onVaccination();
       }
       return;

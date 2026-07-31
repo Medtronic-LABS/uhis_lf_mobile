@@ -1762,7 +1762,15 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final hasPnc = progs.contains(Programme.pnc);
     final hasImci = progs.contains(Programme.imci);
     final hasTb = progs.contains(Programme.tb);
-    final hasEpi = progs.contains(Programme.epi);
+    // confirmedProgrammes is deliberately emptied for a vaccination-only tap
+    // (SymptomPickerScreen._onVaccination's vaccinationOnly:true — see its
+    // comment: "so auto-activated IMCI pathway does not trigger the child
+    // health form"), so Programme.epi never lands in that set for exactly
+    // the visit type this method is meant to recognize. primaryProgramme is
+    // already correctly Programme.epi for that same case (VisitFlowScreen's
+    // _Step2Vaccination.onAdvance), so check both.
+    final hasEpi = progs.contains(Programme.epi) ||
+        widget.primaryProgramme == Programme.epi;
     final epi = widget.epiVisitSummary;
 
     final actions = <NabaNextAction>[];
@@ -1972,7 +1980,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final hasPnc = progs.contains(Programme.pnc);
     final hasImci = progs.contains(Programme.imci);
     final hasTb = progs.contains(Programme.tb);
-    final hasEpi = progs.contains(Programme.epi);
+    // See the matching comment in _ruleBasedNaba() — confirmedProgrammes is
+    // empty for a vaccination-only tap, so primaryProgramme is also checked.
+    final hasEpi = progs.contains(Programme.epi) ||
+        widget.primaryProgramme == Programme.epi;
     final epi = widget.epiVisitSummary;
 
     final buf = StringBuffer();
