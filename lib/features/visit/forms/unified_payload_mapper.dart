@@ -1,5 +1,6 @@
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/debug/console_log.dart';
+import '../models/anc_assessment.dart';
 import 'canonical_visit_data.dart';
 
 /// A single per-programme assessment payload ready for
@@ -18,8 +19,11 @@ class ProgrammePayload {
   /// Matches Android SPICE offline-sync DTO structure exactly:
   ///   ANC        → medicalHistoryPhysicalExamination / pointOfCareInvestigations /
   ///                dangerSignsRiskIdentification / vaccinationAndSupplements /
-  ///                ancServicesBirthPreparedness / visitNo / bmiCategory
-  ///   NCD        → bpLog (weight/height/bmi inside) / glucoseLog / symptomsLog
+  ///                ancServicesBirthPreparedness / visitNo / ancVisitDate /
+  ///                summary (highRiskPregnantWoman, gapsInAnc) —
+  ///                wrapped under {anc: …} by LocalAssessmentEntity.toApiRequest
+  ///   NCD        → biometric / bpLog / glucoseLog / symptomsLog /
+  ///                generalInformation / eyeCare
   ///   PNC_MOTHER → maternalHealthAssessment / pregnancyHistory / postpartumContraception /
   ///                visitNo / daysSinceDelivery
   ///
@@ -255,7 +259,6 @@ abstract final class UnifiedPayloadMapper {
       'pregnantWomanExistingIllness': d.getValue('pregnantWomanExistingIllness'),
       'pregnantWomanOnTreatment': d.getValue('pregnantWomanOnTreatment'),
       'previousPregnancyComplications': d.getValue('previousPregnancyComplications') ?? <String>[],
-      'highRiskPregnantWoman': d.getValue('highRiskPregnantWoman'),
     });
 
     // ANC point-of-care:
@@ -362,11 +365,74 @@ abstract final class UnifiedPayloadMapper {
       ancVisitCount: toInt(visitNo),
     );
 
-    final summary = <String, dynamic>{};
-    if (gapsResult.hasGaps) summary['gapsInAnc'] = gapsResult.gaps;
+    // Spice evaluateAndAddAncSummaryData — summary.highRiskPregnantWoman is a
+    // { URGENT: [...], NON_URGENT: [...] } map computed client-side, not a form field.
+    double? tempF = asNum(d.getValue('temperature'));
+    double? tempC = tempF == null ? null : (tempF - 32) * 5 / 9;
+    final pulseRaw = d.getValue('pulse');
+    final pulseBpm = pulseRaw is int
+        ? pulseRaw
+        : (pulseRaw is num
+            ? pulseRaw.toInt()
+            : (pulseRaw is String ? int.tryParse(pulseRaw) : null));
+    final referral = AncReferralEvaluator.evaluate(
+      AncAssessment(
+        medicalHistoryPhysicalExamination: MedicalHistoryPhysicalExamination(
+          bloodPressureSystolic: asNum(rawSys)?.toInt(),
+          bloodPressureDiastolic: asNum(rawDia)?.toInt(),
+          fundalHeight: fundalHeight,
+          oedema: (d.getValue('oedema') ?? d.getValue('edema')) as String?,
+          weight: weight,
+          height: height,
+        ),
+        pointOfCareInvestigations: PointOfCareInvestigations(
+          hemoglobin: asNum(d.getValue('hemoglobin')),
+          urinaryAlbumin: d.getValue('urinaryAlbumin') as String?,
+          urinaryBilirubin: d.getValue('urinaryBilirubin') as String?,
+          urinarySugar: d.getValue('urinarySugar') as String?,
+          bloodSugarFasting: hasFbs ? glucoseValue : null,
+          bloodSugarRandom: hasRbs ? glucoseValue : null,
+        ),
+        dangerSignsRiskIdentification: DangerSignsRiskIdentification(
+          dangerSignsExperienced12:
+              (d.getValue('dangerSignsExperienced12') as List?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
+          dangerSignsExperienced13To27:
+              (d.getValue('dangerSignsExperienced13To27') as List?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
+          dangerSignsExperienced28To40:
+              (d.getValue('dangerSignsExperienced28To40') as List?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
+        ),
+        gestationalWeeks: gestationalWeeks?.toInt(),
+      ),
+      temperatureCelsius: tempC,
+      pulseBpm: pulseBpm,
+    );
+
+    final highRisk = <String, dynamic>{};
+    if (referral.emergencyConditions.isNotEmpty) {
+      highRisk['URGENT'] = referral.emergencyConditions;
+    }
+    if (referral.nonEmergencyConditions.isNotEmpty) {
+      highRisk['NON_URGENT'] = referral.nonEmergencyConditions;
+    }
+
+    final summary = <String, dynamic>{
+      if (highRisk.isNotEmpty) 'highRiskPregnantWoman': highRisk,
+      if (gapsResult.hasGaps) 'gapsInAnc': gapsResult.gaps,
+    };
 
     return {
       if (visitNo != null) 'visitNo': visitNo,
+      // Spice AssessmentRMNCHFragment.evaluateAndAddAncSummaryData stamps this.
+      'ancVisitDate': DateTime.now().toUtc().toIso8601String(),
       if (bmiCategory != null) 'bmiCategory': bmiCategory,
       if (medHx.isNotEmpty) 'medicalHistoryPhysicalExamination': medHx,
       if (pointOfCare.isNotEmpty) 'pointOfCareInvestigations': pointOfCare,
@@ -404,11 +470,12 @@ abstract final class UnifiedPayloadMapper {
   //                        avgDiastolic, avgBloodPressure, weight, height, bmi,
   //                        isRegularSmoker, cvdRisk, bpLogDetails[] }
   //   ncd.glucoseLog   = { diagnosedGlucose, diagnosedGlucoseMedication,
-  //                        glucose, glucoseType, glucoseUnit, hba1c,
-  //                        glucoseDateTime, hba1cDateTime }
+  //                        glucose, glucoseValue, glucoseType, glucoseUnit,
+  //                        hba1c, glucoseDateTime, hba1cDateTime }
   //   ncd.symptomsLog  = { compliance:"Yes"/"No", hasSymptoms:"Yes"/"No",
   //                        ncdSymptoms[], newWorseningSymptoms,
   //                        ncdSymptomsMedication }
+  //   ncd.biometric    = { height, weight, bmi }
   //
   // weight/height/bmi/isRegularSmoker INSIDE bpLog as numbers.
   // NCD avgSystolic/avgDiastolic are INTEGER on the wire (not strings).
@@ -418,45 +485,30 @@ abstract final class UnifiedPayloadMapper {
   // 'bpReadings', or flat systolic_1/diastolic_1 etc. When present, the
   // bpLogDetails array carries all readings and averages are computed here.
 
-  static Map<String, dynamic> _toNcd(CanonicalVisitData d) {
+  /// Average systolic/diastolic from canonical NCD BP fields.
+  ///
+  /// Mirrors the reading aggregation used by [_toNcd] so referral logic and
+  /// the wire payload share one source of truth.
+  static ({int? systolic, int? diastolic}) ncdAvgBp(CanonicalVisitData d) {
+    final details = _ncdBpDetails(d);
+    if (details.isEmpty) return (systolic: null, diastolic: null);
+    final avgSys = (details.map((r) => r['systolic'] as int).reduce((a, b) => a + b) /
+            details.length)
+        .round();
+    final avgDia = (details.map((r) => r['diastolic'] as int).reduce((a, b) => a + b) /
+            details.length)
+        .round();
+    return (systolic: avgSys, diastolic: avgDia);
+  }
+
+  static List<Map<String, dynamic>> _ncdBpDetails(CanonicalVisitData d) {
     double? asNum(dynamic v) {
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v);
       return null;
     }
 
-    // Normalize boolean-like values to Android "Yes"/"No" string convention.
-    String? yesNo(dynamic v) {
-      if (v == null) return null;
-      if (v == true || v == 'true' || v == 'yes' || v == 'Yes' || v == 1) return 'Yes';
-      if (v == false || v == 'false' || v == 'no' || v == 'No' || v == 0) return 'No';
-      // Already a string — normalize casing
-      final s = v.toString().toLowerCase();
-      if (s == 'yes') return 'Yes';
-      if (s == 'no') return 'No';
-      return v.toString();
-    }
-
-    // Coerce to Dart bool for fields where the DTO expects Boolean (not string).
-    bool? toBool(dynamic v) {
-      if (v == null) return null;
-      if (v is bool) return v;
-      final s = v.toString().toLowerCase();
-      if (s == 'true' || s == 'yes' || s == '1') return true;
-      if (s == 'false' || s == 'no' || s == '0') return false;
-      return null;
-    }
-
-    // ── BP readings ──────────────────────────────────────────────────────────
-    // Support up to 3 indexed readings (systolic_1/diastolic_1 … _3) or a
-    // single flat systolic/diastolic. Averages and bpLogDetails are derived
-    // from whichever readings are present.
-    final bpLog = <String, dynamic>{};
     final bpDetails = <Map<String, dynamic>>[];
-
-    // Priority: bpLogDetails (stored by the _BpReadingField widget in the
-    // unified form — field ID matches field_library.json), then bpReadings
-    // (legacy AI Scribe pre-fill), then indexed/flat fields.
     final bpReadingsRaw =
         d.getValue('bpLogDetails') ?? d.getValue('bpReadings');
     if (bpReadingsRaw is List && bpReadingsRaw.isNotEmpty) {
@@ -474,76 +526,111 @@ abstract final class UnifiedPayloadMapper {
           bpDetails.add(detail);
         }
       }
-    } else {
-      // Fall back to indexed flat fields, then to plain systolic/diastolic.
-      for (var i = 1; i <= 3; i++) {
-        final s = asNum(d.getValue('systolic_$i'));
-        final di = asNum(d.getValue('diastolic_$i'));
-        if (s != null && di != null) {
-          final detail = <String, dynamic>{
-            'systolic': s.toInt(),
-            'diastolic': di.toInt(),
-          };
-          final p = asNum(d.getValue('pulse_$i'));
-          if (p != null) detail['pulse'] = p.toInt();
-          bpDetails.add(detail);
-        }
-      }
-      // Fallback: single reading from plain fields.
-      if (bpDetails.isEmpty) {
-        final s = asNum(d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'));
-        final di = asNum(d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'));
-        if (s != null && di != null) {
-          final detail = <String, dynamic>{
-            'systolic': s.toInt(),
-            'diastolic': di.toInt(),
-          };
-          final pulse = asNum(d.getValue('pulse'));
-          if (pulse != null) detail['pulse'] = pulse.toInt();
-          bpDetails.add(detail);
-        }
-      }
+      return bpDetails;
     }
 
-    if (bpDetails.isNotEmpty) {
-      final avgSys = (bpDetails.map((r) => r['systolic'] as int).reduce((a, b) => a + b) / bpDetails.length).round();
-      final avgDia = (bpDetails.map((r) => r['diastolic'] as int).reduce((a, b) => a + b) / bpDetails.length).round();
-      bpLog['avgSystolic'] = avgSys;
-      bpLog['avgDiastolic'] = avgDia;
-      bpLog['avgBloodPressure'] = '$avgSys/$avgDia';
-      bpLog['bpLogDetails'] = bpDetails;
-      // Android CommonUtils stamps bpTakenOn on every NCD BP log (UTC ISO-8601).
-      bpLog['bpTakenOn'] = DateTime.now().toUtc().toIso8601String();
-      // Biometric data inside bpLog (Android stores weight/height/bmi here).
-      final weight = asNum(d.getValue('weight'));
-      if (weight != null) bpLog['weight'] = weight;
-      final height = asNum(d.getValue('height'));
-      if (height != null) bpLog['height'] = height;
-      final bmi = asNum(d.getValue('bmi'));
-      if (bmi != null) bpLog['bmi'] = bmi;
-      final bmiCategory = d.getValue('bmiCategory');
-      if (bmiCategory != null) bpLog['bmiCategory'] = bmiCategory;
-      final isRegularSmoker = d.getValue('isRegularSmoker');
-      if (isRegularSmoker != null) {
-        // Spice-service BpLogDTO field is Boolean — coerce "Yes"/"yes"/true → true.
-        bpLog['isRegularSmoker'] = toBool(isRegularSmoker);
+    for (var i = 1; i <= 3; i++) {
+      final s = asNum(d.getValue('systolic_$i'));
+      final di = asNum(d.getValue('diastolic_$i'));
+      if (s != null && di != null) {
+        final detail = <String, dynamic>{
+          'systolic': s.toInt(),
+          'diastolic': di.toInt(),
+        };
+        final p = asNum(d.getValue('pulse_$i'));
+        if (p != null) detail['pulse'] = p.toInt();
+        bpDetails.add(detail);
       }
-      // Prior diagnosis fields: Flutter form uses isBeforeHtnDiagnosis / medicationFrequencyBp
-      // (both store "Yes"/"No" strings); Android wire names are diagnosedBP / diagnosedBPMedication.
-      final diagBp =
-          d.getValue('diagnosedBP') ?? d.getValue('isBeforeHtnDiagnosis');
-      if (diagBp != null) bpLog['diagnosedBP'] = diagBp;
-      final diagBpMed =
-          d.getValue('diagnosedBPMedication') ?? d.getValue('medicationFrequencyBp');
-      if (diagBpMed != null) bpLog['diagnosedBPMedication'] = diagBpMed;
-      final cvdRisk = d.getValue('cvdRisk');
-      if (cvdRisk != null) bpLog['cvdRisk'] = cvdRisk;
     }
+    if (bpDetails.isEmpty) {
+      final s =
+          asNum(d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'));
+      final di = asNum(
+          d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'));
+      if (s != null && di != null) {
+        final detail = <String, dynamic>{
+          'systolic': s.toInt(),
+          'diastolic': di.toInt(),
+        };
+        final pulse = asNum(d.getValue('pulse'));
+        if (pulse != null) detail['pulse'] = pulse.toInt();
+        bpDetails.add(detail);
+      }
+    }
+    return bpDetails;
+  }
+
+  /// Local ISO-8601 with numeric offset, e.g. `2026-07-30T23:45:45+05:30`.
+  /// Matches Spice `DateUtils.getTodayDateDDMMYYYY` / glucose stamp format.
+  static String _localIsoWithOffset(DateTime dt) {
+    final local = dt.toLocal();
+    final offset = local.timeZoneOffset;
+    final sign = offset.isNegative ? '-' : '+';
+    final abs = offset.abs();
+    final oh = abs.inHours.toString().padLeft(2, '0');
+    final om = (abs.inMinutes % 60).toString().padLeft(2, '0');
+    String p(int n) => n.toString().padLeft(2, '0');
+    return '${local.year}-${p(local.month)}-${p(local.day)}'
+        'T${p(local.hour)}:${p(local.minute)}:${p(local.second)}'
+        '$sign$oh:$om';
+  }
+
+  static Map<String, dynamic> _toNcd(CanonicalVisitData d) {
+    double? asNum(dynamic v) {
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    // Normalize boolean-like values to Android "Yes"/"No" string convention.
+    String? yesNo(dynamic v) {
+      if (v == null) return null;
+      if (v == true || v == 'true' || v == 'yes' || v == 'Yes' || v == 1) {
+        return 'Yes';
+      }
+      if (v == false || v == 'false' || v == 'no' || v == 'No' || v == 0) {
+        return 'No';
+      }
+      final s = v.toString().toLowerCase();
+      if (s == 'yes') return 'Yes';
+      if (s == 'no') return 'No';
+      return v.toString();
+    }
+
+    bool? toBool(dynamic v) {
+      if (v == null) return null;
+      if (v is bool) return v;
+      final s = v.toString().toLowerCase();
+      if (s == 'true' || s == 'yes' || s == '1') return true;
+      if (s == 'false' || s == 'no' || s == '0') return false;
+      return null;
+    }
+
+    // ── BP log (readings + diagnosis; biometrics live under ncd.biometric) ──
+    final bpLog = <String, dynamic>{};
+    final bpDetails = _ncdBpDetails(d);
+    if (bpDetails.isNotEmpty) {
+      final avg = ncdAvgBp(d);
+      bpLog['avgSystolic'] = avg.systolic;
+      bpLog['avgDiastolic'] = avg.diastolic;
+      bpLog['avgBloodPressure'] = '${avg.systolic}/${avg.diastolic}';
+      bpLog['bpLogDetails'] = bpDetails;
+    }
+
+    // Diagnosis / smoker may appear without BP readings on a follow-up visit.
+    final isRegularSmoker = d.getValue('isRegularSmoker');
+    if (isRegularSmoker != null) {
+      bpLog['isRegularSmoker'] = toBool(isRegularSmoker);
+    }
+    final diagBp =
+        yesNo(d.getValue('diagnosedBP') ?? d.getValue('isBeforeHtnDiagnosis'));
+    if (diagBp != null) bpLog['diagnosedBP'] = diagBp;
+    final diagBpMed = yesNo(d.getValue('diagnosedBPMedication') ??
+        d.getValue('medicationFrequencyBp'));
+    if (diagBpMed != null) bpLog['diagnosedBPMedication'] = diagBpMed;
+    // CVD risk intentionally omitted for now (Spice calculator not ported).
 
     // ── Glucose log ──────────────────────────────────────────────────────────
-    // Fan-out: union reads so whichever glucose field survived the semantic
-    // dedup (NCD: glucoseType/glucoseValue vs PNC: bloodSugar/fastingBloodSugar)
-    // populates the NCD payload.
     final glucoseNum = asNum(d.getValue('glucoseValue') ??
         d.getValue('glucose') ??
         d.getValue('fastingBloodSugar') ??
@@ -551,9 +638,8 @@ abstract final class UnifiedPayloadMapper {
         d.getValue('ancBloodGlucose'));
     final glucoseLog = <String, dynamic>{};
     if (glucoseNum != null) {
-      // Spice-service BpLogDTO / FHIR mapper both read `glucoseValue`, not `glucose`.
-      glucoseLog['glucoseValue'] = glucoseNum;
-      // NCD wire vocabulary is fbs/rbs — translate an ANC/PNC selector value.
+      // Spice BD wire uses `glucose` only (not glucoseValue / bgTakenOn).
+      glucoseLog['glucose'] = glucoseNum;
       final glucoseType = d.getValue('glucoseType') ??
           switch (d.getValue('bloodSugar')) {
             'fasting' => 'fbs',
@@ -563,51 +649,70 @@ abstract final class UnifiedPayloadMapper {
       if (glucoseType != null) glucoseLog['glucoseType'] = glucoseType;
       glucoseLog['glucoseUnit'] =
           d.getValue('glucoseUnit') as String? ?? 'mmol/L';
-      glucoseLog['bgTakenOn'] = DateTime.now().toUtc().toIso8601String();
+      final stamped = d.getValue('glucoseDateTime') as String? ??
+          _localIsoWithOffset(DateTime.now());
+      glucoseLog['glucoseDateTime'] = stamped;
+      glucoseLog['hba1cDateTime'] =
+          d.getValue('hba1cDateTime') as String? ?? stamped;
       final hba1c = asNum(d.getValue('hba1c'));
       if (hba1c != null) {
         glucoseLog['hba1c'] = hba1c;
         glucoseLog['hba1cUnit'] = d.getValue('hba1cUnit') as String? ?? '%';
       }
-      final glucoseDateTime = d.getValue('glucoseDateTime');
-      if (glucoseDateTime != null) glucoseLog['glucoseDateTime'] = glucoseDateTime;
-      final hba1cDateTime = d.getValue('hba1cDateTime');
-      if (hba1cDateTime != null) glucoseLog['hba1cDateTime'] = hba1cDateTime;
-      // Prior diagnosis: Flutter form uses isBeforeDiabetesDiagnosis / medicationFrequencyBg;
-      // Android wire names are diagnosedGlucose / diagnosedGlucoseMedication.
-      final diagGlucose =
-          d.getValue('diagnosedGlucose') ?? d.getValue('isBeforeDiabetesDiagnosis');
-      if (diagGlucose != null) glucoseLog['diagnosedGlucose'] = diagGlucose;
-      final diagGlucoseMed =
-          d.getValue('diagnosedGlucoseMedication') ?? d.getValue('medicationFrequencyBg');
-      if (diagGlucoseMed != null) glucoseLog['diagnosedGlucoseMedication'] = diagGlucoseMed;
+    }
+    final diagGlucose = yesNo(
+        d.getValue('diagnosedGlucose') ?? d.getValue('isBeforeDiabetesDiagnosis'));
+    if (diagGlucose != null) glucoseLog['diagnosedGlucose'] = diagGlucose;
+    final diagGlucoseMed = yesNo(d.getValue('diagnosedGlucoseMedication') ??
+        d.getValue('medicationFrequencyBg'));
+    if (diagGlucoseMed != null) {
+      glucoseLog['diagnosedGlucoseMedication'] = diagGlucoseMed;
     }
 
     // ── Symptoms log ─────────────────────────────────────────────────────────
-    // Android always sends compliance and hasSymptoms as "Yes"/"No" strings.
     final symptomsLog = <String, dynamic>{};
-    final complianceRaw = d.getValue('compliance');
-    final complianceStr = yesNo(complianceRaw);
+    final complianceStr = yesNo(d.getValue('compliance'));
     if (complianceStr != null) symptomsLog['compliance'] = complianceStr;
-    final hasSymptomsRaw = d.getValue('hasSymptoms');
-    final hasSymptomsStr = yesNo(hasSymptomsRaw);
+    final hasSymptomsStr = yesNo(d.getValue('hasSymptoms'));
     if (hasSymptomsStr != null) symptomsLog['hasSymptoms'] = hasSymptomsStr;
     final ncdSymptoms = d.getValue('ncdSymptoms');
     if (ncdSymptoms != null) symptomsLog['ncdSymptoms'] = ncdSymptoms;
     final newWorseningSymptoms = d.getValue('newWorseningSymptoms');
-    if (newWorseningSymptoms != null) symptomsLog['newWorseningSymptoms'] = newWorseningSymptoms;
-    // Android wire key is ncdSymptomsMedication; Flutter layout uses 'compliance' (same field).
-    // Read ncdSymptomsMedication first; fall back to compliance so either layout ID works.
-    final ncdSymptomsMedication = d.getValue('ncdSymptomsMedication') ?? complianceStr;
-    if (ncdSymptomsMedication != null) symptomsLog['ncdSymptomsMedication'] = ncdSymptomsMedication;
+    if (newWorseningSymptoms != null) {
+      symptomsLog['newWorseningSymptoms'] = newWorseningSymptoms;
+    }
+    final ncdSymptomsMedication =
+        yesNo(d.getValue('ncdSymptomsMedication')) ?? complianceStr;
+    if (ncdSymptomsMedication != null) {
+      symptomsLog['ncdSymptomsMedication'] = ncdSymptomsMedication;
+    }
+
+    // ── Biometric (Spice ncd.biometric — not duplicated under bpLog) ─────────
+    final biometric = <String, dynamic>{};
+    final height = asNum(d.getValue('height'));
+    final weight = asNum(d.getValue('weight'));
+    final bmi = asNum(d.getValue('bmi'));
+    if (height != null) biometric['height'] = height;
+    if (weight != null) biometric['weight'] = weight;
+    if (bmi != null) biometric['bmi'] = bmi;
+
+    // Empty card groups always present on Spice BD ncd.json layouts.
+    final generalInformation =
+        d.getValue('generalInformation') as Map<String, dynamic>? ??
+            const <String, dynamic>{};
+    final eyeCare =
+        d.getValue('eyeCare') as Map<String, dynamic>? ??
+            const <String, dynamic>{};
 
     return {
+      if (symptomsLog.isNotEmpty) 'symptomsLog': symptomsLog,
+      if (biometric.isNotEmpty) 'biometric': biometric,
       if (bpLog.isNotEmpty) 'bpLog': bpLog,
       if (glucoseLog.isNotEmpty) 'glucoseLog': glucoseLog,
-      if (symptomsLog.isNotEmpty) 'symptomsLog': symptomsLog,
-      if (d.getValue('htnScreening') != null) 'htnScreening': d.getValue('htnScreening'),
-      if (d.getValue('generalInformation') != null)
-        'generalInformation': d.getValue('generalInformation'),
+      'generalInformation': generalInformation,
+      'eyeCare': eyeCare,
+      if (d.getValue('htnScreening') != null)
+        'htnScreening': d.getValue('htnScreening'),
       if (d.getValue('referralFacilityType') != null)
         'referralFacilityType': d.getValue('referralFacilityType'),
     };

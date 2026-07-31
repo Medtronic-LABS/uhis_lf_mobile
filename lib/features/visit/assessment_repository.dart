@@ -444,11 +444,25 @@ class AssessmentRepository extends ChangeNotifier {
     return _dao.getById(id);
   }
 
+  /// True when the patient already has a prior NCD assessment (local or
+  /// synced history). Used for BD first-visit vs follow-up referral paths.
+  Future<bool> hasPriorNcdAssessment(String patientId) async {
+    if (patientId.isEmpty) return false;
+    final localRows = await _dao.getByPatientId(patientId);
+    if (localRows.any((r) => r.assessmentType.toUpperCase() == 'NCD')) {
+      return true;
+    }
+    if (_historyDao == null) return false;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = historyMap[patientId] ?? const [];
+    return rows.any((r) => _isNcdKind(r.kind?.toUpperCase() ?? ''));
+  }
+
   /// Most-recent weight (kg) for [patientId].
   ///
   /// Order matches prior-visit biometrics for NCD: this device's
   /// `local_assessments` first (unsynced visits are not in history yet), then
-  /// synced `assessments` rows. NCD local rows store weight under `bpLog`.
+  /// synced `assessments` rows. NCD local rows store weight under `biometric`.
   Future<double?> lastRecordedWeight(String patientId) async {
     return _lastRecordedBiometric(patientId, _BiometricKind.weight);
   }
@@ -500,7 +514,7 @@ class AssessmentRepository extends ChangeNotifier {
   }
 
   /// Height/weight from a locally saved assessment_details blob.
-  /// NCD stores them inside `bpLog`; ANC under medicalHistoryPhysicalExamination.
+  /// NCD stores them under `biometric` (legacy rows may still use `bpLog`).
   static double? _biometricFromLocalDetails(
     String detailsJson,
     _BiometricKind kind,
@@ -514,9 +528,12 @@ class AssessmentRepository extends ChangeNotifier {
     final key = kind == _BiometricKind.height ? 'height' : 'weight';
     final candidates = <dynamic>[
       map[key],
+      if (map['biometric'] is Map) (map['biometric'] as Map)[key],
       if (map['bpLog'] is Map) (map['bpLog'] as Map)[key],
       if (map['ncd'] is Map) ...[
         (map['ncd'] as Map)[key],
+        if ((map['ncd'] as Map)['biometric'] is Map)
+          ((map['ncd'] as Map)['biometric'] as Map)[key],
         if ((map['ncd'] as Map)['bpLog'] is Map)
           ((map['ncd'] as Map)['bpLog'] as Map)[key],
       ],

@@ -5,8 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:intl/intl.dart';
-
 import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
@@ -15,6 +13,8 @@ import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/models/json_read.dart';
 import '../../../core/models/referral.dart';
+import '../../../core/risk/anc_status.dart';
+import '../../../core/risk/ncd_status.dart';
 import '../../../core/risk/pregnancy_outcome_status.dart';
 import '../../../core/risk/pw_risk_factors.dart';
 import '../../../core/time/calendar_day.dart';
@@ -117,6 +117,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// When true, height was taken from a prior NCD/Cataract visit and must not
   /// be edited — mirrors Spice `view.isEnabled = false` after prefill.
   bool _heightLockedFromPrior = false;
+
+  /// Field library, supplied by the form screen once `field_library.json` is
+  /// parsed. Used at submit time to translate stored option ids into the wire
+  /// `value` codes Spice sends (see [_withWireOptionValues]).
+  Map<String, FieldDef> _fieldDefs = const {};
+  set fieldDefs(Map<String, FieldDef> defs) => _fieldDefs = defs;
 
   CanonicalVisitData get data => _data;
   bool get submitting => _submitting;
@@ -1155,15 +1161,6 @@ class UnifiedFormNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // For NCD: auto-set referralFacilityType from the user's default site
-      // when no form field has supplied it. Android auto-sets this from
-      // SecuredPreference.DEFAULT_SITE_ID at submit time.
-      if (_defaultReferralSiteId != null &&
-          _activeFormTypes.contains('ncd') &&
-          _data.getValue('referralFacilityType') == null) {
-        _data = _data.setValue('referralFacilityType', _defaultReferralSiteId);
-      }
-
       // Spice: pregnancyDetail.ancVisitNo / pncVisitNo → next visit number
       // stamped onto the payload before save, then written back.
       int? assignedAncVisitNo;
@@ -1191,8 +1188,39 @@ class UnifiedFormNotifier extends ChangeNotifier {
             'patient=$_patientId');
       }
 
+      // BD NCD: first visit uses threshold referral; follow-up uses color band.
+      // Facility type is "Community Clinic" / "Upazila Health Complex" — never
+      // the org FHIR id (that belongs in summary.referredSiteId for CC only).
+      final isNcdFollowUp = _activeFormTypes.contains('ncd')
+          ? await _assessmentRepo.hasPriorNcdAssessment(_patientId)
+          : false;
+
+      final (isReferred, referredReasons) =
+          _computeReferral(isNcdFollowUp: isNcdFollowUp);
+
+      Map<String, dynamic>? ncdOtherDetails;
+      if (_activeFormTypes.contains('ncd') && isReferred) {
+        final avg = UnifiedPayloadMapper.ncdAvgBp(_data);
+        final glVal = _asDoubleField('glucoseValue') ??
+            _asDoubleField('glucose') ??
+            _asDoubleField('fastingBloodSugar') ??
+            _asDoubleField('randomBloodSugar');
+        final facilityType = NcdStatus.resolveFacilityType(
+          isFollowUpVisit: isNcdFollowUp,
+          referredReasons: referredReasons,
+          avgSystolic: avg.systolic,
+          avgDiastolic: avg.diastolic,
+          glucoseMmol: glVal,
+        );
+        _data = _data.setValue('referralFacilityType', facilityType);
+        ncdOtherDetails = NcdStatus.referredSummary(
+          referralFacilityType: facilityType,
+          referredSiteId: _defaultReferralSiteId,
+        );
+      }
+
       final payloads = UnifiedPayloadMapper.decompose(
-        _data,
+        _withWireOptionValues(_data),
         _activeFormTypes.toSet(),
       );
       if (payloads.isEmpty) {
@@ -1201,7 +1229,6 @@ class UnifiedFormNotifier extends ChangeNotifier {
             '${_activeFormTypes.toList()} — nothing will be saved or synced');
       }
 
-      final (isReferred, referredReasons) = _computeReferral();
       _lastIsReferred = isReferred;
       _lastReferredReasons = referredReasons;
       _lastReferralFacility = _data.getValue('referralFacility') as String? ??
@@ -1226,6 +1253,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
                       p.assessmentType == 'PREGNANCY_OUTCOME' ||
                       p.assessmentType == 'PREGNANCYOUTCOME')
                   .details,
+            )
+          : null;
+      final ncdStatus = payloads.any((p) => p.assessmentType == 'NCD')
+          ? NcdStatus.status(
+              isReferred: isReferred,
+              referredReasons: referredReasons,
+            )
+          : null;
+      final ancStatus = payloads.any((p) => p.assessmentType == 'ANC')
+          ? AncStatus.status(
+              payloads.firstWhere((p) => p.assessmentType == 'ANC').details,
             )
           : null;
 
@@ -1265,8 +1303,16 @@ class UnifiedFormNotifier extends ChangeNotifier {
               : (payload.assessmentType == 'PREGNANCY_OUTCOME' ||
                       payload.assessmentType == 'PREGNANCYOUTCOME')
                   ? (poStatus == null || poStatus.isEmpty ? null : poStatus)
-                  : null,
+                  : payload.assessmentType == 'NCD'
+                      ? (ncdStatus == null || ncdStatus.isEmpty
+                          ? null
+                          : ncdStatus)
+                      : payload.assessmentType == 'ANC'
+                          ? ancStatus
+                          : null,
           pregnancyEpisodeId: sharedPregnancyEpisodeId,
+          otherDetails:
+              payload.assessmentType == 'NCD' ? ncdOtherDetails : null,
         );
         savedIds.add(id);
       }
@@ -1334,6 +1380,51 @@ class UnifiedFormNotifier extends ChangeNotifier {
     return n;
   }
 
+  /// Multi-select fields Spice sends as option `value` codes (e.g.
+  /// `"shortnessOfBreath"`) rather than the numeric option ids the widgets
+  /// store. Translation happens only on the way to the payload so form
+  /// visibility rules keyed on option ids/names keep working.
+  static const Set<String> _wireOptionValueFields = {'ncdSymptoms'};
+
+  CanonicalVisitData _withWireOptionValues(CanonicalVisitData data) {
+    var out = data;
+    for (final fieldId in _wireOptionValueFields) {
+      final raw = data.getValue(fieldId);
+      if (raw is! List || raw.isEmpty) continue;
+      final options = _fieldDefs[fieldId]?.options ?? const <FieldOption>[];
+      if (options.isEmpty) continue;
+      final mapped = raw.map((entry) {
+        final id = FieldOption.coerceId(entry);
+        for (final option in options) {
+          if (option.id == id) return option.wireValue;
+        }
+        return entry;
+      }).toList();
+      out = out.setValue(fieldId, mapped);
+    }
+    return out;
+  }
+
+  /// Non-empty NCD symptom ids/names for referral (Spice getSymptomsList).
+  static List<String> _ncdSymptomIds(Object? raw) {
+    if (raw is! List || raw.isEmpty) return const [];
+    final out = <String>[];
+    for (final item in raw) {
+      if (item is Map) {
+        final name = item['name']?.toString() ?? item['id']?.toString();
+        if (name != null && name.isNotEmpty) out.add(name);
+      } else {
+        final s = item.toString().trim();
+        if (s.isNotEmpty &&
+            s.toLowerCase() != 'none' &&
+            s.toLowerCase() != 'nosymptoms') {
+          out.add(s);
+        }
+      }
+    }
+    return out;
+  }
+
   /// Member DOB for the PW age-risk rules. Falls back to the stored age when
   /// no birth date was synced; returns null when neither is known, which makes
   /// [PwRiskFactors] skip the age rules rather than guess.
@@ -1391,19 +1482,21 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  double? _asDoubleField(String k) {
+    final v = _data.getValue(k);
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v);
+    return null;
+  }
+
   /// Runs clinical evaluators against current form data and returns
   /// `(isReferred, referredReasons)`.  Called inside [submit] so every
   /// saved [LocalAssessmentEntity] carries the correct referral flag.
-  (bool, List<String>) _computeReferral() {
+  (bool, List<String>) _computeReferral({bool isNcdFollowUp = false}) {
     bool referred = false;
     final reasons = <String>[];
 
-    double? asDouble(String k) {
-      final v = _data.getValue(k);
-      if (v is num) return v.toDouble();
-      if (v is String) return double.tryParse(v);
-      return null;
-    }
+    double? asDouble(String k) => _asDoubleField(k);
 
     // The `temperature` field is captured in °F (field_library.json
     // `unitMeasurement: "°F"`), but every referral evaluator's fever
@@ -1414,8 +1507,13 @@ class UnifiedFormNotifier extends ChangeNotifier {
       return f == null ? null : fahrenheitToCelsius(f);
     }
 
-    final sys = asDouble('systolic') ?? asDouble('bloodPressureSystolic');
-    final dia = asDouble('diastolic') ?? asDouble('bloodPressureDiastolic');
+    final avgBp = UnifiedPayloadMapper.ncdAvgBp(_data);
+    final sys = avgBp.systolic?.toDouble() ??
+        asDouble('systolic') ??
+        asDouble('bloodPressureSystolic');
+    final dia = avgBp.diastolic?.toDouble() ??
+        asDouble('diastolic') ??
+        asDouble('bloodPressureDiastolic');
     final glucoseType = _data.getValue('glucoseType') as String?;
     final glVal = asDouble('glucoseValue') ??
         asDouble('glucose') ??
@@ -1426,17 +1524,20 @@ class UnifiedFormNotifier extends ChangeNotifier {
     debugPrint('[Referral] inputs: sys=$sys dia=$dia glVal=$glVal glucoseType=$glucoseType isFbs=$isFbs activeTypes=$_activeFormTypes');
 
     if (_activeFormTypes.contains('ncd')) {
-      final result = NcdReferralEvaluator.evaluate(
+      final symptoms = _ncdSymptomIds(_data.getValue('ncdSymptoms'));
+      final result = NcdReferralEvaluator.evaluateBdNcd(
+        isFollowUpVisit: isNcdFollowUp,
+        useNcdRiskAlgorithm: isNcdFollowUp,
         systolic: sys,
         diastolic: dia,
-        fastingGlucoseMmol: isFbs ? glVal : null,
-        randomGlucoseMmol: !isFbs ? glVal : null,
+        glucoseMmol: glVal,
+        glucoseType: glucoseType,
         hba1cPercent: asDouble('hba1c'),
-        symptoms:
-            (_data.getValue('ncdSymptoms') as List?)?.cast<String>() ??
-                const [],
+        symptoms: symptoms,
       );
-      debugPrint('[Referral][NCD] required=${result.isReferralRequired}  reasons=${result.referralReasons}');
+      debugPrint(
+          '[Referral][NCD] followUp=$isNcdFollowUp required=${result.isReferralRequired} '
+          'reasons=${result.referralReasons}');
       if (result.isReferralRequired) {
         referred = true;
         reasons.addAll(result.referralReasons);
@@ -1444,6 +1545,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
 
     if (_activeFormTypes.contains('anc')) {
+      // Spice calculateRMNCHReferralResult: refer when summary has high-risk
+      // and/or gaps; referredReasons use LABEL_* + " - ANC Visit N".
       final ancAssessment = AncAssessment(
         medicalHistoryPhysicalExamination: MedicalHistoryPhysicalExamination(
           bloodPressureSystolic: sys?.toInt(),
@@ -1459,22 +1562,63 @@ class UnifiedFormNotifier extends ChangeNotifier {
           urinaryAlbumin: _data.getValue('urinaryAlbumin') as String?,
           urinaryBilirubin: _data.getValue('urinaryBilirubin') as String?,
           urinarySugar: _data.getValue('urinarySugar') as String?,
+          bloodSugarFasting: isFbs ? glVal : null,
+          bloodSugarRandom: !isFbs ? glVal : null,
         ),
-        gestationalWeeks: asDouble('gestationalAge')?.toInt(),
+        dangerSignsRiskIdentification: DangerSignsRiskIdentification(
+          dangerSignsExperienced12:
+              (_data.getValue('dangerSignsExperienced12') as List?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
+          dangerSignsExperienced13To27:
+              (_data.getValue('dangerSignsExperienced13To27') as List?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
+          dangerSignsExperienced28To40:
+              (_data.getValue('dangerSignsExperienced28To40') as List?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
+        ),
+        gestationalWeeks: asDouble('gestationalAge')?.toInt() ??
+            asDouble('gestationalWeeks')?.toInt(),
       );
       final result = AncReferralEvaluator.evaluate(
         ancAssessment,
         temperatureCelsius: temperatureCelsius(),
         pulseBpm: asDouble('pulse')?.toInt(),
       );
-      debugPrint('[Referral][ANC] required=${result.isReferralRequired}  emergency=${result.emergencyConditions}  nonEmergency=${result.nonEmergencyConditions}');
-      if (result.isReferralRequired) {
-        referred = true;
-        reasons.addAll([
-          ...result.emergencyConditions,
-          ...result.nonEmergencyConditions,
-        ]);
-      }
+      final gaps = AncReferralEvaluator.evaluateGaps(
+        gestationalAgeWeeks:
+            asDouble('gestationalAge') ?? asDouble('gestationalWeeks'),
+        ttTdCompleted: _data.getValue('ttTdCompleted') as String?,
+        ultrasound: _data.getValue('ultrasound') as String?,
+        ancFromMedicalDoctor: _data.getValue('ancFromMedicalDoctor') as String?,
+        facilityIdentifiedForDelivery:
+            _data.getValue('facilityIdentifiedForDelivery') as String?,
+        ifaTotalConsumed: asDouble('ifaTotalConsumed')?.toInt() ??
+            asDouble('ifaTabletsConsumed')?.toInt(),
+        calciumTotalConsumed: asDouble('calciumTotalConsumed')?.toInt() ??
+            asDouble('calciumTabletsConsumed')?.toInt(),
+        ancVisitCount: asDouble('ancVisitNumber')?.toInt() ??
+            asDouble('visitNo')?.toInt(),
+      );
+      final hasHighRisk = result.isReferralRequired;
+      final hasGaps = gaps.hasGaps;
+      debugPrint(
+          '[Referral][ANC] highRisk=$hasHighRisk gaps=$hasGaps '
+          'emergency=${result.emergencyConditions} '
+          'nonEmergency=${result.nonEmergencyConditions} gapsList=${gaps.gaps}');
+      if (hasHighRisk || hasGaps) referred = true;
+      reasons.addAll(
+        AncStatus.referredReasons(
+          hasHighRisk: hasHighRisk,
+          hasGaps: hasGaps,
+          visitNo: _data.getValue('ancVisitNumber') ?? _data.getValue('visitNo'),
+        ),
+      );
     }
 
     if (_activeFormTypes.contains('pncMother')) {

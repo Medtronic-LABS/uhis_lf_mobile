@@ -54,7 +54,10 @@ Future<void> loadTranslations() async {
 String getTranslatedString(String code, String fallback, {Map<String, String>? params}) {
   final entry = _translations?[code];
   var result = entry?[AppLocale.isBangla ? 'bn' : 'en'];
-  if (result == null || result.isEmpty) return fallback;
+  // Prefer the translated entry; otherwise use the English fallback. Params must
+  // still be applied in the fallback path — DebugDb / Settings keys often have
+  // no strings.json entry yet, and '{n} rows' must not render literally.
+  result = (result == null || result.isEmpty) ? fallback : result;
   if (params != null) {
     for (final param in params.entries) {
       result = result!.replaceAll('{${param.key}}', param.value);
@@ -263,6 +266,9 @@ abstract final class SettingsStrings {
   static String get aiSettings => getTranslatedString('aiSettings', 'AI Settings');
   static String get aiSettingsSubtitle => getTranslatedString('aiSettingsSubtitle', 'Voice detection (VAD) tuning');
 
+  // ── Offline DB browser row (kDebugMode only) ──────────────────────────
+  static String get debugDbViewer => getTranslatedString('Settings.debugDbViewer', 'Offline Database');
+  static String get debugDbViewerSubtitle => getTranslatedString('Settings.debugDbViewerSubtitle', 'Browse local SQLCipher tables');
 }
 
 /// AI Settings sub-page — realtime-ASR VAD gate tuning UI. An internal/ops
@@ -4874,4 +4880,44 @@ abstract final class CareThreadStrings {
   static String get illness => getTranslatedString('illness', 'Past illness');
   static String get highrisk => getTranslatedString('highrisk', 'High-risk pregnancy');
   static String get csection => getTranslatedString('csection', 'Emergency C-section');
+}
+
+/// Debug-only offline SQLCipher DB browser (`DebugDbViewerScreen`).
+///
+/// Codes are namespaced because the bare keys (`title`, `close`, `refresh`,
+/// `searchHint`) are already claimed by other features in `strings.json`.
+abstract final class DebugDbStrings {
+  DebugDbStrings._();
+
+  static String get title => getTranslatedString('DebugDb.title', 'Offline Database');
+  static String get subtitle => getTranslatedString('DebugDb.subtitle', 'Local SQLCipher tables');
+  static String get refresh => getTranslatedString('DebugDb.refresh', 'Refresh');
+  static String get close => getTranslatedString('DebugDb.close', 'Close');
+  static String get searchHint => getTranslatedString('DebugDb.searchHint', 'Search rows…');
+  static String get emptyTable => getTranslatedString('DebugDb.emptyTable', 'No rows');
+  static String get counting => getTranslatedString('DebugDb.counting', 'Counting…');
+  static String get countFailed => getTranslatedString('DebugDb.countFailed', 'Count failed');
+  static String get prevPage => getTranslatedString('DebugDb.prevPage', 'Previous page');
+  static String get nextPage => getTranslatedString('DebugDb.nextPage', 'Next page');
+
+  static String loadError(String error) => getTranslatedString(
+      'DebugDb.loadError', 'Could not read the database: {error}',
+      params: {'error': error});
+
+  /// Header line, e.g. `24 tables · 1830 rows`.
+  static String summary(int tables, int rows) => getTranslatedString(
+      'DebugDb.summary', '{tables} tables · {rows} rows',
+      params: {'tables': '$tables', 'rows': '$rows'});
+
+  static String rowCount(int n) =>
+      getTranslatedString('DebugDb.rowCount', '{n} rows', params: {'n': '$n'});
+
+  static String columnCount(int n) => getTranslatedString(
+      'DebugDb.columnCount', '{n} cols',
+      params: {'n': '$n'});
+
+  /// Pagination line, e.g. `Showing 1–50 of 320`.
+  static String pageLabel(int from, int to, int total) => getTranslatedString(
+      'DebugDb.pageLabel', 'Showing {from}–{to} of {total}',
+      params: {'from': '$from', 'to': '$to', 'total': '$total'});
 }

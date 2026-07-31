@@ -19,11 +19,24 @@ class ConsoleLog {
   static void warn(String message) => debugPrint('$_yellow$message$_reset');
   static void banner(String message) => debugPrint('$_magenta$message$_reset');
 
-  /// Logs [message] followed by [data] pretty-printed as indented JSON --
-  /// for the outbound-payload debug traces described in CLAUDE.md's
-  /// "Debug Design — Payload Logging" section.
-  static void json(String message, Object? data) {
-    debugPrint('$_magenta$message$_reset');
-    debugPrint(const JsonEncoder.withIndent('  ').convert(data));
+  /// Dumps [payload] under [label] as indented JSON that can be copied
+  /// straight into a REST client.
+  ///
+  /// Emitted in chunks because logcat drops very long lines — a full sync
+  /// request printed as one line arrives truncated on device.
+  static void json(String label, Object? payload) {
+    String text;
+    try {
+      text = const JsonEncoder.withIndent('  ').convert(payload);
+    } catch (_) {
+      // Non-encodable value somewhere in the tree — the raw dump still helps.
+      text = payload.toString();
+    }
+    banner(label);
+    const chunkSize = 800;
+    for (var i = 0; i < text.length; i += chunkSize) {
+      final end = i + chunkSize > text.length ? text.length : i + chunkSize;
+      debugPrint(text.substring(i, end));
+    }
   }
 }
