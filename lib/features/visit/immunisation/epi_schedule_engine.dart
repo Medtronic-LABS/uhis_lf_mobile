@@ -4,6 +4,47 @@ import 'package:flutter/services.dart';
 
 import '../../../core/db/immunisation_dao.dart';
 
+/// Mirrors assets/forms/field_library.json's "childReferralFacilityType"
+/// optionsList (id + English label only — the immunisation screen has no
+/// Bangla localisation path yet). Single source of truth — the Refer flow's
+/// dropdown and the history-pull facility-id lookup both use this list.
+class FacilityOption {
+  const FacilityOption(this.id, this.label);
+  final String id;
+  final String label;
+}
+
+const List<FacilityOption> referralFacilityOptions = [
+  FacilityOption('medicalCollegeHospital', 'Medical College Hospital'),
+  FacilityOption('governmentHospital', 'Government Hospital'),
+  FacilityOption('upazilaHealthComplex', 'Upazila Health Complex'),
+  FacilityOption('privateHospital', 'Private Hospital/Clinic'),
+  FacilityOption('hwc', 'Health & Family Welfare Center'),
+  FacilityOption('communityClinic', 'Community Clinic'),
+];
+
+/// One vaccine's outcome recovered from assessment history (local cache or
+/// a fresh network fetch) — lower priority than a same-session
+/// [ImmunisationRow], used to fill gaps when the backend schedule response
+/// or a fresh install hasn't caught up with an outcome recorded elsewhere.
+class HistoryOutcome {
+  const HistoryOutcome({
+    required this.vaccineName,
+    this.givenAtMs,
+    this.status,
+    this.reason,
+    this.facility,
+  });
+
+  final String vaccineName;
+  final int? givenAtMs;
+
+  /// 'Vaccinated' | 'Missed'.
+  final String? status;
+  final String? reason;
+  final String? facility;
+}
+
 /// Vaccine status within a milestone group.
 enum VaccineStatus {
   completed,
@@ -26,6 +67,7 @@ class VaccineEntry {
     this.givenDate,
     required this.status,
     this.missedReason,
+    this.referralFacility,
   });
 
   final String code;
@@ -38,6 +80,11 @@ class VaccineEntry {
   final DateTime? givenDate;
   final VaccineStatus status;
   final String? missedReason;
+
+  /// Facility label captured when [status] is [VaccineStatus.missed] via
+  /// the Refer flow — present alongside [missedReason] whenever a dose was
+  /// referred rather than just recorded missed.
+  final String? referralFacility;
 
   bool get isOverdue =>
       (status == VaccineStatus.dueNow) &&
@@ -52,6 +99,7 @@ class VaccineMilestone {
     required this.vaccines,
     required this.offsetType,
     required this.offsetValue,
+    this.actionEnabled = true,
   });
 
   final String label;
@@ -64,6 +112,21 @@ class VaccineMilestone {
 
   /// Offset value (e.g. 6 for "6 Weeks", 9 for "9 Months", 0 for "At Birth").
   final int offsetValue;
+
+  /// Whether this milestone's "Update Status" action is currently
+  /// clickable. Computed by [EpiScheduleEngine.applySequencing] — the
+  /// button itself always renders when [hasDueNow] or [hasMissed] is true;
+  /// this only controls whether it's enabled or shown-but-disabled.
+  final bool actionEnabled;
+
+  VaccineMilestone copyWith({bool? actionEnabled}) => VaccineMilestone(
+        label: label,
+        scheduledDate: scheduledDate,
+        vaccines: vaccines,
+        offsetType: offsetType,
+        offsetValue: offsetValue,
+        actionEnabled: actionEnabled ?? this.actionEnabled,
+      );
 
   bool get allCompleted =>
       vaccines.every((v) => v.status == VaccineStatus.completed);
@@ -106,6 +169,7 @@ class EpiScheduleEngine {
     final givenByCode = <String, DateTime>{};
     final statusByCode = <String, String>{};
     final missedReasonByCode = <String, String>{};
+    final referralFacilityByCode = <String, String>{};
     for (final r in rows) {
       if (r.vaccineCode == null) continue;
       if (r.givenAt != null) {
@@ -117,6 +181,9 @@ class EpiScheduleEngine {
       }
       if (r.missedReason != null && r.missedReason!.isNotEmpty) {
         missedReasonByCode[r.vaccineCode!] = r.missedReason!;
+      }
+      if (r.referralFacility != null && r.referralFacility!.isNotEmpty) {
+        referralFacilityByCode[r.vaccineCode!] = r.referralFacility!;
       }
     }
 
@@ -170,6 +237,7 @@ class EpiScheduleEngine {
           givenDate: givenDate,
           status: status,
           missedReason: missedReasonByCode[code],
+          referralFacility: referralFacilityByCode[code],
         );
       }).toList();
 
@@ -183,6 +251,142 @@ class EpiScheduleEngine {
     }
 
     return milestones;
+  }
+
+  /// Gates each milestone's "Update Status" action to sequential order,
+  /// independent of how the milestone list was built (offline [build] or
+  /// the backend-dto path in immunisation_timeline_screen.dart) — call this
+  /// once, right before rendering, on whichever list was produced.
+  ///
+  /// Walks milestones in chronological order tracking a single [unlocked]
+  /// flag: a referred (missed) milestone is always actionable and never
+  /// blocks what follows (reaching "referred" already resolves that step);
+  /// the *first* unresolved due-now milestone is enabled and immediately
+  /// blocks every due-now milestone after it, until it resolves. Completed/
+  /// upcoming/not-yet-due milestones show no button either way and don't
+  /// affect the flag. This self-heals even with out-of-order historical
+  /// data rather than assuming strict linear progress.
+  static List<VaccineMilestone> applySequencing(
+      List<VaccineMilestone> milestones) {
+    var unlocked = true;
+    final out = <VaccineMilestone>[];
+    for (final m in milestones) {
+      if (m.hasMissed) {
+        out.add(m.copyWith(actionEnabled: true));
+      } else if (m.hasDueNow) {
+        out.add(m.copyWith(actionEnabled: unlocked));
+        unlocked = false;
+      } else {
+        out.add(m);
+      }
+    }
+    return out;
+  }
+
+  /// Recovers [HistoryOutcome]s from a list of assessment-history raw JSON
+  /// blobs (newest-first) — first occurrence per vaccine name wins, i.e. the
+  /// latest known outcome. Best-effort: entries this can't parse are
+  /// skipped, never thrown — this is a read-side enrichment, not a hard
+  /// requirement.
+  static List<HistoryOutcome> outcomesFromRawJsonList(
+      List<Map<String, dynamic>> rawJsons) {
+    final seen = <String>{};
+    final out = <HistoryOutcome>[];
+    for (final raw in rawJsons) {
+      final vaccinations = _extractVaccinations(raw);
+      if (vaccinations == null) continue;
+      final facility = _extractReferralFacilityLabel(raw);
+      for (final v in vaccinations) {
+        if (v is! Map) continue;
+        final name = v['vaccineName'] as String?;
+        if (name == null || name.isEmpty || !seen.add(name)) continue;
+        final status = v['status'] as String?;
+        final vaccinatedDate = v['vaccinatedDate'] as String?;
+        final givenDate =
+            vaccinatedDate != null ? DateTime.tryParse(vaccinatedDate) : null;
+        out.add(HistoryOutcome(
+          vaccineName: name,
+          givenAtMs: givenDate?.millisecondsSinceEpoch,
+          status: status,
+          reason: v['reason'] as String?,
+          facility: status == 'Missed' ? facility : null,
+        ));
+      }
+    }
+    return out;
+  }
+
+  /// Defensively checks the plausible shapes a `CHILD_IMMUNIZATION`
+  /// assessment-history row's raw JSON might echo the write-side
+  /// `{'vaccinations': [...]}` payload back in — unverified against a real
+  /// backend response as of writing (see plan doc); returns null (skip,
+  /// don't crash) if none match.
+  static List<dynamic>? _extractVaccinations(Map<String, dynamic> raw) {
+    // Confirmed against a real member-assessment-history response: the
+    // backend echoes a CHILD_IMMUNIZATION visit's doses back as a
+    // top-level `immunization` list — NOT nested under `observations` or
+    // `assessmentDetails.childImmunization` (those wrapper keys only exist
+    // on the write-side offline-sync/create payload, not on a read).
+    final immunization = raw['immunization'];
+    if (immunization is List) return immunization;
+
+    // Kept as harmless fallbacks in case a different read surface ever
+    // echoes the write shape verbatim — unconfirmed, but zero-cost.
+    final observations = raw['observations'];
+    if (observations is Map && observations['vaccinations'] is List) {
+      return observations['vaccinations'] as List;
+    }
+    final assessmentDetails = raw['assessmentDetails'];
+    if (assessmentDetails is Map) {
+      final childImmunization = assessmentDetails['childImmunization'];
+      if (childImmunization is Map &&
+          childImmunization['vaccinations'] is List) {
+        return childImmunization['vaccinations'] as List;
+      }
+    }
+    final childImmunization = raw['childImmunization'];
+    if (childImmunization is Map &&
+        childImmunization['vaccinations'] is List) {
+      return childImmunization['vaccinations'] as List;
+    }
+    return null;
+  }
+
+  /// Recovers the referral facility label recorded at the assessment level.
+  /// Written via `otherDetails: {'referralFacilityType': id}` /
+  /// `referredReasons: [label]` (see the Update Status sheet's save flow),
+  /// but confirmed against a real history response to come back as
+  /// top-level `referralFacilityType` (an id) and `referralReason` (a
+  /// single already-resolved label string) — not nested under a `summary`
+  /// key and not a `referredReasons` list, which only exist on the write
+  /// side.
+  static String? _extractReferralFacilityLabel(Map<String, dynamic> raw) {
+    final facilityId = raw['referralFacilityType'] as String?;
+    if (facilityId != null) {
+      for (final o in referralFacilityOptions) {
+        if (o.id == facilityId) return o.label;
+      }
+    }
+    final referralReason = raw['referralReason'] as String?;
+    if (referralReason != null && referralReason.isNotEmpty) {
+      return referralReason;
+    }
+
+    // Harmless fallbacks for the write-side shape, in case it's ever
+    // echoed back verbatim on some other read surface.
+    final summary = raw['summary'];
+    final summaryFacilityId =
+        summary is Map ? summary['referralFacilityType'] as String? : null;
+    if (summaryFacilityId != null) {
+      for (final o in referralFacilityOptions) {
+        if (o.id == summaryFacilityId) return o.label;
+      }
+    }
+    final reasons = raw['referredReasons'];
+    if (reasons is List && reasons.isNotEmpty) {
+      return reasons.first?.toString();
+    }
+    return null;
   }
 
   static Future<List<String>> overdueCodesFor({

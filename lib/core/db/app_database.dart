@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 31;
+  static const int schemaVersion = 33;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -265,6 +265,7 @@ class AppDatabase {
         given_at INTEGER,
         status TEXT,
         missed_reason TEXT,
+        referral_facility TEXT,
         raw_json TEXT
       )''');
     await db.execute('''
@@ -397,6 +398,7 @@ class AppDatabase {
         is_referred INTEGER DEFAULT 0,
         referral_status TEXT,
         referred_reasons TEXT,
+        custom_status TEXT,
         follow_up_id INTEGER,
         pregnancy_episode_id TEXT,
         latitude REAL DEFAULT 0.0,
@@ -1452,6 +1454,32 @@ class AppDatabase {
       await addCol31('ALTER TABLE $tableImmunisations ADD COLUMN status TEXT');
       await addCol31(
           'ALTER TABLE $tableImmunisations ADD COLUMN missed_reason TEXT');
+    }
+    if (from < 32) {
+      // v32 — custom_status on local_assessments: LocalAssessmentDao.insert()
+      // has always included this column (LocalAssessmentEntity.toDb()), but
+      // it was never actually added to this table's schema here (fresh
+      // install or upgrade) -- every insert() silently threw
+      // "no column named custom_status" on any device whose DB predates
+      // this fix. Most existing callers swallow the error and proceed
+      // anyway (e.g. the EPI child-assessment submit bar pops the sheet in
+      // a finally-style path regardless of save success), so the data loss
+      // was invisible; the new immunisation Update-Status sheet correctly
+      // does not dismiss on a save error, which is what surfaced this.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableLocalAssessments ADD COLUMN custom_status TEXT');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 33) {
+      // v33 — referral_facility on immunisations: the Refer flow already
+      // captures a facility alongside the missed reason, but nothing
+      // persisted it locally, so the timeline couldn't show "Facility: X"
+      // inline on a referred milestone. Nullable/additive.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableImmunisations ADD COLUMN referral_facility TEXT');
+      } catch (_) {/* column already present — no-op */}
     }
   }
 

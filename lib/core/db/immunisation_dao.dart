@@ -11,6 +11,7 @@ class ImmunisationRow {
     this.givenAt,
     this.status,
     this.missedReason,
+    this.referralFacility,
     required this.rawJson,
   });
 
@@ -25,6 +26,9 @@ class ImmunisationRow {
 
   /// Reason text captured when [status] is 'Missed'.
   final String? missedReason;
+
+  /// Facility label captured when [status] is 'Missed' via the Refer flow.
+  final String? referralFacility;
   final String rawJson;
 
   Map<String, Object?> toDb() => {
@@ -35,6 +39,7 @@ class ImmunisationRow {
         'given_at': givenAt,
         'status': status,
         'missed_reason': missedReason,
+        'referral_facility': referralFacility,
         'raw_json': rawJson,
       };
 
@@ -46,6 +51,7 @@ class ImmunisationRow {
         givenAt: row['given_at'] as int?,
         status: row['status'] as String?,
         missedReason: row['missed_reason'] as String?,
+        referralFacility: row['referral_facility'] as String?,
         rawJson: row['raw_json'] as String? ?? '{}',
       );
 }
