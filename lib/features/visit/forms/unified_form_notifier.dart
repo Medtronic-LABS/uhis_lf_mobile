@@ -15,6 +15,10 @@ import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/models/json_read.dart';
 import '../../../core/models/referral.dart';
+import '../../../core/risk/anc_status.dart';
+import '../../../core/risk/cataract_status.dart';
+import '../../../core/risk/eye_care_status.dart';
+import '../../../core/risk/ncd_status.dart';
 import '../../../core/risk/pregnancy_outcome_status.dart';
 import '../../../core/risk/pw_risk_factors.dart';
 import '../../../core/time/calendar_day.dart';
@@ -117,6 +121,29 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// When true, height was taken from a prior NCD/Cataract visit and must not
   /// be edited — mirrors Spice `view.isEnabled = false` after prefill.
   bool _heightLockedFromPrior = false;
+
+  /// Field library, supplied by the form screen once `field_library.json` is
+  /// parsed. Used at submit time to translate stored option ids into the wire
+  /// `value` codes Spice sends (see [_withWireOptionValues]), and to clear
+  /// fields a condition has just hidden (see [_clearHiddenDependents]).
+  Map<String, FieldDef> _fieldDefs = const {};
+  Map<String, List<FieldVisibilityRule>> _visibilityRules = const {};
+
+  /// driver fieldId → every fieldId its `condition` array targets.
+  final Map<String, Set<String>> _conditionTargets = {};
+
+  set formConfig(FormConfig config) {
+    _fieldDefs = config.fields;
+    _visibilityRules = config.visibilityRulesByTargetId;
+    _conditionTargets.clear();
+    for (final def in config.fields.values) {
+      for (final condition in def.conditions) {
+        _conditionTargets
+            .putIfAbsent(def.id, () => <String>{})
+            .add(condition.targetId);
+      }
+    }
+  }
 
   CanonicalVisitData get data => _data;
   bool get submitting => _submitting;
@@ -631,8 +658,59 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _resizeNewbornDetails(_data.getValue('liveBirthNumbers'));
       }
     }
+    _clearHiddenDependents(fieldId);
     notifyListeners();
     _saveDraft();
+  }
+
+  /// Drops the values of every field this edit has just hidden, then cascades
+  /// into their own dependents.
+  ///
+  /// Android `FormGenerator.setViewVisibility(resetValue = true)` calls
+  /// `resetChildViews` whenever a `condition` hides a view, so a de-selected
+  /// branch leaves nothing behind. Without this, switching Eye Test Outcome
+  /// from Presbyopia to No Problem would hide the glasses chain but still
+  /// submit the Glass Power / Type of Glass / Type of Frame answers.
+  void _clearHiddenDependents(String driverId, [Set<String>? seen]) {
+    final targets = _conditionTargets[driverId];
+    if (targets == null) return;
+    final visited = seen ?? <String>{driverId};
+    for (final targetId in targets) {
+      if (!visited.add(targetId)) continue;
+      if (_visibleByConditionRules(targetId)) continue;
+      if (_data.getValue(targetId) != null) {
+        _data = _data.removeFields({targetId});
+        _fieldSources.remove(targetId);
+        _fieldSourceSegments.remove(targetId);
+      }
+      _clearHiddenDependents(targetId, visited);
+    }
+  }
+
+  /// The `condition`-rule half of [FieldVisibilityRules.isFieldVisible].
+  ///
+  /// Fields with no rule targeting them are reported visible so the
+  /// programme-specific gates evaluated in the widget layer (ANC gestational
+  /// age, PW profile LMP, obstetric chain) are never second-guessed here —
+  /// those hide fields without a de-selected driver to clear them.
+  bool _visibleByConditionRules(String fieldId) {
+    // The Gravida → Parity → Living Children → Age of Last Child chain is
+    // resolved by its own branch in isFieldVisible, which runs *after* the
+    // rules layer — reading the rules alone would under-report it as hidden.
+    if (_fieldDefs[fieldId]?.compositeGroup == 'obstetricHistory') return true;
+    final rules = _visibilityRules[fieldId];
+    if (rules == null || rules.isEmpty) return true;
+    for (final rule in rules) {
+      if (rule.matches(_data.getValue(rule.driverId))) {
+        return rule.visibility == 'visible';
+      }
+    }
+    final anyDriverSet =
+        rules.any((r) => _data.getValue(r.driverId) != null);
+    if (anyDriverSet && rules.every((r) => r.visibility == 'visible')) {
+      return false;
+    }
+    return _fieldDefs[fieldId]?.visibility != 'gone';
   }
 
   static const Set<String> _maternalDeathFieldIds = {
@@ -1191,6 +1269,52 @@ class UnifiedFormNotifier extends ChangeNotifier {
             'patient=$_patientId');
       }
 
+      // BD NCD: first visit uses threshold referral; follow-up uses color band.
+      // Facility type is "Community Clinic" / "Upazila Health Complex" — never
+      // the org FHIR id (that belongs in summary.referredSiteId for CC only).
+      final isNcdFollowUp = (_activeFormTypes.contains('ncd') ||
+              (_activeFormTypes.contains('cataract') &&
+                  _data.getValue('ncdServiceProvided')
+                          ?.toString()
+                          .toLowerCase() ==
+                      'yes'))
+          ? await _assessmentRepo.hasPriorNcdAssessment(_patientId)
+          : false;
+
+      final (isReferred, referredReasons) =
+          _computeReferral(isNcdFollowUp: isNcdFollowUp);
+
+      Map<String, dynamic>? ncdOtherDetails;
+      final cataractNcdProvided = _activeFormTypes.contains('cataract') &&
+          _data.getValue('ncdServiceProvided')?.toString().toLowerCase() ==
+              'yes';
+      if ((_activeFormTypes.contains('ncd') || cataractNcdProvided) &&
+          isReferred) {
+        final avg = UnifiedPayloadMapper.ncdAvgBp(_data);
+        final glVal = _asDoubleField('glucoseValue') ??
+            _asDoubleField('glucose') ??
+            _asDoubleField('fastingBloodSugar') ??
+            _asDoubleField('randomBloodSugar');
+        final facilityType = NcdStatus.resolveFacilityType(
+          isFollowUpVisit: isNcdFollowUp,
+          referredReasons: referredReasons,
+          avgSystolic: avg.systolic,
+          avgDiastolic: avg.diastolic,
+          glucoseMmol: glVal,
+        );
+        _data = _data.setValue('referralFacilityType', facilityType);
+        ncdOtherDetails = NcdStatus.referredSummary(
+          referralFacilityType: facilityType,
+          referredSiteId: _defaultReferralSiteId,
+        );
+      }
+
+      // Spice BDEyeCareAssessmentSummaryFragment stamps the reporting
+      // organisation onto every eye care assessment, referred or not.
+      final eyeCareOtherDetails = _defaultReferralSiteId?.isNotEmpty == true
+          ? {'referredSite': _defaultReferralSiteId}
+          : null;
+
       final payloads = UnifiedPayloadMapper.decompose(
         _data,
         _activeFormTypes.toSet(),
@@ -1226,6 +1350,35 @@ class UnifiedFormNotifier extends ChangeNotifier {
                       p.assessmentType == 'PREGNANCY_OUTCOME' ||
                       p.assessmentType == 'PREGNANCYOUTCOME')
                   .details,
+            )
+          : null;
+      // Spice's NCD branch appends the eye problem / glasses tokens after the
+      // BP/BG ones, dropping NO_EYE_PROBLEM so a clean eye check doesn't
+      // dilute the NCD statuses.
+      final ncdStatus = payloads.any((p) => p.assessmentType == 'NCD')
+          ? [
+              ...NcdStatus.status(
+                isReferred: isReferred,
+                referredReasons: referredReasons,
+              ),
+              ...EyeCareStatus.status(
+                _eyeCareCardOf(payloads, 'NCD'),
+                skipNoProblem: true,
+              ),
+            ]
+          : null;
+      final eyeCareStatus = payloads.any((p) => p.assessmentType == 'EYE_CARE')
+          ? EyeCareStatus.status(_eyeCareCardOf(payloads, 'EYE_CARE'))
+          : null;
+      final cataractStatus = payloads.any((p) => p.assessmentType == 'CATARACT')
+          ? CataractStatus.status(
+              _cataractCardOf(payloads),
+              referredReasons: referredReasons,
+            )
+          : null;
+      final ancStatus = payloads.any((p) => p.assessmentType == 'ANC')
+          ? AncStatus.status(
+              payloads.firstWhere((p) => p.assessmentType == 'ANC').details,
             )
           : null;
 
@@ -1265,8 +1418,29 @@ class UnifiedFormNotifier extends ChangeNotifier {
               : (payload.assessmentType == 'PREGNANCY_OUTCOME' ||
                       payload.assessmentType == 'PREGNANCYOUTCOME')
                   ? (poStatus == null || poStatus.isEmpty ? null : poStatus)
-                  : null,
+                  : payload.assessmentType == 'NCD'
+                      ? (ncdStatus == null || ncdStatus.isEmpty
+                          ? null
+                          : ncdStatus)
+                      : payload.assessmentType == 'ANC'
+                          ? ancStatus
+                          : payload.assessmentType == 'EYE_CARE'
+                              ? (eyeCareStatus == null || eyeCareStatus.isEmpty
+                                  ? null
+                                  : eyeCareStatus)
+                              : payload.assessmentType == 'CATARACT'
+                                  ? (cataractStatus == null ||
+                                          cataractStatus.isEmpty
+                                      ? null
+                                      : cataractStatus)
+                                  : null,
           pregnancyEpisodeId: sharedPregnancyEpisodeId,
+          otherDetails: switch (payload.assessmentType) {
+            'NCD' => ncdOtherDetails,
+            'CATARACT' => cataractNcdProvided ? ncdOtherDetails : null,
+            'EYE_CARE' => eyeCareOtherDetails,
+            _ => null,
+          },
         );
         savedIds.add(id);
       }
@@ -1332,6 +1506,78 @@ class UnifiedFormNotifier extends ChangeNotifier {
     };
     if (n == null || n <= 0) return null;
     return n;
+  }
+
+  /// The `eyeCare` card body of a programme payload — the standalone eye care
+  /// details and the NCD details both nest it under the same key.
+  static Map<String, dynamic>? _eyeCareCardOf(
+    List<ProgrammePayload> payloads,
+    String assessmentType,
+  ) {
+    for (final payload in payloads) {
+      if (payload.assessmentType != assessmentType) continue;
+      final card = payload.details['eyeCare'];
+      if (card is Map<String, dynamic>) return card;
+    }
+    return null;
+  }
+
+  /// Inner Eye Problems card from a CATARACT programme payload
+  /// (`details.cataract` before the outer menu wrap is applied at sync).
+  static Map<String, dynamic>? _cataractCardOf(
+    List<ProgrammePayload> payloads,
+  ) {
+    for (final payload in payloads) {
+      if (payload.assessmentType != 'CATARACT') continue;
+      final card = payload.details['cataract'];
+      if (card is Map<String, dynamic>) return card;
+    }
+    return null;
+  }
+
+  /// Multi-select fields Spice sends as option `value` codes (e.g.
+  /// `"shortnessOfBreath"`) rather than the numeric option ids the widgets
+  /// store. Translation happens only on the way to the payload so form
+  /// visibility rules keyed on option ids/names keep working.
+  static const Set<String> _wireOptionValueFields = {'ncdSymptoms'};
+
+  CanonicalVisitData _withWireOptionValues(CanonicalVisitData data) {
+    var out = data;
+    for (final fieldId in _wireOptionValueFields) {
+      final raw = data.getValue(fieldId);
+      if (raw is! List || raw.isEmpty) continue;
+      final options = _fieldDefs[fieldId]?.options ?? const <FieldOption>[];
+      if (options.isEmpty) continue;
+      final mapped = raw.map((entry) {
+        final id = FieldOption.coerceId(entry);
+        for (final option in options) {
+          if (option.id == id) return option.wireValue;
+        }
+        return entry;
+      }).toList();
+      out = out.setValue(fieldId, mapped);
+    }
+    return out;
+  }
+
+  /// Non-empty NCD symptom ids/names for referral (Spice getSymptomsList).
+  static List<String> _ncdSymptomIds(Object? raw) {
+    if (raw is! List || raw.isEmpty) return const [];
+    final out = <String>[];
+    for (final item in raw) {
+      if (item is Map) {
+        final name = item['name']?.toString() ?? item['id']?.toString();
+        if (name != null && name.isNotEmpty) out.add(name);
+      } else {
+        final s = item.toString().trim();
+        if (s.isNotEmpty &&
+            s.toLowerCase() != 'none' &&
+            s.toLowerCase() != 'nosymptoms') {
+          out.add(s);
+        }
+      }
+    }
+    return out;
   }
 
   /// Member DOB for the PW age-risk rules. Falls back to the stored age when
@@ -1425,8 +1671,14 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
     debugPrint('[Referral] inputs: sys=$sys dia=$dia glVal=$glVal glucoseType=$glucoseType isFbs=$isFbs activeTypes=$_activeFormTypes');
 
-    if (_activeFormTypes.contains('ncd')) {
-      final result = NcdReferralEvaluator.evaluate(
+    if (_activeFormTypes.contains('ncd') ||
+        (_activeFormTypes.contains('cataract') &&
+            _data.getValue('ncdServiceProvided')?.toString().toLowerCase() ==
+                'yes')) {
+      final symptoms = _ncdSymptomIds(_data.getValue('ncdSymptoms'));
+      final result = NcdReferralEvaluator.evaluateBdNcd(
+        isFollowUpVisit: isNcdFollowUp,
+        useNcdRiskAlgorithm: isNcdFollowUp,
         systolic: sys,
         diastolic: dia,
         fastingGlucoseMmol: isFbs ? glVal : null,

@@ -551,6 +551,16 @@ abstract final class FieldVisibilityRules {
       return _ncdSymptomsIncludeAnyNewOrWorsening(data);
     }
 
+    // Cataract: Spice keeps NCD vitals `gone` until ncdServiceProvided=yes.
+    // Those fields share the library with standalone NCD (base visibility
+    // `visible`), so without this formType gate they render on every cataract
+    // visit. Secondary gates (medicationFrequency ← prior diagnosis) still
+    // run through the generic rules below once NCD service is Yes.
+    if (formType == 'cataract') {
+      final cataractGate = _cataractNcdVisibility(field.id, data);
+      if (cataractGate != null) return cataractGate;
+    }
+
     // PW Profile owns its LMP threshold and obstetric-history disclosure
     // (Android AssessmentPregnantWomenRegistrationFragment). Evaluated before
     // the generic rules so a cross-programme condition — e.g. Family
@@ -572,10 +582,20 @@ abstract final class FieldVisibilityRules {
     final rules = rulesByTargetId[field.id];
     if (rules != null && rules.isNotEmpty) {
       for (final rule in rules) {
-        final driverValue = data.getValue(rule.driverId)?.toString();
+        final driverValue = data.getValue(rule.driverId);
         if (rule.matches(driverValue)) {
           return rule.visibility == 'visible';
         }
+      }
+      // Driver answered but no reveal/hide rule matched. Spice keeps
+      // condition-gated fields gone until a parent fires — so when every
+      // targeting rule is a "become visible" gate and at least one driver is
+      // set, stay hidden. (Standalone NCD leaves ncdServiceProvided unset, so
+      // those fields still fall through to their base `visible`.)
+      final anyDriverSet =
+          rules.any((r) => data.getValue(r.driverId) != null);
+      if (anyDriverSet && rules.every((r) => r.visibility == 'visible')) {
+        return false;
       }
       // No rule's trigger value matched — fall through to base visibility.
     }
@@ -598,6 +618,32 @@ abstract final class FieldVisibilityRules {
     }
 
     return field.visibility != 'gone';
+  }
+
+  /// Fields Spice reveals only when `ncdServiceProvided == yes` on cataract.
+  static const Set<String> _cataractNcdYesFieldIds = {
+    'height',
+    'weight',
+    'bmi',
+    'isBeforeHtnDiagnosis',
+    'medicationFrequencyBp',
+    'bpLogDetails',
+    'isRegularSmoker',
+    'isBeforeDiabetesDiagnosis',
+    'medicationFrequencyBg',
+    'glucoseType',
+    'glucose',
+  };
+
+  /// Returns an explicit visibility override for cataract NCD-gated fields,
+  /// or `null` when the field is not gated (caller continues as usual).
+  static bool? _cataractNcdVisibility(String fieldId, CanonicalVisitData data) {
+    if (!_cataractNcdYesFieldIds.contains(fieldId)) return null;
+    final ncd = data.getValue('ncdServiceProvided')?.toString().toLowerCase();
+    if (ncd != 'yes') return false;
+    // ncdServiceProvided=yes — let secondary condition rules decide
+    // (e.g. medicationFrequencyBp needs isBeforeHtnDiagnosis=yes).
+    return null;
   }
 
   /// Android `PregnantWomen.LMP_THRESHOLD_DAYS` — full PW profile only after

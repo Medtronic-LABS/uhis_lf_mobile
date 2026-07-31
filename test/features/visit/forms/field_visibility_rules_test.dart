@@ -109,11 +109,11 @@ void main() {
       expect(
         FieldVisibilityRules.isFieldVisible(
           field: medicationFrequencyBg,
-          data: const CanonicalVisitData({'isBeforeDiabetesDiagnosis': 'Yes'}),
+          data: const CanonicalVisitData({'isBeforeDiabetesDiagnosis': 'yes'}),
           rulesByTargetId: config.visibilityRulesByTargetId,
         ),
         isTrue,
-        reason: 'reveals once isBeforeDiabetesDiagnosis is answered Yes',
+        reason: 'reveals once isBeforeDiabetesDiagnosis is answered yes',
       );
     });
 
@@ -134,7 +134,6 @@ void main() {
         ('additionalFood24Hrs', 'pncChild'),
         ('receivedVaccine', 'pncChild'),
         ('dewormingMedicine', 'pncChild'),
-        ('cvdRisk', 'cataract'),
         ('isPregnant', 'enrollment'),
         ('referralFacility', 'pncMother'),
       ]) {
@@ -152,6 +151,19 @@ void main() {
           isTrue,
           reason: '$id should be visible with no prior answers',
         );
+      }
+
+      // cvdRisk is deliberately absent from every layout — the Framingham
+      // calculator is not wired into the cataract NCD path, so the label would
+      // only ever render its empty placeholder.
+      for (final entry in config.forms.entries) {
+        for (final section in entry.value) {
+          expect(
+            section.fieldRefs.map((r) => r.id),
+            isNot(contains('cvdRisk')),
+            reason: '${entry.key}/${section.sectionId} must not show CVD risk',
+          );
+        }
       }
 
       // pncMother counselling text is Android isSummary → fill-form-hidden.
