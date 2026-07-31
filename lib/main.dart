@@ -245,6 +245,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     auth: widget.authRepo,
     historyDao: _assessmentDao,
     followUpCalls: _followUpCallService,
+    memberDao: _memberDao,
   );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
   late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);

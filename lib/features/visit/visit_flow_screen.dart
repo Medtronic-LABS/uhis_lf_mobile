@@ -193,17 +193,35 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     try {
       int count;
       if (isAnc) {
-        final history = await context
-            .read<AssessmentRepository>()
-            .ancVitalsHistory(widget.patientId);
-        count = history.length;
+        // Prefer the persisted Spice-style counter; fall back to vitals history
+        // length if the snapshot has never been seeded.
+        final snap = await context
+            .read<PregnancySnapshotDao>()
+            .byPatient(widget.patientId);
+        if (snap?.ancVisitNo != null) {
+          count = snap!.ancVisitNo!;
+        } else {
+          final history = await context
+              .read<AssessmentRepository>()
+              .ancVitalsHistory(widget.patientId);
+          count = history.length;
+        }
       } else {
-        final rows = await context
-            .read<LocalAssessmentDao>()
-            .getByPatientId(widget.patientId);
-        count = rows
-            .where((r) => r.assessmentType.toUpperCase() == 'PNC_MOTHER')
-            .length;
+        // Prefer the persisted Spice-style counter; fall back to counting
+        // local PNC_MOTHER rows if the snapshot has never been seeded.
+        final snap = await context
+            .read<PregnancySnapshotDao>()
+            .byPatient(widget.patientId);
+        if (snap?.pncVisitNo != null) {
+          count = snap!.pncVisitNo!;
+        } else {
+          final rows = await context
+              .read<LocalAssessmentDao>()
+              .getByPatientId(widget.patientId);
+          count = rows
+              .where((r) => r.assessmentType.toUpperCase() == 'PNC_MOTHER')
+              .length;
+        }
       }
       if (mounted) setState(() => _visitNumber = count + 1);
     } catch (e) {
@@ -2523,17 +2541,23 @@ class _ReferralAlertCard extends StatelessWidget {
   final String reason;
   final String urgency;
 
-  // Maps raw API camelCase referral keys → human-readable labels (fallback path).
+  // Maps raw API referral keys → human-readable labels (fallback path).
+  // Includes Spice ReferredReason / ANC LABEL_* strings and legacy camelCase keys.
   static const _reasonLabels = <String, String>{
-    'bloodPressure':  'High blood pressure',
-    'bloodGlucose':   'High blood glucose',
-    'symptoms':       'Reported symptoms',
-    'hbLevel':        'Low haemoglobin',
-    'weight':         'Abnormal weight',
-    'urineProtein':   'Urine protein detected',
-    'dangerSigns':    'Danger signs present',
-    'bmi':            'Abnormal BMI',
-    'gestationalAge': 'Gestational age concern',
+    'High risk pregnant woman': 'High-risk pregnant woman',
+    'Gaps in ANC':            'Gaps in antenatal care',
+    'High BP':                'High blood pressure',
+    'High BG':                'High blood glucose',
+    'Symptoms':               'Reported symptoms',
+    'bloodPressure':          'High blood pressure',
+    'bloodGlucose':           'High blood glucose',
+    'symptoms':               'Reported symptoms',
+    'hbLevel':                'Low haemoglobin',
+    'weight':                 'Abnormal weight',
+    'urineProtein':           'Urine protein detected',
+    'dangerSigns':            'Danger signs present',
+    'bmi':                    'Abnormal BMI',
+    'gestationalAge':         'Gestational age concern',
   };
 
   @override

@@ -6,6 +6,7 @@ library;
 
 import 'assessment_thresholds.dart';
 import '../../features/visit/models/anc_assessment.dart';
+import '../risk/ncd_status.dart';
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -20,7 +21,8 @@ class NcdReferralResult {
 
   final NcdRiskBand band;
 
-  /// Which dimensions triggered the result: 'bloodPressure', 'bloodGlucose', 'symptoms'.
+  /// Spice wire values: [NcdStatus.reasonHighBp], [NcdStatus.reasonHighBg],
+  /// [NcdStatus.reasonSymptoms] (`High BP` / `High BG` / `Symptoms`).
   final List<String> referralReasons;
 
   bool get isReferralRequired => band != NcdRiskBand.green;
@@ -90,6 +92,105 @@ class PncReferralResult {
 class NcdReferralEvaluator {
   NcdReferralEvaluator._();
 
+  /// BD community NCD referral — mirrors
+  /// `ReferralResultGenerator.computeReferralResultForBDNCD`.
+  ///
+  /// First visit (or follow-up without risk algorithm): fixed thresholds
+  /// (symptoms always refer; BP ≥ 140/90; FBS ≥ 7.0 / RBS ≥ 11.1).
+  /// Follow-up with [useNcdRiskAlgorithm]: color-band evaluator; facility
+  /// always Upazila when referred.
+  static NcdReferralResult evaluateBdNcd({
+    required bool isFollowUpVisit,
+    bool useNcdRiskAlgorithm = false,
+    double? systolic,
+    double? diastolic,
+    double? glucoseMmol,
+    String? glucoseType,
+    double? fastingGlucoseMmol,
+    double? randomGlucoseMmol,
+    double? hba1cPercent,
+    List<String> symptoms = const [],
+  }) {
+    final fbs = fastingGlucoseMmol ??
+        ((glucoseType?.toLowerCase() == 'fbs' ||
+                glucoseType?.toLowerCase() == 'fasting')
+            ? glucoseMmol
+            : null);
+    final rbs = randomGlucoseMmol ??
+        ((glucoseType?.toLowerCase() == 'rbs' ||
+                glucoseType?.toLowerCase() == 'random')
+            ? glucoseMmol
+            : null);
+    final unresolvedGlucose = (fbs == null && rbs == null) ? glucoseMmol : null;
+
+    if (isFollowUpVisit && useNcdRiskAlgorithm) {
+      return evaluate(
+        systolic: systolic,
+        diastolic: diastolic,
+        fastingGlucoseMmol: fbs ?? unresolvedGlucose,
+        randomGlucoseMmol: rbs,
+        hba1cPercent: hba1cPercent,
+        symptoms: symptoms,
+      );
+    }
+
+    final reasons = <String>[];
+    if (symptoms.isNotEmpty) {
+      reasons.add(NcdStatus.reasonSymptoms);
+    }
+    if (systolic != null &&
+        diastolic != null &&
+        (systolic >= bpHighSystolic || diastolic >= bpHighDiastolic)) {
+      reasons.add(NcdStatus.reasonHighBp);
+    }
+    if (_thresholdGlucoseReferral(
+      fastingGlucoseMmol: fbs,
+      randomGlucoseMmol: rbs,
+      unresolvedGlucoseMmol: unresolvedGlucose,
+      isFollowUpVisit: isFollowUpVisit,
+    )) {
+      reasons.add(NcdStatus.reasonHighBg);
+    }
+
+    if (reasons.isEmpty) {
+      return const NcdReferralResult(band: NcdRiskBand.green);
+    }
+    // Threshold path has no color band — yellowHigh is a neutral "referred".
+    return NcdReferralResult(
+      band: NcdRiskBand.yellowHigh,
+      referralReasons: reasons,
+    );
+  }
+
+  static bool _thresholdGlucoseReferral({
+    double? fastingGlucoseMmol,
+    double? randomGlucoseMmol,
+    double? unresolvedGlucoseMmol,
+    required bool isFollowUpVisit,
+  }) {
+    final fbsMax = isFollowUpVisit
+        ? ncdFollowUpFbsReferralMmol
+        : ncdFirstVisitFbsReferralMmol;
+    final rbsMax = isFollowUpVisit
+        ? ncdFollowUpRbsReferralMmol
+        : ncdFirstVisitRbsReferralMmol;
+    if (fastingGlucoseMmol != null && fastingGlucoseMmol >= fbsMax) {
+      return true;
+    }
+    if (randomGlucoseMmol != null && randomGlucoseMmol >= rbsMax) {
+      return true;
+    }
+    // Spice else-branch when type is neither fbs nor rbs.
+    if (unresolvedGlucoseMmol != null) {
+      return unresolvedGlucoseMmol >= fbsMax ||
+          unresolvedGlucoseMmol >= rbsMax;
+    }
+    return false;
+  }
+
+  /// Follow-up / color-band path — Android `NCDReferralColorEvaluator`.
+  ///
+  /// Reason order matches Spice: Symptoms → High BP → High BG.
   static NcdReferralResult evaluate({
     double? systolic,
     double? diastolic,
@@ -103,12 +204,15 @@ class NcdReferralEvaluator {
     final hba1cBand = _hba1cBand(hba1cPercent);
     final band = _worse(_worse(bpBand, bgBand), hba1cBand);
 
+    // Spice ReferredReason wire strings — order: Symptoms, High BP, High BG.
     final reasons = <String>[];
-    if (bpBand != NcdRiskBand.green) reasons.add('bloodPressure');
-    if (bgBand != NcdRiskBand.green || hba1cBand != NcdRiskBand.green) {
-      reasons.add('bloodGlucose');
+    if (symptoms.isNotEmpty && band != NcdRiskBand.green) {
+      reasons.add(NcdStatus.reasonSymptoms);
     }
-    if (symptoms.isNotEmpty && bpBand == NcdRiskBand.red) reasons.add('symptoms');
+    if (bpBand != NcdRiskBand.green) reasons.add(NcdStatus.reasonHighBp);
+    if (bgBand != NcdRiskBand.green || hba1cBand != NcdRiskBand.green) {
+      reasons.add(NcdStatus.reasonHighBg);
+    }
 
     return NcdReferralResult(band: band, referralReasons: reasons);
   }

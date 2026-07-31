@@ -11,9 +11,11 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
 import '../patient/followup_call_service.dart';
+import 'forms/pregnancy_outcome_side_effects.dart';
 import 'forms/vitals_trend.dart';
 
 /// Repository for offline-first assessment management matching Android pattern.
@@ -32,11 +34,13 @@ class AssessmentRepository extends ChangeNotifier {
     required AuthRepository auth,
     AssessmentDao? historyDao,
     FollowUpCallService? followUpCalls,
+    MemberDao? memberDao,
   })  : _dao = dao,
         _api = api,
         _auth = auth,
         _historyDao = historyDao,
-        _followUpCalls = followUpCalls;
+        _followUpCalls = followUpCalls,
+        _memberDao = memberDao;
 
   final LocalAssessmentDao _dao;
   final ApiClient _api;
@@ -47,6 +51,8 @@ class AssessmentRepository extends ChangeNotifier {
   // Pending follow-up call attempts ride the same offline-sync/create push.
   // Null in unit tests where the follow-up DB isn't wired.
   final FollowUpCallService? _followUpCalls;
+  // New household members (e.g. live-birth babies) ride the same push.
+  final MemberDao? _memberDao;
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -82,10 +88,16 @@ class AssessmentRepository extends ChangeNotifier {
   }) async {
     final id = const Uuid().v4();
     final now = DateTime.now();
+    final type = assessmentType.toUpperCase();
     final resolvedEpisodeId = pregnancyEpisodeId ??
-        (assessmentType.toUpperCase() == 'ANC' ||
-                assessmentType.toUpperCase() == 'PNC' ||
-                assessmentType.toUpperCase() == 'PWPROFILE'
+        (type == 'ANC' ||
+                type == 'PNC' ||
+                type == 'PNC_MOTHER' ||
+                type == 'PNC_NEONATE' ||
+                type == 'PNC_CHILD' ||
+                type == 'PWPROFILE' ||
+                type == 'PREGNANCY_OUTCOME' ||
+                type == 'PREGNANCYOUTCOME'
             ? const Uuid().v4()
             : null);
 
@@ -269,6 +281,31 @@ class AssessmentRepository extends ChangeNotifier {
     // member assessments we send everything in the top-level assessments[] array;
     // the server builds MemberAssessmentFollowUpMap from encounter.memberId +
     // encounter.householdId + provenance on each assessment.
+    // Live-birth babies registered after pregnancy outcome ride this array.
+    var householdMemberPayloads = <Map<String, dynamic>>[];
+    var pushedMemberIds = <String>[];
+    if (_memberDao != null) {
+      try {
+        final pendingMembers = await _memberDao.getUnsynced();
+        if (pendingMembers.isNotEmpty) {
+          householdMemberPayloads = pendingMembers
+              .map(
+                (m) => PregnancyOutcomeSideEffects.toHouseholdMemberWire(
+                  entity: m,
+                  provenance: provenance.toJson(),
+                ),
+              )
+              .toList();
+          pushedMemberIds = pendingMembers.map((m) => m.id).toList();
+          debugPrint(
+              '[AssessmentSync] attaching ${householdMemberPayloads.length} '
+              'pending household member(s)');
+        }
+      } catch (e) {
+        debugPrint('[AssessmentSync] household-member serialize skipped: $e');
+      }
+    }
+
     debugPrint('[AssessmentSync] assessments[${assessmentPayloads.length}]:');
 
     // Build create request matching Android's OfflineSyncRepository.getRequestObject().
@@ -282,7 +319,7 @@ class AssessmentRepository extends ChangeNotifier {
       'syncMode': syncMode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'households': <Map<String, dynamic>>[],
-      'householdMembers': <Map<String, dynamic>>[],
+      'householdMembers': householdMemberPayloads,
       'assessments': assessmentPayloads,
       'followUps': followUpPayloads,
       'householdMemberLinks': <Map<String, dynamic>>[],
@@ -290,12 +327,17 @@ class AssessmentRepository extends ChangeNotifier {
       'rxBuddies': <Map<String, dynamic>>[],
     };
 
+    debugPrint(
+        '********** OFFLINE-SYNC CREATE PAYLOAD START **********');
     ConsoleLog.json(
       '[PayloadDebug] sync-create → ${Endpoints.offlineSyncCreate} '
       '(requestId=$requestId, ${assessmentPayloads.length} assessment(s), '
-      '${followUpPayloads.length} follow-up(s))',
+      '${followUpPayloads.length} follow-up(s), '
+      '${householdMemberPayloads.length} household member(s))',
       request,
     );
+    debugPrint(
+        '*********** OFFLINE-SYNC CREATE PAYLOAD END ***********');
     debugPrint('[AssessmentSync] POST ${Endpoints.offlineSyncCreate}');
     try {
       final response = await _api.dio.post<Map<String, dynamic>>(
@@ -326,6 +368,17 @@ class AssessmentRepository extends ChangeNotifier {
               await _followUpCalls.markPushed(pushedFollowUpIds);
             } catch (e) {
               debugPrint('[AssessmentSync] follow-up markPushed skipped: $e');
+            }
+          }
+          if (pushedMemberIds.isNotEmpty && _memberDao != null) {
+            try {
+              await _memberDao.markSynced(pushedMemberIds);
+              debugPrint(
+                  '[AssessmentSync] Marked ${pushedMemberIds.length} '
+                  'household member(s) as synced');
+            } catch (e) {
+              debugPrint(
+                  '[AssessmentSync] household-member markSynced skipped: $e');
             }
           }
           return ids.length;
@@ -391,11 +444,25 @@ class AssessmentRepository extends ChangeNotifier {
     return _dao.getById(id);
   }
 
+  /// True when the patient already has a prior NCD assessment (local or
+  /// synced history). Used for BD first-visit vs follow-up referral paths.
+  Future<bool> hasPriorNcdAssessment(String patientId) async {
+    if (patientId.isEmpty) return false;
+    final localRows = await _dao.getByPatientId(patientId);
+    if (localRows.any((r) => r.assessmentType.toUpperCase() == 'NCD')) {
+      return true;
+    }
+    if (_historyDao == null) return false;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = historyMap[patientId] ?? const [];
+    return rows.any((r) => _isNcdKind(r.kind?.toUpperCase() ?? ''));
+  }
+
   /// Most-recent weight (kg) for [patientId].
   ///
   /// Order matches prior-visit biometrics for NCD: this device's
   /// `local_assessments` first (unsynced visits are not in history yet), then
-  /// synced `assessments` rows. NCD local rows store weight under `bpLog`.
+  /// synced `assessments` rows. NCD local rows store weight under `biometric`.
   Future<double?> lastRecordedWeight(String patientId) async {
     return _lastRecordedBiometric(patientId, _BiometricKind.weight);
   }
@@ -447,7 +514,7 @@ class AssessmentRepository extends ChangeNotifier {
   }
 
   /// Height/weight from a locally saved assessment_details blob.
-  /// NCD stores them inside `bpLog`; ANC under medicalHistoryPhysicalExamination.
+  /// NCD stores them under `biometric` (legacy rows may still use `bpLog`).
   static double? _biometricFromLocalDetails(
     String detailsJson,
     _BiometricKind kind,
@@ -461,9 +528,12 @@ class AssessmentRepository extends ChangeNotifier {
     final key = kind == _BiometricKind.height ? 'height' : 'weight';
     final candidates = <dynamic>[
       map[key],
+      if (map['biometric'] is Map) (map['biometric'] as Map)[key],
       if (map['bpLog'] is Map) (map['bpLog'] as Map)[key],
       if (map['ncd'] is Map) ...[
         (map['ncd'] as Map)[key],
+        if ((map['ncd'] as Map)['biometric'] is Map)
+          ((map['ncd'] as Map)['biometric'] as Map)[key],
         if ((map['ncd'] as Map)['bpLog'] is Map)
           ((map['ncd'] as Map)['bpLog'] as Map)[key],
       ],

@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 33;
+  static const int schemaVersion = 35;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -427,7 +427,9 @@ class AppDatabase {
         updated_at INTEGER,
         edd_date INTEGER,
         lmp_date INTEGER,
-        delivery_date_millis INTEGER
+        delivery_date_millis INTEGER,
+        anc_visit_no INTEGER,
+        pnc_visit_no INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
@@ -1441,41 +1443,59 @@ class AppDatabase {
       } catch (_) {/* column already present — no-op */}
     }
     if (from < 31) {
-      // v31 — status/missed_reason on immunisations: the EPI "Update Status"
-      // sheet now supports recording a milestone as explicitly Missed (with
-      // a reason), not just Vaccinated. Nullable/additive — existing rows
-      // are unaffected (both default to NULL, read as "no explicit outcome
-      // recorded yet", identical to pre-migration behaviour).
-      Future<void> addCol31(String ddl) async {
-        try {
-          await db.execute(ddl);
-        } catch (_) {/* column already present — no-op */}
-      }
-      await addCol31('ALTER TABLE $tableImmunisations ADD COLUMN status TEXT');
-      await addCol31(
-          'ALTER TABLE $tableImmunisations ADD COLUMN missed_reason TEXT');
-    }
-    if (from < 32) {
-      // v32 — custom_status on local_assessments: LocalAssessmentDao.insert()
-      // has always included this column (LocalAssessmentEntity.toDb()), but
-      // it was never actually added to this table's schema here (fresh
-      // install or upgrade) -- every insert() silently threw
-      // "no column named custom_status" on any device whose DB predates
-      // this fix. Most existing callers swallow the error and proceed
-      // anyway (e.g. the EPI child-assessment submit bar pops the sheet in
-      // a finally-style path regardless of save success), so the data loss
-      // was invisible; the new immunisation Update-Status sheet correctly
-      // does not dismiss on a save error, which is what surfaced this.
+      // v31 — Programme-computed encounter.customStatus (e.g. HIGH_RISK_PW),
+      // evaluated at submit time where the member's DOB is available. This
+      // is also, independently, the fix for LocalAssessmentDao.insert()
+      // always including a custom_status value (LocalAssessmentEntity
+      // .toDb()) that was never actually added to this table's schema here
+      // — every insert() silently threw "no column named custom_status" on
+      // any device whose DB predates this fix.
       try {
         await db.execute(
             'ALTER TABLE $tableLocalAssessments ADD COLUMN custom_status TEXT');
       } catch (_) {/* column already present — no-op */}
     }
+    if (from < 32) {
+      // v32 — pnc_visit_no on pregnancy snapshot (Spice PregnancyDetail.pncVisitNo).
+      // Incremented on each PNC_MOTHER save; seeded from pregnancyInfos[] sync.
+      try {
+        await db.execute(
+            'ALTER TABLE $tablePregnancySnapshot ADD COLUMN pnc_visit_no INTEGER');
+      } catch (_) {/* column already present — no-op */}
+    }
     if (from < 33) {
-      // v33 — referral_facility on immunisations: the Refer flow already
+      // v33 — anc_visit_no on pregnancy snapshot (Spice PregnancyDetail.ancVisitNo).
+      try {
+        await db.execute(
+            'ALTER TABLE $tablePregnancySnapshot ADD COLUMN anc_visit_no INTEGER');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 34) {
+      // v34 — status/missed_reason on immunisations: the EPI "Update Status"
+      // sheet now supports recording a milestone as explicitly Missed (with
+      // a reason), not just Vaccinated. Nullable/additive — existing rows
+      // are unaffected (both default to NULL, read as "no explicit outcome
+      // recorded yet", identical to pre-migration behaviour). Renumbered
+      // from an original v31/v32 pair to slot in after the v31-33 chain
+      // above, which landed on main independently and claimed the same
+      // version numbers for unrelated migrations (one of which — v31's
+      // local_assessments.custom_status — turned out to already be this
+      // migration's other half, so that part is not duplicated here).
+      Future<void> addCol34(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present — no-op */}
+      }
+      await addCol34('ALTER TABLE $tableImmunisations ADD COLUMN status TEXT');
+      await addCol34(
+          'ALTER TABLE $tableImmunisations ADD COLUMN missed_reason TEXT');
+    }
+    if (from < 35) {
+      // v35 — referral_facility on immunisations: the Refer flow already
       // captures a facility alongside the missed reason, but nothing
       // persisted it locally, so the timeline couldn't show "Facility: X"
-      // inline on a referred milestone. Nullable/additive.
+      // inline on a referred milestone. Nullable/additive. Renumbered from
+      // v33 for the same reason as v34 above.
       try {
         await db.execute(
             'ALTER TABLE $tableImmunisations ADD COLUMN referral_facility TEXT');

@@ -17,6 +17,8 @@ class PregnancySnapshotRow {
     this.eddDate,
     this.lmpDate,
     this.deliveryDateMillis,
+    this.ancVisitNo,
+    this.pncVisitNo,
   });
 
   final String patientId;
@@ -36,6 +38,16 @@ class PregnancySnapshotRow {
   /// without waiting for a server re-sync (mirrors Android PregnancyCohortRules).
   final int? deliveryDateMillis;
 
+  /// Completed ANC visit count for this pregnancy episode — mirrors Android
+  /// `PregnancyDetail.ancVisitNo`. Null / 0 means no ANC yet; the next submit
+  /// becomes visit 1.
+  final int? ancVisitNo;
+
+  /// Completed PNC mother visit count for this pregnancy episode — mirrors
+  /// Android `PregnancyDetail.pncVisitNo`. Null / 0 means no PNC yet; the next
+  /// submit becomes visit 1.
+  final int? pncVisitNo;
+
   Map<String, Object?> toDb() => {
         'patient_id': patientId,
         'high_risk_pregnant_woman': facts.highRiskPregnantWoman ? 1 : 0,
@@ -48,6 +60,8 @@ class PregnancySnapshotRow {
         'edd_date': eddDate,
         'lmp_date': lmpDate,
         'delivery_date_millis': deliveryDateMillis,
+        'anc_visit_no': ancVisitNo,
+        'pnc_visit_no': pncVisitNo,
       };
 
   static PregnancySnapshotRow fromDb(Map<String, Object?> row) =>
@@ -65,6 +79,32 @@ class PregnancySnapshotRow {
         eddDate: row['edd_date'] as int?,
         lmpDate: row['lmp_date'] as int?,
         deliveryDateMillis: row['delivery_date_millis'] as int?,
+        ancVisitNo: row['anc_visit_no'] as int?,
+        pncVisitNo: row['pnc_visit_no'] as int?,
+      );
+
+  PregnancySnapshotRow copyWith({
+    PregnancyFacts? facts,
+    int? updatedAt,
+    int? eddDate,
+    int? lmpDate,
+    int? deliveryDateMillis,
+    int? ancVisitNo,
+    int? pncVisitNo,
+    bool clearAncVisitNo = false,
+    bool clearPncVisitNo = false,
+  }) =>
+      PregnancySnapshotRow(
+        patientId: patientId,
+        facts: facts ?? this.facts,
+        updatedAt: updatedAt ?? this.updatedAt,
+        eddDate: eddDate ?? this.eddDate,
+        lmpDate: lmpDate ?? this.lmpDate,
+        deliveryDateMillis: deliveryDateMillis ?? this.deliveryDateMillis,
+        ancVisitNo:
+            clearAncVisitNo ? null : (ancVisitNo ?? this.ancVisitNo),
+        pncVisitNo:
+            clearPncVisitNo ? null : (pncVisitNo ?? this.pncVisitNo),
       );
 }
 
@@ -127,6 +167,61 @@ class PregnancySnapshotDao {
     );
   }
 
+  /// Next visit number for a stored counter, matching Android
+  /// `AssessmentViewModel.getVisitNumber`: null → 1, otherwise existing + 1.
+  static int nextVisitNo(int? existing) {
+    if (existing == null) return 1;
+    return existing + 1;
+  }
+
+  /// Next ANC visit number for [patientId] (Spice `ancVisitNo + 1`).
+  Future<int> nextAncVisitNo(String patientId) async {
+    final row = await byPatient(patientId);
+    return nextVisitNo(row?.ancVisitNo);
+  }
+
+  /// Next PNC visit number for [patientId] (Spice `pncVisitNo + 1`).
+  Future<int> nextPncVisitNo(String patientId) async {
+    final row = await byPatient(patientId);
+    return nextVisitNo(row?.pncVisitNo);
+  }
+
+  /// Persist the just-completed ANC visit count (Spice writes back
+  /// `pregnancyDetail.ancVisitNo` after each ANC save).
+  Future<void> setAncVisitNo(String patientId, int visitNo) async {
+    await _setVisitCounter(patientId, ancVisitNo: visitNo);
+  }
+
+  /// Persist the just-completed PNC visit count (Spice writes back
+  /// `pregnancyDetail.pncVisitNo` after each PNC save).
+  Future<void> setPncVisitNo(String patientId, int visitNo) async {
+    await _setVisitCounter(patientId, pncVisitNo: visitNo);
+  }
+
+  Future<void> _setVisitCounter(
+    String patientId, {
+    int? ancVisitNo,
+    int? pncVisitNo,
+  }) async {
+    final existing = await byPatient(patientId);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (existing == null) {
+      await upsertOne(PregnancySnapshotRow(
+        patientId: patientId,
+        facts: PregnancyFacts.empty,
+        updatedAt: nowMs,
+        ancVisitNo: ancVisitNo,
+        pncVisitNo: pncVisitNo,
+      ));
+      return;
+    }
+    await upsertOne(existing.copyWith(
+      updatedAt: nowMs,
+      ancVisitNo: ancVisitNo,
+      pncVisitNo: pncVisitNo,
+    ));
+  }
+
   Future<void> clearAll() async {
     await _db.db.delete(AppDatabase.tablePregnancySnapshot);
   }
@@ -157,6 +252,8 @@ class PregnancySnapshotDao {
         eddDate: row.eddDate ?? prev.eddDate,
         lmpDate: row.lmpDate ?? prev.lmpDate,
         deliveryDateMillis: row.deliveryDateMillis ?? prev.deliveryDateMillis,
+        ancVisitNo: _preferHigherVisitNo(row.ancVisitNo, prev.ancVisitNo),
+        pncVisitNo: _preferHigherVisitNo(row.pncVisitNo, prev.pncVisitNo),
       );
     }
     return byId.values.toList(growable: false);
@@ -167,6 +264,8 @@ class PregnancySnapshotDao {
   /// - Incoming is first coalesced per patient (see [coalesceByPatient]).
   /// - Incoming facts always win.
   /// - Null `lmpDate` / `eddDate` on incoming keeps the prior value.
+  /// - Visit counters take the higher of server vs local so a stale pull
+  ///   cannot rewind a counter we just incremented offline.
   /// - Prior rows for patients absent from [incoming] are kept (local enroll).
   static List<PregnancySnapshotRow> mergePreservingDates({
     required List<PregnancySnapshotRow> incoming,
@@ -186,7 +285,12 @@ class PregnancySnapshotDao {
               updatedAt: row.updatedAt,
               eddDate: row.eddDate ?? prev.eddDate,
               lmpDate: row.lmpDate ?? prev.lmpDate,
-              deliveryDateMillis: row.deliveryDateMillis ?? prev.deliveryDateMillis,
+              deliveryDateMillis:
+                  row.deliveryDateMillis ?? prev.deliveryDateMillis,
+              ancVisitNo:
+                  _preferHigherVisitNo(row.ancVisitNo, prev.ancVisitNo),
+              pncVisitNo:
+                  _preferHigherVisitNo(row.pncVisitNo, prev.pncVisitNo),
             ));
     }
     for (final entry in prior.entries) {
@@ -195,5 +299,11 @@ class PregnancySnapshotDao {
       }
     }
     return merged;
+  }
+
+  static int? _preferHigherVisitNo(int? a, int? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a >= b ? a : b;
   }
 }
