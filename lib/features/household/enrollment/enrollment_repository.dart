@@ -7,8 +7,6 @@ import '../../../core/api/api_repository.dart';
 import '../../../core/api/endpoints.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/db/household_dao.dart';
-import '../../../core/db/member_dao.dart';
 import '../../../core/models/provance_dto.dart';
 import 'models/household_enrollment_models.dart';
 
@@ -152,6 +150,8 @@ class EnrollmentRepository extends ApiRepository {
       'householdHeadOccupation': household.occupation,
       if (household.occupation.toLowerCase() == 'other')
         'otherOccupation': household.otherOccupation,
+      // Android's HouseHold model carries both: the form only ever writes the
+      // range, and `monthlyIncome` stays a legacy numeric mirror.
       'monthlyIncomeRange': household.monthlyIncomeRange,
       'monthlyIncome': _incomeMidpoint(household.monthlyIncomeRange),
       'disabilityPersonsCount': household.disabilityPersonsCount,
@@ -359,9 +359,12 @@ class EnrollmentRepository extends ApiRepository {
       'noOfPeople': household.numberOfMembers,
       'householdHeadOccupation': household.occupation,
       if (household.occupation.toLowerCase() == 'other')
-        'otherOccupation': household.occupation,
-      'monthlyIncome': _incomeToInt(household.monthlyIncome),
-      'disabilityPersonsCount': household.disabilityQuestion ? 1 : 0,
+        'otherOccupation': household.otherOccupation,
+      // Android's HouseHold model carries both: the form only ever writes the
+      // range, and `monthlyIncome` stays a legacy numeric mirror.
+      'monthlyIncomeRange': household.monthlyIncomeRange,
+      'monthlyIncome': _incomeMidpoint(household.monthlyIncomeRange),
+      'disabilityPersonsCount': household.disabilityPersonsCount,
       'latitude': latitude,
       'longitude': longitude,
       'provenance': provenance.toJson(),
@@ -454,7 +457,7 @@ class EnrollmentRepository extends ApiRepository {
       'nationalId': member.idNumber ?? '',
       'idType': _normalizeIdType(member.idType),
       'dateOfBirth': normDob,
-      'gender': member.gender.toLowerCase(),
+      'gender': _genderValue(member.gender),
       'isHouseholdHead': false,
       'isActive': true,
       'isChild': _isChild(member.age, normDob),
@@ -465,7 +468,8 @@ class EnrollmentRepository extends ApiRepository {
       if (subVillageName?.isNotEmpty == true) 'subVillage': subVillageName,
       'village': villageName,
       'phoneNumber': member.mobileNumber ?? '',
-      'phoneNumberCategory': '',
+      'phoneNumberCategory':
+          EnrollmentStrings.phoneCategoryIds[member.phoneNumberCategory] ?? '',
       'shasthyaShebikaId': ssWorkerId,
       'shasthyaKormiId': userId,
       'createdByRoleName': _skRole,
@@ -536,7 +540,7 @@ class EnrollmentRepository extends ApiRepository {
       'nationalId': member.idNumber ?? '',
       'idType': _normalizeIdType(member.idType),
       'dateOfBirth': normDob,
-      'gender': member.gender.toLowerCase(),
+      'gender': _genderValue(member.gender),
       'isHouseholdHead': isHouseholdHead,
       'isActive': true,
       'isChild': _isChild(member.age, normDob),
@@ -546,7 +550,8 @@ class EnrollmentRepository extends ApiRepository {
       'subVillageId': subVillageId,
       'village': villageName,
       'phoneNumber': member.mobileNumber ?? '',
-      'phoneNumberCategory': '',
+      'phoneNumberCategory':
+          EnrollmentStrings.phoneCategoryIds[member.phoneNumberCategory] ?? '',
       'shasthyaShebikaId': ssWorkerId,
       'shasthyaKormiId': skUserId,
       'createdByRoleName': _skRole,
@@ -571,18 +576,29 @@ class EnrollmentRepository extends ApiRepository {
     };
   }
 
-  static int _incomeToInt(String bracket) {
-    switch (bracket) {
-      case '<10000':
-        return 9999;
-      case '10000-25000':
+  /// Midpoint of a Spice `monthlyIncomeRange` id, for the legacy numeric
+  /// `monthlyIncome` column. Mirrors the brackets in
+  /// `HouseHoldRegistration.rangeFromExactValue`.
+  static int _incomeMidpoint(String range) {
+    switch (range) {
+      case '<5000':
+        return 5000;
+      case '5001–10000':
+        return 7500;
+      case '10001–15000':
+        return 12500;
+      case '15001–20000':
         return 17500;
-      case '25000-50000':
-        return 37500;
-      case '>50000':
-        return 60000;
+      case '20001–30000':
+        return 25000;
+      case '30001–40000':
+        return 35000;
+      case '40001–70000':
+        return 55000;
+      case '>70000':
+        return 70000;
       default:
-        return int.tryParse(bracket) ?? 0;
+        return int.tryParse(range) ?? 0;
     }
   }
 
@@ -670,13 +686,25 @@ class EnrollmentRepository extends ApiRepository {
     return DateTime.now().difference(parsed).inDays < 18 * 365;
   }
 
+  /// Spice `id_type` option ids: nid | brn | na.
   static String _normalizeIdType(String raw) {
     final s = raw.toLowerCase().replaceAll(' ', '');
-    return s == 'nationalid' ? 'nid' : s;
+    return switch (s) {
+      'nationalid' => 'nid',
+      'notavailable' => 'na',
+      _ => s,
+    };
   }
 
   static String _disabilityValue(String status) {
     final s = status.toLowerCase();
-    return (s == 'none' || s == 'absent') ? 'absent' : 'present';
+    return (s == 'none' || s == 'absent' || s == 'no') ? 'absent' : 'present';
+  }
+
+  /// Spice `gender` option ids are lowercase for male/female but capitalised
+  /// for Other; match that exactly so the server sees familiar values.
+  static String _genderValue(String raw) {
+    final s = raw.toLowerCase();
+    return (s == 'male' || s == 'female') ? s : 'Other';
   }
 }

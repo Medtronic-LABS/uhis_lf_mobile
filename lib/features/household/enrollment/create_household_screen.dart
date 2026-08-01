@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/auth/user_hierarchy_service.dart';
@@ -10,6 +9,8 @@ import '../../../core/debug/console_log.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
+import 'enrollment_dob.dart';
+import 'enrollment_id_number.dart';
 import 'widgets/enrollment_section_header.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
@@ -42,7 +43,7 @@ class CreateHouseholdScreen extends StatefulWidget {
 class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   // ── Household fields ────────────────────────────────────────────────────────
   late TextEditingController _totalMembersCtrl;
-  late TextEditingController _incomeCtrl;
+  late TextEditingController _otherOccupationCtrl;
   late TextEditingController _disabilityCountCtrl;
 
   SsWorker? _selectedSsWorker;
@@ -50,7 +51,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   SubVillageRef? _selectedSubVillage;
   String? _householdType;
   String? _selectedOccupation;
-  String _hasDisability = 'No';
+  String? _selectedIncomeRange;
 
   // ── Head fields ─────────────────────────────────────────────────────────────
   late TextEditingController _nameCtrl;
@@ -59,11 +60,22 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   late TextEditingController _dobCtrl;
   late TextEditingController _ageCtrl;
 
+  /// Parsed date of birth. [_dobCtrl] holds its DD-MM-YYYY rendering; the
+  /// model and payload get [EnrollmentDob.wire].
+  DateTime? _dob;
   String? _idType;
   String? _gender;
+  String? _phoneCategory;
   String? _maritalStatus;
   String? _disabilityStatus;
   bool _prefilledFromScan = false;
+
+  /// Age in whole years — drives the marital-status gate and the `age` sent to
+  /// the server. [_ageCtrl] instead shows the most meaningful unit, named by
+  /// [_ageUnit].
+  int _ageInYears = 0;
+  String _ageUnit = '';
+  String? _ageSummary;
 
   // ── Validation ──────────────────────────────────────────────────────────────
   final Map<String, GlobalKey> _fieldKeys = {};
@@ -71,7 +83,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
   static const _validationOrder = [
     'ssWorker', 'village', 'householdType', 'totalMembers',
-    'headName', 'idNumber', 'mobile', 'dob', 'gender', 'maritalStatus',
+    'occupation', 'otherOccupation', 'income', 'disabilityCount',
+    'headName', 'idType', 'idNumber', 'phoneCategory', 'mobile', 'dob',
+    'gender', 'maritalStatus',
   ];
 
   GlobalKey _key(String name) =>
@@ -83,17 +97,26 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
   Map<String, String?> _runValidation() {
     const req = 'Required';
+    // Skipped for "Not Available", digits-and-length checked for National ID.
+    final idError = EnrollmentIdNumber.validate(_idType, _idNumberCtrl.text);
     return {
       if (_selectedSsWorker == null) 'ssWorker': req,
       if (_selectedVillage == null) 'village': req,
       if (_householdType == null) 'householdType': req,
       if (_totalMembersCtrl.text.trim().isEmpty) 'totalMembers': req,
+      if (_selectedOccupation == 'Other' &&
+          _otherOccupationCtrl.text.trim().isEmpty)
+        'otherOccupation': req,
+      if (_selectedIncomeRange == null) 'income': req,
+      if (_disabilityCountCtrl.text.trim().isEmpty) 'disabilityCount': req,
       if (_nameCtrl.text.trim().isEmpty) 'headName': req,
-      if (_idType != 'Not Available' && _idNumberCtrl.text.trim().isEmpty) 'idNumber': req,
+      if (_idType == null) 'idType': req,
+      'idNumber': ?idError,
       if (_mobileCtrl.text.trim().isEmpty) 'mobile': req,
+      if (_phoneCategory == null) 'phoneCategory': req,
       if (_dobCtrl.text.trim().isEmpty) 'dob': 'Date of birth required',
       if (_gender == null) 'gender': req,
-      if ((int.tryParse(_ageCtrl.text) ?? 99) > 5 && _maritalStatus == null) 'maritalStatus': req,
+      if (_ageInYears > 5 && _maritalStatus == null) 'maritalStatus': req,
     };
   }
 
@@ -121,7 +144,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
     // Household controllers
     _totalMembersCtrl = TextEditingController();
-    _incomeCtrl = TextEditingController();
+    _otherOccupationCtrl = TextEditingController();
     _disabilityCountCtrl = TextEditingController();
 
     // Head controllers
@@ -142,11 +165,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
         _nameCtrl.text = widget.scannedName!;
         _prefilledFromScan = true;
       }
-      final dob = widget.scannedDateOfBirth;
-      if (dob != null && dob.isNotEmpty) {
-        _dobCtrl.text = dob;
-        final parsed = DateTime.tryParse(dob);
-        if (parsed != null) _calculateAge(parsed);
+      final dob = EnrollmentDob.parse(widget.scannedDateOfBirth);
+      if (dob != null) {
+        _applyDateOfBirth(dob);
         _prefilledFromScan = true;
       }
     }
@@ -162,6 +183,13 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
       await hierarchy.prefetch();
       if (!mounted) return;
+      // reset() nulls the household, and updateHousehold() is a no-op while it
+      // stays null — so seed it here. Village/SS are still unselected at this
+      // point; _handleContinue fills them in via updateHousehold().
+      await controller.initializeHousehold(healthWorkerId: '', villageId: '');
+      if (!mounted) return;
+      debugPrint('[_CreateHouseholdScreenState] household initialised '
+          'no=${controller.household?.householdNumber}');
       setState(() {}); // trigger rebuild so dropdowns populate their option lists
     });
 
@@ -171,7 +199,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   void dispose() {
     debugPrint('[_CreateHouseholdScreenState] dispose');
     _totalMembersCtrl.dispose();
-    _incomeCtrl.dispose();
+    _otherOccupationCtrl.dispose();
     _disabilityCountCtrl.dispose();
     _nameCtrl.dispose();
     _idNumberCtrl.dispose();
@@ -184,8 +212,8 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(1930),
+      initialDate: _dob ?? DateTime.now(),
+      firstDate: EnrollmentDob.earliestBirthDate(),
       lastDate: DateTime.now(),
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
@@ -200,21 +228,43 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     );
     if (picked != null) {
       setState(() {
-        _dobCtrl.text = DateFormat('yyyy-MM-dd').format(picked);
-        _calculateAge(picked);
+        _applyDateOfBirth(picked);
         _fieldErrors.remove('dob');
       });
     }
   }
 
-  void _calculateAge(DateTime dob) {
-    final now = DateTime.now();
-    int age = now.year - dob.year;
-    if (now.month < dob.month ||
-        (now.month == dob.month && now.day < dob.day)) {
-      age--;
+  /// Single entry point for every source of a date of birth (picker, NID scan)
+  /// so the field and the age can never drift apart. Call inside setState.
+  void _applyDateOfBirth(DateTime dob) {
+    _dob = dob;
+    _dobCtrl.text = EnrollmentDob.display(dob);
+
+    final age = EnrollmentAge.from(dob);
+    _ageInYears = age.years;
+    _ageCtrl.text = age.value.toString();
+    _ageUnit = age.unit;
+    _ageSummary = age.summary;
+
+    if (age.years <= 5) _maritalStatus = null;
+  }
+
+  /// Manual age entry is always whole years. Sets DOB to 01-01 of the
+  /// implied birth year so the two fields stay consistent on the wire.
+  void _applyAgeYears(String raw) {
+    final years = int.tryParse(raw.trim());
+    if (years == null) {
+      _ageInYears = 0;
+      _ageUnit = '';
+      _ageSummary = null;
+      return;
     }
-    _ageCtrl.text = age.toString();
+    _ageInYears = years;
+    _ageUnit = years == 1 ? 'year' : 'years';
+    _ageSummary = null;
+    _dob = EnrollmentDob.fromAgeYears(years);
+    _dobCtrl.text = EnrollmentDob.display(_dob!);
+    if (years <= 5) _maritalStatus = null;
   }
 
   Future<void> _handleContinue(EnrollmentController controller) async {
@@ -254,16 +304,36 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
             : _selectedVillage?.id;
 
     // Update both sections in the controller
+    if (controller.household == null) {
+      // Safety net: the post-frame seed above may not have run yet (or the
+      // controller was reset by another screen). Without a household instance
+      // updateHousehold() silently no-ops and validation reports
+      // "Household not initialized".
+      debugPrint('[_CreateHouseholdScreenState] household was null at '
+          'continue — initialising before update');
+      await controller.initializeHousehold(
+        healthWorkerId: _selectedSsWorker?.id ?? '',
+        villageId: effectiveVillageId ?? '',
+        villageName: _selectedVillage?.name,
+        subVillageId: _selectedSubVillage?.id,
+        subVillageName: _selectedSubVillage?.name,
+      );
+      if (!mounted) return;
+    }
+
     controller.updateHousehold(
       healthWorkerId: _selectedSsWorker?.id,
       householdType: _householdType ?? '',
       numberOfMembers: int.tryParse(_totalMembersCtrl.text) ?? 0,
       houseNumber: '',
       occupation: _selectedOccupation ?? '',
-      monthlyIncome: _incomeCtrl.text.isEmpty ? '0' : _incomeCtrl.text,
-      disabilityQuestion: _hasDisability == 'Yes',
-      disabilityDetails:
-          _hasDisability == 'Yes' ? _disabilityCountCtrl.text : null,
+      otherOccupation: _selectedOccupation == 'Other'
+          ? _otherOccupationCtrl.text.trim()
+          : '',
+      monthlyIncomeRange:
+          EnrollmentStrings.incomeRangeIds[_selectedIncomeRange] ?? '',
+      disabilityPersonsCount:
+          int.tryParse(_disabilityCountCtrl.text.trim()) ?? 0,
       villageId: effectiveVillageId,
       villageName: _selectedVillage?.name,
       subVillageId: _selectedSubVillage?.id ?? '',
@@ -272,12 +342,15 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
     controller.updateHead(
       name: _nameCtrl.text,
-      age: int.tryParse(_ageCtrl.text) ?? 0,
+      age: _ageInYears,
       gender: _gender!,
-      dateOfBirth: _dobCtrl.text,
-      idType: _idType ?? 'BRN',
-      idNumber: _idType == 'Not Available' ? null : _idNumberCtrl.text,
+      dateOfBirth: _dob == null ? '' : EnrollmentDob.wire(_dob!),
+      idType: _idType ?? '',
+      idNumber: EnrollmentIdNumber.isCollected(_idType)
+          ? _idNumberCtrl.text.trim()
+          : null,
       mobileNumber: _mobileCtrl.text,
+      phoneNumberCategory: _phoneCategory,
       mobileAvailable: true,
       maritalStatus: _maritalStatus ?? '',
       disabilityStatus: _disabilityStatus ?? 'Absent',
@@ -546,21 +619,45 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 14),
 
+                    SizedBox(key: _key('occupation'), height: 0),
                     EnrollmentDropdown(
                       label: EnrollmentStrings.householdHeadOccupationLabel,
                       options: EnrollmentStrings.occupationOptions,
                       value: _selectedOccupation,
-                      onChanged: (v) =>
-                          setState(() => _selectedOccupation = v),
+                      onChanged: (v) => setState(() {
+                        _selectedOccupation = v;
+                        if (v != 'Other') _otherOccupationCtrl.clear();
+                        _fieldErrors.remove('otherOccupation');
+                      }),
                       hint: 'Select occupation',
                     ),
                     const SizedBox(height: 14),
 
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.monthlyIncomeInputLabel,
-                      hint: EnrollmentStrings.monthlyIncomeInputHint,
-                      controller: _incomeCtrl,
-                      keyboardType: TextInputType.number,
+                    if (_selectedOccupation == 'Other') ...[
+                      SizedBox(key: _key('otherOccupation'), height: 0),
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.otherOccupationLabel,
+                        hint: EnrollmentStrings.otherOccupationHint,
+                        controller: _otherOccupationCtrl,
+                        isRequired: true,
+                        onChanged: (_) => _clearError('otherOccupation'),
+                        errorText: _fieldErrors['otherOccupation'],
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    SizedBox(key: _key('income'), height: 0),
+                    EnrollmentDropdown(
+                      label: EnrollmentStrings.monthlyIncomeRangeLabel,
+                      options: EnrollmentStrings.incomeRangeOptions,
+                      value: _selectedIncomeRange,
+                      onChanged: (v) => setState(() {
+                        _selectedIncomeRange = v;
+                        _fieldErrors.remove('income');
+                      }),
+                      hint: EnrollmentStrings.monthlyIncomeRangeHint,
+                      isRequired: true,
+                      errorText: _fieldErrors['income'],
                     ),
                     const SizedBox(height: 14),
 
@@ -570,23 +667,18 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       hint: EnrollmentStrings.disabilityPersonCountHint,
                       controller: _disabilityCountCtrl,
                       keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
                       isRequired: true,
                       onChanged: (_) => _clearError('disabilityCount'),
                       errorText: _fieldErrors['disabilityCount'],
                     ),
-
-                    if (_hasDisability == 'Yes') ...[
-                      const SizedBox(height: 14),
-                      EnrollmentInputField(
-                        label: EnrollmentStrings.disabilityPersonCountLabel,
-                        hint: EnrollmentStrings.disabilityPersonCountHint,
-                        controller: _disabilityCountCtrl,
-                        keyboardType: TextInputType.number,
+                    const SizedBox(height: 6),
+                    Text(
+                      EnrollmentStrings.disabilityPersonCountInfo,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
                       ),
-                    ],
+                    ),
 
                     // ── Divider ────────────────────────────────────────────
                     const SizedBox(height: 28),
@@ -643,11 +735,16 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
+                            SizedBox(key: _key('idNumber'), height: 0),
                             EnrollmentInputField(
-                              label: EnrollmentStrings.idNumberLabel,
-                              hint: EnrollmentStrings.idNumberHint,
+                              label: EnrollmentIdNumber.label(_idType),
+                              hint: EnrollmentIdNumber.hint(_idType),
                               controller: _idNumberCtrl,
+                              keyboardType: EnrollmentIdNumber.keyboard(_idType),
+                              inputFormatters:
+                                  EnrollmentIdNumber.formatters(_idType),
                               onChanged: (_) => _clearError('idNumber'),
+                              errorText: _fieldErrors['idNumber'],
                             ),
                             const SizedBox(height: 10),
                             SizedBox(key: _key('headName'), height: 0),
@@ -694,33 +791,58 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       const SizedBox(height: 14),
                     ],
 
+                    SizedBox(key: _key('idType'), height: 0),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.idTypeLabel,
                       options: EnrollmentStrings.idTypesV2,
                       selectedValue: _idType,
                       onChanged: (v) => setState(() {
                         _idType = v;
-                        if (v == 'Not Available') {
+                        _fieldErrors.remove('idType');
+                        if (!EnrollmentIdNumber.isCollected(v)) {
                           _idNumberCtrl.clear();
-                          _fieldErrors.remove('idNumber');
                         }
+                        _fieldErrors.remove('idNumber');
                       }),
                       isRequired: true,
+                      errorText: _fieldErrors['idType'],
                     ),
                     const SizedBox(height: 14),
 
-                    if (!_prefilledFromScan && _idType != 'Not Available') ...[
+                    if (!_prefilledFromScan &&
+                        EnrollmentIdNumber.isCollected(_idType)) ...[
                       SizedBox(key: _key('idNumber'), height: 0),
                       EnrollmentInputField(
-                        label: EnrollmentStrings.idNumberLabel,
-                        hint: EnrollmentStrings.idNumberHint,
+                        label: EnrollmentIdNumber.label(_idType),
+                        hint: EnrollmentIdNumber.hint(_idType),
                         controller: _idNumberCtrl,
                         isRequired: true,
+                        keyboardType: EnrollmentIdNumber.keyboard(_idType),
+                        inputFormatters: EnrollmentIdNumber.formatters(_idType),
                         onChanged: (_) => _clearError('idNumber'),
                         errorText: _fieldErrors['idNumber'],
                       ),
                       const SizedBox(height: 14),
                     ],
+
+                    SizedBox(key: _key('phoneCategory'), height: 0),
+                    EnrollmentDropdown(
+                      label: EnrollmentStrings.phoneCategoryLabel,
+                      // The head cannot own the household head's number on
+                      // someone else's behalf, so Spice hides that option here.
+                      options: EnrollmentStrings.phoneCategoryOptions
+                          .where((o) => o != 'Head of Household')
+                          .toList(),
+                      value: _phoneCategory,
+                      onChanged: (v) => setState(() {
+                        _phoneCategory = v;
+                        _fieldErrors.remove('phoneCategory');
+                      }),
+                      hint: EnrollmentStrings.phoneCategoryHint,
+                      isRequired: true,
+                      errorText: _fieldErrors['phoneCategory'],
+                    ),
+                    const SizedBox(height: 14),
 
                     SizedBox(key: _key('mobile'), height: 0),
                     EnrollmentInputField(
@@ -762,12 +884,29 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       hint: EnrollmentStrings.ageHint,
                       controller: _ageCtrl,
                       keyboardType: TextInputType.number,
-                      onChanged: (v) {
-                        if ((int.tryParse(v) ?? 99) <= 5) {
-                          setState(() => _maritalStatus = null);
-                        }
-                      },
+                      labelSuffix: _ageUnit.isNotEmpty
+                          ? Text(
+                              '($_ageUnit)',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textMuted,
+                              ),
+                            )
+                          : null,
+                      onChanged: (v) => setState(() => _applyAgeYears(v)),
                     ),
+                    if (_ageSummary != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _ageSummary!,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.enrollmentSuccess,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 14),
 
                     SizedBox(key: _key('gender'), height: 0),
@@ -784,7 +923,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    if ((int.tryParse(_ageCtrl.text) ?? 99) > 5) ...[
+                    if (_ageInYears > 5) ...[
                       SizedBox(key: _key('maritalStatus'), height: 0),
                       EnrollmentDropdown(
                         label: EnrollmentStrings.maritalStatusLabel,

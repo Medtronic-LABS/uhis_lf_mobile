@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_repository.dart';
@@ -22,7 +21,9 @@ import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
+import 'enrollment_dob.dart';
 import 'enrollment_entry_sheet.dart';
+import 'enrollment_id_number.dart';
 import 'enrollment_repository.dart';
 import 'nid_ocr_service.dart';
 import 'patient_lookup_repository.dart';
@@ -164,7 +165,16 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   late TextEditingController _mobileCtrl;
 
 
+  /// Parsed date of birth. [_dobCtrl] holds its DD-MM-YYYY rendering; the
+  /// model and payload get [EnrollmentDob.wire].
+  DateTime? _dob;
   String? _gender;
+  String? _phoneCategory;
+
+  /// Household head's mobile — used when phone category is
+  /// "Head of Household". Loaded from the enrollment controller (new HH)
+  /// or MemberDao (standalone link-member).
+  String? _headMobileNumber;
   String? _maritalStatus;
   String? _disabilityStatus;
   bool _nidScanned = false;
@@ -190,7 +200,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   final Map<String, GlobalKey> _fieldKeys = {};
   Map<String, String?> _fieldErrors = {};
 
-  static const _validationOrder = ['name', 'dob', 'gender', 'maritalStatus', 'guardian', 'mobile'];
+  static const _validationOrder = [
+    'name', 'idType', 'idNumber', 'phoneCategory', 'mobile', 'dob', 'gender',
+    'maritalStatus', 'guardian',
+  ];
 
   GlobalKey _key(String name) =>
       _fieldKeys.putIfAbsent(name, GlobalKey.new);
@@ -247,33 +260,29 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       if (widget.scannedName?.isNotEmpty ?? false) {
         _nameCtrl.text = widget.scannedName!;
       }
-      final dob = widget.scannedDateOfBirth;
-      if (dob != null && dob.isNotEmpty) {
-        _dobCtrl.text = dob;
-        final parsed = DateTime.tryParse(dob);
-        if (parsed != null) _calculateAge(parsed);
-      }
+      _applyDateOfBirth(EnrollmentDob.parse(widget.scannedDateOfBirth));
     }
 
-    if (!widget.isStandalone) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final headMobile = context.read<EnrollmentController>().householdHead?.mobileNumber;
-        if (headMobile != null && headMobile.isNotEmpty) {
-          setState(() => _mobileCtrl.text = headMobile);
-        }
-      });
-    } else {
-      // Seed from caller-supplied names first; only hit the DB when empty.
+    // Seed guardian names + resolve the household head's mobile so the
+    // "Head of Household" phone-category option can autofill it.
+    if (widget.isStandalone) {
       if (widget.initialMemberNames.isNotEmpty) {
         _householdMemberNames = List<String>.from(widget.initialMemberNames);
       }
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadHouseholdMembers());
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final head = context.read<EnrollmentController>().householdHead;
+        final mobile = head?.mobileNumber?.trim();
+        if (mobile != null && mobile.isNotEmpty) {
+          setState(() => _headMobileNumber = mobile);
+        }
+      });
     }
   }
 
   Future<void> _loadHouseholdMembers() async {
-    if (_householdMemberNames.isNotEmpty) return; // already seeded from caller
     final hhId = widget.existingHouseholdId;
     if (hhId == null || !mounted) return;
     final dao = context.read<MemberDao>();
@@ -284,12 +293,44 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       entities = await dao.getByHouseholdId(widget.existingHouseholdReferenceId!);
     }
     if (!mounted) return;
+
     final names = entities
         .map((e) => e.name)
         .whereType<String>()
         .where((n) => n.isNotEmpty)
         .toList();
-    if (names.isNotEmpty) setState(() => _householdMemberNames = names);
+
+    String? headMobile;
+    for (final e in entities) {
+      if (!e.isHouseholdHead) continue;
+      final phone = e.phone?.trim();
+      if (phone != null && phone.isNotEmpty) {
+        headMobile = phone;
+        break;
+      }
+    }
+
+    setState(() {
+      if (_householdMemberNames.isEmpty && names.isNotEmpty) {
+        _householdMemberNames = names;
+      }
+      if (headMobile != null) _headMobileNumber = headMobile;
+    });
+  }
+
+  /// Spice: picking "Head of Household" copies the head's number; any other
+  /// category clears the field so the SK enters a fresh number.
+  void _onPhoneCategoryChanged(String? category) {
+    setState(() {
+      _phoneCategory = category;
+      _fieldErrors.remove('phoneCategory');
+      if (category == 'Head of Household') {
+        _mobileCtrl.text = _headMobileNumber ?? '';
+      } else {
+        _mobileCtrl.clear();
+      }
+      _fieldErrors.remove('mobile');
+    });
   }
 
   @override
@@ -306,8 +347,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(1950),
+      initialDate: _dob ?? DateTime.now(),
+      firstDate: EnrollmentDob.earliestBirthDate(),
       lastDate: DateTime.now(),
       builder: (context, child) {
         return Theme(
@@ -323,52 +364,43 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       },
     );
 
-    if (picked != null) {
-      final formatted = DateFormat('yyyy-MM-dd').format(picked);
-      setState(() {
-        _dobCtrl.text = formatted;
-        _calculateAge(picked);
-      });
-    }
+    if (picked != null) setState(() => _applyDateOfBirth(picked));
   }
 
-  void _calculateAge(DateTime dob) {
-    final now = DateTime.now();
+  /// Single entry point for every source of a date of birth (picker, NID scan,
+  /// server lookup) so the field, the age and the marital-status gate can never
+  /// drift apart. Call inside setState.
+  void _applyDateOfBirth(DateTime? dob) {
+    if (dob == null) return;
+    _dob = dob;
+    _dobCtrl.text = EnrollmentDob.display(dob);
 
-    int years = now.year - dob.year;
-    int months = now.month - dob.month;
-    int days = now.day - dob.day;
+    final age = EnrollmentAge.from(dob);
+    _ageInYears = age.years;
+    _ageCtrl.text = age.value.toString();
+    _ageUnit = age.unit;
+    _ageSummary = age.summary;
 
-    if (days < 0) {
-      months--;
-      days += DateTime(now.year, now.month, 0).day;
+    if (age.years <= 5) _maritalStatus = null;
+  }
+
+  /// Manual age entry is always whole years. Sets DOB to 01-01 of the
+  /// implied birth year so the two fields stay consistent on the wire.
+  void _applyAgeYears(String raw) {
+    final years = int.tryParse(raw.trim());
+    if (years == null) {
+      _ageInYears = 0;
+      _ageUnit = '';
+      _ageSummary = null;
+      return;
     }
-    if (months < 0) {
-      years--;
-      months += 12;
-    }
-
     _ageInYears = years;
-
-    // Mirror Android getAgeOrDobDisplay: show years ≥1, else months, else days.
-    if (years >= 1) {
-      _ageCtrl.text = years.toString();
-      _ageUnit = years == 1 ? 'year' : 'years';
-      _ageSummary = months > 0
-          ? '$years yr ${months}m old'
-          : '$years year${years == 1 ? '' : 's'} old';
-    } else if (months > 0) {
-      _ageCtrl.text = months.toString();
-      _ageUnit = months == 1 ? 'month' : 'months';
-      _ageSummary = '$months month${months == 1 ? '' : 's'} old';
-    } else {
-      final d = days < 1 ? 1 : days;
-      _ageCtrl.text = d.toString();
-      _ageUnit = d == 1 ? 'day' : 'days';
-      _ageSummary = days < 1 ? '< 1 day old' : '$days days old';
-    }
-
+    _ageUnit = years == 1 ? 'year' : 'years';
+    _ageSummary = null;
+    _dob = EnrollmentDob.fromAgeYears(years);
+    _dobCtrl.text = EnrollmentDob.display(_dob!);
     if (years <= 5) _maritalStatus = null;
+    if (years >= 1) _guardianName = null;
   }
 
   Future<void> _scanNid() async {
@@ -385,12 +417,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           _existingPatient = null;
           if (data.nidNumber != null) _brnCtrl.text = data.nidNumber!;
           if (data.name != null) _nameCtrl.text = data.name!;
-          final dob = data.dateOfBirth;
-          if (dob != null) {
-            _dobCtrl.text = dob;
-            final parsed = DateTime.tryParse(dob);
-            if (parsed != null) _calculateAge(parsed);
-          }
+          _applyDateOfBirth(EnrollmentDob.parse(data.dateOfBirth));
         });
         final nid = data.nidNumber;
         if (nid != null) await _lookupExisting(nid);
@@ -418,12 +445,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         _existingPatient = patient;
         final name = patient.name;
         if (name != null && name.isNotEmpty) _nameCtrl.text = name;
-        final dob = patient.dob;
-        if (dob != null && dob.isNotEmpty) {
-          _dobCtrl.text = dob;
-          final parsed = DateTime.tryParse(dob);
-          if (parsed != null) _calculateAge(parsed);
-        }
+        _applyDateOfBirth(EnrollmentDob.parse(patient.dob));
         _gender = _matchGender(patient.gender) ?? _gender;
         final phone = patient.phone;
         if (phone != null && phone.isNotEmpty) {
@@ -452,13 +474,19 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   Future<void> _handleSaveMember(EnrollmentController controller) async {
     debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
     final maritalRequired = _ageInYears > 5;
+    // Skipped for "Not Available", digits-and-length checked for National ID.
+    final idError = EnrollmentIdNumber.validate(_idType, _brnCtrl.text);
 
     final errors = <String, String?>{
+      if (_idType == null) 'idType': 'Required',
+      'idNumber': ?idError,
       if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
       if (_dobCtrl.text.trim().isEmpty) 'dob': 'Required',
       if (_gender == null) 'gender': 'Required',
       if (maritalRequired && _maritalStatus == null) 'maritalStatus': 'Required',
       if (_ageInYears < 1 && _guardianName == null) 'guardian': 'Required',
+      if (_mobileCtrl.text.trim().isNotEmpty && _phoneCategory == null)
+        'phoneCategory': 'Required',
     };
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -488,10 +516,15 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       name: _nameCtrl.text,
       age: _ageInYears,
       gender: _gender!,
-      dateOfBirth: _dobCtrl.text,
-      idType: _idType == 'National ID' ? 'NID' : (_idType ?? 'BRN'),
-      idNumber: _idType == 'Not Available' ? null : (nid.isNotEmpty ? nid : null),
+      dateOfBirth: _dob == null ? '' : EnrollmentDob.wire(_dob!),
+      idType: _idType == EnrollmentIdNumber.nationalId
+          ? 'NID'
+          : (_idType ?? EnrollmentIdNumber.brn),
+      idNumber: EnrollmentIdNumber.isCollected(_idType)
+          ? (nid.isNotEmpty ? nid : null)
+          : null,
       mobileNumber: mobile.isNotEmpty ? mobile : null,
+      phoneNumberCategory: mobile.isNotEmpty ? _phoneCategory : null,
       mobileAvailable: mobile.isNotEmpty,
       maritalStatus: _maritalStatus ?? '',
       disabilityStatus: _disabilityStatus ?? 'Absent',
@@ -812,17 +845,38 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     AppSpacing.stickyBarClearance,
                   ),
                   children: [
-                    // ── Q1: ID Type ────────────────────────────────────────
-                    _QuestionLabel(number: 'Q1', text: 'ID Type'),
+                    // ── Q1: Name — hidden when NID scanned (card has it) ──
+                    if (!_nidScanned) ...[
+                      SizedBox(key: _key('name'), height: 0),
+                      _QuestionLabel(number: 'Q1', text: 'Name'),
+                      const SizedBox(height: 10),
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.memberNameLabel,
+                        hint: EnrollmentStrings.memberNameHint,
+                        controller: _nameCtrl,
+                        isRequired: true,
+                        onChanged: (_) => _clearError('name'),
+                        errorText: _fieldErrors['name'],
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // ── Q2: ID Type ────────────────────────────────────────
+                    _QuestionLabel(number: 'Q2', text: 'ID Type'),
                     const SizedBox(height: 10),
+                    SizedBox(key: _key('idType'), height: 0),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.idTypeLabel,
                       options: EnrollmentStrings.idTypesV2,
                       selectedValue: _idType,
                       allowDeselect: false,
+                      isRequired: true,
+                      errorText: _fieldErrors['idType'],
                       onChanged: (v) => setState(() {
-                        _idType = v ?? 'BRN';
-                        if (_idType != 'National ID') {
+                        _idType = v;
+                        _fieldErrors.remove('idType');
+                        _fieldErrors.remove('idNumber');
+                        if (_idType != EnrollmentIdNumber.nationalId) {
                           _nidScanned = false;
                           _brnCtrl.clear();
                           _existingPatient = null;
@@ -832,7 +886,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     const SizedBox(height: 14),
 
                     // NID scan purple CTA — shown only for National ID
-                    if (_idType == 'National ID') ...[
+                    if (_idType == EnrollmentIdNumber.nationalId) ...[
                     Material(
                       borderRadius: BorderRadius.circular(AppRadius.patRow),
                       child: InkWell(
@@ -877,6 +931,27 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                         ),
                       ),
                     ),
+
+                    // Manual entry for SKs who cannot scan (damaged card, no
+                    // camera light); the scanned card below carries the same
+                    // controller once a scan succeeds.
+                    if (!_nidScanned) ...[
+                      const SizedBox(height: 14),
+                      SizedBox(key: _key('idNumber'), height: 0),
+                      EnrollmentInputField(
+                        label: EnrollmentIdNumber.label(_idType),
+                        hint: EnrollmentIdNumber.hint(_idType),
+                        controller: _brnCtrl,
+                        isRequired: true,
+                        keyboardType: EnrollmentIdNumber.keyboard(_idType),
+                        inputFormatters: EnrollmentIdNumber.formatters(_idType),
+                        onChanged: (value) {
+                          _clearError('idNumber');
+                          if (value.length >= 10) _lookupExisting(value);
+                        },
+                        errorText: _fieldErrors['idNumber'],
+                      ),
+                    ],
 
                     // NID scan editable card — shown when scan succeeded so SK
                     // can correct OCR errors without rescanning.
@@ -925,14 +1000,20 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
+                            SizedBox(key: _key('idNumber'), height: 0),
                             EnrollmentInputField(
                               label: EnrollmentStrings.nidNumberLabel,
                               hint: EnrollmentStrings.nidNumberHint,
                               controller: _brnCtrl,
-                              keyboardType: TextInputType.number,
+                              keyboardType:
+                                  EnrollmentIdNumber.keyboard(_idType),
+                              inputFormatters:
+                                  EnrollmentIdNumber.formatters(_idType),
                               onChanged: (value) {
+                                _clearError('idNumber');
                                 if (value.length >= 10) _lookupExisting(value);
                               },
+                              errorText: _fieldErrors['idNumber'],
                             ),
                             const SizedBox(height: 10),
                             EnrollmentInputField(
@@ -1018,32 +1099,34 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ], // end National ID section
 
                     // BRN field — shown only when ID type is BRN
-                    if (_idType == 'BRN') ...[
+                    if (_idType == EnrollmentIdNumber.brn) ...[
+                      SizedBox(key: _key('idNumber'), height: 0),
                       EnrollmentInputField(
                         label: 'Birth Registration Number (BRN)',
                         hint: 'Enter BRN',
                         controller: _brnCtrl,
+                        isRequired: true,
+                        onChanged: (_) => _clearError('idNumber'),
+                        errorText: _fieldErrors['idNumber'],
                       ),
                       const SizedBox(height: 8),
                     ],
                     const SizedBox(height: 20),
 
-                    // ── Q2: Name — hidden when NID scanned (card has it) ──
-                    if (!_nidScanned) ...[
-                      SizedBox(key: _key('name'), height: 0),
-                      _QuestionLabel(number: 'Q2', text: 'Name'),
-                      const SizedBox(height: 10),
-                      EnrollmentInputField(
-                        label: EnrollmentStrings.memberNameLabel,
-                        hint: EnrollmentStrings.memberNameHint,
-                        controller: _nameCtrl,
-                        isRequired: true,
-                        onChanged: (_) => _clearError('name'),
-                        errorText: _fieldErrors['name'],
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-                    if (_nidScanned) const SizedBox(height: 20),
+                    // ── Q3: Mobile number category ─────────────────────────
+                    SizedBox(key: _key('phoneCategory'), height: 0),
+                    _QuestionLabel(number: 'Q3', text: 'Mobile number category'),
+                    const SizedBox(height: 10),
+                    EnrollmentDropdown(
+                      label: EnrollmentStrings.phoneCategoryLabel,
+                      options: EnrollmentStrings.phoneCategoryOptions,
+                      value: _phoneCategory,
+                      onChanged: _onPhoneCategoryChanged,
+                      hint: EnrollmentStrings.phoneCategoryHint,
+                      isRequired: true,
+                      errorText: _fieldErrors['phoneCategory'],
+                    ),
+                    const SizedBox(height: 14),
 
                     SizedBox(key: _key('mobile'), height: 0),
                     _QuestionLabel(number: 'Q4', text: 'Mobile Number'),
@@ -1052,21 +1135,18 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       label: EnrollmentStrings.mobileNumberLabel,
                       hint: EnrollmentStrings.mobileNumberHint,
                       controller: _mobileCtrl,
-                      keyboardType: TextInputType.number,
+                      keyboardType: TextInputType.phone,
                       validator: _validatePhone,
                       onChanged: (_) => _clearError('mobile'),
                       errorText: _fieldErrors['mobile'],
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(14),
-                      ],
+                      inputFormatters: [LengthLimitingTextInputFormatter(14)],
                     ),
                     const SizedBox(height: 20),
 
                     // ── Q5: Date of Birth — hidden when NID scanned (card has it) ──
                     if (!_nidScanned) ...[
                       SizedBox(key: _key('dob'), height: 0),
-                      _QuestionLabel(number: 'Q3', text: 'Date of Birth'),
+                      _QuestionLabel(number: 'Q5', text: 'Date of Birth'),
                       const SizedBox(height: 10),
                       GestureDetector(
                         onTap: () {
@@ -1095,10 +1175,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       const SizedBox(height: 10),
                     ],
 
-                    // Approximate Age
+                    // Age (always years when typed manually)
                     EnrollmentInputField(
-                      label: EnrollmentStrings.approximateAgeLabel,
-                      hint: EnrollmentStrings.approximateAgeHint,
+                      label: EnrollmentStrings.ageLabel,
+                      hint: EnrollmentStrings.ageHint,
                       controller: _ageCtrl,
                       keyboardType: TextInputType.number,
                       labelSuffix: _ageUnit.isNotEmpty
@@ -1111,14 +1191,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                               ),
                             )
                           : null,
-                      onChanged: (v) => setState(() {
-                        _ageSummary = null;
-                        _ageUnit = '';
-                        final years = int.tryParse(v) ?? 99;
-                        _ageInYears = years;
-                        if (years <= 5) _maritalStatus = null;
-                        if (years >= 1) _guardianName = null;
-                      }),
+                      onChanged: (v) => setState(() => _applyAgeYears(v)),
                     ),
                     if (_ageSummary != null) ...[
                       const SizedBox(height: 4),
@@ -1133,9 +1206,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ],
                     const SizedBox(height: 20),
 
-                    // ── Q4: Gender ─────────────────────────────────────────
+                    // ── Q6: Gender ─────────────────────────────────────────
                     SizedBox(key: _key('gender'), height: 0),
-                    _QuestionLabel(number: 'Q4', text: 'Gender'),
+                    _QuestionLabel(number: 'Q6', text: 'Gender'),
                     const SizedBox(height: 10),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.genderLabel,
@@ -1150,10 +1223,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // ── Q6: Marital Status — hidden for age ≤ 5 ───────────
+                    // ── Q7: Marital Status — hidden for age ≤ 5 ───────────
                     if (_ageInYears > 5) ...[
                       SizedBox(key: _key('maritalStatus'), height: 0),
-                      _QuestionLabel(number: 'Q6', text: 'Marital Status'),
+                      _QuestionLabel(number: 'Q7', text: 'Marital Status'),
                       const SizedBox(height: 10),
                       EnrollmentDropdown(
                         label: EnrollmentStrings.maritalStatusLabel,
@@ -1170,10 +1243,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    // ── Guardian — required for members under 1 year ──────
+                    // ── Q8: Guardian — required for members under 1 year ──────
                     if (_ageInYears < 1) ...[
                       SizedBox(key: _key('guardian'), height: 0),
-                      _QuestionLabel(number: 'Q7', text: 'Guardian'),
+                      _QuestionLabel(number: 'Q8', text: 'Guardian'),
                       const SizedBox(height: 10),
                       if (widget.isStandalone)
                         EnrollmentDropdown(
@@ -1213,8 +1286,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    // ── Q8: Disability ─────────────────────────────────────
-                    _QuestionLabel(number: 'Q8', text: 'Disability'),
+                    // ── Q9: Disability ─────────────────────────────────────
+                    _QuestionLabel(number: 'Q9', text: 'Disability'),
                     const SizedBox(height: 10),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.disabilityStatusLabel,
@@ -1223,22 +1296,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       onChanged: (v) =>
                           setState(() => _disabilityStatus = v),
                       isRequired: true,
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ── Q8: Mobile Number ──────────────────────────────────
-                    SizedBox(key: _key('mobile'), height: 0),
-                    _QuestionLabel(number: 'Q8', text: 'Mobile Number'),
-                    const SizedBox(height: 10),
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.mobileNumberLabel,
-                      hint: EnrollmentStrings.mobileNumberHint,
-                      controller: _mobileCtrl,
-                      keyboardType: TextInputType.phone,
-                      validator: _validatePhone,
-                      onChanged: (_) => _clearError('mobile'),
-                      errorText: _fieldErrors['mobile'],
-                      inputFormatters: [LengthLimitingTextInputFormatter(14)],
                     ),
                     const SizedBox(height: 20),
 
