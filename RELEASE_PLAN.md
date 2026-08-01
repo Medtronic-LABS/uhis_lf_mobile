@@ -69,7 +69,7 @@ certificate would require starting over with a brand-new listing.
 | Check | Finding |
 |---|---|
 | Output format | `.aab` — Play requires this for new apps; `flutter build appbundle --release` was run and produced one (see §8). |
-| `targetSdk` | **36** (Android 16), resolved at build time from the installed Flutter SDK's embedded default (Flutter 3.44.2 → `FlutterExtension.kt`: `compileSdkVersion=36`, `targetSdkVersion=36`). Not hardcoded in `build.gradle.kts` — it tracks whatever Flutter version is installed on the build machine/CI. This comfortably clears Play's current minimum target API requirement for new-app submissions (which trails the latest stable release by at most one year). |
+| `targetSdk` | **36** (Android 16), resolved at build time from the installed Flutter SDK's embedded default (Flutter 3.44.8 → `FlutterExtension.kt`: `compileSdkVersion=36`, `targetSdkVersion=36`). Not hardcoded in `build.gradle.kts` — it tracks whatever Flutter version is installed on the build machine/CI. This comfortably clears Play's current minimum target API requirement for new-app submissions (which trails the latest stable release by at most one year). |
 | `minSdk` | **24** (Android 7.0, released 2016) — same Flutter-default mechanism, **reconfirmed this session as the practical floor**: `local_auth_android` (biometric unlock) hard-requires API 24, and Flutter's own build tooling (`DependencyVersionChecker.kt`) throws a hard build error below API 23 regardless of plugins. Not achievable to lower further without dropping biometric unlock (and even then, ML Kit/SQLCipher/speech_to_text all require 21). Reasonable for a CHW field app either way: covers effectively all active Android devices in low/middle-income deployment contexts. |
 | AGP / Kotlin / Gradle | AGP `9.0.1`, Kotlin `2.3.20`, Gradle `9.1.0` (`android/settings.gradle.kts`, `gradle-wrapper.properties`) — current, no compatibility concerns found. |
 | `multiDexEnabled` | `true` (`defaultConfig`) — appropriate given the plugin surface (ML Kit, camera, audio, etc.). |
@@ -185,7 +185,7 @@ Confirmed: publishing under an **Organization (Workspace-verified)** Play Consol
 ## 7. CI/CD
 
 **Built this session**: `.github/workflows/release.yml` — triggers on `v*` tag push or manual
-`workflow_dispatch`. Sets up Java 21 (temurin) + Flutter 3.44.2, reconstructs `android/key.properties`
+`workflow_dispatch`. Sets up Java 21 (temurin) + Flutter 3.44.8, reconstructs `android/key.properties`
 and `env.production.json` from repo secrets, then calls `scripts/release.sh` directly (§10) so CI and
 local releases share one build path instead of duplicating logic in YAML. Uploads the `.aab` as a
 workflow artifact and attaches it to a GitHub Release on tag pushes.
