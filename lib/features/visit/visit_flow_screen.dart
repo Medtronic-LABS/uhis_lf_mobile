@@ -91,8 +91,8 @@ class VisitFlowScreen extends StatefulWidget {
   final String? origin;
 
   /// Step to start the flow at. Use 1 when the caller already captured
-  /// symptom selection (e.g. [NewPatientVisitScreen]) so the SK goes straight
-  /// to programme recommendation + clinical form.
+  /// symptom selection so the SK goes straight to programme recommendation
+  /// + clinical form.
   final int initialStep;
 
   /// Programmes pre-confirmed by the caller — seeded into [_confirmedProgrammes]
@@ -378,9 +378,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// True once triage (Step 1) has been submitted. Blocks back-navigation to
   /// Step 1 from Step 2+ — re-entering triage would create a duplicate assessment.
   ///
-  /// Initialised to true when [widget.initialStep] > 0 (e.g. flows launched
-  /// from NewPatientVisitScreen that already captured symptoms on a separate
-  /// screen). This prevents back-navigation from landing on an empty step 0.
+  /// Initialised to true when [widget.initialStep] > 0 (caller already
+  /// captured symptoms elsewhere). Prevents back-navigation onto an empty
+  /// step 0.
   late bool _triageSubmitted = widget.initialStep > 0;
 
   /// AI Scribe controller for step 0 (symptom picker). Owned here so the
@@ -627,6 +627,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           villageId: widget.villageId,
           householdMemberLocalId: _householdMemberLocalId,
           patientAge: widget.patientAge,
+          ageInMonths: _ageInMonths,
           patientName: widget.patientName,
           patientGender: widget.patientGender,
           gestationalWeeks: _effectiveGestationalWeeks,
@@ -1070,6 +1071,7 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     this.villageId,
     this.householdMemberLocalId,
     this.patientAge,
+    this.ageInMonths,
     this.patientName,
     this.patientGender,
     this.gestationalWeeks,
@@ -1088,6 +1090,7 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final String? villageId;
   final int? householdMemberLocalId;
   final int? patientAge;
+  final int? ageInMonths;
   final String? patientName;
   final String? patientGender;
   final int? gestationalWeeks;
@@ -1301,6 +1304,8 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       villageId: widget.villageId,
       householdMemberLocalId: widget.householdMemberLocalId,
       patientAge: widget.patientAge,
+      ageInMonths: widget.ageInMonths ??
+          (widget.patientAge != null ? widget.patientAge! * 12 : null),
       gestationalWeeks: widget.gestationalWeeks,
       lmpMs: widget.lmpMs,
       eddMs: widget.eddMs,

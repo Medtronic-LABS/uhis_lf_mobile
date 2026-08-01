@@ -37,6 +37,8 @@ import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/widgets/gestational_age_card.dart';
 import '../../core/widgets/skeleton.dart';
 import '../visit/triage/patient_context_builder.dart';
+import '../visit/visit_controller.dart';
+import '../visit/visit_start_helper.dart';
 import 'referral_narrative.dart';
 import 'vitals_repository.dart';
 
@@ -4603,7 +4605,9 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             patientName: d.name,
             patientAge: d.age,
             patientGender: d.gender,
-            villageName: d.villageName,
+            householdId: d.householdId,
+            villageId: d.villageId,
+            memberId: d.memberId,
           )
         else
           Container(
@@ -5387,20 +5391,78 @@ class _HouseholdMemberChip extends StatelessWidget {
 }
 
 /// Banner shown when a patient has no programmes enrolled yet.
-class _NoServicesCard extends StatelessWidget {
+class _NoServicesCard extends StatefulWidget {
   const _NoServicesCard({
     required this.patientId,
     required this.patientName,
     this.patientAge,
     this.patientGender,
-    this.villageName,
+    this.householdId,
+    this.villageId,
+    this.memberId,
+    this.origin,
   });
 
   final String patientId;
   final String? patientName;
   final int? patientAge;
   final String? patientGender;
-  final String? villageName;
+  final String? householdId;
+  final String? villageId;
+  final String? memberId;
+  final String? origin;
+
+  @override
+  State<_NoServicesCard> createState() => _NoServicesCardState();
+}
+
+class _NoServicesCardState extends State<_NoServicesCard> {
+  bool _starting = false;
+
+  Future<void> _startVisit() async {
+    if (_starting) return;
+    setState(() => _starting = true);
+
+    final controller = context.read<VisitController>();
+    final encounterId = await startOrResumeVisit(
+      context,
+      controller: controller,
+      patientId: widget.patientId,
+      programme: Programme.unknown,
+      patientName: widget.patientName,
+      patientAge: widget.patientAge,
+      patientGender: widget.patientGender,
+      householdId: widget.householdId,
+    );
+
+    if (!mounted) return;
+
+    if (encounterId != null) {
+      final originParam =
+          widget.origin != null ? '?origin=${widget.origin}' : '';
+      context.go(
+        '/patients/visit/$encounterId/flow$originParam',
+        extra: {
+          'patientId': widget.patientId,
+          'patientName': widget.patientName,
+          'patientAge': widget.patientAge,
+          'patientGender': widget.patientGender,
+          'householdId': widget.householdId,
+          'villageId': widget.villageId,
+          'memberId': widget.memberId,
+        },
+      );
+    } else {
+      setState(() => _starting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(controller.error ?? 'Failed to start visit'),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -5454,21 +5516,18 @@ class _NoServicesCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () {
-                  context.push(
-                    '/patients/$patientId/new-visit',
-                    extra: <String, dynamic>{
-                      'patientName': patientName ?? 'Patient',
-                      if (patientAge != null) 'patientAge': patientAge,
-                      if (patientGender != null)
-                        'patientGender': patientGender,
-                      if (villageName != null) 'villageName': villageName,
-                    },
-                  );
-                },
-                icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                onPressed: _starting ? null : _startVisit,
+                icon: _starting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add, size: 18, color: Colors.white),
                 label: Text(
-                  EnrollStrings.addServicesCta,
+                  _starting
+                      ? 'Starting...'
+                      : EnrollStrings.addServicesCta,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: Colors.white,

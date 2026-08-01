@@ -31,7 +31,6 @@ import '../features/assistant/assistant_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
 import '../features/patient/enroll/programme_enroll_screen.dart';
-import '../features/visit/new_patient_visit_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
 import '../core/api/api_client.dart';
 import '../core/auth/auth_repository.dart';
@@ -274,34 +273,6 @@ GoRouter buildRouter(AuthState auth) {
                               ? List<MemberAssessment>.from(
                                   extra['assessments'] as List)
                               : const [],
-                        ),
-                      );
-                    },
-                  ),
-                  // First-time visit — symptom picker + service grid (Priya Rani Das wireframe)
-                  GoRoute(
-                    path: ':id/new-visit',
-                    name: 'new-patient-visit',
-                    pageBuilder: (context, state) {
-                      final extra = state.extra is Map<String, dynamic>
-                          ? state.extra as Map<String, dynamic>
-                          : <String, dynamic>{};
-                      final origin = state.uri.queryParameters['origin'];
-                      return MaterialPage(
-                        key: ValueKey(
-                            'new-visit-${state.pathParameters['id']}'),
-                        child: NewPatientVisitScreen(
-                          patientId: state.pathParameters['id']!,
-                          patientName:
-                              extra['patientName'] as String?,
-                          patientAge: extra['patientAge'] as int?,
-                          patientGender:
-                              extra['patientGender'] as String?,
-                          householdId:
-                              extra['householdId'] as String?,
-                          villageName:
-                              extra['villageName'] as String?,
-                          origin: origin,
                         ),
                       );
                     },

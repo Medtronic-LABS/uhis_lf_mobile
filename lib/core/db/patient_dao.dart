@@ -95,6 +95,59 @@ class PatientDao {
     return Patient.fromDb(rows.first);
   }
 
+  /// Resolves a patient row from any identifier a screen might carry.
+  ///
+  /// [upsertMany] keys rows by the local member PK, but the household screens
+  /// route with `members.patient_id`, which holds the server-assigned id
+  /// whenever the sync bundle supplies one. The two id spaces therefore
+  /// diverge for exactly those members, and a plain [byId] misses them. Tries
+  /// `patients.id`, then the server id in `patients.patient_id`, then bridges
+  /// through `members` to recover the local PK.
+  Future<Patient?> byAnyId(String id) async {
+    if (id.isEmpty) return null;
+
+    final direct = await byId(id);
+    if (direct != null) return direct;
+
+    final byServerId = await _db.db.query(
+      AppDatabase.tablePatients,
+      where: 'patient_id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (byServerId.isNotEmpty) {
+      debugPrint('[PatientDao] byAnyId: "$id" resolved via patients.patient_id');
+      return Patient.fromDb(byServerId.first);
+    }
+
+    // Probed one column at a time, most-specific first: a single OR query
+    // could match a different member on a lower-priority column and silently
+    // open the wrong patient's visit.
+    for (final column in const ['patient_id', 'fhir_id', 'reference_id']) {
+      final memberRows = await _db.db.query(
+        AppDatabase.tableMembers,
+        columns: ['id'],
+        where: '$column = ?',
+        whereArgs: [id],
+        limit: 2,
+      );
+      // An id that matches two members is not a safe bridge either way.
+      if (memberRows.length != 1) continue;
+
+      final localId = memberRows.first['id']?.toString();
+      if (localId == null || localId.isEmpty || localId == id) continue;
+
+      final bridged = await byId(localId);
+      if (bridged != null) {
+        debugPrint(
+          '[PatientDao] byAnyId: "$id" resolved via members.$column → $localId',
+        );
+        return bridged;
+      }
+    }
+    return null;
+  }
+
   Future<List<Patient>> allForVillages(List<String> villageIds) async {
     if (villageIds.isEmpty) {
       final rows = await _db.db.query(AppDatabase.tablePatients);

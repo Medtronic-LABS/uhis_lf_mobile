@@ -185,13 +185,24 @@ class PatientContextBuilder {
 
   /// Build patient context from local cache.
   ///
+  /// [requestedId] may be any identifier the calling screen carries — the
+  /// household screens route with the server-assigned `members.patient_id`
+  /// while the worklist uses `patients.id`. Everything below re-keys onto the
+  /// resolved `patients.id`, because the programme, pregnancy, immunisation
+  /// and follow-up tables are all keyed by it.
+  ///
   /// Returns null if the patient is not found in the local database.
-  Future<PatientContext?> build(String patientId) async {
+  Future<PatientContext?> build(String requestedId) async {
     // Fetch patient record
-    final patient = await _patientDao.byId(patientId);
+    final patient = await _patientDao.byAnyId(requestedId);
     if (patient == null) {
-      debugPrint('[PatientCtx] ✗ patient not found: $patientId');
+      debugPrint('[PatientCtx] ✗ patient not found: $requestedId');
       return null;
+    }
+
+    final patientId = patient.id;
+    if (patientId != requestedId) {
+      debugPrint('[PatientCtx] id remapped: $requestedId → $patientId');
     }
 
     debugPrint(

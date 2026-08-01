@@ -5014,26 +5014,6 @@ abstract final class PregnancyRegStrings {
   static String get multiparaWarning => getTranslatedString('multiparaWarning', '⚠ Gravida > 4 — multipara risk');
 }
 
-abstract final class NewPatientVisitStrings {
-  NewPatientVisitStrings._();
-
-  static String get backTooltip => getTranslatedString('backTooltip', 'Back');
-  static String get step1Label => getTranslatedString('NewPatientVisit.step1Label', '1. How are you?');
-  static String get step3Label => getTranslatedString('NewPatientVisit.step3Label', '3. Summary');
-  static String get howFeelFemale => getTranslatedString('howFeelFemale', 'How is she feeling today? 🎙');
-  static String get howFeelMale => getTranslatedString('howFeelMale', 'How is he feeling today? 🎙');
-  static String get scribeTitle => getTranslatedString('scribeTitle', 'AI Scribe');
-  static String get scribeSubtitle => getTranslatedString('scribeSubtitle', 'Tap and let her speak');
-  static String get scribeStart => getTranslatedString('scribeStart', '🎙 Start');
-  static String get searchHint => getTranslatedString('NewPatientVisit.searchHint', 'Search symptoms...');
-  static String get noSymptomsFound => getTranslatedString('noSymptomsFound', 'No symptoms found');
-  static String get eligibleServicesHeader => getTranslatedString('NewPatientVisit.eligibleServicesHeader', '✦ Eligible services');
-  static String get eligibleServicesTag => getTranslatedString('NewPatientVisit.eligibleServicesTag', 'Age & gender based');
-  static String get pwHint => getTranslatedString('NewPatientVisit.pwHint', '⚠ Select \'PW\' first to unlock ANC');
-  static String get startVisitCta => getTranslatedString('startVisitCta', 'Start Visit →');
-  static String get selectServiceCta => getTranslatedString('selectServiceCta', 'Select a service to continue');
-}
-
 /// Patient-scoped AI assistant (the floating "✦" sheet).
 abstract final class PatientAiStrings {
   PatientAiStrings._();
