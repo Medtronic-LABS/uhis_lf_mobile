@@ -270,6 +270,64 @@ abstract final class SettingsStrings {
   // ── Offline DB browser row (kDebugMode only) ──────────────────────────
   static String get debugDbViewer => getTranslatedString('Settings.debugDbViewer', 'Offline Database');
   static String get debugDbViewerSubtitle => getTranslatedString('Settings.debugDbViewerSubtitle', 'Browse local SQLCipher tables');
+
+  // ── Offline Sync (Spice parity) ───────────────────────────────────────
+  static String get offlineSync =>
+      getTranslatedString('Settings.offlineSync', 'Offline Sync');
+  static String get offlineSyncSubtitle => getTranslatedString(
+        'Settings.offlineSyncSubtitle',
+        'Push pending households, members & visits',
+      );
+}
+
+/// Offline Sync screen copy (Spice OfflineSyncActivity).
+abstract final class OfflineSyncStrings {
+  OfflineSyncStrings._();
+
+  static String get title =>
+      getTranslatedString('OfflineSync.title', 'Offline Sync');
+  static String get lastSyncedAt =>
+      getTranslatedString('OfflineSync.lastSyncedAt', 'Last synced at');
+  static String get startPrompt => getTranslatedString(
+        'OfflineSync.startPrompt',
+        'Start offline sync now?',
+      );
+  static String get households =>
+      getTranslatedString('OfflineSync.households', 'Households');
+  static String get householdMembers => getTranslatedString(
+        'OfflineSync.householdMembers',
+        'Household Members',
+      );
+  static String get assessments =>
+      getTranslatedString('OfflineSync.assessments', 'Assessments');
+  static String get followUps =>
+      getTranslatedString('OfflineSync.followUps', 'Follow-ups');
+  static String get cancel =>
+      getTranslatedString('OfflineSync.cancel', 'Cancel');
+  static String get start =>
+      getTranslatedString('OfflineSync.start', 'Start');
+  static String get started => getTranslatedString(
+        'OfflineSync.started',
+        'Offline data has started to sync',
+      );
+  static String get offlineData =>
+      getTranslatedString('OfflineSync.offlineData', 'Offline data');
+  static String progressPercent(int pct) =>
+      getTranslatedString('OfflineSync.progressPercent', '$pct%');
+  static String get completed => getTranslatedString(
+        'OfflineSync.completed',
+        'Offline data sync completed',
+      );
+  static String get failed => getTranslatedString(
+        'OfflineSync.failed',
+        'Offline data sync failed',
+      );
+  static String get okay => getTranslatedString('OfflineSync.okay', 'Okay');
+  static String get retry => getTranslatedString('OfflineSync.retry', 'Retry');
+  static String get alreadyRunning => getTranslatedString(
+        'OfflineSync.alreadyRunning',
+        'A sync is already in progress',
+      );
 }
 
 /// AI Settings sub-page — realtime-ASR VAD gate tuning UI. An internal/ops

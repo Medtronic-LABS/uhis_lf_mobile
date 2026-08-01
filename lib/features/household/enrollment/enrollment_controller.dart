@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +10,7 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/db/household_dao.dart';
 import '../../../core/db/member_dao.dart';
 import '../../../core/db/patient_dao.dart';
+import '../../../core/db/roster_revision.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/services/location_service.dart';
 import 'enrollment_id_number.dart';
@@ -289,8 +291,8 @@ class EnrollmentController extends ChangeNotifier {
 
   /// Submit household enrollment to `POST /offline-service/offline-sync/create`.
   ///
-  /// Falls back to a mock delay when the controller was constructed without
-  /// auth/api deps (e.g. in widget tests).
+  /// Spice order: insert local rows (autoincrement PKs) → push with
+  /// `referenceId = localId` → poll status to stamp `fhir_id` on the same rows.
   Future<bool> submitHousehold() async {
     final householdErrors = validateHouseholdForm();
     final headErrors = validateHeadForm();
@@ -314,8 +316,18 @@ class EnrollmentController extends ChangeNotifier {
         final deviceId = await auth.deviceId();
         final location = await LocationService.getCurrentPosition();
 
-        // Build payload first — generates reference IDs without a network call.
-        final (:body, :result) = repo.buildPayload(
+        // 1) Persist first so referenceIds are stable local autoincrement PKs.
+        final result = await _persistLocally(
+          location: (latitude: location.latitude, longitude: location.longitude),
+        );
+        if (result == null) {
+          _error = 'Failed to save household locally';
+          _setLoading(false);
+          return false;
+        }
+
+        // 2) Build create payload using those local ids as referenceId.
+        final (:body, requestId: requestId) = repo.buildPayload(
           household: _household!,
           head: _householdHead!,
           members: _members,
@@ -325,30 +337,26 @@ class EnrollmentController extends ChangeNotifier {
           deviceId: deviceId,
           latitude: location.latitude,
           longitude: location.longitude,
+          hhReferenceId: result.hhReferenceId,
+          memberReferenceIds: result.memberReferenceIds,
         );
 
-        // Persist to local SQLite before hitting the network so the household
-        // is visible immediately and survives an offline failure.
-        await _persistLocally(
-          result: result,
-          location: (latitude: location.latitude, longitude: location.longitude),
+        // 3) Push in the background, then poll status to stamp fhir_id (Spice
+        // getSyncStatusForOffline). The rows are already on disk, so the
+        // enrollment is done from the health worker's side — awaiting the
+        // network here would only make them sit on the form through a status
+        // poll, and let a failure send them back to Continue, which would
+        // re-run _persistLocally and duplicate the household.
+        unawaited(
+          _pushEnrollment(
+            repo: repo,
+            body: body,
+            requestId: requestId,
+            deviceId: deviceId,
+            userId: userId,
+          ),
         );
-
-        // Attempt the network POST. A connectivity failure is not fatal —
-        // the record is already saved locally and will sync on next warm-sync.
-        try {
-          await repo.postEnrollment(body);
-        } on DioException catch (e) {
-          if (_isNetworkError(e)) {
-            debugPrint('[EnrollmentController] offline — enrollment queued for sync');
-          } else {
-            rethrow;
-          }
-        } on SocketException {
-          debugPrint('[EnrollmentController] offline — enrollment queued for sync');
-        }
       } else {
-        // No HTTP client injected — dev/test path.
         debugPrint('[EnrollmentController] mock submit: ${_household?.toJson()}');
         await Future.delayed(const Duration(milliseconds: 800));
       }
@@ -362,14 +370,44 @@ class EnrollmentController extends ChangeNotifier {
     }
   }
 
-  /// Persist the newly enrolled household + members to local SQLite immediately.
+  /// Pushes an already-persisted enrollment and stamps the returned fhir_ids.
   ///
-  /// Uses the same [referenceId] UUIDs that were sent to the server so the
-  /// records can be matched when the server later returns FHIR IDs via the
-  /// warm-sync bundle. Uses sub-village ID as the canonical village scope to
-  /// match Android's assessment-history pull request granularity.
-  Future<void> _persistLocally({
-    required EnrollmentResult result,
+  /// Runs detached from [submitHousehold], so it must never throw, never touch
+  /// controller state, and never notify: the screen has moved on and [reset]
+  /// may already have cleared the form it was built from. Rows left unstamped
+  /// stay pending and are retried by Offline Sync / the reconnect trigger.
+  Future<void> _pushEnrollment({
+    required EnrollmentRepository repo,
+    required Map<String, dynamic> body,
+    required String requestId,
+    required String deviceId,
+    required int userId,
+  }) async {
+    try {
+      await repo.postEnrollment(body);
+      await repo.pollAndApplyFhirIds(
+        requestId: requestId,
+        deviceId: deviceId,
+        userId: userId,
+        householdDao: _householdDao,
+        memberDao: _memberDao,
+      );
+      debugPrint('[EnrollmentController] background push done');
+    } on DioException catch (e) {
+      debugPrint(_isNetworkError(e)
+          ? '[EnrollmentController] offline — enrollment queued for sync'
+          : '[EnrollmentController] push failed (HTTP ${e.response?.statusCode})'
+              ' — enrollment queued for sync');
+    } on SocketException {
+      debugPrint('[EnrollmentController] offline — enrollment queued for sync');
+    } catch (e) {
+      debugPrint('[EnrollmentController] background push error: $e');
+    }
+  }
+
+  /// Persist household + members with autoincrement local PKs (Spice order).
+  /// Returns the local ids used as create `referenceId`s.
+  Future<EnrollmentResult?> _persistLocally({
     required ({double latitude, double longitude}) location,
   }) async {
     final householdDao = _householdDao;
@@ -377,104 +415,128 @@ class EnrollmentController extends ChangeNotifier {
     final patientDao = _patientDao;
     if (householdDao == null || memberDao == null || patientDao == null) {
       debugPrint('[EnrollmentController] no DAOs injected — skipping local save');
-      return;
+      return null;
     }
 
     final hh = _household!;
     final head = _householdHead!;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // Use sub-village ID as canonical village scope (mirrors _memberToPatient fix).
-    final canonicalVillageId = hh.subVillageId?.isNotEmpty == true
-        ? hh.subVillageId!
-        : hh.villageId;
-    final canonicalVillageName = hh.subVillageName?.isNotEmpty == true
-        ? hh.subVillageName
-        : hh.villageName;
+    // Keep the two levels apart on every row. spice-service resolves the
+    // hierarchy from villageId + subVillageId, so collapsing them (which the
+    // household row used to do) makes every later add-member send the same id
+    // for both and the FHIR mapper 500s.
+    final parentVillageId = hh.villageId;
+    final parentVillageName = hh.villageName;
+    final subVillageId = hh.subVillageId;
+    final subVillageName = hh.subVillageName;
 
-    // ── Household ────────────────────────────────────────────────────────────
-    final hhEntity = HouseholdEntity(
-      id: result.hhReferenceId,
-      householdNo: hh.householdNumber,
-      name: head.name,
-      village: canonicalVillageName,
-      villageId: canonicalVillageId,
-      memberCount: 1 + _members.length,
-      latitude: location.latitude,
-      longitude: location.longitude,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-      syncStatus: 'Success',
-    );
-    await householdDao.upsertMany([hhEntity]);
+    // Patients stay scoped to the finest level available — assessment pulls
+    // are filtered by sub-village (Android getAllSubVillageIds).
+    final canonicalVillageId =
+        subVillageId?.isNotEmpty == true ? subVillageId! : parentVillageId;
+    final canonicalVillageName =
+        subVillageName?.isNotEmpty == true ? subVillageName : parentVillageName;
 
-    // ── Members + Patient rows ────────────────────────────────────────────────
-    // HouseholdHeadInfo extends HouseholdMember, so no reconstruction needed.
-    final membersToSave = <HouseholdMember>[head, ..._members];
-
-    for (var i = 0; i < membersToSave.length; i++) {
-      final m = membersToSave[i];
-      final refId = result.memberReferenceIds[i];
-
-      final memberEntity = HouseholdMemberEntity(
-        id: refId,
-        householdId: result.hhReferenceId,
-        householdReferenceId: result.hhReferenceId,
-        name: m.name,
-        gender: m.gender,
-        dob: m.dateOfBirth,
-        phone: m.mobileNumber,
-        nationalId: m.idNumber,
-        idType: m.idType,
-        villageId: canonicalVillageId,
-        villageName: canonicalVillageName,
-        subVillageId: hh.subVillageId,
-        subVillageName: hh.subVillageName,
-        maritalStatus: m.maritalStatus,
-        disability: m.disabilityStatus.toLowerCase(),
-        isHouseholdHead: i == 0,
-        isActive: true,
-        isPregnant: false,
+    // Household — autoincrement id; NotSynced until status stamps fhir_id.
+    final hhLocalId = await householdDao.insertLocal(
+      HouseholdEntity(
+        id: '0',
+        householdNo: hh.householdNumber,
+        name: head.name,
+        village: parentVillageName,
+        villageId: parentVillageId,
+        subVillageId: subVillageId,
+        subVillageName: subVillageName,
+        memberCount: 1 + _members.length,
         latitude: location.latitude,
         longitude: location.longitude,
         createdAt: nowMs,
         updatedAt: nowMs,
-        syncStatus: 'Success',
-      );
-      await memberDao.upsertMany([memberEntity]);
+        syncStatus: 'NotSynced',
+      ),
+    );
+    // reference_id mirrors local PK (Spice push uses id as referenceId).
+    await householdDao.setReferenceId(hhLocalId);
 
-      // Mirror patient record so PatientDao.byId(refId) resolves immediately.
+    final membersToSave = <HouseholdMember>[head, ..._members];
+    final memberLocalIds = <String>[];
+
+    for (var i = 0; i < membersToSave.length; i++) {
+      final m = membersToSave[i];
+      final memberLocalId = await memberDao.insertLocal(
+        HouseholdMemberEntity(
+          id: '0',
+          householdId: hhLocalId,
+          householdReferenceId: hhLocalId,
+          referenceId: null,
+          name: m.name,
+          gender: m.gender,
+          dob: m.dateOfBirth,
+          phone: m.mobileNumber,
+          phoneNumberCategory: m.phoneNumberCategory,
+          nationalId: m.idNumber,
+          idType: m.idType,
+          villageId: parentVillageId,
+          villageName: parentVillageName,
+          subVillageId: subVillageId,
+          subVillageName: subVillageName,
+          maritalStatus: m.maritalStatus,
+          disability: m.disabilityStatus.toLowerCase(),
+          isHouseholdHead: i == 0,
+          isActive: true,
+          isPregnant: false,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+          syncStatus: 'NotSynced',
+        ),
+      );
+      await memberDao.setReferenceId(memberLocalId);
+      memberLocalIds.add(memberLocalId);
+
+      // Patient keyed by stable local member id (never swapped for FHIR).
       final patientRaw = jsonEncode({
-        'id': refId,
+        'id': memberLocalId,
         'name': m.name,
         'gender': m.gender,
         'dateOfBirth': m.dateOfBirth,
         'phoneNumber': m.mobileNumber,
         'nationalId': m.idNumber,
         'villageId': canonicalVillageId,
-        'houseHoldId': result.hhReferenceId,
+        'houseHoldId': hhLocalId,
         'isActive': true,
       });
-      final patientEntity = Patient(
-        id: refId,
-        name: m.name,
-        gender: m.gender,
-        dob: m.dateOfBirth,
-        phone: m.mobileNumber,
-        nationalId: m.idNumber,
-        villageId: canonicalVillageId,
-        villageName: canonicalVillageName,
-        householdId: result.hhReferenceId,
-        isActive: true,
-        updatedAt: nowMs,
-        rawJson: patientRaw,
-      );
-      await patientDao.upsertMany([patientEntity]);
+      await patientDao.upsertMany([
+        Patient(
+          id: memberLocalId,
+          name: m.name,
+          gender: m.gender,
+          dob: m.dateOfBirth,
+          phone: m.mobileNumber,
+          nationalId: m.idNumber,
+          villageId: canonicalVillageId,
+          villageName: canonicalVillageName,
+          householdId: hhLocalId,
+          isActive: true,
+          updatedAt: nowMs,
+          rawJson: patientRaw,
+        ),
+      ]);
     }
 
     debugPrint('[EnrollmentController] locally saved: '
-        'household=${result.hhReferenceId} '
-        'members=${result.memberReferenceIds.length}');
+        'household=$hhLocalId members=${memberLocalIds.length}');
+
+    // Tell any mounted roster screen to re-query; enrollment leaves via
+    // go('/home'), so the Patients tab gets no navigation event of its own.
+    bumpRosterRevision();
+
+    return EnrollmentResult(
+      hhReferenceId: hhLocalId,
+      memberReferenceIds: memberLocalIds,
+    );
   }
 
   /// Reset the entire enrollment state.

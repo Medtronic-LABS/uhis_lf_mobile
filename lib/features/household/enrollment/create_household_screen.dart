@@ -610,6 +610,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       hint: EnrollmentStrings.totalMembersHint,
                       controller: _totalMembersCtrl,
                       keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
                       isRequired: true,
                       onChanged: (_) => _clearError('totalMembers'),
                       errorText: _fieldErrors['totalMembers'],
@@ -846,11 +849,14 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.mobileNumberLabel,
                       hint: EnrollmentStrings.mobileNumberHint,
                       controller: _mobileCtrl,
-                      keyboardType: TextInputType.phone,
+                      keyboardType: TextInputType.number,
                       isRequired: true,
                       onChanged: (_) => _clearError('mobile'),
                       errorText: _fieldErrors['mobile'],
-                      inputFormatters: [LengthLimitingTextInputFormatter(14)],
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(14),
+                      ],
                     ),
                     const SizedBox(height: 14),
 

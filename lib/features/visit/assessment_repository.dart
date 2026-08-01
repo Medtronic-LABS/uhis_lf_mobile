@@ -14,6 +14,7 @@ import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
+import '../../core/sync/offline_push_service.dart';
 import '../patient/followup_call_service.dart';
 import 'forms/pregnancy_outcome_side_effects.dart';
 import 'forms/vitals_trend.dart';
@@ -151,6 +152,11 @@ class AssessmentRepository extends ChangeNotifier {
   Future<int> syncPendingAssessments({
     String syncMode = 'ManualSync',
   }) async {
+    if (OfflinePushService.isPushInFlight) {
+      debugPrint(
+          '[AssessmentSync] Offline Sync push in flight — skip assessment sync');
+      return 0;
+    }
     if (_isSyncing) {
       debugPrint('[AssessmentSync] Already syncing — skip');
       return 0;

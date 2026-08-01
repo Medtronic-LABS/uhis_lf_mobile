@@ -371,16 +371,15 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     // "0 members" (the no-`extra` entry point from the Patient Context
     // screen's "Same household" strip always lands here with an empty list).
     _loadingMembers = _household.members.isEmpty && _household.id != null;
-    // Auto-fetch members if not provided (defer to avoid setState in initState)
-    if (_household.members.isEmpty && _household.id != null) {
+    // Always re-read the roster from the local DB. The list screen's snapshot
+    // is only a first-paint placeholder: it is built once per list instance,
+    // so a member added after that query (or by a sync) would otherwise stay
+    // invisible here for as long as that instance survives.
+    if (_household.id != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _fetchMembers();
-      });
-    } else if (_household.members.isNotEmpty) {
-      // Members pre-loaded from list screen — run lightweight meta enrichment
-      // so village name, SS name, and last-visit are resolved without a full fetch.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _enrichMeta();
+        if (mounted) {
+          _fetchMembers(preserveExistingOnEmpty: _household.members.isNotEmpty);
+        }
       });
     }
     // Queue membership is independent of member enrichment (may load slower,
@@ -495,8 +494,17 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     });
   }
 
-  Future<void> _fetchMembers() async {
-    debugPrint('[_HouseholdDetailScreenState] _fetchMembers householdId=${_household.id}');
+  /// Reloads the roster from the local DB (Android's own household-detail
+  /// behaviour: the household screen owns its member query).
+  ///
+  /// [preserveExistingOnEmpty] keeps the caller-supplied roster when the local
+  /// query comes back empty, instead of falling through to the API/error path.
+  /// Used when the list screen already handed us members: an empty local read
+  /// there means the household FK we were given doesn't match the rows, and
+  /// blanking a roster we can already display would be a strict regression.
+  Future<void> _fetchMembers({bool preserveExistingOnEmpty = false}) async {
+    debugPrint('[_HouseholdDetailScreenState] _fetchMembers '
+        'householdId=${_household.id} preserve=$preserveExistingOnEmpty');
     // Guard only blocks concurrent re-fetches triggered by pull-to-refresh
     // while a fetch is already running. The initState path sets _loadingMembers
     // synchronously BEFORE calling here, so we must not bail on that case.
@@ -524,7 +532,19 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       final repo = context.read<DashboardRepository>();
       await hierarchy.prefetch();
 
-      final localMembers = await memberDao.getByHouseholdId(householdId);
+      // `householdId` is the local household PK for every in-app entry point,
+      // but the Patient Context strip can hand us a server id — resolve both.
+      var localMembers = await memberDao.getByHouseholdId(householdId);
+      if (localMembers.isEmpty) {
+        localMembers = await memberDao.getByHouseholdFhirId(householdId);
+      }
+
+      if (localMembers.isEmpty && preserveExistingOnEmpty) {
+        if (!mounted) return;
+        setState(() => _loadingMembers = false);
+        await _enrichMeta();
+        return;
+      }
 
       if (localMembers.isNotEmpty && mounted) {
         final base = localMembers.map(HouseholdMemberData.fromEntity).toList();
@@ -717,9 +737,13 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         await context.read<HouseholdDao>().getById(localId);
     final serverHouseholdId = householdEntity?.fhirId ?? localId;
 
+    // Parent village and sub-village must stay distinct all the way into the
+    // member payload — fall back to a member row only for whichever is missing.
     final villageId = householdEntity?.villageId ??
         _household.members.firstOrNull?.villageId ??
         '';
+    final subVillageId = householdEntity?.subVillageId ?? '';
+    final subVillageName = householdEntity?.subVillageName ?? '';
     final memberNames = _household.members
         .map((m) => m.name)
         .whereType<String>()
@@ -732,6 +756,8 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       'householdNo': _household.householdNo ?? '',
       'villageId': villageId,
       'villageName': _household.village ?? '',
+      'subVillageId': subVillageId,
+      'subVillageName': subVillageName,
       'memberNames': memberNames,
     };
     if (result.status == NidScanStatus.success && result.data != null) {
@@ -741,7 +767,11 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       extra['dateOfBirth'] = result.data!.dateOfBirth;
     }
     if (!mounted) return;
-    context.push('/household/enrollment/link-member', extra: extra);
+    await context.push('/household/enrollment/link-member', extra: extra);
+    // The new member is written to the local DB before the push returns, so a
+    // re-read is all that's needed to show it — never leave this screen sitting
+    // on the roster it was opened with.
+    if (mounted) await _fetchMembers();
   }
 
   @override
