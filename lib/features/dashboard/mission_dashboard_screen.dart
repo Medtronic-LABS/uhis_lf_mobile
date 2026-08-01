@@ -38,6 +38,7 @@ import 'mission_dashboard_repository.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
 import '../cce/cce_alerts_drawer.dart';
 import '../cce/cce_repository.dart';
+import '../debug/db_viewer_screen.dart';
 import '../settings/ai_settings_screen.dart';
 import 'sk_performance_screen.dart';
 
@@ -1149,6 +1150,17 @@ class _SettingsMenu extends StatelessWidget {
                 ),
               );
               break;
+            case 'offline_sync':
+              ctx.push('/offline-sync');
+              break;
+            case 'debug_db':
+              if (!kDebugMode) break;
+              Navigator.of(ctx).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const DebugDbViewerScreen(),
+                ),
+              );
+              break;
             case 'logout':
               final confirmLogout = await showDialog<bool>(
                 context: ctx,
@@ -1253,6 +1265,25 @@ class _SettingsMenu extends StatelessWidget {
               subtitle: SettingsStrings.aiSettingsSubtitle,
             ),
           ),
+          PopupMenuItem(
+            value: 'offline_sync',
+            child: _SettingsRow(
+              emoji: '☁️',
+              chipColor: AppColors.ancSurface,
+              title: SettingsStrings.offlineSync,
+              subtitle: SettingsStrings.offlineSyncSubtitle,
+            ),
+          ),
+          if (kDebugMode)
+            PopupMenuItem(
+              value: 'debug_db',
+              child: _SettingsRow(
+                emoji: '🗄️',
+                chipColor: AppColors.catChildSurface,
+                title: SettingsStrings.debugDbViewer,
+                subtitle: SettingsStrings.debugDbViewerSubtitle,
+              ),
+            ),
           PopupMenuItem(
             value: 'logout',
             child: _SettingsRow(

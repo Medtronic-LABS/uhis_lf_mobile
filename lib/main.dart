@@ -49,6 +49,7 @@ import 'core/sla/priority_scorer.dart';
 import 'core/sla/sla_evaluator.dart';
 import 'core/auth/user_hierarchy_service.dart';
 import 'core/sync/offline_sync_service.dart';
+import 'core/sync/offline_push_service.dart';
 import 'features/dashboard/dashboard_repository.dart';
 import 'features/dashboard/mission_dashboard_repository.dart';
 import 'features/lock/lock_barrier.dart';
@@ -247,6 +248,14 @@ class _UhisNextAppState extends State<UhisNextApp>
     followUpCalls: _followUpCallService,
     memberDao: _memberDao,
   );
+  late final OfflinePushService _offlinePush = OfflinePushService(
+    api: widget.api,
+    auth: widget.authRepo,
+    households: _householdDao,
+    members: _memberDao,
+    assessments: _localAssessmentDao,
+    followUpCalls: _followUpCallService,
+  );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
   late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);
   late final UserHierarchyService _userHierarchy =
@@ -262,6 +271,7 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final SyncConnectivityService _connectivitySync = SyncConnectivityService(
     assessmentRepo: _assessmentRepo,
     syncService: _sync,
+    pushService: _offlinePush,
     authState: widget.authState,
     coachingRepo: _coachingRepo,
   );
@@ -402,6 +412,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         ),
         Provider<RiskScoringService>.value(value: _risk),
         ChangeNotifierProvider<OfflineSyncService>.value(value: _sync),
+        ChangeNotifierProvider<OfflinePushService>.value(value: _offlinePush),
         Provider<WorklistRepository>.value(value: _worklist),
         Provider<PatientRepository>.value(value: _patientRepo),
         Provider<ReferralDao>.value(value: _referralDao),

@@ -84,11 +84,12 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
     });
   }
 
-  void _onProceed() {
+  Future<void> _onProceed() async {
     debugPrint('[_SelectHouseholdScreenState] _onProceed householdId=${_selected?.id} householdNo=${_selected?.householdNo}');
     final hh = _selected;
     if (hh == null) return;
-    context.push('/household/enrollment/link-member', extra: {
+    final added = await context.push<bool>(
+        '/household/enrollment/link-member', extra: {
       'householdId': hh.id,
       'householdReferenceId': hh.id,
       'householdFhirId': hh.fhirId ?? hh.id,
@@ -96,12 +97,17 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
       'householdNo': hh.householdNo ?? '',
       'villageId': hh.villageId ?? '',
       'villageName': hh.village ?? '',
+      'subVillageId': hh.subVillageId ?? '',
+      'subVillageName': hh.subVillageName ?? '',
       // Thread NID scan data so LinkMemberScreen can pre-fill the form.
       if (widget.fromNidScan) 'fromNidScan': true,
       if (widget.scannedNidNumber != null) 'nidNumber': widget.scannedNidNumber,
       if (widget.scannedName != null) 'name': widget.scannedName,
       if (widget.scannedDateOfBirth != null) 'dateOfBirth': widget.scannedDateOfBirth,
     });
+    // Member saved — this picker has served its purpose, hand control back to
+    // whatever opened it rather than stranding the user on a selection screen.
+    if (added == true && mounted) context.pop();
   }
 
   @override

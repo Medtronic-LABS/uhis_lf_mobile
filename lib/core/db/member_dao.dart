@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
 
 import 'app_database.dart';
 
@@ -10,6 +9,7 @@ class HouseholdMemberEntity {
     required this.id,
     this.fhirId,
     this.householdId,
+    this.householdFhirId,
     this.householdReferenceId,
     this.referenceId,
     this.name,
@@ -48,11 +48,15 @@ class HouseholdMemberEntity {
     this.rawJson,
   });
 
+  /// Local autoincrement PK as string (Spice `Long id`).
   final String id;
   final String? fhirId;
+  /// Local [HouseholdEntity.id] FK (Spice `household_id` Long).
   final String? householdId;
+  /// Server household FHIR id (Spice `household_fhir_id`).
+  final String? householdFhirId;
   final String? householdReferenceId;
-  /// Backend integer referenceId (the PK used as referenceId in offline-sync/create).
+  /// Wire correlation — equals [id] for rows we enrolled.
   final String? referenceId;
   final String? name;
   final String? gender;
@@ -89,47 +93,140 @@ class HouseholdMemberEntity {
   final String syncStatus;
   final String? rawJson;
 
-  Map<String, dynamic> toDb() => {
-        'id': id,
-        'fhir_id': fhirId,
-        'household_id': householdId,
-        'household_reference_id': householdReferenceId,
-        'reference_id': referenceId,
-        'name': name,
-        'gender': gender,
-        'dob': dob,
-        'phone': phone,
-        'phone_number_category': phoneNumberCategory,
-        'national_id': nationalId,
-        'patient_id': patientId,
-        'village_id': villageId,
-        'village_name': villageName,
-        'sub_village_id': subVillageId,
-        'sub_village_name': subVillageName,
-        'shasthya_shebika_id': shasthyaShebikaId,
-        'is_active': isActive ? 1 : 0,
-        'is_household_head': isHouseholdHead ? 1 : 0,
-        'is_pregnant': isPregnant ? 1 : 0,
-        'relation': relation,
-        'initial': initial,
-        'signature': signature,
-        'local_signature_file': localSignatureFile,
-        'mother_patient_id': motherPatientId,
-        'mother_reference_id': motherReferenceId,
-        'marital_status': maritalStatus,
-        'disability': disability,
-        'guardian_id': guardianId,
-        'guardian_fhir_id': guardianFhirId,
-        'latitude': latitude,
-        'longitude': longitude,
-        'id_type': idType,
-        'version': version,
-        'last_updated': lastUpdated,
-        'created_at': createdAt,
-        'updated_at': updatedAt ?? DateTime.now().millisecondsSinceEpoch,
-        'sync_status': syncStatus,
-        'raw_json': rawJson,
-      };
+  Map<String, dynamic> toDb({bool includeId = true}) {
+    final map = <String, dynamic>{
+      'fhir_id': fhirId,
+      'household_id':
+          householdId == null ? null : (int.tryParse(householdId!) ?? householdId),
+      'household_fhir_id': householdFhirId,
+      'household_reference_id': householdReferenceId,
+      'reference_id': referenceId,
+      'name': name,
+      'gender': gender,
+      'dob': dob,
+      'phone': phone,
+      'phone_number_category': phoneNumberCategory,
+      'national_id': nationalId,
+      'patient_id': patientId,
+      'village_id': villageId,
+      'village_name': villageName,
+      'sub_village_id': subVillageId,
+      'sub_village_name': subVillageName,
+      'shasthya_shebika_id': shasthyaShebikaId,
+      'is_active': isActive ? 1 : 0,
+      'is_household_head': isHouseholdHead ? 1 : 0,
+      'is_pregnant': isPregnant ? 1 : 0,
+      'relation': relation,
+      'initial': initial,
+      'signature': signature,
+      'local_signature_file': localSignatureFile,
+      'mother_patient_id': motherPatientId,
+      'mother_reference_id': motherReferenceId,
+      'marital_status': maritalStatus,
+      'disability': disability,
+      'guardian_id': guardianId,
+      'guardian_fhir_id': guardianFhirId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'id_type': idType,
+      'version': version,
+      'last_updated': lastUpdated,
+      'created_at': createdAt,
+      'updated_at': updatedAt ?? DateTime.now().millisecondsSinceEpoch,
+      'sync_status': syncStatus,
+      'raw_json': rawJson,
+    };
+    if (includeId && id.isNotEmpty && id != '0') {
+      map['id'] = int.tryParse(id) ?? id;
+    }
+    return map;
+  }
+
+  HouseholdMemberEntity copyWith({
+    String? id,
+    String? fhirId,
+    String? householdId,
+    String? householdFhirId,
+    String? householdReferenceId,
+    String? referenceId,
+    String? name,
+    String? gender,
+    String? dob,
+    String? phone,
+    String? phoneNumberCategory,
+    String? nationalId,
+    String? patientId,
+    String? villageId,
+    String? villageName,
+    String? subVillageId,
+    String? subVillageName,
+    String? shasthyaShebikaId,
+    bool? isActive,
+    bool? isHouseholdHead,
+    bool? isPregnant,
+    String? relation,
+    String? initial,
+    String? signature,
+    String? localSignatureFile,
+    String? motherPatientId,
+    String? motherReferenceId,
+    String? maritalStatus,
+    String? disability,
+    String? guardianId,
+    String? guardianFhirId,
+    double? latitude,
+    double? longitude,
+    String? idType,
+    String? version,
+    String? lastUpdated,
+    int? createdAt,
+    int? updatedAt,
+    String? syncStatus,
+    String? rawJson,
+  }) {
+    return HouseholdMemberEntity(
+      id: id ?? this.id,
+      fhirId: fhirId ?? this.fhirId,
+      householdId: householdId ?? this.householdId,
+      householdFhirId: householdFhirId ?? this.householdFhirId,
+      householdReferenceId: householdReferenceId ?? this.householdReferenceId,
+      referenceId: referenceId ?? this.referenceId,
+      name: name ?? this.name,
+      gender: gender ?? this.gender,
+      dob: dob ?? this.dob,
+      phone: phone ?? this.phone,
+      phoneNumberCategory: phoneNumberCategory ?? this.phoneNumberCategory,
+      nationalId: nationalId ?? this.nationalId,
+      patientId: patientId ?? this.patientId,
+      villageId: villageId ?? this.villageId,
+      villageName: villageName ?? this.villageName,
+      subVillageId: subVillageId ?? this.subVillageId,
+      subVillageName: subVillageName ?? this.subVillageName,
+      shasthyaShebikaId: shasthyaShebikaId ?? this.shasthyaShebikaId,
+      isActive: isActive ?? this.isActive,
+      isHouseholdHead: isHouseholdHead ?? this.isHouseholdHead,
+      isPregnant: isPregnant ?? this.isPregnant,
+      relation: relation ?? this.relation,
+      initial: initial ?? this.initial,
+      signature: signature ?? this.signature,
+      localSignatureFile: localSignatureFile ?? this.localSignatureFile,
+      motherPatientId: motherPatientId ?? this.motherPatientId,
+      motherReferenceId: motherReferenceId ?? this.motherReferenceId,
+      maritalStatus: maritalStatus ?? this.maritalStatus,
+      disability: disability ?? this.disability,
+      guardianId: guardianId ?? this.guardianId,
+      guardianFhirId: guardianFhirId ?? this.guardianFhirId,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      idType: idType ?? this.idType,
+      version: version ?? this.version,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      syncStatus: syncStatus ?? this.syncStatus,
+      rawJson: rawJson ?? this.rawJson,
+    );
+  }
 
   /// Returns a copy with location fields overridden (null means keep existing).
   HouseholdMemberEntity copyWithVillage({
@@ -137,54 +234,19 @@ class HouseholdMemberEntity {
     String? subVillageId,
     String? shasthyaShebikaId,
   }) {
-    return HouseholdMemberEntity(
-      id: id,
-      fhirId: fhirId,
-      householdId: householdId,
-      householdReferenceId: householdReferenceId,
-      referenceId: referenceId,
-      name: name,
-      gender: gender,
-      dob: dob,
-      phone: phone,
-      phoneNumberCategory: phoneNumberCategory,
-      nationalId: nationalId,
-      patientId: patientId,
+    return copyWith(
       villageId: villageId ?? this.villageId,
-      villageName: villageName,
       subVillageId: subVillageId ?? this.subVillageId,
-      subVillageName: subVillageName,
       shasthyaShebikaId: shasthyaShebikaId ?? this.shasthyaShebikaId,
-      isActive: isActive,
-      isHouseholdHead: isHouseholdHead,
-      isPregnant: isPregnant,
-      relation: relation,
-      initial: initial,
-      signature: signature,
-      localSignatureFile: localSignatureFile,
-      motherPatientId: motherPatientId,
-      motherReferenceId: motherReferenceId,
-      maritalStatus: maritalStatus,
-      disability: disability,
-      guardianId: guardianId,
-      guardianFhirId: guardianFhirId,
-      latitude: latitude,
-      longitude: longitude,
-      idType: idType,
-      version: version,
-      lastUpdated: lastUpdated,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      syncStatus: syncStatus,
-      rawJson: rawJson,
     );
   }
 
   factory HouseholdMemberEntity.fromDb(Map<String, dynamic> row) {
     return HouseholdMemberEntity(
-      id: row['id'] as String,
+      id: row['id']?.toString() ?? '',
       fhirId: row['fhir_id'] as String?,
-      householdId: row['household_id'] as String?,
+      householdId: row['household_id']?.toString(),
+      householdFhirId: row['household_fhir_id'] as String?,
       householdReferenceId: row['household_reference_id'] as String?,
       referenceId: row['reference_id'] as String?,
       name: row['name'] as String?,
@@ -253,45 +315,55 @@ class HouseholdMemberEntity {
 
     // Parse householdHeadRelationship (API field name)
     final relation = str('householdHeadRelationship') ?? str('relation');
-    // isHouseholdHead = true when relation is "HouseholdHead" or "Self"
     final isHead = relation?.toLowerCase() == 'householdhead' ||
-        relation?.toLowerCase() == 'self';
+        relation?.toLowerCase() == 'self' ||
+        parseBool(json['isHouseholdHead']);
 
-    // Android HouseHoldMember JSON mapping:
-    // - JSON 'id' → @ColumnInfo(name = "fhir_id") var id (the FHIR ID)
-    // - JSON 'referenceId' → @ColumnInfo(name = "id") val referenceId (app-generated ID)
-    // - JSON 'householdId' → @ColumnInfo("household_fhir_id") (the FHIR ID of the household)
-    // We use FHIR ID as primary key and relationship key in Flutter for consistency.
-    final fhirId = str('id');  // JSON 'id' field IS the FHIR ID
+    // Spice HouseHoldMember JSON mapping:
+    // - JSON 'id' → fhir_id
+    // - JSON 'referenceId' → local correlation (may equal local PK after status)
+    // - JSON 'householdId' → household_fhir_id
+    // Local PK is assigned by insertOrUpdateFromBE, not here.
+    final fhirId = str('id');
     final referenceId = str('referenceId') ?? str('memberId');
+    final householdFhirId = str('householdId') ?? str('household_id');
 
     return HouseholdMemberEntity(
-      id: fhirId ?? referenceId ?? '',
+      id: referenceId ?? '0',
       fhirId: fhirId,
-      householdId: str('householdId') ?? str('household_id'),  // This is the FHIR ID of household
-      householdReferenceId: str('householdReferenceId') ?? str('household_reference_id'),
+      householdId: null, // resolved to local HH id during sync persist
+      householdFhirId: householdFhirId,
+      householdReferenceId:
+          str('householdReferenceId') ?? str('household_reference_id'),
       referenceId: referenceId,
       name: str('name'),
       gender: str('gender'),
       dob: str('dateOfBirth') ?? str('dob'),
       phone: str('phoneNumber') ?? str('phone'),
-      phoneNumberCategory: str('phoneNumberCategory') ?? str('phone_number_category'),
+      phoneNumberCategory:
+          str('phoneNumberCategory') ?? str('phone_number_category'),
       nationalId: str('nationalId') ?? str('national_id'),
       patientId: str('patientId') ?? str('patient_id'),
       villageId: str('villageId') ?? str('village_id'),
       villageName: str('village') ?? str('villageName') ?? str('village_name'),
       subVillageId: str('subVillageId') ?? str('sub_village_id'),
-      subVillageName: str('subVillage') ?? str('subVillageName') ?? str('sub_village_name'),
-      shasthyaShebikaId: str('shasthyaShebikaId') ?? str('shasthya_shebika_id'),
+      subVillageName:
+          str('subVillage') ?? str('subVillageName') ?? str('sub_village_name'),
+      shasthyaShebikaId:
+          str('shasthyaShebikaId') ?? str('shasthya_shebika_id'),
       isActive: json['isActive'] != false,
       isHouseholdHead: isHead,
       isPregnant: parseBool(json['isPregnant']),
       relation: relation,
       initial: str('initial'),
       signature: str('signature'),
-      localSignatureFile: str('localSignatureFile') ?? str('local_signature_file'),
-      motherPatientId: str('motherPatientId') ?? str('mother_patient_id') ?? str('parentId'),
-      motherReferenceId: str('motherReferenceId') ?? str('mother_reference_id'),
+      localSignatureFile:
+          str('localSignatureFile') ?? str('local_signature_file'),
+      motherPatientId: str('motherPatientId') ??
+          str('mother_patient_id') ??
+          str('parentId'),
+      motherReferenceId:
+          str('motherReferenceId') ?? str('mother_reference_id'),
       maritalStatus: str('maritalStatus') ?? str('marital_status'),
       disability: str('disability'),
       guardianId: str('guardianId') ?? str('guardian_id'),
@@ -304,7 +376,7 @@ class HouseholdMemberEntity {
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now().millisecondsSinceEpoch,
       syncStatus: str('syncStatus') ?? str('sync_status') ?? 'Success',
-      rawJson: null, // Can serialize full json if needed
+      rawJson: null,
     );
   }
 }
@@ -317,18 +389,155 @@ class MemberDao {
 
   final AppDatabase _db;
 
-  /// Bulk upsert members from sync response.
-  Future<void> upsertMany(List<HouseholdMemberEntity> members) async {
-    if (members.isEmpty) return;
-    final batch = _db.db.batch();
-    for (final m in members) {
-      batch.insert(
-        AppDatabase.tableMembers,
-        m.toDb(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+  /// Insert a new local member (autoincrement). Returns the local id string.
+  Future<String> insertLocal(HouseholdMemberEntity member) async {
+    final id = await _db.db.insert(
+      AppDatabase.tableMembers,
+      member.toDb(includeId: false),
+    );
+    return id.toString();
+  }
+
+  Future<HouseholdMemberEntity?> getByFhirId(String fhirId) async {
+    final rows = await _db.db.query(
+      AppDatabase.tableMembers,
+      where: 'fhir_id = ?',
+      whereArgs: [fhirId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return HouseholdMemberEntity.fromDb(rows.first);
+  }
+
+  /// Local row still awaiting its server id, matched on the reference we sent.
+  ///
+  /// Deliberately not a primary-key lookup: `referenceId` is only ours while
+  /// the row is unstamped. Every device numbers its rows from 1, so treating an
+  /// incoming referenceId as a local PK would let another device's member
+  /// overwrite an unrelated row of ours that happens to share that number.
+  Future<HouseholdMemberEntity?> getUnstampedByReferenceId(
+      String referenceId) async {
+    final rows = await _db.db.query(
+      AppDatabase.tableMembers,
+      where: "reference_id = ? AND (fhir_id IS NULL OR fhir_id = '')",
+      whereArgs: [referenceId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return HouseholdMemberEntity.fromDb(rows.first);
+  }
+
+  /// Spice `MemberDAO.insertOrUpdateFromBE`: merge by [fhirId], keep local PK.
+  /// Also matches [referenceId] → local id to avoid duplicates when pull races
+  /// the status stamp.
+  Future<String> insertOrUpdateFromBE(HouseholdMemberEntity entity) async {
+    final fhir = entity.fhirId;
+    HouseholdMemberEntity? existing = (fhir != null && fhir.isNotEmpty)
+        ? await getByFhirId(fhir)
+        : null;
+
+    if (existing == null &&
+        entity.referenceId != null &&
+        entity.referenceId!.isNotEmpty) {
+      existing = await getUnstampedByReferenceId(entity.referenceId!);
     }
-    await batch.commit(noResult: true);
+
+    // A row we created and haven't had confirmed yet: stamp it, never let the
+    // server echo overwrite the form data the health worker just entered.
+    final existingUnstamped =
+        existing != null && (existing.fhirId == null || existing.fhirId!.isEmpty);
+    if (existing?.syncStatus == 'NotSynced' || existingUnstamped) {
+      if (fhir != null && fhir.isNotEmpty) {
+        await updateFhirId(
+          localId: existing!.id,
+          fhirId: fhir,
+          syncStatus: 'Success',
+        );
+      }
+      return existing!.id;
+    }
+
+    if (existing != null) {
+      final merged = entity.copyWith(
+        id: existing.id,
+        syncStatus: entity.syncStatus.isNotEmpty ? entity.syncStatus : 'Success',
+        fhirId: fhir ?? existing.fhirId,
+        householdId: entity.householdId ?? existing.householdId,
+        householdFhirId: entity.householdFhirId ?? existing.householdFhirId,
+        referenceId: entity.referenceId ?? existing.referenceId,
+        isHouseholdHead: entity.isHouseholdHead || existing.isHouseholdHead,
+      );
+      await _db.db.update(
+        AppDatabase.tableMembers,
+        merged.toDb(includeId: false),
+        where: 'id = ?',
+        whereArgs: [int.tryParse(existing.id) ?? existing.id],
+      );
+      return existing.id;
+    }
+
+    final id = await _db.db.insert(
+      AppDatabase.tableMembers,
+      entity.copyWith(syncStatus: 'Success').toDb(includeId: false),
+    );
+    return id.toString();
+  }
+
+  /// Stamp FHIR id after offline-sync/status Success.
+  Future<void> updateFhirId({
+    required String localId,
+    required String? fhirId,
+    required String syncStatus,
+  }) async {
+    await _db.db.rawUpdate(
+      '''
+      UPDATE ${AppDatabase.tableMembers}
+      SET fhir_id = ?,
+          sync_status = CASE
+            WHEN sync_status IN ('InProgress', 'NetworkError', 'NotSynced', 'Pending')
+            THEN ?
+            ELSE sync_status
+          END,
+          updated_at = ?
+      WHERE id = ?
+      ''',
+      [
+        fhirId,
+        syncStatus,
+        DateTime.now().millisecondsSinceEpoch,
+        int.tryParse(localId) ?? localId,
+      ],
+    );
+  }
+
+  /// Points `reference_id` (what the push echoes) and `patient_id` (what the
+  /// household screens join on) at the local PK, straight after insert.
+  Future<void> setReferenceId(String localId) async {
+    await _db.db.update(
+      AppDatabase.tableMembers,
+      {'reference_id': localId, 'patient_id': localId},
+      where: 'id = ?',
+      whereArgs: [int.tryParse(localId) ?? localId],
+    );
+  }
+
+  /// Bulk merge from sync pull.
+  Future<void> upsertManyFromBE(List<HouseholdMemberEntity> members) async {
+    for (final m in members) {
+      await insertOrUpdateFromBE(m);
+    }
+  }
+
+  /// Prefer [upsertManyFromBE] for sync; kept for call-site compatibility.
+  Future<void> upsertMany(List<HouseholdMemberEntity> members) async {
+    await upsertManyFromBE(members);
+  }
+
+  /// No-op under Spice identity — merge keeps the local row.
+  @Deprecated('Placeholders are no longer deleted; merge by fhir_id instead')
+  Future<void> removeLocalPlaceholders(
+      List<HouseholdMemberEntity> incoming) async {
+    // Intentionally empty — Option A never deletes the local PK row.
   }
 
   /// Mark a member active/inactive (Android updateMemberDeceasedStatus).
@@ -345,9 +554,11 @@ class MemberDao {
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [int.tryParse(id) ?? id],
     );
   }
+
+  static const _pendingStatuses = ['NotSynced', 'NetworkError', 'Pending'];
 
   /// Members waiting to push via offline-sync/create (new babies, etc.).
   ///
@@ -365,66 +576,142 @@ class MemberDao {
     return rows.map(HouseholdMemberEntity.fromDb).toList();
   }
 
-  /// Mark members as successfully synced.
-  Future<void> markSynced(List<String> ids) async {
+  /// Count of all members waiting for offline-sync/create (Spice parity).
+  Future<int> getUnsyncedCount() async {
+    final ph = List.filled(_pendingStatuses.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${AppDatabase.tableMembers} '
+      'WHERE sync_status IN ($ph)',
+      _pendingStatuses,
+    );
+    final c = rows.first['c'];
+    return c is num ? c.toInt() : 0;
+  }
+
+  /// NotSynced members belonging to a NotSynced household (nested under
+  /// `households[].householdMembers` — Spice `getAllUnSyncedHouseHoldMembers`).
+  Future<List<HouseholdMemberEntity>> getUnsyncedForHousehold(
+    String householdLocalId, {
+    List<String> excludeIds = const [],
+  }) async {
+    final statusPh = List.filled(_pendingStatuses.length, '?').join(',');
+    final args = <Object?>[
+      int.tryParse(householdLocalId) ?? householdLocalId,
+      ..._pendingStatuses,
+    ];
+    var excludeClause = '';
+    if (excludeIds.isNotEmpty) {
+      final ePh = List.filled(excludeIds.length, '?').join(',');
+      excludeClause = ' AND id NOT IN ($ePh)';
+      args.addAll(excludeIds.map((id) => int.tryParse(id) ?? id));
+    }
+    final rows = await _db.db.rawQuery(
+      'SELECT * FROM ${AppDatabase.tableMembers} '
+      'WHERE household_id = ? AND sync_status IN ($statusPh) '
+      "AND (fhir_id IS NULL OR fhir_id = '')"
+      '$excludeClause '
+      'ORDER BY created_at ASC',
+      args,
+    );
+    return rows.map(HouseholdMemberEntity.fromDb).toList();
+  }
+
+  /// Standalone NotSynced members whose household is already stamped (or has
+  /// no household) — Spice `getOtherHouseholdMembers`. Excludes [excludeIds]
+  /// already nested under a household payload in the same push.
+  Future<List<HouseholdMemberEntity>> getOtherUnsyncedMembers({
+    List<String> excludeIds = const [],
+  }) async {
+    final statusPh = List.filled(_pendingStatuses.length, '?').join(',');
+    final args = <Object?>[..._pendingStatuses];
+    var excludeClause = '';
+    if (excludeIds.isNotEmpty) {
+      final ePh = List.filled(excludeIds.length, '?').join(',');
+      excludeClause = ' AND m.id NOT IN ($ePh)';
+      args.addAll(excludeIds.map((id) => int.tryParse(id) ?? id));
+    }
+    final rows = await _db.db.rawQuery(
+      'SELECT m.* FROM ${AppDatabase.tableMembers} m '
+      'LEFT JOIN ${AppDatabase.tableHouseholds} h ON h.id = m.household_id '
+      'WHERE m.sync_status IN ($statusPh) '
+      'AND (m.household_id IS NULL OR (h.fhir_id IS NOT NULL AND h.fhir_id != \'\')) '
+      '$excludeClause '
+      'ORDER BY m.created_at ASC',
+      args,
+    );
+    return rows.map(HouseholdMemberEntity.fromDb).toList();
+  }
+
+  /// Flip sync_status for a batch of local member PKs.
+  Future<void> updateSyncStatus(List<String> ids, String syncStatus) async {
     if (ids.isEmpty) return;
-    final placeholders = List.filled(ids.length, '?').join(',');
-    await _db.db.update(
-      AppDatabase.tableMembers,
-      {
-        'sync_status': 'Success',
-        'updated_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      where: 'id IN ($placeholders)',
-      whereArgs: ids,
+    final ph = List.filled(ids.length, '?').join(',');
+    await _db.db.rawUpdate(
+      'UPDATE ${AppDatabase.tableMembers} '
+      'SET sync_status = ?, updated_at = ? '
+      'WHERE id IN ($ph)',
+      [
+        syncStatus,
+        DateTime.now().millisecondsSinceEpoch,
+        ...ids.map((id) => int.tryParse(id) ?? id),
+      ],
     );
   }
 
-  /// Delete locally-created placeholder rows that the server has now confirmed
-  /// with a FHIR primary key. When enrollment succeeds, the server assigns a
-  /// FHIR `id` to each member; the sync bundle returns it as `id` alongside
-  /// the original `referenceId` (local UUID). Without cleanup, both the local
-  /// UUID row and the new FHIR-keyed row exist → same member appears in two
-  /// separate households in getAllGroupedByHousehold.
-  Future<void> removeLocalPlaceholders(
-      List<HouseholdMemberEntity> incoming) async {
-    if (incoming.isEmpty) return;
-    final batch = _db.db.batch();
-    for (final m in incoming) {
-      final refId = m.referenceId;
-      if (refId == null || refId.isEmpty || refId == m.id) continue;
-      // refId != m.id → server assigned a new FHIR id; delete the local row
-      // that used refId as its primary key (id column).
-      batch.delete(
-        AppDatabase.tableMembers,
-        where: 'id = ?',
-        whereArgs: [refId],
-      );
-    }
-    await batch.commit(noResult: true);
+  /// Reclaim rows left InProgress after a killed push (age-gated).
+  Future<int> resetStuckInProgress({
+    Duration olderThan = const Duration(minutes: 15),
+  }) async {
+    final cutoff =
+        DateTime.now().subtract(olderThan).millisecondsSinceEpoch;
+    return _db.db.rawUpdate(
+      'UPDATE ${AppDatabase.tableMembers} '
+      "SET sync_status = 'NotSynced', updated_at = ? "
+      "WHERE sync_status = 'InProgress' AND updated_at < ?",
+      [DateTime.now().millisecondsSinceEpoch, cutoff],
+    );
+  }
+
+  /// Mark members as successfully synced.
+  Future<void> markSynced(List<String> ids) async {
+    if (ids.isEmpty) return;
+    await updateSyncStatus(ids, 'Success');
   }
 
   /// Get all members for a household (LOCAL query, no network).
+  /// [householdId] is the local households.id (numeric string).
   Future<List<HouseholdMemberEntity>> getByHouseholdId(String householdId) async {
     final rows = await _db.db.query(
       AppDatabase.tableMembers,
       where: 'household_id = ?',
-      whereArgs: [householdId],
+      whereArgs: [int.tryParse(householdId) ?? householdId],
       orderBy: 'name ASC',
     );
     return rows.map(HouseholdMemberEntity.fromDb).toList();
   }
 
-  /// Get member by ID (LOCAL query, no network).
+  /// Also resolve by household FHIR id (for screens that still pass server ids).
+  Future<List<HouseholdMemberEntity>> getByHouseholdFhirId(
+      String householdFhirId) async {
+    final rows = await _db.db.query(
+      AppDatabase.tableMembers,
+      where: 'household_fhir_id = ?',
+      whereArgs: [householdFhirId],
+      orderBy: 'name ASC',
+    );
+    return rows.map(HouseholdMemberEntity.fromDb).toList();
+  }
+
+  /// Get member by local ID, falling back to fhir_id for legacy callers.
   Future<HouseholdMemberEntity?> getById(String id) async {
     final rows = await _db.db.query(
       AppDatabase.tableMembers,
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [int.tryParse(id) ?? id],
       limit: 1,
     );
-    if (rows.isEmpty) return null;
-    return HouseholdMemberEntity.fromDb(rows.first);
+    if (rows.isNotEmpty) return HouseholdMemberEntity.fromDb(rows.first);
+    return getByFhirId(id);
   }
 
   /// Get member by patient ID (LOCAL query, no network).
@@ -545,42 +832,12 @@ class MemberDao {
       orderBy: 'household_id, name ASC',
     );
 
-    // Pass 1: build householdId → canonical key map.
-    //
-    // Members from the same household can have MIXED householdReferenceId values:
-    //   - Locally-enrolled rows: householdReferenceId = HH_UUID (always set)
-    //   - Server-synced rows that arrived WITH referenceId: householdReferenceId = HH_UUID
-    //   - Server-synced rows WITHOUT referenceId (e.g. enrolled on another device
-    //     or via another system): householdReferenceId = null
-    //
-    // Without normalization, rows with householdReferenceId = HH_UUID group under
-    // HH_UUID while rows with householdReferenceId = null group under FHIR_HH_ID,
-    // making one household appear as two separate households in the list.
-    //
-    // Fix: for every FHIR householdId, the canonical key is the first non-null
-    // householdReferenceId seen among its members; fall back to householdId
-    // only when no member in the household has a referenceId.
-    final fhirToCanonical = <String, String>{};
-    for (final row in rows) {
-      final hid = row['household_id'] as String?;
-      if (hid == null || hid.isEmpty) continue;
-      final hrid = row['household_reference_id'] as String?;
-      if (hrid != null && hrid.isNotEmpty) {
-        fhirToCanonical.putIfAbsent(hid, () => hrid);
-      } else {
-        fhirToCanonical.putIfAbsent(hid, () => hid);
-      }
-    }
-
-    // Pass 2: group using the normalized canonical key.
+    // Group by stable local household_id (Spice FK). No UUID/FHIR dual-key
+    // normalization needed under Option A.
     final grouped = <String, List<HouseholdMemberEntity>>{};
     for (final row in rows) {
       final member = HouseholdMemberEntity.fromDb(row);
-      final hrid = member.householdReferenceId?.isNotEmpty == true
-          ? member.householdReferenceId!
-          : null;
-      final hid = member.householdId;
-      final key = hrid ?? (hid != null ? (fhirToCanonical[hid] ?? hid) : '');
+      final key = member.householdId ?? '';
       grouped.putIfAbsent(key, () => []).add(member);
     }
     return grouped;
@@ -765,7 +1022,7 @@ class MemberDao {
     ''');
     final counts = <String, int>{};
     for (final row in rows) {
-      final hhId = row['household_id'] as String?;
+      final hhId = row['household_id']?.toString();
       final count = row['count'] as int? ?? 0;
       if (hhId != null) {
         counts[hhId] = count;
@@ -774,31 +1031,53 @@ class MemberDao {
     return counts;
   }
 
-  /// Bulk-lookup: returns memberId → patientId for the given member IDs.
+  /// Bulk-lookup: any known member identifier → the local patient key.
   ///
-  /// `householdMemberId` in the assessment-history API is the numeric
-  /// `referenceId` (backend PK), NOT the FHIR `id` column. Both are checked
-  /// so callers don't need to know which ID system the server used.
+  /// Servers refer to a member by whichever id they hold: the backend PK
+  /// (`fhir_id` under the Spice identity model — this is what assessment
+  /// history's `householdMemberId` carries), the `reference_id` we echoed on
+  /// push, or a separate `patient_id`. All of them resolve to `members.id`,
+  /// because that is the value `_memberToPatient` writes as `patients.id` and
+  /// therefore the key every side table (programmes, follow-ups, assessments,
+  /// encounters, referrals) must use for the worklist join to find them.
   Future<Map<String, String>> patientIdsByMemberIds(List<String> memberIds) async {
     if (memberIds.isEmpty) return const {};
     final ph = List.filled(memberIds.length, '?').join(',');
     final rows = await _db.db.rawQuery(
-      'SELECT id, reference_id, patient_id FROM ${AppDatabase.tableMembers} '
-      'WHERE id IN ($ph) OR reference_id IN ($ph)',
-      [...memberIds, ...memberIds],
+      'SELECT id, fhir_id, reference_id, patient_id '
+      'FROM ${AppDatabase.tableMembers} '
+      'WHERE id IN ($ph) OR fhir_id IN ($ph) OR reference_id IN ($ph) '
+      'OR patient_id IN ($ph)',
+      [...memberIds, ...memberIds, ...memberIds, ...memberIds],
     );
     final result = <String, String>{};
     for (final row in rows) {
-      final fhirId = row['id']?.toString();
-      final refId = row['reference_id']?.toString();
-      final patientId = row['patient_id']?.toString();
-      final resolved =
-          (patientId != null && patientId.isNotEmpty) ? patientId : fhirId;
-      if (resolved == null || resolved.isEmpty) continue;
-      if (fhirId != null && fhirId.isNotEmpty) result[fhirId] = resolved;
-      if (refId != null && refId.isNotEmpty) result[refId] = resolved;
+      final localId = row['id']?.toString();
+      if (localId == null || localId.isEmpty) continue;
+      for (final alias in [
+        localId,
+        row['fhir_id'],
+        row['reference_id'],
+        row['patient_id'],
+      ]) {
+        final key = alias?.toString();
+        if (key != null && key.isNotEmpty) result[key] = localId;
+      }
     }
     return result;
+  }
+
+  /// Points every member row at its own local patient key.
+  ///
+  /// `patients.id` is the member's local PK (Option A), so `members.patient_id`
+  /// — which the household screens and `getByPatientId` use to join a member to
+  /// its patient row — must hold the same value. Only fills blanks, so a real
+  /// server-assigned patient id is never overwritten.
+  Future<int> backfillPatientIds() async {
+    return _db.db.rawUpdate(
+      'UPDATE ${AppDatabase.tableMembers} SET patient_id = id '
+      "WHERE patient_id IS NULL OR patient_id = ''",
+    );
   }
 
   /// Returns all member/patient IDs whose sub_village_id is in [subVillageIds].

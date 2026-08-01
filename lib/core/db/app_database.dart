@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 35;
+  static const int schemaVersion = 37;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -111,15 +111,23 @@ class AppDatabase {
   /// Creates the schema. Exposed (not private) so tests can build an in-memory
   /// database with the same DDL the app uses.
   static Future<void> createSchema(Database db, int version) async {
+    // Spice-parity identity model (v36+):
+    //   id            = local autoincrement PK (stable forever)
+    //   fhir_id       = server id (unique), stamped by status API / pull merge
+    //   reference_id  = wire correlation (usually equals local id as string)
+    // Members.household_id is the local households.id FK; household_fhir_id
+    // holds the server household id for API payloads.
     await db.execute('''
       CREATE TABLE $tableHouseholds (
-        id TEXT PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         fhir_id TEXT,
         reference_id TEXT,
         household_no TEXT,
         name TEXT,
         village TEXT,
         village_id TEXT,
+        sub_village_id TEXT,
+        sub_village_name TEXT,
         member_count INTEGER,
         landmark TEXT,
         head_phone_number TEXT,
@@ -137,11 +145,15 @@ class AppDatabase {
         sync_status TEXT DEFAULT 'Success',
         raw_json TEXT
       )''');
+    await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_households_fhir_id '
+        'ON $tableHouseholds(fhir_id) WHERE fhir_id IS NOT NULL');
     await db.execute('''
       CREATE TABLE $tableMembers (
-        id TEXT PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         fhir_id TEXT,
-        household_id TEXT,
+        household_id INTEGER,
+        household_fhir_id TEXT,
         household_reference_id TEXT,
         reference_id TEXT,
         name TEXT,
@@ -179,6 +191,9 @@ class AppDatabase {
         sync_status TEXT DEFAULT 'Success',
         raw_json TEXT
       )''');
+    await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_members_fhir_id '
+        'ON $tableMembers(fhir_id) WHERE fhir_id IS NOT NULL');
     await db.execute('''
       CREATE TABLE $tablePatients (
         id TEXT PRIMARY KEY,
@@ -1504,6 +1519,107 @@ class AppDatabase {
         await db.execute(
             'ALTER TABLE $tableImmunisations ADD COLUMN referral_facility TEXT');
       } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 36) {
+      // v36 — Spice-parity local identity: INTEGER autoincrement PKs for
+      // households/members, unique fhir_id, household_fhir_id on members.
+      // Greenfield / pre-install only — drop+recreate (no device fleet).
+      await db.execute('DROP TABLE IF EXISTS $tableMembers');
+      await db.execute('DROP TABLE IF EXISTS $tableHouseholds');
+      await db.execute('''
+        CREATE TABLE $tableHouseholds (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          fhir_id TEXT,
+          reference_id TEXT,
+          household_no TEXT,
+          name TEXT,
+          village TEXT,
+          village_id TEXT,
+          member_count INTEGER,
+          landmark TEXT,
+          head_phone_number TEXT,
+          head_phone_number_category TEXT,
+          latitude REAL,
+          longitude REAL,
+          is_owned_an_improved_latrine INTEGER DEFAULT 0,
+          is_owned_hand_washing_facility INTEGER DEFAULT 0,
+          is_owned_a_treated_bed_net INTEGER DEFAULT 0,
+          bed_net_count INTEGER,
+          version TEXT,
+          last_updated TEXT,
+          created_at INTEGER,
+          updated_at INTEGER,
+          sync_status TEXT DEFAULT 'Success',
+          raw_json TEXT
+        )''');
+      await db.execute(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_households_fhir_id '
+          'ON $tableHouseholds(fhir_id) WHERE fhir_id IS NOT NULL');
+      await db.execute('''
+        CREATE TABLE $tableMembers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          fhir_id TEXT,
+          household_id INTEGER,
+          household_fhir_id TEXT,
+          household_reference_id TEXT,
+          reference_id TEXT,
+          name TEXT,
+          gender TEXT,
+          dob TEXT,
+          phone TEXT,
+          phone_number_category TEXT,
+          national_id TEXT,
+          patient_id TEXT,
+          village_id TEXT,
+          village_name TEXT,
+          sub_village_id TEXT,
+          sub_village_name TEXT,
+          shasthya_shebika_id TEXT,
+          is_active INTEGER,
+          is_household_head INTEGER,
+          is_pregnant INTEGER,
+          relation TEXT,
+          initial TEXT,
+          signature TEXT,
+          local_signature_file TEXT,
+          mother_patient_id TEXT,
+          mother_reference_id TEXT,
+          marital_status TEXT,
+          disability TEXT,
+          guardian_id TEXT,
+          guardian_fhir_id TEXT,
+          latitude REAL,
+          longitude REAL,
+          id_type TEXT,
+          version TEXT,
+          last_updated TEXT,
+          created_at INTEGER,
+          updated_at INTEGER,
+          sync_status TEXT DEFAULT 'Success',
+          raw_json TEXT
+        )''');
+      await db.execute(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_members_fhir_id '
+          'ON $tableMembers(fhir_id) WHERE fhir_id IS NOT NULL');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_members_hh ON $tableMembers(household_id)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_members_name ON $tableMembers(name)');
+    }
+    if (from < 37) {
+      // v37 — households keep the sub-village alongside the parent village.
+      // Storing one collapsed id made every add-member write the same value
+      // into both member columns, which the FHIR mapper rejects.
+      for (final sql in [
+        'ALTER TABLE $tableHouseholds ADD COLUMN sub_village_id TEXT',
+        'ALTER TABLE $tableHouseholds ADD COLUMN sub_village_name TEXT',
+      ]) {
+        try {
+          await db.execute(sql);
+        } on DatabaseException catch (e) {
+          if (!e.toString().contains('duplicate column')) rethrow;
+        }
+      }
     }
   }
 

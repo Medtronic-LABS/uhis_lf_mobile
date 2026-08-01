@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -10,8 +12,10 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/api_repository.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/user_hierarchy_service.dart';
+import '../../../core/db/household_dao.dart';
 import '../../../core/db/member_dao.dart';
 import '../../../core/db/patient_dao.dart';
+import '../../../core/db/roster_revision.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
@@ -43,6 +47,8 @@ class AddHouseholdMemberScreen extends StatefulWidget {
     this.existingHouseholdReferenceId,
     this.existingVillageId,
     this.existingVillageName,
+    this.existingSubVillageId,
+    this.existingSubVillageName,
     this.fromNidScan = false,
     this.scannedNidNumber,
     this.scannedName,
@@ -55,8 +61,14 @@ class AddHouseholdMemberScreen extends StatefulWidget {
   /// adding to the enrollment controller's pending batch.
   final String? existingHouseholdId;
   final String? existingHouseholdReferenceId;
+
+  /// Parent village of the household — distinct from [existingSubVillageId].
+  /// spice-service resolves the hierarchy from both, so they must never carry
+  /// the same id.
   final String? existingVillageId;
   final String? existingVillageName;
+  final String? existingSubVillageId;
+  final String? existingSubVillageName;
 
   final bool fromNidScan;
   final String? scannedNidNumber;
@@ -72,6 +84,77 @@ class AddHouseholdMemberScreen extends StatefulWidget {
   @override
   State<AddHouseholdMemberScreen> createState() =>
       _AddHouseholdMemberScreenState();
+}
+
+/// Pushes an already-persisted member and stamps the result on its local row.
+///
+/// Deliberately free of any `State` / `BuildContext`: it outlives the screen,
+/// which pops as soon as the local write lands. Every failure is swallowed and
+/// left as a pending sync status — the member is already on disk, so a network
+/// problem must never look like a failed save.
+Future<void> _pushMemberInBackground({
+  required EnrollmentRepository repo,
+  required MemberDao memberDao,
+  required HouseholdMember member,
+  required String memberLocalId,
+  required String householdFhirId,
+  required String householdReferenceId,
+  required String villageId,
+  required String villageName,
+  required String? subVillageId,
+  required String? subVillageName,
+  required int userId,
+  required String userFhirId,
+  required String organizationId,
+  required String deviceId,
+}) async {
+  try {
+    final result = await repo.submitStandaloneMember(
+      member: member,
+      householdId: householdFhirId,
+      householdReferenceId: householdReferenceId,
+      villageName: villageName,
+      villageId: villageId,
+      subVillageId: subVillageId,
+      subVillageName: subVillageName,
+      userId: userId,
+      userFhirId: userFhirId,
+      organizationId: organizationId,
+      deviceId: deviceId,
+      memberReferenceId: memberLocalId,
+    );
+    // Accepted by the server — park it so an Offline Sync started while we are
+    // still polling cannot post the same member a second time.
+    // resetStuckInProgress puts it back in the queue if status never lands.
+    await memberDao.updateSyncStatus([memberLocalId], 'InProgress');
+    // Without this the row stays unstamped forever, and the next Offline Sync
+    // would post the same member again.
+    await repo.pollAndApplyFhirIds(
+      requestId: result.requestId,
+      deviceId: deviceId,
+      userId: userId,
+      memberDao: memberDao,
+    );
+    debugPrint('[AddMember] background push done localId=$memberLocalId');
+  } on DioException catch (e) {
+    final isNetwork = e.response == null ||
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.connectionError;
+    await memberDao.updateSyncStatus(
+      [memberLocalId],
+      isNetwork ? 'NetworkError' : 'NotSynced',
+    );
+    debugPrint('[AddMember] background push failed (${e.type}) — '
+        'member $memberLocalId queued for retry');
+  } on SocketException {
+    await memberDao.updateSyncStatus([memberLocalId], 'NetworkError');
+    debugPrint('[AddMember] offline — member $memberLocalId queued for retry');
+  } catch (e) {
+    await memberDao.updateSyncStatus([memberLocalId], 'NotSynced');
+    debugPrint('[AddMember] background push error: $e');
+  }
 }
 
 class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
@@ -477,23 +560,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       final api = context.read<ApiClient>();
       final memberDao = context.read<MemberDao>();
       final patientDao = context.read<PatientDao>();
+      final hhDao = context.read<HouseholdDao>();
       final hierarchy = context.read<UserHierarchyService>();
-
-      var effSubVillageId = widget.existingVillageId;
-      var effSubVillageName = widget.existingVillageName;
-      if (effSubVillageId == null || effSubVillageId.isEmpty) {
-        await hierarchy.prefetch();
-        final ssSubs =
-            (hierarchy.ssWorkers ?? []).expand((s) => s.subVillages).toList();
-        final topSubs = hierarchy.subVillages ?? const <SubVillageRef>[];
-        final SubVillageRef? fallback = ssSubs.isNotEmpty
-            ? ssSubs.first
-            : (topSubs.isNotEmpty ? topSubs.first : null);
-        if (fallback != null) {
-          effSubVillageId = fallback.id;
-          effSubVillageName = fallback.name;
-        }
-      }
 
       final userId = await auth.userId() ?? 0;
       final userFhirId = await auth.userFhirId() ?? '';
@@ -501,47 +569,93 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       final deviceId = await auth.deviceId();
 
       final repo = EnrollmentRepository(api);
-      final canonicalVillageId = widget.existingVillageId?.isNotEmpty == true
-          ? widget.existingVillageId!
-          : effSubVillageId ?? '';
-      final canonicalVillageName = widget.existingVillageName?.isNotEmpty == true
-          ? widget.existingVillageName!
-          : effSubVillageName ?? '';
-
-      final result = await repo.submitStandaloneMember(
-        member: member,
-        householdId: widget.existingHouseholdId!,
-        householdReferenceId:
-            widget.existingHouseholdReferenceId ?? widget.existingHouseholdId!,
-        villageName: canonicalVillageName,
-        villageId: canonicalVillageId,
-        subVillageId: effSubVillageId,
-        subVillageName: effSubVillageName,
-        userId: userId,
-        userFhirId: userFhirId,
-        organizationId: orgId,
-        deviceId: deviceId,
-      );
-
       final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final refId = result.memberReferenceId;
 
-      await memberDao.upsertMany([
+      // Resolve the household row this member hangs off. Callers pass either a
+      // server id (household detail) or a local PK (select-household), and both
+      // id spaces are plain integers — so trust the caller's explicit reference
+      // id first and only then fall back to fhir_id/id lookups. Guessing wrong
+      // files the member under another household, or under none, and no screen
+      // can surface it again.
+      final hhArg = widget.existingHouseholdId!;
+      final hhRef = widget.existingHouseholdReferenceId;
+      final household = (hhRef != null && hhRef.isNotEmpty
+              ? await hhDao.getById(hhRef)
+              : null) ??
+          await hhDao.getByFhirId(hhArg) ??
+          await hhDao.getById(hhArg);
+      final localHhId = household?.id ?? hhRef ?? hhArg;
+      final householdFhirId = household?.fhirId;
+      debugPrint('[AddMember] household arg=$hhArg ref=$hhRef '
+          '→ local=$localHhId fhir=$householdFhirId');
+
+      // The member inherits the household's location, and the two levels stay
+      // distinct: sending the same id as villageId and subVillageId is what
+      // made fhir-mapper reject these members.
+      var villageId = household?.villageId ?? widget.existingVillageId ?? '';
+      var villageName = household?.village ?? widget.existingVillageName ?? '';
+      var subVillageId =
+          household?.subVillageId ?? widget.existingSubVillageId ?? '';
+      var subVillageName =
+          household?.subVillageName ?? widget.existingSubVillageName ?? '';
+
+      // Households enrolled before v37 have no sub-village of their own, and a
+      // NID-scan entry can arrive with neither — fall back to the worker's
+      // hierarchy, then derive the missing level from the one we do have.
+      if (subVillageId.isEmpty || villageId.isEmpty) {
+        await hierarchy.prefetch();
+        final subs = <SubVillageRef>[
+          ...(hierarchy.ssWorkers ?? []).expand((s) => s.subVillages),
+          ...(hierarchy.subVillages ?? const <SubVillageRef>[]),
+        ];
+        SubVillageRef? match;
+        if (subVillageId.isNotEmpty) {
+          match = subs.where((s) => s.id == subVillageId).firstOrNull;
+        }
+        // A pre-v37 household stored the sub-village in `village_id`.
+        match ??= villageId.isNotEmpty
+            ? subs.where((s) => s.id == villageId).firstOrNull
+            : null;
+        match ??= subs.firstOrNull;
+        if (match != null) {
+          subVillageId = match.id;
+          subVillageName = match.name;
+          final parentId = match.villageId ?? '';
+          if (parentId.isNotEmpty && parentId != subVillageId) {
+            villageId = parentId;
+            villageName = (hierarchy.villages ?? const <VillageRef>[])
+                    .where((v) => v.id == parentId)
+                    .firstOrNull
+                    ?.name ??
+                villageName;
+          }
+        }
+      }
+      debugPrint('[AddMember] village=$villageId/$villageName '
+          'subVillage=$subVillageId/$subVillageName');
+
+      // Patients (and assessment scoping) key off the finest level available.
+      final canonicalVillageId =
+          subVillageId.isNotEmpty ? subVillageId : villageId;
+      final canonicalVillageName =
+          subVillageName.isNotEmpty ? subVillageName : villageName;
+
+      final memberLocalId = await memberDao.insertLocal(
         HouseholdMemberEntity(
-          id: refId,
-          householdId: widget.existingHouseholdId,
-          householdReferenceId:
-              widget.existingHouseholdReferenceId ?? widget.existingHouseholdId,
+          id: '0',
+          householdId: localHhId,
+          householdFhirId: householdFhirId,
+          householdReferenceId: localHhId,
           name: member.name,
           gender: member.gender,
           dob: member.dateOfBirth,
           phone: member.mobileNumber,
           nationalId: member.idNumber,
           idType: member.idType,
-          villageId: canonicalVillageId,
-          villageName: canonicalVillageName,
-          subVillageId: effSubVillageId,
-          subVillageName: effSubVillageName,
+          villageId: villageId.isEmpty ? null : villageId,
+          villageName: villageName.isEmpty ? null : villageName,
+          subVillageId: subVillageId.isEmpty ? null : subVillageId,
+          subVillageName: subVillageName.isEmpty ? null : subVillageName,
           maritalStatus: member.maritalStatus,
           disability: member.disabilityStatus.toLowerCase(),
           isHouseholdHead: false,
@@ -549,13 +663,14 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           isPregnant: false,
           createdAt: nowMs,
           updatedAt: nowMs,
-          syncStatus: 'Success',
+          syncStatus: 'NotSynced',
         ),
-      ]);
+      );
+      await memberDao.setReferenceId(memberLocalId);
 
       await patientDao.upsertMany([
         Patient(
-          id: refId,
+          id: memberLocalId,
           name: member.name,
           gender: member.gender,
           dob: member.dateOfBirth,
@@ -563,28 +678,74 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           nationalId: member.idNumber,
           villageId: canonicalVillageId,
           villageName: canonicalVillageName,
-          householdId: widget.existingHouseholdId,
+          householdId: localHhId,
           isActive: true,
           updatedAt: nowMs,
           rawJson: jsonEncode({
-            'id': refId,
+            'id': memberLocalId,
             'name': member.name,
             'gender': member.gender,
             'dateOfBirth': member.dateOfBirth,
             'phoneNumber': member.mobileNumber,
             'nationalId': member.idNumber,
             'villageId': canonicalVillageId,
-            'houseHoldId': widget.existingHouseholdId,
+            'houseHoldId': localHhId,
             'isActive': true,
           }),
         ),
       ]);
+      debugPrint('[AddMember] standalone saved localId=$memberLocalId');
+      bumpRosterRevision();
+
+      // The member is safely on disk, so the save is already done as far as the
+      // health worker is concerned — push in the background rather than making
+      // them wait on (or fail because of) the network. Anything left NotSynced
+      // is picked up by Offline Sync and by the reconnect trigger.
+      //
+      // Only push at all when the household exists server-side: otherwise the
+      // create would carry a local PK as `householdId` and orphan the member,
+      // so we leave it for Offline Sync, which posts household and members
+      // together.
+      if (householdFhirId != null && householdFhirId.isNotEmpty) {
+        unawaited(
+          _pushMemberInBackground(
+            repo: repo,
+            memberDao: memberDao,
+            member: member,
+            memberLocalId: memberLocalId,
+            householdFhirId: householdFhirId,
+            householdReferenceId: localHhId,
+            villageId: villageId,
+            villageName: villageName,
+            // A legacy household whose hierarchy we could not resolve has one
+            // id for both levels — send it as the village only, so
+            // spice-service never sees a sub-village that is its own parent.
+            subVillageId: subVillageId == villageId ? null : subVillageId,
+            subVillageName: subVillageId == villageId ? null : subVillageName,
+            userId: userId,
+            userFhirId: userFhirId,
+            organizationId: orgId,
+            deviceId: deviceId,
+          ),
+        );
+      } else {
+        debugPrint('[AddMember] household $localHhId has no fhir_id yet — '
+            'member queued for Offline Sync');
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Member added successfully')),
       );
-      context.go('/patients/households');
+      // Pop back to the caller (household detail / select-household) so it can
+      // re-read the roster it is showing. `go` would rebuild the whole branch
+      // and can leave an older, already-queried list instance on screen — the
+      // new member then stays invisible until the app is restarted.
+      if (context.canPop()) {
+        context.pop(true);
+      } else {
+        context.go('/patients/households');
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

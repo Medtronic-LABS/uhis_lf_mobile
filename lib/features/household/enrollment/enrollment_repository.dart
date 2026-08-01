@@ -10,27 +10,34 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/models/provance_dto.dart';
 import 'models/household_enrollment_models.dart';
 
-/// IDs generated during enrollment — returned from [EnrollmentRepository.submit]
-/// so the controller can persist the household locally without a round-trip.
+/// IDs generated during enrollment — local autoincrement PKs used as
+/// create `referenceId`s (Spice parity).
 class EnrollmentResult {
   const EnrollmentResult({
     required this.hhReferenceId,
     required this.memberReferenceIds,
   });
 
-  /// UUID assigned to the household in the sync payload.
+  /// Local households.id used as create referenceId.
   final String hhReferenceId;
 
-  /// UUID assigned to each member (head first, then additional members).
+  /// Local members.id values (head first, then additional members).
   final List<String> memberReferenceIds;
 }
 
 /// Result from [EnrollmentRepository.submitStandaloneMember].
 class StandaloneMemberResult {
-  const StandaloneMemberResult({required this.memberReferenceId});
+  const StandaloneMemberResult({
+    required this.memberReferenceId,
+    required this.requestId,
+  });
 
-  /// UUID assigned to the new member in the sync payload.
+  /// Local member PK sent as the create `referenceId`.
   final String memberReferenceId;
+
+  /// Id of the create request — needed to poll `offline-sync/status` and stamp
+  /// the returned `fhir_id` back onto the local row.
+  final String requestId;
 }
 
 /// Submits a completed household enrollment to
@@ -58,9 +65,10 @@ class EnrollmentRepository extends ApiRepository {
   /// can persist the data locally immediately (offline-first pattern matching
   /// Android's HouseHoldRepository.insertHouseHoldEntity / registerMember).
   /// Build the offline-sync/create payload without making a network call.
-  /// Returns the body map and the pre-generated reference IDs so the caller
-  /// can persist locally before attempting the POST.
-  ({Map<String, dynamic> body, EnrollmentResult result}) buildPayload({
+  ///
+  /// [hhReferenceId] / [memberReferenceIds] must be the local autoincrement
+  /// PKs already inserted (Spice: referenceId = local id).
+  ({Map<String, dynamic> body, String requestId}) buildPayload({
     required Household household,
     required HouseholdHeadInfo head,
     required List<HouseholdMember> members,
@@ -68,13 +76,18 @@ class EnrollmentRepository extends ApiRepository {
     required String userFhirId,
     required String organizationId,
     required String deviceId,
+    required String hhReferenceId,
+    required List<String> memberReferenceIds,
     double latitude = 0.0,
     double longitude = 0.0,
     String appVersionName = AppConfig.appVersionName,
     int appVersionCode = AppConfig.appVersionCode,
   }) {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final hhReferenceId = _uuid.v4();
+    final headRefId = memberReferenceIds.first;
+    final extraRefIds = memberReferenceIds.length > 1
+        ? memberReferenceIds.sublist(1)
+        : <String>[];
 
     final provenance = ProvanceDto.fromMap({
       'modifiedDate': DateTime.now().toUtc().toIso8601String(),
@@ -87,9 +100,6 @@ class EnrollmentRepository extends ApiRepository {
     final villageId = int.tryParse(household.villageId) ?? 0;
     final subVillageId = int.tryParse(household.subVillageId ?? '') ?? 0;
     final ssWorkerId = int.tryParse(household.healthWorkerId) ?? userId;
-
-    final headRefId = _uuid.v4();
-    final extraRefIds = [for (final _ in members) _uuid.v4()];
 
     final allMembers = <Map<String, dynamic>>[
       _memberPayload(
@@ -153,8 +163,9 @@ class EnrollmentRepository extends ApiRepository {
       'updatedAt': nowMs,
     };
 
+    final requestId = _uuid.v4();
     final body = {
-      'requestId': _uuid.v4(),
+      'requestId': requestId,
       'appVersionName': appVersionName,
       'appVersionCode': appVersionCode,
       'deviceId': deviceId,
@@ -169,13 +180,7 @@ class EnrollmentRepository extends ApiRepository {
       'rxBuddies': <dynamic>[],
     };
 
-    return (
-      body: body,
-      result: EnrollmentResult(
-        hhReferenceId: hhReferenceId,
-        memberReferenceIds: [headRefId, ...extraRefIds],
-      ),
-    );
+    return (body: body, requestId: requestId);
   }
 
   /// POST a pre-built payload to offline-sync/create.
@@ -185,6 +190,88 @@ class EnrollmentRepository extends ApiRepository {
           '${const JsonEncoder.withIndent('  ').convert(body)}');
     }
     await postOk(Endpoints.offlineSyncCreate, data: body, action: 'Enrollment');
+  }
+
+  /// Poll `/offline-sync/status` and stamp `fhir_id` onto local rows.
+  ///
+  /// Mirrors Spice `OfflineSyncRepository.getSyncStatusForOffline` +
+  /// `RoomHelper.updateFhirId`. Same row keeps its local PK.
+  Future<void> pollAndApplyFhirIds({
+    required String requestId,
+    required String deviceId,
+    required int userId,
+    HouseholdDao? householdDao,
+    MemberDao? memberDao,
+    int maxAttempts = 4,
+    Duration delayBetween = const Duration(seconds: 10),
+  }) async {
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) await Future<void>.delayed(delayBetween);
+
+      final body = <String, dynamic>{
+        'requestId': requestId,
+        'dataRequired': false,
+        'userId': userId,
+        'appVersionName': AppConfig.appVersionName,
+        'appVersionCode': AppConfig.appVersionCode,
+        if (deviceId.isNotEmpty) 'deviceId': deviceId,
+      };
+
+      try {
+        final data = await postOk(
+          Endpoints.offlineSyncStatus,
+          data: body,
+          action: 'Enrollment status',
+        );
+        final entities = data is Map ? data['entityList'] : null;
+        debugPrint('[EnrollmentRepository] status poll $attempt/$maxAttempts '
+            'entities=${entities is List ? entities.length : 0}');
+
+        if (entities is! List || entities.isEmpty) continue;
+
+        var anyInProgress = false;
+        for (final raw in entities) {
+          if (raw is! Map) continue;
+          final type = raw['type']?.toString() ?? '';
+          final status = raw['status']?.toString() ?? '';
+          final refId = raw['referenceId']?.toString();
+          final fhirId = raw['fhirId']?.toString();
+
+          if (status == 'InProgress') {
+            anyInProgress = true;
+            continue;
+          }
+          if (refId == null || refId.isEmpty) continue;
+          if (status != 'Success' && status != 'Failed') continue;
+
+          final typeLower = type.toLowerCase();
+          if (typeLower.contains('household') &&
+              !typeLower.contains('member') &&
+              householdDao != null) {
+            await householdDao.updateFhirId(
+              localId: refId,
+              fhirId: status == 'Success' ? fhirId : null,
+              syncStatus: status,
+            );
+          } else if (typeLower.contains('member') && memberDao != null) {
+            await memberDao.updateFhirId(
+              localId: refId,
+              fhirId: status == 'Success' ? fhirId : null,
+              syncStatus: status,
+            );
+          }
+        }
+
+        if (!anyInProgress) {
+          debugPrint('[EnrollmentRepository] status terminal — fhir ids stamped');
+          return;
+        }
+      } catch (e) {
+        debugPrint('[EnrollmentRepository] status poll error: $e');
+      }
+    }
+    debugPrint('[EnrollmentRepository] status poll exhausted — warm sync '
+        'will merge by fhir_id');
   }
 
   Future<EnrollmentResult> submit({
@@ -337,13 +424,14 @@ class EnrollmentRepository extends ApiRepository {
     required String userFhirId,
     required String organizationId,
     required String deviceId,
+    String? memberReferenceId,
     double latitude = 0.0,
     double longitude = 0.0,
     String appVersionName = AppConfig.appVersionName,
     int appVersionCode = AppConfig.appVersionCode,
   }) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final memberRefId = _uuid.v4();
+    final memberRefId = memberReferenceId ?? _uuid.v4();
 
     final provenance = ProvanceDto.fromMap({
       'modifiedDate': DateTime.now().toUtc().toIso8601String(),
@@ -399,8 +487,9 @@ class EnrollmentRepository extends ApiRepository {
       'updatedAt': nowMs,
     };
 
+    final requestId = _uuid.v4();
     final body = {
-      'requestId': _uuid.v4(),
+      'requestId': requestId,
       'appVersionName': appVersionName,
       'appVersionCode': appVersionCode,
       'deviceId': deviceId,
@@ -422,7 +511,10 @@ class EnrollmentRepository extends ApiRepository {
     await postOk(Endpoints.offlineSyncCreate,
         data: body, action: 'LinkMemberToHousehold');
 
-    return StandaloneMemberResult(memberReferenceId: memberRefId);
+    return StandaloneMemberResult(
+      memberReferenceId: memberRefId,
+      requestId: requestId,
+    );
   }
 
   Map<String, dynamic> _memberPayload({
