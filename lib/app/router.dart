@@ -24,6 +24,7 @@ import '../features/pin/pin_unlock_screen.dart';
 import '../features/referral/referral_detail_screen.dart';
 import '../features/referral/referral_list_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
+import '../features/sync/offline_sync_screen.dart';
 import '../features/counselling/counselling_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/assistant/assistant_screen.dart';
@@ -135,6 +136,10 @@ GoRouter buildRouter(AuthState auth) {
         builder: (_, _) => const SyncProgressScreen(),
       ),
       GoRoute(
+        path: '/offline-sync',
+        builder: (_, _) => const OfflineSyncScreen(),
+      ),
+      GoRoute(
         path: '/pin-setup',
         builder: (_, _) => const PinSetupScreen(),
       ),
@@ -165,6 +170,11 @@ GoRouter buildRouter(AuthState auth) {
           // Tab 1: Patients
           StatefulShellBranch(
             navigatorKey: _patientsNavigatorKey,
+            // Lets HouseholdListScreen re-read the local DB when a route
+            // stacked above it (household detail, the duplicate
+            // `/patients/households` page pushed by the enrollment flow) is
+            // popped — otherwise it keeps showing the roster it opened with.
+            observers: [patientsRouteObserver],
             routes: [
               GoRoute(
                 path: '/patients',
@@ -533,6 +543,8 @@ GoRouter buildRouter(AuthState auth) {
                           extra['householdId'] as String?,
                   existingVillageId: extra['villageId'] as String?,
                   existingVillageName: extra['villageName'] as String?,
+                  existingSubVillageId: extra['subVillageId'] as String?,
+                  existingSubVillageName: extra['subVillageName'] as String?,
                   fromNidScan: extra['fromNidScan'] == true,
                   scannedNidNumber: extra['nidNumber'] as String?,
                   scannedName: extra['name'] as String?,

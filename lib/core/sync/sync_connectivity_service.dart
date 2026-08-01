@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../auth/auth_state.dart';
 import '../../features/training/coaching_repository.dart';
 import '../../features/visit/assessment_repository.dart';
+import 'offline_push_service.dart';
 import 'offline_sync_service.dart';
 
 const _retryDelay = Duration(seconds: 30);
@@ -29,15 +30,18 @@ class SyncConnectivityService {
   SyncConnectivityService({
     required AssessmentRepository assessmentRepo,
     required OfflineSyncService syncService,
+    required OfflinePushService pushService,
     required AuthState authState,
     required CoachingRepository coachingRepo,
   })  : _assessmentRepo = assessmentRepo,
         _syncService = syncService,
+        _pushService = pushService,
         _authState = authState,
         _coachingRepo = coachingRepo;
 
   final AssessmentRepository _assessmentRepo;
   final OfflineSyncService _syncService;
+  final OfflinePushService _pushService;
   final AuthState _authState;
   final CoachingRepository _coachingRepo;
 
@@ -111,10 +115,22 @@ class SyncConnectivityService {
       return;
     }
 
-    // Push pending assessments first (outbound), then pull fresh data (inbound),
-    // then refresh micro-coaching. Fire-and-forget; errors are logged.
-    _assessmentRepo
-        .syncPendingAssessments(syncMode: 'AutomaticSync')
+    // Push everything pending (outbound), then pull fresh data (inbound), then
+    // refresh micro-coaching. Fire-and-forget; errors are logged.
+    //
+    // pushAll goes first because it is the only path that posts households and
+    // standalone members — an enrollment saved offline would otherwise sit
+    // NotSynced until someone opened the Offline Sync screen. It also carries
+    // pending assessments, so the call below usually finds nothing left; it
+    // stays as the fallback for rows pushAll declined to take.
+    _pushService
+        .pushAll(syncMode: 'AutomaticSync')
+        .then((r) {
+          debugPrint('[SyncConnectivity] AutomaticSync push: ${r.message}');
+          return _assessmentRepo.syncPendingAssessments(
+            syncMode: 'AutomaticSync',
+          );
+        })
         .then((n) {
           if (n > 0) {
             debugPrint('[SyncConnectivity] AutomaticSync pushed $n assessment(s)');

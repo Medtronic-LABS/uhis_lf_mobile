@@ -537,6 +537,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       hint: EnrollmentStrings.totalMembersHint,
                       controller: _totalMembersCtrl,
                       keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
                       isRequired: true,
                       onChanged: (_) => _clearError('totalMembers'),
                       errorText: _fieldErrors['totalMembers'],
@@ -561,12 +564,18 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    EnrollmentSegmentedButtons(
-                      label: EnrollmentStrings.disabilityAnyPersonLabel,
-                      options: EnrollmentStrings.disabilityYesNo,
-                      selectedValue: _hasDisability,
-                      allowDeselect: false,
-                      onChanged: (v) => setState(() => _hasDisability = v ?? 'No'),
+                    SizedBox(key: _key('disabilityCount'), height: 0),
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.disabilityPersonCountLabel,
+                      hint: EnrollmentStrings.disabilityPersonCountHint,
+                      controller: _disabilityCountCtrl,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      isRequired: true,
+                      onChanged: (_) => _clearError('disabilityCount'),
+                      errorText: _fieldErrors['disabilityCount'],
                     ),
 
                     if (_hasDisability == 'Yes') ...[
@@ -718,11 +727,14 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.mobileNumberLabel,
                       hint: EnrollmentStrings.mobileNumberHint,
                       controller: _mobileCtrl,
-                      keyboardType: TextInputType.phone,
+                      keyboardType: TextInputType.number,
                       isRequired: true,
                       onChanged: (_) => _clearError('mobile'),
                       errorText: _fieldErrors['mobile'],
-                      inputFormatters: [LengthLimitingTextInputFormatter(14)],
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(14),
+                      ],
                     ),
                     const SizedBox(height: 14),
 

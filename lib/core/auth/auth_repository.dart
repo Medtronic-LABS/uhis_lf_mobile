@@ -343,8 +343,8 @@ class AuthRepository {
     await _storage.write(key: _kSubVillageIds, value: joined);
   }
 
-  /// Returns the SS worker IDs assigned to this SK (shasthyaShebikas[].id).
-  /// Used to filter households from the sync bundle to just the SK's caseload.
+  /// Returns the SS worker IDs assigned to this SK (shasthyaShebikas[].id),
+  /// for read-time caseload views.
   Future<List<int>> ssWorkerIds() async {
     final stored = await _storage.read(key: _kSsWorkerIds);
     if (stored == null || stored.isEmpty) return const [];
@@ -356,8 +356,8 @@ class AuthRepository {
   }
 
   /// Persists SS worker IDs from `shasthyaShebikas[].id` in the static-data
-  /// response. These are used to filter households by `shasthyaShebikaId`
-  /// so only the SK's own caseload is shown — mirroring Android's approach.
+  /// response. The sync bundle is scoped server-side by `villageIds`, so these
+  /// must not be used to decide what gets stored locally.
   Future<void> saveSsWorkerIds(List<int> ids) async {
     if (ids.isEmpty) return;
     await _storage.write(key: _kSsWorkerIds, value: ids.join(','));

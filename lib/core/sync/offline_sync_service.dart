@@ -23,6 +23,7 @@ import '../db/patient_dao.dart';
 import '../db/patient_programmes_dao.dart';
 import '../db/pregnancy_snapshot_dao.dart';
 import '../db/referral_dao.dart';
+import '../db/roster_revision.dart';
 import '../db/sync_meta_dao.dart';
 import '../db/treatment_presence_dao.dart';
 import '../mission/mission_pregnancy_facts.dart';
@@ -248,14 +249,10 @@ class OfflineSyncService extends ChangeNotifier {
       debugPrint(
         '[OfflineSyncService] Bundle top-level keys: ${bundle.keys.toList()}',
       );
-      // Filter the bundle to this SK's caseload using SS worker IDs.
-      // The bundle is village-wide; households are scoped to the SK by
-      // shasthyaShebikaId (the SS worker assigned to each household).
-      // Android filters the same way — no `shasthyaKormiId` on members.
+      // The bundle is already scoped by the `villageIds` sent in the request —
+      // Android persists it verbatim, so no client-side caseload filter here.
       final ownerUserId = await _auth.userId();
-      final ssWorkerIds = await _auth.ssWorkerIds();
-      debugPrint('[OfflineSyncService] Bundle filter: ownerUserId=$ownerUserId ssWorkerIds=$ssWorkerIds');
-      var out = await _persistBundle(bundle, ownerUserId: ownerUserId, ssWorkerIds: ssWorkerIds);
+      var out = await _persistBundle(bundle, ownerUserId: ownerUserId);
       debugPrint(
         '[OfflineSyncService] Bundle persisted: patients=${out.patients} '
         'households=${out.households} members=${out.members} '
@@ -295,6 +292,13 @@ class OfflineSyncService extends ChangeNotifier {
         await _syncMeta.stampFull(_entityKey, report.finishedAt);
       } else {
         await _syncMeta.stampWarm(_entityKey, report.finishedAt);
+      }
+
+      // Server rows just landed — nudge any mounted roster screen to re-query.
+      // One bump per sync (not per row), so a large bundle can't turn into a
+      // reload storm.
+      if (totalHouseholds > 0 || totalMembers > 0 || out.patients > 0) {
+        bumpRosterRevision();
       }
 
       // Done!
@@ -379,7 +383,6 @@ class OfflineSyncService extends ChangeNotifier {
   Future<_PersistTotals> _persistBundle(
     Map<String, dynamic> bundle, {
     int? ownerUserId,
-    List<int> ssWorkerIds = const [],
   }) async {
     if (bundle.isEmpty) return const _PersistTotals();
 
@@ -474,36 +477,14 @@ class OfflineSyncService extends ChangeNotifier {
     final hhRefToVillage = <String, String>{};
     final hhRefToSubVillage = <String, String>{};
 
-    // SS worker IDs used to scope the bundle to this SK's caseload.
-    // Android filters households by shasthyaShebikaId matching the SK's
-    // assigned SS worker IDs. When no SS IDs are known, all households are kept.
-    final ssIdSet = ssWorkerIds.toSet();
-    final filteredHouseholdIds = <String>{};
-
     for (final raw in householdNodes) {
       if (raw is! Map) continue;
       final rawMap = Map<String, dynamic>.from(raw);
 
-      // Apply SS worker filter: only include households whose shasthyaShebikaId
-      // matches one of the SK's assigned SS workers. Households with a null or
-      // missing shasthyaShebikaId are excluded when the filter is active —
-      // those are unassigned/legacy records not part of this SK's caseload.
-      // When no SS IDs are known (first-run before static-data completes) the
-      // filter is skipped so the sync isn't left empty.
-      if (ssIdSet.isNotEmpty) {
-        final ssRaw = rawMap['shasthyaShebikaId'];
-        final ssId = ssRaw is int
-            ? ssRaw
-            : (ssRaw is num
-                ? ssRaw.toInt()
-                : (ssRaw is String ? int.tryParse(ssRaw.trim()) : null));
-        if (ssId == null || !ssIdSet.contains(ssId)) continue;
-      }
-
       final hh = HouseholdEntity.fromApiJson(rawMap);
-      if (hh.id.isNotEmpty) {
+      final hhFhir = hh.fhirId;
+      if (hhFhir != null && hhFhir.isNotEmpty) {
         households.add(hh);
-        filteredHouseholdIds.add(hh.id);
       }
 
       final ref = raw['referenceId']?.toString();
@@ -516,40 +497,28 @@ class OfflineSyncService extends ChangeNotifier {
     }
     debugPrint(
       '[OfflineSyncService] Parsed ${households.length} households from bundle '
-      '(${hhRefToVillage.length} with referenceId→village mapping, '
-      'ssFilter=${ssIdSet.isEmpty ? "none" : ssIdSet.toString()})',
+      '(${hhRefToVillage.length} with referenceId→village mapping)',
     );
 
     // ── Parse members from bundle (Android: ResponseInitialDownload) ────────
-    // Keep only members that belong to the SK's filtered households.
-    // When no household filter is active (filteredHouseholdIds empty and
-    // ssIdSet empty) all members pass through for backward compatibility.
     final members = <HouseholdMemberEntity>[];
     final ownedMemberIds = <String>{};
     for (final raw in memberNodes) {
       if (raw is! Map) continue;
       var m = HouseholdMemberEntity.fromApiJson(Map<String, dynamic>.from(raw));
-      if (m.id.isEmpty) continue;
+      // Need a FHIR id to merge; skip incomplete bundle rows.
+      if (m.fhirId == null || m.fhirId!.isEmpty) continue;
 
-      // Scope members to the SK's filtered households. When a household filter
-      // is active, exclude members with a null householdId (orphaned records)
-      // and members whose householdId isn't in the filtered set.
-      // Mirrors the household-level rule: null → exclude when filter is active.
-      if (filteredHouseholdIds.isNotEmpty) {
-        if (m.householdId == null || !filteredHouseholdIds.contains(m.householdId)) continue;
-      }
-
-      // Enrich village/sub-village from household if missing.
-      // Member.householdId = household.referenceId (the small internal ID).
-      if (m.householdId != null) {
-        final vid = m.villageId ?? hhRefToVillage[m.householdId!];
-        final svid = m.subVillageId ?? hhRefToSubVillage[m.householdId!];
+      // Enrich village/sub-village from household reference map if missing.
+      final hhKey = m.householdReferenceId ?? m.householdFhirId;
+      if (hhKey != null) {
+        final vid = m.villageId ?? hhRefToVillage[hhKey];
+        final svid = m.subVillageId ?? hhRefToSubVillage[hhKey];
         if (vid != m.villageId || svid != m.subVillageId) {
           m = m.copyWithVillage(villageId: vid, subVillageId: svid);
         }
       }
 
-      // Also try to capture shasthyaShebikaId from alternate raw key shapes.
       if (m.shasthyaShebikaId == null) {
         final ssRaw = raw['shasthyaShebikaId']
             ?? raw['shasthyaShebika']?['id']
@@ -568,59 +537,98 @@ class OfflineSyncService extends ChangeNotifier {
             : (skRaw is num
                 ? skRaw.toInt()
                 : (skRaw is String ? int.tryParse(skRaw.trim()) : null));
-        if (sk == ownerUserId) ownedMemberIds.add(m.id);
+        if (sk == ownerUserId) {
+          ownedMemberIds.add(m.fhirId!);
+        }
       }
     }
     debugPrint(
       '[OfflineSyncService] Parsed ${members.length} members from bundle '
       '(${ownedMemberIds.length} owned by user $ownerUserId)',
     );
-    // Verify household-member linking
+    // Verify household-member linking (by household FHIR id before local FK resolve)
     if (households.isNotEmpty && members.isNotEmpty) {
-      final householdIds = households.map((h) => h.id).toSet();
-      final linkedMembers = members.where((m) => m.householdId != null && householdIds.contains(m.householdId)).length;
-      final unassignedMembers = members.where((m) => m.householdId == null).length;
-      debugPrint('[OfflineSyncService] Member-household linking: $linkedMembers linked, $unassignedMembers unassigned');
+      final householdFhirIds =
+          households.map((h) => h.fhirId).whereType<String>().toSet();
+      final linkedMembers = members
+          .where((m) =>
+              m.householdFhirId != null &&
+              householdFhirIds.contains(m.householdFhirId))
+          .length;
+      final unassignedMembers =
+          members.where((m) => m.householdFhirId == null).length;
+      debugPrint(
+          '[OfflineSyncService] Member-household linking: $linkedMembers linked, '
+          '$unassignedMembers unassigned');
     }
 
-    // uhis-dev backend ships `members` as the canonical patient list — the
-    // offline-sync bundle has no `patients` key. Bridge each member into the
-    // patients table so the worklist and mission dashboard can see them.
-    // Programme membership remains driven by the dedicated `pregnancyInfos` /
-    // `treatmentDetails` arrays parsed elsewhere; here we only need the
-    // identity columns the worklist query selects.
-    //
-    // Household-level filtering by shasthyaShebikaId already scoped members
-    // to this SK's caseload in the parsing loop above. Bridge all parsed
-    // members directly; no secondary ownership filter is needed.
-    if (patients.isEmpty && members.isNotEmpty) {
-      debugPrint(
-        '[OfflineSyncService] Bridging ${members.length} members → patients '
-        '(households filtered by ssIds=${ssIdSet.isEmpty ? "none" : ssIdSet.toString()})',
-      );
+    // Persist households and members — Spice merge by fhir_id, keep local PK.
+    // Patient bridge runs AFTER merge so patient.id = stable local member id.
+    final bridgedPatients = <Patient>[];
+    Map<String, String> hhFhirToLocal = {};
+    final memberFhirToLocal = <String, String>{};
+    if (households.isNotEmpty && _households != null) {
+      hhFhirToLocal = await _households.upsertManyFromBE(households);
+    }
+    var persistedMembers = 0;
+    var orphanMembers = 0;
+    if (members.isNotEmpty && _members != null) {
       for (final m in members) {
-        final p = _memberToPatient(m);
-        if (p != null) patients.add(p);
+        String? localHhId = m.householdFhirId != null
+            ? hhFhirToLocal[m.householdFhirId!]
+            : null;
+        if (localHhId == null &&
+            m.householdFhirId != null &&
+            _households != null) {
+          final existing = await _households.getByFhirId(m.householdFhirId!);
+          localHhId = existing?.id;
+        }
+        // A member that names a household we cannot resolve — neither in this
+        // bundle nor already local — would be unreachable from every household
+        // screen, so drop it rather than orphan it. Members with no household
+        // at all are kept; the enrolment flow assigns one later.
+        if (localHhId == null && m.householdFhirId != null) {
+          orphanMembers++;
+          continue;
+        }
+        final linked = m.copyWith(householdId: localHhId);
+        final localId = await _members.insertOrUpdateFromBE(linked);
+        memberFhirToLocal[m.fhirId!] = localId;
+        persistedMembers++;
+        final p = _memberToPatient(linked.copyWith(id: localId));
+        if (p != null) bridgedPatients.add(p);
       }
+      // members.patient_id must equal the local key the patients row uses, or
+      // the household screens (which look programmes/assessments up by it) and
+      // getByPatientId() find nothing.
+      await _members.backfillPatientIds();
       debugPrint(
-        '[OfflineSyncService] Derived ${patients.length} patients from members',
+        '[OfflineSyncService] Members persisted: $persistedMembers '
+        '($orphanMembers dropped — household FHIR id not resolvable)',
+      );
+    }
+
+    // uhis-dev backend ships `members` as the canonical patient list.
+    if (patients.isEmpty && bridgedPatients.isNotEmpty) {
+      patients.addAll(bridgedPatients);
+      debugPrint(
+        '[OfflineSyncService] Bridged ${patients.length} patients from members '
+        '(local PK identity)',
       );
     }
 
     // ── Programme inference from bundle side-tables ──────────────────────────
-    // The aggregate bundle ships member identity in `members` but programme
-    // membership in `pregnancyInfos` (ANC) and `followUps.encounterType`
-    // (NCD / TB / ICCM…). Build a memberId → patientId resolver from the
-    // members we just parsed, then merge any programme hits into the
-    // existing `programmes` map so the dashboard surfaces the right pills.
+    // Every id the bundle might use for a member resolves to that member's
+    // local PK — the same value `_memberToPatient` writes as `patients.id`.
+    // Keying side tables by a server id instead would hide the row from the
+    // worklist, which joins programmes and follow-ups on `patients.id`.
     final memberIdToPatientId = <String, String>{};
     for (final m in members) {
-      final pid = (m.patientId != null && m.patientId!.isNotEmpty)
-          ? m.patientId!
-          : m.id;
-      memberIdToPatientId[m.id] = pid;
-      if (m.patientId != null && m.patientId!.isNotEmpty) {
-        memberIdToPatientId[m.patientId!] = pid;
+      final localId = memberFhirToLocal[m.fhirId] ?? m.id;
+      if (localId.isEmpty || localId == '0') continue;
+      for (final alias in [localId, m.id, m.fhirId, m.referenceId, m.patientId]) {
+        if (alias == null || alias.isEmpty || alias == '0') continue;
+        memberIdToPatientId[alias] = localId;
       }
     }
     void mergeProgramme(String? patientKey, Programme? programme) {
@@ -790,20 +798,6 @@ class OfflineSyncService extends ChangeNotifier {
       }
     }
 
-    // Persist households and members if found in bundle and DAOs are available
-    if (households.isNotEmpty && _households != null) {
-      // Remove local placeholder rows (id = local UUID) before inserting
-      // FHIR-keyed rows from server to prevent duplicate household groups.
-      await _households.removeLocalPlaceholders(households);
-      await _households.upsertMany(households);
-    }
-    if (members.isNotEmpty && _members != null) {
-      // Remove local placeholder rows (id = local UUID) before inserting
-      // FHIR-keyed rows from server to prevent members appearing in two groups.
-      await _members.removeLocalPlaceholders(members);
-      await _members.upsertMany(members);
-    }
-
     // Back-propagate village data via in-memory map (handles rows saved by
     // earlier syncs without enrichment). Idempotent — already-set rows skipped.
     if (_members != null && hhRefToVillage.isNotEmpty) {
@@ -854,7 +848,7 @@ class OfflineSyncService extends ChangeNotifier {
       immunisations: immunisations.length,
       assessments: assessments.length,
       households: households.length,
-      members: members.length,
+      members: persistedMembers,
       referrals: referralCount,
     );
   }
@@ -882,11 +876,11 @@ class OfflineSyncService extends ChangeNotifier {
       }
     }
     return Patient(
-      // Prefer the explicit patientId when the backend has minted one, else
-      // fall back to the member's own UUID so every member shows up exactly
-      // once in the patients table.
-      id: (m.patientId != null && m.patientId!.isNotEmpty) ? m.patientId! : m.id,
-      patientId: m.patientId,
+      // Stable local member PK — never swap for FHIR (Option A / Spice).
+      id: m.id,
+      // Server-facing id kept in its own column; `fhir_id` is authoritative
+      // because `members.patient_id` mirrors the local key (see backfillPatientIds).
+      patientId: m.fhirId ?? m.patientId,
       name: m.name,
       gender: m.gender,
       dob: m.dob,
@@ -1592,8 +1586,8 @@ class OfflineSyncService extends ChangeNotifier {
         debugPrint('[OfflineSyncService] Fetched ${ids.length} sub-village IDs from static-data fallback');
       }
 
-      // Extract SS worker IDs (shasthyaShebikas[].id) — used to filter bundle
-      // households by shasthyaShebikaId so only the SK's caseload is stored.
+      // Extract SS worker IDs (shasthyaShebikas[].id) — cached for read-time
+      // caseload views. Never used to filter what the sync stores.
       final ssWorkerIds = (ssRaw is List)
           ? ssRaw
               .whereType<Map>()

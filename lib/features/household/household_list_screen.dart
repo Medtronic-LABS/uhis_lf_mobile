@@ -10,6 +10,7 @@ import '../../core/db/assessment_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
+import '../../core/db/roster_revision.dart';
 import '../../core/mission/programme_reason.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/programme.dart';
@@ -24,6 +25,16 @@ import '../dashboard/mission_dashboard_repository.dart';
 import '../visit/widgets/mission_queue_card.dart' show programmeBadgeColors;
 import 'household_detail_screen.dart';
 
+/// Watches the Patients branch navigator; registered in `router.dart`.
+///
+/// `/patients` and `/patients/households` both render this screen, so a
+/// `go('/patients/households')` (used when the enrollment flow finishes)
+/// stacks a second copy on top of the first. When that copy is later removed,
+/// the original is revealed still holding the roster it queried on open. This
+/// observer lets it notice and re-read.
+final RouteObserver<ModalRoute<void>> patientsRouteObserver =
+    RouteObserver<ModalRoute<void>>();
+
 /// The Patients tab — a single household-card list matching the v13
 /// mockup's `#householdsScreen` exactly (navy header, village tabs, search,
 /// one unified list — no Households/Members tab split), alongside the
@@ -36,7 +47,8 @@ class HouseholdListScreen extends StatefulWidget {
   State<HouseholdListScreen> createState() => _HouseholdListScreenState();
 }
 
-class _HouseholdListScreenState extends State<HouseholdListScreen> {
+class _HouseholdListScreenState extends State<HouseholdListScreen>
+    with RouteAware {
   Future<List<_HouseholdItem>>? _future;
   final ScrollController _scrollController = ScrollController();
 
@@ -65,6 +77,19 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         _loadQueueItems();
       }
     });
+    // This screen lives inside the nav shell's IndexedStack, so it stays
+    // mounted while the user is on another tab and gets no callback when they
+    // come back. Enrollment finishes with go('/home') — not a pop — so
+    // didPopNext never fires for it either, and the new household would stay
+    // invisible here until the app restarted.
+    rosterRevision.addListener(_onRosterChanged);
+  }
+
+  void _onRosterChanged() {
+    if (!mounted) return;
+    debugPrint('[_HouseholdListScreenState] roster revision changed — reloading');
+    _loadData();
+    _loadQueueItems();
   }
 
   /// Loads the mission queue so a household's flagged member (if any) can
@@ -90,8 +115,26 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      patientsRouteObserver.subscribe(this, route);
+    }
+  }
+
+  /// A route above this one was popped — households or members may have been
+  /// created while it was covered.
+  @override
+  void didPopNext() {
+    if (mounted) _loadData();
+  }
+
+  @override
   void dispose() {
     debugPrint('[_HouseholdListScreenState] dispose');
+    rosterRevision.removeListener(_onRosterChanged);
+    patientsRouteObserver.unsubscribe(this);
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -626,14 +669,19 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     return haystack.contains(query);
   }
 
-  void _navigateToDetail(BuildContext context, _HouseholdItem item) {
+  Future<void> _navigateToDetail(
+      BuildContext context, _HouseholdItem item) async {
     debugPrint('[_HouseholdListScreenState] _navigateToDetail id=${item.id}');
     final id = item.id;
     if (id == null || id.isEmpty) {
       debugPrint('[HouseholdList] Skipping nav — household has empty ID');
       return;
     }
-    context.push('/patients/household/$id', extra: item.toDetailData());
+    await context.push('/patients/household/$id', extra: item.toDetailData());
+    // A member may have been added from the detail screen. This list only
+    // queries on init, so without this the card's member count (and the header
+    // totals) would keep showing the roster as it was when the screen opened.
+    if (mounted) _loadData();
   }
 
   void _navigateToMemberDetail(BuildContext context, _MemberInfo member) {
