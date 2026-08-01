@@ -19,9 +19,8 @@ import '../visit/triage/ai_scribe_triage_vocab.dart';
 /// `AiScribeBanner`'s `symptomVocab` param sends this app's own vocabulary to
 /// the server, which returns real per-code confidence directly (see
 /// `RealtimeSymptomCodes`), no keyword matching needed. Both migrated call
-/// sites (`symptom_picker_screen.dart`, `new_patient_visit_screen.dart`) no
-/// longer use this class. Left in place for one release as a rollback safety
-/// margin before deletion.
+/// site (`symptom_picker_screen.dart`) no longer uses this class. Left in
+/// place for one release as a rollback safety margin before deletion.
 @Deprecated(
   'Superseded by AiScribeBanner.symptomVocab + RealtimeSymptomCodes, which '
   'get real per-code confidence directly from the server instead of '

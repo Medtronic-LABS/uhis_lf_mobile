@@ -923,30 +923,6 @@
   "bn": "উচ্চ রক্তচাপ স্ক্রিনিং",
   "en": "Hypertension screening"
  },
- "NewPatientVisit.eligibleServicesHeader": {
-  "bn": "✦ উপযুক্ত সেবা",
-  "en": "✦ Eligible services"
- },
- "NewPatientVisit.eligibleServicesTag": {
-  "bn": "বয়স ও লিঙ্গ ভিত্তিক",
-  "en": "Age & gender based"
- },
- "NewPatientVisit.pwHint": {
-  "bn": "⚠ ANC আনলক করতে আগে 'PW' নির্বাচন করুন",
-  "en": "⚠ Select 'PW' first to unlock ANC"
- },
- "NewPatientVisit.searchHint": {
-  "bn": "লক্ষণ খুঁজুন...",
-  "en": "Search symptoms..."
- },
- "NewPatientVisit.step1Label": {
-  "bn": "১. আপনি কেমন আছেন?",
-  "en": "1. How are you?"
- },
- "NewPatientVisit.step3Label": {
-  "bn": "৩. সারাংশ",
-  "en": "3. Summary"
- },
  "Onboarding.notAvailable": {
   "bn": "পাওয়া যাচ্ছে না",
   "en": "Not available"
@@ -4707,14 +4683,6 @@
   "bn": "{n} টি পরিবার",
   "en": "{n} households"
  },
- "howFeelFemale": {
-  "bn": "আজ তার কেমন লাগছে? 🎙",
-  "en": "How is she feeling today? 🎙"
- },
- "howFeelMale": {
-  "bn": "আজ তার কেমন লাগছে? 🎙",
-  "en": "How is he feeling today? 🎙"
- },
  "htn": {
   "bn": "উচ্চ রক্তচাপ",
   "en": "Hypertension"
@@ -5794,10 +5762,6 @@
  "noSsAssigned": {
   "bn": "নির্ধারিত নেই",
   "en": "Not assigned"
- },
- "noSymptomsFound": {
-  "bn": "কোনো লক্ষণ পাওয়া যায়নি",
-  "en": "No symptoms found"
  },
  "noSymptomsGuard": {
   "bn": "কোনো লক্ষণ নির্বাচিত নয় — এগিয়ে যাওয়ার আগে লক্ষণ চেক করুন।",
@@ -7343,10 +7307,6 @@
   "bn": "📋  সেবা নির্বাচন করুন",
   "en": "📋  Select service"
  },
- "selectServiceCta": {
-  "bn": "চালিয়ে যেতে একটি সেবা নির্বাচন করুন",
-  "en": "Select a service to continue"
- },
  "selectStatus": {
   "bn": "রোগীর বর্তমান অবস্থা নির্বাচন করুন",
   "en": "Select the patient's current status"
@@ -7630,10 +7590,6 @@
  "startVisit": {
   "bn": "ভিজিট শুরু করুন",
   "en": "Start Visit"
- },
- "startVisitCta": {
-  "bn": "ভিজিট শুরু করুন →",
-  "en": "Start Visit →"
  },
  "startingButton": {
   "bn": "শুরু হচ্ছে...",

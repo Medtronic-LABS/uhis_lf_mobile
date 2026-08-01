@@ -318,6 +318,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           currentData: notifier.data,
           gestationalWeeks: effectiveGa,
           enrolledFormTypes: widget.enrolledFormTypes,
+          ageInMonths: widget.ageInMonths,
         );
         final outcomeValue = notifier.data.getValue('deliveryOutcomeType');
         if (widget.activeFormTypes.contains('pregnancyOutcome')) {
