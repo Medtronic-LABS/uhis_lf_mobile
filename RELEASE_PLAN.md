@@ -6,6 +6,33 @@ CI workflow) now exist, and the privacy/data-deletion policy questions are decid
 this document is either a fact gathered from the repo or a manual step for whoever holds Play Console
 access — nothing past this point has been submitted anywhere.
 
+**Follow-up session (2026-08-01):**
+- `env.production.json` updated to real production values: `API_BASE_URL=https://uhis-next-backend.labsplatform.com/`,
+  `PASSWORD_HASH_KEY=spice_uhis` (previously pointed at a dev backend despite the filename).
+- All 5 CI signing secrets pushed to the GitHub repo (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+  `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `ENV_PRODUCTION_JSON_BASE64`) so `.github/workflows/release.yml`
+  can build/sign in CI without any local secrets.
+- A rebuild against these values hit a genuine compile error unrelated to this work: PR #464
+  ("household and member changes and sync fix"), merged to `main` earlier the same day, added
+  `pollAndApplyFhirIds` to `enrollment_repository.dart` using `HouseholdDao?`/`MemberDao?` params
+  without importing either class. Fixed on a separate branch/PR
+  ([#486](https://github.com/Medtronic-LABS/uhis_lf_mobile/pull/486), not merged directly to `main`) —
+  two missing import lines, verified with `flutter analyze`. The `.aab` for this session was built
+  from that fix branch pending PR review/merge.
+- Screenshot capture deferred: the integration test's hardcoded `hyper_sk`/`Spice123` test account
+  is unconfirmed against the new `uhis-next-backend.labsplatform.com` backend.
+- Listing-copy fields needing a real business decision (contact support email, sponsoring org/region
+  framing in the full description) are intentionally still bracketed placeholders in §5 — not invented here.
+- **Local build gotcha**: this machine's `/usr/bin/keytool` is a Java-not-installed stub (no system JDK),
+  so `scripts/release.sh` silently failed at the signer-verification step until `JAVA_HOME` was pointed
+  at Homebrew's `openjdk@21` (`export JAVA_HOME=/opt/homebrew/opt/openjdk@21`). CI is unaffected — it
+  already uses `actions/setup-java@v4` with temurin 21 — but any other engineer building locally needs
+  the same `JAVA_HOME` export (or an installed JDK) for the release script's signer check to run at all.
+- **Result**: signed `.aab` built and verified from the fix branch —
+  `build/app/outputs/bundle/release/app-release.aab` (70MB), SHA-256
+  `DA:32:CB:B0:59:15:94:EA:F6:3B:FA:3D:3C:54:A6:F3:57:37:12:5C:46:99:AA:A3:2B:D8:59:91:6D:B0:3B:26`,
+  matching the upload keystore from §2.
+
 Decisions locked in for this plan (confirmed with the requester):
 - **Play Console account**: Organization (Workspace-verified) → no forced 14-day closed-testing gate;
   Internal testing can promote directly to Production.
