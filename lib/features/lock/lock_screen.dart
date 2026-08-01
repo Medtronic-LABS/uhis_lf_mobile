@@ -103,7 +103,7 @@ class _LockScreenState extends State<LockScreen> {
         children: [
           // ── Dark navy header ────────────────────────────────────────────
           const LockProgramHeader(
-            title: LockStrings.aponSushashthya,
+            title: LockStrings.leapwell,
             pageCount: 8,
             currentPage: 0,
           ),
@@ -318,7 +318,12 @@ class _LockContentState extends State<LockContent>
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('🔢 ', style: TextStyle(fontSize: 16)),
+                      // Was a '🔢 ' emoji glyph — inconsistent color/weight
+                      // vs. every other icon on this screen (fingerprint,
+                      // chevron, connectivity dot), and rendering varies by
+                      // OS emoji font. An Icon matches those exactly.
+                      const Icon(Icons.dialpad_outlined, size: 16, color: AppColors.navy),
+                      const SizedBox(width: 8),
                       Text(LockStrings.orUsePin(AppConfig.pinLength)),
                     ],
                   ),

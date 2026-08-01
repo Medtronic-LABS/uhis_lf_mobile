@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -138,14 +139,22 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     const SizedBox(height: 32),
                     Center(
+                      child: SvgPicture.asset(
+                        // Foreground-only layer (no card/background fill,
+                        // unlike leapwell-icon.svg) — bare mark for the
+                        // login header.
+                        'assets/images/leapwell-icon-foreground.svg',
+                        width: 88,
+                        height: 88,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
                       child: Text(
                         AppStrings.appName,
-                        style: TextStyle(
-                          fontFamily: AppFonts.display,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
+                        style: AppTextStyles.brandWordmark.copyWith(
+                          fontSize: 27.2, // 32 * 0.85 — brief asked for -15%
                           color: AppColors.pink,
-                          letterSpacing: -0.5,
                         ),
                       ),
                     ),
@@ -235,7 +244,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       autocorrect: false,
                       decoration: InputDecoration(
                         labelText: LoginStrings.usernameLabel,
-                        border: const OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.field),
+                        ),
                       ),
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? CommonStrings.required
@@ -247,7 +258,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
                         labelText: LoginStrings.passwordLabel,
-                        border: const OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.field),
+                        ),
                         suffixIcon: IconButton(
                           tooltip: _obscurePassword
                               ? 'Show password'

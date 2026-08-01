@@ -126,9 +126,10 @@ abstract final class LoginStrings {
 /// Lock / unlock screen + mid-session lock barrier.
 ///
 /// Pilot slice of the localization seam (see [LoginStrings] doc comment).
-/// `aponSushashthya`/`aponSushashthyaBn`/`programName`/`programSubtitle` are
-/// NOT converted — they're the app's bilingual brand lockup, always shown
-/// together regardless of UI language, not alternates of each other.
+/// `aponSushashthya`/`aponSushashthyaBn`/`programSubtitle` are NOT
+/// converted — they're the app's bilingual brand tagline, always shown
+/// beneath the [leapwell] header regardless of UI language, not alternates
+/// of each other.
 abstract final class LockStrings {
   LockStrings._();
 
@@ -161,9 +162,10 @@ abstract final class LockStrings {
   static String get verifyFingerprint => getTranslatedString('verifyFingerprint', 'Verify fingerprint');
   static String get tapToPlaceFinger => getTranslatedString('tapToPlaceFinger', 'Touch sensor to begin');
   static String get tapToPlaceFingerSubtitle => getTranslatedString('tapToPlaceFingerSubtitle', 'Tap to place your finger and sign in');
-  /// Primary splash-screen title. LEAPWELL and Apon Sushashthya were both
-  /// approved by BRAC; LEAPWELL is the app's primary name for recall, with
-  /// Apon Sushashthya shown as the tagline beneath it (see [aponSushashthya]).
+  /// Primary header text for the splash and lock screens. LEAPWELL and Apon
+  /// Sushashthya were both approved by BRAC; LEAPWELL is the app's primary
+  /// name for recall, with Apon Sushashthya shown as the tagline/subtitle
+  /// beneath it (see [aponSushashthya], [programSubtitle]).
   static const String leapwell = 'LEAPWELL';
   static const String aponSushashthya = 'Apon Sushashthya';
   static const String aponSushashthyaBn = 'আপন সুস্বাস্থ্য';
@@ -171,7 +173,6 @@ abstract final class LockStrings {
   static String get readingFingerprint => getTranslatedString('readingFingerprint', 'Reading fingerprint…');
   static String get fingerprintVerified => getTranslatedString('fingerprintVerified', 'Verified!');
   static String get communityHealth => getTranslatedString('communityHealth', 'Community Health');
-  static String get programName => getTranslatedString('programName', 'Apon Sushashthya');
   static String get programSubtitle => getTranslatedString('programSubtitle', 'Apon Sushashthya · Community Health');
   static String orUsePin(int len) => getTranslatedString('orUsePin', 'Use {len}-digit PIN', params: {'len': '$len'});
 }
