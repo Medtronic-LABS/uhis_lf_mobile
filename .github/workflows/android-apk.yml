@@ -1,14 +1,20 @@
 name: Android APK
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
-      - '**'
+      - main
   workflow_dispatch:
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
     steps:
       - uses: actions/checkout@v7
@@ -52,6 +58,10 @@ jobs:
 
       - name: Build release APK
         run: scripts/build_apk.sh ci --release
+
+      - name: SonarQube analysis
+        if: ${{ env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
 
       - uses: actions/upload-artifact@v7
         with:
