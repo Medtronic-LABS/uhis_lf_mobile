@@ -107,13 +107,25 @@ class AssessmentRepository extends ChangeNotifier {
       'encounterId': ?encounterId,
     };
 
-    final entity = LocalAssessmentEntity(
-      id: id,
+    // Screens hand us whatever id they had on hand, which since the local-PK
+    // migration is usually the member's autoincrement id rather than its FHIR
+    // id. Resolve against the member row here so the stored assessment carries
+    // the same identity Android writes.
+    final identity = await _resolveEncounterIdentity(
       householdMemberLocalId: householdMemberLocalId,
       memberId: memberId,
       householdId: householdId,
       patientId: patientId,
       villageId: villageId,
+    );
+
+    final entity = LocalAssessmentEntity(
+      id: id,
+      householdMemberLocalId: householdMemberLocalId,
+      memberId: identity.memberId,
+      householdId: identity.householdId,
+      patientId: identity.patientId,
+      villageId: identity.villageId,
       assessmentType: assessmentType.toUpperCase(),
       assessmentDetails: jsonEncode(assessmentDetails),
       otherDetails: enrichedOtherDetails.isNotEmpty
@@ -139,6 +151,74 @@ class AssessmentRepository extends ChangeNotifier {
     await _refreshPendingCount();
 
     return id;
+  }
+
+  /// Resolve the encounter identity from the member row, mirroring the join
+  /// Android's `AssessmentDAO` does at sync time. Caller-supplied values win
+  /// only when the member row has nothing better to offer.
+  Future<({
+    String? memberId,
+    String? householdId,
+    String? patientId,
+    String? villageId,
+  })> _resolveEncounterIdentity({
+    required int householdMemberLocalId,
+    String? memberId,
+    String? householdId,
+    String? patientId,
+    String? villageId,
+  }) async {
+    String? keep(String? value) => value?.isNotEmpty == true ? value : null;
+
+    final dao = _memberDao;
+    if (dao == null) {
+      return (
+        memberId: memberId,
+        householdId: householdId,
+        patientId: patientId,
+        villageId: villageId,
+      );
+    }
+
+    try {
+      var member = householdMemberLocalId > 0
+          ? await dao.getById('$householdMemberLocalId')
+          : null;
+      if (member == null && keep(patientId) != null) {
+        member = await dao.getByPatientId(patientId!);
+      }
+      if (member == null) {
+        debugPrint(
+            '[Assessment] identity unresolved — localId=$householdMemberLocalId '
+            'patientId=$patientId; storing caller-supplied ids');
+        return (
+          memberId: memberId,
+          householdId: householdId,
+          patientId: patientId,
+          villageId: villageId,
+        );
+      }
+      final resolved = (
+        memberId: keep(member.fhirId) ?? keep(memberId),
+        householdId: keep(member.householdFhirId) ?? keep(householdId),
+        patientId: keep(patientId) ?? keep(member.patientId),
+        villageId: keep(villageId) ??
+            keep(member.subVillageId) ??
+            keep(member.villageId),
+      );
+      debugPrint(
+          '[Assessment] identity resolved — member=${resolved.memberId} '
+          'household=${resolved.householdId} village=${resolved.villageId}');
+      return resolved;
+    } catch (e) {
+      debugPrint('[Assessment] identity lookup failed: $e');
+      return (
+        memberId: memberId,
+        householdId: householdId,
+        patientId: patientId,
+        villageId: villageId,
+      );
+    }
   }
 
   /// Batch sync all pending assessments via `offline-sync/create` matching Android.
@@ -178,7 +258,13 @@ class AssessmentRepository extends ChangeNotifier {
       // only retries pending + networkError (server rejections stay failed).
       final includeFailed =
           syncMode == 'ManualSync' || syncMode == 'InitialSync';
-      final pending = await _dao.getUnsynced(includeFailed: includeFailed);
+      final queue = await _dao.getUnsyncedForPush(includeFailed: includeFailed);
+      final pending = queue.ready;
+      if (queue.blocked.isNotEmpty) {
+        debugPrint(
+            '[AssessmentSync] Holding ${queue.blocked.length} assessment(s) — '
+            'member or household not registered server-side yet');
+      }
       debugPrint('[AssessmentSync] Pending count: ${pending.length} (syncMode=$syncMode)');
       if (pending.isEmpty) return 0;
 
@@ -362,12 +448,49 @@ class AssessmentRepository extends ChangeNotifier {
         debugPrint(
             '[AssessmentSync] Queue accepted (HTTP $status) — polling status '
             'for requestId=$requestId');
-        final terminal = await _pollOfflineSyncStatus(
+        final poll = await _pollOfflineSyncStatus(
           requestId: requestId,
           deviceId: deviceId,
         );
-        if (terminal == _OfflineSyncPollResult.success) {
-          await _dao.updateSyncStatus(ids, AssessmentSyncStatus.success);
+        if (poll.overall == _OfflineSyncPollResult.inProgress) {
+          // Leave rows inProgress (not pending) so the next sync does not
+          // re-POST duplicates. Stuck reclaim is age-gated in
+          // LocalAssessmentDao.resetStuckInProgress.
+          debugPrint(
+              '[AssessmentSync] Status still InProgress after polls — leaving '
+              '${ids.length} as inProgress (requestId=$requestId)');
+          return 0;
+        }
+
+        // Attribute each verdict to the assessment the server named. Anything
+        // it did not name inherits the batch outcome.
+        final succeededIds = <String>[];
+        final failedIds = <String>[];
+        for (final entity in assessments) {
+          final reported = entity.referenceId == null
+              ? null
+              : poll.assessmentStatusByReference[entity.referenceId];
+          final ok = reported == null
+              ? poll.overall == _OfflineSyncPollResult.success
+              : reported == 'Success';
+          (ok ? succeededIds : failedIds).add(entity.id);
+          final fhirId = entity.referenceId == null
+              ? null
+              : poll.assessmentFhirIdByReference[entity.referenceId];
+          if (ok && fhirId != null && fhirId.isNotEmpty) {
+            await _dao.applyFhirIdByReferenceId(entity.referenceId!, fhirId);
+          }
+        }
+
+        if (failedIds.isNotEmpty) {
+          await _dao.updateSyncStatus(failedIds, AssessmentSyncStatus.failed);
+        }
+        if (succeededIds.isNotEmpty) {
+          await _dao.updateSyncStatus(
+              succeededIds, AssessmentSyncStatus.success);
+        }
+
+        if (failedIds.isEmpty) {
           debugPrint('[AssessmentSync] Marked ${ids.length} as success');
           if (pushedFollowUpIds.isNotEmpty && _followUpCalls != null) {
             try {
@@ -389,21 +512,13 @@ class AssessmentRepository extends ChangeNotifier {
           }
           return ids.length;
         }
-        if (terminal == _OfflineSyncPollResult.failed) {
-          await _dao.updateSyncStatus(ids, AssessmentSyncStatus.failed);
-          debugPrint(
-              '[AssessmentSync] ✗ Status poll reported Failed — marked '
-              '${ids.length} as failed');
-          throw StateError(
-              'Batch sync Failed for requestId=$requestId (status poll)');
-        }
-        // Still InProgress after retries — leave rows inProgress (not pending)
-        // so the next sync does not re-POST duplicates. Stuck reclaim is
-        // age-gated in LocalAssessmentDao.resetStuckInProgress.
+
         debugPrint(
-            '[AssessmentSync] Status still InProgress after polls — leaving '
-            '${ids.length} as inProgress (requestId=$requestId)');
-        return 0;
+            '[AssessmentSync] ✗ Status poll reported Failed — marked '
+            '${failedIds.length} as failed, ${succeededIds.length} as success');
+        throw StateError(
+            'Batch sync Failed for requestId=$requestId (status poll): '
+            '${failedIds.length} of ${ids.length} assessment(s) rejected');
       } else {
         // Server returned an error response — mark as failed (not network error).
         // Failed assessments are NOT automatically retried; require manual sync.
@@ -1171,7 +1286,7 @@ class AssessmentRepository extends ChangeNotifier {
   /// or [maxAttempts] is exhausted. Mirrors Android
   /// `ScheduledSyncWork.getSyncStatus` (4 × 10s) /
   /// `OfflineSyncRepository.getSyncStatusForOffline`.
-  Future<_OfflineSyncPollResult> _pollOfflineSyncStatus({
+  Future<_OfflineSyncPollOutcome> _pollOfflineSyncStatus({
     required String requestId,
     required String deviceId,
     int maxAttempts = 4,
@@ -1179,6 +1294,8 @@ class AssessmentRepository extends ChangeNotifier {
   }) async {
     final userId = await _auth.userId();
     var sawFailed = false;
+    final statusByReference = <int, String>{};
+    final fhirIdByReference = <int, String>{};
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
@@ -1213,10 +1330,18 @@ class AssessmentRepository extends ChangeNotifier {
         for (final raw in entities) {
           if (raw is! Map) continue;
           final entityStatus = raw['status']?.toString() ?? '';
+          final reference = int.tryParse(raw['referenceId']?.toString() ?? '');
           debugPrint(
               '[AssessmentSync] status entity type=${raw['type']} '
               'ref=${raw['referenceId']} status=$entityStatus '
               'err=${raw['errorMessage']}');
+          if (raw['type']?.toString() == 'Assessment' && reference != null) {
+            statusByReference[reference] = entityStatus;
+            final fhirId = raw['fhirId']?.toString();
+            if (fhirId != null && fhirId.isNotEmpty && fhirId != 'null') {
+              fhirIdByReference[reference] = fhirId;
+            }
+          }
           if (entityStatus == 'InProgress') {
             anyInProgress = true;
           } else if (entityStatus == 'Failed') {
@@ -1224,9 +1349,13 @@ class AssessmentRepository extends ChangeNotifier {
           }
         }
         if (anyInProgress) continue;
-        return sawFailed
-            ? _OfflineSyncPollResult.failed
-            : _OfflineSyncPollResult.success;
+        return _OfflineSyncPollOutcome(
+          overall: sawFailed
+              ? _OfflineSyncPollResult.failed
+              : _OfflineSyncPollResult.success,
+          assessmentStatusByReference: statusByReference,
+          assessmentFhirIdByReference: fhirIdByReference,
+        );
       } on DioException catch (e) {
         debugPrint(
             '[AssessmentSync] status poll $attempt/$maxAttempts error: '
@@ -1234,13 +1363,31 @@ class AssessmentRepository extends ChangeNotifier {
         // Transport blip — keep trying; do not mark Failed yet.
       }
     }
-    return sawFailed
-        ? _OfflineSyncPollResult.failed
-        : _OfflineSyncPollResult.inProgress;
+    return _OfflineSyncPollOutcome(
+      overall: sawFailed
+          ? _OfflineSyncPollResult.failed
+          : _OfflineSyncPollResult.inProgress,
+      assessmentStatusByReference: statusByReference,
+      assessmentFhirIdByReference: fhirIdByReference,
+    );
   }
 }
 
 enum _OfflineSyncPollResult { success, failed, inProgress }
+
+/// Terminal verdict for the batch plus the per-assessment breakdown, keyed by
+/// the numeric `referenceId` the server echoes for each entity.
+class _OfflineSyncPollOutcome {
+  const _OfflineSyncPollOutcome({
+    required this.overall,
+    required this.assessmentStatusByReference,
+    required this.assessmentFhirIdByReference,
+  });
+
+  final _OfflineSyncPollResult overall;
+  final Map<int, String> assessmentStatusByReference;
+  final Map<int, String> assessmentFhirIdByReference;
+}
 
 enum _BiometricKind { height, weight }
 

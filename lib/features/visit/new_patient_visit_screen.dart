@@ -192,6 +192,7 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
         // payload matches Android: encounter.memberId = numeric referenceId,
         // assessment.villageId = patient's sub-village scope.
         String? resolvedMemberId;
+        String? resolvedHouseholdId;
         String? resolvedVillageId;
         int? resolvedLocalId;
         if (mounted) {
@@ -200,18 +201,18 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
           final patient = await patientDao.byId(widget.patientId);
           resolvedVillageId = patient?.villageId;
 
-          // Mirror PatientContextScreen._resolveEncounterMemberId():
-          // prefer numeric referenceId from member entity.
           final entity = await memberDao.getById(widget.patientId) ??
               await memberDao.getByPatientId(widget.patientId);
           if (entity != null) {
-            if (entity.referenceId?.isNotEmpty == true) {
-              resolvedMemberId = entity.referenceId;
-              resolvedLocalId = int.tryParse(entity.referenceId!);
-            } else if (int.tryParse(entity.id) != null) {
-              resolvedMemberId = entity.id;
-              resolvedLocalId = int.tryParse(entity.id);
-            }
+            // Encounter ids are server-facing; the local PK travels separately
+            // as householdMemberLocalId.
+            resolvedMemberId = entity.fhirId?.isNotEmpty == true
+                ? entity.fhirId
+                : (entity.referenceId?.isNotEmpty == true
+                    ? entity.referenceId
+                    : (int.tryParse(entity.id) != null ? entity.id : null));
+            resolvedHouseholdId = entity.householdFhirId;
+            resolvedLocalId = int.tryParse(entity.referenceId ?? entity.id);
           }
           // Fallback: patientId itself when member not yet in local DB
           // (e.g. freshly enrolled via household enrollment).
@@ -230,7 +231,9 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
             'patientId': widget.patientId,
             'patientName': widget.patientName,
             'memberId': resolvedMemberId,
-            'householdId': widget.householdId,
+            'householdId': resolvedHouseholdId?.isNotEmpty == true
+                ? resolvedHouseholdId
+                : widget.householdId,
             'villageId': resolvedVillageId,
             'householdMemberLocalId': ?resolvedLocalId,
             'patientAge': widget.patientAge,

@@ -16,12 +16,25 @@ enum AssessmentSyncStatus {
   networkError,
 }
 
+/// Split of the unsynced queue into assessments that can be pushed now and
+/// those whose member or household is not registered server-side yet.
+class PushableAssessments {
+  const PushableAssessments({required this.ready, required this.blocked});
+
+  /// Encounter identity resolved — safe to send.
+  final List<LocalAssessmentEntity> ready;
+
+  /// Held back until the member / household syncs; left untouched in the queue.
+  final List<LocalAssessmentEntity> blocked;
+}
+
 /// Local assessment entity for offline-first storage.
 ///
 /// Mirrors Android's AssessmentEntity with sync status tracking.
 class LocalAssessmentEntity {
   const LocalAssessmentEntity({
     required this.id,
+    this.referenceId,
     required this.householdMemberLocalId,
     this.memberId,
     this.householdId,
@@ -46,6 +59,11 @@ class LocalAssessmentEntity {
 
   /// Local unique ID (UUID).
   final String id;
+
+  /// Monotonic numeric id sent as the wire `referenceId`, matching Android's
+  /// `AssessmentEntity.id` (Long). Assigned by [LocalAssessmentDao.insert];
+  /// null only for rows written before schema v38 backfilled them.
+  final int? referenceId;
 
   /// Local household member ID (referenceId).
   final int householdMemberLocalId;
@@ -111,6 +129,7 @@ class LocalAssessmentEntity {
 
   Map<String, Object?> toDb() => {
         'id': id,
+        'reference_id': referenceId,
         'household_member_local_id': householdMemberLocalId,
         'member_id': memberId,
         'household_id': householdId,
@@ -136,6 +155,7 @@ class LocalAssessmentEntity {
   factory LocalAssessmentEntity.fromDb(Map<String, Object?> row) {
     return LocalAssessmentEntity(
       id: row['id'] as String,
+      referenceId: row['reference_id'] as int?,
       householdMemberLocalId: row['household_member_local_id'] as int,
       memberId: row['member_id'] as String?,
       householdId: row['household_id'] as String?,
@@ -168,6 +188,7 @@ class LocalAssessmentEntity {
 
   LocalAssessmentEntity copyWith({
     String? id,
+    int? referenceId,
     int? householdMemberLocalId,
     String? memberId,
     String? householdId,
@@ -191,6 +212,7 @@ class LocalAssessmentEntity {
   }) =>
       LocalAssessmentEntity(
         id: id ?? this.id,
+        referenceId: referenceId ?? this.referenceId,
         householdMemberLocalId:
             householdMemberLocalId ?? this.householdMemberLocalId,
         memberId: memberId ?? this.memberId,
@@ -253,14 +275,16 @@ class LocalAssessmentEntity {
     final isPregnancyType = pregnancyTypes.contains(assessmentType.toUpperCase());
 
     final request = <String, dynamic>{
-      // NOTE(referenceId): Android sends the assessment entity's own numeric DB PK
-      // (entity.id: Long). Flutter's PK is a UUID string, so we send the household
-      // member local integer ID instead — this is a known gap; the server uses it
-      // only as a client-side correlation key in the batch response.
-      'referenceId': householdMemberLocalId,
+      // Android sends the assessment row's own numeric PK. Ours is a UUID, so
+      // schema v38 carries a parallel numeric reference_id; pre-v38 rows that
+      // were never backfilled fall back to the member id as before.
+      'referenceId': referenceId ?? householdMemberLocalId,
       'assessmentType': wireType,
       'assessmentDetails': wrappedDetails,
-      'villageId': villageId,
+      // Android's Assessment.villageId is non-null (String), resolved from the
+      // household sub-village with a '0' fallback. A null here fails the whole
+      // entity server-side.
+      'villageId': villageId?.isNotEmpty == true ? villageId : '0',
       'assessmentDate': createdAt?.toUtc().toIso8601String(),
       'patientStatus': referralStatus ?? 'Recovered',
       // Android Assessment DTO has no top-level assessmentStatus — only
@@ -591,13 +615,27 @@ class LocalAssessmentDao {
 
   static const String tableName = 'local_assessments';
 
-  /// Save a new local assessment.
-  Future<void> insert(LocalAssessmentEntity entity) async {
-    await _db.db.insert(
-      tableName,
-      entity.toDb(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+  /// Save a new local assessment, assigning the numeric [
+  /// LocalAssessmentEntity.referenceId] the server correlates sync status by.
+  ///
+  /// Ids are handed out as `MAX + 1` rather than reusing `rowid`, so a deleted
+  /// row can never hand its number to a later assessment and collide with a
+  /// mapping the server already holds.
+  Future<int> insert(LocalAssessmentEntity entity) async {
+    return _db.db.transaction((txn) async {
+      var reference = entity.referenceId;
+      if (reference == null) {
+        final row = await txn
+            .rawQuery('SELECT MAX(reference_id) AS next FROM $tableName');
+        reference = ((row.first['next'] as int?) ?? 0) + 1;
+      }
+      await txn.insert(
+        tableName,
+        entity.copyWith(referenceId: reference).toDb(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      return reference;
+    });
   }
 
   /// Update an existing assessment.
@@ -633,6 +671,121 @@ class LocalAssessmentDao {
       orderBy: 'created_at ASC',
     );
     return rows.map(LocalAssessmentEntity.fromDb).toList();
+  }
+
+  /// Assessments eligible for upload, with their encounter identity resolved
+  /// from the live member / household rows.
+  ///
+  /// Android's `AssessmentDAO.getUnSyncedAssessments` joins HouseholdMember and
+  /// Household at sync time (`hhm.fhir_id as memberId, hh.fhir_id as
+  /// householdId`) rather than trusting whatever was stamped on the row when
+  /// the form was saved, and skips any assessment whose member (or household)
+  /// has not been registered server-side yet. Doing the same here keeps the
+  /// wire payload correct no matter which screen started the visit, and stops
+  /// us burning retries on an assessment the FHIR mapper cannot resolve.
+  Future<PushableAssessments> getUnsyncedForPush({
+    bool includeFailed = false,
+  }) async {
+    final statuses = <String>[
+      AssessmentSyncStatus.pending.name,
+      AssessmentSyncStatus.networkError.name,
+      if (includeFailed) AssessmentSyncStatus.failed.name,
+    ];
+    final placeholders = List.filled(statuses.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      'SELECT a.*, '
+      'm.fhir_id AS j_member_fhir, m.patient_id AS j_patient_id, '
+      'm.household_id AS j_member_household, '
+      'm.sub_village_id AS j_member_sub_village, '
+      'm.village_id AS j_member_village, '
+      'h.fhir_id AS j_household_fhir, '
+      'h.sub_village_id AS j_household_sub_village, '
+      'h.village_id AS j_household_village '
+      'FROM $tableName a '
+      'LEFT JOIN ${AppDatabase.tableMembers} m '
+      '  ON m.id = a.household_member_local_id '
+      'LEFT JOIN ${AppDatabase.tableHouseholds} h ON h.id = m.household_id '
+      'WHERE a.sync_status IN ($placeholders) '
+      'ORDER BY a.created_at ASC',
+      statuses,
+    );
+
+    // household_member_local_id can be 0 when the visit was started from a
+    // screen that never resolved it — recover those by patient id before
+    // deciding an assessment is unpushable.
+    final orphanPatientIds = rows
+        .where((r) => r['j_member_fhir'] == null)
+        .map((r) => r['patient_id'] as String?)
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    var rescue = const <String, Map<String, Object?>>{};
+    if (orphanPatientIds.isNotEmpty) {
+      final ph = List.filled(orphanPatientIds.length, '?').join(',');
+      final found = await _db.db.rawQuery(
+        'SELECT m.patient_id, m.fhir_id, m.household_id, m.sub_village_id, '
+        '  m.village_id, h.fhir_id AS household_fhir, '
+        '  h.sub_village_id AS household_sub_village, '
+        '  h.village_id AS household_village '
+        'FROM ${AppDatabase.tableMembers} m '
+        'LEFT JOIN ${AppDatabase.tableHouseholds} h ON h.id = m.household_id '
+        'WHERE m.patient_id IN ($ph)',
+        orphanPatientIds,
+      );
+      rescue = {
+        for (final r in found) r['patient_id'] as String: r,
+      };
+    }
+
+    final ready = <LocalAssessmentEntity>[];
+    final blocked = <LocalAssessmentEntity>[];
+    for (final row in rows) {
+      final entity = LocalAssessmentEntity.fromDb(row);
+      final fallback = rescue[row['patient_id']];
+
+      String? pick(String joined, String rescued) =>
+          (row[joined] as String?)?.isNotEmpty == true
+              ? row[joined] as String
+              : (fallback?[rescued] as String?);
+
+      final memberFhir = pick('j_member_fhir', 'fhir_id');
+      final householdFhir = pick('j_household_fhir', 'household_fhir');
+      final householdLocal = row['j_member_household'] ??
+          fallback?['household_id'];
+
+      // Android: `hhm.fhir_id IS NOT NULL AND (hh.id IS NULL OR hh.fhir_id IS
+      // NOT NULL)` — hold the assessment until its member (and household, when
+      // it has one) exists server-side.
+      if (memberFhir == null ||
+          (householdLocal != null && householdFhir == null)) {
+        blocked.add(entity);
+        continue;
+      }
+
+      final village = [
+        entity.villageId,
+        pick('j_household_sub_village', 'household_sub_village'),
+        pick('j_member_sub_village', 'sub_village_id'),
+        pick('j_household_village', 'household_village'),
+        pick('j_member_village', 'village_id'),
+      ].firstWhere(
+        (v) => v != null && v.isNotEmpty,
+        orElse: () => '0',
+      );
+
+      ready.add(
+        entity.copyWith(
+          memberId: memberFhir,
+          householdId: householdFhir,
+          patientId: entity.patientId?.isNotEmpty == true
+              ? entity.patientId
+              : pick('j_patient_id', 'patient_id'),
+          villageId: village,
+        ),
+      );
+    }
+    return PushableAssessments(ready: ready, blocked: blocked);
   }
 
   /// Count of assessments pending upload (pending + networkError).
@@ -727,6 +880,35 @@ class LocalAssessmentDao {
     await _db.db.rawUpdate(
       'UPDATE $tableName SET sync_status = ?, updated_at = ? WHERE id IN ($placeholders)',
       [status.name, DateTime.now().millisecondsSinceEpoch, ...ids],
+    );
+  }
+
+  /// Update sync status for the rows carrying [referenceIds], the numeric keys
+  /// `offline-sync/status` reports per entity.
+  Future<void> updateSyncStatusByReferenceIds(
+    List<int> referenceIds,
+    AssessmentSyncStatus status,
+  ) async {
+    if (referenceIds.isEmpty) return;
+    final placeholders = List.filled(referenceIds.length, '?').join(',');
+    await _db.db.rawUpdate(
+      'UPDATE $tableName SET sync_status = ?, updated_at = ? '
+      'WHERE reference_id IN ($placeholders)',
+      [status.name, DateTime.now().millisecondsSinceEpoch, ...referenceIds],
+    );
+  }
+
+  /// Stamp the server FHIR id onto the row carrying [referenceId].
+  Future<void> applyFhirIdByReferenceId(int referenceId, String fhirId) async {
+    await _db.db.update(
+      tableName,
+      {
+        'fhir_id': fhirId,
+        'sync_status': AssessmentSyncStatus.success.name,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'reference_id = ?',
+      whereArgs: [referenceId],
     );
   }
 

@@ -4152,11 +4152,12 @@ abstract final class EnrollmentStrings {
 
   // Spice household_registration.json names `village_id` "Union" and
   // `sub_village_id` "Village"; keep the same wording so SKs see the labels
-  // they were trained on in Android.
+  // they were trained on in Android. Keys are Enrollment-scoped so other
+  // screens that still say "Sub-Village" are unaffected.
   static String get villageLabel => getTranslatedString('Enrollment.villageLabel', 'Union');
-  static String get villageHint => getTranslatedString('villageHint', 'Select union');
-  static String get subVillageLabel => getTranslatedString('subVillageLabel', 'Village');
-  static String get subVillageHint => getTranslatedString('subVillageHint', 'Select village');
+  static String get villageHint => getTranslatedString('Enrollment.villageHint', 'Select union');
+  static String get subVillageLabel => getTranslatedString('Enrollment.subVillageLabel', 'Village');
+  static String get subVillageHint => getTranslatedString('Enrollment.subVillageHint', 'Select village');
 
   static String get householdTypeLabel => getTranslatedString('householdTypeLabel', 'Household Type');
   static const List<String> householdTypes = [
@@ -4191,7 +4192,7 @@ abstract final class EnrollmentStrings {
   static String get householdHeadTitle => getTranslatedString('householdHeadTitle', 'Household Head Information');
   static String get householdHeadSubtitle => getTranslatedString('householdHeadSubtitle', 'Step 2 of 2');
 
-  static String get headNameLabel => getTranslatedString('headNameLabel', 'Name');
+  static String get headNameLabel => getTranslatedString('headNameLabel', 'Household Head Name');
   static String get headNameHint => getTranslatedString('headNameHint', 'Head\'s full name');
 
   static String get fatherNameLabel => getTranslatedString('fatherNameLabel', 'Father\'s Name');

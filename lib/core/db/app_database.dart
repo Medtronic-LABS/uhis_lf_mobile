@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 37;
+  static const int schemaVersion = 38;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -402,6 +402,7 @@ class AppDatabase {
     await db.execute('''
       CREATE TABLE $tableLocalAssessments (
         id TEXT PRIMARY KEY,
+        reference_id INTEGER,
         household_member_local_id INTEGER NOT NULL,
         member_id TEXT,
         household_id TEXT,
@@ -427,6 +428,9 @@ class AppDatabase {
         'CREATE INDEX idx_local_assessments_patient ON $tableLocalAssessments(patient_id)');
     await db.execute(
         'CREATE INDEX idx_local_assessments_sync ON $tableLocalAssessments(sync_status)');
+    await db.execute(
+        'CREATE UNIQUE INDEX idx_local_assessments_reference '
+        'ON $tableLocalAssessments(reference_id) WHERE reference_id IS NOT NULL');
 
     // v8 — Tiered Mission Dashboard side tables (spec
     // leapfrog-setup/designs/dashboard-prioritization-impl.md).
@@ -1620,6 +1624,25 @@ class AppDatabase {
           if (!e.toString().contains('duplicate column')) rethrow;
         }
       }
+    }
+    if (from < 38) {
+      // v38 — assessments get their own numeric reference_id. offline-sync
+      // correlates every entity by a Long referenceId (Android sends the
+      // Assessment row PK); our PK is a UUID, so we were sending the member's
+      // local id instead. That collided across assessments for the same member
+      // and made a Failed entity impossible to attribute back to one row.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableLocalAssessments ADD COLUMN reference_id INTEGER');
+      } on DatabaseException catch (e) {
+        if (!e.toString().contains('duplicate column')) rethrow;
+      }
+      await db.execute(
+          'UPDATE $tableLocalAssessments SET reference_id = rowid '
+          'WHERE reference_id IS NULL');
+      await db.execute(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_assessments_reference '
+          'ON $tableLocalAssessments(reference_id) WHERE reference_id IS NOT NULL');
     }
   }
 

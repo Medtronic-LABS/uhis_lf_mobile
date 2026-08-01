@@ -92,13 +92,17 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
     final memberDao = context.read<MemberDao>();
     final programme = widget.data?.programme ?? Programme.unknown;
 
-    // Resolve numeric member ID so offline-sync/create has a valid referenceId.
-    // Without this, the FHIR mapper falls back to Group/{householdId} which may
-    // not exist in HAPI, producing a 400.
+    // Server-facing member id for the encounter — the FHIR mapper resolves the
+    // patient from it, and falls back to Group/{householdId} when it is absent.
     final member = await memberDao.getByPatientId(widget.patientId);
-    final memberId = member?.referenceId?.isNotEmpty == true
-        ? member!.referenceId
-        : member?.id;
+    final memberId = member?.fhirId?.isNotEmpty == true
+        ? member!.fhirId
+        : (member?.referenceId?.isNotEmpty == true
+            ? member!.referenceId
+            : member?.id);
+    final householdId = member?.householdFhirId?.isNotEmpty == true
+        ? member!.householdFhirId
+        : widget.data?.householdId;
     final householdMemberLocalId =
         int.tryParse(member?.referenceId ?? '') ??
         int.tryParse(member?.id ?? '') ??
@@ -129,7 +133,7 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
           'patientId': widget.patientId,
           'patientName': widget.data?.patientName,
           'memberId': memberId,
-          'householdId': widget.data?.householdId,
+          'householdId': householdId,
           'patientAge': widget.data?.patientAge,
           'patientGender': widget.data?.patientGender,
           'householdMemberLocalId': householdMemberLocalId,

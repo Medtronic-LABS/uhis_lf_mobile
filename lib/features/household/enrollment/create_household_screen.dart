@@ -102,7 +102,8 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     return {
       if (_selectedSsWorker == null) 'ssWorker': req,
       if (_selectedVillage == null) 'village': req,
-      if (_householdType == null) 'householdType': req,
+      // Household Type is optional — Spice household_registration.json sets
+      // isMandatory: false for household_type.
       if (_totalMembersCtrl.text.trim().isEmpty) 'totalMembers': req,
       if (_selectedOccupation == 'Other' &&
           _otherOccupationCtrl.text.trim().isEmpty)
@@ -188,11 +189,56 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       // point; _handleContinue fills them in via updateHousehold().
       await controller.initializeHousehold(healthWorkerId: '', villageId: '');
       if (!mounted) return;
+      // Spice pre-selects the only SS / Union when the SK has a single
+      // assignment so the SK doesn't have to tap a one-item dropdown.
+      _autoSelectSingleHierarchyOptions(hierarchy);
       debugPrint('[_CreateHouseholdScreenState] household initialised '
-          'no=${controller.household?.householdNumber}');
+          'no=${controller.household?.householdNumber} '
+          'ss=${_selectedSsWorker?.id} union=${_selectedVillage?.id} '
+          'village=${_selectedSubVillage?.id}');
       setState(() {}); // trigger rebuild so dropdowns populate their option lists
     });
 
+  }
+
+  /// When the SK has exactly one SS and/or one Union, pre-select them (and
+  /// cascade the dependent Village). Mirrors Spice's single-option spinner
+  /// default so enrollment doesn't stall on an obvious choice.
+  void _autoSelectSingleHierarchyOptions(UserHierarchyService hierarchy) {
+    final ssWorkers = hierarchy.ssWorkers ?? const <SsWorker>[];
+    final villages = hierarchy.villages ?? const <VillageRef>[];
+
+    if (_selectedSsWorker == null && ssWorkers.length == 1) {
+      final ss = ssWorkers.first;
+      _selectedSsWorker = ss;
+      final ssSubs = ss.subVillages;
+      final parentVillageId =
+          ssSubs.isNotEmpty ? ssSubs.first.villageId : null;
+      if (parentVillageId != null) {
+        final matches =
+            villages.where((v) => v.id == parentVillageId).toList();
+        if (matches.isNotEmpty) _selectedVillage = matches.first;
+      }
+      if (ssSubs.length == 1) {
+        _selectedSubVillage = ssSubs.first;
+      }
+    }
+
+    if (_selectedVillage == null && villages.length == 1) {
+      _selectedVillage = villages.first;
+    }
+
+    if (_selectedSubVillage == null && _selectedVillage != null) {
+      final ssSubs = _selectedSsWorker?.subVillages ?? const <SubVillageRef>[];
+      final List<SubVillageRef> candidates = ssSubs.isNotEmpty
+          ? ssSubs
+          : (hierarchy.subVillages ?? const <SubVillageRef>[])
+              .where((sv) => sv.villageId == _selectedVillage!.id)
+              .toList();
+      if (candidates.length == 1) {
+        _selectedSubVillage = candidates.first;
+      }
+    }
   }
 
   @override
@@ -565,7 +611,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                         _householdType = v;
                         _fieldErrors.remove('householdType');
                       }),
-                      isRequired: true,
+                      isRequired: false,
                       errorText: _fieldErrors['householdType'],
                     ),
                     const SizedBox(height: 14),
