@@ -589,29 +589,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       'selected programmes: ${_selectedProgrammes.map((p) => p.name).join(', ')}',
     );
 
-    // Guard: only block when there is truly no programme context —
-    // no enrolled programmes, no activated pathways, no symptoms.
-    // Enrolled patients always proceed: enrolment alone determines the form.
-    final hasEnrolledProgrammes =
-        _patientContext!.activeProgrammes.isNotEmpty;
-    if (vm.selectedSymptoms.isEmpty &&
-        vm.activatedPathways.isEmpty &&
-        !hasEnrolledProgrammes) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(SymptomPickerStrings.noSymptomsGuard),
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: SymptomPickerStrings.noSymptomsGuardCta,
-              onPressed: () => _doAdvance(vm),
-            ),
-          ),
-        );
-      return;
-    }
-
     _doAdvance(vm, vaccinationSelected: _vaccinationSelected);
   }
 

@@ -5763,14 +5763,6 @@
   "bn": "নির্ধারিত নেই",
   "en": "Not assigned"
  },
- "noSymptomsGuard": {
-  "bn": "কোনো লক্ষণ নির্বাচিত নয় — এগিয়ে যাওয়ার আগে লক্ষণ চেক করুন।",
-  "en": "No symptoms selected — please check symptoms before proceeding."
- },
- "noSymptomsGuardCta": {
-  "bn": "তবুও চালিয়ে যান",
-  "en": "Continue anyway"
- },
  "noSymptomsRoutineVisit": {
   "bn": "কোনো লক্ষণ নেই / নিয়মিত ভিজিট",
   "en": "No symptoms / routine visit"

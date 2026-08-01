@@ -3373,10 +3373,6 @@ abstract final class SymptomPickerStrings {
   static String get ctaStartCheckup => getTranslatedString('ctaStartCheckup', 'Start Checkup →');
   static String get ctaRoutine => getTranslatedString('ctaRoutine', 'Start Checkup →');
 
-  // ── No-symptom guard ────────────────────────────────────────────────────
-  static String get noSymptomsGuard => getTranslatedString('noSymptomsGuard', 'No symptoms selected — please check symptoms before proceeding.');
-  static String get noSymptomsGuardCta => getTranslatedString('noSymptomsGuardCta', 'Continue anyway');
-
   // ── Status bar above CTA ────────────────────────────────────────────────
   static String symptomsSelectedStatus(int n) =>
       '$n ${n == 1 ? 'symptom' : 'symptoms'} selected';
