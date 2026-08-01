@@ -555,14 +555,11 @@ class _PatientContextScreenState
       // Referral fetch count at index 2 — used only for debug logging.
       final referralFetchCount = phase2Results[2] as int;
       ConsoleLog.step('[PatientCtx] referral fetch ingested $referralFetchCount ticket(s)');
-      ConsoleLog.step('[PatientCtx] remoteAssessments=${remoteAssessments.length} types=${remoteAssessments.map((a) => a.type).join(",")}');
 
       // Load persisted referral rows (may include newly fetched tickets).
       var liveReferrals = await referralDaoLocal
           .forPatient(widget.patientId)
           .catchError((_) => <Referral>[]);
-
-      ConsoleLog.step('[PatientCtx] liveReferrals states=${liveReferrals.map((r) => r.state.wireTag).join(",")}');
 
       // Backend does NOT update patientStatus on the referral ticket when the
       // nurse completes a medical review. Synthesize: if any open referral
