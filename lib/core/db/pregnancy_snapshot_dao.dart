@@ -1,14 +1,18 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 
 import '../mission/mission_pregnancy_facts.dart';
 import 'app_database.dart';
 
-/// Per-patient pregnancy snapshot persisted to `patient_pregnancy_snapshot`
-/// (schema v8). Built at sync time from the bundle's `pregnancyInfos[]` array;
-/// read by `MissionDashboardRepository` to feed
-/// `MissionInputData.pregnancyByPatientId`.
+/// Per-patient pregnancy episode snapshot (`patient_pregnancy_snapshot`).
 ///
-/// One row per patient — re-syncing replaces the row in place.
+/// Mirrors the Spice Android `PregnancyDetail` fields needed for ANC
+/// show/hide, visit continuity, and mission dashboard flags. Gestational
+/// weeks are **not** stored — they are always computed from [lmpDate].
+///
+/// One row per patient — sync merges with [mergePreservingDates] so a
+/// server pull cannot wipe locally-captured obstetric fields.
 class PregnancySnapshotRow {
   const PregnancySnapshotRow({
     required this.patientId,
@@ -19,34 +23,85 @@ class PregnancySnapshotRow {
     this.deliveryDateMillis,
     this.ancVisitNo,
     this.pncVisitNo,
+    this.gravida,
+    this.parity,
+    this.livingChildren,
+    this.ageOfLastChild,
+    this.pregnancyTest,
+    this.previousPregnancyComplications,
+    this.existingIllness,
+    this.onTreatment,
+    this.ttTdCompleted,
+    this.facilityIdentifiedForDelivery,
+    this.ancWeight,
+    this.lastAncVisitDateMs,
   });
 
   final String patientId;
   final PregnancyFacts facts;
   final int? updatedAt;
 
-  /// EDD as epoch milliseconds — from `pregnancyInfos[].estimatedDeliveryDate`.
+  /// EDD as epoch milliseconds.
   final int? eddDate;
 
-  /// LMP as epoch milliseconds — from `pregnancyInfos[].lmpDate` (or similar).
-  /// Preferred over deriving from EDD; stored at sync time so Form 2 can show
-  /// gestational age without requiring the server to echo it in assessment rows.
+  /// LMP as epoch milliseconds — source of truth for gestational age.
   final int? lmpDate;
 
-  /// Delivery date as epoch milliseconds — written locally after
-  /// PREGNANCY_OUTCOME submission so `isPostpartum` is available immediately
-  /// without waiting for a server re-sync (mirrors Android PregnancyCohortRules).
+  /// Delivery date as epoch milliseconds (post pregnancy-outcome).
   final int? deliveryDateMillis;
 
-  /// Completed ANC visit count for this pregnancy episode — mirrors Android
-  /// `PregnancyDetail.ancVisitNo`. Null / 0 means no ANC yet; the next submit
-  /// becomes visit 1.
+  /// Completed ANC visit count (Spice `PregnancyDetail.ancVisitNo`).
   final int? ancVisitNo;
 
-  /// Completed PNC mother visit count for this pregnancy episode — mirrors
-  /// Android `PregnancyDetail.pncVisitNo`. Null / 0 means no PNC yet; the next
-  /// submit becomes visit 1.
+  /// Completed PNC mother visit count (Spice `PregnancyDetail.pncVisitNo`).
   final int? pncVisitNo;
+
+  /// Spice `PregnancyDetail.gravida` — PW registration / PW profile.
+  final int? gravida;
+
+  /// Spice `PregnancyDetail.parity`.
+  final int? parity;
+
+  /// Spice `PregnancyDetail.numberOfLivingChildren`.
+  final int? livingChildren;
+
+  /// Spice `PregnancyDetail.ageOfLastChild` (ISO date or free text).
+  final String? ageOfLastChild;
+
+  /// Spice `PregnancyDetail.pregnancyTest`.
+  final String? pregnancyTest;
+
+  /// JSON list string — Spice `previousPregnancyComplications`.
+  final String? previousPregnancyComplications;
+
+  /// JSON list string — Spice `pregnantWomanExistingIllness`.
+  final String? existingIllness;
+
+  /// JSON list string — Spice `pregnantWomanOnTreatment`.
+  final String? onTreatment;
+
+  /// Spice `ttTdCompleted` (string / option id).
+  final String? ttTdCompleted;
+
+  /// Spice facility identified for delivery.
+  final String? facilityIdentifiedForDelivery;
+
+  /// Last ANC weight (kg) — Spice `ancWeight` for visit-2+ gain check.
+  final double? ancWeight;
+
+  /// Last ANC visit date as epoch ms — Spice `ancVisitDate`.
+  final int? lastAncVisitDateMs;
+
+  /// Gestational weeks from [lmpDate] (floor days/7). Null when LMP unknown.
+  int? get gestationalWeeksFromLmp {
+    final ms = lmpDate;
+    if (ms == null) return null;
+    final days = DateTime.now()
+        .difference(DateTime.fromMillisecondsSinceEpoch(ms))
+        .inDays;
+    if (days < 0) return 0;
+    return days ~/ 7;
+  }
 
   Map<String, Object?> toDb() => {
         'patient_id': patientId,
@@ -62,6 +117,18 @@ class PregnancySnapshotRow {
         'delivery_date_millis': deliveryDateMillis,
         'anc_visit_no': ancVisitNo,
         'pnc_visit_no': pncVisitNo,
+        'gravida': gravida,
+        'parity': parity,
+        'living_children': livingChildren,
+        'age_of_last_child': ageOfLastChild,
+        'pregnancy_test': pregnancyTest,
+        'previous_pregnancy_complications': previousPregnancyComplications,
+        'existing_illness': existingIllness,
+        'on_treatment': onTreatment,
+        'tt_td_completed': ttTdCompleted,
+        'facility_identified_for_delivery': facilityIdentifiedForDelivery,
+        'anc_weight': ancWeight,
+        'last_anc_visit_date_ms': lastAncVisitDateMs,
       };
 
   static PregnancySnapshotRow fromDb(Map<String, Object?> row) =>
@@ -81,9 +148,70 @@ class PregnancySnapshotRow {
         deliveryDateMillis: row['delivery_date_millis'] as int?,
         ancVisitNo: row['anc_visit_no'] as int?,
         pncVisitNo: row['pnc_visit_no'] as int?,
+        gravida: row['gravida'] as int?,
+        parity: row['parity'] as int?,
+        livingChildren: row['living_children'] as int?,
+        ageOfLastChild: row['age_of_last_child'] as String?,
+        pregnancyTest: row['pregnancy_test'] as String?,
+        previousPregnancyComplications:
+            row['previous_pregnancy_complications'] as String?,
+        existingIllness: row['existing_illness'] as String?,
+        onTreatment: row['on_treatment'] as String?,
+        ttTdCompleted: row['tt_td_completed'] as String?,
+        facilityIdentifiedForDelivery:
+            row['facility_identified_for_delivery'] as String?,
+        ancWeight: (row['anc_weight'] as num?)?.toDouble(),
+        lastAncVisitDateMs: row['last_anc_visit_date_ms'] as int?,
       );
 
+  /// Encode a form list/string value as a JSON list string for SQLite.
+  static String? encodeJsonList(dynamic value) {
+    if (value == null) return null;
+    if (value is String) {
+      final t = value.trim();
+      if (t.isEmpty) return null;
+      if (t.startsWith('[')) return t;
+      return jsonEncode([t]);
+    }
+    if (value is List) {
+      if (value.isEmpty) return null;
+      return jsonEncode(value.map((e) => e.toString()).toList());
+    }
+    return jsonEncode([value.toString()]);
+  }
+
+  /// Decode a stored JSON list string back to `List<String>`.
+  static List<String>? decodeJsonList(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((e) => e.toString()).toList();
+      }
+    } catch (_) {
+      return [raw];
+    }
+    return [raw];
+  }
+
+  static int? asInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v.trim());
+    return null;
+  }
+
+  static double? asDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v.trim());
+    return null;
+  }
+
   PregnancySnapshotRow copyWith({
+    String? patientId,
     PregnancyFacts? facts,
     int? updatedAt,
     int? eddDate,
@@ -91,11 +219,23 @@ class PregnancySnapshotRow {
     int? deliveryDateMillis,
     int? ancVisitNo,
     int? pncVisitNo,
+    int? gravida,
+    int? parity,
+    int? livingChildren,
+    String? ageOfLastChild,
+    String? pregnancyTest,
+    String? previousPregnancyComplications,
+    String? existingIllness,
+    String? onTreatment,
+    String? ttTdCompleted,
+    String? facilityIdentifiedForDelivery,
+    double? ancWeight,
+    int? lastAncVisitDateMs,
     bool clearAncVisitNo = false,
     bool clearPncVisitNo = false,
   }) =>
       PregnancySnapshotRow(
-        patientId: patientId,
+        patientId: patientId ?? this.patientId,
         facts: facts ?? this.facts,
         updatedAt: updatedAt ?? this.updatedAt,
         eddDate: eddDate ?? this.eddDate,
@@ -105,6 +245,53 @@ class PregnancySnapshotRow {
             clearAncVisitNo ? null : (ancVisitNo ?? this.ancVisitNo),
         pncVisitNo:
             clearPncVisitNo ? null : (pncVisitNo ?? this.pncVisitNo),
+        gravida: gravida ?? this.gravida,
+        parity: parity ?? this.parity,
+        livingChildren: livingChildren ?? this.livingChildren,
+        ageOfLastChild: ageOfLastChild ?? this.ageOfLastChild,
+        pregnancyTest: pregnancyTest ?? this.pregnancyTest,
+        previousPregnancyComplications: previousPregnancyComplications ??
+            this.previousPregnancyComplications,
+        existingIllness: existingIllness ?? this.existingIllness,
+        onTreatment: onTreatment ?? this.onTreatment,
+        ttTdCompleted: ttTdCompleted ?? this.ttTdCompleted,
+        facilityIdentifiedForDelivery: facilityIdentifiedForDelivery ??
+            this.facilityIdentifiedForDelivery,
+        ancWeight: ancWeight ?? this.ancWeight,
+        lastAncVisitDateMs: lastAncVisitDateMs ?? this.lastAncVisitDateMs,
+      );
+
+  /// Prefer non-null values from [patch]; keep this row's values otherwise.
+  PregnancySnapshotRow mergedWith(PregnancySnapshotRow patch) =>
+      PregnancySnapshotRow(
+        patientId: patientId,
+        facts: patch.facts,
+        updatedAt: patch.updatedAt ?? updatedAt,
+        eddDate: patch.eddDate ?? eddDate,
+        lmpDate: patch.lmpDate ?? lmpDate,
+        deliveryDateMillis: patch.deliveryDateMillis ?? deliveryDateMillis,
+        ancVisitNo: PregnancySnapshotDao._preferHigherVisitNo(
+          patch.ancVisitNo,
+          ancVisitNo,
+        ),
+        pncVisitNo: PregnancySnapshotDao._preferHigherVisitNo(
+          patch.pncVisitNo,
+          pncVisitNo,
+        ),
+        gravida: patch.gravida ?? gravida,
+        parity: patch.parity ?? parity,
+        livingChildren: patch.livingChildren ?? livingChildren,
+        ageOfLastChild: patch.ageOfLastChild ?? ageOfLastChild,
+        pregnancyTest: patch.pregnancyTest ?? pregnancyTest,
+        previousPregnancyComplications: patch.previousPregnancyComplications ??
+            previousPregnancyComplications,
+        existingIllness: patch.existingIllness ?? existingIllness,
+        onTreatment: patch.onTreatment ?? onTreatment,
+        ttTdCompleted: patch.ttTdCompleted ?? ttTdCompleted,
+        facilityIdentifiedForDelivery: patch.facilityIdentifiedForDelivery ??
+            facilityIdentifiedForDelivery,
+        ancWeight: patch.ancWeight ?? ancWeight,
+        lastAncVisitDateMs: patch.lastAncVisitDateMs ?? lastAncVisitDateMs,
       );
 }
 
@@ -134,8 +321,7 @@ class PregnancySnapshotDao {
     return {for (final e in rows.entries) e.key: e.value.facts};
   }
 
-  /// Full snapshot rows keyed by patient ID (includes `lmp_date` / `edd_date`).
-  /// Used by sync to preserve dates the server omits on re-write.
+  /// Full snapshot rows keyed by patient ID.
   Future<Map<String, PregnancySnapshotRow>> getAllRows() async {
     final rows = await _db.db.query(AppDatabase.tablePregnancySnapshot);
     final out = <String, PregnancySnapshotRow>{};
@@ -157,14 +343,47 @@ class PregnancySnapshotDao {
     return PregnancySnapshotRow.fromDb(rows.first);
   }
 
-  /// Insert or replace a single row — used by the pregnancy registration sheet
-  /// to persist LMP/EDD/risk flags captured offline before the first ANC visit.
+  /// Snapshot for [patientId], including any row sync stored under
+  /// [memberId].
+  ///
+  /// Sync keys rows by household-member id whenever the FHIR patient map was
+  /// incomplete, so a plain [byPatient] can miss a woman's entire episode and
+  /// make an established pregnancy look brand new. Values recorded against
+  /// the patient id win; the member row only fills gaps, and visit counters
+  /// take the higher of the two.
+  Future<PregnancySnapshotRow?> byPatientOrMember(
+    String patientId, {
+    String? memberId,
+  }) async {
+    final own = await byPatient(patientId);
+    if (memberId == null || memberId.isEmpty || memberId == patientId) {
+      return own;
+    }
+    final alias = await byPatient(memberId);
+    if (alias == null) return own;
+    if (own == null) return alias.copyWith(patientId: patientId);
+    return alias.mergedWith(own).copyWith(patientId: patientId);
+  }
+
+  /// Insert or replace a single row. Prefer [mergeUpsert] when only a subset
+  /// of episode fields is known so existing obstetric data is not wiped.
   Future<void> upsertOne(PregnancySnapshotRow row) async {
     await _db.db.insert(
       AppDatabase.tablePregnancySnapshot,
       row.toDb(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// Merge [patch] into the existing row (or insert if none). Non-null patch
+  /// fields win; null patch fields keep prior values.
+  Future<void> mergeUpsert(PregnancySnapshotRow patch) async {
+    final existing = await byPatient(patch.patientId);
+    if (existing == null) {
+      await upsertOne(patch);
+      return;
+    }
+    await upsertOne(existing.mergedWith(patch));
   }
 
   /// Next visit number for a stored counter, matching Android
@@ -175,14 +394,14 @@ class PregnancySnapshotDao {
   }
 
   /// Next ANC visit number for [patientId] (Spice `ancVisitNo + 1`).
-  Future<int> nextAncVisitNo(String patientId) async {
-    final row = await byPatient(patientId);
+  Future<int> nextAncVisitNo(String patientId, {String? memberId}) async {
+    final row = await byPatientOrMember(patientId, memberId: memberId);
     return nextVisitNo(row?.ancVisitNo);
   }
 
   /// Next PNC visit number for [patientId] (Spice `pncVisitNo + 1`).
-  Future<int> nextPncVisitNo(String patientId) async {
-    final row = await byPatient(patientId);
+  Future<int> nextPncVisitNo(String patientId, {String? memberId}) async {
+    final row = await byPatientOrMember(patientId, memberId: memberId);
     return nextVisitNo(row?.pncVisitNo);
   }
 
@@ -227,11 +446,6 @@ class PregnancySnapshotDao {
   }
 
   /// Collapse multiple server episodes for the same patient into one row.
-  ///
-  /// `pregnancyInfos[]` often has several episodes per member; later rows
-  /// frequently omit `lastMenstrualPeriod` / EDD even when an earlier episode
-  /// has them. Prefer any non-null LMP/EDD so a null later row cannot wipe a
-  /// good date before [upsertMany] (last-write-wins on `patient_id`).
   static List<PregnancySnapshotRow> coalesceByPatient(
     List<PregnancySnapshotRow> rows,
   ) {
@@ -242,19 +456,7 @@ class PregnancySnapshotDao {
         byId[row.patientId] = row;
         continue;
       }
-      final rowAt = row.updatedAt ?? 0;
-      final prevAt = prev.updatedAt ?? 0;
-      byId[row.patientId] = PregnancySnapshotRow(
-        patientId: row.patientId,
-        // Later episode facts tend to reflect current state (PNC window etc.).
-        facts: row.facts,
-        updatedAt: rowAt >= prevAt ? row.updatedAt : prev.updatedAt,
-        eddDate: row.eddDate ?? prev.eddDate,
-        lmpDate: row.lmpDate ?? prev.lmpDate,
-        deliveryDateMillis: row.deliveryDateMillis ?? prev.deliveryDateMillis,
-        ancVisitNo: _preferHigherVisitNo(row.ancVisitNo, prev.ancVisitNo),
-        pncVisitNo: _preferHigherVisitNo(row.pncVisitNo, prev.pncVisitNo),
-      );
+      byId[row.patientId] = prev.mergedWith(row);
     }
     return byId.values.toList(growable: false);
   }
@@ -263,10 +465,9 @@ class PregnancySnapshotDao {
   ///
   /// - Incoming is first coalesced per patient (see [coalesceByPatient]).
   /// - Incoming facts always win.
-  /// - Null `lmpDate` / `eddDate` on incoming keeps the prior value.
-  /// - Visit counters take the higher of server vs local so a stale pull
-  ///   cannot rewind a counter we just incremented offline.
-  /// - Prior rows for patients absent from [incoming] are kept (local enroll).
+  /// - Null clinical / date fields on incoming keep the prior value.
+  /// - Visit counters take the higher of server vs local.
+  /// - Prior rows for patients absent from [incoming] are kept.
   static List<PregnancySnapshotRow> mergePreservingDates({
     required List<PregnancySnapshotRow> incoming,
     required Map<String, PregnancySnapshotRow> prior,
@@ -277,21 +478,34 @@ class PregnancySnapshotDao {
     for (final row in coalesced) {
       incomingIds.add(row.patientId);
       final prev = prior[row.patientId];
-      merged.add(prev == null
-          ? row
-          : PregnancySnapshotRow(
-              patientId: row.patientId,
-              facts: row.facts,
-              updatedAt: row.updatedAt,
-              eddDate: row.eddDate ?? prev.eddDate,
-              lmpDate: row.lmpDate ?? prev.lmpDate,
-              deliveryDateMillis:
-                  row.deliveryDateMillis ?? prev.deliveryDateMillis,
-              ancVisitNo:
-                  _preferHigherVisitNo(row.ancVisitNo, prev.ancVisitNo),
-              pncVisitNo:
-                  _preferHigherVisitNo(row.pncVisitNo, prev.pncVisitNo),
-            ));
+      if (prev == null) {
+        merged.add(row);
+        continue;
+      }
+      merged.add(PregnancySnapshotRow(
+        patientId: row.patientId,
+        facts: row.facts,
+        updatedAt: row.updatedAt ?? prev.updatedAt,
+        eddDate: row.eddDate ?? prev.eddDate,
+        lmpDate: row.lmpDate ?? prev.lmpDate,
+        deliveryDateMillis: row.deliveryDateMillis ?? prev.deliveryDateMillis,
+        ancVisitNo: _preferHigherVisitNo(row.ancVisitNo, prev.ancVisitNo),
+        pncVisitNo: _preferHigherVisitNo(row.pncVisitNo, prev.pncVisitNo),
+        gravida: row.gravida ?? prev.gravida,
+        parity: row.parity ?? prev.parity,
+        livingChildren: row.livingChildren ?? prev.livingChildren,
+        ageOfLastChild: row.ageOfLastChild ?? prev.ageOfLastChild,
+        pregnancyTest: row.pregnancyTest ?? prev.pregnancyTest,
+        previousPregnancyComplications: row.previousPregnancyComplications ??
+            prev.previousPregnancyComplications,
+        existingIllness: row.existingIllness ?? prev.existingIllness,
+        onTreatment: row.onTreatment ?? prev.onTreatment,
+        ttTdCompleted: row.ttTdCompleted ?? prev.ttTdCompleted,
+        facilityIdentifiedForDelivery: row.facilityIdentifiedForDelivery ??
+            prev.facilityIdentifiedForDelivery,
+        ancWeight: row.ancWeight ?? prev.ancWeight,
+        lastAncVisitDateMs: row.lastAncVisitDateMs ?? prev.lastAncVisitDateMs,
+      ));
     }
     for (final entry in prior.entries) {
       if (!incomingIds.contains(entry.key)) {

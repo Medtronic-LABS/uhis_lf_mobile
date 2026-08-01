@@ -2122,7 +2122,7 @@
     "visibility": "visible",
     "titleCulture": "রেফারেল স্বাস্থ্যসেবা কেন্দ্র",
     "errorMessage": "Please select a valid option",
-    "isSummary": false,
+    "isSummary": true,
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",

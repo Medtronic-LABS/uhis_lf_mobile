@@ -18,6 +18,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
@@ -47,6 +48,7 @@ import '../patient/followup_call_service.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import 'forms/childhood_visit.dart';
+import 'forms/rmnch_referral_facility.dart';
 import 'immunisation/epi_visit_summary.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
 import 'programme_selection/programme_selection_screen.dart';
@@ -166,6 +168,26 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// the childhood visit form next (immunization timeline itself is unchanged).
   bool _childhoodFormAfterVaccination = false;
 
+  /// Local `patients.id` for [widget.patientId]. Household routes often pass
+  /// `members.patient_id` (server id); pregnancy snapshot + programmes are
+  /// keyed by the member PK. Cached after the first [PatientDao.byAnyId].
+  String? _canonicalPatientId;
+
+  /// Resolves the route id onto the local patient PK used by snapshot /
+  /// programmes tables.
+  Future<String> _localPatientId() async {
+    if (_canonicalPatientId != null) return _canonicalPatientId!;
+    try {
+      final p =
+          await context.read<PatientDao>().byAnyId(widget.patientId);
+      _canonicalPatientId = p?.id ?? widget.patientId;
+    } catch (e) {
+      debugPrint('[VisitFlow] local patient id resolve failed: $e');
+      _canonicalPatientId = widget.patientId;
+    }
+    return _canonicalPatientId!;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -198,37 +220,37 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     final isChildhood = progs.contains(Programme.imci);
     if (!isAnc && !isPnc && !isChildhood) return;
     try {
+      // Resolved before the first await so the async gaps below never touch
+      // a BuildContext.
+      final assessments = context.read<AssessmentRepository>();
+      final snapshots = context.read<PregnancySnapshotDao>();
+      final localAssessments = context.read<LocalAssessmentDao>();
+      final localId = await _localPatientId();
       int count;
       if (isChildhood && !isAnc && !isPnc) {
-        count = await context
-            .read<AssessmentRepository>()
-            .priorChildhoodVisitCount(widget.patientId);
+        count = await assessments.priorChildhoodVisitCount(widget.patientId);
       } else if (isAnc) {
-        // Prefer the persisted Spice-style counter; fall back to vitals history
-        // length if the snapshot has never been seeded.
-        final snap = await context
-            .read<PregnancySnapshotDao>()
-            .byPatient(widget.patientId);
-        if (snap?.ancVisitNo != null) {
-          count = snap!.ancVisitNo!;
-        } else {
-          final history = await context
-              .read<AssessmentRepository>()
-              .ancVitalsHistory(widget.patientId);
-          count = history.length;
-        }
+        // Take the highest of the persisted Spice-style counter and the ANC
+        // assessments on file, so a snapshot that never got seeded (or was
+        // written before this visit's ANC synced back) cannot restart at 1.
+        final snap = await snapshots.byPatientOrMember(
+          localId,
+          memberId: widget.memberId,
+        );
+        final recorded = await assessments.priorAncVisitCount(widget.patientId);
+        count = math.max(snap?.ancVisitNo ?? 0, recorded);
       } else {
         // Prefer the persisted Spice-style counter; fall back to counting
         // local PNC_MOTHER rows if the snapshot has never been seeded.
-        final snap = await context
-            .read<PregnancySnapshotDao>()
-            .byPatient(widget.patientId);
+        final snap = await snapshots.byPatientOrMember(
+          localId,
+          memberId: widget.memberId,
+        );
         if (snap?.pncVisitNo != null) {
           count = snap!.pncVisitNo!;
         } else {
-          final rows = await context
-              .read<LocalAssessmentDao>()
-              .getByPatientId(widget.patientId);
+          final rows =
+              await localAssessments.getByPatientId(widget.patientId);
           count = rows
               .where((r) => r.assessmentType.toUpperCase() == 'PNC_MOTHER')
               .length;
@@ -250,8 +272,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     debugPrint('[_VisitFlowState] _loadPatientNameFromDb');
     try {
       final dao = context.read<PatientDao>();
-      final p = await dao.byId(widget.patientId);
+      final p = await dao.byAnyId(widget.patientId);
       if (!mounted || p == null) return;
+      _canonicalPatientId ??= p.id;
       setState(() {
         _patientName = _patientName ?? p.name;
         _patientAge = _patientAge ?? p.age;
@@ -266,8 +289,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     debugPrint('[_VisitFlowState] _loadPostpartumFromDb');
     try {
       final dao = context.read<PregnancySnapshotDao>();
+      final localId = await _localPatientId();
       final all = await dao.getAll();
-      final facts = all[widget.patientId];
+      final facts = all[localId] ?? all[widget.patientId];
       if (!mounted || facts == null) return;
       if (facts.isPostpartumWindow) {
         setState(() {
@@ -283,19 +307,13 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     debugPrint('[_VisitFlowState] _loadPregnancySnapshotFromDb');
     try {
       final dao = context.read<PregnancySnapshotDao>();
-      var snap = await dao.byPatient(widget.patientId);
-      // Sync sometimes keys the row by household-member id when the FHIR
-      // patient map was incomplete — fall back to memberId.
-      final memberId = widget.memberId;
-      if ((snap?.lmpDate == null && snap?.eddDate == null) &&
-          memberId != null &&
-          memberId.isNotEmpty &&
-          memberId != widget.patientId) {
-        final byMember = await dao.byPatient(memberId);
-        if (byMember?.lmpDate != null || byMember?.eddDate != null) {
-          snap = byMember;
-        }
-      }
+      final localId = await _localPatientId();
+      // Prefer the local member PK (snapshot rows live there); keep the
+      // memberId fallback for older sync keys.
+      var snap = await dao.byPatientOrMember(
+        localId,
+        memberId: widget.memberId,
+      );
       if (!mounted || snap == null) return;
 
       DateTime? lmp;
@@ -314,10 +332,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       final weeks =
           lmp != null ? DateTime.now().difference(lmp).inDays ~/ 7 : null;
 
+      // Always set LMP/EDD when present — even if weeks compute to 0
+      // (very early pregnancy); the Step 2 GA card needs the dates.
       setState(() {
-        if (weeks != null && weeks > 0) {
-          _resolvedGestationalWeeks = weeks;
-        }
+        _resolvedGestationalWeeks = weeks != null && weeks >= 0 ? weeks : null;
         _resolvedLmpMs = lmp?.millisecondsSinceEpoch;
         _resolvedEddMs = edd?.millisecondsSinceEpoch;
       });
@@ -1150,19 +1168,24 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
   Future<void> _hydrate() async {
     final dao = context.read<PatientProgrammesDao>();
     try {
-      final progs = await dao.programmesFor(widget.patientId);
+      // Route id may be members.patient_id; programmes are under patients.id.
+      final patient =
+          await context.read<PatientDao>().byAnyId(widget.patientId);
+      final localId = patient?.id ?? widget.patientId;
+      final progs = await dao.programmesFor(localId);
       if (!mounted) return;
 
       final hasAnc = _selectedProgrammes.contains(Programme.anc);
+      final isRegistered = await _isPregnancyRegistered(progs, localId);
+      if (!mounted) return;
 
-      // Task 3 — PW once-only: drop PW silently if already enrolled.
+      // Task 3 — PW once-only: drop PW silently if already registered.
       // Do not show a dialog — ANC/other programmes in the same visit should
       // continue without interrupting the SK.
-      if (_selectedProgrammes.contains(Programme.pw) &&
-          progs.contains(Programme.pw)) {
+      if (_selectedProgrammes.contains(Programme.pw) && isRegistered) {
         debugPrint(
           '[Step2][PayloadDebug] PW block: patient=${widget.patientId} '
-          'already enrolled in PW — re-enrollment skipped (no dialog).',
+          'pregnancy already registered — re-enrollment skipped (no dialog).',
         );
         _selectedProgrammes =
             _selectedProgrammes.difference({Programme.pw});
@@ -1204,16 +1227,15 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
         }
       }
 
-      // Task 5 — When ANC is selected for a first-time pregnancy (no LMP
-      // snapshot yet) and PW was not explicitly chosen, auto-include PW so the
-      // pregnancy profile form is submitted alongside the ANC visit.
-      if (hasAnc && !_selectedProgrammes.contains(Programme.pw)) {
-        final snapshotDao = context.read<PregnancySnapshotDao>();
-        final snapshot = await snapshotDao.byPatient(widget.patientId);
-        if (!mounted) return;
-        if (snapshot?.lmpDate == null) {
-          _selectedProgrammes = {..._selectedProgrammes, Programme.pw};
-        }
+      // Task 5 — When ANC is selected for a first-time pregnancy and PW was
+      // not explicitly chosen, auto-include PW so the pregnancy profile form
+      // is submitted alongside the ANC visit. Registered women are skipped:
+      // adding PW here would submit a duplicate PWPROFILE even though the
+      // section itself is hidden.
+      if (hasAnc &&
+          !isRegistered &&
+          !_selectedProgrammes.contains(Programme.pw)) {
+        _selectedProgrammes = {..._selectedProgrammes, Programme.pw};
       }
 
       setState(() {
@@ -1229,6 +1251,40 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
         _request = _buildRequest(const <Programme>{});
         _ready = true;
       });
+    }
+  }
+
+  /// True when this pregnancy is already on file, so PW registration must not
+  /// be offered or auto-added again.
+  ///
+  /// Checks three independent stores because none of them is reliable on its
+  /// own: enrolment is only written on a successful submit, sync records ANC
+  /// (never PW) for a synced pregnancy, and the snapshot can be keyed by
+  /// household-member id.
+  Future<bool> _isPregnancyRegistered(
+    Set<Programme> enrolled,
+    String localPatientId,
+  ) async {
+    if (enrolled.contains(Programme.pw) || enrolled.contains(Programme.anc)) {
+      return true;
+    }
+    try {
+      final snapshots = context.read<PregnancySnapshotDao>();
+      final assessments = context.read<AssessmentRepository>();
+      final snapshot = await snapshots.byPatientOrMember(
+        localPatientId,
+        memberId: widget.memberId,
+      );
+      if (snapshot?.lmpDate != null || snapshot?.ancVisitNo != null) {
+        return true;
+      }
+      // Assessments may still be stamped with the route id.
+      return await assessments.hasPregnancyRegistration(widget.patientId) ||
+          (localPatientId != widget.patientId &&
+              await assessments.hasPregnancyRegistration(localPatientId));
+    } catch (e) {
+      debugPrint('[Step2] pregnancy registration lookup failed: $e');
+      return false;
     }
   }
 
@@ -1395,6 +1451,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   NabaVitalSnapshot? _loadedVitals;
   List<NabaLabResult> _loadedLabs = [];
   DateTime? _selectedFollowUpDate;
+
+  /// Spice ANC/PNC summary facility spinner selection (option id).
+  String? _selectedRmnchFacilityId;
 
   Color _headerColor(Programme p) => switch (p) {
         Programme.anc || Programme.pnc => AppColors.ancHeader,
@@ -2332,27 +2391,93 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     setState(() => _accepted = true);
     if (!mounted) return;
 
-    // Schedule follow-up locally using the date the SK selected (or the
-    // auto-calculated date from the first follow-up item). Stored as
-    // NotSynced and pushed on the next offline-sync cycle.
+    // Prefer the SK-picked date, then the first timeline item's resolved date,
+    // then a programme-aware Spice default. Null when this programme's summary
+    // does not stamp nextVisitDate (e.g. childhood keeps its age-band stamp).
     final followUpDate = _selectedFollowUpDate ??
         (naba.followUp.isNotEmpty
             ? _FollowUpDateRowState.resolveDate(naba.followUp.first)
-            : DateTime.now().add(const Duration(days: 14)));
+            : _defaultSummaryFollowUpDate(
+                widget.primaryProgramme,
+                referred: widget.referralRecommended,
+              ));
+
+    final assessmentRepo = context.read<AssessmentRepository>();
+    final followUpSvc = context.read<FollowUpCallService>();
+
+    final isReferred = widget.referralRecommended ||
+        (naba.referralRecommendation?.required_ ?? false);
+    // Spice RMNCH summary: selected spinner option id → summary.referralFacilityType.
+    // Other programmes keep the Step 2 / NCD auto type string.
+    final referralFacilityType = RmnchReferralFacility.showOnStep3(
+          programme: widget.primaryProgramme,
+          isReferred: isReferred,
+        )
+        ? (_selectedRmnchFacilityId ??
+            RmnchReferralFacility.initialSelection(
+              preferredId: widget.referralFacility,
+            ))
+        : widget.referralFacility;
+
+    // Spice updateOtherAssessmentDetails: stamp nextVisitDate /
+    // referralFacilityType onto assessments[].summary before sync.
     try {
-      final followUpSvc = context.read<FollowUpCallService>();
+      await assessmentRepo.applyStep3Summary(
+        encounterId: widget.visitId,
+        nextVisitDate: followUpDate,
+        isReferred: isReferred,
+        referralFacilityType: referralFacilityType,
+      );
+      // Now that summary is stamped, release the hold and push (Spice Done).
+      unawaited(assessmentRepo.syncPendingAssessments().then(
+        (n) => debugPrint('[Step3] syncPendingAssessments → synced $n'),
+        onError: (e) => debugPrint('[Step3] syncPendingAssessments ✗ $e'),
+      ));
+    } catch (e) {
+      debugPrint('[Step3] applyStep3Summary failed (non-blocking): $e');
+    }
+
+    // Local follow-up ticket (separate from assessment summary) — keep even
+    // when summary has no nextVisitDate so Tasks still shows an open item.
+    final scheduleDate =
+        followUpDate ?? DateTime.now().add(const Duration(days: 14));
+    try {
       await followUpSvc.scheduleLocal(
         patientId: widget.patientId,
-        dueDate: followUpDate,
+        dueDate: scheduleDate,
         type: 'MEDICAL_REVIEW',
       );
-      debugPrint('[Step3] follow-up scheduled: $followUpDate');
+      debugPrint('[Step3] follow-up scheduled: $scheduleDate');
     } catch (e) {
       debugPrint('[Step3] follow-up schedule failed (non-blocking): $e');
     }
 
     if (!mounted) return;
     context.go(_returnPath);
+  }
+
+  /// Spice summary defaults when the SK never touched the date picker and the
+  /// NABA response had no follow-up rows. Returns null when Spice does not
+  /// stamp `nextVisitDate` for that programme on the summary screen.
+  static DateTime? _defaultSummaryFollowUpDate(
+    Programme programme, {
+    required bool referred,
+  }) {
+    final days = switch (programme) {
+      // AssessmentRMNCHSummaryFragment.bindAncSummary — today + 28.
+      Programme.anc => 28,
+      // PNC bands are days-since-delivery on the form; without that, a short
+      // postpartum window matches Spice's earliest PNC follow-up band.
+      Programme.pnc => 7,
+      // BD NCD / Cataract summary — +5 days when referred.
+      Programme.ncd || Programme.cataract when referred => 5,
+      Programme.imci => 3,
+      _ => null,
+    };
+    if (days == null) return null;
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day)
+        .add(Duration(days: days));
   }
 
   @override
@@ -2535,6 +2660,16 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   Widget _buildResult(NabaResponse naba) {
     final referral =
         naba.referralRecommendation?.required_ ?? widget.referralRecommended;
+    final showRmnchFacility = RmnchReferralFacility.showOnStep3(
+      programme: widget.primaryProgramme,
+      isReferred: referral,
+    );
+    final rmnchFacilityId = showRmnchFacility
+        ? (_selectedRmnchFacilityId ??
+            RmnchReferralFacility.initialSelection(
+              preferredId: widget.referralFacility,
+            ))
+        : null;
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 40),
@@ -2560,6 +2695,17 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             ),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
+
+          // Spice AssessmentRMNCHSummaryFragment: facility spinner when Referred.
+          if (showRmnchFacility && rmnchFacilityId != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: _RmnchReferralFacilityPicker(
+                selectedId: rmnchFacilityId,
+                onChanged: (id) =>
+                    setState(() => _selectedRmnchFacilityId = id),
+              ),
+            ),
 
           // Inner content has horizontal padding
           Padding(
@@ -2628,6 +2774,77 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 }
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
+
+/// Spice AssessmentRMNCHSummaryFragment facility spinner — shown under the
+/// referral banner when ANC/PNC is Referred. Selection id is stamped onto
+/// `summary.referralFacilityType` on Accept (Spice Done remap).
+class _RmnchReferralFacilityPicker extends StatelessWidget {
+  const _RmnchReferralFacilityPicker({
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  final String selectedId;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          EpiStrings.referralFacilityLabel,
+          style: theme.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: ValueKey(selectedId),
+          isExpanded: true,
+          initialValue: selectedId,
+          onChanged: (id) {
+            if (id != null) onChanged(id);
+          },
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppColors.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.navy, width: 1.5),
+            ),
+            filled: true,
+            fillColor: AppColors.cardSurface,
+          ),
+          items: RmnchReferralFacility.options
+              .map(
+                (o) => DropdownMenuItem<String>(
+                  value: o.id,
+                  child: Text(
+                    RmnchReferralFacility.labelOf(o),
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+}
 
 /// Shown atop Step 3 when `_fetchNaba()` couldn't reach the AI service and
 /// silently substituted the local rule-based recommendation — makes that

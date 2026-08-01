@@ -131,11 +131,14 @@ class _PregnancyRegistrationSheetState
         updatedAt: DateTime.now().millisecondsSinceEpoch,
         lmpDate: _lmp!.millisecondsSinceEpoch,
         eddDate: _edd?.millisecondsSinceEpoch,
+        // Spice PregnancyDetail obstetric fields from PW registration.
+        gravida: _gravida,
+        parity: _parity,
         // New pregnancy episode — reset visit counters (Spice getUpdatedPregnancyDetail).
         ancVisitNo: 0,
         pncVisitNo: 0,
       );
-      await dao.upsertOne(row);
+      await dao.mergeUpsert(row);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(PregnancyRegStrings.savedToast)),

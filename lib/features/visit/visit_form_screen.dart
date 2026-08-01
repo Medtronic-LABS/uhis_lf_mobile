@@ -130,6 +130,13 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   /// submit throws so the SK can retry; successful submit navigates away.
   bool _isSubmitting = false;
 
+  /// Cached across rebuilds — recreating [UnifiedFormNotifier] on every
+  /// [build] wiped LMP/EDD loaded from the pregnancy snapshot (finished PW
+  /// looked empty on the Step 2 GA card).
+  UnifiedFormNotifier? _formNotifier;
+  List<String>? _notifierFormTypes;
+  String? _notifierEncounterId;
+
   bool get _hasActivatedPathways =>
       widget.activatedPathways != null && widget.activatedPathways!.isNotEmpty;
 
@@ -147,6 +154,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
 
   @override
   void dispose() {
+    _formNotifier?.dispose();
+    _formNotifier = null;
     if (_scribeInitialized) _scribeCtrl.dispose();
     debugPrint('[_VisitFormScreenState] dispose');
     super.dispose();
@@ -291,24 +300,34 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     debugPrint('[VisitForm]   activeFormTypes    : ${formTypes.join(', ')}');
     debugPrint('[VisitForm]   enrolledFormTypes  : ${enrolledFormTypes.join(', ')}');
     debugPrint('[VisitForm] ────────────────────────────────────────────────');
-    final draftDao = ctx.read<AssessmentDraftDao>();
-    final assessmentRepo = ctx.read<AssessmentRepository>();
 
-    final notifier = UnifiedFormNotifier(
-      encounterId: widget.visitId,
-      patientId: widget.patientId ?? '',
-      activeFormTypes: formTypes,
-      draftDao: draftDao,
-      assessmentRepo: assessmentRepo,
-      patientDao: ctx.read<PatientDao>(),
-      pregnancySnapshotDao: ctx.read<PregnancySnapshotDao>(),
-      memberId: widget.memberId,
-      householdId: widget.householdId,
-      villageId: widget.villageId,
-      householdMemberLocalId: widget.householdMemberLocalId ?? 0,
-      defaultReferralSiteId: ctx.read<ApiClient>().organizationFhirId,
-      referralRepo: ctx.read<ReferralRepository>(),
-    );
+    final reuseNotifier = _formNotifier != null &&
+        _notifierEncounterId == widget.visitId &&
+        _listEquals(_notifierFormTypes, formTypes);
+    late final UnifiedFormNotifier notifier;
+    if (reuseNotifier) {
+      notifier = _formNotifier!;
+    } else {
+      _formNotifier?.dispose();
+      notifier = UnifiedFormNotifier(
+        encounterId: widget.visitId,
+        patientId: widget.patientId ?? '',
+        activeFormTypes: formTypes,
+        draftDao: ctx.read<AssessmentDraftDao>(),
+        assessmentRepo: ctx.read<AssessmentRepository>(),
+        patientDao: ctx.read<PatientDao>(),
+        pregnancySnapshotDao: ctx.read<PregnancySnapshotDao>(),
+        memberId: widget.memberId,
+        householdId: widget.householdId,
+        villageId: widget.villageId,
+        householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+        defaultReferralSiteId: ctx.read<ApiClient>().organizationFhirId,
+        referralRepo: ctx.read<ReferralRepository>(),
+      );
+      _formNotifier = notifier;
+      _notifierFormTypes = List<String>.from(formTypes);
+      _notifierEncounterId = widget.visitId;
+    }
 
     return ChangeNotifierProvider<UnifiedFormNotifier>.value(
       value: notifier,
@@ -325,6 +344,14 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
             _onSectionedSubmit(ctx, visitCtrl, session, notifier),
       ),
     );
+  }
+
+  static bool _listEquals(List<String>? a, List<String> b) {
+    if (a == null || a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   Future<void> _onSectionedSubmit(
@@ -367,14 +394,19 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               .map(Programme.fromString)
               .where((p) => p != Programme.unknown)
               .toSet();
+          // Enrolment must live under patients.id (member PK), not the route
+          // server id — otherwise the next visit cannot see it.
+          final local =
+              await patientDao.byAnyId(patientId);
+          final localId = local?.id ?? patientId;
           debugPrint(
             '[VisitForm] programme enrolment — activatedPathways=${widget.activatedPathways} '
-            'newProgs=${newProgs.map((p) => p.name).toList()} patientId=$patientId',
+            'newProgs=${newProgs.map((p) => p.name).toList()} patientId=$localId',
           );
           if (newProgs.isNotEmpty) {
-            final current = await progDao.programmesFor(patientId);
+            final current = await progDao.programmesFor(localId);
             final merged = {...current, ...newProgs};
-            await progDao.replaceFor(patientId, merged);
+            await progDao.replaceFor(localId, merged);
             debugPrint(
               '[VisitForm] programme enrolment written: '
               'previous=${current.map((p) => p.name).toList()} '
@@ -411,9 +443,20 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               final deliveryMs = deliveryRaw is String
                   ? DateTime.tryParse(deliveryRaw)?.millisecondsSinceEpoch
                   : null;
-              final existing = await pregnancySnapshotDao.byPatient(patientId);
-              final updated = PregnancySnapshotRow(
-                patientId: patientId,
+              final local =
+                  await patientDao.byAnyId(patientId);
+              final localId = local?.id ?? patientId;
+              final existing =
+                  await pregnancySnapshotDao.byPatientOrMember(
+                localId,
+                memberId: widget.memberId,
+              );
+              final updated = (existing ??
+                      PregnancySnapshotRow(
+                        patientId: localId,
+                        facts: PregnancyFacts.empty,
+                      ))
+                  .copyWith(
                 facts: const PregnancyFacts(
                   isPostpartumWindow: true,
                   highRiskPregnantWoman: false,
@@ -423,18 +466,14 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
                   hasPncIllness: false,
                 ),
                 updatedAt: DateTime.now().millisecondsSinceEpoch,
-                // Preserve EDD/LMP for reference; delivery date drives postpartum gate.
-                eddDate: existing?.eddDate,
-                lmpDate: existing?.lmpDate,
-                deliveryDateMillis: deliveryMs
-                    ?? DateTime.now().millisecondsSinceEpoch,
-                // Keep visit counters across the postpartum transition.
-                ancVisitNo: existing?.ancVisitNo,
-                pncVisitNo: existing?.pncVisitNo,
+                deliveryDateMillis: deliveryMs ??
+                    DateTime.now().millisecondsSinceEpoch,
               );
-              await pregnancySnapshotDao.upsertOne(updated);
+              await pregnancySnapshotDao.upsertOne(
+                updated.copyWith(patientId: localId),
+              );
               debugPrint('[VisitForm] pregnancy snapshot → postpartum '
-                  'deliveryMs=$deliveryMs patientId=$patientId');
+                  'deliveryMs=$deliveryMs patientId=$localId');
             }
 
             // Android AssessmentViewModel.savePregnancyOutcomeDetails:
@@ -455,11 +494,24 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               }
             }
 
-            debugPrint('[VisitForm] triggering syncPendingAssessments');
-            await assessmentRepo.syncPendingAssessments().then(
-              (n) => debugPrint('[VisitForm] syncPendingAssessments → synced $n'),
-              onError: (e) => debugPrint('[VisitForm] syncPendingAssessments ✗ $e'),
-            );
+            // Spice: form save leaves the row NotSynced; sync is started after
+            // the summary screen Done. When embedded in the visit flow, skip
+            // the explicit push here — Step 3 Accept stamps summary then syncs.
+            // No hold flag: if the SK abandons Step 3, reconnect/background
+            // sync can still upload (same tradeoff as Spice).
+            if (widget.onAdvance == null) {
+              debugPrint('[VisitForm] triggering syncPendingAssessments');
+              await assessmentRepo.syncPendingAssessments().then(
+                (n) => debugPrint(
+                    '[VisitForm] syncPendingAssessments → synced $n'),
+                onError: (e) =>
+                    debugPrint('[VisitForm] syncPendingAssessments ✗ $e'),
+              );
+            } else {
+              debugPrint(
+                '[VisitForm] sync deferred until Step 3 Accept (Spice parity)',
+              );
+            }
             if (patientId != null) {
               await patientDao.updateVisitSchedule(
                 patientId: patientId,

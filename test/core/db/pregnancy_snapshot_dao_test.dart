@@ -227,4 +227,139 @@ void main() {
       expect(merged.first.facts.isNearTermAnc, isTrue);
     });
   });
+
+  group('PregnancySnapshotDao.byPatientOrMember', () {
+    test('finds a row sync keyed by household-member id', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.upsertOne(PregnancySnapshotRow(
+        patientId: 'member-1',
+        facts: PregnancyFacts.empty,
+        lmpDate: 1000,
+        ancVisitNo: 1,
+      ));
+
+      expect(await dao.byPatient('patient-1'), isNull);
+      final row =
+          await dao.byPatientOrMember('patient-1', memberId: 'member-1');
+      expect(row?.patientId, 'patient-1');
+      expect(row?.lmpDate, 1000);
+      expect(row?.ancVisitNo, 1);
+    });
+
+    test('patient row wins, member row fills gaps and raises counters',
+        () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.upsertOne(PregnancySnapshotRow(
+        patientId: 'patient-1',
+        facts: PregnancyFacts.empty,
+        lmpDate: 2000,
+        gravida: 2,
+      ));
+      await dao.upsertOne(PregnancySnapshotRow(
+        patientId: 'member-1',
+        facts: PregnancyFacts.empty,
+        lmpDate: 1000,
+        eddDate: 9000,
+        ancVisitNo: 3,
+      ));
+
+      final row =
+          await dao.byPatientOrMember('patient-1', memberId: 'member-1');
+      expect(row?.patientId, 'patient-1');
+      expect(row?.lmpDate, 2000);
+      expect(row?.eddDate, 9000);
+      expect(row?.gravida, 2);
+      expect(row?.ancVisitNo, 3);
+    });
+
+    test('nextAncVisitNo follows the member-keyed counter', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.setAncVisitNo('member-1', 1);
+
+      expect(await dao.nextAncVisitNo('patient-1'), 1);
+      expect(
+        await dao.nextAncVisitNo('patient-1', memberId: 'member-1'),
+        2,
+      );
+    });
+  });
+
+  group('PregnancySnapshotDao obstetric episode fields', () {
+    test('round-trips obstetric episode fields', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.upsertOne(PregnancySnapshotRow(
+        patientId: 'p1',
+        facts: PregnancyFacts.empty,
+        lmpDate: 111,
+        gravida: 3,
+        parity: 2,
+        livingChildren: 1,
+        existingIllness: '["diabetes"]',
+        ttTdCompleted: 'yes',
+      ));
+
+      final row = await dao.byPatient('p1');
+      expect(row?.gravida, 3);
+      expect(row?.parity, 2);
+      expect(row?.livingChildren, 1);
+      expect(row?.existingIllness, '["diabetes"]');
+      expect(row?.ttTdCompleted, 'yes');
+    });
+
+    test('mergeUpsert keeps prior gravida when patch omits it', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.upsertOne(PregnancySnapshotRow(
+        patientId: 'p1',
+        facts: PregnancyFacts.empty,
+        gravida: 2,
+        lmpDate: 100,
+      ));
+      await dao.mergeUpsert(PregnancySnapshotRow(
+        patientId: 'p1',
+        facts: PregnancyFacts.empty,
+        existingIllness: '["htn"]',
+        ancVisitNo: 1,
+      ));
+
+      final row = await dao.byPatient('p1');
+      expect(row?.gravida, 2);
+      expect(row?.lmpDate, 100);
+      expect(row?.existingIllness, '["htn"]');
+      expect(row?.ancVisitNo, 1);
+    });
+
+    test('mergePreservingDates keeps local gravida when server omits it', () {
+      final prior = {
+        'p1': PregnancySnapshotRow(
+          patientId: 'p1',
+          facts: PregnancyFacts.empty,
+          gravida: 4,
+          lmpDate: 1000,
+        ),
+      };
+      final incoming = [
+        PregnancySnapshotRow(
+          patientId: 'p1',
+          facts: const PregnancyFacts(highRiskPregnantWoman: true),
+        ),
+      ];
+      final merged = PregnancySnapshotDao.mergePreservingDates(
+        incoming: incoming,
+        prior: prior,
+      );
+      expect(merged.first.gravida, 4);
+      expect(merged.first.lmpDate, 1000);
+      expect(merged.first.facts.highRiskPregnantWoman, isTrue);
+    });
+  });
 }

@@ -339,6 +339,8 @@ class LocalAssessmentEntity {
       if (decoded is! Map) return null;
       final summary = Map<String, dynamic>.from(decoded);
       summary.remove('encounterId');
+      // Leftover from a brief hold-flag experiment — never send to server.
+      summary.remove('awaitingSummary');
       return summary.isEmpty ? null : summary;
     } catch (_) {
       return null;
@@ -646,6 +648,60 @@ class LocalAssessmentDao {
       where: 'id = ?',
       whereArgs: [entity.id],
     );
+  }
+
+  /// Pending / retryable assessments whose `otherDetails.encounterId` matches
+  /// [encounterId] (visit id). Used by Step 3 to stamp Spice `summary` fields.
+  Future<List<LocalAssessmentEntity>> forEncounter(String encounterId) async {
+    if (encounterId.isEmpty) return const [];
+    final rows = await getUnsynced(includeFailed: true);
+    final matched = <LocalAssessmentEntity>[];
+    for (final e in rows) {
+      final raw = e.otherDetails;
+      if (raw == null || raw.isEmpty) continue;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map && decoded['encounterId'] == encounterId) {
+          matched.add(e);
+        }
+      } catch (_) {}
+    }
+    return matched;
+  }
+
+  /// Merge [patch] into each matching assessment's `otherDetails` JSON.
+  /// Returns how many rows were updated.
+  Future<int> mergeOtherDetailsForEncounter({
+    required String encounterId,
+    required Map<String, dynamic> Function(LocalAssessmentEntity row) patchFor,
+  }) async {
+    final rows = await forEncounter(encounterId);
+    if (rows.isEmpty) return 0;
+    final now = DateTime.now();
+    var updated = 0;
+    for (final row in rows) {
+      final existing = <String, dynamic>{};
+      final raw = row.otherDetails;
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map) {
+            existing.addAll(Map<String, dynamic>.from(decoded));
+          }
+        } catch (_) {}
+      }
+      existing.addAll(patchFor(row));
+      // Preserve encounterId even if patch omitted it.
+      existing['encounterId'] = existing['encounterId'] ?? encounterId;
+      // Drop any leftover hold flag from earlier builds.
+      existing.remove('awaitingSummary');
+      await update(row.copyWith(
+        otherDetails: jsonEncode(existing),
+        updatedAt: now,
+      ));
+      updated++;
+    }
+    return updated;
   }
 
   /// Get all assessments eligible for upload.

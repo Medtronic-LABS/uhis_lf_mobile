@@ -710,6 +710,21 @@ class OfflineSyncService extends ChangeNotifier {
           'pnc_visit_no',
           'pncVisitNumber',
         ]),
+        gravida: JsonRead.firstInt(flat, const ['gravida']),
+        parity: JsonRead.firstInt(flat, const ['parity']),
+        livingChildren: JsonRead.firstInt(flat, const [
+          'numberOfLivingChildren',
+          'livingChildren',
+          'living_children',
+        ]),
+        ageOfLastChild: JsonRead.firstString(flat, const [
+          'ageOfLastChild',
+          'age_of_last_child',
+        ]),
+        pregnancyTest: JsonRead.firstString(flat, const [
+          'pregnancyTest',
+          'pregnancy_test',
+        ]),
       ));
     }
     final withLmp =

@@ -668,19 +668,28 @@ class _ImmunisationTimelineScreenState
               debugPrint(
                 '[ImmunisationTimeline] CHILDHOOD_VISIT assessment queued for sync',
               );
-              debugPrint(
-                '[ImmunisationTimeline] triggering syncPendingAssessments',
-              );
-              unawaited(
-                assessmentRepo.syncPendingAssessments().then(
-                  (n) => debugPrint(
-                    '[ImmunisationTimeline] syncPendingAssessments → synced $n',
+              // Spice: sync after summary Done. When advancing to Step 3, skip
+              // the explicit push; Accept stamps summary then syncs. No hold —
+              // abandon still allows later reconnect sync.
+              if (widget.onVisitComplete == null) {
+                debugPrint(
+                  '[ImmunisationTimeline] triggering syncPendingAssessments',
+                );
+                unawaited(
+                  assessmentRepo.syncPendingAssessments().then(
+                    (n) => debugPrint(
+                      '[ImmunisationTimeline] syncPendingAssessments → synced $n',
+                    ),
+                    onError: (e) => debugPrint(
+                      '[ImmunisationTimeline] syncPendingAssessments ✗ $e',
+                    ),
                   ),
-                  onError: (e) => debugPrint(
-                    '[ImmunisationTimeline] syncPendingAssessments ✗ $e',
-                  ),
-                ),
-              );
+                );
+              } else {
+                debugPrint(
+                  '[ImmunisationTimeline] sync deferred until Step 3 Accept',
+                );
+              }
             } on Object catch (e) {
               debugPrint(
                 '[ImmunisationTimeline] CHILDHOOD_VISIT assessment save error: $e',
