@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Splash theme — shown while Flutter engine loads. -->
-    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">@drawable/launch_background</item>
+    <!-- Splash theme — shown while Flutter engine loads.
+         Theme.SplashScreen (androidx.core:core-splashscreen) gives a single
+         consistent code path across API levels; on API 31+ the platform's
+         own SplashScreen system ignores a plain windowBackground drawable
+         and shows only the launcher icon's foreground on a solid color, so
+         this is the only way to get a background behind the icon there too. -->
+    <style name="LaunchTheme" parent="Theme.SplashScreen.IconBackground">
+        <item name="windowSplashScreenBackground">@color/splashBg</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>
+        <item name="postSplashScreenTheme">@style/NormalTheme</item>
     </style>
     <!-- Normal theme applied once Flutter is running.
          Uses a Material parent so Android 12+ edge-to-edge window insets

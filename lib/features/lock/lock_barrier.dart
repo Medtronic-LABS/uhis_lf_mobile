@@ -90,7 +90,7 @@ class _LockBarrierState extends State<LockBarrier> {
     final biometricAvailable = context.select<AuthState, bool>((a) => a.biometricAvailable);
     final pinEnabled = context.select<AuthState, bool>((a) => a.pinEnabled);
     
-    final programTitle = _summary?.area ?? LockStrings.programName;
+    final programTitle = _summary?.area ?? LockStrings.leapwell;
 
     return PopScope(
       canPop: false,
