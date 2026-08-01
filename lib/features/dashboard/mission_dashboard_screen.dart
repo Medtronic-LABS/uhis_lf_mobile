@@ -657,15 +657,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final memberDao = context.read<MemberDao>();
     final controller = context.read<VisitController>();
     final member = await memberDao.getByPatientId(patientId);
-    // referenceId is the backend integer PK; fall back to id which may also
-    // be numeric (e.g. "768293") for members synced before schema v17.
+    // Both id and referenceId are the local autoincrement PK.
     final householdMemberLocalId =
         int.tryParse(member?.referenceId ?? '') ??
         int.tryParse(member?.id ?? '') ??
         0;
-    final memberId = member?.referenceId?.isNotEmpty == true
-        ? member!.referenceId
-        : member?.id;
+    // Server-facing id — the encounter and the pregnancy snapshot are both
+    // keyed by FHIR. Falls back to the local id for members not yet registered.
+    final memberId = member?.fhirId?.isNotEmpty == true
+        ? member!.fhirId
+        : (member?.referenceId?.isNotEmpty == true
+            ? member!.referenceId
+            : member?.id);
+    final householdFhirId = member?.householdFhirId?.isNotEmpty == true
+        ? member!.householdFhirId
+        : householdId;
     // Mirror Android: use sub-village ID for assessment scope so that Android's
     // member-assessment-history pull (scoped to [203, 204, 206]) can find
     // Flutter-submitted assessments. Parent villageId (34) is invisible to it.
@@ -694,7 +700,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'patientId': patientId,
           'patientName': patientName,
           'patientGender': member?.gender,
-          'householdId': householdId,
+          'householdId': householdFhirId,
           'patientAge': patientAge,
           'memberId': memberId,
           'householdMemberLocalId': householdMemberLocalId,

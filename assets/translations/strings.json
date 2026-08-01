@@ -740,8 +740,20 @@
   "en": "Save"
  },
  "Enrollment.villageLabel": {
+  "bn": "ইউনিয়ন",
+  "en": "Union"
+ },
+ "Enrollment.villageHint": {
+  "bn": "ইউনিয়ন নির্বাচন করুন",
+  "en": "Select union"
+ },
+ "Enrollment.subVillageLabel": {
   "bn": "গ্রাম",
   "en": "Village"
+ },
+ "Enrollment.subVillageHint": {
+  "bn": "গ্রাম নির্বাচন করুন",
+  "en": "Select village"
  },
  "Epi.cancel": {
   "bn": "বাতিল",
@@ -3400,8 +3412,8 @@
   "en": "e.g. 1"
  },
  "disabilityPersonCountLabel": {
-  "bn": "প্রতিবন্ধী ব্যক্তির সংখ্যা",
-  "en": "Number of persons with disability"
+  "bn": "খানায় বিশেষ চাহিদা সম্পন্ন ব্যক্তির সংখ্যা",
+  "en": "Persons with disability in the HH"
  },
  "disabilityQuestionLabel": {
   "bn": "পরিবারের কোনো সদস্যের প্রতিবন্ধিতা আছে?",
@@ -4472,8 +4484,8 @@
   "en": "Head's full name"
  },
  "headNameLabel": {
-  "bn": "পূর্ণ নাম",
-  "en": "Full Name"
+  "bn": "খানা প্রধানের নাম",
+  "en": "Household Head Name"
  },
  "headPrefilledFromScan": {
   "bn": "নাম, জন্ম তারিখ ও এনআইডি কার্ড থেকে পড়া হয়েছে — যাচাই করুন, তারপর পিতা ও মাতার নাম (বাংলা) নিজে যুক্ত করুন।",

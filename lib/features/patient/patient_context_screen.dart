@@ -313,50 +313,44 @@ class _PatientContextScreenState
     return out;
   }
 
-  /// Resolves the numeric server-assigned member referenceId required by the
-  /// FHIR mapper for [encounter.memberId].
+  /// Resolves the server-facing member id the FHIR mapper needs for
+  /// `encounter.memberId`.
   ///
   /// Priority:
-  ///   1. Explicit referenceId passed in navigation extras (most reliable).
-  ///   2. DB lookup by members.id (primary key = FHIR ID = widget.patientId).
-  ///   3. DB lookup by members.patient_id column.
-  ///   4. Fallback to extras['id'] or widget.patientId (FHIR ID — mapper may
-  ///      still fail, but it is the best available value).
+  ///   1. members.fhir_id — the only id the mapper can resolve to a Patient.
+  ///   2. The local PK, for members not registered server-side yet. The push
+  ///      guard holds those assessments back until the member syncs.
+  ///   3. Explicit referenceId passed in navigation extras.
+  ///   4. Fallback to extras['id'] or widget.patientId.
   Future<String> _resolveEncounterMemberId() async {
-    // 1. Prefer the numeric referenceId pre-resolved by HouseholdDetailScreen.
-    final fromExtras = widget.memberData?['referenceId'] as String?;
-    if (fromExtras != null && fromExtras.isNotEmpty) {
-      debugPrint('[PatientContext] memberId resolved from extras referenceId: $fromExtras');
-      return fromExtras;
-    }
-
-    // 2 & 3. Look up the member entity from local DB.
-    // The backend may store members with the numeric server PK as entity.id
-    // (when no FHIR UUID is present) or as entity.referenceId. Mirror the same
-    // resolution strategy used by MemberDetailRepository.getMemberAssessments:
-    // collect all known IDs from the entity and prefer the numeric one.
     final memberDao = context.read<MemberDao>();
     final entity = await memberDao.getById(widget.patientId) ??
         await memberDao.getByPatientId(widget.patientId);
 
     if (entity != null) {
-      // Prefer explicit referenceId field.
+      if (entity.fhirId?.isNotEmpty == true) {
+        debugPrint(
+            '[PatientContext] memberId resolved via entity.fhirId: ${entity.fhirId}');
+        return entity.fhirId!;
+      }
       if (entity.referenceId?.isNotEmpty == true) {
         debugPrint('[PatientContext] memberId resolved via entity.referenceId: ${entity.referenceId}');
         return entity.referenceId!;
       }
-      // When entity.id is a pure numeric string it IS the backend integer PK
-      // (the FHIR-ID slot was empty during sync and fell back to referenceId).
       if (int.tryParse(entity.id) != null) {
         debugPrint('[PatientContext] memberId resolved via entity.id (numeric): ${entity.id}');
         return entity.id;
       }
     }
 
-    // 4. Fallback — FHIR ID; FHIR mapper will likely reject this but it is all
-    //    we have when the member has no referenceId (e.g. newly enrolled, not yet synced).
+    final fromExtras = widget.memberData?['referenceId'] as String?;
+    if (fromExtras != null && fromExtras.isNotEmpty) {
+      debugPrint('[PatientContext] memberId resolved from extras referenceId: $fromExtras');
+      return fromExtras;
+    }
+
     final fallback = widget.memberData?['id'] as String? ?? widget.patientId;
-    debugPrint('[PatientContext] memberId fallback to FHIR ID: $fallback');
+    debugPrint('[PatientContext] memberId fallback: $fallback');
     return fallback;
   }
 
