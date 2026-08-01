@@ -11,6 +11,7 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/widgets/app_version_label.dart';
 import 'lock_header.dart';
 
 class LockScreen extends StatefulWidget {
@@ -99,33 +100,43 @@ class _LockScreenState extends State<LockScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      body: Column(
+      body: Stack(
         children: [
-          // ── Dark navy header ────────────────────────────────────────────
-          const LockProgramHeader(
-            title: LockStrings.leapwell,
-            pageCount: 8,
-            currentPage: 0,
-          ),
-          // ── Scrollable body ─────────────────────────────────────────────
-          Expanded(
-            child: SingleChildScrollView(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
-                  child: LockContent(
-                    summary: _summary,
-                    busy: busy,
-                    failed: _failed,
-                    biometricEnabled: biometricEnabled && biometricAvailable,
-                    pinEnabled: pinEnabled,
-                    isOnline: _isOnline,
-                    onUnlock: _trigger,
-                    onPinUnlock: () => context.go('/pin-unlock'),
+          Column(
+            children: [
+              // ── Dark navy header ────────────────────────────────────────
+              const LockProgramHeader(
+                title: LockStrings.leapwell,
+                pageCount: 8,
+                currentPage: 0,
+              ),
+              // ── Scrollable body ─────────────────────────────────────────
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 480),
+                      child: LockContent(
+                        summary: _summary,
+                        busy: busy,
+                        failed: _failed,
+                        biometricEnabled:
+                            biometricEnabled && biometricAvailable,
+                        pinEnabled: pinEnabled,
+                        isOnline: _isOnline,
+                        onUnlock: _trigger,
+                        onPinUnlock: () => context.go('/pin-unlock'),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
+          ),
+          Positioned(
+            right: AppSpacing.h6xl,
+            bottom: AppSpacing.md,
+            child: SafeArea(top: false, child: const AppVersionLabel()),
           ),
         ],
       ),

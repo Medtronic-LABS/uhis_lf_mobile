@@ -96,6 +96,7 @@ abstract final class CommonStrings {
   static String get usePassword => getTranslatedString('usePassword', 'Use password');
   static String get unnamed => getTranslatedString('unnamed', '(unnamed)');
   static String get remove => getTranslatedString('remove', 'Remove');
+  static String versionLabel(String version) => getTranslatedString('versionLabel', 'v{version}', params: {'version': version});
 }
 
 /// Login screen + login-flow feedback.
