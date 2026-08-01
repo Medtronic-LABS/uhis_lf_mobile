@@ -376,8 +376,8 @@
   "en": "Edema"
  },
  "Composer.field.fieldFacilityIdentifiedForDelivery": {
-  "bn": "প্রসবের জন্য নির্ধারিত হাসপাতাল/ক্লিনিক",
-  "en": "Facility identified for delivery"
+  "bn": "গর্ভবতী মা কি প্রসবের জন্য কোনো স্বাস্থ্যকেন্দ্র ঠিক করেছেন?",
+  "en": "Has the PW identified a health facility for institutional delivery?"
  },
  "Composer.field.fieldFetalHeartRate": {
   "bn": "ভ্রূণের হৃদস্পন্দন",

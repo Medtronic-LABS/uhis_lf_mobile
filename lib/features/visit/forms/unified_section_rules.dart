@@ -558,7 +558,8 @@ abstract final class FieldVisibilityRules {
   ///
   /// [gestationalWeeks] — current GA from LMP/snapshot; null when unknown.
   /// [ancVisitNumber] — 1-based ANC visit count; null treated as visit 1 for
-  /// height / BMI / previous-pregnancy-complications gates.
+  /// BMI / previous-pregnancy-complications gates. Height stays visible on
+  /// visit 2+ (read-only in the UI) so the height+weight pair still renders.
   /// [formType] — owning programme layout key (e.g. `ncd`, `anc`).
   static bool isFieldVisible({
     required FieldDef field,
@@ -848,8 +849,11 @@ abstract final class FieldVisibilityRules {
       case 'previousPregnancyComplications':
         return visit == 1 && gravida > 1;
 
+      // Height stays visible on every ANC visit. Visit 2+ locks it read-only
+      // in the form UI so the height+weight pair card still shows weight
+      // (Spice hides height; Flutter keeps it disabled for the pair layout).
       case 'height':
-        return visit == 1;
+        return true;
 
       case 'bmi':
         return visit == 1 && (ga == null || ga < _gaWeek12);
@@ -893,6 +897,11 @@ abstract final class FieldVisibilityRules {
       case 'ultrasound':
       case 'ancFromMedicalDoctor':
         return ga != null && ga >= _gaWeek28;
+
+      // Flutter-only vitals field (Spice uses danger-sign options). Show with
+      // fundal height when fetal size is clinically assessable.
+      case 'fetalMovement':
+        return ga != null && ga >= _gaWeek24;
 
       default:
         return null;

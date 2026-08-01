@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 38;
+  static const int schemaVersion = 39;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -448,7 +448,19 @@ class AppDatabase {
         lmp_date INTEGER,
         delivery_date_millis INTEGER,
         anc_visit_no INTEGER,
-        pnc_visit_no INTEGER
+        pnc_visit_no INTEGER,
+        gravida INTEGER,
+        parity INTEGER,
+        living_children INTEGER,
+        age_of_last_child TEXT,
+        pregnancy_test TEXT,
+        previous_pregnancy_complications TEXT,
+        existing_illness TEXT,
+        on_treatment TEXT,
+        tt_td_completed TEXT,
+        facility_identified_for_delivery TEXT,
+        anc_weight REAL,
+        last_anc_visit_date_ms INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
@@ -1643,6 +1655,30 @@ class AppDatabase {
       await db.execute(
           'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_assessments_reference '
           'ON $tableLocalAssessments(reference_id) WHERE reference_id IS NOT NULL');
+    }
+    if (from < 39) {
+      // v39 — Spice PregnancyDetail obstetric / ANC continuity fields on the
+      // local pregnancy snapshot (gravida, illness, TT, facility, weight…).
+      for (final sql in [
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN gravida INTEGER',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN parity INTEGER',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN living_children INTEGER',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN age_of_last_child TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN pregnancy_test TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN previous_pregnancy_complications TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN existing_illness TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN on_treatment TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN tt_td_completed TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN facility_identified_for_delivery TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN anc_weight REAL',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN last_anc_visit_date_ms INTEGER',
+      ]) {
+        try {
+          await db.execute(sql);
+        } on DatabaseException catch (e) {
+          if (!e.toString().contains('duplicate column')) rethrow;
+        }
+      }
     }
   }
 

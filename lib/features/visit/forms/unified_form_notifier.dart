@@ -11,6 +11,7 @@ import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/debug/console_log.dart';
+import '../../../core/mission/mission_pregnancy_facts.dart';
 import '../../../core/models/json_read.dart';
 import '../../../core/models/referral.dart';
 import '../../../core/risk/anc_status.dart';
@@ -166,6 +167,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// True when height was prefilled from a prior visit and is hard-locked.
   bool get isHeightLockedFromPrior => _heightLockedFromPrior;
 
+  /// Height is locked when prefilled from a prior visit, or on ANC visit 2+
+  /// (shown disabled so the height+weight pair can still render weight).
+  bool _isHeightLocked() {
+    if (_heightLockedFromPrior) return true;
+    final visitNo = _asInt(_data.getValue('ancVisitNumber')) ??
+        _asInt(_data.getValue('visitNo'));
+    return visitNo != null && visitNo > 1;
+  }
+
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
   /// All AI-populated fields still pending SK review (drives banner count).
   int get aiPendingCount => _fieldSources.values
       .where((s) => s == FieldSource.aiPending)
@@ -178,9 +195,23 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// vitals-trend card can look up prior-visit history.
   String get patientId => _patientId;
 
+  /// Household-member id for this visit, when it differs from [patientId].
+  /// Pregnancy snapshot rows are sometimes keyed by it.
+  String? get memberId => _memberId;
+
   /// Loads prior ANC visit snapshots for the vitals-trend card, oldest-first.
-  Future<List<VisitVitals>> ancVitalsHistory() =>
-      _assessmentRepo.ancVitalsHistory(_patientId);
+  Future<List<VisitVitals>> ancVitalsHistory() async =>
+      _assessmentRepo.ancVitalsHistory(
+        _patientId,
+        alsoId: await _localPatientId(),
+      );
+
+  /// ANC visits already on file for this patient (local + synced history).
+  Future<int> priorAncVisitCount() async =>
+      _assessmentRepo.priorAncVisitCount(
+        _patientId,
+        alsoId: await _localPatientId(),
+      );
 
   /// Returns the most-recent weight (kg) recorded for this patient from ANY
   /// prior visit, or `null` when no prior weight exists.
@@ -229,7 +260,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// already entered a value (i.e., field is null in current data).
   Future<void> preloadAncMedicalHistory() async {
     if (_data.getValue('pregnantWomanExistingIllness') != null) return;
-    final prior = await _assessmentRepo.lastAncIllnessData(_patientId);
+    final prior = await _assessmentRepo.lastAncIllnessData(
+      _patientId,
+      alsoId: await _localPatientId(),
+    );
     if (prior == null) return;
     var changed = false;
     for (final entry in prior.entries) {
@@ -244,7 +278,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Pre-fills stable ANC obstetric history fields: previousPregnancyComplications,
   /// ttTdCompleted, facilityIdentifiedForDelivery.
   Future<void> preloadAncChronic() async {
-    final prior = await _assessmentRepo.lastAncChronicData(_patientId);
+    final prior = await _assessmentRepo.lastAncChronicData(
+      _patientId,
+      alsoId: await _localPatientId(),
+    );
     if (prior == null) return;
     var changed = false;
     for (final entry in prior.entries) {
@@ -253,6 +290,63 @@ class UnifiedFormNotifier extends ChangeNotifier {
         changed = true;
       }
     }
+    if (changed) notifyListeners();
+  }
+
+  /// Prefill ANC/PW fields from the local pregnancy episode snapshot
+  /// (Spice `PregnancyDetail` continuity). Does not overwrite SK-entered values.
+  Future<void> preloadFromPregnancySnapshot() async {
+    PregnancySnapshotRow? snap;
+    try {
+      snap = await _pregnancySnapshotForPatient();
+    } catch (e) {
+      debugPrint('[PregnancySnapshot] preload skipped: $e');
+      return;
+    }
+    if (snap == null) return;
+
+    var changed = false;
+    void putIfEmpty(String key, dynamic value) {
+      if (value == null) return;
+      if (_data.getValue(key) != null) return;
+      _data = _data.setValue(key, value);
+      changed = true;
+    }
+
+    putIfEmpty('gravida', snap.gravida);
+    putIfEmpty('parity', snap.parity);
+    putIfEmpty('livingChildren', snap.livingChildren);
+    putIfEmpty('ageOfLastChild', snap.ageOfLastChild);
+    putIfEmpty('pregnancyTest', snap.pregnancyTest);
+    putIfEmpty(
+      'previousPregnancyComplications',
+      PregnancySnapshotRow.decodeJsonList(snap.previousPregnancyComplications),
+    );
+    putIfEmpty(
+      'pregnantWomanExistingIllness',
+      PregnancySnapshotRow.decodeJsonList(snap.existingIllness),
+    );
+    putIfEmpty(
+      'pregnantWomanOnTreatment',
+      PregnancySnapshotRow.decodeJsonList(snap.onTreatment),
+    );
+    putIfEmpty('ttTdCompleted', snap.ttTdCompleted);
+    putIfEmpty(
+      'facilityIdentifiedForDelivery',
+      snap.facilityIdentifiedForDelivery,
+    );
+
+    // Seed in-memory GA from snapshot LMP when not already set (same-page
+    // LMP edit wins via _applyPwProfileLmpChange).
+    if (_gestationalWeeks == null && snap.lmpDate != null) {
+      _lmpDate = DateTime.fromMillisecondsSinceEpoch(snap.lmpDate!);
+      if (snap.eddDate != null) {
+        _eddDate = DateTime.fromMillisecondsSinceEpoch(snap.eddDate!);
+      }
+      _gestationalWeeks = snap.gestationalWeeksFromLmp;
+      changed = true;
+    }
+
     if (changed) notifyListeners();
   }
 
@@ -426,20 +520,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       var source = 'none';
 
       // ── 1. Prefer pregnancy snapshot (stable per-patient store) ───────────
-      var snap = await _pregnancySnapshotDao.byPatient(_patientId);
-      // Snapshot rows are sometimes keyed by household-member id when the
-      // sync-time FHIR patient map was incomplete — try memberId next.
-      final memberId = _memberId;
-      if ((snap?.lmpDate == null && snap?.eddDate == null) &&
-          memberId != null &&
-          memberId.isNotEmpty &&
-          memberId != _patientId) {
-        final byMember = await _pregnancySnapshotDao.byPatient(memberId);
-        if (byMember?.lmpDate != null || byMember?.eddDate != null) {
-          snap = byMember;
-          debugPrint('[LMP] load using memberId snapshot member=$memberId');
-        }
-      }
+      final snap = await _pregnancySnapshotForPatient();
       debugPrint(
         '[LMP] load patient=$_patientId member=$_memberId snapshot='
         '${snap == null ? "missing" : "hit"} '
@@ -491,7 +572,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
       // ── 4. Fallback: patient rawJson (flatten nested pregnancy DTOs) ─────
       if (lmp == null) {
-        final patient = await _patientDao.byId(_patientId);
+        final patient = await _patientDao.byAnyId(_patientId);
         if (patient == null) {
           debugPrint('[LMP] load patient $_patientId not found in DB');
         }
@@ -594,8 +675,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// When `height` or `weight` changes, BMI is automatically recomputed and
   /// stored under the `bmi` field so the `_InfoLabelField` stays in sync.
   void updateField(String fieldId, dynamic value) {
-    if (fieldId == 'height' && _heightLockedFromPrior) {
-      debugPrint('[UnifiedForm] height locked from prior visit — ignoring edit');
+    if (fieldId == 'height' && _isHeightLocked()) {
+      debugPrint('[UnifiedForm] height locked — ignoring edit');
       return;
     }
     final valueType = value?.runtimeType ?? 'null';
@@ -908,23 +989,35 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   /// Mirrors Android LMP callback: compute EDD + GA when ≥ 42 days; otherwise
   /// clear the rest of the pregnancy-details fields (too-early path).
+  ///
+  /// Also updates [_gestationalWeeks] / [_lmpDate] / [_eddDate] so ANC
+  /// show/hide on the same combined PW+ANC form reacts immediately.
   void _applyPwProfileLmpChange(dynamic value) {
     final raw = value?.toString();
     final lmp = (raw == null || raw.isEmpty) ? null : DateTime.tryParse(raw);
     if (lmp == null) {
       _data = _data.removeFields(_pwLmpClearedFieldIds);
+      _lmpDate = null;
+      _eddDate = null;
+      _gestationalWeeks = null;
       return;
     }
 
     final days = CalendarDay.daysBetween(lmp, DateTime.now());
     if (days < FieldVisibilityRules.lmpThresholdDays) {
       _data = _data.removeFields(_pwLmpClearedFieldIds);
+      _lmpDate = lmp;
+      _eddDate = null;
+      _gestationalWeeks = null;
       return;
     }
 
     final edd = lmp.add(const Duration(days: 280));
     final weeks = days ~/ 7;
     final remDays = days % 7;
+    _lmpDate = lmp;
+    _eddDate = edd;
+    _gestationalWeeks = weeks;
     _data = _data.setValue('EDD', _eddDisplayFormat.format(edd));
     // Android formatGestationalAge(Pair): "X weeks Y days "
     _data = _data.setValue(
@@ -1131,9 +1224,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// True when the SK typed or edited this field — AI must never overwrite.
-  /// Also true for height locked from a prior NCD/Cataract visit.
+  /// Also true for height locked from a prior visit / ANC visit 2+.
   bool _isSkOwned(String fieldId) {
-    if (fieldId == 'height' && _heightLockedFromPrior) return true;
+    if (fieldId == 'height' && _isHeightLocked()) return true;
     final source = _fieldSources[fieldId];
     return source == FieldSource.manual || source == FieldSource.aiModified;
   }
@@ -1240,8 +1333,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
       if (_activeFormTypes.contains('anc') &&
           _data.getValue('ancVisitNumber') == null &&
           _data.getValue('visitNo') == null) {
-        assignedAncVisitNo =
-            await _pregnancySnapshotDao.nextAncVisitNo(_patientId);
+        assignedAncVisitNo = await _pregnancySnapshotDao
+            .nextAncVisitNo(_patientId, memberId: _memberId);
         _data = _data.setValue('ancVisitNumber', assignedAncVisitNo);
         debugPrint(
             '[AncVisitNo] assigned visitNo=$assignedAncVisitNo '
@@ -1253,8 +1346,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
               _data.getValue('deliveryOutcomeType')?.toString() == 'liveBirth');
       int? assignedPncVisitNo;
       if (willEmitPnc && _data.getValue('pncVisitNumber') == null) {
-        assignedPncVisitNo =
-            await _pregnancySnapshotDao.nextPncVisitNo(_patientId);
+        assignedPncVisitNo = await _pregnancySnapshotDao
+            .nextPncVisitNo(_patientId, memberId: _memberId);
         _data = _data.setValue('pncVisitNumber', assignedPncVisitNo);
         debugPrint(
             '[PncVisitNo] assigned visitNo=$assignedPncVisitNo '
@@ -1466,35 +1559,16 @@ class UnifiedFormNotifier extends ChangeNotifier {
         savedIds.add(id);
       }
 
-      // Persist completed ANC / PNC counts (Spice PregnancyDetail.*VisitNo).
-      if (payloads.any((p) => p.assessmentType.toUpperCase() == 'ANC')) {
-        final raw = assignedAncVisitNo ??
-            _data.getValue('ancVisitNumber') ??
-            _data.getValue('visitNo');
-        final completed = _asPositiveInt(raw);
-        if (completed != null) {
-          try {
-            await _pregnancySnapshotDao.setAncVisitNo(_patientId, completed);
-            debugPrint(
-                '[AncVisitNo] persisted ancVisitNo=$completed patient=$_patientId');
-          } catch (e) {
-            debugPrint('[AncVisitNo] persist skipped: $e');
-          }
-        }
-      }
-      if (payloads.any((p) => p.assessmentType.toUpperCase() == 'PNC_MOTHER')) {
-        final raw = assignedPncVisitNo ??
-            _data.getValue('pncVisitNumber');
-        final completed = _asPositiveInt(raw);
-        if (completed != null) {
-          try {
-            await _pregnancySnapshotDao.setPncVisitNo(_patientId, completed);
-            debugPrint(
-                '[PncVisitNo] persisted pncVisitNo=$completed patient=$_patientId');
-          } catch (e) {
-            debugPrint('[PncVisitNo] persist skipped: $e');
-          }
-        }
+      // Persist completed ANC / PNC counts (Spice PregnancyDetail.*VisitNo)
+      // and merge episode clinical fields captured on this visit.
+      try {
+        await _persistPregnancyEpisodeAfterSubmit(
+          payloads: payloads,
+          assignedAncVisitNo: assignedAncVisitNo,
+          assignedPncVisitNo: assignedPncVisitNo,
+        );
+      } catch (e) {
+        debugPrint('[PregnancySnapshot] persist after submit skipped: $e');
       }
 
       // CCE: bridge referred assessments into the local referrals table so
@@ -1527,6 +1601,115 @@ class UnifiedFormNotifier extends ChangeNotifier {
     };
     if (n == null || n <= 0) return null;
     return n;
+  }
+
+  /// Write PW + ANC episode fields back to the local pregnancy snapshot
+  /// (Spice `savePregnancyDetails` / `saveAncPregnancyDetails`).
+  Future<void> _persistPregnancyEpisodeAfterSubmit({
+    required List<ProgrammePayload> payloads,
+    int? assignedAncVisitNo,
+    int? assignedPncVisitNo,
+  }) async {
+    final types = payloads.map((p) => p.assessmentType.toUpperCase()).toSet();
+    final hasPw = types.contains('PWPROFILE') ||
+        types.contains('PW') ||
+        _activeFormTypes.contains('pwProfile');
+    final hasAnc = types.contains('ANC');
+    final hasPnc = types.contains('PNC_MOTHER');
+
+    if (!hasPw && !hasAnc && !hasPnc) return;
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    int? ancNo;
+    if (hasAnc) {
+      ancNo = _asPositiveInt(
+        assignedAncVisitNo ??
+            _data.getValue('ancVisitNumber') ??
+            _data.getValue('visitNo'),
+      );
+    }
+    int? pncNo;
+    if (hasPnc) {
+      pncNo = _asPositiveInt(
+        assignedPncVisitNo ?? _data.getValue('pncVisitNumber'),
+      );
+    }
+
+    // Prefer in-memory LMP/EDD from this session; fall back to form LMP.
+    int? lmpMs = _lmpDate?.millisecondsSinceEpoch;
+    int? eddMs = _eddDate?.millisecondsSinceEpoch;
+    if (lmpMs == null) {
+      final raw = _data.getValue('lmp')?.toString();
+      final parsed = raw == null || raw.isEmpty ? null : DateTime.tryParse(raw);
+      if (parsed != null) {
+        lmpMs = parsed.millisecondsSinceEpoch;
+        eddMs ??= parsed.add(const Duration(days: 280)).millisecondsSinceEpoch;
+      }
+    }
+
+    final weight = PregnancySnapshotRow.asDouble(_data.getValue('weight'));
+
+    final localId = await _localPatientId();
+    final patch = PregnancySnapshotRow(
+      patientId: localId,
+      facts: PregnancyFacts.empty,
+      updatedAt: nowMs,
+      lmpDate: hasPw || hasAnc ? lmpMs : null,
+      eddDate: hasPw || hasAnc ? eddMs : null,
+      ancVisitNo: ancNo,
+      pncVisitNo: pncNo,
+      gravida: hasPw || hasAnc
+          ? PregnancySnapshotRow.asInt(_data.getValue('gravida'))
+          : null,
+      parity: hasPw || hasAnc
+          ? PregnancySnapshotRow.asInt(_data.getValue('parity'))
+          : null,
+      livingChildren: hasPw || hasAnc
+          ? PregnancySnapshotRow.asInt(_data.getValue('livingChildren'))
+          : null,
+      ageOfLastChild: hasPw || hasAnc
+          ? _data.getValue('ageOfLastChild')?.toString()
+          : null,
+      pregnancyTest: hasPw ? _data.getValue('pregnancyTest')?.toString() : null,
+      previousPregnancyComplications: hasAnc
+          ? PregnancySnapshotRow.encodeJsonList(
+              _data.getValue('previousPregnancyComplications'),
+            )
+          : null,
+      existingIllness: hasAnc
+          ? PregnancySnapshotRow.encodeJsonList(
+              _data.getValue('pregnantWomanExistingIllness'),
+            )
+          : null,
+      onTreatment: hasAnc
+          ? PregnancySnapshotRow.encodeJsonList(
+              _data.getValue('pregnantWomanOnTreatment'),
+            )
+          : null,
+      ttTdCompleted:
+          hasAnc ? _data.getValue('ttTdCompleted')?.toString() : null,
+      facilityIdentifiedForDelivery: hasAnc
+          ? _data.getValue('facilityIdentifiedForDelivery')?.toString()
+          : null,
+      ancWeight: hasAnc ? weight : null,
+      lastAncVisitDateMs: hasAnc ? nowMs : null,
+    );
+
+    // Preserve existing mission facts when we only have empty defaults here.
+    final existing = await _pregnancySnapshotDao.byPatientOrMember(
+      localId,
+      memberId: _memberId,
+    );
+    final withFacts = existing == null
+        ? patch
+        : patch.copyWith(facts: existing.facts);
+    await _pregnancySnapshotDao.mergeUpsert(withFacts);
+    if (ancNo != null) {
+      debugPrint('[AncVisitNo] persisted ancVisitNo=$ancNo patient=$localId');
+    }
+    if (pncNo != null) {
+      debugPrint('[PncVisitNo] persisted pncVisitNo=$pncNo patient=$localId');
+    }
   }
 
   /// The `eyeCare` card body of a programme payload — the standalone eye care
@@ -1601,13 +1784,38 @@ class UnifiedFormNotifier extends ChangeNotifier {
     return out;
   }
 
+  /// Local `patients.id` for [_patientId]. Snapshot + programmes are keyed by
+  /// the member PK; the visit route often carries `members.patient_id`.
+  Future<String> _localPatientId() async {
+    if (_patientId.isEmpty) return _patientId;
+    try {
+      final patient = await _patientDao.byAnyId(_patientId);
+      return patient?.id ?? _patientId;
+    } catch (_) {
+      return _patientId;
+    }
+  }
+
+  /// Pregnancy snapshot under the local PK, with memberId as a secondary key.
+  Future<PregnancySnapshotRow?> pregnancySnapshot() =>
+      _pregnancySnapshotForPatient();
+
+  /// Pregnancy snapshot under the local PK, with memberId as a secondary key.
+  Future<PregnancySnapshotRow?> _pregnancySnapshotForPatient() async {
+    final localId = await _localPatientId();
+    return _pregnancySnapshotDao.byPatientOrMember(
+      localId,
+      memberId: _memberId,
+    );
+  }
+
   /// Member DOB for the PW age-risk rules. Falls back to the stored age when
   /// no birth date was synced; returns null when neither is known, which makes
   /// [PwRiskFactors] skip the age rules rather than guess.
   Future<DateTime?> _patientDateOfBirth() async {
     if (_patientId.isEmpty) return null;
     try {
-      final patient = await _patientDao.byId(_patientId);
+      final patient = await _patientDao.byAnyId(_patientId);
       if (patient == null) return null;
       final dob = patient.dob;
       if (dob != null && dob.isNotEmpty) {

@@ -2242,7 +2242,7 @@ abstract final class ComposerStrings {
   static const String fieldIfaProvided = 'IFA tablets provided';
   static const String fieldCalciumProvided = 'Calcium tablets provided';
   static const String fieldFacilityIdentifiedForDelivery =
-      'Facility identified for delivery';
+      'Has the PW identified a health facility for institutional delivery?';
   static const String fieldUltrasound = 'Ultrasound';
   static const String fieldHemoglobin = 'Hemoglobin (Hb)';
   static const String fieldBloodSugar = 'Blood sugar type';
@@ -2377,7 +2377,7 @@ abstract final class ComposerStrings {
       case 'fieldCalciumProvided':
         return getTranslatedString('Composer.field.fieldCalciumProvided', 'Calcium tablets provided');
       case 'fieldFacilityIdentifiedForDelivery':
-        return getTranslatedString('Composer.field.fieldFacilityIdentifiedForDelivery', 'Facility identified for delivery');
+        return getTranslatedString('Composer.field.fieldFacilityIdentifiedForDelivery', 'Has the PW identified a health facility for institutional delivery?');
       case 'fieldUltrasound':
         return getTranslatedString('Composer.field.fieldUltrasound', 'Ultrasound');
       case 'fieldHemoglobin':

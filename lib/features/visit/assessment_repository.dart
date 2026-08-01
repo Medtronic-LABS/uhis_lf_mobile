@@ -17,6 +17,7 @@ import '../../core/models/provance_dto.dart';
 import '../../core/sync/offline_push_service.dart';
 import '../patient/followup_call_service.dart';
 import 'forms/pregnancy_outcome_side_effects.dart';
+import 'forms/visit_summary_details.dart';
 import 'forms/vitals_trend.dart';
 
 /// Repository for offline-first assessment management matching Android pattern.
@@ -151,6 +152,36 @@ class AssessmentRepository extends ChangeNotifier {
     await _refreshPendingCount();
 
     return id;
+  }
+
+  /// Spice `updateOtherAssessmentDetails` — merge Step 3 summary keys into
+  /// each pending assessment for this visit and return how many rows were
+  /// updated. Caller should then [syncPendingAssessments].
+  Future<int> applyStep3Summary({
+    required String encounterId,
+    DateTime? nextVisitDate,
+    required bool isReferred,
+    String? referralFacilityType,
+    String? referredSiteId,
+  }) async {
+    final updated = await _dao.mergeOtherDetailsForEncounter(
+      encounterId: encounterId,
+      patchFor: (row) => VisitSummaryDetails.patchFor(
+        assessmentType: row.assessmentType,
+        nextVisitDate: nextVisitDate,
+        isReferred: isReferred || row.isReferred,
+        referralFacilityType: referralFacilityType,
+        referredSiteId: referredSiteId,
+      ),
+    );
+    if (updated > 0) {
+      debugPrint(
+        '[AssessmentRepo] Step 3 summary applied to $updated assessment(s) '
+        'encounter=$encounterId nextVisit=$nextVisitDate referred=$isReferred',
+      );
+      await _refreshPendingCount();
+    }
+    return updated;
   }
 
   /// Resolve the encounter identity from the member row, mirroring the join
@@ -598,6 +629,89 @@ class AssessmentRepository extends ChangeNotifier {
     return count;
   }
 
+  /// The keys one patient's assessments can be filed under.
+  ///
+  /// A visit stamps `local_assessments` with whatever id its screen carried
+  /// (usually `members.patient_id`), while sync files `assessments` under the
+  /// local member PK — see [MemberDao.patientIdsByMemberIds]. Reading only one
+  /// of them hides half the patient's ANC history.
+  static List<String> _idsFor(String patientId, String? alsoId) =>
+      <String>{patientId, if (alsoId != null) alsoId}
+          .where((id) => id.isNotEmpty)
+          .toList(growable: false);
+
+  /// Local rows across [ids], newest-first and de-duplicated by row id.
+  Future<List<LocalAssessmentEntity>> _localRows(List<String> ids) async {
+    if (ids.length == 1) return _dao.getByPatientId(ids.first);
+    final seen = <String>{};
+    final out = <LocalAssessmentEntity>[];
+    for (final id in ids) {
+      for (final row in await _dao.getByPatientId(id)) {
+        if (seen.add(row.id)) out.add(row);
+      }
+    }
+    out.sort((a, b) => (b.createdAt?.millisecondsSinceEpoch ?? 0)
+        .compareTo(a.createdAt?.millisecondsSinceEpoch ?? 0));
+    return out;
+  }
+
+  /// Synced history rows across [ids], de-duplicated by row id.
+  Future<List<AssessmentRow>> _historyRows(List<String> ids) async {
+    if (_historyDao == null || ids.isEmpty) return const [];
+    final map = await _historyDao.forMany(ids);
+    final seen = <String>{};
+    final out = <AssessmentRow>[];
+    for (final id in ids) {
+      for (final row in map[id] ?? const <AssessmentRow>[]) {
+        if (seen.add(row.id)) out.add(row);
+      }
+    }
+    return out;
+  }
+
+  /// Number of ANC visits already recorded for [patientId], across this
+  /// device's rows and synced history.
+  ///
+  /// Unlike [ancVitalsHistory] this counts every ANC assessment, including
+  /// ones saved without vitals — a visit still happened, so it must advance
+  /// the visit number.
+  Future<int> priorAncVisitCount(String patientId, {String? alsoId}) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return 0;
+    final localRows = await _localRows(ids);
+    var count = localRows
+        .where((r) => r.assessmentType.toUpperCase() == 'ANC')
+        .length;
+    count += (await _historyRows(ids))
+        .where((r) => _isAncVisitKind(r.kind?.toUpperCase() ?? ''))
+        .length;
+    return count;
+  }
+
+  /// True when this pregnancy has already been registered — a PW profile or
+  /// any ANC visit exists locally or in synced history.
+  ///
+  /// Used to decide whether PW registration should be offered again. Reads
+  /// both stores so a device that missed the local enrolment write (or was
+  /// re-installed) still recognises a registered woman.
+  Future<bool> hasPregnancyRegistration(String patientId) async {
+    if (patientId.isEmpty) return false;
+    final localRows = await _dao.getByPatientId(patientId);
+    if (localRows.any((r) {
+      final type = r.assessmentType.toUpperCase();
+      return type == 'ANC' || _isPwProfileKind(type);
+    })) {
+      return true;
+    }
+    if (_historyDao == null) return false;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = historyMap[patientId] ?? const [];
+    return rows.any((r) {
+      final kind = r.kind?.toUpperCase() ?? '';
+      return _isAncVisitKind(kind) || _isPwProfileKind(kind);
+    });
+  }
+
   /// Most-recent weight (kg) for [patientId].
   ///
   /// Order matches prior-visit biometrics for NCD: this device's
@@ -729,12 +843,16 @@ class AssessmentRepository extends ChangeNotifier {
   /// persisted here, so no explicit exclusion is required.
   /// Returns ANC vital snapshots oldest-first from BOTH local submissions and
   /// server-synced history.  The trend card needs ≥2 data points.
-  Future<List<VisitVitals>> ancVitalsHistory(String patientId) async {
-    if (patientId.isEmpty) return const [];
+  Future<List<VisitVitals>> ancVitalsHistory(
+    String patientId, {
+    String? alsoId,
+  }) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return const [];
     final snapshots = <VisitVitals>[];
 
     // 1. Locally-submitted assessments (pending or synced by this app).
-    final localRows = await _dao.getByPatientId(patientId);
+    final localRows = await _localRows(ids);
     for (final row in localRows) {
       if (row.assessmentType.toUpperCase() != 'ANC') continue;
       final snap = _snapshotFromAnc(row.assessmentDetails, row.createdAt);
@@ -742,11 +860,10 @@ class AssessmentRepository extends ChangeNotifier {
     }
 
     // 2. Server-synced assessment history stored during offline sync.
-    if (_historyDao != null) {
-      final historyMap = await _historyDao.forMany([patientId]);
-      final historyRows = historyMap[patientId] ?? const [];
+    {
+      final historyRows = await _historyRows(ids);
       debugPrint('[AssessmentRepo] ANC history lookup: ${historyRows.length} rows '
-          'for patient $patientId');
+          'for ids=$ids');
       for (final row in historyRows) {
         final kind = row.kind?.toUpperCase() ?? '';
         debugPrint('[AssessmentRepo] history row kind="$kind" id=${row.id}');
@@ -777,13 +894,17 @@ class AssessmentRepository extends ChangeNotifier {
   /// Returns `pregnantWomanExistingIllness` and `pregnantWomanOnTreatment`
   /// from the most recent prior ANC assessment. Checks local submissions first,
   /// then server-synced history. Returns null when no prior ANC data found.
-  Future<Map<String, dynamic>?> lastAncIllnessData(String patientId) async {
-    if (patientId.isEmpty) return null;
+  Future<Map<String, dynamic>?> lastAncIllnessData(
+    String patientId, {
+    String? alsoId,
+  }) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return null;
 
     // 1. Most-recent local ANC row (newest-first from DAO).
     // Local ANC details are nested: medicalHistoryPhysicalExamination holds
     // pregnantWomanExistingIllness — unwrap before reading.
-    final localRows = await _dao.getByPatientId(patientId);
+    final localRows = await _localRows(ids);
     for (final row in localRows) {
       if (row.assessmentType.toUpperCase() != 'ANC') continue;
       try {
@@ -801,10 +922,7 @@ class AssessmentRepository extends ChangeNotifier {
     }
 
     // 2. Server-synced history rows (newest-first).
-    if (_historyDao == null) return null;
-    final historyMap = await _historyDao.forMany([patientId]);
-    final historyRows = List<AssessmentRow>.from(
-        historyMap[patientId] ?? const [])
+    final historyRows = List<AssessmentRow>.from(await _historyRows(ids))
       ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
     for (final row in historyRows) {
       if (!_isAncKind(row.kind?.toUpperCase() ?? '')) continue;
@@ -827,22 +945,24 @@ class AssessmentRepository extends ChangeNotifier {
   /// Stable ANC obstetric history fields from the most recent prior ANC:
   /// `previousPregnancyComplications`, `ttTdCompleted`,
   /// `facilityIdentifiedForDelivery`. Returns null when no prior ANC found.
-  Future<Map<String, dynamic>?> lastAncChronicData(String patientId) async {
-    if (patientId.isEmpty) return null;
+  Future<Map<String, dynamic>?> lastAncChronicData(
+    String patientId, {
+    String? alsoId,
+  }) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return null;
     const keys = [
       'previousPregnancyComplications',
       'ttTdCompleted',
       'facilityIdentifiedForDelivery',
     ];
-    final localRows = await _dao.getByPatientId(patientId);
+    final localRows = await _localRows(ids);
     for (final row in localRows) {
       if (row.assessmentType.toUpperCase() != 'ANC') continue;
       final r = _extractKeys(row.assessmentDetails, keys, _ancSubObjects);
       if (r != null) return r;
     }
-    if (_historyDao == null) return null;
-    final historyMap = await _historyDao.forMany([patientId]);
-    final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
+    final rows = List<AssessmentRow>.from(await _historyRows(ids))
       ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
     for (final row in rows) {
       if (!_isAncKind(row.kind?.toUpperCase() ?? '')) continue;
@@ -1107,6 +1227,19 @@ class AssessmentRepository extends ChangeNotifier {
         kind.contains('OBSTETRIC') ||
         kind.contains('PREGNANCY');
   }
+
+  /// Stricter than [_isAncKind]: counts antenatal visits only, so a delivery
+  /// record (`PREGNANCY_OUTCOME`) is never mistaken for an ANC visit.
+  static bool _isAncVisitKind(String kind) {
+    if (kind.isEmpty || kind.contains('OUTCOME')) return false;
+    return kind.contains('ANC') ||
+        kind.contains('ANTENATAL') ||
+        kind.contains('PRENATAL');
+  }
+
+  /// Pregnant-woman registration record (Spice `PWPROFILE`).
+  static bool _isPwProfileKind(String kind) =>
+      kind.replaceAll('_', '').contains('PWPROFILE');
 
   static bool _isNcdKind(String kind) =>
       kind.contains('NCD') || kind.contains('HYPERTENSION') || kind.contains('DIABETES');
