@@ -31,7 +31,6 @@ Future<GoRouter> _pumpFlowAtStep3(WidgetTester tester) async {
         ),
       ),
       GoRoute(path: '/home', builder: (_, _) => const Text('home-route')),
-      GoRoute(path: '/tasks', builder: (_, _) => const Text('tasks-route')),
     ],
   );
   await tester.pumpWidget(MaterialApp.router(routerConfig: router));
@@ -99,9 +98,9 @@ void main() {
       await tester.tap(find.text(VisitCompleteStrings.backToHome));
       await tester.pumpAndSettle();
       final loc = router.routerDelegate.currentConfiguration.uri.toString();
-      // Default origin is null → 'patients' → /tasks per _Step3AiReco mapping.
-      expect(loc == '/tasks' || loc == '/home', isTrue,
-          reason: 'expected /tasks or /home, got $loc');
+      // Default/unrecognised origin falls through to /home per _Step3AiReco's
+      // _returnPath mapping (only 'dashboard'/'household'/'patient' are handled).
+      expect(loc, '/home');
     });
 
     testWidgets('no referral warning when referralRecommended is false',

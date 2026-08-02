@@ -668,12 +668,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _navigateToFirstQueueItem() async {
-    debugPrint('[_DashboardScreenState] _navigateToFirstQueueItem');
-    // Navigate to Tasks screen (Visits tab)
-    if (mounted) context.push('/tasks');
-  }
-
   @override
   Widget build(BuildContext context) {
     // Check if a refresh is pending (e.g., assessment completed while on another tab)
@@ -857,7 +851,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             return _TodaysVisitsHeader(
                               visitCount: _todayVisitCount,
                               loading: _todayCountLoading || waiting,
-                              onTap: _navigateToFirstQueueItem,
                             );
                           }
                           if (index == 3) return const SizedBox(height: 10);
@@ -1455,14 +1448,12 @@ class _TodaysVisitsHeader extends StatelessWidget {
   const _TodaysVisitsHeader({
     required this.visitCount,
     required this.loading,
-    this.onTap,
   });
 
   /// Unfiltered today's actionable visits (upcoming excluded). Independent of
   /// village / need / search chips so the badge stays honest while filtering.
   final int visitCount;
   final bool loading;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

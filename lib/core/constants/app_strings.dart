@@ -967,83 +967,10 @@ abstract final class ReferralStrings {
   ];
 
   // ── Dashboard ────────────────────────────────────────────────────────────
-  static String get dashboardTitle => getTranslatedString('dashboardTitle', 'Referrals');
-  static String get emptyTitle => getTranslatedString('Referral.emptyTitle', 'No active referrals');
-  static String get emptyBody => getTranslatedString('Referral.emptyBody', 'Your SLA dashboard populates after you create a referral or sync from the facility.');
   static String get loadFailed => getTranslatedString('Referral.loadFailed', 'Could not load referrals');
 
-  // ── Filter chips (priority bands) ────────────────────────────────────────
-  static String get filterAll => getTranslatedString('Referral.filterAll', 'All');
-  static String get filterCritical => getTranslatedString('filterCritical', 'Critical');
-  static String get filterHigh => getTranslatedString('filterHigh', 'High');
-  static String get filterMedium => getTranslatedString('filterMedium', 'Medium');
-  static String get filterLow => getTranslatedString('filterLow', 'Low');
-
-  // ── SLA tier labels ──────────────────────────────────────────────────────
-  static String get tierEmergency => getTranslatedString('tierEmergency', 'EMERGENCY');
-  static String get tierUrgent => getTranslatedString('tierUrgent', 'URGENT');
-  static String get tierRoutine => getTranslatedString('tierRoutine', 'ROUTINE');
-
-  // ── SLA strip / data-age badge ───────────────────────────────────────────
-  static String syncedAgo(String relative) => getTranslatedString('syncedAgo', 'Synced {relative}', params: {'relative': '$relative'});
-  static String breachesCount(int n) => AppLocale.isBangla ? '$n এসএলএ লঙ্ঘন' : '$n SLA breach${n == 1 ? "" : "es"}';
-  static String escalationsCount(int n) =>
-      AppLocale.isBangla ? '$n এস্কালেশন মুলতুবি' : '$n escalation${n == 1 ? "" : "s"} pending';
-
-  // ── Critical banner ──────────────────────────────────────────────────────
-  static String criticalBannerFmt(String patientName, String tier, String detail) => getTranslatedString('criticalBannerFmt', 'BREACHED: {patientName} · {tier} · {detail}', params: {'patientName': '$patientName', 'tier': '$tier', 'detail': '$detail'});
-
-  // ── Timeline node labels ─────────────────────────────────────────────────
-  static String get stepCreated => getTranslatedString('stepCreated', 'Created');
-  static String get stepAcknowledged => getTranslatedString('stepAcknowledged', 'Acked');
-  static String get stepInTransit => getTranslatedString('stepInTransit', 'Travel');
-  static String get stepArrived => getTranslatedString('stepArrived', 'Arrived');
-  static String get stepTreatmentStarted => getTranslatedString('stepTreatmentStarted', 'Treated');
-  static String get stepClosedRecovered => getTranslatedString('stepClosedRecovered', 'Recovered');
-  static String get stepClosedDeceased => getTranslatedString('stepClosedDeceased', 'Deceased');
-  static String get stepBreached => getTranslatedString('stepBreached', 'BREACH');
-  static String get stepPaused => getTranslatedString('stepPaused', 'Paused');
-  static String get stepRefused => getTranslatedString('stepRefused', 'Refused');
-  static String get stepTargetUnreachable => getTranslatedString('stepTargetUnreachable', 'Target unreachable');
-  static String get stepDuplicate => getTranslatedString('stepDuplicate', 'Duplicate');
-  static String get stepTransportDeclined => getTranslatedString('stepTransportDeclined', 'Transport declined');
-  static String get stepDiverted => getTranslatedString('stepDiverted', 'Diverted');
-
-  // ── Driver labels (extends RiskRationale._formatDriver vocabulary) ──────
-  static String formatDriver(String driver) {
-    final parts = driver.split(':');
-    final key = parts[0];
-    final value = parts.length > 1 ? parts[1] : null;
-    switch (key) {
-      case 'sla-breached':
-        return 'SLA breached';
-      case 'emergency-dx':
-        return 'Emergency diagnosis';
-      case 'no-arrival':
-        return 'No arrival recorded';
-      case 'delay-48h':
-        return 'Delay over 48 h';
-      case 'missed-follow-up':
-        return value != null
-            ? '$value missed follow-up(s)'
-            : 'Missed follow-up';
-      case 'escalation-pending':
-        return 'Escalation pending';
-      case 'under-5':
-        return value != null ? 'Under-5 child (age $value)' : 'Under-5 child';
-      case 'pregnancy':
-        return 'Pregnancy / ANC enrolled';
-      default:
-        return driver;
-    }
-  }
-
   // ── Card labels ──────────────────────────────────────────────────────────
-  static String get tapToSeeWhy => getTranslatedString('tapToSeeWhy', 'Tap to see why');
-  static String get rationaleSheetTitle => getTranslatedString('rationaleSheetTitle', 'Why is this referral prioritized?');
   static String get modelVersionLabel => getTranslatedString('Referral.modelVersionLabel', 'Model version');
-  static String agedFmt(String relative) => getTranslatedString('agedFmt', 'referred {relative} ago', params: {'relative': '$relative'});
-  static String overdueFmt(String relative) => getTranslatedString('overdueFmt', 'overdue by {relative}', params: {'relative': '$relative'});
 
   // ── Dashboard chip on home screen ────────────────────────────────────────
   static String dashboardChipCritical(int n) => getTranslatedString('dashboardChipCritical', '{n} critical referrals', params: {'n': '$n'});
@@ -1063,69 +990,15 @@ abstract final class ReferralStrings {
   static String get permissionRationaleAction => getTranslatedString('permissionRationaleAction', 'Enable');
   static String get permissionRationaleDismiss => getTranslatedString('permissionRationaleDismiss', 'Not now');
 
-  // ── Triage Card — Priority Badges ────────────────────────────────────────
-  static String get badgeCritical => getTranslatedString('badgeCritical', '🔴 CRITICAL');
-  static String get badgeHigh => getTranslatedString('badgeHigh', '🟠 HIGH');
-  static String get badgeMedium => getTranslatedString('badgeMedium', '🟡 MEDIUM');
-  static String get badgeLow => getTranslatedString('badgeLow', '🟢 LOW');
-  static String get badgeCompleted => getTranslatedString('Referral.badgeCompleted', '🟢 COMPLETED');
-
-  // ── Triage Card — SLA Status Layer ───────────────────────────────────────
-  static String slaBreached(String overdue) => getTranslatedString('slaBreached', 'SLA BREACHED +{overdue}', params: {'overdue': '$overdue'});
-  static String slaWarning(String remaining) => getTranslatedString('slaWarning', 'SLA: {remaining} left', params: {'remaining': '$remaining'});
-  static String get slaCompleted => getTranslatedString('slaCompleted', 'Completed ✓');
-  static String get slaOnTrack => getTranslatedString('slaOnTrack', 'On Track');
-
   // ── Triage Card — Referral Metadata ──────────────────────────────────────
-  static String get metaReferred => getTranslatedString('metaReferred', 'Referred:');
-  static String get metaCondition => getTranslatedString('metaCondition', 'Condition:');
   static String get metaFacility => getTranslatedString('metaFacility', 'Facility:');
-  static String get metaProgramme => getTranslatedString('metaProgramme', 'Programme:');
-  static String get metaAssigned => getTranslatedString('metaAssigned', 'Assigned:');
-  static String get metaReferralId => getTranslatedString('metaReferralId', 'Ref ID:');
 
   // ── Triage Card — Operational Status ─────────────────────────────────────
-  static String get statusLabel => getTranslatedString('statusLabel', 'Status:');
-  static String get statusNotArrived => getTranslatedString('statusNotArrived', 'Not arrived at facility');
-  static String get statusCheckedIn => getTranslatedString('statusCheckedIn', 'Checked in');
   static String get statusAwaitingReview => getTranslatedString('statusAwaitingReview', 'Awaiting review');
   static String get statusDischarged => getTranslatedString('statusDischarged', 'Discharged');
-  static String get statusInTreatment => getTranslatedString('statusInTreatment', 'In treatment');
-  static String overdueStatus(String days) => getTranslatedString('overdueStatus', '{days} overdue', params: {'days': '$days'});
-  static String slaWasStatus(String days) => getTranslatedString('slaWasStatus', 'SLA was {days}', params: {'days': '$days'});
-  static String waitingStatus(String duration) => getTranslatedString('waitingStatus', '{duration} waiting', params: {'duration': '$duration'});
-  static String followUpDue(String date) => getTranslatedString('Referral.followUpDue', 'Follow-up due {date}', params: {'date': '$date'});
-  static String get prescriptionShared => getTranslatedString('prescriptionShared', 'Prescription shared');
-
-  // ── Triage Card — Operational Status Hints ───────────────────────────────
-  static String get hintNotCheckedIn => getTranslatedString('hintNotCheckedIn', '📍 Not checked in');
-  static String get hintTransportBarrier => getTranslatedString('hintTransportBarrier', '🚌 Possible transport barrier');
-  static String get hintAtFacility => getTranslatedString('hintAtFacility', '🏥 At facility');
-  static String hintQueueWait(String department, String duration) => getTranslatedString('hintQueueWait', '⏳ {department} queue {duration}', params: {'department': '$department', 'duration': '$duration'});
-  static String get hintCareCompleted => getTranslatedString('hintCareCompleted', '✅ Care completed');
-  static String hintFollowUp(String duration) => getTranslatedString('hintFollowUp', '📋 Follow-up in {duration}', params: {'duration': '$duration'});
 
   // ── Triage Card — Timeline Progress ──────────────────────────────────────
-  static String get timelineSKVisit => getTranslatedString('timelineSKVisit', 'SK Visit');
-  static String get timelineReferred => getTranslatedString('timelineReferred', 'Referred');
-  static String get timelineArrived => getTranslatedString('timelineArrived', 'Arrived');
   static String get timelineOBReview => getTranslatedString('timelineOBReview', 'OB Review');
-  static String get timelineTreated => getTranslatedString('timelineTreated', 'Treated');
-  static String get timelineDischarged => getTranslatedString('timelineDischarged', 'Discharged');
-  static String get timelineWaiting => getTranslatedString('timelineWaiting', 'Waiting');
-
-  // ── Triage Card — Action Layer ───────────────────────────────────────────
-  static String get actionCallFamily => getTranslatedString('Referral.actionCallFamily', 'Call Family');
-  static String get actionUpdateStatus => getTranslatedString('Referral.actionUpdateStatus', 'Update Status');
-  static String get actionLocate => getTranslatedString('Referral.actionLocate', 'Locate');
-  static String get actionEscalate => getTranslatedString('actionEscalate', 'Escalate');
-  static String get actionCallFacility => getTranslatedString('actionCallFacility', 'Call Facility');
-  static String get actionUpdateQueue => getTranslatedString('actionUpdateQueue', 'Update Queue');
-  static String get actionOpenReferral => getTranslatedString('actionOpenReferral', 'Open Referral');
-  static String get actionViewPrescription => getTranslatedString('actionViewPrescription', 'View Prescription');
-  static String get actionScheduleFollowUp => getTranslatedString('actionScheduleFollowUp', 'Schedule Follow-up');
-  static String get actionSendReminder => getTranslatedString('actionSendReminder', 'Send Reminder');
-  static String get actionCloseCase => getTranslatedString('actionCloseCase', 'Close Case');
 
   // ── Contact Sheet ────────────────────────────────────────────────────────
   static String contactSheetTitle(String name) => getTranslatedString('contactSheetTitle', 'Contact {name}', params: {'name': '$name'});
@@ -1139,43 +1012,7 @@ abstract final class ReferralStrings {
   // ── Contact Messages ─────────────────────────────────────────────────────
   static String msgGreeting(String name) => getTranslatedString('msgGreeting', 'Hello {name}, ', params: {'name': '$name'});
   static String get msgIntro => getTranslatedString('msgIntro', 'this is UHIS Health Worker. ');
-  static String msgReferralFor(String diagnosis) => getTranslatedString('msgReferralFor', 'Regarding your referral for {diagnosis}, ', params: {'diagnosis': '$diagnosis'});
-  static String get msgReferralGeneric => getTranslatedString('msgReferralGeneric', 'Regarding your health referral, ');
-  static String get msgOverdue => getTranslatedString('msgOverdue', 'we noticed your appointment is overdue. Please contact us or visit the health facility as soon as possible. ');
-  static String get msgNewReferral => getTranslatedString('msgNewReferral', 'please ensure you visit the referred health facility at your earliest convenience. ');
-  static String get msgInTreatment => getTranslatedString('msgInTreatment', 'we are following up on your treatment progress. Please let us know if you need any assistance. ');
-  static String get msgCompleted => getTranslatedString('msgCompleted', 'we hope you are recovering well. Please attend your follow-up appointment as scheduled. ');
   static String get msgGenericOutreach => getTranslatedString('msgGenericOutreach', 'we are reaching out regarding your health care. ');
-  static String get msgClosing => getTranslatedString('msgClosing', 'Reply to this message or call us for any queries. Thank you.');
-
-  // ── Error Messages ───────────────────────────────────────────────────────
-  static String get errorNoPhone => getTranslatedString('errorNoPhone', 'No phone number available');
-  static String get errorPhoneDialer => getTranslatedString('errorPhoneDialer', 'Could not open phone dialer');
-  static String get errorWhatsApp => getTranslatedString('errorWhatsApp', 'Could not open WhatsApp. Is it installed?');
-  static String get errorSms => getTranslatedString('errorSms', 'Could not open SMS app');
-  static String get errorMaps => getTranslatedString('errorMaps', 'Could not open Google Maps');
-  static String errorOpening(String type, String error) => getTranslatedString('errorOpening', 'Error opening {type}: {error}', params: {'type': '$type', 'error': '$error'});
-
-  // ── Location Sheet ───────────────────────────────────────────────────────
-  static String locateSheetTitle(String name) => getTranslatedString('locateSheetTitle', 'Locate {name}', params: {'name': '$name'});
-  static String get locateOpenMaps => getTranslatedString('locateOpenMaps', 'Open in Google Maps');
-  static String get locateOpenMapsSubtitle => getTranslatedString('locateOpenMapsSubtitle', 'View location on map');
-  static String get locateGetDirections => getTranslatedString('locateGetDirections', 'Get Directions');
-  static String get locateGetDirectionsSubtitle => getTranslatedString('locateGetDirectionsSubtitle', 'Navigate to patient');
-
-  // ── Record outcome sheet ─────────────────────────────────────────────────
-  static String get recordOutcomeTitle => getTranslatedString('recordOutcomeTitle', 'Record outcome');
-  static String get recordOutcomeSubtitle => getTranslatedString('recordOutcomeSubtitle', 'Update the current status of this referral');
-  static String get outcomeReferred => getTranslatedString('outcomeReferred', 'Still referred');
-  static String get outcomeReferredSubtitle => getTranslatedString('outcomeReferredSubtitle', 'Patient not yet arrived at facility');
-  static String get outcomeOnTreatment => getTranslatedString('outcomeOnTreatment', 'On treatment');
-  static String get outcomeOnTreatmentSubtitle => getTranslatedString('outcomeOnTreatmentSubtitle', 'Patient arrived and treatment started');
-  static String get outcomeRecovered => getTranslatedString('outcomeRecovered', 'Recovered');
-  static String get outcomeRecoveredSubtitle => getTranslatedString('outcomeRecoveredSubtitle', 'Treatment complete, patient discharged');
-  static String get outcomeDeceased => getTranslatedString('outcomeDeceased', 'Deceased');
-  static String get outcomeDeceasedSubtitle => getTranslatedString('outcomeDeceasedSubtitle', 'Patient passed away');
-  static String get outcomeUpdated => getTranslatedString('outcomeUpdated', 'Status updated');
-  static String get outcomeUpdateFailed => getTranslatedString('outcomeUpdateFailed', 'Could not update status — please try again');
 }
 
 /// AI Mission Dashboard strings (Screen 2 redesign).

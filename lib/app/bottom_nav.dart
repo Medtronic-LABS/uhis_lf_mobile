@@ -9,16 +9,6 @@ import 'theme.dart';
 
 /// Shell widget for the persistent 3-tab bottom navigation.
 /// Each tab maintains its own navigation stack.
-///
-/// TASKS-STASHED: the Tasks tab (StatefulShellBranch index 2 in
-/// `router.dart`, routing to ReferralListScreen/ReferralDetailScreen) was
-/// intentionally hidden from this bar per GitHub issue #84 (2026-07-13).
-/// The branch itself, its route, and the 6 existing `context.go('/tasks')`
-/// call sites elsewhere in the app (visit_complete_screen.dart,
-/// visit_form_screen.dart, visit_flow_screen.dart, mission_dashboard_screen.dart)
-/// are untouched and still fully functional — only the visible nav entry was
-/// removed. Do NOT restore or further modify this without direct user
-/// instruction. Search `TASKS-STASHED` for every related marker.
 class BottomNavShell extends StatefulWidget {
   const BottomNavShell({
     super.key,
@@ -93,11 +83,8 @@ class _BottomNavShellState extends State<BottomNavShell>
     widget.navigationShell.goBranch(branchIndex, initialLocation: true);
   }
 
-  // TASKS-STASHED: maps visible nav-bar position -> real StatefulShellRoute
-  // branch index. Branch 2 (Tasks, see router.dart "Tab 2: Tasks") is
-  // deliberately excluded from this bar per GitHub issue #84 (2026-07-13) but
-  // remains a live branch for existing direct `context.go('/tasks')` callers.
-  static const List<int> _visibleBranchIndices = [0, 1, 3];
+  // Maps visible nav-bar position -> real StatefulShellRoute branch index.
+  static const List<int> _visibleBranchIndices = [0, 1, 2];
 
   @override
   Widget build(BuildContext context) {
