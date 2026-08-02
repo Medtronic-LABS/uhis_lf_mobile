@@ -22,8 +22,6 @@ import '../features/patient/vitals_repository.dart';
 import '../features/patient/member_detail_repository.dart';
 import '../features/pin/pin_setup_screen.dart';
 import '../features/pin/pin_unlock_screen.dart';
-import '../features/referral/referral_detail_screen.dart';
-import '../features/referral/referral_list_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
 import '../features/sync/offline_sync_screen.dart';
 import '../features/counselling/counselling_screen.dart';
@@ -50,7 +48,6 @@ import 'bottom_nav.dart';
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'home');
 final _patientsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'patients');
-final _tasksNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'tasks');
 final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'assistant');
 final _galleryNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'gallery');
 
@@ -386,39 +383,6 @@ GoRouter buildRouter(AuthState auth) {
                         ),
                       );
                     },
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          // Tab 2: Tasks
-          // TASKS-STASHED: this branch is intentionally excluded from the
-          // bottom nav bar's visible destinations (see bottom_nav.dart) per
-          // GitHub issue #84 (2026-07-13). The branch/route itself is left
-          // fully functional — do not remove or restore it here without
-          // direct user instruction; the nav-bar visibility is the only
-          // thing that changed. Search `TASKS-STASHED` for every marker.
-          StatefulShellBranch(
-            navigatorKey: _tasksNavigatorKey,
-            routes: [
-              GoRoute(
-                path: '/tasks',
-                name: 'tasks-list',
-                pageBuilder: (context, state) => const MaterialPage(
-                  key: ValueKey('tasks-list-page'),
-                  child: ReferralListScreen(),
-                ),
-                routes: [
-                  GoRoute(
-                    path: ':id',
-                    name: 'task-detail',
-                    pageBuilder: (context, state) => MaterialPage(
-                      key: ValueKey('task-detail-${state.pathParameters['id']}'),
-                      child: ReferralDetailScreen(
-                        patientId: state.pathParameters['id']!,
-                      ),
-                    ),
                   ),
                 ],
               ),
