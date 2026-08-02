@@ -128,51 +128,6 @@ class _BottomNavShellState extends State<BottomNavShell>
   }
 }
 
-/// Placeholder widget for the Assistant tab (empty state).
-class AssistantPlaceholderScreen extends StatelessWidget {
-  const AssistantPlaceholderScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(BottomNavStrings.assistantTitle),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.chat_outlined,
-              size: 80,
-              color: tokens.textMuted.withValues(alpha: 0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              BottomNavStrings.assistantPlaceholderHeading,
-              style: textTheme.headlineSmall?.copyWith(
-                color: tokens.textMuted,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              BottomNavStrings.assistantPlaceholderSubheading,
-              style: textTheme.bodyLarge?.copyWith(
-                color: tokens.textMuted.withValues(alpha: 0.7),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// Bottom-nav icon matching the v13 mockup's exact dual selection mechanism:
 /// fill-hex swap (`#9CA3AF` inactive → `#1B2B5E` active) *and* an opacity
 /// transition (`0.35` inactive → `1`) layered on top of it — both are present
