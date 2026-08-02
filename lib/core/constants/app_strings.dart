@@ -96,6 +96,7 @@ abstract final class CommonStrings {
   static String get usePassword => getTranslatedString('usePassword', 'Use password');
   static String get unnamed => getTranslatedString('unnamed', '(unnamed)');
   static String get remove => getTranslatedString('remove', 'Remove');
+  static String versionLabel(String version) => getTranslatedString('versionLabel', 'v{version}', params: {'version': version});
 }
 
 /// Login screen + login-flow feedback.
@@ -274,9 +275,9 @@ abstract final class SettingsStrings {
   static String get english => getTranslatedString('english', 'English');
   static String get bangla => getTranslatedString('bangla', 'বাংলা (Bangla)');
 
-  // ── AI Settings row ───────────────────────────────────────────────────
-  static String get aiSettings => getTranslatedString('aiSettings', 'AI Settings');
-  static String get aiSettingsSubtitle => getTranslatedString('aiSettingsSubtitle', 'Voice detection (VAD) tuning');
+  // ── Settings row ──────────────────────────────────────────────────────
+  static String get settings => getTranslatedString('settings', 'Settings');
+  static String get settingsSubtitle => getTranslatedString('settingsSubtitle', 'Account, security & app preferences');
 
   // ── Offline DB browser row (kDebugMode only) ──────────────────────────
   static String get debugDbViewer => getTranslatedString('Settings.debugDbViewer', 'Offline Database');
