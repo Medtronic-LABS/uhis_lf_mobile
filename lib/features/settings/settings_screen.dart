@@ -1,21 +1,65 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/locale_provider.dart';
+import '../../app/theme_provider.dart';
+import '../../core/auth/auth_repository.dart';
+import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/i18n/app_locale.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
 import '../../core/theme/app_theme.dart';
+import '../debug/db_viewer_screen.dart';
+import 'settings_actions.dart';
+import 'widgets/profile_card.dart';
+import 'widgets/settings_row.dart';
 
-/// AI Settings — realtime-ASR VAD gate tuning. Field-adjustable without a
-/// rebuild so the entry/sustain/floor/timing thresholds can be dialed in
-/// against real device + environment conditions (rural, variable vocal
-/// volume, unpredictable ambient noise) rather than guessed at in code.
+/// Settings — account/device controls (device unlock, PIN, appearance,
+/// language, offline database) plus the AI Widgets toggles. Consolidates
+/// what used to be spread across this page (AI-only) and the dashboard's
+/// popup Settings menu; the popup menu still exposes Language/Offline Sync/
+/// Sign out directly, with everything else routed through this page via the
+/// shared functions in `settings_actions.dart` and [SettingsRow].
 ///
-/// Changes take effect on the next recording session — [RealtimeAsrController]
-/// reads the current [VadTuningNotifier] value each time [start] is called,
-/// not just once at construction.
-class AiSettingsScreen extends StatelessWidget {
-  const AiSettingsScreen({super.key});
+/// The VAD (voice-activity-gate) tuning UI below is intentionally hidden —
+/// [_showVadTuning] — the underlying [VadTuningNotifier]/tuning sliders stay
+/// in the codebase; the plan is to drive visibility from a remote config/API
+/// flag rather than exposing it as a raw UI knob for now.
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  UserProfileSummary? _summary;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSummary());
+  }
+
+  Future<void> _loadSummary() async {
+    if (!mounted) return;
+    final auth = context.read<AuthState>();
+    final s = await auth.userProfileSummary();
+    if (!mounted) return;
+    setState(() => _summary = s);
+  }
+
+  Future<void> _confirmReset(BuildContext context) async {
+    final togglesNotifier = context.read<AiFeatureTogglesNotifier>();
+    await togglesNotifier.resetToDefaults();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AiSettingsStrings.resetConfirmation)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,16 +74,16 @@ class AiSettingsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '🤖 ${AiSettingsStrings.title}',
-              style: TextStyle(
+              '⚙️ ${SettingsStrings.settings}',
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
                 fontSize: 17,
               ),
             ),
             Text(
-              AiSettingsStrings.appBarSubtitle,
-              style: TextStyle(
+              SettingsStrings.settingsSubtitle,
+              style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 11,
                 fontWeight: FontWeight.w400,
@@ -55,27 +99,182 @@ class AiSettingsScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: const _VadTuningBody(),
-    );
-  }
-
-  Future<void> _confirmReset(BuildContext context) async {
-    debugPrint('[AiSettingsScreen] _confirmReset context=${context}');
-    final vadNotifier = context.read<VadTuningNotifier>();
-    final togglesNotifier = context.read<AiFeatureTogglesNotifier>();
-    await Future.wait([
-      vadNotifier.resetToDefaults(),
-      togglesNotifier.resetToDefaults(),
-    ]);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AiSettingsStrings.resetConfirmation)),
+      body: _SettingsBody(summary: _summary),
     );
   }
 }
 
-class _VadTuningBody extends StatelessWidget {
-  const _VadTuningBody();
+class _SettingsBody extends StatelessWidget {
+  const _SettingsBody({required this.summary});
+
+  final UserProfileSummary? summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthState>();
+    final theme = context.watch<ThemeProvider>();
+    final locale = context.watch<LocaleProvider>();
+
+    final String appearanceSubtitle;
+    if (theme.isDark) {
+      appearanceSubtitle = SettingsStrings.darkMode;
+    } else if (theme.isSystem) {
+      appearanceSubtitle = SettingsStrings.systemMode;
+    } else {
+      appearanceSubtitle = SettingsStrings.lightMode;
+    }
+    final languageSubtitle = locale.isBangla
+        ? SettingsStrings.bangla
+        : SettingsStrings.english;
+
+    return ListView(
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      children: [
+        if (summary != null) ...[
+          ProfileCard(summary: summary!, username: auth.username),
+          const SizedBox(height: 14),
+        ],
+        _WhiteCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SettingsTapRow(
+                row: SettingsRow(
+                  emoji: auth.biometricEnabled ? '🔒' : '🔓',
+                  chipColor: AppColors.aiSurfaceStart,
+                  title: auth.biometricEnabled
+                      ? DashboardStrings.disableDeviceUnlock
+                      : DashboardStrings.enableDeviceUnlock,
+                ),
+                onTap: () => auth.biometricEnabled
+                    ? disableDeviceUnlock(context, auth)
+                    : offerDeviceUnlock(context),
+              ),
+              const Divider(height: 20),
+              _SettingsTapRow(
+                row: SettingsRow(
+                  emoji: '🔢',
+                  chipColor: AppColors.ancSurface,
+                  title: auth.pinEnabled
+                      ? PinStrings.disablePin
+                      : PinStrings.enablePin,
+                ),
+                onTap: () => auth.pinEnabled
+                    ? removePin(context, auth)
+                    : context.go('/pin-setup'),
+              ),
+              const Divider(height: 20),
+              _SettingsTapRow(
+                row: SettingsRow(
+                  emoji: '🌓',
+                  chipColor: AppColors.catChildSurface,
+                  title: SettingsStrings.appearance,
+                  subtitle: appearanceSubtitle,
+                ),
+                onTap: () async {
+                  final chosen = await showOptionPicker<ThemeMode>(
+                    context: context,
+                    title: SettingsStrings.appearance,
+                    current: theme.mode,
+                    options: [
+                      (ThemeMode.light, SettingsStrings.lightMode),
+                      (ThemeMode.dark, SettingsStrings.darkMode),
+                      (ThemeMode.system, SettingsStrings.systemMode),
+                    ],
+                  );
+                  if (chosen != null) await theme.setMode(chosen);
+                },
+              ),
+              const Divider(height: 20),
+              _SettingsTapRow(
+                row: SettingsRow(
+                  emoji: '🌐',
+                  chipColor: AppColors.catHomeSurface,
+                  title: SettingsStrings.language,
+                  subtitle: languageSubtitle,
+                ),
+                onTap: () async {
+                  final chosen = await showOptionPicker<AppLanguage>(
+                    context: context,
+                    title: SettingsStrings.language,
+                    current: locale.language,
+                    options: [
+                      (AppLanguage.english, SettingsStrings.english),
+                      (AppLanguage.bangla, SettingsStrings.bangla),
+                    ],
+                  );
+                  if (chosen != null) await locale.setLanguage(chosen);
+                },
+              ),
+              if (kDebugMode) ...[
+                const Divider(height: 20),
+                _SettingsTapRow(
+                  row: SettingsRow(
+                    emoji: '🗄️',
+                    chipColor: AppColors.catChildSurface,
+                    title: SettingsStrings.debugDbViewer,
+                    subtitle: SettingsStrings.debugDbViewerSubtitle,
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const DebugDbViewerScreen(),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (_showVadTuning) ...[
+          _WhiteCard(
+            child: Text(
+              AiSettingsStrings.sectionDescription,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textMuted,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const _VadTuningCard(),
+          const SizedBox(height: 14),
+        ],
+        const _AiWidgetTogglesCard(),
+      ],
+    );
+  }
+}
+
+/// Makes a [SettingsRow] fully tappable — used on this page (unlike the
+/// popup menu, where `PopupMenuItem.onSelected` already handles the tap).
+class _SettingsTapRow extends StatelessWidget {
+  const _SettingsTapRow({required this.row, required this.onTap});
+
+  final SettingsRow row;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: row,
+      ),
+    );
+  }
+}
+
+// Future: drive from a remote config/API flag instead of a compile-time
+// const — feature/notifier stay intact, only the UI is hidden for now.
+const bool _showVadTuning = false;
+
+class _VadTuningCard extends StatelessWidget {
+  const _VadTuningCard();
 
   @override
   Widget build(BuildContext context) {
@@ -86,139 +285,120 @@ class _VadTuningBody extends StatelessWidget {
       notifier.update(next);
     }
 
-    return ListView(
-      physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-      children: [
-        _WhiteCard(
-          child: Text(
-            AiSettingsStrings.sectionDescription,
-            style: TextStyle(
-              fontSize: 12.5,
-              color: AppColors.textMuted,
-              height: 1.4,
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        _WhiteCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return _WhiteCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    AiSettingsStrings.sectionHeader,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textMuted,
-                      letterSpacing: 0.8,
-                    ),
+              Text(
+                AiSettingsStrings.sectionHeader,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => notifier.resetToDefaults(),
+                child: Text(
+                  AiSettingsStrings.widgetsResetToDefaults,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.aiPurpleDark,
                   ),
-                  GestureDetector(
-                    onTap: () => notifier.resetToDefaults(),
-                    child: Text(
-                      AiSettingsStrings.widgetsResetToDefaults,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.aiPurpleDark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              _TuningSlider(
-                label: AiSettingsStrings.enterMarginLabel,
-                description: AiSettingsStrings.enterMarginDesc,
-                value: cfg.enterMarginDb,
-                min: 3,
-                max: 20,
-                divisions: 34,
-                unit: 'dB',
-                onChangeEnd: (v) => save(cfg.copyWith(enterMarginDb: v)),
-              ),
-              _TuningSlider(
-                label: AiSettingsStrings.sustainMarginLabel,
-                description: AiSettingsStrings.sustainMarginDesc,
-                value: cfg.sustainMarginDb,
-                min: 2,
-                max: 15,
-                divisions: 26,
-                unit: 'dB',
-                onChangeEnd: (v) => save(cfg.copyWith(sustainMarginDb: v)),
-              ),
-              _TuningSlider(
-                label: AiSettingsStrings.floorCeilingLabel,
-                description: AiSettingsStrings.floorCeilingDesc,
-                value: cfg.floorCeilingDbfs,
-                min: -60,
-                max: -10,
-                divisions: 50,
-                unit: 'dBFS',
-                onChangeEnd: (v) => save(cfg.copyWith(floorCeilingDbfs: v)),
-              ),
-              _TuningSlider(
-                label: AiSettingsStrings.floorAlphaLabel,
-                description: AiSettingsStrings.floorAlphaDesc,
-                value: cfg.floorAlpha,
-                min: 0.01,
-                max: 0.3,
-                divisions: 29,
-                unit: '',
-                valueFractionDigits: 2,
-                onChangeEnd: (v) => save(cfg.copyWith(floorAlpha: v)),
-              ),
-              _TuningSlider(
-                label: AiSettingsStrings.bootstrapLabel,
-                description: AiSettingsStrings.bootstrapDesc,
-                value: cfg.bootstrapMs.toDouble(),
-                min: 100,
-                max: 1500,
-                divisions: 28,
-                unit: 'ms',
-                onChangeEnd: (v) => save(cfg.copyWith(bootstrapMs: v.round())),
-              ),
-              _TuningSlider(
-                label: AiSettingsStrings.debounceLabel,
-                description: AiSettingsStrings.debounceDesc,
-                value: cfg.debounceMs.toDouble(),
-                min: 50,
-                max: 500,
-                divisions: 45,
-                unit: 'ms',
-                onChangeEnd: (v) => save(cfg.copyWith(debounceMs: v.round())),
-              ),
-              _TuningSlider(
-                label: AiSettingsStrings.hangoverLabel,
-                description: AiSettingsStrings.hangoverDesc,
-                value: cfg.hangoverMs.toDouble(),
-                min: 200,
-                max: 2000,
-                divisions: 36,
-                unit: 'ms',
-                onChangeEnd: (v) => save(cfg.copyWith(hangoverMs: v.round())),
-              ),
-              _TuningSlider(
-                label: AiSettingsStrings.preRollLabel,
-                description: AiSettingsStrings.preRollDesc,
-                value: cfg.preRollMs.toDouble(),
-                min: 100,
-                max: 800,
-                divisions: 28,
-                unit: 'ms',
-                isLast: true,
-                onChangeEnd: (v) => save(cfg.copyWith(preRollMs: v.round())),
+                ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 14),
-        const _AiWidgetTogglesCard(),
-      ],
+          const SizedBox(height: 4),
+          _TuningSlider(
+            label: AiSettingsStrings.enterMarginLabel,
+            description: AiSettingsStrings.enterMarginDesc,
+            value: cfg.enterMarginDb,
+            min: 3,
+            max: 20,
+            divisions: 34,
+            unit: 'dB',
+            onChangeEnd: (v) => save(cfg.copyWith(enterMarginDb: v)),
+          ),
+          _TuningSlider(
+            label: AiSettingsStrings.sustainMarginLabel,
+            description: AiSettingsStrings.sustainMarginDesc,
+            value: cfg.sustainMarginDb,
+            min: 2,
+            max: 15,
+            divisions: 26,
+            unit: 'dB',
+            onChangeEnd: (v) => save(cfg.copyWith(sustainMarginDb: v)),
+          ),
+          _TuningSlider(
+            label: AiSettingsStrings.floorCeilingLabel,
+            description: AiSettingsStrings.floorCeilingDesc,
+            value: cfg.floorCeilingDbfs,
+            min: -60,
+            max: -10,
+            divisions: 50,
+            unit: 'dBFS',
+            onChangeEnd: (v) => save(cfg.copyWith(floorCeilingDbfs: v)),
+          ),
+          _TuningSlider(
+            label: AiSettingsStrings.floorAlphaLabel,
+            description: AiSettingsStrings.floorAlphaDesc,
+            value: cfg.floorAlpha,
+            min: 0.01,
+            max: 0.3,
+            divisions: 29,
+            unit: '',
+            valueFractionDigits: 2,
+            onChangeEnd: (v) => save(cfg.copyWith(floorAlpha: v)),
+          ),
+          _TuningSlider(
+            label: AiSettingsStrings.bootstrapLabel,
+            description: AiSettingsStrings.bootstrapDesc,
+            value: cfg.bootstrapMs.toDouble(),
+            min: 100,
+            max: 1500,
+            divisions: 28,
+            unit: 'ms',
+            onChangeEnd: (v) => save(cfg.copyWith(bootstrapMs: v.round())),
+          ),
+          _TuningSlider(
+            label: AiSettingsStrings.debounceLabel,
+            description: AiSettingsStrings.debounceDesc,
+            value: cfg.debounceMs.toDouble(),
+            min: 50,
+            max: 500,
+            divisions: 45,
+            unit: 'ms',
+            onChangeEnd: (v) => save(cfg.copyWith(debounceMs: v.round())),
+          ),
+          _TuningSlider(
+            label: AiSettingsStrings.hangoverLabel,
+            description: AiSettingsStrings.hangoverDesc,
+            value: cfg.hangoverMs.toDouble(),
+            min: 200,
+            max: 2000,
+            divisions: 36,
+            unit: 'ms',
+            onChangeEnd: (v) => save(cfg.copyWith(hangoverMs: v.round())),
+          ),
+          _TuningSlider(
+            label: AiSettingsStrings.preRollLabel,
+            description: AiSettingsStrings.preRollDesc,
+            value: cfg.preRollMs.toDouble(),
+            min: 100,
+            max: 800,
+            divisions: 28,
+            unit: 'ms',
+            isLast: true,
+            onChangeEnd: (v) => save(cfg.copyWith(preRollMs: v.round())),
+          ),
+        ],
+      ),
     );
   }
 }
