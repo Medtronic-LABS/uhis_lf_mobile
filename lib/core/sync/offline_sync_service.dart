@@ -149,9 +149,18 @@ class OfflineSyncService extends ChangeNotifier {
   /// wipes local data.
   Future<SyncReport> warmSync() => _runSync(fullSync: false);
 
+  /// Same-user relogin after session expiry: delta record filter (bandwidth-
+  /// friendly) but an always-fresh village/sub-village scope (a relogin gap
+  /// is exactly when a server-side reassignment is most plausible).
+  Future<SyncReport> reloginSync() {
+    debugPrint('[OfflineSyncService] reloginSync() — delta fetch, fresh village scope');
+    return _runSync(fullSync: false, refreshVillageIds: true);
+  }
+
   Future<SyncReport> _runSync({
     required bool fullSync,
     bool wipeBeforeSync = false,
+    bool? refreshVillageIds,
   }) async {
     if (_running) {
       return SyncReport.empty().copyWith(
@@ -191,8 +200,12 @@ class OfflineSyncService extends ChangeNotifier {
       // Fallback: call _fetchAndSaveVillageIds() ourselves so that a cold
       // OfflineSyncService start (no UserHierarchyService, or hierarchy not
       // yet fetched) still gets the authoritative ids.
+      // reloginSync() forces this true even on a delta pull — a relogin gap
+      // is exactly when a server-side village reassignment is most plausible,
+      // so warmSync's cheaper "just reuse the cached list" isn't safe there.
+      final resolveVillageIds = refreshVillageIds ?? fullSync;
       var villageIds = <int>[];
-      if (fullSync) {
+      if (resolveVillageIds) {
         final hierarchyReady = _hierarchy?.ssWorkers != null;
         if (hierarchyReady) {
           villageIds = await _auth.villageIds();
@@ -252,7 +265,11 @@ class OfflineSyncService extends ChangeNotifier {
       // The bundle is already scoped by the `villageIds` sent in the request —
       // Android persists it verbatim, so no client-side caseload filter here.
       final ownerUserId = await _auth.userId();
-      var out = await _persistBundle(bundle, ownerUserId: ownerUserId);
+      var out = await _persistBundle(
+        bundle,
+        ownerUserId: ownerUserId,
+        fullSync: fullSync,
+      );
       debugPrint(
         '[OfflineSyncService] Bundle persisted: patients=${out.patients} '
         'households=${out.households} members=${out.members} '
@@ -383,6 +400,7 @@ class OfflineSyncService extends ChangeNotifier {
   Future<_PersistTotals> _persistBundle(
     Map<String, dynamic> bundle, {
     int? ownerUserId,
+    required bool fullSync,
   }) async {
     if (bundle.isEmpty) return const _PersistTotals();
 
@@ -850,10 +868,31 @@ class OfflineSyncService extends ChangeNotifier {
       }
     }
     if (_treatmentPresence != null) {
-      await _treatmentPresence.clearAll();
-      if (treatmentPatientIds.isNotEmpty) {
-        await _treatmentPresence
-            .upsertAll(treatmentPatientIds, updatedAt: nowMs);
+      if (fullSync) {
+        // Full bundle is authoritative — replace outright, so a patient who
+        // came off treatment (no treatmentDetails[] row this pull) correctly
+        // loses the flag.
+        await _treatmentPresence.clearAll();
+        if (treatmentPatientIds.isNotEmpty) {
+          await _treatmentPresence
+              .upsertAll(treatmentPatientIds, updatedAt: nowMs);
+        }
+      } else {
+        // Delta bundle only carries patients that changed since `since` —
+        // absence means "unchanged", not "no longer on treatment". Merge
+        // with prior state so warm/relogin syncs can't silently wipe
+        // untouched patients' flags (same defect class _pregnancySnapshot
+        // above already guards against, one table over).
+        final prior = await _treatmentPresence.getAll();
+        final merged = {...prior, ...treatmentPatientIds};
+        debugPrint(
+          '[OfflineSyncService] treatment-presence delta merge: '
+          'prior=${prior.length} thisBundle=${treatmentPatientIds.length} merged=${merged.length}',
+        );
+        await _treatmentPresence.clearAll();
+        if (merged.isNotEmpty) {
+          await _treatmentPresence.upsertAll(merged, updatedAt: nowMs);
+        }
       }
     }
 

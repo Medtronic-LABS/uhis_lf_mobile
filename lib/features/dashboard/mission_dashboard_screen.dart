@@ -26,6 +26,7 @@ import '../search/member_search_repository.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
 import 'widgets/dashboard_search_field.dart';
+import '../visit/assessment_repository.dart';
 import '../visit/visit_controller.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/mission/programme_reason.dart';
@@ -1051,6 +1052,68 @@ class _SettingsMenu extends StatelessWidget {
                 ),
               );
               if (confirmLogout != true) break;
+              if (!ctx.mounted) break;
+
+              final assessmentRepo = ctx.read<AssessmentRepository>();
+              final pendingCount = await assessmentRepo.getPendingCount();
+              debugPrint('[logout] pendingCount=$pendingCount');
+              if (pendingCount > 0) {
+                final offline = await auth.isDeviceOffline();
+                debugPrint('[logout] pendingCount>0, offline=$offline');
+                if (!ctx.mounted) break;
+                if (!offline) {
+                  unawaited(showDialog<void>(
+                    context: ctx,
+                    barrierDismissible: false,
+                    builder: (_) => AlertDialog(
+                      content: Row(
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: Text(DashboardStrings.syncingBeforeSignOut),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ));
+                  try {
+                    final pushed = await assessmentRepo.syncPendingAssessments();
+                    debugPrint('[logout] syncPendingAssessments pushed $pushed record(s)');
+                  } catch (e) {
+                    debugPrint('[logout] pending-assessment push failed: $e');
+                  }
+                  if (ctx.mounted) Navigator.of(ctx, rootNavigator: true).pop();
+                } else {
+                  debugPrint('[logout] offline with pending data — showing delete-warning dialog');
+                  final confirmOffline = await showDialog<bool>(
+                    context: ctx,
+                    builder: (dlgCtx) => AlertDialog(
+                      title: Text(DashboardStrings.signOutOfflineWarningTitle),
+                      content: Text(
+                        DashboardStrings.signOutOfflineWarningBody(pendingCount),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dlgCtx).pop(false),
+                          child: Text(DashboardStrings.cancel),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.of(dlgCtx).pop(true),
+                          child: Text(DashboardStrings.signOutAnyway),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmOffline != true) {
+                    debugPrint('[logout] user cancelled offline sign-out — aborting logout');
+                    break;
+                  }
+                  debugPrint('[logout] user confirmed sign-out anyway while offline — proceeding to wipe');
+                }
+              }
+
+              if (!ctx.mounted) break;
               await auth.logout();
               if (ctx.mounted) ctx.go('/login');
               break;

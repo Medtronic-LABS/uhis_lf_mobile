@@ -36,6 +36,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (last != null) {
       _userCtl.text = last;
     }
+    debugPrint(
+      '[_LoginScreenState] cachedUsername=${last == null ? 'null (field editable)' : '"$last" (field locked)'}',
+    );
     // Capture and clear any pending auth error (e.g. session expired) so it
     // shows as a persistent banner rather than a dismissible snackbar.
     final pending = auth.error;
@@ -137,6 +140,13 @@ class _LoginScreenState extends State<LoginScreen> {
     );
     final showPin = context.select<AuthState, bool>((a) => a.pinEnabled);
     final busy = context.select<AuthState, bool>((a) => a.busy);
+    // A cached username means this is a relogin (session-expiry or
+    // otherwise), not a fresh device or a just-logged-out one — lock the
+    // field to it so a same-user relogin can never accidentally submit a
+    // different username (which would wipe local data via sameUserRelogin
+    // going false). Only an explicit Logout clears the cache, which is the
+    // only way a genuinely different user gets an editable field again.
+    final cachedUsername = context.select<AuthState, String?>((a) => a.username);
     return Scaffold(
       body: Stack(
         children: [
@@ -265,6 +275,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                         TextFormField(
                           controller: _userCtl,
+                          enabled: cachedUsername == null,
                           keyboardType: TextInputType.emailAddress,
                           autocorrect: false,
                           decoration: InputDecoration(
