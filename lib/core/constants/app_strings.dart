@@ -238,6 +238,16 @@ abstract final class DashboardStrings {
   static String get cancel => getTranslatedString('Dashboard.cancel', 'Cancel');
   static String get disable => getTranslatedString('disable', 'Disable');
 
+  // Sign-out pending-data safety flow.
+  static String get syncingBeforeSignOut => getTranslatedString('syncingBeforeSignOut', 'Syncing your data before signing out…');
+  static String get signOutOfflineWarningTitle => getTranslatedString('signOutOfflineWarningTitle', 'You\'re offline');
+  static String signOutOfflineWarningBody(int count) => getTranslatedString(
+        'signOutOfflineWarningBody',
+        'You have {count} unsynced record(s). Signing out now will permanently delete them from this device. Continue?',
+        params: {'count': '$count'},
+      );
+  static String get signOutAnyway => getTranslatedString('signOutAnyway', 'Sign out anyway');
+
   static String couldNotEnable(Object error) => getTranslatedString('couldNotEnable', 'Could not enable: {error}', params: {'error': '$error'});
 
   /// `Good Morning, Asha` style greeting.
