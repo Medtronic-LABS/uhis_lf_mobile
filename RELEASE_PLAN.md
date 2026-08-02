@@ -260,15 +260,37 @@ paths.
 
 ---
 
-## What's left — manual checklist for whoever has Play Console access
+## Build log — production bundle
 
-1. Create the app in Play Console under the Organization account; confirm `com.medtroniclabs.uhis_next` as the package name (immutable after this point).
-2. Enroll in Play App Signing when prompted (mandatory for new apps) — either let Play extract the upload cert from the first `.aab` upload, or supply the SHA-256 fingerprint from §2 manually if asked first.
-3. Run `scripts/release.sh production` (needs a real `env.production.json` — see `env.example.json` for shape) and upload the resulting `.aab` to the **Internal testing** track.
-4. Fill in **App content** using §4/§5 of this document: permissions declaration, Data Safety form (privacy policy URL and deletion answer already decided), content rating questionnaire, target audience.
-5. Run `scripts/capture_screenshots.sh` for phone screenshots (§9); capture the AI Recommendation screen manually; get the feature graphic (1024×500) and hi-res icon (512×512) designed — no source assets exist yet.
-6. Fill in app title/short/full description (draft provided in §5), category, contact email.
-7. Decide on a Closed-testing round before Production (recommended, not required for this account type — §6).
-8. Create the five GitHub repo secrets listed in §7 if you want `.github/workflows/release.yml` to run; add `PLAY_SERVICE_ACCOUNT_JSON` later to enable the commented-out Play upload job.
-9. Move `~/.keystores/uhis-lf-mobile/credentials.txt` into a real secrets vault / password manager, then delete the plaintext file from disk.
-10. Back up `~/.keystores/uhis-lf-mobile/apon-sushashthya-upload.jks` outside this machine.
+| Date | Built from | Fingerprint | Size | Notes |
+|---|---|---|---|---|
+| 2026-08-02 | `main` @ `c2968b1` | `DA:32:CB:B0:59:15:94:EA:F6:3B:FA:3D:3C:54:A6:F3:57:37:12:5C:46:99:AA:A3:2B:D8:59:91:6D:B0:3B:26` | 70M (`.aab` 73.0MB raw) | `env.production.json`: `API_BASE_URL=https://uhis-next-backend.labsplatform.com/`, `PASSWORD_HASH_KEY=spice_uhis`. Current PLAY-READY artifact — see `build/app/outputs/bundle/release/app-release.aab`. Signer verified against the upload keystore in §2. `main` now includes the `HouseholdDao`/`MemberDao` import fix (landed via a separate merged PR), so the standalone fix branch/[#486](https://github.com/Medtronic-LABS/uhis_lf_mobile/pull/486) is redundant — safe to close once confirmed. |
+
+## What's left — step-by-step for whoever has Play Console access
+
+**Already done (this doc's author has done these — nothing to redo):**
+- ✅ Signed, verified `.aab` built from `main` (table above).
+- ✅ Five GitHub Actions secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `ENV_PRODUCTION_JSON_BASE64`) already pushed to the repo — `.github/workflows/release.yml` can build/sign in CI right now.
+- ✅ App content answers drafted (§4): permissions declaration, Data Safety form, privacy policy URL, data-deletion answer.
+- ✅ Store listing draft (§5): app title, short description, full description (minus two bracketed fields below).
+
+**Still needed — in order:**
+
+1. **Create the app in Play Console** under the Organization account. Confirm `com.medtroniclabs.uhis_next` as the package name — this is **immutable** after the first upload.
+2. **Enroll in Play App Signing** when prompted (mandatory for new apps): either let Play extract the upload cert automatically from the first `.aab` upload, or supply the SHA-256 fingerprint from §2/the build-log table above manually if the Console asks first.
+3. **Upload `build/app/outputs/bundle/release/app-release.aab`** to the **Internal testing** track. (Rebuild anytime with `JAVA_HOME=/opt/homebrew/opt/openjdk@21 scripts/release.sh production` — see the local build gotcha noted earlier in this doc.)
+4. **Fill in App content**, using §4/§5 as copy-paste source:
+   - Permissions declaration (table in §4)
+   - Data Safety form (draft table in §4) — privacy policy URL and no-deletion answer already decided
+   - Content rating questionnaire — expect "Everyone", but the "Medical" category may trigger extra clinical-claims questions
+   - Target audience — Adults only (professional tool, not child-directed)
+5. **Fill in remaining store listing fields**:
+   - App title / short description / full description — draft in §5, **except**: sponsoring org/region framing in the full description, and the contact support email — both intentionally left as `[bracketed placeholders]`, need a real decision from you
+   - Category — Medical (recommended over Health & Fitness — see §5 rationale)
+   - Feature graphic (1024×500) and hi-res icon (512×512) — **no source assets exist yet**, need a designer
+   - Phone screenshots — run `scripts/capture_screenshots.sh production -d <device-id>` (§9); **unverified**: the test relies on a hardcoded `hyper_sk`/`Spice123` login, not yet confirmed to exist on the `uhis-next-backend.labsplatform.com` backend — check that first or screenshots will fail at login. Capture the Step 3 AI Recommendation screen manually regardless (not automated).
+6. **Decide on a Closed-testing round** before Production — recommended given thin offline-sync test coverage (§3), not required for this Organization account type (§6).
+7. **Promote Internal testing → Production** via staged rollout (20% → 50% → 100%) once satisfied, rather than 100% on day one.
+8. Later, if you want CI to auto-publish to Play: create a Play Console service account, add its JSON as repo secret `PLAY_SERVICE_ACCOUNT_JSON`, then uncomment the `publish-play-store` job in `.github/workflows/release.yml`.
+9. **Move `~/.keystores/uhis-lf-mobile/credentials.txt`** into a real secrets vault / password manager, then delete the plaintext file from disk.
+10. **Back up `~/.keystores/uhis-lf-mobile/apon-sushashthya-upload.jks`** outside this machine (encrypted company vault) — this is your *upload key*; losing it before Google acknowledges the upload cert means starting the listing over.
