@@ -11,7 +11,8 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
-import '../../core/sync/sync_connectivity_service.dart';
+import '../../core/widgets/app_version_label.dart';
+import '../settings/widgets/profile_card.dart';
 import 'lock_header.dart';
 
 class LockScreen extends StatefulWidget {
@@ -98,36 +99,48 @@ class _LockScreenState extends State<LockScreen> {
       (a) => a.biometricAvailable,
     );
     final pinEnabled = context.select<AuthState, bool>((a) => a.pinEnabled);
+    final username = context.select<AuthState, String?>((a) => a.username);
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      body: Column(
+      body: Stack(
         children: [
-          // ── Dark navy header ────────────────────────────────────────────
-          const LockProgramHeader(
-            title: LockStrings.leapwell,
-            pageCount: 8,
-            currentPage: 0,
-          ),
-          // ── Scrollable body ─────────────────────────────────────────────
-          Expanded(
-            child: SingleChildScrollView(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
-                  child: LockContent(
-                    summary: _summary,
-                    busy: busy,
-                    failed: _failed,
-                    biometricEnabled: biometricEnabled && biometricAvailable,
-                    pinEnabled: pinEnabled,
-                    isOnline: _isOnline,
-                    onUnlock: _trigger,
-                    onPinUnlock: () => context.go('/pin-unlock'),
+          Column(
+            children: [
+              // ── Dark navy header ────────────────────────────────────────
+              const LockProgramHeader(
+                title: LockStrings.leapwell,
+                pageCount: 8,
+                currentPage: 0,
+              ),
+              // ── Scrollable body ─────────────────────────────────────────
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 480),
+                      child: LockContent(
+                        summary: _summary,
+                        username: username,
+                        busy: busy,
+                        failed: _failed,
+                        biometricEnabled:
+                            biometricEnabled && biometricAvailable,
+                        pinEnabled: pinEnabled,
+                        isOnline: _isOnline,
+                        onUnlock: _trigger,
+                        onPinUnlock: () => context.go('/pin-unlock'),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
+          ),
+          Positioned(
+            right: AppSpacing.h6xl,
+            bottom: AppSpacing.md,
+            child: SafeArea(top: false, child: const AppVersionLabel()),
           ),
         ],
       ),
@@ -141,6 +154,7 @@ class LockContent extends StatefulWidget {
   const LockContent({
     super.key,
     required this.summary,
+    this.username,
     required this.busy,
     required this.failed,
     required this.biometricEnabled,
@@ -151,6 +165,7 @@ class LockContent extends StatefulWidget {
   });
 
   final UserProfileSummary? summary;
+  final String? username;
   final bool busy;
   final bool failed;
   final bool biometricEnabled;
@@ -270,7 +285,7 @@ class _LockContentState extends State<LockContent>
 
           // ── Profile card ───────────────────────────────────────────────
           if (s != null) ...[
-            _enter(2, _ProfileCard(summary: s)),
+            _enter(2, ProfileCard(summary: s, username: widget.username)),
             const SizedBox(height: 20),
           ] else ...[
             const SizedBox(height: 20),
@@ -344,103 +359,6 @@ class _LockContentState extends State<LockContent>
 }
 
 // ── Dark navy header (app branding + stepper dots) ────────────────────────────
-
-// ── Simplified profile card ───────────────────────────────────────────────────
-
-class _ProfileCard extends StatelessWidget {
-  const _ProfileCard({required this.summary});
-
-  final UserProfileSummary summary;
-
-  String _initials() {
-    final f = summary.firstName?.trim() ?? '';
-    final l = summary.lastName?.trim() ?? '';
-    final fi = f.isNotEmpty ? f[0].toUpperCase() : '';
-    final li = l.isNotEmpty ? l[0].toUpperCase() : '';
-    final result = '$fi$li';
-    return result.isNotEmpty ? result : '?';
-  }
-
-  String _fullName() {
-    final f = summary.firstName?.trim() ?? '';
-    final l = summary.lastName?.trim() ?? '';
-    return [f, l].where((e) => e.isNotEmpty).join(' ');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.h4xl,
-        AppSpacing.xxxl,
-        AppSpacing.h4xl,
-        AppSpacing.xxxl,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppRadius.profileCard),
-        boxShadow: AppShadows.profileCard,
-      ),
-      child: Row(
-        children: [
-          // Initials avatar — pink background
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: AppColors.pink.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              _initials(),
-              style: TextStyle(
-                fontFamily: AppFonts.display,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: AppColors.pink,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // Name + role
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  LockStrings.shasthyaKormi,
-                  style: TextStyle(
-                    fontFamily: AppFonts.body,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.navy.withValues(alpha: 0.45),
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _fullName().isNotEmpty
-                      ? _fullName()
-                      : LockStrings.profileLoading,
-                  style: const TextStyle(
-                    fontFamily: AppFonts.display,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.navy,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ── OR divider ────────────────────────────────────────────────────────────────
 

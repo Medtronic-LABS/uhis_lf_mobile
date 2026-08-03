@@ -162,7 +162,10 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       } catch (e) {
         debugPrint('[Sync] login push before coldSync failed: $e');
       }
-      report = await sync.coldSync();
+      // Push before pull is still required: `since` is read from SyncMetaDao
+      // at the top of _runSync and syncPendingAssessments doesn't touch it,
+      // so ordering here is unaffected by the fullSync→delta switch below.
+      report = await sync.reloginSync();
     } else {
       report = await sync.coldSync(wipeBeforeSync: true);
     }

@@ -34,6 +34,15 @@ class ApiClient {
   // backend activity, so an actively-used mobile session doesn't hit the
   // synthetic Bearer-token expiry wall while the SK is still working.
   void Function()? onAuthenticatedActivity;
+  // Fired on a 401/403 from any authenticated endpoint (never the login
+  // endpoint itself — a wrong password legitimately 401s there) — lets
+  // AuthState detect a server-invalidated session proactively instead of
+  // only via local TTL checks.
+  void Function()? onUnauthorized;
+  // Awaited before every request except the login and token-validation
+  // endpoints themselves — lets AuthRepository refresh a near-expiry Bearer
+  // token before it's used, so most sessions never reach onUnauthorized.
+  Future<void> Function()? onBeforeRequest;
 
   static Future<ApiClient> create() async {
     final cookieJar = CookieJar();
@@ -60,6 +69,21 @@ class ApiClient {
               return true;
             };
     }
+    // Registered first so a refreshed token (if onBeforeRequest triggers one)
+    // is what the cookie/token-header interceptor below attaches. Skips the
+    // login endpoint (no token exists yet pre-login) and the token-validation
+    // endpoint itself (would otherwise recurse — that request would trigger
+    // onBeforeRequest again, which would call it again, forever).
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final skip = options.path.contains('/session') ||
+              options.path.contains('/authenticate');
+          if (!skip) await client.onBeforeRequest?.call();
+          handler.next(options);
+        },
+      ),
+    );
     if (kIsWeb) {
       configureWebCredentials(dio);
       // On web the browser manages cookies via withCredentials.  The Bearer
@@ -83,6 +107,10 @@ class ApiClient {
             final status = response.statusCode;
             if (status != null && status >= 200 && status < 300) {
               client.onAuthenticatedActivity?.call();
+            } else if ((status == 401 || status == 403) &&
+                !response.requestOptions.path.contains('/session')) {
+              debugPrint('[ApiClient] $status on ${response.requestOptions.path} — signaling onUnauthorized');
+              client.onUnauthorized?.call();
             }
             handler.next(response);
           },
@@ -150,6 +178,10 @@ class ApiClient {
             final status = response.statusCode;
             if (status != null && status >= 200 && status < 300) {
               client.onAuthenticatedActivity?.call();
+            } else if ((status == 401 || status == 403) &&
+                !response.requestOptions.path.contains('/session')) {
+              debugPrint('[ApiClient] $status on ${response.requestOptions.path} — signaling onUnauthorized');
+              client.onUnauthorized?.call();
             }
             handler.next(response);
           },

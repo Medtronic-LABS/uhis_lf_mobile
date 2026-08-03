@@ -15,7 +15,14 @@ enum AuthStatus { unknown, signedOut, signedIn }
 
 class AuthState extends ChangeNotifier {
   AuthState(this._repo, this._biometric, {Future<void> Function()? onWipeLocalData})
-      : _onWipeLocalData = onWipeLocalData;
+      : _onWipeLocalData = onWipeLocalData {
+    // Server-side session invalidation (401/403 from any authenticated call)
+    // routes through the exact same path as today's locally-detected expiry.
+    _repo.onUnauthorized = () {
+      debugPrint('[AuthState] onUnauthorized fired (server 401/403) — calling handleSessionExpired()');
+      handleSessionExpired();
+    };
+  }
 
   final AuthRepository _repo;
   final BiometricService _biometric;
@@ -195,7 +202,7 @@ class AuthState extends ChangeNotifier {
       final restored = await _repo.restorePersistedSession();
       debugPrint('[AuthState] biometricUnlock: restored=$restored');
       if (!restored) {
-        final offline = await _isDeviceOffline();
+        final offline = await isDeviceOffline();
         debugPrint('[AuthState] biometricUnlock: restore failed, offline=$offline');
         if (offline) {
           // Offline grace: biometric identity verified, device in hand, but
@@ -331,7 +338,7 @@ class AuthState extends ChangeNotifier {
       }
       final restored = await _repo.restorePersistedSession();
       if (!restored) {
-        if (await _isDeviceOffline()) {
+        if (await isDeviceOffline()) {
           final graceOk = await _repo.restoreTokensIgnoringExpiry();
           if (graceOk) {
             _username = await _repo.biometricLastUsername() ?? _username;
@@ -410,7 +417,11 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<void> handleSessionExpired() async {
-    if (_status == AuthStatus.signedOut) return;
+    if (_status == AuthStatus.signedOut) {
+      debugPrint('[AuthState] handleSessionExpired() called but already signedOut — no-op');
+      return;
+    }
+    debugPrint('[AuthState] handleSessionExpired() — signing out, username preserved for relogin lock');
     await _repo.handleSessionExpired();
     _status = AuthStatus.signedOut;
     _locked = false;
@@ -465,6 +476,13 @@ class AuthState extends ChangeNotifier {
     _locked = false;
     _biometricEnabled = false;
     _pinEnabled = false;
+    // AuthRepository.logout() already deleted the stored username (Step 1)
+    // so a genuinely different user can sign in next — but that's on disk;
+    // this in-memory field is what LoginScreen actually reads, and nothing
+    // else in this method resets it. Without this, the same process would
+    // keep showing the old username prefilled (and locked) until a full
+    // app restart re-bootstrapped _username from the now-empty storage.
+    _username = null;
     ConsoleLog.success('✅ [AuthState] logout() Step 5/5 — signed out.');
     // Defer to avoid build scope conflicts
     _scheduleNotify();
