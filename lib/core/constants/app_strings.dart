@@ -312,6 +312,10 @@ abstract final class OfflineSyncStrings {
       );
   static String get assessments =>
       getTranslatedString('OfflineSync.assessments', 'Assessments');
+  static String get failedPendingRetry => getTranslatedString(
+        'OfflineSync.failedPendingRetry',
+        'Failed — will retry on Start',
+      );
   static String get followUps =>
       getTranslatedString('OfflineSync.followUps', 'Follow-ups');
   static String get cancel =>

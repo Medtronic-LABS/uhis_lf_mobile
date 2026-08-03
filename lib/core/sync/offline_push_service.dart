@@ -10,6 +10,7 @@ import '../db/household_dao.dart';
 import '../db/local_assessment_dao.dart';
 import '../db/member_dao.dart';
 import '../models/provance_dto.dart';
+import 'sync_activity.dart';
 import '../../features/patient/followup_call_service.dart';
 import '../../features/visit/forms/pregnancy_outcome_side_effects.dart';
 
@@ -20,6 +21,7 @@ class OfflinePushCounts {
     this.members = 0,
     this.assessments = 0,
     this.followUps = 0,
+    this.failed = 0,
   });
 
   final int households;
@@ -27,9 +29,17 @@ class OfflinePushCounts {
   final int assessments;
   final int followUps;
 
+  /// Households + members + assessments the server rejected on a prior
+  /// attempt (`sync_status == 'Failed'`) — excluded from [total] since a
+  /// Manual/Initial sync is the only thing that will retry them (see
+  /// `includeFailed` on the various DAOs' unsynced queries), and the SK
+  /// should see this as a distinct "stuck, needs a manual retry" signal
+  /// rather than it silently vanishing from the ordinary pending count.
+  final int failed;
+
   int get total => households + members + assessments + followUps;
 
-  bool get isEmpty => total == 0;
+  bool get isEmpty => total == 0 && failed == 0;
 }
 
 /// Outcome of [OfflinePushService.pushAll].
@@ -108,11 +118,15 @@ class OfflinePushService extends ChangeNotifier {
     try {
       follow = await _followUpCalls?.pendingPushCount() ?? 0;
     } catch (_) {}
+    final failedHh = await _households.getFailedCount();
+    final failedMem = await _members.getFailedCount();
+    final failedAssess = await _assessments.getFailedCount();
     _counts = OfflinePushCounts(
       households: hh,
       members: mem,
       assessments: assess,
       followUps: follow,
+      failed: failedHh + failedMem + failedAssess,
     );
     notifyListeners();
     return _counts;
@@ -129,7 +143,10 @@ class OfflinePushService extends ChangeNotifier {
         message: 'Not authenticated — sign in again before syncing',
       );
     }
-    if (_running || isPushInFlight) {
+    if (_running ||
+        isPushInFlight ||
+        SyncActivity.assessmentPushInFlight ||
+        SyncActivity.pullInFlight) {
       return const OfflinePushResult(
         success: false,
         message: 'Sync already in progress',
@@ -138,6 +155,7 @@ class OfflinePushService extends ChangeNotifier {
 
     _running = true;
     isPushInFlight = true;
+    SyncActivity.householdMemberPushInFlight = true;
     _progress = 0;
     notifyListeners();
 
@@ -146,7 +164,14 @@ class OfflinePushService extends ChangeNotifier {
       await _members.resetStuckInProgress();
       await _assessments.resetStuckInProgress();
 
-      final unsyncedHouseholds = await _households.getUnsynced();
+      // Manual / Initial sync also retries prior HTTP failures (a household
+      // or member the server rejected doesn't otherwise have any way back
+      // into these queries — see LocalAssessmentDao's identical convention).
+      final includeFailed =
+          syncMode == 'ManualSync' || syncMode == 'InitialSync';
+
+      final unsyncedHouseholds =
+          await _households.getUnsynced(includeFailed: includeFailed);
       final nestedMemberIds = <String>[];
       final householdPayloads = <Map<String, dynamic>>[];
 
@@ -168,6 +193,7 @@ class OfflinePushService extends ChangeNotifier {
         final nested = await _members.getUnsyncedForHousehold(
           hh.id,
           excludeIds: nestedMemberIds,
+          includeFailed: includeFailed,
         );
         for (final m in nested) {
           nestedMemberIds.add(m.id);
@@ -193,6 +219,7 @@ class OfflinePushService extends ChangeNotifier {
 
       final otherMembers = await _members.getOtherUnsyncedMembers(
         excludeIds: nestedMemberIds,
+        includeFailed: includeFailed,
       );
       final standaloneMemberIds = otherMembers.map((m) => m.id).toList();
 
@@ -216,7 +243,6 @@ class OfflinePushService extends ChangeNotifier {
         );
       }
 
-      final includeFailed = syncMode == 'ManualSync' || syncMode == 'InitialSync';
       final assessmentQueue =
           await _assessments.getUnsyncedForPush(includeFailed: includeFailed);
       if (assessmentQueue.blocked.isNotEmpty) {
@@ -423,6 +449,7 @@ class OfflinePushService extends ChangeNotifier {
     } finally {
       _running = false;
       isPushInFlight = false;
+      SyncActivity.householdMemberPushInFlight = false;
       notifyListeners();
     }
   }

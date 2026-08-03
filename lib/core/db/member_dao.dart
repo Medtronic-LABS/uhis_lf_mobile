@@ -563,29 +563,53 @@ class MemberDao {
 
   static const _pendingStatuses = ['NotSynced', 'NetworkError', 'Pending'];
 
+  /// [includeFailed] mirrors `LocalAssessmentDao`'s Manual/Initial-sync
+  /// retry: without it, a member the server rejected (`'Failed'`) has no way
+  /// back into any of these queries and silently drops out of the pending
+  /// count forever.
+  static List<String> _statusesFor({required bool includeFailed}) =>
+      includeFailed ? [..._pendingStatuses, 'Failed'] : _pendingStatuses;
+
   /// Members waiting to push via offline-sync/create (new babies, etc.).
   ///
   /// Only rows that were locally created for createHouseHoldMember — mothers
   /// marked inactive keep their prior sync_status and are excluded.
-  Future<List<HouseholdMemberEntity>> getUnsynced() async {
-    final rows = await _db.db.query(
-      AppDatabase.tableMembers,
-      where:
-          "(sync_status = 'NotSynced' OR sync_status = 'Pending') "
-          "AND mother_reference_id IS NOT NULL "
-          "AND mother_reference_id != ''",
-      orderBy: 'created_at ASC',
+  Future<List<HouseholdMemberEntity>> getUnsynced({
+    bool includeFailed = false,
+  }) async {
+    final statuses = ['NotSynced', 'Pending', if (includeFailed) 'Failed'];
+    final ph = List.filled(statuses.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      'SELECT * FROM ${AppDatabase.tableMembers} '
+      'WHERE sync_status IN ($ph) '
+      "AND mother_reference_id IS NOT NULL "
+      "AND mother_reference_id != '' "
+      'ORDER BY created_at ASC',
+      statuses,
     );
     return rows.map(HouseholdMemberEntity.fromDb).toList();
   }
 
   /// Count of all members waiting for offline-sync/create (Spice parity).
-  Future<int> getUnsyncedCount() async {
-    final ph = List.filled(_pendingStatuses.length, '?').join(',');
+  Future<int> getUnsyncedCount({bool includeFailed = false}) async {
+    final statuses = _statusesFor(includeFailed: includeFailed);
+    final ph = List.filled(statuses.length, '?').join(',');
     final rows = await _db.db.rawQuery(
       'SELECT COUNT(*) AS c FROM ${AppDatabase.tableMembers} '
       'WHERE sync_status IN ($ph)',
-      _pendingStatuses,
+      statuses,
+    );
+    final c = rows.first['c'];
+    return c is num ? c.toInt() : 0;
+  }
+
+  /// Count of members the server rejected on the last attempt — surfaced
+  /// separately so a permanently-stuck member registration is visible, not
+  /// silently dropped from the pending count.
+  Future<int> getFailedCount() async {
+    final rows = await _db.db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${AppDatabase.tableMembers} '
+      "WHERE sync_status = 'Failed'",
     );
     final c = rows.first['c'];
     return c is num ? c.toInt() : 0;
@@ -596,11 +620,13 @@ class MemberDao {
   Future<List<HouseholdMemberEntity>> getUnsyncedForHousehold(
     String householdLocalId, {
     List<String> excludeIds = const [],
+    bool includeFailed = false,
   }) async {
-    final statusPh = List.filled(_pendingStatuses.length, '?').join(',');
+    final statuses = _statusesFor(includeFailed: includeFailed);
+    final statusPh = List.filled(statuses.length, '?').join(',');
     final args = <Object?>[
       int.tryParse(householdLocalId) ?? householdLocalId,
-      ..._pendingStatuses,
+      ...statuses,
     ];
     var excludeClause = '';
     if (excludeIds.isNotEmpty) {
@@ -624,9 +650,11 @@ class MemberDao {
   /// already nested under a household payload in the same push.
   Future<List<HouseholdMemberEntity>> getOtherUnsyncedMembers({
     List<String> excludeIds = const [],
+    bool includeFailed = false,
   }) async {
-    final statusPh = List.filled(_pendingStatuses.length, '?').join(',');
-    final args = <Object?>[..._pendingStatuses];
+    final statuses = _statusesFor(includeFailed: includeFailed);
+    final statusPh = List.filled(statuses.length, '?').join(',');
+    final args = <Object?>[...statuses];
     var excludeClause = '';
     if (excludeIds.isNotEmpty) {
       final ePh = List.filled(excludeIds.length, '?').join(',');

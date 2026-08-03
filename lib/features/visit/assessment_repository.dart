@@ -15,6 +15,7 @@ import '../../core/db/member_dao.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
 import '../../core/sync/offline_push_service.dart';
+import '../../core/sync/sync_activity.dart';
 import '../patient/followup_call_service.dart';
 import 'forms/pregnancy_outcome_side_effects.dart';
 import 'forms/visit_summary_details.dart';
@@ -282,8 +283,13 @@ class AssessmentRepository extends ChangeNotifier {
       debugPrint('[AssessmentSync] Already syncing — skip');
       return 0;
     }
+    if (SyncActivity.pullInFlight) {
+      debugPrint('[AssessmentSync] Pull in flight — skip assessment sync');
+      return 0;
+    }
 
     _isSyncing = true;
+    SyncActivity.assessmentPushInFlight = true;
     notifyListeners();
 
     try {
@@ -318,6 +324,7 @@ class AssessmentRepository extends ChangeNotifier {
       rethrow;
     } finally {
       _isSyncing = false;
+      SyncActivity.assessmentPushInFlight = false;
       notifyListeners();
     }
   }
@@ -419,7 +426,11 @@ class AssessmentRepository extends ChangeNotifier {
     var pushedMemberIds = <String>[];
     if (_memberDao != null) {
       try {
-        final pendingMembers = await _memberDao.getUnsynced();
+        final includeFailedMembers =
+            syncMode == 'ManualSync' || syncMode == 'InitialSync';
+        final pendingMembers = await _memberDao.getUnsynced(
+          includeFailed: includeFailedMembers,
+        );
         if (pendingMembers.isNotEmpty) {
           householdMemberPayloads = pendingMembers
               .map(

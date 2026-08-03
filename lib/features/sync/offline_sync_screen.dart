@@ -185,6 +185,13 @@ class _OfflineSyncScreenState extends State<OfflineSyncScreen> {
               count: counts.assessments,
             ),
             // Follow-ups count hidden until null-id creates sync reliably.
+            if (counts.failed > 0) ...[
+              const SizedBox(height: 4),
+              _CountRow(
+                label: OfflineSyncStrings.failedPendingRetry,
+                count: counts.failed,
+              ),
+            ],
             const Spacer(),
             Row(
               children: [
