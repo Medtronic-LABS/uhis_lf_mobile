@@ -11,8 +11,18 @@ import '../../household/enrollment/enrollment_entry_sheet.dart';
 /// Calls [onChanged] on every keystroke so the caller can apply the filter
 /// synchronously from its cached queue.
 class DashboardSearchField extends StatefulWidget {
-  const DashboardSearchField({super.key, required this.onChanged});
+  const DashboardSearchField({
+    super.key,
+    this.initialValue = '',
+    required this.onChanged,
+  });
 
+  /// Current value of the backing filter state (e.g. `DashboardFilterState`),
+  /// so this field's displayed text stays in sync with it even when the value
+  /// changes for a reason other than the user typing here — e.g. this widget
+  /// remounting after a `context.go()` round trip that preserves the filter,
+  /// or an external "Clear filters" action.
+  final String initialValue;
   final ValueChanged<String> onChanged;
 
   @override
@@ -20,7 +30,21 @@ class DashboardSearchField extends StatefulWidget {
 }
 
 class _DashboardSearchFieldState extends State<DashboardSearchField> {
-  final TextEditingController _ctrl = TextEditingController();
+  late final TextEditingController _ctrl = TextEditingController(
+    text: widget.initialValue,
+  );
+
+  @override
+  void didUpdateWidget(covariant DashboardSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialValue != oldWidget.initialValue &&
+        widget.initialValue != _ctrl.text) {
+      _ctrl.value = TextEditingValue(
+        text: widget.initialValue,
+        selection: TextSelection.collapsed(offset: widget.initialValue.length),
+      );
+    }
+  }
 
   @override
   void dispose() {
