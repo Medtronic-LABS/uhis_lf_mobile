@@ -10,13 +10,15 @@ Every flagged library was traced to its source and checked against upstream rele
 
 ## 🔴 Confirmed broken, and actionable
 
-**1. PDFium (`io.github.petretiandrea:android-pdf-viewer:4.0.0`) — dead upstream dependency, no possible fix at this coordinate.**
+**1. PDFium (`io.github.petretiandrea:android-pdf-viewer:4.0.0`) — dead upstream dependency, and not fixable from this repo at all.**
 Flags `libpdfium.so`, `libpdfium.cr.so`, `libicuuc.cr.so`, `libchrome_zlib.cr.so`, `libc++_chrome.cr.so`. This artifact has had exactly two releases ever (`1.0.0` and `4.0.0`, both November 2021) and its GitHub source (`petretiandrea/AndroidPdfViewer`) has been **deleted** — confirmed via a direct 404 on the GitHub API, not just inactive. Its own last-known README said "Looking for new maintainer!" before disappearing entirely. There is no version of this exact library, now or ever, that will carry a 16 KB-aligned PDFium binary.
-**Fix:** migrate off this dependency. The community has already moved on to `io.github.oothp:android-pdf-viewer` (latest `3.2.0-beta06`), an actively maintained fork with an explicit 16 KB alignment fix (compressed shared libraries + post-build realignment, AGP 8.13+/NDK r28+) — it's the fork the community `flutter_pdfview` plugin itself switched to for this exact reason. Other options if a bigger change is acceptable: `syncfusion_flutter_pdfviewer` (already updated for the Play 16 KB requirement) or `pdfrx` (uses Android's native `PdfRenderer` API, sidestepping the bundled-PDFium problem entirely). Needs whatever screen currently renders PDFs found and re-verified against the new library's API before swapping.
+**Where it's actually used (traced by decompiling the AAR — see below): nowhere in this repo.** `android/app/build.gradle.kts:105` declares it only because it's a transitive runtime requirement of the prebuilt `micro-coaching-sdk.aar` — the AAR's own `com.medtroniclabs.microcoaching.ui.document.PdfPagerScreenKt`/`DocumentPreviewActivity` classes import `com.github.barteksc.pdfviewer.PDFView` directly to preview coaching/training PDFs. Grepping every `.kt`/`.java` file in `android/app/src/main` for `pdf`/`petretiandrea`/`barteksc` returns nothing — the only call site is compiled into the closed-source AAR binary.
+**Fix:** this cannot be migrated from `uhis_lf_mobile`. Swapping the Maven coordinate here would just change which version we declare to satisfy the AAR's linker requirement — the AAR's own compiled bytecode still calls the old `com.github.barteksc.pdfviewer.PDFView` API and would need to be recompiled against a different library. The actual fix (migrate to `io.github.oothp:android-pdf-viewer` or similar, or drop bundled-PDFium entirely in favor of Android's native `PdfRenderer`) has to happen in **`Medtronic-LABS/spice-coaching`** (the source repo that builds `micro-coaching-sdk.aar`), then flow down here as a new AAR version.
 
-**2. MediaPipe (`com.google.mediapipe:tasks-genai:0.10.24`) — 16 KB status unconfirmed, likely still unfixed at any available version.**
-Flags `libllm_inference_engine_jni.so` (the on-device LLM inference engine, used by the micro-coaching SDK). Google's own MediaPipe team stated explicitly, twice, that the July 2025 16 KB alignment fix (`0.10.26`) shipped **only for `tasks-vision`/`tasks-core`, not `tasks-genai`**. `tasks-genai`'s own version history skips `0.10.26` entirely (`0.10.25 → 0.10.27`), and no subsequent release note confirms the native library was realigned even at the current latest, `0.10.35`. Google's own on-device Gallery app has an open, unresolved tracking issue for the same gap.
-**Fix:** bump `0.10.24 → 0.10.35` regardless (reasonable hygiene, and it's possible the underlying build toolchain change was inherited even without an explicit release note) — but do not report this as "fixed" without independently verifying: `unzip -p tasks-genai-0.10.35.aar libllm_inference_engine_jni.so | readelf -lW -` and confirm the `LOAD` segment alignment reads `0x4000`, not `0x1000`/`0x2000`.
+**2. MediaPipe (`com.google.mediapipe:tasks-genai:0.10.24`) — 16 KB status unconfirmed, likely still unfixed at any available version, and same "not fixable here" situation as PDFium.**
+Flags `libllm_inference_engine_jni.so` (the on-device LLM inference engine). Google's own MediaPipe team stated explicitly, twice, that the July 2025 16 KB alignment fix (`0.10.26`) shipped **only for `tasks-vision`/`tasks-core`, not `tasks-genai`**. `tasks-genai`'s own version history skips `0.10.26` entirely (`0.10.25 → 0.10.27`), and no subsequent release note confirms the native library was realigned even at the current latest, `0.10.35`. Google's own on-device Gallery app has an open, unresolved tracking issue for the same gap.
+**Where it's actually used:** also nowhere in this repo's own Kotlin/Dart code. Decompiling `micro-coaching-sdk.aar` shows `com.medtroniclabs.microcoaching.ai.inference.GemmaService`/`InferenceRouter`/`ModelRuntime`/`ModelCatalog` — the on-device Gemma model backing the coaching chat — calling MediaPipe directly. Our own `MicroCoachingPlugin.kt`/`MainApplication.kt` only bridge Flutter to the AAR's Kotlin API; neither references MediaPipe.
+**Fix:** same constraint as PDFium — bumping `0.10.24` in our `build.gradle.kts` only changes what we declare to link against, and risks an API mismatch against whatever the AAR's `GemmaService` was actually compiled against. The real fix (bump the dependency, then verify with `readelf -lW` that `libllm_inference_engine_jni.so`'s `LOAD` segment aligns to `0x4000`) has to happen in `spice-coaching`, in the same AAR rebuild as the PDFium fix.
 
 ---
 
@@ -39,10 +41,35 @@ In practice, `barcode-scanning`'s `libbarhopper_v3.so` (and possibly a co-bundle
 
 ---
 
+## Where PDFium and MediaPipe are actually used
+
+Both looked, at first pass, like our own dependencies to fix — they're declared in our own `android/app/build.gradle.kts`. Tracing actual call sites tells a different story.
+
+**Method:** `android/app/src/main` has exactly 3 Kotlin/Java files (`MainActivity.kt`, `MicroCoachingPlugin.kt`, `MainApplication.kt`, plus Flutter's generated plugin registrant) — grepping all of them for `pdf`, `petretiandrea`, `barteksc`, and `mediapipe`/`llminference` returns nothing. The dependencies exist purely to satisfy the linker for `android/app/libs/micro-coaching-sdk.aar`, a prebuilt binary (AARs don't bundle their own transitive dependencies, so the consuming app has to declare them). To find the real usage, the AAR was decompiled directly:
+
+```bash
+unzip -o micro-coaching-sdk.aar -d extracted
+unzip -o extracted/classes.jar -d extracted/classes
+grep -rla "petretiandrea\|PDFView\|pdfium" extracted/classes      # PDFium usage
+grep -rlai "mediapipe\|llm_inference\|LlmInference" extracted/classes  # MediaPipe usage
+```
+
+**Result — both libraries are used exclusively inside the AAR's own compiled classes, not anywhere in this repo:**
+
+| Library | Class(es) inside the AAR calling it | What it's for |
+|---|---|---|
+| PDFium (`android-pdf-viewer`) | `com.medtroniclabs.microcoaching.ui.document.PdfPagerScreenKt`, `DocumentPreviewActivity` — directly import `com.github.barteksc.pdfviewer.PDFView` | Previewing coaching/training PDF documents inside the micro-coaching feature |
+| MediaPipe (`tasks-genai`) | `com.medtroniclabs.microcoaching.ai.inference.GemmaService`, `InferenceRouter`, `ModelRuntime`, `ModelCatalog` | The on-device Gemma LLM powering the coaching chat |
+
+**Why this matters:** neither library can be swapped or safely version-bumped from `uhis_lf_mobile` alone. Changing the Maven coordinate in our `build.gradle.kts` only changes what we declare to link against at build time — the AAR's own compiled bytecode still calls whatever API surface it was originally compiled against, and a version mismatch there risks a runtime `NoSuchMethodError`/`ClassNotFoundException` rather than a clean fix. The actual source lives in a separate repo — **`Medtronic-LABS/spice-coaching`** ("Codebase for micro coaching SDK for Spice") — which builds and ships `micro-coaching-sdk.aar`. Fixing either library means a change there, followed by a new AAR drop into this repo.
+
+---
+
 ## Recommendation
 
-Two real pieces of work here, in priority order:
-1. **Migrate off `io.github.petretiandrea:android-pdf-viewer`** — it's not just unaligned, it's an abandoned dependency with a deleted source repo, which is a maintenance risk independent of the 16 KB issue.
-2. **Bump `com.google.mediapipe:tasks-genai` to `0.10.35`**, then verify the bundled `.so` alignment directly with `readelf` rather than assuming it inherited the vision/core fix.
+There is no in-repo code fix available for the two actionable items — both route through a separate repo:
+
+1. **File the PDFium and MediaPipe findings against `Medtronic-LABS/spice-coaching`**, since that's where `micro-coaching-sdk.aar` is actually built. That repo's maintainers would need to: migrate off `io.github.petretiandrea:android-pdf-viewer` (dead, deleted source — e.g. to `io.github.oothp:android-pdf-viewer` or Android's native `PdfRenderer`), and bump `com.google.mediapipe:tasks-genai` past `0.10.24`, verifying `libllm_inference_engine_jni.so`'s alignment with `readelf -lW` afterward rather than assuming it inherited the vision/core-only fix.
+2. Once `spice-coaching` ships an updated AAR, bump `android/app/libs/micro-coaching-sdk.aar` here and re-run the compatibility check to confirm both libraries drop off the flagged list.
 
 Everything else is either already fine (SQLCipher, CameraX) or has no available fix yet (ML Kit) — tracked here for visibility, not immediate action.
