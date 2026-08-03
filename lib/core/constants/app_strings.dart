@@ -818,6 +818,7 @@ abstract final class PatientProfileStrings {
   static String get mapsOpenFailed => getTranslatedString('mapsOpenFailed', 'Could not open maps');
 
   static String get activeCareThreads => getTranslatedString('activeCareThreads', 'Active care threads');
+  static String get editProgrammesCta => getTranslatedString('editProgrammesCta', '+ Edit');
   static String get aiInsight => getTranslatedString('PatientProfile.aiInsight', 'AI Insight');
   static String get pregnancyProgress => getTranslatedString('pregnancyProgress', 'Pregnancy progress');
   static String get careHistory => getTranslatedString('careHistory', 'Care history');
@@ -3087,88 +3088,6 @@ abstract final class SymptomPickerStrings {
   static String get removeSymptomSemanticPrefix => getTranslatedString('removeSymptomSemanticPrefix', 'Remove symptom');
 }
 
-/// Strings for the AI Programme Selection step (Step 2 of the visit flow).
-///
-/// Surfaces the AI's programme recommendations grounded in BRAC + Bangladesh
-/// national clinical guidelines and lets the SK accept / reject before the
-/// screening form loads.
-abstract final class ProgrammeSelectionStrings {
-  ProgrammeSelectionStrings._();
-
-  static String get stepLabel => getTranslatedString('stepLabel', 'Programmes');
-  static String get stepTitle => getTranslatedString('stepTitle', 'AI recommended programmes');
-
-  // Loading / empty states
-  static String get loadingTitle => getTranslatedString('ProgrammeSelection.loadingTitle', 'AI is reviewing the symptoms…');
-  static String get loadingSubtitle => getTranslatedString('ProgrammeSelection.loadingSubtitle', 'Checking BRAC protocols and Bangladesh national clinical guidelines');
-  static String get failedTitle => getTranslatedString('failedTitle', 'Unable to load AI recommendations');
-  static String get failedSubtitle => getTranslatedString('failedSubtitle', 'Continue with the current enrolment or add a programme manually.');
-  static String get retry => getTranslatedString('ProgrammeSelection.retry', 'Retry');
-
-  // Current Programme widget
-  static String get currentProgrammeTitle => getTranslatedString('currentProgrammeTitle', 'Current Programme');
-  static String get currentProgrammeNone => getTranslatedString('currentProgrammeNone', 'Patient is not enrolled in any programme yet.');
-  static String get consistencyConsistent => getTranslatedString('consistencyConsistent', 'Selected symptoms are consistent with this programme.');
-  static String get consistencyInconsistent => getTranslatedString('consistencyInconsistent', 'Selected symptoms do not strongly match this programme.');
-
-  // AI Recommended Programmes widget
-  static String get aiRecommendedTitle => getTranslatedString('aiRecommendedTitle', 'AI Recommended Programmes');
-  static String confidenceChip(int pct) => getTranslatedString('confidenceChip', '{pct}% confidence', params: {'pct': '$pct'});
-  static String get currentBadge => getTranslatedString('currentBadge', 'Current');
-  static String get acceptCta => getTranslatedString('acceptCta', 'Add');
-  static String get acceptedCta => getTranslatedString('acceptedCta', 'Added');
-  static String get rejectCta => getTranslatedString('rejectCta', 'Skip');
-
-  // ── Manual-add confirmation dialog ───────────────────────────────────────
-  /// Title fires when the SK selects a programme directly from the manual
-  /// add sheet — keeps a deliberate confirmation before opening the form.
-  static String addConfirmTitle(String programmeTag) => getTranslatedString('addConfirmTitle', 'Add {programmeTag} assessment?', params: {'programmeTag': '$programmeTag'});
-  static String get addConfirmBody => getTranslatedString('addConfirmBody', 'This will open the screening questions for the selected programme. You can remove it later from the recommendations list.');
-  static String get addConfirmCta => getTranslatedString('addConfirmCta', 'Yes, add');
-  static String get addConfirmCancel => getTranslatedString('addConfirmCancel', 'Cancel');
-
-  /// Skip confirmation when SK rejects an AI recommendation card.
-  static String skipConfirmTitle(String programmeTag) => getTranslatedString('ProgrammeSelection.skipConfirmTitle', 'Skip {programmeTag} for this visit?', params: {'programmeTag': '$programmeTag'});
-  static String get skipConfirmBody => getTranslatedString('ProgrammeSelection.skipConfirmBody', 'The AI recommended this programme based on the patient\'s symptoms and history. Are you sure you want to skip it?');
-  static String get skipConfirmCta => getTranslatedString('skipConfirmCta', 'Yes, skip');
-  static String get skipConfirmCancel => getTranslatedString('skipConfirmCancel', 'Keep it');
-
-  // ── Review-before-continue sheet ─────────────────────────────────────────
-  /// Title — "Review N programme(s)".
-  static String reviewSheetTitle(int count) =>
-      count == 1 ? 'Review 1 programme' : 'Review $count programmes';
-  static String get reviewSheetSubtitle => getTranslatedString('reviewSheetSubtitle', 'Confirm the assessments below. You can add or remove before continuing.');
-  static String get reviewSheetEmpty => getTranslatedString('reviewSheetEmpty', 'No programmes selected. Add one before continuing, or proceed with a routine visit.');
-  static String get reviewSheetAddMore => getTranslatedString('reviewSheetAddMore', 'Add another programme');
-  static String get reviewSheetBack => getTranslatedString('reviewSheetBack', 'Back');
-
-  // Cross-program notice callout
-  static String get crossNoticeTitle => getTranslatedString('crossNoticeTitle', 'Cross-programme alert');
-
-  // Add programme sheet
-  static String get addProgrammeCta => getTranslatedString('addProgrammeCta', 'Add another programme');
-  static String get addProgrammeSheetTitle => getTranslatedString('addProgrammeSheetTitle', 'Add a programme');
-  static String get addProgrammeSheetSubtitle => getTranslatedString('addProgrammeSheetSubtitle', 'Tap to select. Already-recommended programmes are hidden.');
-  static String get addProgrammeSheetEmpty => getTranslatedString('addProgrammeSheetEmpty', 'All programmes already selected.');
-
-  // Continue
-  static String continueCta(int count) => count <= 1
-      ? 'Continue with $count programme'
-      : 'Continue with $count programmes';
-  static String get continueCtaEmpty => getTranslatedString('continueCtaEmpty', 'Continue (no programme)');
-
-  // Rationale source labels — match RationaleSource.displayLabel but as
-  // string constants so widgets can show them inline.
-  static String get sourceBrac => getTranslatedString('sourceBrac', 'BRAC');
-  static String get sourceBdNational => getTranslatedString('sourceBdNational', 'BD national');
-  static String get sourcePatientContext => getTranslatedString('sourcePatientContext', 'Context');
-  static String get sourceSymptom => getTranslatedString('sourceSymptom', 'Symptom');
-
-  // Confirmation toasts shown when the SK accepts / removes a programme.
-  static String toastAdded(String programmeTag) => getTranslatedString('toastAdded', '{programmeTag} added to this visit', params: {'programmeTag': '$programmeTag'});
-  static String toastRemoved(String programmeTag) => getTranslatedString('toastRemoved', '{programmeTag} removed from this visit', params: {'programmeTag': '$programmeTag'});
-}
-
 /// Visit-completion copy. `VisitCompleteScreen` itself was deleted (superseded
 /// by `VisitFlowScreen`'s inline Step 3) — these 4 members remain live,
 /// consumed directly by `VisitFlowScreen`'s Step 3 body and its widget test.
@@ -4069,40 +3988,6 @@ abstract final class EnrollmentStrings {
   static String get duplicateBody => getTranslatedString('duplicateBody', 'A member with this ID is already in your records. Registering again may create a duplicate.');
   static String get duplicateViewRecord => getTranslatedString('duplicateViewRecord', 'View record');
   static String get duplicateContinue => getTranslatedString('duplicateContinue', 'Continue anyway');
-}
-
-/// Three-card pre-visit AI briefing screen shown between encounter creation
-/// and triage. (Card 1 title is shared with
-/// [SymptomPickerStrings.briefCard1Title]; `Next` is shared with
-/// [ComposerStrings.nextButton].)
-abstract final class VisitBriefingStrings {
-  VisitBriefingStrings._();
-
-  static String get fallbackTitle => getTranslatedString('VisitBriefing.fallbackTitle', 'Pre-Visit Briefing');
-
-  // ── Card 1: Before You Knock ──────────────────────────────────────────────
-  static String get card1Subtitle => getTranslatedString('card1Subtitle', 'AI-generated briefing based on patient history');
-  static String get briefingUnavailable => getTranslatedString('briefingUnavailable', 'AI briefing unavailable — check patient record manually.');
-
-  // ── Card 2: Conversation Guide ────────────────────────────────────────────
-  static String get card2Title => getTranslatedString('card2Title', 'Conversation Guide');
-  static String get card2Subtitle => getTranslatedString('card2Subtitle', 'Personalised for this patient\'s programmes and history');
-  static String get guideUnavailable => getTranslatedString('guideUnavailable', 'Conversation guide unavailable.');
-
-  // ── Card 3: Transition ────────────────────────────────────────────────────
-  static String get card3Title => getTranslatedString('card3Title', 'Begin the Consultation');
-  static String get card3Subtitle => getTranslatedString('card3Subtitle', 'Ask the patient how they are feeling — the AI Scribe will start listening');
-  static String get transitionFallback => getTranslatedString('transitionFallback', 'Ask the patient how she is feeling today and begin the consultation.');
-  static String get scribeBadgeLabel => getTranslatedString('scribeBadgeLabel', 'Ambient AI Scribe');
-  static String get scribeBadgeDescription => getTranslatedString('scribeBadgeDescription', 'Automatically transcribes and structures clinical information as you speak.');
-  static String get autofillBadgeLabel => getTranslatedString('autofillBadgeLabel', 'Auto-fill Assessment');
-  static String get autofillBadgeDescription => getTranslatedString('autofillBadgeDescription', 'Relevant fields in the assessment form are populated from the conversation.');
-  static String get reviewBadgeLabel => getTranslatedString('reviewBadgeLabel', 'You Review Everything');
-  static String get reviewBadgeDescription => getTranslatedString('reviewBadgeDescription', 'All AI suggestions are proposals — you accept or edit before submitting.');
-
-  // ── Bottom bar ────────────────────────────────────────────────────────────
-  static String get beginAssessment => getTranslatedString('beginAssessment', 'Begin Assessment');
-  static String get skipBriefing => getTranslatedString('skipBriefing', 'Skip briefing');
 }
 
 /// Strings for [AssistantScreen] — conversational AI Q&A tab.

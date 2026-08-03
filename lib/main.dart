@@ -69,7 +69,6 @@ import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
-import 'features/visit/programme_selection/programme_recommendation_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'features/training/coaching_dao.dart';
 import 'features/training/coaching_repository.dart';
@@ -481,12 +480,6 @@ class _UhisNextAppState extends State<UhisNextApp>
         // AI Assistant — conversational Q&A (Tab 3)
         Provider<AssistantRepository>(
             create: (_) => AssistantRepository(widget.api)),
-        // AI Programme Recommendation — Step 2 picker grounded in BRAC + BD
-        // national clinical guidelines. Caches per-patient via _aiCacheDao
-        // so re-entering Step 2 doesn't re-hit the API.
-        Provider<ProgrammeRecommendationRepository>(
-            create: (_) => ProgrammeRecommendationRepository(widget.api,
-                cache: _aiCacheDao)),
         // AI Scribe API service
         Provider<ScribeApiService>(
             create: (_) => ScribeApiService(widget.api)),

@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../core/constants/app_strings.dart';
 import '../core/widgets/mockup_svg_icons.dart';
-import '../features/visit/visit_flow_screen.dart';
 import 'theme.dart';
 
 /// Shell widget for the persistent 3-tab bottom navigation.
@@ -64,22 +63,12 @@ class _BottomNavShellState extends State<BottomNavShell>
     return true;
   }
 
-  Future<void> _onTap(BuildContext context, int visibleIndex) async {
+  void _onTap(BuildContext context, int visibleIndex) {
+    // Visit flow now lives on the root navigator (see router.dart), so it's
+    // never shown under this bar — no need to guard tab switches against an
+    // in-progress visit here; VisitFlowScreen's own PopScope already confirms
+    // before leaving via the back button.
     final branchIndex = _visibleBranchIndices[visibleIndex];
-    // Same tab tapped — just reset to root of that branch.
-    if (branchIndex == widget.navigationShell.currentIndex) {
-      widget.navigationShell.goBranch(branchIndex, initialLocation: true);
-      return;
-    }
-    // If an active visit flow is running, ask before leaving.
-    final path =
-        GoRouter.of(context).routeInformationProvider.value.uri.path;
-    final inVisitFlow =
-        path.contains('/patients/visit/') && path.endsWith('/flow');
-    if (inVisitFlow) {
-      final leave = await showLeaveVisitDialog(context);
-      if (leave != true || !mounted) return;
-    }
     widget.navigationShell.goBranch(branchIndex, initialLocation: true);
   }
 

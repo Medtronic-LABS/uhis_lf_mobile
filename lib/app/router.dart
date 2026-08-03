@@ -27,7 +27,6 @@ import '../features/sync/offline_sync_screen.dart';
 import '../features/counselling/counselling_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/assistant/assistant_screen.dart';
-import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
 import '../features/patient/enroll/programme_enroll_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
@@ -300,90 +299,6 @@ GoRouter buildRouter(AuthState auth) {
                       );
                     },
                   ),
-                  // Visit flow routes
-                  GoRoute(
-                    path: 'visit/:visitId/briefing',
-                    name: 'visit-briefing',
-                    pageBuilder: (context, state) {
-                      Map<String, dynamic>? extra;
-                      if (state.extra is Map<String, dynamic>) {
-                        extra = state.extra as Map<String, dynamic>;
-                      } else if (state.extra is Map) {
-                        extra = Map<String, dynamic>.from(state.extra as Map);
-                      }
-                      final origin = state.uri.queryParameters['origin'];
-                      final rawProgrammes =
-                          extra?['programmes'] as List<dynamic>?;
-                      final programmes = rawProgrammes
-                              ?.map((e) => Programme.fromString(e.toString()))
-                              .toSet() ??
-                          <Programme>{};
-                      return MaterialPage(
-                        key: ValueKey(
-                            'visit-briefing-${state.pathParameters['visitId']}'),
-                        child: VisitBriefingScreen(
-                          encounterId: state.pathParameters['visitId']!,
-                          patientId: extra?['patientId'] as String? ?? '',
-                          patientName: extra?['patientName'] as String?,
-                          patientAge: extra?['patientAge'] as int?,
-                          patientGender: extra?['patientGender'] as String?,
-                          householdId: extra?['householdId'] as String?,
-                          memberId: extra?['memberId'] as String?,
-                          programmes: programmes,
-                          origin: origin,
-                        ),
-                      );
-                    },
-                  ),
-                  GoRoute(
-                    path: 'visit/:visitId/flow',
-                    name: 'visit-flow',
-                    pageBuilder: (context, state) {
-                      Map<String, dynamic>? extra;
-                      if (state.extra is Map<String, dynamic>) {
-                        extra = state.extra as Map<String, dynamic>;
-                      } else if (state.extra is Map) {
-                        extra = Map<String, dynamic>.from(state.extra as Map);
-                      }
-                      final origin = state.uri.queryParameters['origin'];
-                      return MaterialPage(
-                        key: ValueKey(
-                            'visit-flow-${state.pathParameters['visitId']}'),
-                        child: VisitFlowScreen(
-                          visitId: state.pathParameters['visitId']!,
-                          patientId: extra?['patientId'] as String? ?? '',
-                          memberId: extra?['memberId'] as String?,
-                          householdId: extra?['householdId'] as String?,
-                          villageId: extra?['villageId'] as String?,
-                          householdMemberLocalId:
-                              extra?['householdMemberLocalId'] as int?,
-                          patientAge: extra?['patientAge'] as int?,
-                          patientName: extra?['patientName'] as String?,
-                          patientGender: extra?['patientGender'] as String?,
-                          gestationalWeeks:
-                              extra?['gestationalWeeks'] as int?,
-                          isPostpartum:
-                              extra?['isPostpartum'] as bool? ?? false,
-                          postpartumWeeks:
-                              extra?['postpartumWeeks'] as int?,
-                          origin: origin,
-                          initialStep:
-                              extra?['initialStep'] as int? ?? 0,
-                          seedProgrammes: () {
-                            final raw = extra?['seedProgrammes'];
-                            if (raw is List) {
-                              return raw
-                                  .whereType<String>()
-                                  .map(Programme.fromString)
-                                  .where((p) => p != Programme.unknown)
-                                  .toSet();
-                            }
-                            return const <Programme>{};
-                          }(),
-                        ),
-                      );
-                    },
-                  ),
                 ],
               ),
             ],
@@ -528,6 +443,59 @@ GoRouter buildRouter(AuthState auth) {
       // ─────────────────────────────────────────────────────────────────────
       // Standalone feature routes (full-screen, outside the shell)
       // ─────────────────────────────────────────────────────────────────────
+      // Visit flow — reachable from the Home dashboard, the Assistant AI
+      // sheet, and the Patients tab alike. Must live at root level (not
+      // nested under the Patients branch): a nested route forces GoRouter's
+      // StatefulShellRoute to switch the active branch/tab before pushing,
+      // which visibly flickers the bottom nav through Home -> Patients on
+      // every dashboard-initiated visit. parentNavigatorKey pins it to the
+      // root navigator so it always pushes on top of whichever tab is
+      // active, without touching the shell's branch index.
+      GoRoute(
+        path: '/patients/visit/:visitId/flow',
+        name: 'visit-flow',
+        parentNavigatorKey: _rootNavigatorKey,
+        pageBuilder: (context, state) {
+          Map<String, dynamic>? extra;
+          if (state.extra is Map<String, dynamic>) {
+            extra = state.extra as Map<String, dynamic>;
+          } else if (state.extra is Map) {
+            extra = Map<String, dynamic>.from(state.extra as Map);
+          }
+          final origin = state.uri.queryParameters['origin'];
+          return MaterialPage(
+            key: ValueKey('visit-flow-${state.pathParameters['visitId']}'),
+            child: VisitFlowScreen(
+              visitId: state.pathParameters['visitId']!,
+              patientId: extra?['patientId'] as String? ?? '',
+              memberId: extra?['memberId'] as String?,
+              householdId: extra?['householdId'] as String?,
+              villageId: extra?['villageId'] as String?,
+              householdMemberLocalId:
+                  extra?['householdMemberLocalId'] as int?,
+              patientAge: extra?['patientAge'] as int?,
+              patientName: extra?['patientName'] as String?,
+              patientGender: extra?['patientGender'] as String?,
+              gestationalWeeks: extra?['gestationalWeeks'] as int?,
+              isPostpartum: extra?['isPostpartum'] as bool? ?? false,
+              postpartumWeeks: extra?['postpartumWeeks'] as int?,
+              origin: origin,
+              initialStep: extra?['initialStep'] as int? ?? 0,
+              seedProgrammes: () {
+                final raw = extra?['seedProgrammes'];
+                if (raw is List) {
+                  return raw
+                      .whereType<String>()
+                      .map(Programme.fromString)
+                      .where((p) => p != Programme.unknown)
+                      .toSet();
+                }
+                return const <Programme>{};
+              }(),
+            ),
+          );
+        },
+      ),
       GoRoute(
         path: '/teleconsult',
         name: 'teleconsult',

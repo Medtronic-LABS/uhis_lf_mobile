@@ -983,7 +983,19 @@ class _PatientContextScreenState
                     const SizedBox(height: 10),
 
                     // ── Active care threads ───────────────────────────────
-                    _CareThreadChipRow(threads: threads),
+                    _CareThreadChipRow(
+                      threads: threads,
+                      onEdit: () => context.push(
+                        '/patients/${widget.patientId}/enroll',
+                        extra: <String, dynamic>{
+                          'patientName': data.name,
+                          'patientAge': data.age,
+                          'patientGender': data.gender,
+                          'villageName': data.villageName,
+                          'existingProgrammes': data.programmes,
+                        },
+                      ),
+                    ),
                     const SizedBox(height: 12),
 
                     // ── Pregnancy LMP/EDD card (active pregnancy only) ────
@@ -1000,6 +1012,16 @@ class _PatientContextScreenState
                             ? DateTime.fromMillisecondsSinceEpoch(snap.eddDate!)
                             : null,
                         ancVisitNumber: ancVisitNum,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    // ── Vitals trends (BP/BG mini-charts + view-all link) ─
+                    if (data.vitalHistory.isNotEmpty) ...[
+                      _BpBgTrendSection(
+                        vitalHistory: data.vitalHistory,
+                        assessments: data.assessments,
+                        patientId: widget.patientId,
+                        patientName: data.name,
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -2019,11 +2041,13 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
 // ─── Care Thread Chip Row ──────────────────────────────────────────────────
 
 /// Wrapping row of thread chips — one pill per active clinical pathway.
-/// Display-only (not tappable).
+/// The chips themselves are display-only; an optional [onEdit] renders a
+/// trailing "+ Edit" action that opens ProgrammeEnrollScreen.
 class _CareThreadChipRow extends StatelessWidget {
-  const _CareThreadChipRow({required this.threads});
+  const _CareThreadChipRow({required this.threads, this.onEdit});
 
   final List<_CareThread> threads;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -2033,14 +2057,33 @@ class _CareThreadChipRow extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            PatientProfileStrings.activeCareThreads,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textMid,
-              letterSpacing: 0.2,
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  PatientProfileStrings.activeCareThreads,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMid,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+              if (onEdit != null)
+                GestureDetector(
+                  key: const Key('patient_context_edit_programmes'),
+                  onTap: onEdit,
+                  child: Text(
+                    PatientProfileStrings.editProgrammesCta,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         Wrap(
