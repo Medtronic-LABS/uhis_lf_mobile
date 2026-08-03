@@ -361,9 +361,14 @@ class _PatientContextScreenState
             ? DateTime.now()
             : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
         final prog = Programme.fromString(row.kind ?? '');
-        final typeLabel = prog == Programme.unknown
-            ? (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase()
-            : prog.wireTag;
+        // Keep the wire kind (PREGNANCYOUTCOME, PNC_MOTHER, …). Collapsing to
+        // [Programme.wireTag] made outcomes look like plain PNC visits.
+        final rawKind = (row.kind ?? '').trim();
+        final typeLabel = rawKind.isNotEmpty
+            ? rawKind.toUpperCase()
+            : (prog == Programme.unknown
+                ? PatientContextStrings.genericAssessmentLabel.toUpperCase()
+                : prog.wireTag);
         out.add(MemberAssessment(
           id: row.id,
           type: typeLabel,
@@ -1877,51 +1882,114 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
     ));
   }
 
-  // Newest-first by date. Same timestamp: ANC above PW, PNC above Outcome.
-  entries.sort(_compareTimelineEntries);
+  // Two care flows stay separate: PW+ANC, and pregnancy-outcome+PNC.
+  // Do not globally stack ANC above PNC above PW above outcome.
+  _sortTimelineEntries(entries);
 
   _logVisitCounterDiagnostics(data, entries);
   return entries;
 }
 
-/// Newest date first. On equal dates, keep PW below ANC and Outcome below PNC.
-int _compareTimelineEntries(_TimelineEntry a, _TimelineEntry b) {
-  final byDate = b.date.compareTo(a.date);
-  if (byDate != 0) return byDate;
-  return _timelineSameDateRank(a).compareTo(_timelineSameDateRank(b));
+/// Local YYYYmmdd so UTC vs local stamps on the same care day still tie.
+int _timelineDayKey(DateTime d) {
+  final l = d.toLocal();
+  return l.year * 10000 + l.month * 100 + l.day;
 }
 
-/// Lower rank appears higher in the newest-first list.
-int _timelineSameDateRank(_TimelineEntry e) {
+/// Care-flow buckets for same-day ordering (not a global programme ranking).
+enum _TimelineFlow { antenatal, postnatal, other }
+
+_TimelineFlow _timelineFlow(_TimelineEntry e) {
   final type = e.source?.type.toUpperCase() ?? '';
   final title = e.title;
   final category = e.category;
 
-  if (type.contains('PWPROFILE') ||
-      title == PatientProfileStrings.pregnancyRegistered ||
-      category == PatientProfileStrings.pregnancyRegistrationCategory) {
-    return 2; // below ANC
-  }
   if (_isPregnancyOutcomeType(type) ||
       title == 'Pregnancy Outcome' ||
       category == 'Delivery') {
-    return 3; // below PNC
+    return _TimelineFlow.postnatal;
   }
-  if (Programme.fromString(type) == Programme.anc ||
+  if (e.programme == Programme.pw ||
+      type.contains('PWPROFILE') ||
+      title == PatientProfileStrings.pregnancyRegistered ||
+      category == PatientProfileStrings.pregnancyRegistrationCategory ||
+      e.programme == Programme.anc ||
+      Programme.fromString(type) == Programme.anc ||
       title.startsWith('ANC') ||
       category == 'Antenatal Care') {
-    return 0;
+    return _TimelineFlow.antenatal;
   }
-  if (Programme.fromString(type) == Programme.pnc ||
+  if (e.programme == Programme.pnc ||
+      Programme.fromString(type) == Programme.pnc ||
       title.startsWith('PNC') ||
       category == 'Postnatal Care') {
-    return 1;
+    return _TimelineFlow.postnatal;
   }
-  if (e.badge == 'Enrolled' ||
-      category == PatientProfileStrings.enrollmentMilestone) {
-    return 9;
+  return _TimelineFlow.other;
+}
+
+/// Within antenatal: ANC above PW. Within postnatal: PNC above outcome.
+/// Lower value sorts higher in the newest-first list.
+int _timelineFlowRank(_TimelineEntry e) {
+  final type = e.source?.type.toUpperCase() ?? '';
+  final title = e.title;
+  final category = e.category;
+
+  if (_isPregnancyOutcomeType(type) ||
+      title == 'Pregnancy Outcome' ||
+      category == 'Delivery') {
+    return 1; // below PNC
   }
-  return 5;
+  if (e.programme == Programme.pw ||
+      type.contains('PWPROFILE') ||
+      title == PatientProfileStrings.pregnancyRegistered ||
+      category == PatientProfileStrings.pregnancyRegistrationCategory) {
+    return 1; // below ANC
+  }
+  return 0; // ANC / PNC / other
+}
+
+/// Newest day first. Same day: each flow is ordered on its own (PW+ANC, PO+PNC),
+/// then flows are ordered by that flow's newest timestamp — never a mixed
+/// ANC→PNC→PW→outcome stack.
+void _sortTimelineEntries(List<_TimelineEntry> entries) {
+  final byDay = <int, List<_TimelineEntry>>{};
+  for (final e in entries) {
+    byDay.putIfAbsent(_timelineDayKey(e.date), () => []).add(e);
+  }
+  final dayKeys = byDay.keys.toList()..sort((a, b) => b.compareTo(a));
+  entries
+    ..clear()
+    ..addAll([
+      for (final day in dayKeys) ..._sortTimelineDay(byDay[day]!),
+    ]);
+}
+
+List<_TimelineEntry> _sortTimelineDay(List<_TimelineEntry> dayEntries) {
+  final byFlow = <_TimelineFlow, List<_TimelineEntry>>{};
+  for (final e in dayEntries) {
+    byFlow.putIfAbsent(_timelineFlow(e), () => []).add(e);
+  }
+
+  for (final list in byFlow.values) {
+    list.sort((a, b) {
+      final byRank = _timelineFlowRank(a).compareTo(_timelineFlowRank(b));
+      if (byRank != 0) return byRank;
+      return b.date.compareTo(a.date);
+    });
+  }
+
+  final flows = byFlow.entries.toList()
+    ..sort((a, b) {
+      DateTime newestOf(List<_TimelineEntry> list) =>
+          list.map((e) => e.date).reduce((x, y) => x.isAfter(y) ? x : y);
+      final byNewest = newestOf(b.value).compareTo(newestOf(a.value));
+      if (byNewest != 0) return byNewest;
+      // Stable tie-break: antenatal before postnatal before other when tied.
+      return a.key.index.compareTo(b.key.index);
+    });
+
+  return [for (final f in flows) ...f.value];
 }
 
 /// Unpacks the `{kind, raw}` envelope written by AssessmentDao so that
