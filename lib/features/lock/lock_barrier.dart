@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import 'lock_header.dart';
 import 'lock_screen.dart' show LockContent;
 
@@ -73,7 +74,10 @@ class _LockBarrierState extends State<LockBarrier> {
     setState(() => _failed = false);
     final ok = await auth.biometricUnlock();
     if (!mounted) return;
-    if (ok) return;
+    if (ok) {
+      context.read<SyncConnectivityService>().syncIfSessionReady();
+      return;
+    }
     if (!auth.biometricEnabled) {
       await auth.requestPasswordFallback();
       if (mounted) context.read<GoRouter>().go('/login?from=lock');

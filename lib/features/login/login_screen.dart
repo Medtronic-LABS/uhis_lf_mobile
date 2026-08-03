@@ -54,14 +54,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     debugPrint('[_LoginScreenState] _submit username=${_userCtl.text.trim()}');
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      debugPrint('[_LoginScreenState] _submit: form validation failed');
+      return;
+    }
     final auth = context.read<AuthState>();
+    debugPrint('[_LoginScreenState] _submit: calling auth.login…');
     final ok = await auth.login(_userCtl.text.trim(), _passCtl.text);
+    debugPrint('[_LoginScreenState] _submit: auth.login → ok=$ok error=${auth.error}');
     if (!mounted) return;
     if (ok) {
-      // Prefetch user hierarchy (saves upazila from chiefdoms[0].name) so the
-      // lock screen profile card shows correct data on next background lock.
-      context.read<UserHierarchyService>().prefetch().ignore();
+      // Prefetch user hierarchy (saves upazila + durable SS/village cache) so
+      // enrollment dropdowns work offline after process death / PIN unlock.
+      context
+          .read<UserHierarchyService>()
+          .prefetch(forceRefresh: true)
+          .ignore();
       debugPrint('[_LoginScreenState] post-login: onboardingComplete=${auth.onboardingComplete} pinEnabled=${auth.pinEnabled} biometricEnabled=${auth.biometricEnabled}');
       if (!auth.onboardingComplete && !auth.pinEnabled) {
         // New user — kick off sync in background immediately so data arrives

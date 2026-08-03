@@ -122,6 +122,13 @@ class OfflinePushService extends ChangeNotifier {
   Future<OfflinePushResult> pushAll({
     String syncMode = 'ManualSync',
   }) async {
+    if (!_auth.hasSessionCredentials) {
+      debugPrint('[OfflinePush] blocked — no auth token/session credentials');
+      return const OfflinePushResult(
+        success: false,
+        message: 'Not authenticated — sign in again before syncing',
+      );
+    }
     if (_running || isPushInFlight) {
       return const OfflinePushResult(
         success: false,

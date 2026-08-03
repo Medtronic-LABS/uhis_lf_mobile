@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -130,8 +131,11 @@ class AuthState extends ChangeNotifier {
     try {
       // Offline path: verify stored hash (Spice Android parity).
       // Allows CHWs to authenticate for days/weeks without connectivity.
-      if (await _isDeviceOffline()) {
+      final offline = await _isDeviceOffline();
+      debugPrint('[AuthState] login: offline=$offline user=$username');
+      if (offline) {
         final hashOk = await _repo.verifyOfflinePassword(username, password);
+        debugPrint('[AuthState] login: offline password match=$hashOk');
         if (hashOk) {
           final graceOk = await _repo.restoreTokensIgnoringExpiry();
           _username = username;
@@ -144,13 +148,18 @@ class AuthState extends ChangeNotifier {
           debugPrint('[AuthState] login: offline password verified${graceOk ? ', session restored' : ', no prior session'}');
           return true;
         }
-        _error = LoginStrings.loginFailed;
-        _status = AuthStatus.signedOut;
-        return false;
+        // Fall through to online login. The offline probe can false-positive
+        // (e.g. google.com DNS blocked while spice backend is reachable), and
+        // logout clears the offline password hash — so a hard fail here would
+        // strand the user with no network attempt.
+        debugPrint(
+            '[AuthState] login: no offline credentials — trying online login');
       }
       // Online path: normal network login.
       // Must run BEFORE _repo.login(), which overwrites the cached username.
       _sameUserRelogin = await _repo.isReturningUser(username);
+      debugPrint(
+          '[AuthState] login: online path sameUserRelogin=$_sameUserRelogin');
       await _repo.login(username, password);
       _username = username;
       _biometricEnabled = await _repo.isBiometricEnabled();
@@ -158,8 +167,10 @@ class AuthState extends ChangeNotifier {
       _onboardingComplete = await _repo.isOnboardingComplete();
       _status = AuthStatus.signedIn;
       _locked = false;
+      debugPrint('[AuthState] login: online success');
       return true;
     } catch (e) {
+      debugPrint('[AuthState] login: failed — $e');
       _error = NetworkErrorMapper.friendly(e);
       _status = AuthStatus.signedOut;
       return false;
@@ -222,12 +233,29 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<bool> _isDeviceOffline() async {
+    // Prefer connectivity_plus (same as SyncConnectivityService). A google.com
+    // DNS probe false-positives offline in markets where Google is blocked or
+    // filtered, which previously blocked online login entirely after logout
+    // cleared the offline password hash.
     try {
-      final result = await InternetAddress.lookup('google.com')
+      final results = await Connectivity()
+          .checkConnectivity()
           .timeout(const Duration(seconds: 3));
-      return result.isEmpty || result[0].rawAddress.isEmpty;
+      final hasInterface =
+          results.any((r) => r != ConnectivityResult.none);
+      if (!hasInterface) return true;
+      return false;
     } catch (_) {
-      return true;
+      // Fall back to a short reachability probe against our own API host.
+      try {
+        final host = Uri.parse(AppConfig.apiBaseUrl).host;
+        if (host.isEmpty) return true;
+        final result = await InternetAddress.lookup(host)
+            .timeout(const Duration(seconds: 3));
+        return result.isEmpty || result[0].rawAddress.isEmpty;
+      } catch (_) {
+        return true;
+      }
     }
   }
 

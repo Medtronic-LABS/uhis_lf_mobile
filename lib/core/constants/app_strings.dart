@@ -522,6 +522,11 @@ abstract final class SyncStrings {
   static String get syncErrorTimeout => getTranslatedString('syncErrorTimeout', 'Connection timed out. Please try again.');
   static String get syncErrorServer => getTranslatedString('syncErrorServer', 'Could not reach the server. Please try again later.');
   static String get syncErrorGeneric => getTranslatedString('syncErrorGeneric', 'Something went wrong. Please try again.');
+  static String get syncErrorSessionExpired => getTranslatedString(
+        'syncErrorSessionExpired',
+        'Your session expired. Sign in again online before syncing.',
+      );
+  static String get signInAgain => getTranslatedString('Sync.signInAgain', 'Sign in again');
   static String get continueOffline => getTranslatedString('continueOffline', 'Continue with what we have');
   static String get retry => CommonStrings.retry;
 

@@ -11,6 +11,7 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import 'lock_header.dart';
 
 class LockScreen extends StatefulWidget {
@@ -78,6 +79,7 @@ class _LockScreenState extends State<LockScreen> {
     final ok = await auth.biometricUnlock();
     if (!mounted) return;
     if (ok) {
+      context.read<SyncConnectivityService>().syncIfSessionReady();
       context.go('/home');
     } else if (!auth.biometricEnabled || !auth.biometricAvailable) {
       context.go('/login?from=lock');
