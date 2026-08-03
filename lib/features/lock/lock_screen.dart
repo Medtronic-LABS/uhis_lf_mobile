@@ -11,6 +11,7 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/widgets/app_version_label.dart';
 import '../settings/widgets/profile_card.dart';
 import 'lock_header.dart';

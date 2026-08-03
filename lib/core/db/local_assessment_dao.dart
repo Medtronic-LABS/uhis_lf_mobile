@@ -192,7 +192,7 @@ class LocalAssessmentEntity {
     int? householdMemberLocalId,
     String? memberId,
     String? householdId,
-    String? patientId,
+    Object? patientId = _unset,
     String? villageId,
     String? assessmentType,
     String? assessmentDetails,
@@ -217,7 +217,10 @@ class LocalAssessmentEntity {
             householdMemberLocalId ?? this.householdMemberLocalId,
         memberId: memberId ?? this.memberId,
         householdId: householdId ?? this.householdId,
-        patientId: patientId ?? this.patientId,
+        // Allow explicit null (Spice: hhm.patient_id may be unset for new members).
+        patientId: identical(patientId, _unset)
+            ? this.patientId
+            : patientId as String?,
         villageId: villageId ?? this.villageId,
         assessmentType: assessmentType ?? this.assessmentType,
         assessmentDetails: assessmentDetails ?? this.assessmentDetails,
@@ -235,6 +238,8 @@ class LocalAssessmentEntity {
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
+
+  static const Object _unset = Object();
 
   /// Convert to API request format matching Android's Assessment model.
   ///
@@ -752,69 +757,97 @@ class LocalAssessmentDao {
       'SELECT a.*, '
       'm.fhir_id AS j_member_fhir, m.patient_id AS j_patient_id, '
       'm.household_id AS j_member_household, '
+      'm.household_fhir_id AS j_member_household_fhir, '
       'm.sub_village_id AS j_member_sub_village, '
       'm.village_id AS j_member_village, '
-      'h.fhir_id AS j_household_fhir, '
-      'h.sub_village_id AS j_household_sub_village, '
-      'h.village_id AS j_household_village '
+      'COALESCE(h.id, h2.id) AS j_household_local, '
+      'COALESCE(h.fhir_id, h2.fhir_id) AS j_household_fhir, '
+      'COALESCE(h.sub_village_id, h2.sub_village_id) AS j_household_sub_village, '
+      'COALESCE(h.village_id, h2.village_id) AS j_household_village '
       'FROM $tableName a '
-      'LEFT JOIN ${AppDatabase.tableMembers} m '
-      '  ON m.id = a.household_member_local_id '
+      // a.patient_id is deliberately not a join key: for a member the server
+      // has not assigned a patient id to it holds the local member PK, which
+      // could collide with another member's server patient_id.
+      // _rescueMemberForPush resolves that case explicitly.
+      'LEFT JOIN ${AppDatabase.tableMembers} m ON ( '
+      '  (a.household_member_local_id > 0 AND m.id = a.household_member_local_id) '
+      '  OR (a.member_id IS NOT NULL AND a.member_id != \'\' '
+      '      AND m.fhir_id = a.member_id) '
+      ') '
       'LEFT JOIN ${AppDatabase.tableHouseholds} h ON h.id = m.household_id '
+      'LEFT JOIN ${AppDatabase.tableHouseholds} h2 '
+      '  ON h2.fhir_id = m.household_fhir_id '
       'WHERE a.sync_status IN ($placeholders) '
       'ORDER BY a.created_at ASC',
       statuses,
     );
 
-    // household_member_local_id can be 0 when the visit was started from a
-    // screen that never resolved it — recover those by patient id before
-    // deciding an assessment is unpushable.
-    final orphanPatientIds = rows
-        .where((r) => r['j_member_fhir'] == null)
-        .map((r) => r['patient_id'] as String?)
-        .whereType<String>()
-        .where((id) => id.isNotEmpty)
-        .toSet()
-        .toList();
-    var rescue = const <String, Map<String, Object?>>{};
-    if (orphanPatientIds.isNotEmpty) {
-      final ph = List.filled(orphanPatientIds.length, '?').join(',');
-      final found = await _db.db.rawQuery(
-        'SELECT m.patient_id, m.fhir_id, m.household_id, m.sub_village_id, '
-        '  m.village_id, h.fhir_id AS household_fhir, '
-        '  h.sub_village_id AS household_sub_village, '
-        '  h.village_id AS household_village '
-        'FROM ${AppDatabase.tableMembers} m '
-        'LEFT JOIN ${AppDatabase.tableHouseholds} h ON h.id = m.household_id '
-        'WHERE m.patient_id IN ($ph)',
-        orphanPatientIds,
-      );
-      rescue = {
-        for (final r in found) r['patient_id'] as String: r,
-      };
+    // The member join is an OR over three keys, so one assessment can match
+    // more than one member row. Keep a single row per assessment, preferring
+    // the one that actually resolved a member.
+    final rowByAssessmentId = <String, Map<String, Object?>>{};
+    for (final row in rows) {
+      final id = row['id'] as String;
+      final kept = rowByAssessmentId[id];
+      if (kept == null ||
+          (_nonEmpty(kept['j_member_fhir']) == null &&
+              _nonEmpty(row['j_member_fhir']) != null)) {
+        rowByAssessmentId[id] = row;
+      }
+    }
+
+    // When the join still misses (e.g. local id was 0 and member_id / patient_id
+    // were null at save), resolve the member row explicitly before blocking.
+    final rescueByAssessmentId = <String, Map<String, Object?>>{};
+    for (final row in rowByAssessmentId.values) {
+      if (_nonEmpty(row['j_member_fhir']) != null) continue;
+      final entity = LocalAssessmentEntity.fromDb(row);
+      final rescued = await _rescueMemberForPush(entity);
+      if (rescued != null) {
+        rescueByAssessmentId[entity.id] = rescued;
+      }
     }
 
     final ready = <LocalAssessmentEntity>[];
     final blocked = <LocalAssessmentEntity>[];
-    for (final row in rows) {
+    for (final row in rowByAssessmentId.values) {
       final entity = LocalAssessmentEntity.fromDb(row);
-      final fallback = rescue[row['patient_id']];
+      final fallback = rescueByAssessmentId[entity.id];
 
       String? pick(String joined, String rescued) =>
-          (row[joined] as String?)?.isNotEmpty == true
-              ? row[joined] as String
-              : (fallback?[rescued] as String?);
+          _nonEmpty(row[joined]) ?? _nonEmpty(fallback?[rescued]);
 
       final memberFhir = pick('j_member_fhir', 'fhir_id');
-      final householdFhir = pick('j_household_fhir', 'household_fhir');
-      final householdLocal = row['j_member_household'] ??
-          fallback?['household_id'];
+      // Household row reached through the member link (hh in Android's join).
+      final householdRow = pick('j_household_local', 'household_local');
+      var householdFhir = pick('j_household_fhir', 'household_fhir') ??
+          pick('j_member_household_fhir', 'household_fhir_id');
+      // The member link can be stale (household re-inserted by a pull). Fall
+      // back to the household the assessment itself was stamped with.
+      final storedHousehold = _nonEmpty(entity.householdId);
+      var householdFromStored = false;
+      if (householdFhir == null && storedHousehold != null) {
+        final hh = await _householdByAnyId(storedHousehold);
+        householdFromStored = hh != null;
+        householdFhir = _nonEmpty(hh?['fhir_id']);
+      }
 
       // Android: `hhm.fhir_id IS NOT NULL AND (hh.id IS NULL OR hh.fhir_id IS
-      // NOT NULL)` — hold the assessment until its member (and household, when
-      // it has one) exists server-side.
-      if (memberFhir == null ||
-          (householdLocal != null && householdFhir == null)) {
+      // NOT NULL)` — hold the assessment until its member exists server-side,
+      // and until its household does too when a household row is present. A
+      // member with no resolvable household row is pushed, not held forever.
+      final hasHousehold = householdRow != null || householdFromStored;
+      if (memberFhir == null || (hasHousehold && householdFhir == null)) {
+        ConsoleLog.warn(
+          '[AssessmentPush] blocked id=${entity.id} type=${entity.assessmentType} '
+          'localMemberId=${entity.householdMemberLocalId} '
+          'memberFhir=${memberFhir ?? "(null)"} '
+          'householdRow=${householdRow ?? "(null)"} '
+          'householdFhir=${householdFhir ?? "(null)"} '
+          'storedMemberId=${entity.memberId} '
+          'storedHouseholdId=${entity.householdId} '
+          'storedPatientId=${entity.patientId}',
+        );
         blocked.add(entity);
         continue;
       }
@@ -834,14 +867,94 @@ class LocalAssessmentDao {
         entity.copyWith(
           memberId: memberFhir,
           householdId: householdFhir,
-          patientId: entity.patientId?.isNotEmpty == true
-              ? entity.patientId
-              : pick('j_patient_id', 'patient_id'),
+          // Spice AssessmentDAO.getOtherUnSyncedAssessments:
+          // always `hhm.patient_id as patientId` at push time.
+          patientId: pick('j_patient_id', 'patient_id'),
           villageId: village,
         ),
       );
     }
     return PushableAssessments(ready: ready, blocked: blocked);
+  }
+
+  /// Find the live member/household FHIR row when the primary SQL join misses.
+  Future<Map<String, Object?>?> _rescueMemberForPush(
+    LocalAssessmentEntity entity,
+  ) async {
+    Future<Map<String, Object?>?> query(String where, List<Object?> args) async {
+      final found = await _db.db.rawQuery(
+        'SELECT m.id, m.patient_id, m.fhir_id, m.household_id, '
+        '  m.household_fhir_id, m.sub_village_id, m.village_id, '
+        '  COALESCE(h.id, h2.id) AS household_local, '
+        '  COALESCE(h.fhir_id, h2.fhir_id) AS household_fhir, '
+        '  COALESCE(h.sub_village_id, h2.sub_village_id) AS household_sub_village, '
+        '  COALESCE(h.village_id, h2.village_id) AS household_village '
+        'FROM ${AppDatabase.tableMembers} m '
+        'LEFT JOIN ${AppDatabase.tableHouseholds} h ON h.id = m.household_id '
+        'LEFT JOIN ${AppDatabase.tableHouseholds} h2 '
+        '  ON h2.fhir_id = m.household_fhir_id '
+        'WHERE $where LIMIT 1',
+        args,
+      );
+      return found.isEmpty ? null : found.first;
+    }
+
+    if (entity.householdMemberLocalId > 0) {
+      final byId = await query('m.id = ?', [entity.householdMemberLocalId]);
+      if (byId != null) return byId;
+    }
+    final memberId = entity.memberId;
+    if (memberId != null && memberId.isNotEmpty) {
+      final byFhir = await query('m.fhir_id = ?', [memberId]);
+      if (byFhir != null) return byFhir;
+      // Route sometimes stored the local PK in memberId.
+      final asInt = int.tryParse(memberId);
+      if (asInt != null && asInt > 0) {
+        final byLocal = await query('m.id = ?', [asInt]);
+        if (byLocal != null) return byLocal;
+      }
+    }
+    final patientId = entity.patientId;
+    if (patientId != null && patientId.isNotEmpty) {
+      final byPatient = await query('m.patient_id = ?', [patientId]);
+      if (byPatient != null) return byPatient;
+      final asInt = int.tryParse(patientId);
+      if (asInt != null && asInt > 0) {
+        final byLocal = await query('m.id = ?', [asInt]);
+        if (byLocal != null) return byLocal;
+      }
+    }
+    return null;
+  }
+
+  /// Household row for [id], which may be either a household FHIR id or a
+  /// local household PK. Null when no such household exists locally.
+  Future<Map<String, Object?>?> _householdByAnyId(String id) async {
+    final byFhir = await _db.db.query(
+      AppDatabase.tableHouseholds,
+      columns: ['id', 'fhir_id'],
+      where: 'fhir_id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (byFhir.isNotEmpty) return byFhir.first;
+    final local = int.tryParse(id);
+    if (local == null || local <= 0) return null;
+    final byLocal = await _db.db.query(
+      AppDatabase.tableHouseholds,
+      columns: ['id', 'fhir_id'],
+      where: 'id = ?',
+      whereArgs: [local],
+      limit: 1,
+    );
+    return byLocal.isEmpty ? null : byLocal.first;
+  }
+
+  static String? _nonEmpty(Object? value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    if (s.isEmpty || s == 'null') return null;
+    return s;
   }
 
   /// Count of assessments pending upload (pending + networkError).

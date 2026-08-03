@@ -558,8 +558,9 @@ abstract final class FieldVisibilityRules {
   ///
   /// [gestationalWeeks] — current GA from LMP/snapshot; null when unknown.
   /// [ancVisitNumber] — 1-based ANC visit count; null treated as visit 1 for
-  /// BMI / previous-pregnancy-complications gates. Height stays visible on
-  /// visit 2+ (read-only in the UI) so the height+weight pair still renders.
+  /// BMI / previous-pregnancy-complications / height gates. Height is visit-1
+  /// only (Spice AssessmentRMNCHFragment); the form still renders weight in
+  /// the height+weight pair shell when height is hidden.
   /// [formType] — owning programme layout key (e.g. `ncd`, `anc`).
   static bool isFieldVisible({
     required FieldDef field,
@@ -849,11 +850,10 @@ abstract final class FieldVisibilityRules {
       case 'previousPregnancyComplications':
         return visit == 1 && gravida > 1;
 
-      // Height stays visible on every ANC visit. Visit 2+ locks it read-only
-      // in the form UI so the height+weight pair card still shows weight
-      // (Spice hides height; Flutter keeps it disabled for the pair layout).
+      // Spice AssessmentRMNCHFragment: height only on ANC visit 1. Visit 2+
+      // hides the field; the Flutter pair card still renders weight alone.
       case 'height':
-        return true;
+        return visit == 1;
 
       case 'bmi':
         return visit == 1 && (ga == null || ga < _gaWeek12);

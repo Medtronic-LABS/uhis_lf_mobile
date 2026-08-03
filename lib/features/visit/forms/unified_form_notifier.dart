@@ -168,7 +168,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool get isHeightLockedFromPrior => _heightLockedFromPrior;
 
   /// Height is locked when prefilled from a prior visit, or on ANC visit 2+
-  /// (shown disabled so the height+weight pair can still render weight).
+  /// (field is hidden in the UI; value is still kept for payload / BMI).
   bool _isHeightLocked() {
     if (_heightLockedFromPrior) return true;
     final visitNo = _asInt(_data.getValue('ancVisitNumber')) ??
@@ -223,9 +223,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
   Future<double?> lastRecordedHeight() =>
       _assessmentRepo.lastRecordedHeight(_patientId);
 
-  /// Pre-seeds height and weight from the patient's most-recent prior visit
-  /// when those fields are not yet filled in this visit. Called after
-  /// [loadDraft] so a saved draft always wins over historical values.
+  /// Pre-seeds height and weight from the patient's most-recent prior ANC,
+  /// NCD, or Cataract assessment when those fields are not yet filled in this
+  /// visit. Called after [loadDraft] so a saved draft always wins over
+  /// historical values. Height and weight are resolved independently (latest
+  /// non-empty value for each field).
   ///
   /// When a prior height exists, the field is hard-locked (Spice NCD behaviour)
   /// even if a draft already held the same value.

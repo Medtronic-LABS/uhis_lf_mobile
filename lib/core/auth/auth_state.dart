@@ -138,7 +138,7 @@ class AuthState extends ChangeNotifier {
     try {
       // Offline path: verify stored hash (Spice Android parity).
       // Allows CHWs to authenticate for days/weeks without connectivity.
-      final offline = await _isDeviceOffline();
+      final offline = await isDeviceOffline();
       debugPrint('[AuthState] login: offline=$offline user=$username');
       if (offline) {
         final hashOk = await _repo.verifyOfflinePassword(username, password);
@@ -239,7 +239,9 @@ class AuthState extends ChangeNotifier {
     }
   }
 
-  Future<bool> _isDeviceOffline() async {
+  /// Whether the device currently has no usable network interface.
+  /// Used by unlock / logout flows that need an offline-grace path.
+  Future<bool> isDeviceOffline() async {
     // Prefer connectivity_plus (same as SyncConnectivityService). A google.com
     // DNS probe false-positives offline in markets where Google is blocked or
     // filtered, which previously blocked online login entirely after logout
