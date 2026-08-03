@@ -553,14 +553,18 @@ abstract final class FieldVisibilityRules {
   ///    pairs) are unrelated dedup metadata handled elsewhere and are not
   ///    interpreted here.
   /// 5. ANC gestational-age / visit-number gates — only when [formType] is
-  ///    `anc` (must not hide NCD biometrics).
-  /// 6. The field's own declared base `visibility` ("visible"/"gone").
+  ///    `anc`.
+  /// 6. NCD/cataract height — hidden when a prior height was prefilled/locked
+  ///    (same UX as ANC visit 2+; value stays in data for BMI / payload).
+  /// 7. The field's own declared base `visibility` ("visible"/"gone").
   ///
   /// [gestationalWeeks] — current GA from LMP/snapshot; null when unknown.
   /// [ancVisitNumber] — 1-based ANC visit count; null treated as visit 1 for
   /// BMI / previous-pregnancy-complications / height gates. Height is visit-1
   /// only (Spice AssessmentRMNCHFragment); the form still renders weight in
   /// the height+weight pair shell when height is hidden.
+  /// [priorHeightLocked] — true when height was seeded from a prior visit and
+  /// must not be re-entered (NCD/cataract hide the field; ANC uses visit #).
   /// [formType] — owning programme layout key (e.g. `ncd`, `anc`).
   static bool isFieldVisible({
     required FieldDef field,
@@ -570,6 +574,7 @@ abstract final class FieldVisibilityRules {
     int? ancVisitNumber,
     String? formType,
     int? ageInMonths,
+    bool priorHeightLocked = false,
   }) {
     if (field.isSummary &&
         formType != null &&
@@ -646,8 +651,7 @@ abstract final class FieldVisibilityRules {
       if (chain != null) return chain;
     }
 
-    // ANC visit/GA gates apply only inside the ANC layout — never to NCD
-    // height/weight/BMI (Android BDNCDAssessmentFragment shows Biometric always).
+    // ANC visit/GA gates apply only inside the ANC layout.
     if (formType == 'anc') {
       final ancGate = _ancConditionalVisibility(
         fieldId: field.id,
@@ -656,6 +660,14 @@ abstract final class FieldVisibilityRules {
         ancVisitNumber: ancVisitNumber,
       );
       if (ancGate != null) return ancGate;
+    }
+
+    // NCD / cataract: hide height once a prior value is locked — same weight-
+    // only pair shell as ANC visit 2+. Weight stays visible and editable.
+    if (field.id == 'height' &&
+        priorHeightLocked &&
+        (formType == 'ncd' || formType == 'cataract')) {
+      return false;
     }
 
     return field.visibility != 'gone';
