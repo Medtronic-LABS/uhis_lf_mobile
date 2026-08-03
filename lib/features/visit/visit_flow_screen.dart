@@ -1167,7 +1167,11 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
             _selectedProgrammes.difference({Programme.pw});
         if (_selectedProgrammes.isEmpty) {
           if (!mounted) return;
-          Navigator.of(context).pop();
+          // This route is a top-level GoRoute pinned to the root Navigator
+          // and is always entered via context.go() (a stack replace), so it
+          // is routinely the only entry on the stack — Navigator.pop() here
+          // has nothing to pop into and crashes go_router's delegate.
+          context.go('/home');
           return;
         }
       }
@@ -1181,7 +1185,7 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
           AppStrings.ancBlockedPostpartumMessage,
         );
         if (!mounted) return;
-        Navigator.of(context).pop();
+        context.go('/home');
         return;
       }
 
@@ -1198,7 +1202,7 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
             AppStrings.ancBlockedDuplicateMessage,
           );
           if (!mounted) return;
-          Navigator.of(context).pop();
+          context.go('/home');
           return;
         }
       }
@@ -3719,8 +3723,11 @@ class _BottomCtaBar extends StatelessWidget {
                   ),
                 ),
               ),
-              if ((primaryProgramme == Programme.imci ||
-                      primaryProgramme == Programme.epi) &&
+              // EPI (child immunization) is intentionally excluded: the
+              // inline AI Counselling Guide card above already renders this
+              // same WhatsApp message with its own working send action, so a
+              // second full-screen entry point is redundant for EPI visits.
+              if (primaryProgramme == Programme.imci &&
                   naba.whatsappSummary != null) ...[
                 const SizedBox(height: 8),
                 SizedBox(
