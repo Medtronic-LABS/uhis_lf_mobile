@@ -511,24 +511,44 @@ class HouseholdDao {
 
   static const _pendingStatuses = ['NotSynced', 'NetworkError', 'Pending'];
 
+  /// [includeFailed] mirrors `LocalAssessmentDao`'s Manual/Initial-sync
+  /// retry: without it, a household the server rejected (`'Failed'`) has no
+  /// way back into `getUnsynced`/`getUnsyncedCount` at all and silently
+  /// drops out of the pending count forever.
+  static List<String> _statusesFor({required bool includeFailed}) =>
+      includeFailed ? [..._pendingStatuses, 'Failed'] : _pendingStatuses;
+
   /// Count of households waiting for offline-sync/create (Spice parity).
-  Future<int> getUnsyncedCount() async {
-    final ph = List.filled(_pendingStatuses.length, '?').join(',');
+  Future<int> getUnsyncedCount({bool includeFailed = false}) async {
+    final statuses = _statusesFor(includeFailed: includeFailed);
+    final ph = List.filled(statuses.length, '?').join(',');
     final rows = await _db.db.rawQuery(
       'SELECT COUNT(*) AS c FROM ${AppDatabase.tableHouseholds} '
       'WHERE sync_status IN ($ph)',
-      _pendingStatuses,
+      statuses,
+    );
+    return Sqflite.firstIntValue(rows) ?? 0;
+  }
+
+  /// Count of households the server rejected on the last attempt — surfaced
+  /// separately so a permanently-stuck enrollment is visible, not silently
+  /// dropped from the pending count.
+  Future<int> getFailedCount() async {
+    final rows = await _db.db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${AppDatabase.tableHouseholds} '
+      "WHERE sync_status = 'Failed'",
     );
     return Sqflite.firstIntValue(rows) ?? 0;
   }
 
   /// Households eligible for Manual Offline Sync push.
-  Future<List<HouseholdEntity>> getUnsynced() async {
-    final ph = List.filled(_pendingStatuses.length, '?').join(',');
+  Future<List<HouseholdEntity>> getUnsynced({bool includeFailed = false}) async {
+    final statuses = _statusesFor(includeFailed: includeFailed);
+    final ph = List.filled(statuses.length, '?').join(',');
     final rows = await _db.db.query(
       AppDatabase.tableHouseholds,
       where: 'sync_status IN ($ph)',
-      whereArgs: _pendingStatuses,
+      whereArgs: statuses,
       orderBy: 'created_at ASC',
     );
     return rows.map(HouseholdEntity.fromDb).toList();

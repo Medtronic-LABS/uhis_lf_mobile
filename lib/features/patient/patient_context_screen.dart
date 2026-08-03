@@ -75,10 +75,14 @@ class PatientOrMemberData {
   /// the patient has no pregnancy episode stored.
   final PregnancySnapshotRow? pregnancySnapshot;
 
-  /// Locally-cached assessments — union of synced AssessmentDao rows and
-  /// sync-pending LocalAssessmentDao drafts (pending/networkError/failed only;
-  /// success drafts are already in AssessmentDao after sync). Surfaces records
-  /// even when the remote endpoint is unreachable (offline-first §3.1).
+  /// Locally-cached assessments — raw union of every synced AssessmentDao row
+  /// and every LocalAssessmentDao draft regardless of sync status (there is
+  /// no status filter here). Surfaces records even when the remote endpoint
+  /// is unreachable (offline-first §3.1). A draft and its eventual synced
+  /// counterpart are reconciled into one row later, in [assessments] below —
+  /// by same-programme + [_visitMergeWindow] proximity, not by sync status —
+  /// so a draft whose synced counterpart hasn't landed yet (or lands outside
+  /// that window) still shows, just as two rows instead of one.
   final List<MemberAssessment> localAssessments;
   final List<PatientVisit> recentVisits;
   final String? memberId;

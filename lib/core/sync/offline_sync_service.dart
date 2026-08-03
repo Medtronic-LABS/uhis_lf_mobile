@@ -32,6 +32,7 @@ import '../models/patient.dart';
 import '../models/programme.dart';
 import '../models/referral.dart';
 import '../referral/referral_ingest_mapper.dart';
+import 'sync_activity.dart';
 import 'sync_progress.dart';
 import 'sync_report.dart';
 
@@ -81,6 +82,12 @@ class OfflineSyncService extends ChangeNotifier {
         _hierarchy = hierarchy;
 
   static const String _entityKey = 'worklist';
+
+  /// Separate `sync_meta` entity for the assessment-history endpoint, which
+  /// has always fetched full village scope regardless of cold/warm/relogin —
+  /// tracked independently of [_entityKey] so it can go incremental without
+  /// disturbing the main bundle's own cursor.
+  static const String _assessmentHistoryEntityKey = 'assessmentHistory';
 
   final ApiClient _api;
   final AuthRepository _auth;
@@ -162,12 +169,15 @@ class OfflineSyncService extends ChangeNotifier {
     bool wipeBeforeSync = false,
     bool? refreshVillageIds,
   }) async {
-    if (_running) {
+    if (_running ||
+        SyncActivity.householdMemberPushInFlight ||
+        SyncActivity.assessmentPushInFlight) {
       return SyncReport.empty().copyWith(
         errors: const ['Sync already running'],
       );
     }
     _running = true;
+    SyncActivity.pullInFlight = true;
     _emitProgress(const SyncProgress(currentStep: SyncStep.connecting));
     final started = DateTime.now();
     var report = SyncReport(startedAt: started, finishedAt: started)
@@ -291,8 +301,30 @@ class OfflineSyncService extends ChangeNotifier {
       // Step 3c: Merge assessment history serviceProvided → patient_programmes
       // and project open referrals into the CCE `referrals` table.
       // Runs after the member sync so the member→patientId map is fully built.
-      final historyReferrals =
-          await _syncAssessmentHistoryProgrammes(villageIds);
+      DateTime? historySince;
+      if (!fullSync) {
+        final lastHistory = await _syncMeta.read(_assessmentHistoryEntityKey);
+        if (lastHistory?.lastSyncTime != null) {
+          historySince =
+              DateTime.fromMillisecondsSinceEpoch(lastHistory!.lastSyncTime!);
+        }
+      }
+      final historyReferrals = await _syncAssessmentHistoryProgrammes(
+        villageIds,
+        since: historySince,
+      );
+      // Only stamp the cursor forward once the fetch+persist above actually
+      // succeeded — _syncAssessmentHistoryProgrammes returns null on failure,
+      // so a failed pass must not silently advance `since` and skip
+      // re-fetching those rows next time.
+      if (historyReferrals != null) {
+        final now = DateTime.now();
+        if (fullSync) {
+          await _syncMeta.stampFull(_assessmentHistoryEntityKey, now);
+        } else {
+          await _syncMeta.stampWarm(_assessmentHistoryEntityKey, now);
+        }
+      }
 
       report = report.copyWith(
         finishedAt: DateTime.now(),
@@ -302,7 +334,7 @@ class OfflineSyncService extends ChangeNotifier {
         assessments: out.assessments,
         households: totalHouseholds,
         members: totalMembers,
-        referrals: out.referrals + historyReferrals,
+        referrals: out.referrals + (historyReferrals ?? 0),
       );
 
       if (fullSync) {
@@ -329,6 +361,7 @@ class OfflineSyncService extends ChangeNotifier {
       );
     } finally {
       _running = false;
+      SyncActivity.pullInFlight = false;
       notifyListeners();
     }
   }
@@ -1308,10 +1341,19 @@ class OfflineSyncService extends ChangeNotifier {
   /// Assessment history provides the most up-to-date service type per member.
   ///
   /// Returns the number of referral rows ingested for [SyncReport.referrals].
-  Future<int> _syncAssessmentHistoryProgrammes(List<int> villageIds) async {
+  /// Returns the CCE referral count on success (0 or more), or `null` if the
+  /// call failed — callers must not advance an incremental cursor on `null`,
+  /// since that would skip re-fetching these rows on the next attempt.
+  Future<int?> _syncAssessmentHistoryProgrammes(
+    List<int> villageIds, {
+    DateTime? since,
+  }) async {
     if (_members == null) return 0;
     try {
-      final items = await fetchAssessmentHistory(villageIds: villageIds);
+      final items = await fetchAssessmentHistory(
+        villageIds: villageIds,
+        since: since,
+      );
       if (items.isEmpty) return 0;
 
       // Collect unique member IDs and bulk-resolve to patient IDs.
@@ -1500,7 +1542,7 @@ class OfflineSyncService extends ChangeNotifier {
       debugPrint(
         '[OfflineSyncService] assessment-history programme sync failed: $e',
       );
-      return 0;
+      return null;
     }
   }
 

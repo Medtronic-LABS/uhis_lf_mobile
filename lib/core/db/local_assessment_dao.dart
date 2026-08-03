@@ -969,6 +969,17 @@ class LocalAssessmentDao {
     return result.first['count'] as int? ?? 0;
   }
 
+  /// Count of assessments the server rejected on the last attempt — surfaced
+  /// separately so a rejected assessment is visible, not silently absent from
+  /// the ordinary pending count (which excludes [AssessmentSyncStatus.failed]).
+  Future<int> getFailedCount() async {
+    final result = await _db.db.rawQuery(
+      'SELECT COUNT(*) as count FROM $tableName WHERE sync_status = ?',
+      [AssessmentSyncStatus.failed.name],
+    );
+    return result.first['count'] as int? ?? 0;
+  }
+
   /// Reclaim rows left as [AssessmentSyncStatus.inProgress] after a killed /
   /// crashed sync — but only when older than [olderThan], so an in-flight
   /// Android-parity status poll (create → InProgress → poll status) is not
