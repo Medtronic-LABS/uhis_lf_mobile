@@ -16,6 +16,7 @@ import 'canonical_visit_data.dart';
 import 'childhood_visit.dart';
 import 'form_config.dart';
 import 'form_field_visuals.dart';
+import 'form_scroll_registry.dart';
 import '../../scribe/form_field_schema_builder.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/widgets/ai_scribe_banner.dart';
@@ -125,9 +126,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// programme types — used for the weight-delta badge.  `null` until loaded.
   double? _lastRecordedWeight;
 
-  // One GlobalKey per section — used to scroll to the first error section
-  // on submit so the SK doesn't have to hunt for the highlighted field.
+  // Section keys — fallback when a field-level scroll target is not mounted yet.
   final Map<String, GlobalKey> _sectionKeys = {};
+
+  // Field-level scroll targets for plain and composite widgets.
+  final FormFieldScrollRegistry _fieldScrollRegistry = FormFieldScrollRegistry();
 
   @override
   void initState() {
@@ -454,6 +457,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             config: _config!,
             data: notifier.data,
             validationErrors: notifier.validationErrors,
+            scrollRegistry: _fieldScrollRegistry,
             onFieldChanged: notifier.updateField,
             previousWeight: _lastRecordedWeight,
             // Visit 2+: keep height visible but disabled so the height+weight
@@ -568,8 +572,6 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         lines: _describeMissingMandatory(notifier, annotated, errors),
       );
       notifier.setValidationErrors(errors);
-      // Scroll to the first section containing an error so the SK lands
-      // directly on the highlighted field rather than hunting from the top.
       _scrollToFirstError(annotated, errors);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -588,10 +590,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     // under the offending field, so no separate snackbar is needed here.
     final rangeValid = _formKey.currentState?.validate() ?? true;
     if (!rangeValid) {
+      final rangeErrors = _computeRangeErrorFieldIds(notifier, annotated);
       _logSubmitBlocked(
         reason: 'numeric value(s) out of the allowed range',
         lines: _describeRangeFailures(notifier, annotated),
       );
+      if (rangeErrors.isNotEmpty) {
+        _scrollToFirstError(annotated, rangeErrors);
+      }
       return;
     }
 
@@ -742,6 +748,24 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             (v is List && v.isEmpty);
         if (empty) errors.add(ref.id);
       }
+
+      // BloodGlucoseEntry stores the numeric value under `glucose`, which is
+      // often absent from section fieldRefs — require it once a type is chosen.
+      if (a.section.fieldRefs.any((r) => r.id == 'glucoseType')) {
+        final typeDef = _config!.fields['glucoseType'];
+        if (typeDef != null &&
+            _isFieldVisible(typeDef, notifier, formType: a.section.formType)) {
+          final glucoseType = notifier.data.getValue('glucoseType');
+          final typeChosen = glucoseType != null &&
+              glucoseType.toString().trim().isNotEmpty;
+          if (typeChosen) {
+            final gv = notifier.data.getValue('glucose');
+            final glucoseEmpty = gv == null ||
+                (gv is String && gv.trim().isEmpty);
+            if (glucoseEmpty) errors.add('glucose');
+          }
+        }
+      }
     }
     return errors;
   }
@@ -783,34 +807,57 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   GlobalKey _sectionKeyFor(String sectionId) =>
       _sectionKeys.putIfAbsent(sectionId, GlobalKey.new);
 
-  /// Scrolls to the first section that contains a validation error.
+  /// Scrolls to the first field (or section) that contains a validation error.
   void _scrollToFirstError(
     List<AnnotatedFormSection> annotated,
     Set<String> errors,
   ) {
+    FormScrollHelper.scrollToFirstError(
+      context: context,
+      registry: _fieldScrollRegistry,
+      annotated: annotated,
+      errors: errors,
+      sectionKeys: _sectionKeys,
+    );
+  }
+
+  /// Field IDs whose numeric range validators currently fail.
+  Set<String> _computeRangeErrorFieldIds(
+    UnifiedFormNotifier notifier,
+    List<AnnotatedFormSection> annotated,
+  ) {
+    final errors = <String>{};
+    final checked = <String>{};
     for (final a in annotated) {
-      final hasError = a.section.fieldRefs.any((r) => errors.contains(r.id)) ||
-          (a.section.sectionId == 'newbornDetails' &&
-              errors.any((e) => e.startsWith('newbornDetails')));
-      if (!hasError) continue;
-      final key = _sectionKeys['${a.section.formType}_${a.section.sectionId}'];
-      final ctx = key?.currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOut,
-          alignment: 0.1,
+      for (final ref in a.section.fieldRefs) {
+        if (!checked.add(ref.id)) continue;
+        final def = _config!.fields[ref.id];
+        if (def == null) continue;
+        if (!_isFieldVisible(def, notifier, formType: a.section.formType)) {
+          continue;
+        }
+        final validator = _SectionCard._numericRangeValidator(
+          ref.id,
+          formType: a.section.formType,
+          ageInMonths: widget.ageInMonths,
         );
-        return;
+        if (validator == null) continue;
+        final raw = notifier.data.getValue(ref.id);
+        if (validator(raw?.toString()) != null) errors.add(ref.id);
+      }
+
+      // BloodGlucoseEntry value is stored under `glucose`.
+      if (a.section.fieldRefs.any((r) => r.id == 'glucoseType')) {
+        final glucoseValidator = _SectionCard._numericRangeValidator('glucose');
+        if (glucoseValidator != null) {
+          final raw = notifier.data.getValue('glucose');
+          if (glucoseValidator(raw?.toString()) != null) {
+            errors.add('glucose');
+          }
+        }
       }
     }
-    // Fallback: scroll to top if no key context found yet.
-    _scrollCtrl.animateTo(
-      0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
+    return errors;
   }
 
   /// Returns the set of field IDs that are currently hidden (per the same
@@ -1636,6 +1683,7 @@ class _SectionCard extends StatelessWidget {
     required this.config,
     required this.data,
     required this.validationErrors,
+    required this.scrollRegistry,
     required this.onFieldChanged,
     this.previousWeight,
     this.heightReadOnly = false,
@@ -1649,6 +1697,7 @@ class _SectionCard extends StatelessWidget {
   final FormConfig config;
   final CanonicalVisitData data;
   final Set<String> validationErrors;
+  final FormFieldScrollRegistry scrollRegistry;
   final void Function(String fieldId, dynamic value) onFieldChanged;
 
   /// Weight (kg) from the patient's most-recent prior ANC visit — used to
@@ -1927,6 +1976,7 @@ class _SectionCard extends StatelessWidget {
         final meta = _supplementConsumedMap[ref.id]!;
         final providedId = supplementConsumedToProvidedRef[ref.id];
         if (providedId != null) {
+          badgeIds = {ref.id, providedId};
           final providedDef = config.fields[providedId];
           if (providedDef != null) {
             child = _supplementPairCard(context, def, ref, providedDef, providedId, meta);
@@ -1946,7 +1996,12 @@ class _SectionCard extends StatelessWidget {
 
       fieldWidgets.add(Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-        child: child,
+        child: FormScrollTarget(
+          registry: scrollRegistry,
+          ownerFieldId: ref.id,
+          aliasIds: badgeIds,
+          child: child,
+        ),
       ));
     }
 
@@ -2035,7 +2090,16 @@ class _SectionCard extends StatelessWidget {
       final causeError =
           validationErrors.contains('newbornDetails_${i}_causeOfNeonatalDeath');
 
-      cards.add(Padding(
+      cards.add(FormScrollTarget(
+        registry: scrollRegistry,
+        ownerFieldId: 'newbornDetails_$i',
+        aliasIds: {
+          'newbornDetails_$i',
+          'newbornDetails_${i}_isBabyAlive',
+          'newbornDetails_${i}_sex',
+          'newbornDetails_${i}_causeOfNeonatalDeath',
+        },
+        child: Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.lg),
         child: Container(
           width: double.infinity,
@@ -2141,17 +2205,23 @@ class _SectionCard extends StatelessWidget {
             ],
           ),
         ),
-      ));
+      ),
+    ));
     }
 
     if (babies.isEmpty) {
-      cards.add(Padding(
+      cards.add(FormScrollTarget(
+        registry: scrollRegistry,
+        ownerFieldId: 'newbornDetails',
+        aliasIds: const {'newbornDetails'},
+        child: Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.lg),
         child: Text(
           'Enter number of live births to add newborn details.',
           style: AppTextStyles.subText,
         ),
-      ));
+      ),
+    ));
     }
 
     final inner = Padding(
@@ -2757,6 +2827,7 @@ class _SectionCard extends StatelessWidget {
     switch (fieldId) {
       case 'fastingBloodSugar':
       case 'randomBloodSugar':
+      case 'glucose':
         return (v) {
           if (v == null || v.isEmpty) return null;
           final n = double.tryParse(v);
@@ -2950,7 +3021,8 @@ class _SectionCard extends StatelessWidget {
           glucoseType: currentValue as String?,
           glucoseValue: data.getValue('glucose'),
           isMandatory: def.isMandatory || ref.isMandatory,
-          hasError: validationErrors.contains(ref.id),
+          hasError: validationErrors.contains(ref.id) ||
+              validationErrors.contains('glucose'),
           onTypeChanged: (type) => onFieldChanged(def.id, type),
           onValueChanged: (val) => onFieldChanged('glucose', val),
         );
@@ -3778,6 +3850,7 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
               hintText: UnifiedFormStrings.bloodGlucoseEntryHint,
               suffixText: UnifiedFormStrings.bloodGlucoseEntryUnit,
             ),
+            validator: _SectionCard._numericRangeValidator('glucose'),
             onChanged: (v) {
               if (v.isEmpty) {
                 widget.onValueChanged(null);
