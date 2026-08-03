@@ -215,13 +215,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   /// Returns the most-recent weight (kg) recorded for this patient from ANY
   /// prior visit, or `null` when no prior weight exists.
-  Future<double?> lastRecordedWeight() =>
-      _assessmentRepo.lastRecordedWeight(_patientId);
+  Future<double?> lastRecordedWeight() async =>
+      _assessmentRepo.lastRecordedWeight(
+        _patientId,
+        alsoId: await _localPatientId(),
+      );
 
   /// Returns the most-recent height (cm) recorded for this patient from ANY
   /// prior visit, or `null` when no prior height exists.
-  Future<double?> lastRecordedHeight() =>
-      _assessmentRepo.lastRecordedHeight(_patientId);
+  Future<double?> lastRecordedHeight() async =>
+      _assessmentRepo.lastRecordedHeight(
+        _patientId,
+        alsoId: await _localPatientId(),
+      );
 
   /// Pre-seeds height and weight from the patient's most-recent prior ANC,
   /// NCD, or Cataract assessment when those fields are not yet filled in this
@@ -233,7 +239,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// even if a draft already held the same value.
   Future<void> preloadBiometrics() async {
     var changed = false;
-    final priorHeight = await _assessmentRepo.lastRecordedHeight(_patientId);
+    final alsoId = await _localPatientId();
+    final priorHeight = await _assessmentRepo.lastRecordedHeight(
+      _patientId,
+      alsoId: alsoId,
+    );
     if (priorHeight != null) {
       if (_data.getValue('height') == null) {
         _data = _data.setValue('height', priorHeight);
@@ -245,7 +255,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
       }
     }
     if (_data.getValue('weight') == null) {
-      final w = await _assessmentRepo.lastRecordedWeight(_patientId);
+      final w = await _assessmentRepo.lastRecordedWeight(
+        _patientId,
+        alsoId: alsoId,
+      );
       if (w != null) {
         _data = _data.setValue('weight', w);
         changed = true;
@@ -337,6 +350,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
       'facilityIdentifiedForDelivery',
       snap.facilityIdentifiedForDelivery,
     );
+    // Spice PregnancyDetail.ancWeight — prior ANC weight for visit 2+.
+    // Fallback when assessment-history lookup missed the dual patient-id path.
+    putIfEmpty('weight', snap.ancWeight);
 
     // Seed in-memory GA from snapshot LMP when not already set (same-page
     // LMP edit wins via _applyPwProfileLmpChange).
@@ -349,7 +365,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
       changed = true;
     }
 
-    if (changed) notifyListeners();
+    if (changed) {
+      // Weight may have arrived from ancWeight after height prefill.
+      _recomputeBmi();
+      notifyListeners();
+    }
   }
 
   /// Pre-fills stable NCD diagnosis/medication/lifestyle fields:
