@@ -22,10 +22,12 @@ import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../../core/clinical/ai_context_fields.dart';
 import '../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
 import '../../core/clinical/briefing_rules/clinical_finding.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
+import '../../core/risk/clinical_vitals_from_history.dart';
 import 'followup_repository.dart';
 import 'member_detail_repository.dart';
 import 'patient_actions_row.dart';
@@ -269,6 +271,53 @@ class PatientOrMemberData {
   }
 }
 
+/// Resolves a [PatientContext] for [patientId] — local DB first, falling
+/// back to whatever identity data [data] already carries (remote member /
+/// pre-passed household data) when this device has no local `patients` row
+/// yet. Shared by [_AiInsightCardState] and the patient-scoped AI assistant's
+/// context builder so both compute clinical findings from the same source.
+Future<PatientContext?> resolvePatientContext(
+  BuildContext context,
+  String patientId,
+  PatientOrMemberData data,
+) async {
+  final builder = PatientContextBuilder(
+    patientDao: context.read<PatientDao>(),
+    programmesDao: context.read<PatientProgrammesDao>(),
+    pregnancyDao: context.read<PregnancySnapshotDao>(),
+    immunisationDao: context.read<ImmunisationDao>(),
+  );
+  final patientCtx = await builder.build(patientId);
+  return patientCtx ?? _fallbackPatientContextFor(patientId, data);
+}
+
+/// Minimal [PatientContext] built from whatever identity data this screen
+/// already has (`remoteMember`/pre-passed household data) when this device
+/// has no local `patients` row for this patient at all — the "online but
+/// not yet locally synced" case. Returns null when even that's unavailable
+/// (`data.hasData` false), which is the genuine no-data-anywhere case.
+PatientContext? _fallbackPatientContextFor(
+  String patientId,
+  PatientOrMemberData data,
+) {
+  if (!data.hasData) return null;
+  final ageYears = data.age;
+  final gender = data.gender?.toUpperCase().trim();
+  final sex = gender == 'M' || gender == 'MALE'
+      ? Sex.male
+      : gender == 'F' || gender == 'FEMALE'
+          ? Sex.female
+          : Sex.unknown;
+  return PatientContext(
+    patientId: patientId,
+    ageMonths: ageYears != null ? ageYears * 12 : 0,
+    ageKnown: ageYears != null,
+    sex: sex,
+    isPregnant: data.isPregnant,
+    activeProgrammes: data.programmes,
+  );
+}
+
 /// Patient/Member Context Screen — shows health details when tapping on a
 /// patient from the worklist or a member from household details.
 class PatientContextScreen extends PhiScreen {
@@ -302,12 +351,33 @@ class _PatientContextScreenState
   PatientOrMemberData? _localSnapshot;
   bool _remoteLoading = false;
 
+  /// Assistant context, assembled proactively as soon as [_future] resolves
+  /// (not lazily on FAB tap) so opening the assistant is instant in the
+  /// common case — clinical-findings/vitals/follow-up aggregation involves
+  /// async local-DB reads (see [_aiContext]), and doing that work while the
+  /// SK is still reading the screen avoids a visible delay on tap.
+  Future<PatientAiContext>? _aiContextFuture;
+  // True only for the rare case the FAB is tapped before the prefetch above
+  // finishes — shows a brief spinner on the FAB instead of nothing happening.
+  bool _openingAssistant = false;
+
   @override
   void initState() {
     super.initState();
     debugPrint('[_PatientContextScreenState] initState patientId=${widget.patientId}');
     // Initialize directly without setState since widget isn't mounted yet
     _future = _fetchData();
+    _prefetchAiContext(_future!);
+  }
+
+  /// Kicks off [_aiContext] the moment [dataFuture] resolves. Fire-and-forget
+  /// by design — a failure here just leaves [_aiContextFuture] null, and the
+  /// FAB falls back to computing it on tap (see the FAB's onPressed).
+  void _prefetchAiContext(Future<PatientOrMemberData> dataFuture) {
+    dataFuture.then((data) {
+      if (!mounted || !data.hasData) return;
+      setState(() => _aiContextFuture = _aiContext(data));
+    });
   }
 
   void _load() {
@@ -316,6 +386,7 @@ class _PatientContextScreenState
     setState(() {
       _future = future;
     });
+    _prefetchAiContext(future);
   }
 
   /// Looks up household name from the local DB. Returns null if not found.
@@ -805,6 +876,7 @@ class _PatientContextScreenState
       setState(() {
         _future = Future.value(data);
         _aiInsightRefreshGen++;
+        _aiContextFuture = data.hasData ? _aiContext(data) : null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(PatientContextStrings.refreshDone)),
@@ -836,7 +908,10 @@ class _PatientContextScreenState
 
   /// Build the patient-scoped AI context (chip line, 2-line summary, and the
   /// structured payload the assistant answers from) out of the loaded data.
-  PatientAiContext _aiContext(PatientOrMemberData data) {
+  /// Includes the same clinical-findings/vitals/follow-up history the AI
+  /// Visit Briefing sends (see [_clinicalContextExtras]) so the assistant can
+  /// answer questions about the patient's history, not just demographics.
+  Future<PatientAiContext> _aiContext(PatientOrMemberData data) async {
     final progs = data.programmes.toList();
 
     final band = data.riskBand;
@@ -852,6 +927,8 @@ class _PatientContextScreenState
       ..write('${data.age != null ? '${data.age}y' : '—'}'
           '${data.gender != null ? ', ${data.gender}' : ''}');
     if (data.isPregnant) summary.write('  ·  Pregnant');
+
+    final extras = await _clinicalContextExtras(data);
 
     return PatientAiContext(
       patientId: data.patientId ?? widget.patientId,
@@ -872,12 +949,161 @@ class _PatientContextScreenState
         'age': data.age,
         'gender': data.gender,
         'programmes': progs.map((p) => p.wireTag).toList(),
+        // Duplicate of 'programmes' under the key name the sibling AI Visit
+        // Briefing/NABA requests use (see symptom_picker_screen.dart) — the
+        // backend's patient-scoped prompt may only read this key.
+        'activeProgrammes': progs.map((p) => p.name).toList(),
         'riskBand': bandLabel,
         'riskReasons': reasons,
         'isPregnant': data.isPregnant,
         'villageName': data.villageName,
+        ...extras,
       },
     );
+  }
+
+  /// Clinical-findings/vitals/encounter-history for the assistant's
+  /// `patientContext` payload. Deliberately bypasses [VitalsRepository] —
+  /// that repository reads `encounters.vitals_json`, a column nothing in the
+  /// current unified visit-form flow writes to anymore (only the unreachable
+  /// legacy `visit_form_screen.dart` ever wrote it), so it's always empty for
+  /// patients assessed through the live flow. Instead this reads the same
+  /// local/history assessment rows [BriefingFindingsAggregator] (below) and
+  /// the risk-scoring engine already read correctly, via
+  /// [ClinicalVitalsFromHistory] — the proven adapter `WorklistRepository`
+  /// uses for risk banding — rather than re-deriving that parsing here.
+  /// Degrades gracefully to an empty map on any failure so the assistant
+  /// still gets the base demographic context above.
+  Future<Map<String, dynamic>> _clinicalContextExtras(
+    PatientOrMemberData data,
+  ) async {
+    try {
+      final patientId = data.patientId ?? widget.patientId;
+      final patientCtx = await resolvePatientContext(context, patientId, data);
+      if (patientCtx == null) return const {};
+
+      final followUpRepo = context.read<FollowUpRepository>();
+      final localAssessmentDao = context.read<LocalAssessmentDao>();
+      final historyAssessmentDao = context.read<AssessmentDao>();
+
+      final followUps = await followUpRepo.openForPatientLocal(patientId);
+      final findings = await BriefingFindingsAggregator.build(
+        patientId: patientId,
+        patientCtx: patientCtx,
+        selectedProgrammes: patientCtx.activeProgrammes,
+        assessmentDao: localAssessmentDao,
+        historyAssessmentDao: historyAssessmentDao,
+        followUpRepo: followUpRepo,
+        patientDao: context.read<PatientDao>(),
+        immunisationDao: context.read<ImmunisationDao>(),
+        remoteAssessments: data.assessments,
+      );
+
+      // Encounter history + last-visit summary — from the merged local+remote
+      // assessment list already loaded on this screen (PatientOrMemberData
+      // .assessments, newest-first), not a fresh fetch.
+      final encounters = data.assessments;
+      final lastVisit = encounters.isNotEmpty ? encounters.first : null;
+      final recentEncounters = encounters
+          .take(5)
+          .map((a) => {
+                'date': a.date.toIso8601String().split('T').first,
+                'type': a.type,
+                if (a.status != null) 'status': a.status,
+              })
+          .toList();
+
+      final vitalsSummary = await _mostRecentVitalsSummary(
+        patientId: patientId,
+        localAssessmentDao: localAssessmentDao,
+        historyAssessmentDao: historyAssessmentDao,
+        remoteAssessments: data.assessments,
+      );
+
+      return {
+        'visitCount': encounters.length,
+        if (lastVisit != null)
+          'lastVisitDate': lastVisit.date.toIso8601String().split('T').first,
+        if (lastVisit != null) 'lastVisitProgramme': lastVisit.type,
+        if (recentEncounters.isNotEmpty) 'recentEncounters': recentEncounters,
+        if (vitalsSummary != null) 'recentVitals': vitalsSummary,
+        'openFollowUps': buildFollowUpSummaries(followUps),
+        'clinicalFindings': findings.map((f) => f.toJson()).toList(),
+        if (patientCtx.gestationalWeeks != null)
+          'gestationalWeeks': patientCtx.gestationalWeeks,
+      };
+    } on Object catch (e, st) {
+      ConsoleLog.warn('[PatientAiContext] clinical context extras failed: $e');
+      debugPrint('$st');
+      return const {};
+    }
+  }
+
+  /// Most recent parseable vitals (BP / Hb / fasting glucose) for
+  /// [patientId] — checked newest-first across local drafts, then synced
+  /// history, then the pre-passed remote fallback. Each source is already
+  /// ordered newest-first by its own query/getter, so the first parseable
+  /// row found (via [ClinicalVitalsFromHistory]) is the latest encounter
+  /// with usable vitals. Returns null when none of the three sources has
+  /// anything parseable.
+  Future<Map<String, dynamic>?> _mostRecentVitalsSummary({
+    required String patientId,
+    required LocalAssessmentDao localAssessmentDao,
+    required AssessmentDao historyAssessmentDao,
+    required List<MemberAssessment> remoteAssessments,
+  }) async {
+    final localRows = await localAssessmentDao.getByPatientId(patientId);
+    for (final row in localRows) {
+      final vitals = ClinicalVitalsFromHistory.fromRawJson(
+        row.assessmentDetails,
+        assessmentType: row.assessmentType,
+      );
+      if (vitals != null) return _vitalsSummaryMap(vitals);
+    }
+
+    final byPatient = await historyAssessmentDao.forMany([patientId]);
+    final historyRows = byPatient[patientId] ?? const <AssessmentRow>[];
+    for (final row in historyRows) {
+      final vitals = ClinicalVitalsFromHistory.fromRawJson(
+        row.rawJson,
+        assessmentType: row.kind,
+      );
+      if (vitals != null) return _vitalsSummaryMap(vitals);
+    }
+
+    for (final a in remoteAssessments) {
+      final vitals =
+          ClinicalVitalsFromHistory.fromMap(a.rawJson, assessmentType: a.type);
+      if (vitals != null) return _vitalsSummaryMap(vitals);
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _vitalsSummaryMap(ClinicalVitals v) {
+    final map = <String, dynamic>{
+      if (v.systolicBp != null) 'bloodPressureSystolic': v.systolicBp,
+      if (v.diastolicBp != null) 'bloodPressureDiastolic': v.diastolicBp,
+      if (v.hemoglobin != null) 'hemoglobin': v.hemoglobin,
+      if (v.fastingGlucoseMmolL != null)
+        'fastingGlucoseMmolL': v.fastingGlucoseMmolL,
+    };
+    return map.isEmpty ? null : map;
+  }
+
+  /// Opens the assistant sheet, awaiting [_aiContextFuture] (already resolved
+  /// in the common case since it's prefetched in [_prefetchAiContext]) or
+  /// computing it fresh if the FAB was tapped before that finished.
+  Future<void> _openAssistant(PatientOrMemberData data) async {
+    if (_openingAssistant) return;
+    setState(() => _openingAssistant = true);
+    try {
+      final ctx = await (_aiContextFuture ?? _aiContext(data));
+      if (!mounted) return;
+      await PatientAiSheet.show(context, ctx);
+    } finally {
+      if (mounted) setState(() => _openingAssistant = false);
+    }
   }
 
   /// Go-router-aware back navigation. `Navigator.of(context).maybePop()`
@@ -909,8 +1135,17 @@ class _PatientContextScreenState
           return FloatingActionButton(
             heroTag: 'patient-ai-fab',
             tooltip: PatientAiStrings.fabTooltip,
-            onPressed: () => PatientAiSheet.show(context, _aiContext(d)),
-            child: const Icon(Icons.auto_awesome),
+            onPressed: _openingAssistant ? null : () => _openAssistant(d),
+            child: _openingAssistant
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.auto_awesome),
           );
         },
       ),
@@ -2488,14 +2723,11 @@ class _AiInsightCardState extends State<_AiInsightCard> {
 
   Future<_AiInsightResult> _computeSummary() async {
     try {
-      final builder = PatientContextBuilder(
-        patientDao: context.read<PatientDao>(),
-        programmesDao: context.read<PatientProgrammesDao>(),
-        pregnancyDao: context.read<PregnancySnapshotDao>(),
-        immunisationDao: context.read<ImmunisationDao>(),
+      final patientCtx = await resolvePatientContext(
+        context,
+        widget.patientId,
+        widget.data,
       );
-      var patientCtx = await builder.build(widget.patientId);
-      patientCtx ??= _fallbackPatientContext(widget.data);
       if (patientCtx == null) {
         return const _AiInsightResult(summary: '', patientKnown: false);
       }
@@ -2519,30 +2751,6 @@ class _AiInsightCardState extends State<_AiInsightCard> {
       debugPrint('[AiInsightCard] $st');
       return const _AiInsightResult(summary: '', patientKnown: false);
     }
-  }
-
-  /// Minimal [PatientContext] built from whatever identity data this screen
-  /// already has (`remoteMember`/pre-passed household data) when this device
-  /// has no local `patients` row for this patient at all — the "online but
-  /// not yet locally synced" case. Returns null when even that's unavailable
-  /// (`data.hasData` false), which is the genuine no-data-anywhere case.
-  PatientContext? _fallbackPatientContext(PatientOrMemberData data) {
-    if (!data.hasData) return null;
-    final ageYears = data.age;
-    final gender = data.gender?.toUpperCase().trim();
-    final sex = gender == 'M' || gender == 'MALE'
-        ? Sex.male
-        : gender == 'F' || gender == 'FEMALE'
-            ? Sex.female
-            : Sex.unknown;
-    return PatientContext(
-      patientId: widget.patientId,
-      ageMonths: ageYears != null ? ageYears * 12 : 0,
-      ageKnown: ageYears != null,
-      sex: sex,
-      isPregnant: data.isPregnant,
-      activeProgrammes: data.programmes,
-    );
   }
 
   void _showDetail(BuildContext context, String summary, {bool patientKnown = true}) {

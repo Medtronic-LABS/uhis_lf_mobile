@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/clinical/ai_context_fields.dart';
 import '../../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
 import '../../../core/clinical/service_eligibility.dart';
 import '../../../core/config/app_config.dart';
@@ -313,46 +314,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         patientCtx.patientId,
       );
 
-      Map<String, dynamic>? vitalsMap;
-      if (visitsByVisit.isNotEmpty) {
-        final latest = visitsByVisit.first;
-        final bp = latest.readings
-            .where((r) => r.type == VitalType.bloodPressure)
-            .firstOrNull;
-        final weight = latest.readings
-            .where((r) => r.type == VitalType.weight)
-            .firstOrNull;
-        final glucose = latest.readings
-            .where((r) => r.type == VitalType.glucose)
-            .firstOrNull;
-        final spo2 = latest.readings
-            .where((r) => r.type == VitalType.spO2)
-            .firstOrNull;
-        final bmi = latest.readings
-            .where((r) => r.type == VitalType.bmi)
-            .firstOrNull;
-        vitalsMap = {
-          if (bp?.systolic != null)
-            'bloodPressureSystolic': bp!.systolic!.toInt(),
-          if (bp?.diastolic != null)
-            'bloodPressureDiastolic': bp!.diastolic!.toInt(),
-          if (weight?.value != null) 'weight': weight!.value,
-          if (glucose?.value != null) 'glucose': glucose!.value,
-          if (spo2?.value != null) 'spO2': spo2!.value!.toInt(),
-          if (bmi?.value != null) 'bmi': bmi!.value,
-        };
-      }
-
-      final followUpSummaries = followUps.map((f) {
-        final daysOverdue = f.isOverdue
-            ? DateTime.now().difference(f.dueDate).inDays
-            : null;
-        return {
-          'type': f.type.name,
-          'daysOverdue': daysOverdue,
-          'reason': f.reason,
-        };
-      }).toList();
+      final vitalsMap = buildRecentVitalsSummary(visitsByVisit);
+      final followUpSummaries = buildFollowUpSummaries(followUps);
 
       final clinicalFindings = await BriefingFindingsAggregator.build(
         patientId: patientCtx.patientId,

@@ -42,6 +42,7 @@ class AssistantRepository {
   Future<AssistantAnswer> ask(
     String question, {
     Map<String, dynamic>? patientContext,
+    List<Map<String, String>>? history,
   }) async {
     final coachingUrl = AppConfig.coachingServiceUrl;
     if (coachingUrl.isNotEmpty && patientContext == null) {
@@ -50,7 +51,7 @@ class AssistantRepository {
       }
       return _askCoachingRag(question, coachingUrl);
     }
-    return _askAiScribe(question, patientContext: patientContext);
+    return _askAiScribe(question, patientContext: patientContext, history: history);
   }
 
   Future<AssistantAnswer> _askCoachingRag(
@@ -140,20 +141,21 @@ class AssistantRepository {
   Future<AssistantAnswer> _askAiScribe(
     String question, {
     Map<String, dynamic>? patientContext,
+    List<Map<String, String>>? history,
   }) async {
     final (dio, path) = _resolve();
+    final body = {
+      'question': question,
+      'locale': 'en',
+      'context':
+          patientContext == null ? 'community-health-worker' : 'patient-scoped',
+      if (patientContext != null) 'patientContext': patientContext,
+      if (history != null && history.isNotEmpty) 'history': history,
+    };
+    ConsoleLog.json('[PayloadDebug] assistant-ask', body);
     try {
-      final response = await dio.post<Map<String, dynamic>>(
-        path,
-        data: {
-          'question': question,
-          'locale': 'en',
-          'context': patientContext == null
-              ? 'community-health-worker'
-              : 'patient-scoped',
-          if (patientContext != null) 'patientContext': patientContext,
-        },
-      );
+      final response = await dio.post<Map<String, dynamic>>(path, data: body);
+      ConsoleLog.step('[PayloadDebug] assistant-ask → ${response.statusCode}');
       final data = response.data;
       if (data == null) throw const AssistantException('Empty response');
       final answer = data['answer'] as String?;
@@ -172,6 +174,7 @@ class AssistantRepository {
       }
       return AssistantAnswer(text: answer, actions: actions);
     } on DioException catch (e) {
+      ConsoleLog.warn('[PayloadDebug] assistant-ask error: $e');
       throw AssistantException(NetworkErrorMapper.friendly(e),
           statusCode: e.response?.statusCode);
     }
