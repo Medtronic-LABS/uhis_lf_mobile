@@ -62,9 +62,22 @@ class MemberAssessment {
 
   static String _normalizeType(String type) {
     final upper = type.toUpperCase();
-    if (upper.contains('ANC') || upper.contains('PREGNANCY')) return 'ANC';
-    if (upper.contains('IMCI') || upper.contains('ICCM') || upper.contains('UNDER_FIVE') || upper.contains('UNDER_2')) return 'IMCI';
+    final compact = upper.replaceAll('_', '').replaceAll(' ', '');
+    // Before the broad "PREGNANCY" → ANC rule: outcome must stay outcome
+    // (otherwise Care History labels delivery rows as "ANC Visit N").
+    if (compact.contains('PREGNANCYOUTCOME') || compact == 'OUTCOME') {
+      return 'PREGNANCY_OUTCOME';
+    }
+    if (compact.contains('PWPROFILE')) return 'PWPROFILE';
+    // PNC before ANC: "PNC" does not contain pregnancy, but keep order explicit.
     if (upper.contains('PNC')) return 'PNC';
+    if (upper.contains('ANC') || upper.contains('PREGNANCY')) return 'ANC';
+    if (upper.contains('IMCI') ||
+        upper.contains('ICCM') ||
+        upper.contains('UNDER_FIVE') ||
+        upper.contains('UNDER_2')) {
+      return 'IMCI';
+    }
     if (upper.contains('NCD')) return 'NCD';
     if (upper.contains('TB')) return 'TB';
     return type;
