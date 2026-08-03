@@ -819,6 +819,23 @@ class _PatientContextScreenState
     );
   }
 
+  /// Go-router-aware back navigation. `Navigator.of(context).maybePop()`
+  /// looks wrong here: when this screen is reached via `context.push(...)`
+  /// from a route outside its own shell branch (e.g. tapping the patient
+  /// name in the visit flow's header, itself a root-level route), the
+  /// nearest raw Flutter Navigator can have nothing to pop even though
+  /// go_router's own location stack does — silently no-opping the back
+  /// arrow. `context.pop()` operates on that router-level stack instead,
+  /// matching the pattern already used elsewhere in this app (e.g.
+  /// `add_household_member_screen.dart`).
+  void _handleBack(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/home');
+    }
+  }
+
   Widget buildPhi(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Scaffold(
@@ -851,7 +868,7 @@ class _PatientContextScreenState
                 top: false,
                 child: SkeletonPatientDetail(
                   name: widget.memberData?['name'] as String?,
-                  onBack: () => Navigator.of(context).maybePop(),
+                  onBack: () => _handleBack(context),
                 ),
               ),
             );
@@ -960,7 +977,7 @@ class _PatientContextScreenState
             _PatientDetailHeader(
               data: data,
               refreshing: _refreshing,
-              onBack: () => Navigator.of(context).maybePop(),
+              onBack: () => _handleBack(context),
               onRefresh: _refreshing ? null : _refresh,
             ),
             Expanded(
