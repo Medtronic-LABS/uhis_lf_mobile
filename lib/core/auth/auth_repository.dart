@@ -148,6 +148,13 @@ class AuthRepository {
     return stored != null ? int.tryParse(stored) : null;
   }
 
+  /// Returns the current Bearer token — in-memory first, storage fallback.
+  Future<String?> getToken() async {
+    final inMemory = _api.exportAuthToken();
+    if (inMemory != null && inMemory.isNotEmpty) return inMemory;
+    return _storage.read(key: _kBioAuthToken);
+  }
+
   /// Returns the FHIR ID of the logged-in user (e.g. for provenance payloads).
   Future<String?> userFhirId() => _storage.read(key: _kUserFhirId);
 
