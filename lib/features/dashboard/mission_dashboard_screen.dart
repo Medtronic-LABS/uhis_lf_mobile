@@ -705,6 +705,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               settingsMenu: const _SettingsMenu(),
               notificationCount: _notificationCount,
               onNotificationTap: () => CceAlertsDrawer.show(context),
+              searchQuery: _searchQuery,
               onSearchChanged: (q) {
                 _filterState.setSearchQuery(q);
                 setState(() {
@@ -1232,6 +1233,7 @@ class _DashboardHeader extends StatelessWidget {
     required this.settingsMenu,
     required this.notificationCount,
     required this.onNotificationTap,
+    required this.searchQuery,
     required this.onSearchChanged,
   });
 
@@ -1241,6 +1243,7 @@ class _DashboardHeader extends StatelessWidget {
   final Widget settingsMenu;
   final int notificationCount;
   final VoidCallback onNotificationTap;
+  final String searchQuery;
   final ValueChanged<String> onSearchChanged;
 
   @override
@@ -1297,7 +1300,10 @@ class _DashboardHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.xxl), // .header-row margin-bottom:14px
-          DashboardSearchField(onChanged: onSearchChanged),
+          DashboardSearchField(
+            initialValue: searchQuery,
+            onChanged: onSearchChanged,
+          ),
         ],
       ),
     );
