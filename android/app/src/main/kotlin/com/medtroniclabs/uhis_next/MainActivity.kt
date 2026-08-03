@@ -1,8 +1,8 @@
 package com.medtroniclabs.uhis_next
 
 import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.renderer.FlutterUiDisplayListener
@@ -20,8 +20,15 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         splashScreen.setKeepOnScreenCondition { !flutterUiDisplayed }
-        WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
+        // Must run after super.onCreate() — the theme (and its NoActionBar /
+        // transparent-background attributes) is only resolved onto the window
+        // once the framework's own onCreate has run. Calling this before
+        // super.onCreate() forces an early DecorView inflation against the
+        // window's pre-theme defaults, which surfaced a stray native
+        // ActionBar (visible as a solid bar showing the app label) — most
+        // visible in dark mode.
+        enableEdgeToEdge()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

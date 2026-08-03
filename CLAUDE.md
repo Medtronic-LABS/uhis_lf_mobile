@@ -475,8 +475,8 @@ All code in this app must satisfy the **Engineering Design Standards** defined i
 ## Running
 
 ```bash
-# Dev (local backend)
-flutter run --dart-define=BASE_URL=http://10.0.2.2 --dart-define=PASSWORD_HASH_KEY=spice_uat
+# Dev (remote staging backend — default; see AppConfig.apiBaseUrl)
+flutter run --dart-define=API_BASE_URL=https://spice-dev-backend.uhis.labsplatform.com/ --dart-define=PASSWORD_HASH_KEY=spice_uat
 
 # Run unit tests
 flutter test
