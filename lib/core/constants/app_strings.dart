@@ -848,15 +848,6 @@ abstract final class PatientProfileStrings {
   static String get enrollmentMilestone => getTranslatedString('enrollmentMilestone', 'Enrollment date');
   static String get pregnancyRegistered => getTranslatedString('pregnancyRegistered', 'Pregnancy Registered');
   static String get pregnancyRegistrationCategory => getTranslatedString('pregnancyRegistrationCategory', 'Pregnancy Registration');
-  static String get trendsTitle => getTranslatedString('trendsTitle', 'Trends');
-  static String get bpChartLabel => getTranslatedString('bpChartLabel', 'Blood Pressure');
-  static String get bgChartLabel => getTranslatedString('bgChartLabel', 'Blood Glucose');
-  static String get viewAllTrends => getTranslatedString('viewAllTrends', 'View all trends');
-  static String get allTrendsTitle => getTranslatedString('allTrendsTitle', 'All Trends');
-  static String get weightChartLabel => getTranslatedString('weightChartLabel', 'Weight');
-  static String get spO2ChartLabel => getTranslatedString('spO2ChartLabel', 'SpO₂');
-  static String get haemoglobinChartLabel => getTranslatedString('haemoglobinChartLabel', 'Haemoglobin');
-  static String get tempChartLabel => getTranslatedString('tempChartLabel', 'Temperature');
 }
 
 abstract final class ContactSheetStrings {

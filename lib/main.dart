@@ -50,6 +50,7 @@ import 'core/sla/sla_evaluator.dart';
 import 'core/auth/user_hierarchy_service.dart';
 import 'core/sync/offline_sync_service.dart';
 import 'core/sync/offline_push_service.dart';
+import 'features/dashboard/dashboard_filter_state.dart';
 import 'features/dashboard/dashboard_repository.dart';
 import 'features/dashboard/mission_dashboard_repository.dart';
 import 'features/lock/lock_barrier.dart';
@@ -392,6 +393,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         ChangeNotifierProvider<AuthState>.value(value: widget.authState),
         ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
         ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
+        ChangeNotifierProvider<DashboardFilterState>(
+            create: (_) => DashboardFilterState()),
         Provider<DashboardRepository>(
             create: (_) => DashboardRepository(
                 widget.api, widget.authRepo, _householdDao, _memberDao)),

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
+import '../../../core/clinical/service_eligibility.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
@@ -981,18 +982,38 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         // ── Start Checkup button (adults only) ────────────
                         if (!(_patientContext!.isUnder5)) ...[
                           const SizedBox(height: 4),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed: _onContinue,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.pink,
-                                foregroundColor: AppColors.textOnNavy,
+                          Builder(builder: (context) {
+                            final eligible = hasAnyEligibleProgramme(
+                                ageYears: _patientContext!.ageYears);
+                            return SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: () {
+                                  if (!eligible) {
+                                    ScaffoldMessenger.of(context)
+                                      ..hideCurrentSnackBar()
+                                      ..showSnackBar(SnackBar(
+                                        content:
+                                            Text(EnrollStrings.noProgrammes),
+                                        duration:
+                                            const Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ));
+                                    return;
+                                  }
+                                  _onContinue();
+                                },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: eligible
+                                      ? AppColors.pink
+                                      : AppColors.pink.withValues(alpha: 0.4),
+                                  foregroundColor: AppColors.textOnNavy,
+                                ),
+                                child: Text(
+                                    SymptomPickerStrings.ctaStartCheckup),
                               ),
-                              child: Text(
-                                  SymptomPickerStrings.ctaStartCheckup),
-                            ),
-                          ),
+                            );
+                          }),
                         ],
                       ],
                     ),
