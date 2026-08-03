@@ -98,7 +98,10 @@ class PatientOrMemberData {
   String? get patientId =>
       localPatient?.patient.patientId ?? remoteMember?.patientId;
   int? get age => localPatient?.patient.age ?? remoteMember?.age;
-  bool get isPregnant => remoteMember?.isPregnant ?? false;
+  bool get isPregnant =>
+      pregnancySnapshot != null ||
+      programmes.contains(Programme.anc) ||
+      (remoteMember?.isPregnant ?? false);
   String? get nationalId =>
       localPatient?.patient.nationalId ?? remoteMember?.nationalId;
   String? get dateOfBirth =>

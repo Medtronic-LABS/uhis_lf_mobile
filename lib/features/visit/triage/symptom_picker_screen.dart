@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -383,6 +386,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           'gestationalWeeks': patientCtx.gestationalWeeks,
       };
 
+      debugPrint('[DebugTrace] briefing request patientId=${request['patientId']} '
+          'body=${jsonEncode(request)}');
       final data = await briefingRepo.generate(request);
       if (mounted) {
         setState(() {
@@ -393,6 +398,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     } on Object catch (e, st) {
       debugPrint('[Briefing] fetch failed: $e');
       debugPrint('[Briefing] $st');
+      if (e is DioException) {
+        debugPrint('[DebugTrace] briefing error status=${e.response?.statusCode} '
+            'data=${e.response?.data}');
+      }
       if (mounted) setState(() => _briefingLoading = false);
     }
   }
