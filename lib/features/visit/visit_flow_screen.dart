@@ -2412,6 +2412,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final referralFacilityType = RmnchReferralFacility.showOnStep3(
           programme: widget.primaryProgramme,
           isReferred: isReferred,
+          visitProgrammes: widget.confirmedProgrammes,
         )
         ? (_selectedRmnchFacilityId ??
             RmnchReferralFacility.initialSelection(
@@ -2663,6 +2664,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final showRmnchFacility = RmnchReferralFacility.showOnStep3(
       programme: widget.primaryProgramme,
       isReferred: referral,
+      visitProgrammes: widget.confirmedProgrammes,
     );
     final rmnchFacilityId = showRmnchFacility
         ? (_selectedRmnchFacilityId ??
@@ -2695,17 +2697,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             ),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
-
-          // Spice AssessmentRMNCHSummaryFragment: facility spinner when Referred.
-          if (showRmnchFacility && rmnchFacilityId != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: _RmnchReferralFacilityPicker(
-                selectedId: rmnchFacilityId,
-                onChanged: (id) =>
-                    setState(() => _selectedRmnchFacilityId = id),
-              ),
-            ),
 
           // Inner content has horizontal padding
           Padding(
@@ -2750,6 +2741,16 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             ),
             const SizedBox(height: 16),
           ],
+
+          // Spice AssessmentRMNCHSummaryFragment: facility after follow-up date.
+          if (showRmnchFacility && rmnchFacilityId != null) ...[
+            _RmnchReferralFacilityPicker(
+              selectedId: rmnchFacilityId,
+              onChanged: (id) =>
+                  setState(() => _selectedRmnchFacilityId = id),
+            ),
+            const SizedBox(height: 16),
+          ],
               ], // end inner Column children
             ),   // end inner Column
           ),     // end Padding
@@ -2775,8 +2776,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
 
-/// Spice AssessmentRMNCHSummaryFragment facility spinner — shown under the
-/// referral banner when ANC/PNC is Referred. Selection id is stamped onto
+/// Spice AssessmentRMNCHSummaryFragment facility spinner — shown after the
+/// follow-up date when ANC/PNC is Referred. Selection id is stamped onto
 /// `summary.referralFacilityType` on Accept (Spice Done remap).
 class _RmnchReferralFacilityPicker extends StatelessWidget {
   const _RmnchReferralFacilityPicker({

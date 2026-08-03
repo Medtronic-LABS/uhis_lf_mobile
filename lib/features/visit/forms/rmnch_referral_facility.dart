@@ -39,12 +39,22 @@ abstract final class RmnchReferralFacility {
   ];
 
   /// Whether Step 3 should show the Spice RMNCH facility spinner.
+  ///
+  /// Uses the full visit programme set when available so a combined PW+ANC
+  /// visit still shows the spinner (primary may be [Programme.pw]). Falls
+  /// back to [programme] for callers that only pass the primary pathway.
   static bool showOnStep3({
     required Programme programme,
     required bool isReferred,
-  }) =>
-      isReferred &&
-      (programme == Programme.anc || programme == Programme.pnc);
+    Set<Programme> visitProgrammes = const {},
+  }) {
+    if (!isReferred) return false;
+    if (visitProgrammes.contains(Programme.anc) ||
+        visitProgrammes.contains(Programme.pnc)) {
+      return true;
+    }
+    return programme == Programme.anc || programme == Programme.pnc;
+  }
 
   /// Locale-aware label for a spinner row.
   static String labelOf(FieldOption option) => option.displayName;

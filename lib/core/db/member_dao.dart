@@ -510,12 +510,15 @@ class MemberDao {
     );
   }
 
-  /// Points `reference_id` (what the push echoes) and `patient_id` (what the
-  /// household screens join on) at the local PK, straight after insert.
+  /// Points `reference_id` (what the push echoes) at the local PK after insert.
+  ///
+  /// Does **not** set `patient_id` — Spice leaves `HouseholdMember.patient_id`
+  /// null for newly created members until the server assigns one on sync pull.
+  /// Writing the local PK here made Flutter assessments send `"279"`-style ids.
   Future<void> setReferenceId(String localId) async {
     await _db.db.update(
       AppDatabase.tableMembers,
-      {'reference_id': localId, 'patient_id': localId},
+      {'reference_id': localId},
       where: 'id = ?',
       whereArgs: [int.tryParse(localId) ?? localId],
     );
@@ -1067,18 +1070,14 @@ class MemberDao {
     return result;
   }
 
-  /// Points every member row at its own local patient key.
+  /// No-op — kept for call-site compatibility.
   ///
-  /// `patients.id` is the member's local PK (Option A), so `members.patient_id`
-  /// — which the household screens and `getByPatientId` use to join a member to
-  /// its patient row — must hold the same value. Only fills blanks, so a real
-  /// server-assigned patient id is never overwritten.
-  Future<int> backfillPatientIds() async {
-    return _db.db.rawUpdate(
-      'UPDATE ${AppDatabase.tableMembers} SET patient_id = id '
-      "WHERE patient_id IS NULL OR patient_id = ''",
-    );
-  }
+  /// Previously filled blank `patient_id` with the local member PK. That diverged
+  /// from Spice (`HouseholdMember.patient_id` stays null until the server
+  /// assigns it) and caused assessment sync to emit local ids like `"279"`.
+  /// Household / patient joins already fall back to `members.id` when
+  /// `patient_id` is empty.
+  Future<int> backfillPatientIds() async => 0;
 
   /// Returns all member/patient IDs whose sub_village_id is in [subVillageIds].
   Future<Set<String>> getPatientIdsBySubVillages(List<String> subVillageIds) async {

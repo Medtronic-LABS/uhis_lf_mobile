@@ -21,6 +21,28 @@ void main() {
       );
     });
 
+    test('shows when visit includes ANC even if primary is PW', () {
+      expect(
+        RmnchReferralFacility.showOnStep3(
+          programme: Programme.pw,
+          isReferred: true,
+          visitProgrammes: {Programme.pw, Programme.anc},
+        ),
+        isTrue,
+      );
+    });
+
+    test('shows when visit includes PNC even if primary is PW', () {
+      expect(
+        RmnchReferralFacility.showOnStep3(
+          programme: Programme.pw,
+          isReferred: true,
+          visitProgrammes: {Programme.pw, Programme.pnc},
+        ),
+        isTrue,
+      );
+    });
+
     test('hides when not referred or other programme', () {
       expect(
         RmnchReferralFacility.showOnStep3(
@@ -33,6 +55,14 @@ void main() {
         RmnchReferralFacility.showOnStep3(
           programme: Programme.ncd,
           isReferred: true,
+        ),
+        isFalse,
+      );
+      expect(
+        RmnchReferralFacility.showOnStep3(
+          programme: Programme.pw,
+          isReferred: true,
+          visitProgrammes: {Programme.pw},
         ),
         isFalse,
       );
