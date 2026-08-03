@@ -14,3 +14,9 @@
 # Keep Flutter wrapper classes
 -keep class io.flutter.** { *; }
 -keep class io.flutter.plugin.** { *; }
+
+# MediaPipe tasks-genai references protobuf internal annotation classes that
+# are stripped by R8 at minification time (they're optional compile-time only).
+-dontwarn com.google.protobuf.Internal$ProtoNonnullApi
+-dontwarn com.google.protobuf.ProtoPresenceBits
+-dontwarn com.google.protobuf.**
