@@ -1,6 +1,5 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -23,6 +22,35 @@ import 'triage_symptom_mapper.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
 import 'vitals_trend.dart';
+
+/// Returns the `formType_sectionId_fieldId`-scoped key of the first field in
+/// [errors], walking [annotated] and each section's `fieldRefs` in the same
+/// visual order the form renders them in (see
+/// [UnifiedSectionRules.activeSections]). Scoped — not just the bare field id
+/// — because the same field id (e.g. "weight") can legitimately appear in
+/// more than one concurrently-mounted section on a combined-programme visit;
+/// the scoping must match how `_SectionCard` registers its anchor keys.
+/// Returns `null` when no ordinary field id in [errors] maps to a rendered
+/// section — e.g. when the only error belongs to the dynamic newborn-details
+/// cards, which have no single field anchor and are scrolled to at the
+/// section level instead.
+String? firstErrorFieldId(
+  List<AnnotatedFormSection> annotated,
+  Set<String> errors,
+) {
+  for (final a in annotated) {
+    if (a.section.sectionId == 'newbornDetails' &&
+        a.section.formType == 'pregnancyOutcome') {
+      continue;
+    }
+    for (final ref in a.section.fieldRefs) {
+      if (errors.contains(ref.id)) {
+        return '${a.section.formType}_${a.section.sectionId}_${ref.id}';
+      }
+    }
+  }
+  return null;
+}
 
 /// JSON-driven assessment form.
 ///
@@ -113,13 +141,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// Loaded once after init; empty until then / for non-ANC visits.
   List<VisitVitals> _priorAncVisits = const [];
 
-  /// Completed ANC count from pregnancy snapshot (Spice ancVisitNo). When set,
-  /// preferred over counting vitals history for the 1-based visit label.
+  /// Completed ANC count from pregnancy snapshot (Spice ancVisitNo).
   int? _ancVisitNoFromSnapshot;
-
-  /// ANC assessments already on file (local + synced history). Counts visits
-  /// [_priorAncVisits] drops because they carry no vitals.
-  int _priorAncVisitCount = 0;
 
   /// Weight (kg) from the patient's most-recent prior visit across ALL
   /// programme types — used for the weight-delta badge.  `null` until loaded.
@@ -128,6 +151,22 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   // One GlobalKey per section — used to scroll to the first error section
   // on submit so the SK doesn't have to hunt for the highlighted field.
   final Map<String, GlobalKey> _sectionKeys = {};
+
+  // One GlobalKey per field id — lets submit-time validation scroll straight
+  // to the specific missing field instead of just its (possibly tall) section.
+  final Map<String, GlobalKey> _fieldKeys = {};
+
+  GlobalKey _fieldKeyFor(String fieldId) =>
+      _fieldKeys.putIfAbsent(fieldId, GlobalKey.new);
+
+  /// Composite rows (BP+pulse, glucose pair, height+weight pair, supplement
+  /// pairs) render one anchor for several field ids — aliasing lets an error
+  /// on any absorbed id (e.g. `diastolic`) still resolve to the shared card.
+  void _aliasFieldKeys(Set<String> ids, GlobalKey key) {
+    for (final id in ids) {
+      _fieldKeys[id] = key;
+    }
+  }
 
   @override
   void initState() {
@@ -210,11 +249,6 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             setState(() => _ancVisitNoFromSnapshot = snap!.ancVisitNo);
           }
         });
-        notifier.priorAncVisitCount().then((count) {
-          if (mounted && count > 0) {
-            setState(() => _priorAncVisitCount = count);
-          }
-        });
         // Load LMP/EDD for the gestational-age card (snapshot → seed → history).
         _reloadPregnancyIfSeeded();
       }
@@ -225,19 +259,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   int? _effectiveGestationalWeeks(UnifiedFormNotifier notifier) =>
       notifier.gestationalWeeks ?? widget.gestationalWeeks;
 
-  /// 1-based ANC visit number: the highest count any source knows about, + 1.
-  ///
-  /// The snapshot counter is authoritative when seeded, but it is missing for
-  /// pregnancies registered on another device, so the assessments on file act
-  /// as a floor. Taking the max means the number can never regress and repeat
-  /// a visit the patient has already had.
-  int _ancVisitNumber() {
-    final completed = math.max(
-      _ancVisitNoFromSnapshot ?? 0,
-      math.max(_priorAncVisitCount, _priorAncVisits.length),
-    );
-    return completed + 1;
-  }
+  /// 1-based ANC visit number: Spice pregnancyDetail.ancVisitNo + 1.
+  int _ancVisitNumber() => (_ancVisitNoFromSnapshot ?? 0) + 1;
 
   bool _isFieldVisible(
     FieldDef field,
@@ -456,6 +479,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             data: notifier.data,
             validationErrors: notifier.validationErrors,
             onFieldChanged: notifier.updateField,
+            fieldKeyFor: _fieldKeyFor,
+            aliasFieldKeys: _aliasFieldKeys,
             previousWeight: _lastRecordedWeight,
             // Prior height is locked; NCD/cataract also hide the field (ANC
             // visit 2+ already hides via visit-number rules). Weight stays.
@@ -525,6 +550,15 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                 key: _formKey,
                 child: ListView(
                   controller: _scrollCtrl,
+                  // A combined ANC+NCD visit can have 9+ sections; Flutter's
+                  // default ~250px cache extent only keeps nearby sections
+                  // mounted, so a distant section's/field's GlobalKey has a
+                  // null currentContext by the time submit tries to scroll
+                  // to it. This form is a bounded clinical assessment (not an
+                  // arbitrarily long list), so keeping every section built
+                  // is the correct trade-off — matches a plain Column's
+                  // always-built behavior without giving up ListView.
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(20000),
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.xxxl, AppSpacing.md, AppSpacing.xxxl, AppSpacing.xxxl),
                   children: items,
@@ -789,7 +823,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       _sectionKeys.putIfAbsent(sectionId, GlobalKey.new);
 
   /// Field IDs whose numeric range validators currently fail — used to scroll
-  /// to the section that owns the first bad value after Form.validate().
+  /// to the field that owns the first bad value after Form.validate().
   Set<String> _computeRangeErrorFieldIds(
     UnifiedFormNotifier notifier,
     List<AnnotatedFormSection> annotated,
@@ -812,7 +846,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     return errors;
   }
 
-  /// Scrolls to the first section that contains a validation error.
+  /// Scrolls to the first field (or, failing that, the first section) that
+  /// contains a validation error, so the SK lands directly on the missing
+  /// input instead of having to hunt within a (possibly tall) section.
   ///
   /// Must run in a post-frame callback: [UnifiedFormNotifier.setValidationErrors]
   /// notifies listeners and rebuilds the [ListView] in the same frame. An
@@ -825,24 +861,26 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || errors.isEmpty) return;
       FocusScope.of(context).unfocus();
+      final fieldId = firstErrorFieldId(annotated, errors);
+      if (fieldId != null) {
+        final ctx = _fieldKeys[fieldId]?.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOut,
+            alignment: 0.2,
+          );
+          return;
+        }
+      }
       for (final a in annotated) {
         final hasError =
             a.section.fieldRefs.any((r) => errors.contains(r.id)) ||
                 (a.section.sectionId == 'newbornDetails' &&
                     errors.any((e) => e.startsWith('newbornDetails')));
         if (!hasError) continue;
-        final key =
-            _sectionKeys['${a.section.formType}_${a.section.sectionId}'];
-        final ctx = key?.currentContext;
-        if (ctx != null) {
-          Scrollable.ensureVisible(
-            ctx,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOut,
-            alignment: 0.1,
-          );
-          return;
-        }
+        if (_scrollToSection(a)) return;
       }
       // Fallback: scroll to top if no key context found yet.
       if (_scrollCtrl.hasClients) {
@@ -853,6 +891,21 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         );
       }
     });
+  }
+
+  /// Scrolls to [a]'s section anchor. Returns false (without scrolling) if the
+  /// section has no attached context yet, so the caller can fall through.
+  bool _scrollToSection(AnnotatedFormSection a) {
+    final key = _sectionKeys['${a.section.formType}_${a.section.sectionId}'];
+    final ctx = key?.currentContext;
+    if (ctx == null) return false;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOut,
+      alignment: 0.1,
+    );
+    return true;
   }
 
   /// Returns the set of field IDs that are currently hidden (per the same
@@ -1679,6 +1732,8 @@ class _SectionCard extends StatelessWidget {
     required this.data,
     required this.validationErrors,
     required this.onFieldChanged,
+    required this.fieldKeyFor,
+    required this.aliasFieldKeys,
     this.previousWeight,
     this.heightReadOnly = false,
     this.gestationalWeeks,
@@ -1692,6 +1747,14 @@ class _SectionCard extends StatelessWidget {
   final CanonicalVisitData data;
   final Set<String> validationErrors;
   final void Function(String fieldId, dynamic value) onFieldChanged;
+
+  /// Returns (creating if absent) the anchor key used to scroll to this field
+  /// on a failed submit — see `_UnifiedFormScreenState._fieldKeyFor`.
+  final GlobalKey Function(String fieldId) fieldKeyFor;
+
+  /// Registers a shared anchor key under every id a composite row covers
+  /// (e.g. the BP+pulse card under `systolic`/`diastolic`/`pulse`).
+  final void Function(Set<String> ids, GlobalKey key) aliasFieldKeys;
 
   /// Weight (kg) from the patient's most-recent prior ANC visit — used to
   /// compute the weight-delta badge.  `null` when unavailable.
@@ -2034,9 +2097,28 @@ class _SectionCard extends StatelessWidget {
         child = _AiFilledBadgeWrap(child: child);
       }
 
+      // Zero-height anchor so a failed submit can scroll straight to this
+      // exact field (or, for composite rows, to the shared card) instead of
+      // just its section — aliased under every id the row covers. Scoped by
+      // formType_sectionId (matching _sectionKeys) since the same field id
+      // (e.g. "weight") can legitimately appear in more than one
+      // concurrently-mounted section on a combined-programme visit — a bare
+      // field-id key would collide across them ("Duplicate GlobalKeys").
+      String scopedFieldId(String id) =>
+          '${section.formType}_${section.sectionId}_$id';
+      final fieldAnchorKey = fieldKeyFor(scopedFieldId(ref.id));
+      aliasFieldKeys(badgeIds.map(scopedFieldId).toSet(), fieldAnchorKey);
+
       fieldWidgets.add(Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-        child: child,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(key: fieldAnchorKey, height: 0),
+            child,
+          ],
+        ),
       ));
     }
 
