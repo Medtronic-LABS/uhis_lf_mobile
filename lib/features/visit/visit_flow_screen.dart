@@ -44,9 +44,11 @@ import '../../core/theme/app_theme.dart';
 import 'naba/naba_models.dart';
 import 'naba/naba_repository.dart';
 import 'pathway/pathway_engine.dart';
+import '../dashboard/mission_dashboard_repository.dart';
 import '../patient/followup_call_service.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
+import '../worklist/worklist_repository.dart';
 import 'forms/childhood_visit.dart';
 import 'forms/rmnch_referral_facility.dart';
 import 'immunisation/epi_visit_summary.dart';
@@ -2404,6 +2406,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
     final assessmentRepo = context.read<AssessmentRepository>();
     final followUpSvc = context.read<FollowUpCallService>();
+    final patientDao = context.read<PatientDao>();
+    final worklistRepo = context.read<WorklistRepository>();
+    final missionRepo = context.read<MissionDashboardRepository>();
 
     final isReferred = widget.referralRecommended ||
         (naba.referralRecommendation?.required_ ?? false);
@@ -2451,6 +2456,32 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       debugPrint('[Step3] follow-up scheduled: $scheduleDate');
     } catch (e) {
       debugPrint('[Step3] follow-up schedule failed (non-blocking): $e');
+    }
+
+    // Summary follow-up date wins over the Step 2 fallback written at form
+    // submit (kept when Step 3 is skipped). Stamp patients.next_due_at so Home
+    // matches the date the SK saw on this screen.
+    if (followUpDate != null && widget.patientId.isNotEmpty) {
+      try {
+        final local = await patientDao.byAnyId(widget.patientId);
+        if (!mounted) return;
+        final localId = local?.id ?? widget.patientId;
+        final dueMs = DateTime(
+          followUpDate.year,
+          followUpDate.month,
+          followUpDate.day,
+        ).millisecondsSinceEpoch;
+        await patientDao.patchVisitTiming(
+          patientId: localId,
+          nextDueAt: dueMs,
+        );
+        await worklistRepo.recomputeAllAfterSync();
+        if (!mounted) return;
+        missionRepo.clearCache();
+        debugPrint('[Step3] next_due_at set from summary: $followUpDate');
+      } catch (e) {
+        debugPrint('[Step3] next_due_at update failed (non-blocking): $e');
+      }
     }
 
     if (!mounted) return;

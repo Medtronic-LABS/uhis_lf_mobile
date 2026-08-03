@@ -513,6 +513,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               );
             }
             if (patientId != null) {
+              // Fallback schedule when Step 3 is skipped; Step 3 Accept
+              // overwrites next_due_at with the summary follow-up date.
               await patientDao.updateVisitSchedule(
                 patientId: patientId,
                 lastVisitAt: now.millisecondsSinceEpoch,

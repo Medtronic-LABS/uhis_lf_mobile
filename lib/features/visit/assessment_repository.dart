@@ -724,26 +724,45 @@ class AssessmentRepository extends ChangeNotifier {
 
   /// Most-recent weight (kg) for [patientId] from any prior ANC, NCD, or
   /// Cataract assessment (local unsynced rows first, then synced history).
-  Future<double?> lastRecordedWeight(String patientId) async {
-    return _lastRecordedBiometric(patientId, _BiometricKind.weight);
+  ///
+  /// Pass [alsoId] when the caller's screen id and the local member PK differ
+  /// — same dual-key rule as [ancVitalsHistory] / [priorAncVisitCount].
+  Future<double?> lastRecordedWeight(
+    String patientId, {
+    String? alsoId,
+  }) async {
+    return _lastRecordedBiometric(
+      patientId,
+      _BiometricKind.weight,
+      alsoId: alsoId,
+    );
   }
 
   /// Most-recent height (cm) for [patientId] from any prior ANC, NCD, or
   /// Cataract assessment. Used to prefill and lock height on later visits.
-  Future<double?> lastRecordedHeight(String patientId) async {
-    return _lastRecordedBiometric(patientId, _BiometricKind.height);
+  Future<double?> lastRecordedHeight(
+    String patientId, {
+    String? alsoId,
+  }) async {
+    return _lastRecordedBiometric(
+      patientId,
+      _BiometricKind.height,
+      alsoId: alsoId,
+    );
   }
 
   Future<double?> _lastRecordedBiometric(
     String patientId,
-    _BiometricKind kind,
-  ) async {
-    if (patientId.isEmpty) return null;
+    _BiometricKind kind, {
+    String? alsoId,
+  }) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return null;
 
     // 1. Local rows (newest first) — includes unsynced visits not yet in
     //    history. Height and weight are resolved independently (most recent
     //    non-empty value for each field across ANC / NCD / Cataract).
-    final localRows = await _dao.getByPatientId(patientId);
+    final localRows = await _localRows(ids);
     for (final row in localRows) {
       if (!_isBiometricSourceLocalType(row.assessmentType)) continue;
       final v = _biometricFromLocalDetails(row.assessmentDetails, kind);
@@ -751,11 +770,8 @@ class AssessmentRepository extends ChangeNotifier {
     }
 
     // 2. Synced history — same programme types, newest first.
-    if (_historyDao == null) return null;
-    final historyMap = await _historyDao.forMany([patientId]);
-    final historyRows = List<AssessmentRow>.from(
-      historyMap[patientId] ?? const [],
-    )..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    final historyRows = List<AssessmentRow>.from(await _historyRows(ids))
+      ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
     for (final row in historyRows) {
       final kindTag = row.kind?.toUpperCase() ?? '';
       if (!_isBiometricSourceHistoryKind(kindTag)) continue;
@@ -795,6 +811,8 @@ class AssessmentRepository extends ChangeNotifier {
       return null;
     }
     final key = kind == _BiometricKind.height ? 'height' : 'weight';
+    final anc = map['anc'];
+    final ancMedHx = anc is Map ? anc['medicalHistoryPhysicalExamination'] : null;
     final candidates = <dynamic>[
       map[key],
       if (map['biometric'] is Map) (map['biometric'] as Map)[key],
@@ -808,6 +826,7 @@ class AssessmentRepository extends ChangeNotifier {
       ],
       if (map['medicalHistoryPhysicalExamination'] is Map)
         (map['medicalHistoryPhysicalExamination'] as Map)[key],
+      if (ancMedHx is Map) ancMedHx[key],
     ];
     for (final raw in candidates) {
       final v = _positiveDouble(raw);
@@ -835,6 +854,13 @@ class AssessmentRepository extends ChangeNotifier {
     final detailsMedHx = details is Map
         ? details['medicalHistoryPhysicalExamination']
         : null;
+    final anc = raw['anc'] is Map
+        ? raw['anc'] as Map
+        : (details is Map && details['anc'] is Map)
+            ? details['anc'] as Map
+            : null;
+    final ancMedHx =
+        anc != null ? anc['medicalHistoryPhysicalExamination'] : null;
     final candidates = <dynamic>[
       if (obs is Map) obs[key],
       raw[key],
@@ -843,6 +869,7 @@ class AssessmentRepository extends ChangeNotifier {
       if (details is Map) details[key],
       if (medHx is Map) medHx[key],
       if (detailsMedHx is Map) detailsMedHx[key],
+      if (ancMedHx is Map) ancMedHx[key],
       if (raw['ncd'] is Map) ...[
         (raw['ncd'] as Map)[key],
         if ((raw['ncd'] as Map)['biometric'] is Map)
