@@ -84,6 +84,11 @@ class PatientAiSheet extends StatefulWidget {
 }
 
 class _PatientAiSheetState extends State<PatientAiSheet> {
+  // Bounds how many prior turns ride along with each question — enough for
+  // "and what about her BP?"-style follow-ups without letting a long session
+  // grow the request payload unbounded.
+  static const _maxHistoryTurns = 8;
+
   final List<ChatMessage> _messages = [];
   final _input = TextEditingController();
   final _scroll = ScrollController();
@@ -151,6 +156,9 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     debugPrint('[_PatientAiSheetState] _send question=$question');
     final q = question.trim();
     if (q.isEmpty || _loading) return;
+    // Snapshot prior turns before appending this question — the backend
+    // gets what led up to this question, not the question itself twice.
+    final history = _recentHistory();
     _input.clear();
     setState(() {
       _error = null;
@@ -163,9 +171,11 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     });
     _scrollToBottom();
     try {
-      final answer = await context
-          .read<AssistantRepository>()
-          .ask(q, patientContext: widget.ctx.apiContext);
+      final answer = await context.read<AssistantRepository>().ask(
+            q,
+            patientContext: widget.ctx.apiContext,
+            history: history,
+          );
       if (!mounted) return;
       setState(() {
         _messages.add(ChatMessage(
@@ -190,6 +200,18 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
       });
     }
     _scrollToBottom();
+  }
+
+  /// Last [_maxHistoryTurns] messages as `{role, text}` pairs for multi-turn
+  /// continuity — without this, a follow-up like "and what about her BP?"
+  /// loses all context from the answer it's referring to.
+  List<Map<String, String>> _recentHistory() {
+    final recent = _messages.length > _maxHistoryTurns
+        ? _messages.sublist(_messages.length - _maxHistoryTurns)
+        : _messages;
+    return recent
+        .map((m) => {'role': m.role.name, 'text': m.text})
+        .toList();
   }
 
   void _scrollToBottom() {
