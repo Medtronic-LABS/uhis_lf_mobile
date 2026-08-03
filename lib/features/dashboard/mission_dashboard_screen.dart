@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -9,7 +8,6 @@ import 'package:provider/provider.dart';
 
 import '../../app/locale_provider.dart';
 import '../../app/theme.dart';
-import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
@@ -28,6 +26,7 @@ import '../search/member_search_repository.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
 import 'widgets/dashboard_search_field.dart';
+import '../visit/assessment_repository.dart';
 import '../visit/visit_controller.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/mission/programme_reason.dart';
@@ -38,8 +37,9 @@ import 'mission_dashboard_repository.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
 import '../cce/cce_alerts_drawer.dart';
 import '../cce/cce_repository.dart';
-import '../debug/db_viewer_screen.dart';
-import '../settings/ai_settings_screen.dart';
+import '../settings/settings_actions.dart';
+import '../settings/settings_screen.dart';
+import '../settings/widgets/settings_row.dart';
 import 'sk_performance_screen.dart';
 
 /// AI Mission Dashboard — the operational command center for the SK.
@@ -471,57 +471,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _reloadStats();
   }
 
-  /// Called from menu when user wants to enable device unlock.
-  Future<void> _offerBiometric() async {
-    final auth = context.read<AuthState>();
-    if (auth.biometricEnabled) return;
-    if (!mounted) return;
-    final supported = auth.biometricAvailable;
-    final ans = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(DashboardStrings.useDeviceUnlockTitle),
-        content: Text(
-          supported
-              ? DashboardStrings.biometricOfferSupported
-              : DashboardStrings.biometricOfferUnsupported,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(DashboardStrings.notNow),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(DashboardStrings.enable),
-          ),
-        ],
-      ),
-    );
-    if (ans != true || !mounted) return;
-    if (!supported) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(DashboardStrings.setUpScreenLock),
-        ),
-      );
-      return;
-    }
-    try {
-      final auth = context.read<AuthState>();
-      await auth.enrolBiometric();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(DashboardStrings.deviceUnlockEnabled)),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(DashboardStrings.couldNotEnable(e))),
-      );
-    }
-  }
-
   String _greeting() {
     final hour = DateTime.now().hour;
     final part = hour < 12
@@ -657,15 +606,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final memberDao = context.read<MemberDao>();
     final controller = context.read<VisitController>();
     final member = await memberDao.getByPatientId(patientId);
-    // referenceId is the backend integer PK; fall back to id which may also
-    // be numeric (e.g. "768293") for members synced before schema v17.
+    // Both id and referenceId are the local autoincrement PK.
     final householdMemberLocalId =
         int.tryParse(member?.referenceId ?? '') ??
         int.tryParse(member?.id ?? '') ??
         0;
-    final memberId = member?.referenceId?.isNotEmpty == true
-        ? member!.referenceId
-        : member?.id;
+    // Server-facing id — the encounter and the pregnancy snapshot are both
+    // keyed by FHIR. Falls back to the local id for members not yet registered.
+    final memberId = member?.fhirId?.isNotEmpty == true
+        ? member!.fhirId
+        : (member?.referenceId?.isNotEmpty == true
+            ? member!.referenceId
+            : member?.id);
+    final householdFhirId = member?.householdFhirId?.isNotEmpty == true
+        ? member!.householdFhirId
+        : householdId;
     // Mirror Android: use sub-village ID for assessment scope so that Android's
     // member-assessment-history pull (scoped to [203, 204, 206]) can find
     // Flutter-submitted assessments. Parent villageId (34) is invisible to it.
@@ -694,7 +649,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'patientId': patientId,
           'patientName': patientName,
           'patientGender': member?.gender,
-          'householdId': householdId,
+          'householdId': householdFhirId,
           'patientAge': patientAge,
           'memberId': memberId,
           'householdMemberLocalId': householdMemberLocalId,
@@ -711,12 +666,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
-  }
-
-  void _navigateToFirstQueueItem() async {
-    debugPrint('[_DashboardScreenState] _navigateToFirstQueueItem');
-    // Navigate to Tasks screen (Visits tab)
-    if (mounted) context.push('/tasks');
   }
 
   @override
@@ -749,7 +698,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   builder: (_) => const SkPerformanceScreen(),
                 ),
               ),
-              settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
+              settingsMenu: const _SettingsMenu(),
               notificationCount: _notificationCount,
               onNotificationTap: () => CceAlertsDrawer.show(context),
               onSearchChanged: (q) {
@@ -902,7 +851,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             return _TodaysVisitsHeader(
                               visitCount: _todayVisitCount,
                               loading: _todayCountLoading || waiting,
-                              onTap: _navigateToFirstQueueItem,
                             );
                           }
                           if (index == 3) return const SizedBox(height: 10);
@@ -1038,10 +986,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 /// Settings popup menu in the app bar.
+/// Settings popup menu in the app bar.
 class _SettingsMenu extends StatelessWidget {
-  const _SettingsMenu({required this.onOfferBiometric});
-
-  final VoidCallback onOfferBiometric;
+  const _SettingsMenu();
 
   @override
   Widget build(BuildContext context) {
@@ -1058,81 +1005,14 @@ class _SettingsMenu extends StatelessWidget {
         ),
         onSelected: (v) async {
           switch (v) {
-            case 'enable_bio':
-              onOfferBiometric();
-              break;
-            case 'disable_bio':
-              final confirmBio = await showDialog<bool>(
-                context: ctx,
-                builder: (dlgCtx) => AlertDialog(
-                  title: Text(DashboardStrings.confirmDisableDeviceUnlock),
-                  content: Text(DashboardStrings.confirmDisableDeviceUnlockBody),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(dlgCtx).pop(false),
-                      child: Text(DashboardStrings.cancel),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(dlgCtx).pop(true),
-                      child: Text(DashboardStrings.disable),
-                    ),
-                  ],
-                ),
+            case 'settings':
+              Navigator.of(ctx).push(
+                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
               );
-              if (confirmBio != true) break;
-              await auth.disableBiometric();
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(content: Text(DashboardStrings.deviceUnlockDisabled)),
-                );
-              }
-              break;
-            case 'set_pin':
-              ctx.go('/pin-setup');
-              break;
-            case 'remove_pin':
-              final confirmPin = await showDialog<bool>(
-                context: ctx,
-                builder: (dlgCtx) => AlertDialog(
-                  title: Text(PinStrings.confirmRemovePin),
-                  content: Text(PinStrings.confirmRemovePinBody),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(dlgCtx).pop(false),
-                      child: Text(DashboardStrings.cancel),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(dlgCtx).pop(true),
-                      child: Text(CommonStrings.remove),
-                    ),
-                  ],
-                ),
-              );
-              if (confirmPin != true) break;
-              await auth.disablePin();
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(content: Text(PinStrings.disabledSnack)),
-                );
-              }
-              break;
-            case 'appearance':
-              final theme = ctx.read<ThemeProvider>();
-              final chosen = await _showOptionPicker<ThemeMode>(
-                context: ctx,
-                title: SettingsStrings.appearance,
-                current: theme.mode,
-                options: [
-                  (ThemeMode.light, SettingsStrings.lightMode),
-                  (ThemeMode.dark, SettingsStrings.darkMode),
-                  (ThemeMode.system, SettingsStrings.systemMode),
-                ],
-              );
-              if (chosen != null) await theme.setMode(chosen);
               break;
             case 'language':
               final locale = ctx.read<LocaleProvider>();
-              final chosen = await _showOptionPicker<AppLanguage>(
+              final chosen = await showOptionPicker<AppLanguage>(
                 context: ctx,
                 title: SettingsStrings.language,
                 current: locale.language,
@@ -1143,23 +1023,8 @@ class _SettingsMenu extends StatelessWidget {
               );
               if (chosen != null) await locale.setLanguage(chosen);
               break;
-            case 'ai_settings':
-              Navigator.of(ctx).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AiSettingsScreen(),
-                ),
-              );
-              break;
             case 'offline_sync':
               ctx.push('/offline-sync');
-              break;
-            case 'debug_db':
-              if (!kDebugMode) break;
-              Navigator.of(ctx).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const DebugDbViewerScreen(),
-                ),
-              );
               break;
             case 'logout':
               final confirmLogout = await showDialog<bool>(
@@ -1180,73 +1045,87 @@ class _SettingsMenu extends StatelessWidget {
                 ),
               );
               if (confirmLogout != true) break;
+              if (!ctx.mounted) break;
+
+              final assessmentRepo = ctx.read<AssessmentRepository>();
+              final pendingCount = await assessmentRepo.getPendingCount();
+              debugPrint('[logout] pendingCount=$pendingCount');
+              if (pendingCount > 0) {
+                final offline = await auth.isDeviceOffline();
+                debugPrint('[logout] pendingCount>0, offline=$offline');
+                if (!ctx.mounted) break;
+                if (!offline) {
+                  unawaited(showDialog<void>(
+                    context: ctx,
+                    barrierDismissible: false,
+                    builder: (_) => AlertDialog(
+                      content: Row(
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: Text(DashboardStrings.syncingBeforeSignOut),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ));
+                  try {
+                    final pushed = await assessmentRepo.syncPendingAssessments();
+                    debugPrint('[logout] syncPendingAssessments pushed $pushed record(s)');
+                  } catch (e) {
+                    debugPrint('[logout] pending-assessment push failed: $e');
+                  }
+                  if (ctx.mounted) Navigator.of(ctx, rootNavigator: true).pop();
+                } else {
+                  debugPrint('[logout] offline with pending data — showing delete-warning dialog');
+                  final confirmOffline = await showDialog<bool>(
+                    context: ctx,
+                    builder: (dlgCtx) => AlertDialog(
+                      title: Text(DashboardStrings.signOutOfflineWarningTitle),
+                      content: Text(
+                        DashboardStrings.signOutOfflineWarningBody(pendingCount),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dlgCtx).pop(false),
+                          child: Text(DashboardStrings.cancel),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.of(dlgCtx).pop(true),
+                          child: Text(DashboardStrings.signOutAnyway),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmOffline != true) {
+                    debugPrint('[logout] user cancelled offline sign-out — aborting logout');
+                    break;
+                  }
+                  debugPrint('[logout] user confirmed sign-out anyway while offline — proceeding to wipe');
+                }
+              }
+
+              if (!ctx.mounted) break;
               await auth.logout();
               if (ctx.mounted) ctx.go('/login');
               break;
           }
         },
         itemBuilder: (_) => [
-          if (!auth.biometricEnabled)
-            PopupMenuItem(
-              value: 'enable_bio',
-              child: _SettingsRow(
-                emoji: '🔓',
-                chipColor: AppColors.aiSurfaceStart,
-                title: DashboardStrings.enableDeviceUnlock,
-              ),
-            ),
-          if (auth.biometricEnabled)
-            PopupMenuItem(
-              value: 'disable_bio',
-              child: _SettingsRow(
-                emoji: '🔒',
-                chipColor: AppColors.aiSurfaceStart,
-                title: DashboardStrings.disableDeviceUnlock,
-              ),
-            ),
-          if (!auth.pinEnabled)
-            PopupMenuItem(
-              value: 'set_pin',
-              child: _SettingsRow(
-                emoji: '🔢',
-                chipColor: AppColors.ancSurface,
-                title: PinStrings.enablePin,
-              ),
-            ),
-          if (auth.pinEnabled)
-            PopupMenuItem(
-              value: 'remove_pin',
-              child: _SettingsRow(
-                emoji: '🔢',
-                chipColor: AppColors.ancSurface,
-                title: PinStrings.disablePin,
-              ),
-            ),
           PopupMenuItem(
-            value: 'appearance',
-            child: Consumer<ThemeProvider>(
-              builder: (_, theme, _) {
-                final String subtitle;
-                if (theme.isDark) {
-                  subtitle = SettingsStrings.darkMode;
-                } else if (theme.isSystem) {
-                  subtitle = SettingsStrings.systemMode;
-                } else {
-                  subtitle = SettingsStrings.lightMode;
-                }
-                return _SettingsRow(
-                  emoji: '🌓',
-                  chipColor: AppColors.catChildSurface,
-                  title: SettingsStrings.appearance,
-                  subtitle: subtitle,
-                );
-              },
+            value: 'settings',
+            child: SettingsRow(
+              emoji: '⚙️',
+              chipColor: AppColors.aiSurfaceStart,
+              title: SettingsStrings.settings,
+              subtitle: SettingsStrings.settingsSubtitle,
             ),
           ),
           PopupMenuItem(
             value: 'language',
             child: Consumer<LocaleProvider>(
-              builder: (_, locale, _) => _SettingsRow(
+              builder: (_, locale, _) => SettingsRow(
                 emoji: '🌐',
                 chipColor: AppColors.catHomeSurface,
                 title: SettingsStrings.language,
@@ -1257,36 +1136,17 @@ class _SettingsMenu extends StatelessWidget {
             ),
           ),
           PopupMenuItem(
-            value: 'ai_settings',
-            child: _SettingsRow(
-              emoji: '🤖',
-              chipColor: AppColors.aiSurfaceStart,
-              title: SettingsStrings.aiSettings,
-              subtitle: SettingsStrings.aiSettingsSubtitle,
-            ),
-          ),
-          PopupMenuItem(
             value: 'offline_sync',
-            child: _SettingsRow(
+            child: SettingsRow(
               emoji: '☁️',
               chipColor: AppColors.ancSurface,
               title: SettingsStrings.offlineSync,
               subtitle: SettingsStrings.offlineSyncSubtitle,
             ),
           ),
-          if (kDebugMode)
-            PopupMenuItem(
-              value: 'debug_db',
-              child: _SettingsRow(
-                emoji: '🗄️',
-                chipColor: AppColors.catChildSurface,
-                title: SettingsStrings.debugDbViewer,
-                subtitle: SettingsStrings.debugDbViewerSubtitle,
-              ),
-            ),
           PopupMenuItem(
             value: 'logout',
-            child: _SettingsRow(
+            child: SettingsRow(
               emoji: '🚪',
               chipColor: AppColors.catHighriskSurface,
               title: DashboardStrings.signOut,
@@ -1298,101 +1158,6 @@ class _SettingsMenu extends StatelessWidget {
       ),
     );
   }
-}
-
-/// One row in the Settings popup — colored icon chip + title + optional
-/// subtitle + trailing chevron, matching the v13 mockup's `.settings-opt`
-/// row exactly (28×28 rounded-8 chip, 12px/700 title, 9.5px muted subtitle).
-class _SettingsRow extends StatelessWidget {
-  const _SettingsRow({
-    required this.emoji,
-    required this.chipColor,
-    required this.title,
-    this.subtitle,
-    this.titleColor,
-    this.showChevron = true,
-  });
-
-  final String emoji;
-  final Color chipColor;
-  final String title;
-  final String? subtitle;
-  final Color? titleColor;
-  final bool showChevron;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: chipColor,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          alignment: Alignment.center,
-          child: Text(emoji, style: const TextStyle(fontSize: 13)),
-        ),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: titleColor ?? AppColors.textPrimary,
-                ),
-              ),
-              if (subtitle != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: Text(
-                    subtitle!,
-                    style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (showChevron)
-          const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
-      ],
-    );
-  }
-}
-
-/// Small "pick one of N" dialog shared by the Appearance and Language rows —
-/// a list of options with a check mark next to whichever is current.
-Future<T?> _showOptionPicker<T>({
-  required BuildContext context,
-  required String title,
-  required T current,
-  required List<(T value, String label)> options,
-}) {
-  return showDialog<T>(
-    context: context,
-    builder: (dlgCtx) => SimpleDialog(
-      title: Text(title),
-      children: [
-        for (final (value, label) in options)
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(dlgCtx).pop(value),
-            child: Row(
-              children: [
-                Expanded(child: Text(label)),
-                if (value == current)
-                  const Icon(Icons.check, size: 18, color: AppColors.aiPurpleDark),
-              ],
-            ),
-          ),
-      ],
-    ),
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1683,14 +1448,12 @@ class _TodaysVisitsHeader extends StatelessWidget {
   const _TodaysVisitsHeader({
     required this.visitCount,
     required this.loading,
-    this.onTap,
   });
 
   /// Unfiltered today's actionable visits (upcoming excluded). Independent of
   /// village / need / search chips so the badge stays honest while filtering.
   final int visitCount;
   final bool loading;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

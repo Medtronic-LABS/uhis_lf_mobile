@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 37;
+  static const int schemaVersion = 39;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -402,6 +402,7 @@ class AppDatabase {
     await db.execute('''
       CREATE TABLE $tableLocalAssessments (
         id TEXT PRIMARY KEY,
+        reference_id INTEGER,
         household_member_local_id INTEGER NOT NULL,
         member_id TEXT,
         household_id TEXT,
@@ -427,6 +428,9 @@ class AppDatabase {
         'CREATE INDEX idx_local_assessments_patient ON $tableLocalAssessments(patient_id)');
     await db.execute(
         'CREATE INDEX idx_local_assessments_sync ON $tableLocalAssessments(sync_status)');
+    await db.execute(
+        'CREATE UNIQUE INDEX idx_local_assessments_reference '
+        'ON $tableLocalAssessments(reference_id) WHERE reference_id IS NOT NULL');
 
     // v8 — Tiered Mission Dashboard side tables (spec
     // leapfrog-setup/designs/dashboard-prioritization-impl.md).
@@ -444,7 +448,19 @@ class AppDatabase {
         lmp_date INTEGER,
         delivery_date_millis INTEGER,
         anc_visit_no INTEGER,
-        pnc_visit_no INTEGER
+        pnc_visit_no INTEGER,
+        gravida INTEGER,
+        parity INTEGER,
+        living_children INTEGER,
+        age_of_last_child TEXT,
+        pregnancy_test TEXT,
+        previous_pregnancy_complications TEXT,
+        existing_illness TEXT,
+        on_treatment TEXT,
+        tt_td_completed TEXT,
+        facility_identified_for_delivery TEXT,
+        anc_weight REAL,
+        last_anc_visit_date_ms INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
@@ -1613,6 +1629,49 @@ class AppDatabase {
       for (final sql in [
         'ALTER TABLE $tableHouseholds ADD COLUMN sub_village_id TEXT',
         'ALTER TABLE $tableHouseholds ADD COLUMN sub_village_name TEXT',
+      ]) {
+        try {
+          await db.execute(sql);
+        } on DatabaseException catch (e) {
+          if (!e.toString().contains('duplicate column')) rethrow;
+        }
+      }
+    }
+    if (from < 38) {
+      // v38 — assessments get their own numeric reference_id. offline-sync
+      // correlates every entity by a Long referenceId (Android sends the
+      // Assessment row PK); our PK is a UUID, so we were sending the member's
+      // local id instead. That collided across assessments for the same member
+      // and made a Failed entity impossible to attribute back to one row.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableLocalAssessments ADD COLUMN reference_id INTEGER');
+      } on DatabaseException catch (e) {
+        if (!e.toString().contains('duplicate column')) rethrow;
+      }
+      await db.execute(
+          'UPDATE $tableLocalAssessments SET reference_id = rowid '
+          'WHERE reference_id IS NULL');
+      await db.execute(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_assessments_reference '
+          'ON $tableLocalAssessments(reference_id) WHERE reference_id IS NOT NULL');
+    }
+    if (from < 39) {
+      // v39 — Spice PregnancyDetail obstetric / ANC continuity fields on the
+      // local pregnancy snapshot (gravida, illness, TT, facility, weight…).
+      for (final sql in [
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN gravida INTEGER',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN parity INTEGER',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN living_children INTEGER',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN age_of_last_child TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN pregnancy_test TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN previous_pregnancy_complications TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN existing_illness TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN on_treatment TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN tt_td_completed TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN facility_identified_for_delivery TEXT',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN anc_weight REAL',
+        'ALTER TABLE $tablePregnancySnapshot ADD COLUMN last_anc_visit_date_ms INTEGER',
       ]) {
         try {
           await db.execute(sql);

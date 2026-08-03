@@ -6,8 +6,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
 
-/// Burgundy 3-step visit progress header shared by [VisitFlowScreen] and
-/// [NewPatientVisitScreen]. Extracted so both screens render identically.
+/// Burgundy 3-step visit progress header used by [VisitFlowScreen].
 class VisitFlowHeader extends StatelessWidget {
   const VisitFlowHeader({
     super.key,

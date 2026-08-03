@@ -676,11 +676,13 @@ void main() {
       expect(visible('ultrasound', ga: 27), isFalse);
       expect(visible('ultrasound', ga: 28), isTrue);
       expect(visible('ancFromMedicalDoctor', ga: 28), isTrue);
+      expect(visible('fetalMovement', ga: 20), isFalse);
+      expect(visible('fetalMovement', ga: 24), isTrue);
     });
 
-    test('height / BMI visit-1 gates', () {
+    test('height visible all visits; BMI visit-1 only', () {
       expect(visible('height', visit: 1), isTrue);
-      expect(visible('height', visit: 2), isFalse);
+      expect(visible('height', visit: 2), isTrue);
       expect(visible('bmi', visit: 1, ga: 8), isTrue);
       expect(visible('bmi', visit: 1, ga: 14), isFalse);
       expect(visible('bmi', visit: 2, ga: 8), isFalse);
@@ -834,6 +836,7 @@ void main() {
         ),
         isTrue,
       );
+      // ANC keeps height visible on visit 2+ (read-only in UI for weight pair).
       expect(
         FieldVisibilityRules.isFieldVisible(
           field: height,
@@ -843,7 +846,7 @@ void main() {
           ancVisitNumber: 3,
           gestationalWeeks: 28,
         ),
-        isFalse,
+        isTrue,
       );
     });
   });

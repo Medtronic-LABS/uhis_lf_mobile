@@ -59,10 +59,18 @@ class AuthRepository {
     _api.onAuthenticatedActivity = () {
       unawaited(touchReentryExpiry());
     };
+    // Forwarded up to AuthState, which knows what "session expired" means at
+    // the app-state level — this layer just relays the signal.
+    _api.onUnauthorized = () => onUnauthorized?.call();
+    _api.onBeforeRequest = _validateTokenIfStale;
   }
 
   final ApiClient _api;
   final FlutterSecureStorage _storage;
+
+  /// Set by [AuthState] to [AuthState.handleSessionExpired] — see
+  /// [ApiClient.onUnauthorized] for why this layer only relays it.
+  void Function()? onUnauthorized;
 
   // Sliding-window renewal of the reentry-session TTL — see [touchReentryExpiry].
   DateTime? _lastReentryTouch;
@@ -95,6 +103,9 @@ class AuthRepository {
   static const _kVillageIds = 'villageIds';
   static const _kSubVillageIds = 'subVillageIds';
   static const _kSsWorkerIds = 'ssWorkerIds';
+  /// Full SK→SS→village hierarchy snapshot for offline enrollment dropdowns.
+  /// Survives process death / PIN unlock; cleared only on explicit logout.
+  static const _kUserHierarchyCache = 'userHierarchyCache';
   static const _kUserId = 'userId';
   static const _kUserFhirId = 'userFhirId';
   static const _kDeviceId = 'deviceId';
@@ -104,6 +115,10 @@ class AuthRepository {
   // so offline password verification works for days/weeks without network.
   // Cleared only on explicit logout.
   static const _kOfflinePasswordHash = 'offline_pwd_hash';
+  // ISO8601 timestamp of the last successful /auth-service/authenticate
+  // validation (or login) — gates _validateTokenIfStale so the token is only
+  // re-verified once per hour, not on every single request.
+  static const _kTokenVerifiedAt = 'token_verified_at';
 
   Future<String?> currentTenantId() async {
     final cached = _api.tenantId;
@@ -216,6 +231,12 @@ class AuthRepository {
     await _storage.write(key: _kUsername, value: username);
     // Persist hash for offline password verification (Spice Android parity).
     await _storage.write(key: _kOfflinePasswordHash, value: hashedPwd);
+    // The token this login just returned is definitionally fresh — skip the
+    // first _validateTokenIfStale check for a full hour.
+    await _storage.write(
+      key: _kTokenVerifiedAt,
+      value: DateTime.now().toIso8601String(),
+    );
     // Extract profile directly from login response — no separate profile call.
     // On web, Dio's BrowserHttpClientAdapter returns raw JSON text (String)
     // rather than a decoded Map; decode manually when needed.
@@ -363,6 +384,34 @@ class AuthRepository {
     await _storage.write(key: _kSsWorkerIds, value: ids.join(','));
   }
 
+  /// Persists the full user-data hierarchy (SS names, villages, sub-villages,
+  /// SK profile, facility) so enrollment dropdowns work after process death
+  /// or offline PIN unlock — IDs alone are not enough for the form UI.
+  Future<void> saveUserHierarchyCache(Map<String, dynamic> cache) async {
+    await _storage.write(key: _kUserHierarchyCache, value: jsonEncode(cache));
+  }
+
+  /// Returns the last successfully fetched hierarchy snapshot, or null.
+  Future<Map<String, dynamic>?> loadUserHierarchyCache() async {
+    final raw = await _storage.read(key: _kUserHierarchyCache);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (e) {
+      debugPrint('[auth] hierarchy cache decode failed: $e');
+    }
+    return null;
+  }
+
+  Future<void> clearUserHierarchyCache() async {
+    await _storage.delete(key: _kUserHierarchyCache);
+  }
+
+  /// Whether the API client currently has credentials to call authenticated
+  /// endpoints (Bearer token and/or auth cookie).
+  bool get hasSessionCredentials => _api.hasSessionCredentials;
+
   Future<void> saveUpazila(String? name) async {
     if (name != null && name.isNotEmpty) {
       await _storage.write(key: _kUpazila, value: name);
@@ -385,10 +434,17 @@ class AuthRepository {
     await _storage.delete(key: _kTenantId);
     await _storage.delete(key: _kOrganizationFhirId);
     await _storage.delete(key: _kUserFhirId);
+    await clearUserHierarchyCache();
     await _clearReentrySession();
     await _storage.delete(key: _kBioEnabled);
     await _storage.delete(key: _kBioUsername);
     await _storage.delete(key: _kOfflinePasswordHash);
+    // Only an explicit logout clears this — session expiry deliberately
+    // keeps it so the login screen can lock the field to the same user on
+    // relogin (see LoginScreen). Clearing it here is what lets a genuinely
+    // different SK sign into a shared device: the next login screen shows
+    // an empty, editable username field.
+    await _storage.delete(key: _kUsername);
     await clearPin();
   }
 
@@ -408,6 +464,61 @@ class AuthRepository {
     await _api.clearSession();
     await _storage.delete(key: _kTenantId);
     await _clearReentrySession();
+  }
+
+  /// Proactively verifies/refreshes the Bearer token via
+  /// `POST /auth-service/authenticate` if it hasn't been checked in the last
+  /// hour — the token is only valid ~1hr, so this keeps a session alive
+  /// across normal app use instead of waiting for the server to start
+  /// rejecting requests (that reactive path is [ApiClient.onUnauthorized]).
+  /// Wired to [ApiClient.onBeforeRequest], so this runs ahead of most
+  /// authenticated calls; failures are swallowed here on purpose — a request
+  /// that goes on to actually 401/403 is still caught there.
+  Future<void> _validateTokenIfStale() async {
+    final lastStr = await _storage.read(key: _kTokenVerifiedAt);
+    final last = lastStr == null ? null : DateTime.tryParse(lastStr);
+    if (last != null && DateTime.now().difference(last).inSeconds < 3600) {
+      return; // no log here — this is the common case, would fire on every request
+    }
+    final token = _api.exportAuthToken();
+    if (token == null || token.isEmpty) return; // nothing to verify pre-login
+    debugPrint('[auth] token stale (last verified: ${last?.toIso8601String() ?? 'never'}) — calling /auth-service/authenticate');
+    try {
+      final resp = await _api.dio.post('/auth-service/authenticate');
+      if (resp.statusCode != 200) {
+        debugPrint('[auth] token validation returned ${resp.statusCode} — leaving token as-is (a real rejection surfaces via onUnauthorized)');
+        return;
+      }
+      String? newToken;
+      final data = resp.data;
+      var source = 'none';
+      if (data is Map) {
+        final userDetail = data['userDetail'];
+        if (userDetail is Map) {
+          newToken = userDetail['authorization'] as String?;
+          if (newToken != null) source = 'body.userDetail.authorization';
+        }
+      }
+      // Fallback: the login endpoint delivers its token via this response
+      // header rather than the body — this endpoint's exact shape wasn't
+      // verified against a live response, so check both.
+      if (newToken == null) {
+        newToken = resp.headers.value('authorization');
+        if (newToken != null) source = 'Authorization response header';
+      }
+      if (newToken != null && newToken.isNotEmpty) {
+        _api.importAuthToken(newToken);
+        debugPrint('[auth] token refreshed from $source');
+      } else {
+        debugPrint('[auth] validate call succeeded (200) but no new token found in body or header');
+      }
+      await _storage.write(
+        key: _kTokenVerifiedAt,
+        value: DateTime.now().toIso8601String(),
+      );
+    } catch (e) {
+      debugPrint('[auth] token validation failed (will retry next request): $e');
+    }
   }
 
   /// Verifies [plaintext] password offline by re-hashing and comparing to the

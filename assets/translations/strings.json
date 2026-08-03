@@ -376,8 +376,8 @@
   "en": "Edema"
  },
  "Composer.field.fieldFacilityIdentifiedForDelivery": {
-  "bn": "প্রসবের জন্য নির্ধারিত হাসপাতাল/ক্লিনিক",
-  "en": "Facility identified for delivery"
+  "bn": "গর্ভবতী মা কি প্রসবের জন্য কোনো স্বাস্থ্যকেন্দ্র ঠিক করেছেন?",
+  "en": "Has the PW identified a health facility for institutional delivery?"
  },
  "Composer.field.fieldFetalHeartRate": {
   "bn": "ভ্রূণের হৃদস্পন্দন",
@@ -740,8 +740,20 @@
   "en": "Save"
  },
  "Enrollment.villageLabel": {
+  "bn": "ইউনিয়ন",
+  "en": "Union"
+ },
+ "Enrollment.villageHint": {
+  "bn": "ইউনিয়ন নির্বাচন করুন",
+  "en": "Select union"
+ },
+ "Enrollment.subVillageLabel": {
   "bn": "গ্রাম",
   "en": "Village"
+ },
+ "Enrollment.subVillageHint": {
+  "bn": "গ্রাম নির্বাচন করুন",
+  "en": "Select village"
  },
  "Epi.cancel": {
   "bn": "বাতিল",
@@ -910,30 +922,6 @@
  "NcdScreening.sectionTitle": {
   "bn": "উচ্চ রক্তচাপ স্ক্রিনিং",
   "en": "Hypertension screening"
- },
- "NewPatientVisit.eligibleServicesHeader": {
-  "bn": "✦ উপযুক্ত সেবা",
-  "en": "✦ Eligible services"
- },
- "NewPatientVisit.eligibleServicesTag": {
-  "bn": "বয়স ও লিঙ্গ ভিত্তিক",
-  "en": "Age & gender based"
- },
- "NewPatientVisit.pwHint": {
-  "bn": "⚠ ANC আনলক করতে আগে 'PW' নির্বাচন করুন",
-  "en": "⚠ Select 'PW' first to unlock ANC"
- },
- "NewPatientVisit.searchHint": {
-  "bn": "লক্ষণ খুঁজুন...",
-  "en": "Search symptoms..."
- },
- "NewPatientVisit.step1Label": {
-  "bn": "১. আপনি কেমন আছেন?",
-  "en": "1. How are you?"
- },
- "NewPatientVisit.step3Label": {
-  "bn": "৩. সারাংশ",
-  "en": "3. Summary"
  },
  "Onboarding.notAvailable": {
   "bn": "পাওয়া যাচ্ছে না",
@@ -3400,8 +3388,8 @@
   "en": "e.g. 1"
  },
  "disabilityPersonCountLabel": {
-  "bn": "প্রতিবন্ধী ব্যক্তির সংখ্যা",
-  "en": "Number of persons with disability"
+  "bn": "খানায় বিশেষ চাহিদা সম্পন্ন ব্যক্তির সংখ্যা",
+  "en": "Persons with disability in the HH"
  },
  "disabilityQuestionLabel": {
   "bn": "পরিবারের কোনো সদস্যের প্রতিবন্ধিতা আছে?",
@@ -4472,8 +4460,8 @@
   "en": "Head's full name"
  },
  "headNameLabel": {
-  "bn": "পূর্ণ নাম",
-  "en": "Full Name"
+  "bn": "খানা প্রধানের নাম",
+  "en": "Household Head Name"
  },
  "headPrefilledFromScan": {
   "bn": "নাম, জন্ম তারিখ ও এনআইডি কার্ড থেকে পড়া হয়েছে — যাচাই করুন, তারপর পিতা ও মাতার নাম (বাংলা) নিজে যুক্ত করুন।",
@@ -4694,14 +4682,6 @@
  "householdsCount": {
   "bn": "{n} টি পরিবার",
   "en": "{n} households"
- },
- "howFeelFemale": {
-  "bn": "আজ তার কেমন লাগছে? 🎙",
-  "en": "How is she feeling today? 🎙"
- },
- "howFeelMale": {
-  "bn": "আজ তার কেমন লাগছে? 🎙",
-  "en": "How is he feeling today? 🎙"
  },
  "htn": {
   "bn": "উচ্চ রক্তচাপ",
@@ -5782,18 +5762,6 @@
  "noSsAssigned": {
   "bn": "নির্ধারিত নেই",
   "en": "Not assigned"
- },
- "noSymptomsFound": {
-  "bn": "কোনো লক্ষণ পাওয়া যায়নি",
-  "en": "No symptoms found"
- },
- "noSymptomsGuard": {
-  "bn": "কোনো লক্ষণ নির্বাচিত নয় — এগিয়ে যাওয়ার আগে লক্ষণ চেক করুন।",
-  "en": "No symptoms selected — please check symptoms before proceeding."
- },
- "noSymptomsGuardCta": {
-  "bn": "তবুও চালিয়ে যান",
-  "en": "Continue anyway"
  },
  "noSymptomsRoutineVisit": {
   "bn": "কোনো লক্ষণ নেই / নিয়মিত ভিজিট",
@@ -7331,10 +7299,6 @@
   "bn": "📋  সেবা নির্বাচন করুন",
   "en": "📋  Select service"
  },
- "selectServiceCta": {
-  "bn": "চালিয়ে যেতে একটি সেবা নির্বাচন করুন",
-  "en": "Select a service to continue"
- },
  "selectStatus": {
   "bn": "রোগীর বর্তমান অবস্থা নির্বাচন করুন",
   "en": "Select the patient's current status"
@@ -7618,10 +7582,6 @@
  "startVisit": {
   "bn": "ভিজিট শুরু করুন",
   "en": "Start Visit"
- },
- "startVisitCta": {
-  "bn": "ভিজিট শুরু করুন →",
-  "en": "Start Visit →"
  },
  "startingButton": {
   "bn": "শুরু হচ্ছে...",

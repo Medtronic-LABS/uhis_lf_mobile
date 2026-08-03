@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,8 +22,6 @@ import '../features/patient/vitals_repository.dart';
 import '../features/patient/member_detail_repository.dart';
 import '../features/pin/pin_setup_screen.dart';
 import '../features/pin/pin_unlock_screen.dart';
-import '../features/referral/referral_detail_screen.dart';
-import '../features/referral/referral_list_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
 import '../features/sync/offline_sync_screen.dart';
 import '../features/counselling/counselling_screen.dart';
@@ -31,7 +30,6 @@ import '../features/assistant/assistant_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
 import '../features/patient/enroll/programme_enroll_screen.dart';
-import '../features/visit/new_patient_visit_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
 import '../core/api/api_client.dart';
 import '../core/auth/auth_repository.dart';
@@ -50,7 +48,6 @@ import 'bottom_nav.dart';
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'home');
 final _patientsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'patients');
-final _tasksNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'tasks');
 final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'assistant');
 final _galleryNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'gallery');
 
@@ -278,34 +275,6 @@ GoRouter buildRouter(AuthState auth) {
                       );
                     },
                   ),
-                  // First-time visit — symptom picker + service grid (Priya Rani Das wireframe)
-                  GoRoute(
-                    path: ':id/new-visit',
-                    name: 'new-patient-visit',
-                    pageBuilder: (context, state) {
-                      final extra = state.extra is Map<String, dynamic>
-                          ? state.extra as Map<String, dynamic>
-                          : <String, dynamic>{};
-                      final origin = state.uri.queryParameters['origin'];
-                      return MaterialPage(
-                        key: ValueKey(
-                            'new-visit-${state.pathParameters['id']}'),
-                        child: NewPatientVisitScreen(
-                          patientId: state.pathParameters['id']!,
-                          patientName:
-                              extra['patientName'] as String?,
-                          patientAge: extra['patientAge'] as int?,
-                          patientGender:
-                              extra['patientGender'] as String?,
-                          householdId:
-                              extra['householdId'] as String?,
-                          villageName:
-                              extra['villageName'] as String?,
-                          origin: origin,
-                        ),
-                      );
-                    },
-                  ),
                   // Programme enrollment — edit existing services
                   GoRoute(
                     path: ':id/enroll',
@@ -414,39 +383,6 @@ GoRouter buildRouter(AuthState auth) {
                         ),
                       );
                     },
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          // Tab 2: Tasks
-          // TASKS-STASHED: this branch is intentionally excluded from the
-          // bottom nav bar's visible destinations (see bottom_nav.dart) per
-          // GitHub issue #84 (2026-07-13). The branch/route itself is left
-          // fully functional — do not remove or restore it here without
-          // direct user instruction; the nav-bar visibility is the only
-          // thing that changed. Search `TASKS-STASHED` for every marker.
-          StatefulShellBranch(
-            navigatorKey: _tasksNavigatorKey,
-            routes: [
-              GoRoute(
-                path: '/tasks',
-                name: 'tasks-list',
-                pageBuilder: (context, state) => const MaterialPage(
-                  key: ValueKey('tasks-list-page'),
-                  child: ReferralListScreen(),
-                ),
-                routes: [
-                  GoRoute(
-                    path: ':id',
-                    name: 'task-detail',
-                    pageBuilder: (context, state) => MaterialPage(
-                      key: ValueKey('task-detail-${state.pathParameters['id']}'),
-                      child: ReferralDetailScreen(
-                        patientId: state.pathParameters['id']!,
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -748,11 +684,7 @@ class _SplashScreenState extends State<_SplashScreen>
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.pink, AppColors.brandAccentDeep],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: AppColors.cardSurface,
               borderRadius: BorderRadius.circular(22),
               boxShadow: [
                 BoxShadow(
@@ -762,8 +694,19 @@ class _SplashScreenState extends State<_SplashScreen>
                 ),
               ],
             ),
-            child: CustomPaint(
-              painter: _SplashIconPainter(),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: SvgPicture.asset(
+                  // Foreground-only layer — the box above already paints an
+                  // opaque background, so the plain leapwell-icon.svg (which
+                  // bakes in its own near-white fill) would be a redundant
+                  // second background layer.
+                  'assets/images/leapwell-icon-foreground.svg',
+                  fit: BoxFit.contain,
+                ),
+              ),
             ),
           ),
         ),
@@ -825,12 +768,9 @@ class _SplashScreenState extends State<_SplashScreen>
                 fade: _titleFade, slide: _titleSlide,
                 child: Text(
                   LockStrings.leapwell,
-                  style: TextStyle(
-                    fontFamily: AppFonts.display,
+                  style: AppTextStyles.brandWordmark.copyWith(
                     fontSize: 26,
-                    fontWeight: FontWeight.w900,
                     color: Colors.white,
-                    letterSpacing: -0.3,
                   ),
                 ),
               ),
@@ -840,6 +780,7 @@ class _SplashScreenState extends State<_SplashScreen>
                 child: Text(
                   LockStrings.aponSushashthya,
                   style: TextStyle(
+                    fontFamily: AppFonts.body,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: Colors.white.withValues(alpha: 0.85),
@@ -852,8 +793,12 @@ class _SplashScreenState extends State<_SplashScreen>
                 child: Text(
                   LockStrings.aponSushashthyaBn,
                   style: TextStyle(
+                    fontFamily: AppFonts.body,
+                    fontFamilyFallback: const ['NotoSansBengali'],
                     fontSize: 15,
-                    color: Colors.white.withValues(alpha: 0.50),
+                    // .60 not .50 — .50 measured ~4.52:1 against navy, only
+                    // barely clearing WCAG AA (4.5:1) for normal text.
+                    color: Colors.white.withValues(alpha: 0.60),
                   ),
                 ),
               ),
@@ -866,6 +811,8 @@ class _SplashScreenState extends State<_SplashScreen>
                     LockStrings.splashTagline,
                     textAlign: TextAlign.center,
                     style: TextStyle(
+                      fontFamily: AppFonts.body,
+                      fontFamilyFallback: const ['NotoSansBengali'],
                       fontSize: 13,
                       color: Colors.white.withValues(alpha: 0.65),
                       height: 1.6,
@@ -886,48 +833,6 @@ class _SplashScreenState extends State<_SplashScreen>
       ),
     );
   }
-}
-
-// Person silhouette + community health pulse arc — from prototype SVG paths
-class _SplashIconPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
-
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-    final s = size.width / 80; // scale factor relative to 80dp box
-
-    // Person head
-    canvas.drawCircle(Offset(cx, cy - 10 * s), 5 * s, paint);
-    // Shoulders arc
-    final shoulderPath = Path()
-      ..moveTo(cx - 10 * s, cy + 12 * s)
-      ..quadraticBezierTo(cx, cy + 5 * s, cx + 10 * s, cy + 12 * s);
-    canvas.drawPath(shoulderPath, paint);
-    // Outer pulse arc
-    final arcPaint = Paint()
-      ..color = Colors.white.withAlpha(0x99)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCenter(center: Offset(cx, cy - 10 * s), width: 22 * s, height: 22 * s),
-      pi * 1.1, pi * 0.8, false, arcPaint,
-    );
-    canvas.drawArc(
-      Rect.fromCenter(center: Offset(cx, cy - 10 * s), width: 34 * s, height: 34 * s),
-      pi * 1.15, pi * 0.7, false,
-      arcPaint..color = Colors.white.withAlpha(0x55),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter old) => false;
 }
 
 class _AnimatedDots extends StatelessWidget {

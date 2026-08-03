@@ -107,6 +107,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   bool _isLoading = true;
   String? _error;
 
+  /// Canonical `patients.id` for this visit. The household screens route with
+  /// the server-assigned `members.patient_id`, which [PatientContextBuilder]
+  /// remaps onto the local key every other table is keyed by. Falls back to
+  /// the routed id until the context has loaded.
+  String get _patientId => _patientContext?.patientId ?? widget.patientId;
+
   VisitBriefingResponse? _briefingData;
   bool _briefingLoading = true;
 
@@ -237,7 +243,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       // Block a second ANC visit on the same calendar day.
       final ancToday = await context
           .read<LocalAssessmentDao>()
-          .hasAncAssessmentTodayForPatient(patientId);
+          .hasAncAssessmentTodayForPatient(ctx.patientId);
       // Pregnancy Outcome is an explicit SK choice — never auto-on.
       // Postpartum mothers get PNC via [enrolledSeed], not this flag.
       final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
@@ -296,11 +302,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       final briefingRepo = context.read<VisitBriefingRepository>();
 
       final visitsByVisit = await vitalsRepo.recentByVisit(
-        widget.patientId,
+        patientCtx.patientId,
         limit: 5,
       );
       final followUps = await followUpRepo.openForPatientLocal(
-        widget.patientId,
+        patientCtx.patientId,
       );
 
       Map<String, dynamic>? vitalsMap;
@@ -345,7 +351,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       }).toList();
 
       final clinicalFindings = await BriefingFindingsAggregator.build(
-        patientId: widget.patientId,
+        patientId: patientCtx.patientId,
         patientCtx: patientCtx,
         selectedProgrammes: _selectedProgrammes,
         assessmentDao: context.read<LocalAssessmentDao>(),
@@ -358,7 +364,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       final lastVisit = visitsByVisit.isNotEmpty ? visitsByVisit.first : null;
 
       final request = <String, dynamic>{
-        'patientId': widget.patientId,
+        'patientId': patientCtx.patientId,
         if (widget.patientName != null) 'patientName': widget.patientName,
         if (widget.patientAge != null) 'ageYears': widget.patientAge,
         if (widget.patientGender != null) 'gender': widget.patientGender,
@@ -540,10 +546,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     if (ctx == null) return;
     // Fetch DOB from patient DAO to pass to timeline screen
     final patientDao = context.read<PatientDao>();
-    patientDao.byId(widget.patientId).then((patient) {
+    patientDao.byAnyId(_patientId).then((patient) {
       if (!mounted) return;
       context.push(
-        '/patients/${widget.patientId}/immunisation',
+        '/patients/$_patientId/immunisation',
         extra: <String, dynamic>{
           'patientName': widget.patientName,
           if (patient?.dob != null) 'dob': patient!.dob,
@@ -582,29 +588,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       '${vm.activatedPathways.map((p) => p.programme.name).join(', ')} | '
       'selected programmes: ${_selectedProgrammes.map((p) => p.name).join(', ')}',
     );
-
-    // Guard: only block when there is truly no programme context —
-    // no enrolled programmes, no activated pathways, no symptoms.
-    // Enrolled patients always proceed: enrolment alone determines the form.
-    final hasEnrolledProgrammes =
-        _patientContext!.activeProgrammes.isNotEmpty;
-    if (vm.selectedSymptoms.isEmpty &&
-        vm.activatedPathways.isEmpty &&
-        !hasEnrolledProgrammes) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(SymptomPickerStrings.noSymptomsGuard),
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: SymptomPickerStrings.noSymptomsGuardCta,
-              onPressed: () => _doAdvance(vm),
-            ),
-          ),
-        );
-      return;
-    }
 
     _doAdvance(vm, vaccinationSelected: _vaccinationSelected);
   }
@@ -658,7 +641,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     if (pathways.isEmpty && mounted) {
       try {
         final dao = context.read<LocalAssessmentDao>();
-        final assessments = await dao.getByPatientId(widget.patientId);
+        final assessments = await dao.getByPatientId(_patientId);
         if (assessments.isNotEmpty) {
           final lastType = assessments.first.assessmentType;
           final programme = Programme.fromTag(lastType);
@@ -737,7 +720,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     context.go(
       '/patients/visit/${widget.encounterId}/form$originParam',
       extra: {
-        'patientId': widget.patientId,
+        'patientId': _patientId,
         'memberId': widget.memberId,
         'householdId': widget.householdId,
         'patientAge': widget.patientAge,
@@ -865,7 +848,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: AiScribeBanner(
                         encounterId: widget.encounterId,
-                        patientId: widget.patientId,
+                        patientId: _patientId,
                         isFemale:
                             vm.patientContext.sex == Sex.female,
                         tapStartsLiveAsr: true,

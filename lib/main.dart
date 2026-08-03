@@ -273,6 +273,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     syncService: _sync,
     pushService: _offlinePush,
     authState: widget.authState,
+    authRepo: widget.authRepo,
     coachingRepo: _coachingRepo,
   );
 
@@ -413,6 +414,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<RiskScoringService>.value(value: _risk),
         ChangeNotifierProvider<OfflineSyncService>.value(value: _sync),
         ChangeNotifierProvider<OfflinePushService>.value(value: _offlinePush),
+        Provider<SyncConnectivityService>.value(value: _connectivitySync),
         Provider<WorklistRepository>.value(value: _worklist),
         Provider<PatientRepository>.value(value: _patientRepo),
         Provider<ReferralDao>.value(value: _referralDao),
@@ -511,7 +513,7 @@ class _UhisNextAppState extends State<UhisNextApp>
           create: (_) =>
               AiFeatureTogglesNotifier(const FlutterSecureStorage())..load(),
         ),
-        // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
+        // SK → SS → sub-village hierarchy (memory + disk cache; cleared on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(
             value: _userHierarchy),
         // EPI immunisation DAO + repository — exposed for ImmunisationTimelineScreen + PatientContextBuilder

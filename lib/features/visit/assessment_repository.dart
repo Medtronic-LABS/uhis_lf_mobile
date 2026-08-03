@@ -17,6 +17,7 @@ import '../../core/models/provance_dto.dart';
 import '../../core/sync/offline_push_service.dart';
 import '../patient/followup_call_service.dart';
 import 'forms/pregnancy_outcome_side_effects.dart';
+import 'forms/visit_summary_details.dart';
 import 'forms/vitals_trend.dart';
 
 /// Repository for offline-first assessment management matching Android pattern.
@@ -107,13 +108,25 @@ class AssessmentRepository extends ChangeNotifier {
       'encounterId': ?encounterId,
     };
 
-    final entity = LocalAssessmentEntity(
-      id: id,
+    // Screens hand us whatever id they had on hand, which since the local-PK
+    // migration is usually the member's autoincrement id rather than its FHIR
+    // id. Resolve against the member row here so the stored assessment carries
+    // the same identity Android writes.
+    final identity = await _resolveEncounterIdentity(
       householdMemberLocalId: householdMemberLocalId,
       memberId: memberId,
       householdId: householdId,
       patientId: patientId,
       villageId: villageId,
+    );
+
+    final entity = LocalAssessmentEntity(
+      id: id,
+      householdMemberLocalId: householdMemberLocalId,
+      memberId: identity.memberId,
+      householdId: identity.householdId,
+      patientId: identity.patientId,
+      villageId: identity.villageId,
       assessmentType: assessmentType.toUpperCase(),
       assessmentDetails: jsonEncode(assessmentDetails),
       otherDetails: enrichedOtherDetails.isNotEmpty
@@ -139,6 +152,104 @@ class AssessmentRepository extends ChangeNotifier {
     await _refreshPendingCount();
 
     return id;
+  }
+
+  /// Spice `updateOtherAssessmentDetails` — merge Step 3 summary keys into
+  /// each pending assessment for this visit and return how many rows were
+  /// updated. Caller should then [syncPendingAssessments].
+  Future<int> applyStep3Summary({
+    required String encounterId,
+    DateTime? nextVisitDate,
+    required bool isReferred,
+    String? referralFacilityType,
+    String? referredSiteId,
+  }) async {
+    final updated = await _dao.mergeOtherDetailsForEncounter(
+      encounterId: encounterId,
+      patchFor: (row) => VisitSummaryDetails.patchFor(
+        assessmentType: row.assessmentType,
+        nextVisitDate: nextVisitDate,
+        isReferred: isReferred || row.isReferred,
+        referralFacilityType: referralFacilityType,
+        referredSiteId: referredSiteId,
+      ),
+    );
+    if (updated > 0) {
+      debugPrint(
+        '[AssessmentRepo] Step 3 summary applied to $updated assessment(s) '
+        'encounter=$encounterId nextVisit=$nextVisitDate referred=$isReferred',
+      );
+      await _refreshPendingCount();
+    }
+    return updated;
+  }
+
+  /// Resolve the encounter identity from the member row, mirroring the join
+  /// Android's `AssessmentDAO` does at sync time. Caller-supplied values win
+  /// only when the member row has nothing better to offer.
+  Future<({
+    String? memberId,
+    String? householdId,
+    String? patientId,
+    String? villageId,
+  })> _resolveEncounterIdentity({
+    required int householdMemberLocalId,
+    String? memberId,
+    String? householdId,
+    String? patientId,
+    String? villageId,
+  }) async {
+    String? keep(String? value) => value?.isNotEmpty == true ? value : null;
+
+    final dao = _memberDao;
+    if (dao == null) {
+      return (
+        memberId: memberId,
+        householdId: householdId,
+        patientId: patientId,
+        villageId: villageId,
+      );
+    }
+
+    try {
+      var member = householdMemberLocalId > 0
+          ? await dao.getById('$householdMemberLocalId')
+          : null;
+      if (member == null && keep(patientId) != null) {
+        member = await dao.getByPatientId(patientId!);
+      }
+      if (member == null) {
+        debugPrint(
+            '[Assessment] identity unresolved — localId=$householdMemberLocalId '
+            'patientId=$patientId; storing caller-supplied ids');
+        return (
+          memberId: memberId,
+          householdId: householdId,
+          patientId: patientId,
+          villageId: villageId,
+        );
+      }
+      final resolved = (
+        memberId: keep(member.fhirId) ?? keep(memberId),
+        householdId: keep(member.householdFhirId) ?? keep(householdId),
+        patientId: keep(patientId) ?? keep(member.patientId),
+        villageId: keep(villageId) ??
+            keep(member.subVillageId) ??
+            keep(member.villageId),
+      );
+      debugPrint(
+          '[Assessment] identity resolved — member=${resolved.memberId} '
+          'household=${resolved.householdId} village=${resolved.villageId}');
+      return resolved;
+    } catch (e) {
+      debugPrint('[Assessment] identity lookup failed: $e');
+      return (
+        memberId: memberId,
+        householdId: householdId,
+        patientId: patientId,
+        villageId: villageId,
+      );
+    }
   }
 
   /// Batch sync all pending assessments via `offline-sync/create` matching Android.
@@ -178,7 +289,13 @@ class AssessmentRepository extends ChangeNotifier {
       // only retries pending + networkError (server rejections stay failed).
       final includeFailed =
           syncMode == 'ManualSync' || syncMode == 'InitialSync';
-      final pending = await _dao.getUnsynced(includeFailed: includeFailed);
+      final queue = await _dao.getUnsyncedForPush(includeFailed: includeFailed);
+      final pending = queue.ready;
+      if (queue.blocked.isNotEmpty) {
+        debugPrint(
+            '[AssessmentSync] Holding ${queue.blocked.length} assessment(s) — '
+            'member or household not registered server-side yet');
+      }
       debugPrint('[AssessmentSync] Pending count: ${pending.length} (syncMode=$syncMode)');
       if (pending.isEmpty) return 0;
 
@@ -362,12 +479,49 @@ class AssessmentRepository extends ChangeNotifier {
         debugPrint(
             '[AssessmentSync] Queue accepted (HTTP $status) — polling status '
             'for requestId=$requestId');
-        final terminal = await _pollOfflineSyncStatus(
+        final poll = await _pollOfflineSyncStatus(
           requestId: requestId,
           deviceId: deviceId,
         );
-        if (terminal == _OfflineSyncPollResult.success) {
-          await _dao.updateSyncStatus(ids, AssessmentSyncStatus.success);
+        if (poll.overall == _OfflineSyncPollResult.inProgress) {
+          // Leave rows inProgress (not pending) so the next sync does not
+          // re-POST duplicates. Stuck reclaim is age-gated in
+          // LocalAssessmentDao.resetStuckInProgress.
+          debugPrint(
+              '[AssessmentSync] Status still InProgress after polls — leaving '
+              '${ids.length} as inProgress (requestId=$requestId)');
+          return 0;
+        }
+
+        // Attribute each verdict to the assessment the server named. Anything
+        // it did not name inherits the batch outcome.
+        final succeededIds = <String>[];
+        final failedIds = <String>[];
+        for (final entity in assessments) {
+          final reported = entity.referenceId == null
+              ? null
+              : poll.assessmentStatusByReference[entity.referenceId];
+          final ok = reported == null
+              ? poll.overall == _OfflineSyncPollResult.success
+              : reported == 'Success';
+          (ok ? succeededIds : failedIds).add(entity.id);
+          final fhirId = entity.referenceId == null
+              ? null
+              : poll.assessmentFhirIdByReference[entity.referenceId];
+          if (ok && fhirId != null && fhirId.isNotEmpty) {
+            await _dao.applyFhirIdByReferenceId(entity.referenceId!, fhirId);
+          }
+        }
+
+        if (failedIds.isNotEmpty) {
+          await _dao.updateSyncStatus(failedIds, AssessmentSyncStatus.failed);
+        }
+        if (succeededIds.isNotEmpty) {
+          await _dao.updateSyncStatus(
+              succeededIds, AssessmentSyncStatus.success);
+        }
+
+        if (failedIds.isEmpty) {
           debugPrint('[AssessmentSync] Marked ${ids.length} as success');
           if (pushedFollowUpIds.isNotEmpty && _followUpCalls != null) {
             try {
@@ -389,21 +543,13 @@ class AssessmentRepository extends ChangeNotifier {
           }
           return ids.length;
         }
-        if (terminal == _OfflineSyncPollResult.failed) {
-          await _dao.updateSyncStatus(ids, AssessmentSyncStatus.failed);
-          debugPrint(
-              '[AssessmentSync] ✗ Status poll reported Failed — marked '
-              '${ids.length} as failed');
-          throw StateError(
-              'Batch sync Failed for requestId=$requestId (status poll)');
-        }
-        // Still InProgress after retries — leave rows inProgress (not pending)
-        // so the next sync does not re-POST duplicates. Stuck reclaim is
-        // age-gated in LocalAssessmentDao.resetStuckInProgress.
+
         debugPrint(
-            '[AssessmentSync] Status still InProgress after polls — leaving '
-            '${ids.length} as inProgress (requestId=$requestId)');
-        return 0;
+            '[AssessmentSync] ✗ Status poll reported Failed — marked '
+            '${failedIds.length} as failed, ${succeededIds.length} as success');
+        throw StateError(
+            'Batch sync Failed for requestId=$requestId (status poll): '
+            '${failedIds.length} of ${ids.length} assessment(s) rejected');
       } else {
         // Server returned an error response — mark as failed (not network error).
         // Failed assessments are NOT automatically retried; require manual sync.
@@ -481,6 +627,89 @@ class AssessmentRepository extends ChangeNotifier {
         .where((r) => _isChildhoodVisitKind(r.kind?.toUpperCase() ?? ''))
         .length;
     return count;
+  }
+
+  /// The keys one patient's assessments can be filed under.
+  ///
+  /// A visit stamps `local_assessments` with whatever id its screen carried
+  /// (usually `members.patient_id`), while sync files `assessments` under the
+  /// local member PK — see [MemberDao.patientIdsByMemberIds]. Reading only one
+  /// of them hides half the patient's ANC history.
+  static List<String> _idsFor(String patientId, String? alsoId) =>
+      <String>{patientId, if (alsoId != null) alsoId}
+          .where((id) => id.isNotEmpty)
+          .toList(growable: false);
+
+  /// Local rows across [ids], newest-first and de-duplicated by row id.
+  Future<List<LocalAssessmentEntity>> _localRows(List<String> ids) async {
+    if (ids.length == 1) return _dao.getByPatientId(ids.first);
+    final seen = <String>{};
+    final out = <LocalAssessmentEntity>[];
+    for (final id in ids) {
+      for (final row in await _dao.getByPatientId(id)) {
+        if (seen.add(row.id)) out.add(row);
+      }
+    }
+    out.sort((a, b) => (b.createdAt?.millisecondsSinceEpoch ?? 0)
+        .compareTo(a.createdAt?.millisecondsSinceEpoch ?? 0));
+    return out;
+  }
+
+  /// Synced history rows across [ids], de-duplicated by row id.
+  Future<List<AssessmentRow>> _historyRows(List<String> ids) async {
+    if (_historyDao == null || ids.isEmpty) return const [];
+    final map = await _historyDao.forMany(ids);
+    final seen = <String>{};
+    final out = <AssessmentRow>[];
+    for (final id in ids) {
+      for (final row in map[id] ?? const <AssessmentRow>[]) {
+        if (seen.add(row.id)) out.add(row);
+      }
+    }
+    return out;
+  }
+
+  /// Number of ANC visits already recorded for [patientId], across this
+  /// device's rows and synced history.
+  ///
+  /// Unlike [ancVitalsHistory] this counts every ANC assessment, including
+  /// ones saved without vitals — a visit still happened, so it must advance
+  /// the visit number.
+  Future<int> priorAncVisitCount(String patientId, {String? alsoId}) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return 0;
+    final localRows = await _localRows(ids);
+    var count = localRows
+        .where((r) => r.assessmentType.toUpperCase() == 'ANC')
+        .length;
+    count += (await _historyRows(ids))
+        .where((r) => _isAncVisitKind(r.kind?.toUpperCase() ?? ''))
+        .length;
+    return count;
+  }
+
+  /// True when this pregnancy has already been registered — a PW profile or
+  /// any ANC visit exists locally or in synced history.
+  ///
+  /// Used to decide whether PW registration should be offered again. Reads
+  /// both stores so a device that missed the local enrolment write (or was
+  /// re-installed) still recognises a registered woman.
+  Future<bool> hasPregnancyRegistration(String patientId) async {
+    if (patientId.isEmpty) return false;
+    final localRows = await _dao.getByPatientId(patientId);
+    if (localRows.any((r) {
+      final type = r.assessmentType.toUpperCase();
+      return type == 'ANC' || _isPwProfileKind(type);
+    })) {
+      return true;
+    }
+    if (_historyDao == null) return false;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = historyMap[patientId] ?? const [];
+    return rows.any((r) {
+      final kind = r.kind?.toUpperCase() ?? '';
+      return _isAncVisitKind(kind) || _isPwProfileKind(kind);
+    });
   }
 
   /// Most-recent weight (kg) for [patientId].
@@ -614,12 +843,16 @@ class AssessmentRepository extends ChangeNotifier {
   /// persisted here, so no explicit exclusion is required.
   /// Returns ANC vital snapshots oldest-first from BOTH local submissions and
   /// server-synced history.  The trend card needs ≥2 data points.
-  Future<List<VisitVitals>> ancVitalsHistory(String patientId) async {
-    if (patientId.isEmpty) return const [];
+  Future<List<VisitVitals>> ancVitalsHistory(
+    String patientId, {
+    String? alsoId,
+  }) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return const [];
     final snapshots = <VisitVitals>[];
 
     // 1. Locally-submitted assessments (pending or synced by this app).
-    final localRows = await _dao.getByPatientId(patientId);
+    final localRows = await _localRows(ids);
     for (final row in localRows) {
       if (row.assessmentType.toUpperCase() != 'ANC') continue;
       final snap = _snapshotFromAnc(row.assessmentDetails, row.createdAt);
@@ -627,11 +860,10 @@ class AssessmentRepository extends ChangeNotifier {
     }
 
     // 2. Server-synced assessment history stored during offline sync.
-    if (_historyDao != null) {
-      final historyMap = await _historyDao.forMany([patientId]);
-      final historyRows = historyMap[patientId] ?? const [];
+    {
+      final historyRows = await _historyRows(ids);
       debugPrint('[AssessmentRepo] ANC history lookup: ${historyRows.length} rows '
-          'for patient $patientId');
+          'for ids=$ids');
       for (final row in historyRows) {
         final kind = row.kind?.toUpperCase() ?? '';
         debugPrint('[AssessmentRepo] history row kind="$kind" id=${row.id}');
@@ -662,13 +894,17 @@ class AssessmentRepository extends ChangeNotifier {
   /// Returns `pregnantWomanExistingIllness` and `pregnantWomanOnTreatment`
   /// from the most recent prior ANC assessment. Checks local submissions first,
   /// then server-synced history. Returns null when no prior ANC data found.
-  Future<Map<String, dynamic>?> lastAncIllnessData(String patientId) async {
-    if (patientId.isEmpty) return null;
+  Future<Map<String, dynamic>?> lastAncIllnessData(
+    String patientId, {
+    String? alsoId,
+  }) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return null;
 
     // 1. Most-recent local ANC row (newest-first from DAO).
     // Local ANC details are nested: medicalHistoryPhysicalExamination holds
     // pregnantWomanExistingIllness — unwrap before reading.
-    final localRows = await _dao.getByPatientId(patientId);
+    final localRows = await _localRows(ids);
     for (final row in localRows) {
       if (row.assessmentType.toUpperCase() != 'ANC') continue;
       try {
@@ -686,10 +922,7 @@ class AssessmentRepository extends ChangeNotifier {
     }
 
     // 2. Server-synced history rows (newest-first).
-    if (_historyDao == null) return null;
-    final historyMap = await _historyDao.forMany([patientId]);
-    final historyRows = List<AssessmentRow>.from(
-        historyMap[patientId] ?? const [])
+    final historyRows = List<AssessmentRow>.from(await _historyRows(ids))
       ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
     for (final row in historyRows) {
       if (!_isAncKind(row.kind?.toUpperCase() ?? '')) continue;
@@ -712,22 +945,24 @@ class AssessmentRepository extends ChangeNotifier {
   /// Stable ANC obstetric history fields from the most recent prior ANC:
   /// `previousPregnancyComplications`, `ttTdCompleted`,
   /// `facilityIdentifiedForDelivery`. Returns null when no prior ANC found.
-  Future<Map<String, dynamic>?> lastAncChronicData(String patientId) async {
-    if (patientId.isEmpty) return null;
+  Future<Map<String, dynamic>?> lastAncChronicData(
+    String patientId, {
+    String? alsoId,
+  }) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return null;
     const keys = [
       'previousPregnancyComplications',
       'ttTdCompleted',
       'facilityIdentifiedForDelivery',
     ];
-    final localRows = await _dao.getByPatientId(patientId);
+    final localRows = await _localRows(ids);
     for (final row in localRows) {
       if (row.assessmentType.toUpperCase() != 'ANC') continue;
       final r = _extractKeys(row.assessmentDetails, keys, _ancSubObjects);
       if (r != null) return r;
     }
-    if (_historyDao == null) return null;
-    final historyMap = await _historyDao.forMany([patientId]);
-    final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
+    final rows = List<AssessmentRow>.from(await _historyRows(ids))
       ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
     for (final row in rows) {
       if (!_isAncKind(row.kind?.toUpperCase() ?? '')) continue;
@@ -993,6 +1228,19 @@ class AssessmentRepository extends ChangeNotifier {
         kind.contains('PREGNANCY');
   }
 
+  /// Stricter than [_isAncKind]: counts antenatal visits only, so a delivery
+  /// record (`PREGNANCY_OUTCOME`) is never mistaken for an ANC visit.
+  static bool _isAncVisitKind(String kind) {
+    if (kind.isEmpty || kind.contains('OUTCOME')) return false;
+    return kind.contains('ANC') ||
+        kind.contains('ANTENATAL') ||
+        kind.contains('PRENATAL');
+  }
+
+  /// Pregnant-woman registration record (Spice `PWPROFILE`).
+  static bool _isPwProfileKind(String kind) =>
+      kind.replaceAll('_', '').contains('PWPROFILE');
+
   static bool _isNcdKind(String kind) =>
       kind.contains('NCD') || kind.contains('HYPERTENSION') || kind.contains('DIABETES');
 
@@ -1171,7 +1419,7 @@ class AssessmentRepository extends ChangeNotifier {
   /// or [maxAttempts] is exhausted. Mirrors Android
   /// `ScheduledSyncWork.getSyncStatus` (4 × 10s) /
   /// `OfflineSyncRepository.getSyncStatusForOffline`.
-  Future<_OfflineSyncPollResult> _pollOfflineSyncStatus({
+  Future<_OfflineSyncPollOutcome> _pollOfflineSyncStatus({
     required String requestId,
     required String deviceId,
     int maxAttempts = 4,
@@ -1179,6 +1427,8 @@ class AssessmentRepository extends ChangeNotifier {
   }) async {
     final userId = await _auth.userId();
     var sawFailed = false;
+    final statusByReference = <int, String>{};
+    final fhirIdByReference = <int, String>{};
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
@@ -1213,10 +1463,18 @@ class AssessmentRepository extends ChangeNotifier {
         for (final raw in entities) {
           if (raw is! Map) continue;
           final entityStatus = raw['status']?.toString() ?? '';
+          final reference = int.tryParse(raw['referenceId']?.toString() ?? '');
           debugPrint(
               '[AssessmentSync] status entity type=${raw['type']} '
               'ref=${raw['referenceId']} status=$entityStatus '
               'err=${raw['errorMessage']}');
+          if (raw['type']?.toString() == 'Assessment' && reference != null) {
+            statusByReference[reference] = entityStatus;
+            final fhirId = raw['fhirId']?.toString();
+            if (fhirId != null && fhirId.isNotEmpty && fhirId != 'null') {
+              fhirIdByReference[reference] = fhirId;
+            }
+          }
           if (entityStatus == 'InProgress') {
             anyInProgress = true;
           } else if (entityStatus == 'Failed') {
@@ -1224,9 +1482,13 @@ class AssessmentRepository extends ChangeNotifier {
           }
         }
         if (anyInProgress) continue;
-        return sawFailed
-            ? _OfflineSyncPollResult.failed
-            : _OfflineSyncPollResult.success;
+        return _OfflineSyncPollOutcome(
+          overall: sawFailed
+              ? _OfflineSyncPollResult.failed
+              : _OfflineSyncPollResult.success,
+          assessmentStatusByReference: statusByReference,
+          assessmentFhirIdByReference: fhirIdByReference,
+        );
       } on DioException catch (e) {
         debugPrint(
             '[AssessmentSync] status poll $attempt/$maxAttempts error: '
@@ -1234,13 +1496,31 @@ class AssessmentRepository extends ChangeNotifier {
         // Transport blip — keep trying; do not mark Failed yet.
       }
     }
-    return sawFailed
-        ? _OfflineSyncPollResult.failed
-        : _OfflineSyncPollResult.inProgress;
+    return _OfflineSyncPollOutcome(
+      overall: sawFailed
+          ? _OfflineSyncPollResult.failed
+          : _OfflineSyncPollResult.inProgress,
+      assessmentStatusByReference: statusByReference,
+      assessmentFhirIdByReference: fhirIdByReference,
+    );
   }
 }
 
 enum _OfflineSyncPollResult { success, failed, inProgress }
+
+/// Terminal verdict for the batch plus the per-assessment breakdown, keyed by
+/// the numeric `referenceId` the server echoes for each entity.
+class _OfflineSyncPollOutcome {
+  const _OfflineSyncPollOutcome({
+    required this.overall,
+    required this.assessmentStatusByReference,
+    required this.assessmentFhirIdByReference,
+  });
+
+  final _OfflineSyncPollResult overall;
+  final Map<int, String> assessmentStatusByReference;
+  final Map<int, String> assessmentFhirIdByReference;
+}
 
 enum _BiometricKind { height, weight }
 

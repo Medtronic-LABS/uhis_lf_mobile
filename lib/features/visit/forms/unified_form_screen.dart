@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,7 +8,6 @@ import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/widgets/gestational_age_card.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/i18n/app_locale.dart';
 import '../../../core/theme/app_theme.dart';
@@ -116,6 +117,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// preferred over counting vitals history for the 1-based visit label.
   int? _ancVisitNoFromSnapshot;
 
+  /// ANC assessments already on file (local + synced history). Counts visits
+  /// [_priorAncVisits] drops because they carry no vitals.
+  int _priorAncVisitCount = 0;
+
   /// Weight (kg) from the patient's most-recent prior visit across ALL
   /// programme types — used for the weight-delta badge.  `null` until loaded.
   double? _lastRecordedWeight;
@@ -163,6 +168,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         final hasAnc = widget.activeFormTypes.contains('anc') ||
             widget.enrolledFormTypes.contains('anc');
         if (hasAnc) {
+          await notifier.preloadFromPregnancySnapshot();
           await notifier.preloadAncMedicalHistory();
           await notifier.preloadAncChronic();
         }
@@ -199,9 +205,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             setState(() => _priorAncVisits = history);
           }
         });
-        context.read<PregnancySnapshotDao>().byPatient(notifier.patientId).then((snap) {
+        notifier.pregnancySnapshot().then((snap) {
           if (mounted && snap?.ancVisitNo != null) {
             setState(() => _ancVisitNoFromSnapshot = snap!.ancVisitNo);
+          }
+        });
+        notifier.priorAncVisitCount().then((count) {
+          if (mounted && count > 0) {
+            setState(() => _priorAncVisitCount = count);
           }
         });
         // Load LMP/EDD for the gestational-age card (snapshot → seed → history).
@@ -214,12 +225,18 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   int? _effectiveGestationalWeeks(UnifiedFormNotifier notifier) =>
       notifier.gestationalWeeks ?? widget.gestationalWeeks;
 
-  /// 1-based ANC visit number: snapshot counter + 1 when available, else
-  /// prior vitals history length + 1 (legacy fallback).
+  /// 1-based ANC visit number: the highest count any source knows about, + 1.
+  ///
+  /// The snapshot counter is authoritative when seeded, but it is missing for
+  /// pregnancies registered on another device, so the assessments on file act
+  /// as a floor. Taking the max means the number can never regress and repeat
+  /// a visit the patient has already had.
   int _ancVisitNumber() {
-    final stored = _ancVisitNoFromSnapshot;
-    if (stored != null) return stored + 1;
-    return _priorAncVisits.length + 1;
+    final completed = math.max(
+      _ancVisitNoFromSnapshot ?? 0,
+      math.max(_priorAncVisitCount, _priorAncVisits.length),
+    );
+    return completed + 1;
   }
 
   bool _isFieldVisible(
@@ -318,6 +335,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           currentData: notifier.data,
           gestationalWeeks: effectiveGa,
           enrolledFormTypes: widget.enrolledFormTypes,
+          ageInMonths: widget.ageInMonths,
         );
         final outcomeValue = notifier.data.getValue('deliveryOutcomeType');
         if (widget.activeFormTypes.contains('pregnancyOutcome')) {
@@ -381,19 +399,16 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             (widget.eddMs != null
                 ? DateTime.fromMillisecondsSinceEpoch(widget.eddMs!)
                 : null);
-        // Always mount on ANC visits — even when LMP/EDD/GA are missing
-        // (shows "—" placeholders). Android shows pregnancy context whenever
-        // the ANC form is open; gating on dates hid the card for patients
-        // whose pregnancyInfos snapshot has null LMP (common after messy
-        // PNC/outcome history).
+        // Only show when we have real pregnancy dating (LMP, EDD, or GA).
+        // Empty "—" placeholders confuse first-time PW+ANC (LMP still being
+        // entered below) and hide nothing useful when PW never recorded LMP.
         final hasLmpData =
             cardLmp != null || cardEdd != null || effectiveGa != null;
-        if (isAnc) {
+        if (isAnc && hasLmpData) {
           debugPrint(
             '[LMP] card MOUNT patient=${notifier.patientId} '
             'lmp=$cardLmp edd=$cardEdd '
-            'weeks=$effectiveGa '
-            'hasDate=$hasLmpData',
+            'weeks=$effectiveGa',
           );
           items.add(GestationalAgeCard(
             lmpDate: cardLmp,
@@ -402,6 +417,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             bottomPadding: AppSpacing.xl,
             ancVisitNumber: _ancVisitNumber().toString(),
           ));
+        } else if (isAnc) {
+          debugPrint(
+            '[LMP] card HIDE — no LMP/EDD/GA yet patient=${notifier.patientId}',
+          );
         } else {
           debugPrint(
             '[LMP] card SKIP — not ANC activeFormTypes=${widget.activeFormTypes}',
@@ -437,7 +456,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             validationErrors: notifier.validationErrors,
             onFieldChanged: notifier.updateField,
             previousWeight: _lastRecordedWeight,
-            heightReadOnly: notifier.isHeightLockedFromPrior,
+            // Visit 2+: keep height visible but disabled so the height+weight
+            // pair card still renders weight (standalone weight is absorbed).
+            heightReadOnly: notifier.isHeightLockedFromPrior ||
+                (isAnc && _ancVisitNumber() > 1),
             gestationalWeeks: effectiveGa,
             ancVisitNumber: _ancVisitNumber(),
             ageInMonths: widget.ageInMonths,
@@ -794,13 +816,18 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// Returns the set of field IDs that are currently hidden (per the same
   /// visibility rules used for rendering and validation) but still hold a
   /// value in [notifier] — these are stale and must not reach the payload.
+  ///
+  /// [height] is never stripped: on visit 2+ height stays visible (read-only)
+  /// with the prior value for continuity / locked biometric prefill.
   Set<String> _computeHiddenFieldIds(
     UnifiedFormNotifier notifier,
     List<AnnotatedFormSection> annotated,
   ) {
+    const preserveHidden = {'height'};
     final hidden = <String>{};
     for (final a in annotated) {
       for (final ref in a.section.fieldRefs) {
+        if (preserveHidden.contains(ref.id)) continue;
         final def = _config!.fields[ref.id];
         if (def == null) continue;
         if (_isFieldVisible(def, notifier, formType: a.section.formType)) {
@@ -2952,8 +2979,10 @@ class _SectionCard extends StatelessWidget {
           isDecimal: isDecimal,
           unit: def.unitMeasurement,
           hint: def.hintText,
+          readOnly: def.id == 'height' && heightReadOnly,
           initialValue: currentValue?.toString(),
           onChanged: (v) {
+            if (def.id == 'height' && heightReadOnly) return;
             if (v == null || v.isEmpty) {
               onFieldChanged(def.id, null);
             } else {

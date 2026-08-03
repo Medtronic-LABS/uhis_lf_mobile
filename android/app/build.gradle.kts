@@ -80,4 +80,9 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    // enableEdgeToEdge() — explicit opt-in the Play Console SDK 35 static
+    // check looks for; don't rely on the version pulled in transitively via
+    // FlutterFragmentActivity -> FragmentActivity.
+    implementation("androidx.activity:activity-ktx:1.9.3")
 }

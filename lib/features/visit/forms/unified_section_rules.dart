@@ -153,17 +153,25 @@ abstract final class UnifiedSectionRules {
     localClaimed.addAll(_bloodGlucoseEntryFieldIds);
   }
 
+  /// Spice `BDNCDAssessmentFragment.handleDateOfBirth` — Eye Care card in
+  /// NCD is hidden when the member is under 35 years.
+  static const int ncdEyeCareMinAgeYears = 35;
+
   /// Returns ordered, deduplicated [AnnotatedFormSection]s for rendering.
   ///
   /// [enrolledFormTypes] — the expanded formType keys (from `_toFormTypes()`)
   /// of programmes the patient is already enrolled in.  These sections are
   /// rendered between Vitals and the pathway-recommended sections.
+  ///
+  /// [ageInMonths] — member age for NCD Eye Care gate (Spice parity: hide
+  /// when under [ncdEyeCareMinAgeYears]). Null leaves the section visible.
   static List<AnnotatedFormSection> activeSections({
     required FormConfig config,
     required List<String> activeFormTypes,
     required CanonicalVisitData currentData,
     int? gestationalWeeks,
     List<String> enrolledFormTypes = const [],
+    int? ageInMonths,
   }) {
     final claimedFieldIds = <String>{};
     final vitalsSections = <AnnotatedFormSection>[];
@@ -180,6 +188,7 @@ abstract final class UnifiedSectionRules {
           enrolledFormTypes: enrolledFormTypes,
           currentData: currentData,
           gestationalWeeks: gestationalWeeks,
+          ageInMonths: ageInMonths,
         )) { continue; }
 
         final remaining =
@@ -225,6 +234,7 @@ abstract final class UnifiedSectionRules {
           enrolledFormTypes: enrolledFormTypes,
           currentData: currentData,
           gestationalWeeks: gestationalWeeks,
+          ageInMonths: ageInMonths,
         )) {
           continue;
         }
@@ -365,8 +375,19 @@ abstract final class UnifiedSectionRules {
     required CanonicalVisitData currentData,
     List<String> enrolledFormTypes = const [],
     int? gestationalWeeks,
+    int? ageInMonths,
   }) {
     final id = section.sectionId;
+
+    // Spice BDNCDAssessmentFragment.handleDateOfBirth: hide NCD Eye Care
+    // when age < 35. Standalone eye_care form is unaffected.
+    if (id == 'eyeCare' && section.formType == 'ncd') {
+      if (ageInMonths != null &&
+          ageInMonths < ncdEyeCareMinAgeYears * 12) {
+        return false;
+      }
+    }
+
     if (section.formType == 'pregnancyOutcome') {
       // ignore: avoid_print
       print('[SectionVisibility] pregnancyOutcome section=$id '
@@ -537,7 +558,8 @@ abstract final class FieldVisibilityRules {
   ///
   /// [gestationalWeeks] — current GA from LMP/snapshot; null when unknown.
   /// [ancVisitNumber] — 1-based ANC visit count; null treated as visit 1 for
-  /// height / BMI / previous-pregnancy-complications gates.
+  /// BMI / previous-pregnancy-complications gates. Height stays visible on
+  /// visit 2+ (read-only in the UI) so the height+weight pair still renders.
   /// [formType] — owning programme layout key (e.g. `ncd`, `anc`).
   static bool isFieldVisible({
     required FieldDef field,
@@ -827,8 +849,11 @@ abstract final class FieldVisibilityRules {
       case 'previousPregnancyComplications':
         return visit == 1 && gravida > 1;
 
+      // Height stays visible on every ANC visit. Visit 2+ locks it read-only
+      // in the form UI so the height+weight pair card still shows weight
+      // (Spice hides height; Flutter keeps it disabled for the pair layout).
       case 'height':
-        return visit == 1;
+        return true;
 
       case 'bmi':
         return visit == 1 && (ga == null || ga < _gaWeek12);
@@ -872,6 +897,11 @@ abstract final class FieldVisibilityRules {
       case 'ultrasound':
       case 'ancFromMedicalDoctor':
         return ga != null && ga >= _gaWeek28;
+
+      // Flutter-only vitals field (Spice uses danger-sign options). Show with
+      // fundal height when fetal size is clinically assessable.
+      case 'fetalMovement':
+        return ga != null && ga >= _gaWeek24;
 
       default:
         return null;

@@ -536,7 +536,11 @@ abstract final class AppTextStyles {
   // nearest 0.5px so the scale stays on the app's existing half-point grid.
 
   // ─── Header ────────────────────────────────────────────────
-  // .header-title: Nunito 20px w800 white
+  // .header-title: Nunito 20px w800 white. Also doubles as the Lock screen's
+  // top-bar title slot, which can hold a real ward/area name instead of the
+  // "LEAPWELL" wordmark (see lock_barrier.dart) — kept smaller/lighter than
+  // [brandWordmark] deliberately so a real place name doesn't overflow the
+  // compact header; not a drift, a documented exception.
   static const TextStyle headerTitle = TextStyle(
     fontFamily: AppFonts.display, fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w800,
     color: Colors.white,
@@ -545,6 +549,16 @@ abstract final class AppTextStyles {
   static const TextStyle headerSub = TextStyle(
     fontFamily: AppFonts.body, fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
     color: AppColors.onDarkLow,
+  );
+
+  // Shared "LEAPWELL" brand wordmark treatment (Splash + Login both render
+  // the literal wordmark as a standalone brand moment). Size and color vary
+  // by context — call `.copyWith(fontSize: ..., color: ...)` at each site —
+  // but family/weight/letterSpacing stay in one place instead of three.
+  static const TextStyle brandWordmark = TextStyle(
+    fontFamily: AppFonts.display,
+    fontWeight: FontWeight.w900,
+    letterSpacing: -0.5,
   );
 
   // Household list/detail navy headers: same size as headerTitle/headerSub

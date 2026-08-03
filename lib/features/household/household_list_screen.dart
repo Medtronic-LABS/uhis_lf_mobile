@@ -56,6 +56,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  // Household IDs whose "other members" panel is expanded.
+  final Set<String> _expandedHouseholdIds = {};
+
   // patientId -> queue item, so a household's flagged member (if any) can be
   // rendered with its real urgency badge/status via MissionQueueCard.
   Map<String, MissionQueueItem> _queueItems = {};
@@ -630,6 +633,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
       itemBuilder: (context, index) {
         final item = filteredItems[index];
         final primary = _primaryMember(item);
+        final others = item.members.where((m) => m != primary).toList();
+        final id = item.id ?? '';
         final q = _searchQuery;
         final highlightPrimary = primary != null &&
             q.isNotEmpty &&
@@ -647,9 +652,23 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
                 )
               : const SizedBox.shrink(),
           highlightPrimary: highlightPrimary,
+          searchQuery: q,
           primaryRelation: primary != null
               ? _displayRelation(primary.relation)
               : null,
+          otherMembers: others,
+          isExpanded: _expandedHouseholdIds.contains(id),
+          onToggleExpanded: id.isEmpty
+              ? null
+              : () => setState(() {
+                  if (!_expandedHouseholdIds.remove(id)) {
+                    _expandedHouseholdIds.add(id);
+                  }
+                }),
+          onMemberTap: (other) => _navigateToMemberDetail(
+            context,
+            _MemberInfo.fromMember(other, item),
+          ),
           onTap: () => _navigateToDetail(context, item),
         );
       },
@@ -795,7 +814,12 @@ class _HouseholdCard extends StatelessWidget {
     required this.villageDisplayName,
     required this.primaryMemberRow,
     this.highlightPrimary = false,
+    this.searchQuery = '',
     this.primaryRelation,
+    required this.otherMembers,
+    required this.isExpanded,
+    required this.onToggleExpanded,
+    required this.onMemberTap,
     this.onTap,
   });
 
@@ -806,9 +830,17 @@ class _HouseholdCard extends StatelessWidget {
   /// Whether the primary member row should be highlighted (name matches query).
   final bool highlightPrimary;
 
+  /// Active search query — used to highlight matching other members and
+  /// auto-expand the panel when a non-primary member matches.
+  final String searchQuery;
+
   /// The primary member's relation to the household head (e.g. "Husband"),
   /// or null when not shown (blank, or the member IS the head/self).
   final String? primaryRelation;
+  final List<_HouseholdMember> otherMembers;
+  final bool isExpanded;
+  final VoidCallback? onToggleExpanded;
+  final void Function(_HouseholdMember other) onMemberTap;
   final VoidCallback? onTap;
 
   @override
@@ -936,9 +968,182 @@ class _HouseholdCard extends StatelessWidget {
                 ? _SearchMatchHighlight(child: primaryMemberRow)
                 : primaryMemberRow,
           ),
+          if (otherMembers.isNotEmpty)
+            Builder(builder: (context) {
+              final anyOtherMatches = searchQuery.isNotEmpty &&
+                  otherMembers.any(
+                    (m) => m.name?.toLowerCase().contains(searchQuery) ?? false,
+                  );
+              final showExpanded = isExpanded || anyOtherMatches;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  InkWell(
+                    onTap: onToggleExpanded,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            HouseholdListStrings.otherMembersToggle(
+                              otherMembers.length,
+                            ),
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: lc.aiPurple,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          AnimatedRotation(
+                            turns: showExpanded ? 0.5 : 0,
+                            duration: const Duration(milliseconds: 200),
+                            child: MockupIcons.chevronDown(color: lc.aiPurple),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  AnimatedCrossFade(
+                    firstChild: const SizedBox(width: double.infinity),
+                    secondChild: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Divider(height: 1, color: lc.surfaceTrack),
+                          for (final other in otherMembers)
+                            _OtherMemberRow(
+                              member: other,
+                              isHighlighted: searchQuery.isNotEmpty &&
+                                  (other.name
+                                          ?.toLowerCase()
+                                          .contains(searchQuery) ??
+                                      false),
+                              onTap: () => onMemberTap(other),
+                            ),
+                        ],
+                      ),
+                    ),
+                    crossFadeState: showExpanded
+                        ? CrossFadeState.showSecond
+                        : CrossFadeState.showFirst,
+                    duration: const Duration(milliseconds: 200),
+                    sizeCurve: Curves.easeOut,
+                  ),
+                ],
+              );
+            }),
         ],
       ),
     );
+  }
+}
+
+/// One row in a household card's expanded "other members" panel — initials
+/// avatar, name, relation + age/gender, and an "Enrolled" tag, matching the
+/// v13 mockup's `otherMembers` treatment. The mockup's static prototype has
+/// no tap action here; this app has a real Patient Details page, so tapping
+/// opens it — real capability shouldn't regress just because the mockup
+/// couldn't demonstrate it.
+class _OtherMemberRow extends StatelessWidget {
+  const _OtherMemberRow({
+    required this.member,
+    required this.onTap,
+    this.isHighlighted = false,
+  });
+
+  final _HouseholdMember member;
+  final VoidCallback onTap;
+  final bool isHighlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
+    final age = _MemberInfo._calculateAge(member.dateOfBirth);
+    final ageGender = [
+      if (age != null) '$age',
+      if (member.gender != null) member.gender,
+    ].whereType<String>().join('/');
+    final subtitle = [
+      if (member.relation != null && member.relation!.isNotEmpty)
+        member.relation,
+      if (ageGender.isNotEmpty) ageGender,
+    ].whereType<String>().join(' · ');
+
+    final row = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: lc.surfaceTrack,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                memberInitials(member.name),
+                style: TextStyle(
+                  fontFamily: AppFonts.display,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: lc.textMuted,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    member.name ?? HouseholdListStrings.unnamedMember,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight:
+                          isHighlighted ? FontWeight.w800 : FontWeight.w700,
+                      color: lc.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (subtitle.isNotEmpty)
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: lc.textMuted,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: lc.statusSuccessSurface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                HouseholdListStrings.enrolledTag,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: lc.statusSuccessAction,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return isHighlighted ? _SearchMatchHighlight(child: row) : row;
   }
 }
 

@@ -196,12 +196,7 @@
         "fieldRefs": [
           "counsellingMotherCare",
           "motherCare",
-          "newbornCare",
-          {
-            "fieldName": "Referral Facility",
-            "isMandatory": false,
-            "id": "referralFacility"
-          }
+          "newbornCare"
         ]
       }
     ]
@@ -682,11 +677,6 @@
             "isMandatory": false
           },
           {
-            "id": "urinarySugar",
-            "fieldName": "Urinary Sugar",
-            "isMandatory": false
-          },
-          {
             "id": "urinaryBilirubin",
             "fieldName": "Urinary Bilirubin",
             "isMandatory": false
@@ -772,7 +762,7 @@
           },
           {
             "id": "facilityIdentifiedForDelivery",
-            "fieldName": "Facility identified for delivery",
+            "fieldName": "Has the PW identified a health facility for institutional delivery?",
             "isMandatory": false
           }
         ]

@@ -80,7 +80,7 @@ class EnrollmentController extends ChangeNotifier {
       villageName: villageName,
       subVillageId: subVillageId,
       subVillageName: subVillageName,
-      householdType: 'Single-family',
+      householdType: '',
       numberOfMembers: 0,
       houseNumber: '',
       occupation: '',
@@ -204,9 +204,6 @@ class EnrollmentController extends ChangeNotifier {
         'village=${_household!.villageId} '
         'subVillage=${_household!.subVillageId}');
 
-    if (_household!.householdType.isEmpty) {
-      errors.add('Household type is required');
-    }
     if (_household!.numberOfMembers <= 0) {
       errors.add('Number of members must be greater than 0');
     }

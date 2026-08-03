@@ -66,6 +66,7 @@ analysis_benchmark.json
 .pub-preload-cache/
 .pub/
 build/
+releases/
 flutter_*.png
 linked_*.ds
 unlinked.ds
@@ -146,3 +147,6 @@ app.*.symbols
 # Demo APK build artifacts (too large for GitHub, keep local only)
 demo_jul_1/
 *.apk
+
+# Claude Code local settings (per-developer permission grants, machine-specific paths)
+.claude/settings.local.json

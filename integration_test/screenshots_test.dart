@@ -107,25 +107,17 @@ void main() {
     // ── Visit flow — Step 1 triage/symptom picker ───────────────────────────
     // Best-effort: reaching this (and especially the Step 3 AI Recommendation
     // screen further beyond it) depends on this synced test account having
-    // patient/vitals data that lets `NewPatientVisitStrings.startVisitCta`
-    // resolve to a single eligible service without extra taps. If the CTA
-    // isn't present or a service picker blocks it, log and move on rather
-    // than fail the whole capture run — treat those screens as manual
-    // captures until a stable test-data fixture exists for them.
+    // patient data that lets Start Visit open the shared VisitFlowScreen.
+    // If the CTA isn't present, log and move on rather than fail the whole
+    // capture run — treat those screens as manual captures until a stable
+    // test-data fixture exists for them.
     try {
-      final startVisit = find.text(NewPatientVisitStrings.startVisitCta);
+      final startVisit = find.text(PatientContextStrings.startVisit);
       if (startVisit.evaluate().isEmpty) {
         throw StateError('Start Visit CTA not present on this account/state');
       }
       await tester.tap(startVisit.first);
       await _settle(tester, 5);
-
-      if (find.text(NewPatientVisitStrings.selectServiceCta)
-          .evaluate()
-          .isNotEmpty) {
-        throw StateError(
-            'A service must be selected first — not automated here');
-      }
 
       await _settle(tester, 3);
       await binding.takeScreenshot('03_visit_triage');

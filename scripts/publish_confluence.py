@@ -14,7 +14,7 @@ Required env vars:
   CONFLUENCE_PARENT_PAGE_ID Parent page numeric ID, e.g. 712540457
 """
 
-import os, re, subprocess, datetime, sys
+import os, re, subprocess, datetime, sys, json
 from pathlib import Path
 
 try:
@@ -93,31 +93,27 @@ def note(text):
 
 def parse_sections():
     """
-    Parse section_registry.dart → list of (sectionId, programmes, priority, fieldCount).
-    Walks through FormSection( blocks and extracts the three header fields.
+    Parse layout_manifests.json → list of (sectionId, formType, priority, fieldCount).
     """
-    path = REPO_ROOT / "lib/features/visit/composer/section_registry.dart"
-    src = path.read_text()
+    path = REPO_ROOT / "assets/forms/layout_manifests.json"
+    if not path.exists():
+        return []
 
-    # Collect (sectionId, programmes, priority) triples
-    # Pattern: after FormSection( we expect sectionId, programmes, priority in that order
-    blocks = re.findall(
-        r"FormSection\(\s*sectionId:\s*'([^']+)',\s*programmes:\s*\{([^}]+)\},\s*priority:\s*(\d+),",
-        src,
-    )
-
-    # Count FieldDef occurrences per section block
-    section_src_blocks = re.split(r"FormSection\(", src)[1:]
-
+    manifests = json.loads(path.read_text())
     results = []
-    for i, (sid, progs_raw, prio) in enumerate(blocks):
-        progs = re.sub(r"Programme\.", "", progs_raw).replace(" ", "")
-        # count FieldDef entries in this block (up to next FormSection)
-        block_text = section_src_blocks[i] if i < len(section_src_blocks) else ""
-        field_count = block_text.count("FieldDef(")
-        results.append((sid, progs, int(prio), field_count))
+    priority = 0
+    for manifest in manifests:
+        form_type = manifest.get("formType", "?")
+        for section in manifest.get("sections", []):
+            priority += 1
+            field_refs = section.get("fieldRefs", [])
+            results.append((
+                section.get("sectionId", "?"),
+                form_type,
+                priority,
+                len(field_refs),
+            ))
 
-    results.sort(key=lambda x: x[2])
     return results
 
 
@@ -148,6 +144,9 @@ def parse_cds_alerts():
     Parse cds_rules.dart → list of (alertId, severity, action).
     """
     path = REPO_ROOT / "lib/features/visit/composer/cds_rules.dart"
+    if not path.exists():
+        return []
+
     src = path.read_text()
 
     # Find CdsAlert(...) blocks and extract alertId, severity, action
@@ -643,15 +642,16 @@ def page_assessment_cds():
             "  CDS alert review · Referral decision · Submit to upload queue",
             language="text",
         )
-        + h(2, f"Section Registry ({len(sections)} sections)")
-        + p("Parsed from <code>lib/features/visit/composer/section_registry.dart</code>. "
-            "Add a <code>FormSection</code> here and it appears automatically in this table on the next push.")
+        + h(2, f"Form Sections ({len(sections)} sections)")
+        + p("Parsed from <code>assets/forms/layout_manifests.json</code>. "
+            "Add a section there and it appears automatically in this table on the next push.")
         + table(
             ["Section ID", "Programmes", "Priority", "Fields"],
             [[sid, progs, str(prio), str(fcount)] for sid, progs, prio, fcount in sections],
         )
         + h(2, f"CDS Alert Rules ({len(alerts)} alerts)")
-        + p("Parsed from <code>lib/features/visit/composer/cds_rules.dart</code>.")
+        + p("Parsed from legacy <code>lib/features/visit/composer/cds_rules.dart</code> when present; "
+            "current dynamic-form builds may not define static alert rows.")
         + table(
             ["Alert ID", "Severity", "Action"],
             [[aid, sev, act] for aid, sev, act in alerts],

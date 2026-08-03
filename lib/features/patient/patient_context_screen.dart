@@ -37,6 +37,8 @@ import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/widgets/gestational_age_card.dart';
 import '../../core/widgets/skeleton.dart';
 import '../visit/triage/patient_context_builder.dart';
+import '../visit/visit_controller.dart';
+import '../visit/visit_start_helper.dart';
 import 'referral_narrative.dart';
 import 'vitals_repository.dart';
 
@@ -115,11 +117,28 @@ class PatientOrMemberData {
   Band? get riskBand => localPatient?.patient.riskBand;
   Modifier? get riskModifier => localPatient?.patient.riskModifier;
   List<String> get riskReasons => localPatient?.patient.riskReasons ?? [];
+  /// A local draft and the synced record of the same visit are treated as one
+  /// visit when their timestamps fall inside this window. The device clock and
+  /// the server `visitDate` rarely agree to the minute, and a visit saved late
+  /// at night syncs back dated the next day.
+  static const Duration _visitMergeWindow = Duration(hours: 48);
+
+  /// True when the row came from [LocalAssessmentDao]. Only local drafts carry
+  /// the on-device sync status; server-backed history rows never do.
+  static bool _isLocalDraft(MemberAssessment a) =>
+      a.rawJson.containsKey('syncStatus');
+
   /// Merged Recent Visits feed — locally-cached first (always available
   /// even offline), then remote-only rows the device hasn't synced yet.
-  /// Deduped by [MemberAssessment.id], sorted DESC by date so newest sits
-  /// at top of the section. Replaces the old remote-or-bust behavior that
-  /// rendered "No assessments yet" whenever the API was offline / empty.
+  /// Sorted DESC by date so newest sits at top of the section. Replaces the
+  /// old remote-or-bust behavior that rendered "No assessments yet" whenever
+  /// the API was offline / empty.
+  ///
+  /// One clinical visit reaches this list under two identities: the local
+  /// draft keyed by its UUID and the synced record keyed by the server
+  /// `encounterId`. Deduping on id alone left both in Care History, so a
+  /// single NCD submit rendered as two "NCD Visit" rows. Same-programme rows
+  /// inside [_visitMergeWindow] are therefore collapsed into one.
   List<MemberAssessment> get assessments {
     final byId = <String, MemberAssessment>{};
     void addAll(List<MemberAssessment> src) {
@@ -133,9 +152,70 @@ class PatientOrMemberData {
     addAll(localAssessments);
     addAll(remoteAssessments);
     addAll(remoteMember?.assessments ?? const []);
-    final out = byId.values.toList();
+
+    // Sort before pairing so the result never depends on hash-map order.
+    final rows = byId.values.toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    final out = <MemberAssessment>[];
+    final absorbed = <int>{};
+    for (final a in rows) {
+      // Pair with the closest unpaired counterpart, so two real visits of the
+      // same programme inside the window each keep their own row.
+      var bestIdx = -1;
+      var bestDelta = _visitMergeWindow;
+      for (var i = 0; i < out.length; i++) {
+        if (absorbed.contains(i)) continue;
+        final m = out[i];
+        if (m.type.toUpperCase() != a.type.toUpperCase()) continue;
+        if (_isLocalDraft(m) == _isLocalDraft(a)) continue;
+        final delta = m.date.difference(a.date).abs();
+        if (delta <= bestDelta) {
+          bestDelta = delta;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx < 0) {
+        out.add(a);
+        continue;
+      }
+      final draft = _isLocalDraft(a) ? a : out[bestIdx];
+      final synced = _isLocalDraft(a) ? out[bestIdx] : a;
+      out[bestIdx] = _mergeVisit(synced: synced, draft: draft);
+      absorbed.add(bestIdx);
+    }
     out.sort((a, b) => b.date.compareTo(a.date));
     return out;
+  }
+
+  /// Folds a local draft into the synced record of the same visit. The synced
+  /// row owns the identity (server `encounterId` + `visitDate`); the draft
+  /// contributes the referral decision and the full form payload, which the
+  /// history response omits.
+  static MemberAssessment _mergeVisit({
+    required MemberAssessment synced,
+    required MemberAssessment draft,
+  }) {
+    final draftRaw = draft.rawJson;
+    return MemberAssessment(
+      id: synced.id,
+      type: synced.type,
+      date: synced.date,
+      visitNumber: synced.visitNumber ?? draft.visitNumber,
+      status: synced.status,
+      notes: synced.notes?.isNotEmpty == true ? synced.notes : draft.notes,
+      rawJson: <String, dynamic>{
+        ...synced.rawJson,
+        if (draftRaw['assessmentDetails'] != null)
+          'assessmentDetails': draftRaw['assessmentDetails'],
+        if (draftRaw['customStatus'] != null)
+          'customStatus': draftRaw['customStatus'],
+        if (draftRaw['referralStatus'] != null)
+          'referralStatus': draftRaw['referralStatus'],
+        if (draftRaw['isReferred'] != null)
+          'isReferred': draftRaw['isReferred'],
+      },
+    );
   }
   
   /// Member reference for FHIR API calls (format: RelatedPerson/xxx).
@@ -278,9 +358,12 @@ class _PatientContextScreenState
       print('[PatientContextScreen] local assessments fetch failed: $e');
     }
 
-    // Source 2: unsent local drafts (pending / networkError / failed).
-    // Excluded: success — those are already present in Source 1 after sync
-    // completes, so including them would produce a duplicate record.
+    // Source 2: local assessments, emitted as-is regardless of sync status.
+    // They always carry assessmentDetails, which the timeline sheet reads
+    // LMP/gravida/etc. from and which Source 1 usually omits. Pairing a draft
+    // with the synced record of the same visit happens once, in
+    // [PatientOrMemberData.assessments], so that it also covers records that
+    // only came back over the network.
     try {
       final drafts = await localDrafts.getByPatientId(stripped);
       // ignore: avoid_print
@@ -288,18 +371,42 @@ class _PatientContextScreenState
       for (final d in drafts) {
         // ignore: avoid_print
         print('[PatientContextScreen]   draft id=${d.id} type=${d.assessmentType} syncStatus=${d.syncStatus.name} storedPatientId=${d.patientId}');
-        if (d.syncStatus == AssessmentSyncStatus.success) continue;
+
+        Map<String, dynamic> details = const {};
+        try {
+          final decoded = jsonDecode(d.assessmentDetails);
+          if (decoded is Map<String, dynamic>) {
+            details = decoded;
+          } else if (decoded is Map) {
+            details = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {}
+
+        dynamic customStatus;
+        final csRaw = d.customStatus;
+        if (csRaw != null && csRaw.isNotEmpty) {
+          try {
+            customStatus = jsonDecode(csRaw);
+          } catch (_) {
+            customStatus = csRaw;
+          }
+        }
+
+        final localRaw = <String, dynamic>{
+          'isReferred': d.isReferred,
+          'referralStatus': d.referralStatus,
+          'syncStatus': d.syncStatus.name,
+          'assessmentDetails': details,
+          if (customStatus != null) 'customStatus': customStatus,
+        };
+
         out.add(MemberAssessment(
           id: d.id.toString(),
           type: d.assessmentType.toUpperCase(),
           date: d.createdAt ?? DateTime.now(),
           status: d.syncStatus.name,
           notes: d.referredReasons,
-          rawJson: <String, dynamic>{
-            'isReferred': d.isReferred,
-            'referralStatus': d.referralStatus,
-            'syncStatus': d.syncStatus.name,
-          },
+          rawJson: localRaw,
         ));
       }
     } on Object catch (e) {
@@ -313,51 +420,80 @@ class _PatientContextScreenState
     return out;
   }
 
-  /// Resolves the numeric server-assigned member referenceId required by the
-  /// FHIR mapper for [encounter.memberId].
+  /// Resolves the server-facing member id the FHIR mapper needs for
+  /// `encounter.memberId`.
   ///
   /// Priority:
-  ///   1. Explicit referenceId passed in navigation extras (most reliable).
-  ///   2. DB lookup by members.id (primary key = FHIR ID = widget.patientId).
-  ///   3. DB lookup by members.patient_id column.
-  ///   4. Fallback to extras['id'] or widget.patientId (FHIR ID — mapper may
-  ///      still fail, but it is the best available value).
+  ///   1. members.fhir_id — the only id the mapper can resolve to a Patient.
+  ///   2. The local PK, for members not registered server-side yet. The push
+  ///      guard holds those assessments back until the member syncs.
+  ///   3. Explicit referenceId passed in navigation extras.
+  ///   4. Fallback to extras['id'] or widget.patientId.
   Future<String> _resolveEncounterMemberId() async {
-    // 1. Prefer the numeric referenceId pre-resolved by HouseholdDetailScreen.
-    final fromExtras = widget.memberData?['referenceId'] as String?;
-    if (fromExtras != null && fromExtras.isNotEmpty) {
-      debugPrint('[PatientContext] memberId resolved from extras referenceId: $fromExtras');
-      return fromExtras;
-    }
-
-    // 2 & 3. Look up the member entity from local DB.
-    // The backend may store members with the numeric server PK as entity.id
-    // (when no FHIR UUID is present) or as entity.referenceId. Mirror the same
-    // resolution strategy used by MemberDetailRepository.getMemberAssessments:
-    // collect all known IDs from the entity and prefer the numeric one.
     final memberDao = context.read<MemberDao>();
     final entity = await memberDao.getById(widget.patientId) ??
         await memberDao.getByPatientId(widget.patientId);
 
     if (entity != null) {
-      // Prefer explicit referenceId field.
+      if (entity.fhirId?.isNotEmpty == true) {
+        debugPrint(
+            '[PatientContext] memberId resolved via entity.fhirId: ${entity.fhirId}');
+        return entity.fhirId!;
+      }
       if (entity.referenceId?.isNotEmpty == true) {
         debugPrint('[PatientContext] memberId resolved via entity.referenceId: ${entity.referenceId}');
         return entity.referenceId!;
       }
-      // When entity.id is a pure numeric string it IS the backend integer PK
-      // (the FHIR-ID slot was empty during sync and fell back to referenceId).
       if (int.tryParse(entity.id) != null) {
         debugPrint('[PatientContext] memberId resolved via entity.id (numeric): ${entity.id}');
         return entity.id;
       }
     }
 
-    // 4. Fallback — FHIR ID; FHIR mapper will likely reject this but it is all
-    //    we have when the member has no referenceId (e.g. newly enrolled, not yet synced).
+    final fromExtras = widget.memberData?['referenceId'] as String?;
+    if (fromExtras != null && fromExtras.isNotEmpty) {
+      debugPrint('[PatientContext] memberId resolved from extras referenceId: $fromExtras');
+      return fromExtras;
+    }
+
     final fallback = widget.memberData?['id'] as String? ?? widget.patientId;
-    debugPrint('[PatientContext] memberId fallback to FHIR ID: $fallback');
+    debugPrint('[PatientContext] memberId fallback: $fallback');
     return fallback;
+  }
+
+  /// Pregnancy snapshots are stored under the local member PK — see
+  /// `OfflineSyncService._persistBundle`, which maps every incoming member
+  /// alias to that PK before writing. This screen can be opened with
+  /// `members.patient_id` instead, which for server-synced members holds the
+  /// server's program patient id, so a direct lookup misses and the episode
+  /// renders as though the patient had never been registered. Retry through
+  /// the member's other ids before giving up.
+  Future<PregnancySnapshotRow?> _loadPregnancySnapshot(
+    PregnancySnapshotDao dao,
+    MemberDao memberDao,
+  ) async {
+    final direct = await dao.byPatient(widget.patientId);
+    if (direct != null) return direct;
+
+    final member = await memberDao.getById(widget.patientId) ??
+        await memberDao.getByPatientId(widget.patientId);
+    if (member == null) return null;
+
+    for (final alias in <String?>[
+      member.id,
+      member.patientId,
+      member.fhirId,
+      member.referenceId,
+    ]) {
+      if (alias == null || alias.isEmpty || alias == widget.patientId) continue;
+      final row = await dao.byPatient(alias);
+      if (row != null) {
+        debugPrint('[PatientContext] pregnancy snapshot found under alias '
+            '$alias (route id ${widget.patientId})');
+        return row;
+      }
+    }
+    return null;
   }
 
   Future<PatientOrMemberData> _fetchData() async {
@@ -372,6 +508,7 @@ class _PatientContextScreenState
     final syncSvc = context.read<OfflineSyncService>();
     final vitalsRepo = context.read<VitalsRepository>();
     final pregnancyDao = context.read<PregnancySnapshotDao>();
+    final memberDao = context.read<MemberDao>();
 
     final t0 = Stopwatch()..start();
     // Phase 1: all local reads in parallel — returns instantly from SQLite.
@@ -381,7 +518,7 @@ class _PatientContextScreenState
       _localAssessmentsFor(widget.patientId),
       syncSvc.lastSyncedAt(),
       vitalsRepo.recentByVisit(widget.patientId).catchError((_) => <VisitVitals>[]),
-      pregnancyDao.byPatient(widget.patientId).catchError((_) => null),
+      _loadPregnancySnapshot(pregnancyDao, memberDao).catchError((_) => null),
       memberRepo.enrolledAtFor(widget.patientId).catchError((_) => null),
     ]);
     final resolvedMemberId = phase1[0] as String?;
@@ -887,7 +1024,11 @@ class _PatientContextScreenState
                     const SizedBox(height: 12),
 
                     // ── Pregnancy LMP/EDD card (active pregnancy only) ────
-                    if (isAnc && snap != null && snap.deliveryDateMillis == null && !snap.facts.isPostpartumWindow) ...[
+                    if (isAnc &&
+                        snap != null &&
+                        snap.deliveryDateMillis == null &&
+                        !snap.facts.isPostpartumWindow &&
+                        (snap.lmpDate != null || snap.eddDate != null)) ...[
                       GestationalAgeCard(
                         lmpDate: snap.lmpDate != null
                             ? DateTime.fromMillisecondsSinceEpoch(snap.lmpDate!)
@@ -903,6 +1044,7 @@ class _PatientContextScreenState
                     _CombinedTimeline(
                       entries: _buildTimelineEntries(data),
                       isLoading: remoteLoading,
+                      pregnancySnapshot: snap,
                     ),
 
                     // ── Action row ────────────────────────────────────────
@@ -1601,6 +1743,29 @@ String? _rawStr(dynamic v) {
   return v.toString();
 }
 
+/// Parse LMP/EDD from ISO strings, epoch millis, or DateTime.
+DateTime? _parseFlexibleDate(dynamic v) {
+  if (v == null) return null;
+  if (v is DateTime) return v;
+  if (v is int) {
+    // Distinguishes epoch-ms from tiny ints (e.g. gravida).
+    if (v < 1e11) return null;
+    return DateTime.fromMillisecondsSinceEpoch(v);
+  }
+  if (v is num) {
+    final n = v.toInt();
+    if (n < 1e11) return null;
+    return DateTime.fromMillisecondsSinceEpoch(n);
+  }
+  final s = v.toString().trim();
+  if (s.isEmpty) return null;
+  final asInt = int.tryParse(s);
+  if (asInt != null && asInt >= 1e11) {
+    return DateTime.fromMillisecondsSinceEpoch(asInt);
+  }
+  return DateTime.tryParse(s);
+}
+
 ///
 /// After normalisation, callers read `out['bp']`, `out['bg']`, `out['bgType']`
 /// regardless of origin. The merge uses putIfAbsent so explicit top-level keys
@@ -1629,6 +1794,28 @@ Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) {
         out.putIfAbsent(e.key.toString(), () => e.value);
       }
     }
+  }
+
+  // Step 1c — PWPROFILE nests as pwProfile → pregnancyDetailsAndHistory → fields
+  // (lmp, gravida, parity, …). Lift both levels so the timeline sheet can read
+  // LMP/EDD without knowing the wire shape.
+  for (var depth = 0; depth < 2; depth++) {
+    var lifted = false;
+    for (final subKey in const [
+      'pwProfile',
+      'pregnancyDetailsAndHistory',
+      'pregnancyDetails',
+      'pregnancyProfile',
+      'obstetricHistory',
+    ]) {
+      final sub = out[subKey];
+      if (sub is! Map) continue;
+      for (final e in sub.entries) {
+        out.putIfAbsent(e.key.toString(), () => e.value);
+        lifted = true;
+      }
+    }
+    if (!lifted) break;
   }
 
   // Step 2 — map NCD bpLog / glucoseLog nested keys (local-form format).
@@ -3778,10 +3965,12 @@ class _CombinedTimeline extends StatefulWidget {
   const _CombinedTimeline({
     required this.entries,
     required this.isLoading,
+    this.pregnancySnapshot,
   });
 
   final List<_TimelineEntry> entries;
   final bool isLoading;
+  final PregnancySnapshotRow? pregnancySnapshot;
 
   @override
   State<_CombinedTimeline> createState() => _CombinedTimelineState();
@@ -3816,6 +4005,7 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
         entryRows.add(_TimelineEntryRow(
           entry: visible[i],
           isLast: i == visible.length - 1 && (!hasMore || _expanded),
+          pregnancySnapshot: widget.pregnancySnapshot,
         ));
       }
       Widget? showMoreBtn;
@@ -3875,10 +4065,15 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
 
 /// Single row in the combined timeline — solid colour dot + connector + flat content.
 class _TimelineEntryRow extends StatelessWidget {
-  const _TimelineEntryRow({required this.entry, required this.isLast});
+  const _TimelineEntryRow({
+    required this.entry,
+    required this.isLast,
+    this.pregnancySnapshot,
+  });
 
   final _TimelineEntry entry;
   final bool isLast;
+  final PregnancySnapshotRow? pregnancySnapshot;
 
   static const _dotSize = 24.0;
   static const _lineWidth = 1.5;
@@ -3921,7 +4116,10 @@ class _TimelineEntryRow extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(bottom: 14, top: 6),
-              child: _TimelineEntryCard(entry: entry),
+              child: _TimelineEntryCard(
+                entry: entry,
+                pregnancySnapshot: pregnancySnapshot,
+              ),
             ),
           ),
         ],
@@ -3933,9 +4131,13 @@ class _TimelineEntryRow extends StatelessWidget {
 /// Flat content block for a single [_TimelineEntry]: title + date + badge + narrative.
 /// No card border — text sits directly to the right of the dot.
 class _TimelineEntryCard extends StatelessWidget {
-  const _TimelineEntryCard({required this.entry});
+  const _TimelineEntryCard({
+    required this.entry,
+    this.pregnancySnapshot,
+  });
 
   final _TimelineEntry entry;
+  final PregnancySnapshotRow? pregnancySnapshot;
 
   @override
   Widget build(BuildContext context) {
@@ -3943,7 +4145,11 @@ class _TimelineEntryCard extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: entry.source != null
-          ? () => _TimelineEventSheet.show(context, entry.source!)
+          ? () => _TimelineEventSheet.show(
+                context,
+                entry.source!,
+                pregnancySnapshot: pregnancySnapshot,
+              )
           : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4111,18 +4317,29 @@ class _TimelineShimmer extends StatelessWidget {
 /// Bottom sheet expanding a care-thread timeline event into full clinical detail.
 /// Unpacks the rawJson envelope via [_unpackRaw] to surface clinical fields.
 class _TimelineEventSheet extends StatelessWidget {
-  const _TimelineEventSheet({required this.assessment});
+  const _TimelineEventSheet({
+    required this.assessment,
+    this.pregnancySnapshot,
+  });
 
   final MemberAssessment assessment;
+  final PregnancySnapshotRow? pregnancySnapshot;
 
-  static void show(BuildContext context, MemberAssessment assessment) {
+  static void show(
+    BuildContext context,
+    MemberAssessment assessment, {
+    PregnancySnapshotRow? pregnancySnapshot,
+  }) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _TimelineEventSheet(assessment: assessment),
+      builder: (_) => _TimelineEventSheet(
+        assessment: assessment,
+        pregnancySnapshot: pregnancySnapshot,
+      ),
     );
   }
 
@@ -4136,12 +4353,81 @@ class _TimelineEventSheet extends StatelessWidget {
     final typeColor = progColors.of(prog);
 
     final entries = <MapEntry<String, String>>[];
+    final snap = pregnancySnapshot;
     void addIfPresent(String key, String label) {
       final v = _rawStr(raw[key]);
       if (v != null && v.isNotEmpty) {
         entries.add(MapEntry(label, v));
       }
     }
+
+    // Assessment history summaries carry only a subset of what the SK
+    // captured, so for obstetric answers the pregnancy snapshot is often the
+    // only surviving copy. Payload still wins when it has the field.
+    void addWithFallback(String key, String label, Object? fallback) {
+      final v = _rawStr(raw[key]) ?? _rawStr(fallback);
+      if (v != null && v.isNotEmpty) {
+        entries.add(MapEntry(label, v));
+      }
+    }
+
+    void addSnapshotList(String? encoded, String label) {
+      final decoded = PregnancySnapshotRow.decodeJsonList(encoded);
+      if (decoded == null || decoded.isEmpty) return;
+      entries.add(MapEntry(label, decoded.join(', ')));
+    }
+
+    void addSnapshotDate(int? millis, String label) {
+      if (millis == null) return;
+      entries.add(MapEntry(
+        label,
+        DateFormat('d MMM yyyy')
+            .format(DateTime.fromMillisecondsSinceEpoch(millis)),
+      ));
+    }
+
+    // ── PW registration dating (LMP stored; EDD/GA derived) ────────────────
+    // Prefer assessment payload; fall back to pregnancy snapshot when the
+    // history summary omitted LMP (common after sync).
+    var lmpDate = _parseFlexibleDate(
+      raw['lmp'] ??
+          raw['lmpDate'] ??
+          raw['lastMenstrualPeriod'] ??
+          raw['lastMenstrualPeriodDate'],
+    );
+    var eddDate = _parseFlexibleDate(
+      raw['edd'] ?? raw['eddDate'] ?? raw['estimatedDeliveryDate'],
+    );
+    if (lmpDate == null && snap?.lmpDate != null) {
+      lmpDate = DateTime.fromMillisecondsSinceEpoch(snap!.lmpDate!);
+    }
+    if (eddDate == null && snap?.eddDate != null) {
+      eddDate = DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
+    }
+    if (lmpDate == null && eddDate != null) {
+      lmpDate = eddDate.subtract(const Duration(days: 280));
+    }
+    if (lmpDate != null) {
+      final shortDate = DateFormat('d MMM yyyy');
+      entries.add(MapEntry('LMP', shortDate.format(lmpDate)));
+      eddDate ??= lmpDate.add(const Duration(days: 280));
+      entries.add(MapEntry('EDD', shortDate.format(eddDate)));
+      final totalDays = DateTime.now().difference(lmpDate).inDays;
+      if (totalDays >= 0) {
+        final weeks = totalDays ~/ 7;
+        final days = totalDays % 7;
+        entries.add(MapEntry(
+          'Gestational age',
+          days > 0 ? '$weeks weeks $days days' : '$weeks weeks',
+        ));
+      }
+    } else if (prog == Programme.pw) {
+      debugPrint(
+        '[PW Sheet] LMP missing — rawKeys=${raw.keys.toList()} '
+        'snapLmp=${snap?.lmpDate} snapEdd=${snap?.eddDate}',
+      );
+    }
+
     // ── Vitals (all programmes) ────────────────────────────────────────────
     addIfPresent('bp', 'BP');
     addIfPresent('bg', 'Blood glucose');
@@ -4161,12 +4447,33 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('copd', 'COPD');
     addIfPresent('referralFacilityType', 'Referred to');
 
-    // ── ANC ────────────────────────────────────────────────────────────────
+    // ── ANC / PW obstetric ─────────────────────────────────────────────────
     addIfPresent('hemoglobin', 'Hb (g/dL)');
     addIfPresent('fundalHeight', 'Fundal height (cm)');
-    addIfPresent('gravida', 'Gravida');
-    addIfPresent('parity', 'Parity');
-    addIfPresent('ancVisitNumber', 'ANC visit no.');
+    addWithFallback('gravida', 'Gravida', snap?.gravida);
+    addWithFallback('parity', 'Parity', snap?.parity);
+    addWithFallback('livingChildren', 'Living children', snap?.livingChildren);
+    // Pregnancy test is a PW-form field (GA ≤ 16 weeks) — not ANC/PNC.
+    if (prog == Programme.pw) {
+      addWithFallback('pregnancyTest', 'Pregnancy test', snap?.pregnancyTest);
+    }
+    // ageOfLastChild is stored as DOB on the wire — show formatted if parseable.
+    final ageOfLastChild = _parseFlexibleDate(
+      raw['ageOfLastChild'] ?? snap?.ageOfLastChild,
+    );
+    if (ageOfLastChild != null) {
+      entries.add(MapEntry(
+        'Age of last child (DOB)',
+        DateFormat('d MMM yyyy').format(ageOfLastChild),
+      ));
+    } else {
+      addWithFallback('ageOfLastChild', 'Age of last child', snap?.ageOfLastChild);
+    }
+    // Visit counters belong on the visit that produced them, not PW registration
+    // (snapshot often holds 0 / a later count from a different encounter).
+    if (prog == Programme.anc) {
+      addWithFallback('ancVisitNumber', 'ANC visit no.', snap?.ancVisitNo);
+    }
     addIfPresent('highRiskPregnantWoman', 'High risk');
     addIfPresent('gapsInAnc', 'ANC gaps');
     addIfPresent('dangerSignsDuringPregnancy', 'Danger signs');
@@ -4174,13 +4481,40 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('followUpVisit', 'Follow-up visit');
 
     // ── PNC ────────────────────────────────────────────────────────────────
-    addIfPresent('pncVisitNumber', 'PNC visit no.');
+    if (prog == Programme.pnc) {
+      addWithFallback('pncVisitNumber', 'PNC visit no.', snap?.pncVisitNo);
+    }
     addIfPresent('modeOfDelivery', 'Mode of delivery');
     addIfPresent('anyComplicationsDuringDelivery', 'Complications');
     addIfPresent('complicationsDuringDelivery', 'Complication details');
     addIfPresent('numberOfLivingChildren', 'Living children');
     addIfPresent('motherCare', 'Postnatal care');
     addIfPresent('newbornCare', 'Newborn care');
+
+    // ── Snapshot-only obstetric detail (programme-scoped) ──────────────────
+    // These columns are written by ANC / outcome flows, not PW registration.
+    // Dumping them on every maternal sheet made PW look like it captured
+    // answers the SK never saw.
+    if (snap != null && prog == Programme.anc) {
+      addSnapshotList(
+          snap.previousPregnancyComplications, 'Previous complications');
+      addSnapshotList(snap.existingIllness, 'Existing illness');
+      addSnapshotList(snap.onTreatment, 'On treatment');
+      if (snap.ttTdCompleted?.isNotEmpty == true) {
+        entries.add(MapEntry('TT/Td completed', snap.ttTdCompleted!));
+      }
+      if (snap.facilityIdentifiedForDelivery?.isNotEmpty == true) {
+        entries.add(
+            MapEntry('Delivery facility', snap.facilityIdentifiedForDelivery!));
+      }
+      if (snap.ancWeight != null) {
+        entries.add(MapEntry('Last ANC weight (kg)', '${snap.ancWeight}'));
+      }
+      addSnapshotDate(snap.lastAncVisitDateMs, 'Last ANC visit');
+    }
+    if (snap != null && prog == Programme.pnc) {
+      addSnapshotDate(snap.deliveryDateMillis, 'Delivery date');
+    }
 
     // ── TB ─────────────────────────────────────────────────────────────────
     addIfPresent('has_cough', 'Cough');
@@ -4243,6 +4577,13 @@ class _TimelineEventSheet extends StatelessWidget {
       }
     }
 
+    final sheetTitle = prog == Programme.pw
+        ? PatientProfileStrings.pregnancyRegistrationCategory
+        : assessment.type;
+    final sheetHeading = assessment.visitNumber != null
+        ? '$sheetTitle — Visit ${assessment.visitNumber}'
+        : sheetTitle;
+
     final result = DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.6,
@@ -4271,9 +4612,7 @@ class _TimelineEventSheet extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    assessment.visitNumber != null
-                        ? '${assessment.type} — Visit ${assessment.visitNumber}'
-                        : assessment.type,
+                    sheetHeading,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -4609,7 +4948,9 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             patientName: d.name,
             patientAge: d.age,
             patientGender: d.gender,
-            villageName: d.villageName,
+            householdId: d.householdId,
+            villageId: d.villageId,
+            memberId: d.memberId,
           )
         else
           Container(
@@ -5393,20 +5734,78 @@ class _HouseholdMemberChip extends StatelessWidget {
 }
 
 /// Banner shown when a patient has no programmes enrolled yet.
-class _NoServicesCard extends StatelessWidget {
+class _NoServicesCard extends StatefulWidget {
   const _NoServicesCard({
     required this.patientId,
     required this.patientName,
     this.patientAge,
     this.patientGender,
-    this.villageName,
+    this.householdId,
+    this.villageId,
+    this.memberId,
+    this.origin,
   });
 
   final String patientId;
   final String? patientName;
   final int? patientAge;
   final String? patientGender;
-  final String? villageName;
+  final String? householdId;
+  final String? villageId;
+  final String? memberId;
+  final String? origin;
+
+  @override
+  State<_NoServicesCard> createState() => _NoServicesCardState();
+}
+
+class _NoServicesCardState extends State<_NoServicesCard> {
+  bool _starting = false;
+
+  Future<void> _startVisit() async {
+    if (_starting) return;
+    setState(() => _starting = true);
+
+    final controller = context.read<VisitController>();
+    final encounterId = await startOrResumeVisit(
+      context,
+      controller: controller,
+      patientId: widget.patientId,
+      programme: Programme.unknown,
+      patientName: widget.patientName,
+      patientAge: widget.patientAge,
+      patientGender: widget.patientGender,
+      householdId: widget.householdId,
+    );
+
+    if (!mounted) return;
+
+    if (encounterId != null) {
+      final originParam =
+          widget.origin != null ? '?origin=${widget.origin}' : '';
+      context.go(
+        '/patients/visit/$encounterId/flow$originParam',
+        extra: {
+          'patientId': widget.patientId,
+          'patientName': widget.patientName,
+          'patientAge': widget.patientAge,
+          'patientGender': widget.patientGender,
+          'householdId': widget.householdId,
+          'villageId': widget.villageId,
+          'memberId': widget.memberId,
+        },
+      );
+    } else {
+      setState(() => _starting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(controller.error ?? 'Failed to start visit'),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -5460,21 +5859,18 @@ class _NoServicesCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () {
-                  context.push(
-                    '/patients/$patientId/new-visit',
-                    extra: <String, dynamic>{
-                      'patientName': patientName ?? 'Patient',
-                      if (patientAge != null) 'patientAge': patientAge,
-                      if (patientGender != null)
-                        'patientGender': patientGender,
-                      if (villageName != null) 'villageName': villageName,
-                    },
-                  );
-                },
-                icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                onPressed: _starting ? null : _startVisit,
+                icon: _starting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add, size: 18, color: Colors.white),
                 label: Text(
-                  EnrollStrings.addServicesCta,
+                  _starting
+                      ? 'Starting...'
+                      : EnrollStrings.addServicesCta,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: Colors.white,

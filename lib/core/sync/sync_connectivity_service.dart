@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
+import '../auth/auth_repository.dart';
 import '../auth/auth_state.dart';
 import '../../features/training/coaching_repository.dart';
 import '../../features/visit/assessment_repository.dart';
@@ -32,17 +33,20 @@ class SyncConnectivityService {
     required OfflineSyncService syncService,
     required OfflinePushService pushService,
     required AuthState authState,
+    required AuthRepository authRepo,
     required CoachingRepository coachingRepo,
   })  : _assessmentRepo = assessmentRepo,
         _syncService = syncService,
         _pushService = pushService,
         _authState = authState,
+        _authRepo = authRepo,
         _coachingRepo = coachingRepo;
 
   final AssessmentRepository _assessmentRepo;
   final OfflineSyncService _syncService;
   final OfflinePushService _pushService;
   final AuthState _authState;
+  final AuthRepository _authRepo;
   final CoachingRepository _coachingRepo;
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
@@ -108,10 +112,22 @@ class SyncConnectivityService {
     }
   }
 
+  /// Call after login / unlock when the session is ready so pending outbound
+  /// work is pushed even if the offline→online edge was already consumed
+  /// (e.g. network returned while locked, or app opened already online).
+  void syncIfSessionReady() {
+    _triggerSync();
+  }
+
   void _triggerSync() {
     // Only sync when the user has an active authenticated session.
     if (_authState.status != AuthStatus.signedIn || _authState.locked) {
       debugPrint('[SyncConnectivity] Skipping auto-sync — not signed-in or session locked');
+      return;
+    }
+    if (!_authRepo.hasSessionCredentials) {
+      debugPrint(
+          '[SyncConnectivity] Skipping auto-sync — no auth token/session credentials');
       return;
     }
 

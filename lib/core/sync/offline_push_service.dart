@@ -51,6 +51,18 @@ class OfflinePushResult {
 
 enum _PushPollResult { success, failed, inProgress }
 
+/// Batch verdict plus the per-assessment breakdown, keyed by the numeric
+/// `referenceId` the server echoes for each entity.
+class _PushPollOutcome {
+  const _PushPollOutcome({
+    required this.overall,
+    required this.assessmentStatus,
+  });
+
+  final _PushPollResult overall;
+  final Map<int, String> assessmentStatus;
+}
+
 /// Spice-style Manual Offline Sync: one `offline-sync/create` for all pending
 /// households, standalone members, assessments and follow-ups, then status
 /// poll to stamp `fhir_id` / Success without duplicating local rows.
@@ -110,6 +122,13 @@ class OfflinePushService extends ChangeNotifier {
   Future<OfflinePushResult> pushAll({
     String syncMode = 'ManualSync',
   }) async {
+    if (!_auth.hasSessionCredentials) {
+      debugPrint('[OfflinePush] blocked — no auth token/session credentials');
+      return const OfflinePushResult(
+        success: false,
+        message: 'Not authenticated — sign in again before syncing',
+      );
+    }
     if (_running || isPushInFlight) {
       return const OfflinePushResult(
         success: false,
@@ -198,8 +217,15 @@ class OfflinePushService extends ChangeNotifier {
       }
 
       final includeFailed = syncMode == 'ManualSync' || syncMode == 'InitialSync';
-      final pendingAssessments =
-          await _assessments.getUnsynced(includeFailed: includeFailed);
+      final assessmentQueue =
+          await _assessments.getUnsyncedForPush(includeFailed: includeFailed);
+      if (assessmentQueue.blocked.isNotEmpty) {
+        debugPrint(
+          '[OfflinePush] holding ${assessmentQueue.blocked.length} '
+          'assessment(s) — member or household not registered server-side yet',
+        );
+      }
+      final pendingAssessments = assessmentQueue.ready;
       final assessmentIds = pendingAssessments.map((e) => e.id).toList();
       final assessmentPayloads = pendingAssessments
           .map(
@@ -330,25 +356,35 @@ class OfflinePushService extends ChangeNotifier {
       _progress = 0.4;
       notifyListeners();
 
-      final poll = await _pollAndApply(
+      final outcome = await _pollAndApply(
         requestId: requestId,
         deviceId: deviceId,
         userId: userId,
       );
+      final poll = outcome.overall;
 
-      if (assessmentIds.isNotEmpty) {
-        if (poll == _PushPollResult.failed) {
-          await _assessments.updateSyncStatus(
-            assessmentIds,
-            AssessmentSyncStatus.failed,
-          );
-        } else if (poll == _PushPollResult.success) {
-          await _assessments.updateSyncStatus(
-            assessmentIds,
-            AssessmentSyncStatus.success,
-          );
+      // inProgress → leave every row InProgress (no duplicate re-POST).
+      if (pendingAssessments.isNotEmpty && poll != _PushPollResult.inProgress) {
+        final succeeded = <String>[];
+        final failed = <String>[];
+        for (final entity in pendingAssessments) {
+          final reported = entity.referenceId == null
+              ? null
+              : outcome.assessmentStatus[entity.referenceId];
+          // Anything the server did not name inherits the batch verdict.
+          final ok = reported == null
+              ? poll == _PushPollResult.success
+              : reported == 'Success';
+          (ok ? succeeded : failed).add(entity.id);
         }
-        // inProgress → leave as InProgress (no duplicate re-POST).
+        if (failed.isNotEmpty) {
+          await _assessments.updateSyncStatus(
+              failed, AssessmentSyncStatus.failed);
+        }
+        if (succeeded.isNotEmpty) {
+          await _assessments.updateSyncStatus(
+              succeeded, AssessmentSyncStatus.success);
+        }
       }
 
       _progress = 1;
@@ -391,7 +427,7 @@ class OfflinePushService extends ChangeNotifier {
     }
   }
 
-  Future<_PushPollResult> _pollAndApply({
+  Future<_PushPollOutcome> _pollAndApply({
     required String requestId,
     required String deviceId,
     required int userId,
@@ -399,6 +435,7 @@ class OfflinePushService extends ChangeNotifier {
     Duration delayBetween = const Duration(seconds: 8),
   }) async {
     var sawFailed = false;
+    final assessmentStatus = <int, String>{};
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) await Future<void>.delayed(delayBetween);
       _progress = 0.4 + (0.5 * attempt / maxAttempts);
@@ -439,31 +476,51 @@ class OfflinePushService extends ChangeNotifier {
           if (refId == null || refId.isEmpty) continue;
           if (status != 'Success' && status != 'Failed') continue;
 
-          final typeLower = type.toLowerCase();
-          if (typeLower.contains('household') &&
-              !typeLower.contains('member')) {
-            await _households.updateFhirId(
-              localId: refId,
-              fhirId: status == 'Success' ? fhirId : null,
-              syncStatus: status,
-            );
-          } else if (typeLower.contains('member')) {
-            await _members.updateFhirId(
-              localId: refId,
-              fhirId: status == 'Success' ? fhirId : null,
-              syncStatus: status,
-            );
+          // Match the entity type exactly. Substring matching folded
+          // "MemberAssessmentFollowUpMap" — a server-side join whose
+          // referenceId is the member id — into the member branch, which then
+          // stamped an unrelated status onto that member row.
+          switch (type) {
+            case 'Household':
+              await _households.updateFhirId(
+                localId: refId,
+                fhirId: status == 'Success' ? fhirId : null,
+                syncStatus: status,
+              );
+            case 'HouseholdMember':
+              await _members.updateFhirId(
+                localId: refId,
+                fhirId: status == 'Success' ? fhirId : null,
+                syncStatus: status,
+              );
+            case 'Assessment':
+              final reference = int.tryParse(refId);
+              if (reference == null) break;
+              assessmentStatus[reference] = status;
+              if (status == 'Success' &&
+                  fhirId != null &&
+                  fhirId.isNotEmpty &&
+                  fhirId != 'null') {
+                await _assessments.applyFhirIdByReferenceId(reference, fhirId);
+              }
           }
         }
 
         if (!anyInProgress) {
-          return sawFailed ? _PushPollResult.failed : _PushPollResult.success;
+          return _PushPollOutcome(
+            overall:
+                sawFailed ? _PushPollResult.failed : _PushPollResult.success,
+            assessmentStatus: assessmentStatus,
+          );
         }
       } on DioException catch (e) {
         debugPrint('[OfflinePush] status poll error: ${e.type}');
       }
     }
-    return sawFailed ? _PushPollResult.failed : _PushPollResult.inProgress;
+    return _PushPollOutcome(
+      overall: sawFailed ? _PushPollResult.failed : _PushPollResult.inProgress,
+      assessmentStatus: assessmentStatus,
+    );
   }
 
   Future<void> _markNetworkOrFailed({
