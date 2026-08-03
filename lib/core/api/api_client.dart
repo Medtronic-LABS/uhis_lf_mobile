@@ -253,6 +253,15 @@ class ApiClient {
   /// Returns true if currently authenticated via Bearer token (mobile flow).
   bool get hasAuthToken => _authToken != null && _authToken!.isNotEmpty;
 
+  /// True when the client can authenticate API calls (Bearer token and/or
+  /// auth cookie). Offline password login can mark the user signed-in without
+  /// restoring credentials — callers that hit the network must check this.
+  bool get hasSessionCredentials {
+    if (hasAuthToken) return true;
+    final cookie = _cachedAuthCookie;
+    return cookie != null && cookie.isNotEmpty;
+  }
+
   /// Export the Bearer token used for mobile auth.
   String? exportAuthToken() => _authToken;
 

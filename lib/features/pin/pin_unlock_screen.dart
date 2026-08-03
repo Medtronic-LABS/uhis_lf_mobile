@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'pin_pad.dart';
 
@@ -37,6 +38,8 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     if (!mounted) return;
 
     if (ok) {
+      // Reconnect may have arrived while locked — push any pending work now.
+      context.read<SyncConnectivityService>().syncIfSessionReady();
       context.go('/home');
     } else {
       setState(() {
@@ -116,9 +119,14 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                               : () async {
                                   final router = GoRouter.of(context);
                                   final auth = context.read<AuthState>();
+                                  final connectivity =
+                                      context.read<SyncConnectivityService>();
                                   final ok = await auth.biometricUnlock();
                                   if (!mounted) return;
-                                  if (ok) router.go('/home');
+                                  if (ok) {
+                                    connectivity.syncIfSessionReady();
+                                    router.go('/home');
+                                  }
                                 },
                           icon: const Icon(Icons.lock_open),
                           label: Text(LockStrings.unlockWithBiometrics),

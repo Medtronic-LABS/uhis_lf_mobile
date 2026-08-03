@@ -184,10 +184,7 @@ class _OfflineSyncScreenState extends State<OfflineSyncScreen> {
               label: OfflineSyncStrings.assessments,
               count: counts.assessments,
             ),
-            _CountRow(
-              label: OfflineSyncStrings.followUps,
-              count: counts.followUps,
-            ),
+            // Follow-ups count hidden until null-id creates sync reliably.
             const Spacer(),
             Row(
               children: [

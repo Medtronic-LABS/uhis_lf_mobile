@@ -50,6 +50,14 @@ class SsWorker {
       subVillages: subVillages,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        if (phoneNumber != null) 'phoneNumber': phoneNumber,
+        if (ssId != null) 'ssId': ssId,
+        'subVillages': subVillages.map((sv) => sv.toJson()).toList(),
+      };
 }
 
 /// Sub-village reference — used both as a nested SS assignment and in the
@@ -84,6 +92,13 @@ class SubVillageRef {
       code: str('code'),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        if (villageId != null) 'villageId': villageId,
+        if (code != null) 'code': code,
+      };
 }
 
 /// Village assigned to the SK — top-level entry from `villages[]` in the
@@ -115,6 +130,12 @@ class VillageRef {
       code: str('code'),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        if (code != null) 'code': code,
+      };
 }
 
 /// SK profile snapshot from `userProfile` in the static-data response.
@@ -153,6 +174,14 @@ class SkProfile {
       fhirId: str('fhirId'),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        if (phone != null) 'phoneNumber': phone,
+        if (email != null) 'email': email,
+        if (fhirId != null) 'fhirId': fhirId,
+      };
 }
 
 /// Health facility reference from `defaultHealthFacility` /
@@ -185,6 +214,13 @@ class HealthFacilityRef {
       tenantId: str('tenantId'),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        if (fhirId != null) 'fhirId': fhirId,
+        if (tenantId != null) 'tenantId': tenantId,
+      };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,8 +238,10 @@ class HealthFacilityRef {
 ///   - Assigned workflow IDs (`workflowIds[]`)
 ///   - Default health facility (`defaultHealthFacility`)
 ///
-/// Read-through cache: first call hits the network; subsequent calls within
-/// the same session return cached data. Call [invalidate] after logout.
+/// Session memory is the fast path; a durable snapshot is also written to
+/// secure storage so cold start / offline PIN unlock can still populate
+/// enrollment SS and Village dropdowns. Call [invalidate] after logout
+/// (disk cache is cleared with logout).
 ///
 /// [prefetch] is the preferred entry-point — call it once after login so all
 /// downstream getters are guaranteed to return without a network round-trip.
@@ -222,11 +260,13 @@ class UserHierarchyService extends ChangeNotifier {
   bool _loading = false;
   String? _error;
 
+  /// True after a successful network parse or a successful disk hydrate.
+  /// Failed network with no disk cache leaves this false so prefetch retries.
+  bool _ready = false;
+
   // Inflight future — prevents duplicate HTTP calls when multiple callers
   // await the service concurrently before the first fetch completes.
   Future<void>? _inflightFetch;
-
-  bool get _fetched => _ssWorkers != null;
 
   List<SsWorker>? get ssWorkers => _ssWorkers;
   List<VillageRef>? get villages => _villages;
@@ -237,11 +277,12 @@ class UserHierarchyService extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
 
-  /// Ensures data is loaded. Safe to call multiple times — only one HTTP
-  /// request fires per session regardless of concurrent callers.
+  /// Ensures data is loaded. Safe to call multiple times — only one attempt
+  /// (network, with disk fallback) runs until [invalidate] or [forceRefresh].
   Future<void> prefetch({bool forceRefresh = false}) async {
-    if (!forceRefresh && _fetched) return;
-    _inflightFetch ??= _doFetch().whenComplete(() => _inflightFetch = null);
+    if (!forceRefresh && _ready) return;
+    _inflightFetch ??= _doFetch(forceRefresh: forceRefresh)
+        .whenComplete(() => _inflightFetch = null);
     await _inflightFetch;
   }
 
@@ -263,7 +304,7 @@ class UserHierarchyService extends ChangeNotifier {
     return _subVillages ?? const [];
   }
 
-  Future<void> _doFetch() async {
+  Future<void> _doFetch({bool forceRefresh = false}) async {
     if (_loading) return;
     _loading = true;
     _error = null;
@@ -282,123 +323,10 @@ class UserHierarchyService extends ChangeNotifier {
         entity = const {};
       }
 
-      // ── SS workers ───────────────────────────────────────────────────────
-      final ssRaw = entity['shasthyaShebikas'];
-      _ssWorkers = (ssRaw is List)
-          ? ssRaw
-              .whereType<Map>()
-              .map((m) => SsWorker.fromJson(Map<String, dynamic>.from(m)))
-              .toList()
-          : const [];
-
-      // ── Top-level villages ───────────────────────────────────────────────
-      final villagesRaw = entity['villages'];
-      _villages = (villagesRaw is List)
-          ? villagesRaw
-              .whereType<Map>()
-              .map((m) => VillageRef.fromJson(Map<String, dynamic>.from(m)))
-              .toList()
-          : const [];
-
-      // ── Top-level sub-villages ───────────────────────────────────────────
-      final svRaw = entity['subVillages'];
-      _subVillages = (svRaw is List)
-          ? svRaw
-              .whereType<Map>()
-              .map((m) => SubVillageRef.fromJson(Map<String, dynamic>.from(m)))
-              .toList()
-          : const [];
-
-      // ── SK profile ───────────────────────────────────────────────────────
-      final profileRaw = entity['userProfile'];
-      if (profileRaw is Map) {
-        _skProfile =
-            SkProfile.fromJson(Map<String, dynamic>.from(profileRaw));
-      }
-
-      // ── Workflow IDs ─────────────────────────────────────────────────────
-      final wfRaw = entity['workflowIds'];
-      _workflowIds = (wfRaw is List)
-          ? wfRaw.whereType<num>().map((n) => n.toInt()).toList()
-          : const [];
-
-      // ── Default health facility ──────────────────────────────────────────
-      final facRaw = entity['defaultHealthFacility'];
-      if (facRaw is Map) {
-        _defaultFacility =
-            HealthFacilityRef.fromJson(Map<String, dynamic>.from(facRaw));
-      }
-
-      // ── Upazila — chiefdoms[0].name ──────────────────────────────────────
-      String? upazilaName;
-      final chiefsRaw = entity['chiefdoms'];
-      debugPrint('[UserHierarchyService] chiefdoms raw: $chiefsRaw');
-      if (chiefsRaw is List && chiefsRaw.isNotEmpty) {
-        final first = chiefsRaw.first;
-        if (first is Map) {
-          final v = first['name'];
-          if (v != null) upazilaName = v.toString().trim();
-        }
-      }
-      debugPrint('[UserHierarchyService] upazila → $upazilaName');
-      await _auth.saveUpazila(upazilaName);
-
-      // ── Persist LINKED_VILLAGE_IDS for offline sync ──────────────────────
-      // Mirror Android MetaRepository: use sub-villages nested within each
-      // SS worker (shasthyaShebikas[].subVillages) as the primary scope —
-      // these are the most specific IDs and match exactly what the server
-      // used when it assigned data to this SK's caseload. Fall back to the
-      // top-level `subVillages` list, then to `villages` only as a last
-      // resort (village-level IDs return the entire village, not just this
-      // SK's area, and produce oversized bundles).
-      final ssSubIds = _ssWorkers!
-          .expand((ss) => ss.subVillages)
-          .map((sv) => int.tryParse(sv.id))
-          .whereType<int>()
-          .toList();
-      final topSubIds = _subVillages!
-          .map((sv) => int.tryParse(sv.id))
-          .whereType<int>()
-          .toList();
-      final villageOnlyIds = _villages!
-          .map((v) => v.idAsInt)
-          .whereType<int>()
-          .toList();
-      final linkedIds = ssSubIds.isNotEmpty
-          ? ssSubIds
-          : (topSubIds.isNotEmpty ? topSubIds : villageOnlyIds);
-      debugPrint(
-          '[UserHierarchyService] villageId candidates: '
-          'ssSubIds=${ssSubIds.length} topSubIds=${topSubIds.length} '
-          'villageIds=${villageOnlyIds.length} → using ${linkedIds.length}');
-      if (linkedIds.isNotEmpty) {
-        await _auth.saveLinkedVillageIds(linkedIds);
-      }
-
-      // Persist SS worker IDs so OfflineSyncService can filter bundle
-      // households by shasthyaShebikaId (mirrors Android caseload scoping).
-      final ssIds = _ssWorkers!
-          .map((ss) => int.tryParse(ss.id))
-          .whereType<int>()
-          .toList();
-      if (ssIds.isNotEmpty) {
-        await _auth.saveSsWorkerIds(ssIds);
-      }
-      debugPrint(
-          '[UserHierarchyService] Saved ${ssIds.length} SS worker IDs: $ssIds');
-
-      // Persist FHIR Practitioner ID and org FHIR ID so OfflineSyncService can
-      // read them from AuthRepository without a second user-data call (P1).
-      final userFhirId = _skProfile?.fhirId;
-      if (userFhirId != null && userFhirId.isNotEmpty) {
-        await _auth.saveUserFhirId(userFhirId);
-        debugPrint('[UserHierarchyService] Saved userFhirId: $userFhirId');
-      }
-      final orgFhirId = _defaultFacility?.fhirId;
-      if (orgFhirId != null && orgFhirId.isNotEmpty) {
-        await _auth.saveOrganizationFhirId(orgFhirId);
-        debugPrint('[UserHierarchyService] Saved orgFhirId: $orgFhirId');
-      }
+      _applyEntity(entity);
+      await _persistSideEffectsFromNetwork(entity);
+      await _persistHierarchyCache();
+      _ready = true;
 
       debugPrint(
           '[UserHierarchyService] Loaded: ${_ssWorkers!.length} SS, '
@@ -406,14 +334,181 @@ class UserHierarchyService extends ChangeNotifier {
           '${_workflowIds.length} workflows');
     } catch (e) {
       _error = e.toString();
-      _ssWorkers ??= const [];
-      _villages ??= const [];
-      _subVillages ??= const [];
       debugPrint('[UserHierarchyService] Fetch failed: $e');
+      final hydrated = await _hydrateFromDisk();
+      if (hydrated) {
+        _ready = true;
+        _error = null;
+        debugPrint(
+            '[UserHierarchyService] Hydrated from disk cache: '
+            '${_ssWorkers?.length ?? 0} SS, '
+            '${_villages?.length ?? 0} villages, '
+            '${_subVillages?.length ?? 0} sub-villages');
+      } else if (forceRefresh) {
+        // Explicit refresh failed and no disk — keep prior memory if any.
+        _ready = _ssWorkers != null;
+      } else {
+        // Leave lists null and _ready false so a later prefetch can retry
+        // (e.g. network returns after a cold offline open).
+        _ready = false;
+      }
     } finally {
       _loading = false;
       notifyListeners();
     }
+  }
+
+  void _applyEntity(Map<String, dynamic> entity) {
+    // ── SS workers ───────────────────────────────────────────────────────
+    final ssRaw = entity['shasthyaShebikas'] ?? entity['ssWorkers'];
+    _ssWorkers = (ssRaw is List)
+        ? ssRaw
+            .whereType<Map>()
+            .map((m) => SsWorker.fromJson(Map<String, dynamic>.from(m)))
+            .toList()
+        : const [];
+
+    // ── Top-level villages ───────────────────────────────────────────────
+    final villagesRaw = entity['villages'];
+    _villages = (villagesRaw is List)
+        ? villagesRaw
+            .whereType<Map>()
+            .map((m) => VillageRef.fromJson(Map<String, dynamic>.from(m)))
+            .toList()
+        : const [];
+
+    // ── Top-level sub-villages ───────────────────────────────────────────
+    final svRaw = entity['subVillages'];
+    _subVillages = (svRaw is List)
+        ? svRaw
+            .whereType<Map>()
+            .map((m) => SubVillageRef.fromJson(Map<String, dynamic>.from(m)))
+            .toList()
+        : const [];
+
+    // ── SK profile ───────────────────────────────────────────────────────
+    final profileRaw = entity['userProfile'] ?? entity['skProfile'];
+    if (profileRaw is Map) {
+      _skProfile = SkProfile.fromJson(Map<String, dynamic>.from(profileRaw));
+    }
+
+    // ── Workflow IDs ─────────────────────────────────────────────────────
+    final wfRaw = entity['workflowIds'];
+    _workflowIds = (wfRaw is List)
+        ? wfRaw.whereType<num>().map((n) => n.toInt()).toList()
+        : const [];
+
+    // ── Default health facility ──────────────────────────────────────────
+    final facRaw = entity['defaultHealthFacility'] ?? entity['defaultFacility'];
+    if (facRaw is Map) {
+      _defaultFacility =
+          HealthFacilityRef.fromJson(Map<String, dynamic>.from(facRaw));
+    }
+  }
+
+  /// Network-only side effects that must run after a live user-data parse.
+  Future<void> _persistSideEffectsFromNetwork(Map<String, dynamic> entity) async {
+    String? upazilaName;
+    final chiefsRaw = entity['chiefdoms'];
+    debugPrint('[UserHierarchyService] chiefdoms raw: $chiefsRaw');
+    if (chiefsRaw is List && chiefsRaw.isNotEmpty) {
+      final first = chiefsRaw.first;
+      if (first is Map) {
+        final v = first['name'];
+        if (v != null) upazilaName = v.toString().trim();
+      }
+    }
+    debugPrint('[UserHierarchyService] upazila → $upazilaName');
+    await _auth.saveUpazila(upazilaName);
+
+    // ── Persist LINKED_VILLAGE_IDS for offline sync ──────────────────────
+    // Mirror Android MetaRepository: use sub-villages nested within each
+    // SS worker (shasthyaShebikas[].subVillages) as the primary scope —
+    // these are the most specific IDs and match exactly what the server
+    // used when it assigned data to this SK's caseload. Fall back to the
+    // top-level `subVillages` list, then to `villages` only as a last
+    // resort (village-level IDs return the entire village, not just this
+    // SK's area, and produce oversized bundles).
+    final ssSubIds = _ssWorkers!
+        .expand((ss) => ss.subVillages)
+        .map((sv) => int.tryParse(sv.id))
+        .whereType<int>()
+        .toList();
+    final topSubIds = _subVillages!
+        .map((sv) => int.tryParse(sv.id))
+        .whereType<int>()
+        .toList();
+    final villageOnlyIds = _villages!
+        .map((v) => v.idAsInt)
+        .whereType<int>()
+        .toList();
+    final linkedIds = ssSubIds.isNotEmpty
+        ? ssSubIds
+        : (topSubIds.isNotEmpty ? topSubIds : villageOnlyIds);
+    debugPrint(
+        '[UserHierarchyService] villageId candidates: '
+        'ssSubIds=${ssSubIds.length} topSubIds=${topSubIds.length} '
+        'villageIds=${villageOnlyIds.length} → using ${linkedIds.length}');
+    if (linkedIds.isNotEmpty) {
+      await _auth.saveLinkedVillageIds(linkedIds);
+    }
+
+    // Persist SS worker IDs so OfflineSyncService can filter bundle
+    // households by shasthyaShebikaId (mirrors Android caseload scoping).
+    final ssIds = _ssWorkers!
+        .map((ss) => int.tryParse(ss.id))
+        .whereType<int>()
+        .toList();
+    if (ssIds.isNotEmpty) {
+      await _auth.saveSsWorkerIds(ssIds);
+    }
+    debugPrint(
+        '[UserHierarchyService] Saved ${ssIds.length} SS worker IDs: $ssIds');
+
+    // Persist FHIR Practitioner ID and org FHIR ID so OfflineSyncService can
+    // read them from AuthRepository without a second user-data call (P1).
+    final userFhirId = _skProfile?.fhirId;
+    if (userFhirId != null && userFhirId.isNotEmpty) {
+      await _auth.saveUserFhirId(userFhirId);
+      debugPrint('[UserHierarchyService] Saved userFhirId: $userFhirId');
+    }
+    final orgFhirId = _defaultFacility?.fhirId;
+    if (orgFhirId != null && orgFhirId.isNotEmpty) {
+      await _auth.saveOrganizationFhirId(orgFhirId);
+      debugPrint('[UserHierarchyService] Saved orgFhirId: $orgFhirId');
+    }
+  }
+
+  Future<void> _persistHierarchyCache() async {
+    final cache = <String, dynamic>{
+      'ssWorkers': _ssWorkers!.map((s) => s.toJson()).toList(),
+      'villages': _villages!.map((v) => v.toJson()).toList(),
+      'subVillages': _subVillages!.map((sv) => sv.toJson()).toList(),
+      'workflowIds': _workflowIds,
+      if (_skProfile != null) 'skProfile': _skProfile!.toJson(),
+      if (_defaultFacility != null)
+        'defaultFacility': _defaultFacility!.toJson(),
+    };
+    await _auth.saveUserHierarchyCache(cache);
+  }
+
+  /// Returns true when disk cache populated in-memory lists.
+  Future<bool> _hydrateFromDisk() async {
+    final cache = await _auth.loadUserHierarchyCache();
+    if (cache == null) return false;
+
+    final ssRaw = cache['ssWorkers'];
+    final villagesRaw = cache['villages'];
+    final svRaw = cache['subVillages'];
+    final hasSs = ssRaw is List && ssRaw.isNotEmpty;
+    final hasVillages = villagesRaw is List && villagesRaw.isNotEmpty;
+    final hasSubVillages = svRaw is List && svRaw.isNotEmpty;
+    if (!hasSs && !hasVillages && !hasSubVillages) return false;
+
+    _applyEntity(cache);
+    // Disk hydrate must not wipe a soft network error used for diagnostics,
+    // but enrollment only needs the lists.
+    return true;
   }
 
   void invalidate() {
@@ -424,7 +519,11 @@ class UserHierarchyService extends ChangeNotifier {
     _workflowIds = const [];
     _defaultFacility = null;
     _error = null;
+    _ready = false;
     _inflightFetch = null;
+    // Disk clear is awaited in AuthRepository.logout(); this is a safety net
+    // if invalidate is called without a full logout.
+    _auth.clearUserHierarchyCache().ignore();
     notifyListeners();
   }
 }

@@ -117,11 +117,28 @@ class PatientOrMemberData {
   Band? get riskBand => localPatient?.patient.riskBand;
   Modifier? get riskModifier => localPatient?.patient.riskModifier;
   List<String> get riskReasons => localPatient?.patient.riskReasons ?? [];
+  /// A local draft and the synced record of the same visit are treated as one
+  /// visit when their timestamps fall inside this window. The device clock and
+  /// the server `visitDate` rarely agree to the minute, and a visit saved late
+  /// at night syncs back dated the next day.
+  static const Duration _visitMergeWindow = Duration(hours: 48);
+
+  /// True when the row came from [LocalAssessmentDao]. Only local drafts carry
+  /// the on-device sync status; server-backed history rows never do.
+  static bool _isLocalDraft(MemberAssessment a) =>
+      a.rawJson.containsKey('syncStatus');
+
   /// Merged Recent Visits feed — locally-cached first (always available
   /// even offline), then remote-only rows the device hasn't synced yet.
-  /// Deduped by [MemberAssessment.id], sorted DESC by date so newest sits
-  /// at top of the section. Replaces the old remote-or-bust behavior that
-  /// rendered "No assessments yet" whenever the API was offline / empty.
+  /// Sorted DESC by date so newest sits at top of the section. Replaces the
+  /// old remote-or-bust behavior that rendered "No assessments yet" whenever
+  /// the API was offline / empty.
+  ///
+  /// One clinical visit reaches this list under two identities: the local
+  /// draft keyed by its UUID and the synced record keyed by the server
+  /// `encounterId`. Deduping on id alone left both in Care History, so a
+  /// single NCD submit rendered as two "NCD Visit" rows. Same-programme rows
+  /// inside [_visitMergeWindow] are therefore collapsed into one.
   List<MemberAssessment> get assessments {
     final byId = <String, MemberAssessment>{};
     void addAll(List<MemberAssessment> src) {
@@ -135,9 +152,70 @@ class PatientOrMemberData {
     addAll(localAssessments);
     addAll(remoteAssessments);
     addAll(remoteMember?.assessments ?? const []);
-    final out = byId.values.toList();
+
+    // Sort before pairing so the result never depends on hash-map order.
+    final rows = byId.values.toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    final out = <MemberAssessment>[];
+    final absorbed = <int>{};
+    for (final a in rows) {
+      // Pair with the closest unpaired counterpart, so two real visits of the
+      // same programme inside the window each keep their own row.
+      var bestIdx = -1;
+      var bestDelta = _visitMergeWindow;
+      for (var i = 0; i < out.length; i++) {
+        if (absorbed.contains(i)) continue;
+        final m = out[i];
+        if (m.type.toUpperCase() != a.type.toUpperCase()) continue;
+        if (_isLocalDraft(m) == _isLocalDraft(a)) continue;
+        final delta = m.date.difference(a.date).abs();
+        if (delta <= bestDelta) {
+          bestDelta = delta;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx < 0) {
+        out.add(a);
+        continue;
+      }
+      final draft = _isLocalDraft(a) ? a : out[bestIdx];
+      final synced = _isLocalDraft(a) ? out[bestIdx] : a;
+      out[bestIdx] = _mergeVisit(synced: synced, draft: draft);
+      absorbed.add(bestIdx);
+    }
     out.sort((a, b) => b.date.compareTo(a.date));
     return out;
+  }
+
+  /// Folds a local draft into the synced record of the same visit. The synced
+  /// row owns the identity (server `encounterId` + `visitDate`); the draft
+  /// contributes the referral decision and the full form payload, which the
+  /// history response omits.
+  static MemberAssessment _mergeVisit({
+    required MemberAssessment synced,
+    required MemberAssessment draft,
+  }) {
+    final draftRaw = draft.rawJson;
+    return MemberAssessment(
+      id: synced.id,
+      type: synced.type,
+      date: synced.date,
+      visitNumber: synced.visitNumber ?? draft.visitNumber,
+      status: synced.status,
+      notes: synced.notes?.isNotEmpty == true ? synced.notes : draft.notes,
+      rawJson: <String, dynamic>{
+        ...synced.rawJson,
+        if (draftRaw['assessmentDetails'] != null)
+          'assessmentDetails': draftRaw['assessmentDetails'],
+        if (draftRaw['customStatus'] != null)
+          'customStatus': draftRaw['customStatus'],
+        if (draftRaw['referralStatus'] != null)
+          'referralStatus': draftRaw['referralStatus'],
+        if (draftRaw['isReferred'] != null)
+          'isReferred': draftRaw['isReferred'],
+      },
+    );
   }
   
   /// Member reference for FHIR API calls (format: RelatedPerson/xxx).
@@ -280,10 +358,12 @@ class _PatientContextScreenState
       print('[PatientContextScreen] local assessments fetch failed: $e');
     }
 
-    // Source 2: local assessments. Always attach assessmentDetails — the
-    // timeline sheet reads LMP/gravida/etc. from there. Success rows enrich
-    // the matching history entry (Source 1 often has only customStatus /
-    // gravida and omits LMP); pending/error rows are shown as their own entry.
+    // Source 2: local assessments, emitted as-is regardless of sync status.
+    // They always carry assessmentDetails, which the timeline sheet reads
+    // LMP/gravida/etc. from and which Source 1 usually omits. Pairing a draft
+    // with the synced record of the same visit happens once, in
+    // [PatientOrMemberData.assessments], so that it also covers records that
+    // only came back over the network.
     try {
       final drafts = await localDrafts.getByPatientId(stripped);
       // ignore: avoid_print
@@ -320,52 +400,9 @@ class _PatientContextScreenState
           if (customStatus != null) 'customStatus': customStatus,
         };
 
-        final typeUpper = d.assessmentType.toUpperCase();
-        if (d.syncStatus == AssessmentSyncStatus.success) {
-          // Enrich history entry of the same type closest in time (within 2 days).
-          final draftDate = d.createdAt ?? DateTime.now();
-          var bestIdx = -1;
-          var bestHours = 1 << 30;
-          for (var i = 0; i < out.length; i++) {
-            if (out[i].type.toUpperCase() != typeUpper) continue;
-            final hours = out[i].date.difference(draftDate).inHours.abs();
-            if (hours < bestHours) {
-              bestHours = hours;
-              bestIdx = i;
-            }
-          }
-          if (bestIdx >= 0 && bestHours <= 48) {
-            final existing = out[bestIdx];
-            out[bestIdx] = MemberAssessment(
-              id: existing.id,
-              type: existing.type,
-              date: existing.date,
-              visitNumber: existing.visitNumber,
-              status: existing.status,
-              notes: existing.notes,
-              rawJson: <String, dynamic>{
-                ...existing.rawJson,
-                'assessmentDetails': details,
-                if (customStatus != null) 'customStatus': customStatus,
-              },
-            );
-          } else {
-            // Synced locally but history not back yet — still show with details.
-            out.add(MemberAssessment(
-              id: d.id.toString(),
-              type: typeUpper,
-              date: draftDate,
-              status: d.syncStatus.name,
-              notes: d.referredReasons,
-              rawJson: localRaw,
-            ));
-          }
-          continue;
-        }
-
         out.add(MemberAssessment(
           id: d.id.toString(),
-          type: typeUpper,
+          type: d.assessmentType.toUpperCase(),
           date: d.createdAt ?? DateTime.now(),
           status: d.syncStatus.name,
           notes: d.referredReasons,

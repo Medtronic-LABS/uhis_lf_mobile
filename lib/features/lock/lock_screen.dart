@@ -80,6 +80,7 @@ class _LockScreenState extends State<LockScreen> {
     final ok = await auth.biometricUnlock();
     if (!mounted) return;
     if (ok) {
+      context.read<SyncConnectivityService>().syncIfSessionReady();
       context.go('/home');
     } else if (!auth.biometricEnabled || !auth.biometricAvailable) {
       context.go('/login?from=lock');

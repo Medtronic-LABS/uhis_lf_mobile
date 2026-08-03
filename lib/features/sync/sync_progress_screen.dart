@@ -5,16 +5,17 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
+import '../../core/sync/offline_push_service.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../referral/referral_repository.dart';
 import '../training/coaching_repository.dart';
-import '../visit/assessment_repository.dart';
 import '../worklist/worklist_repository.dart';
 
 /// Full-screen loading indicator shown during initial data sync after login.
@@ -41,6 +42,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
   bool _syncStarted = false;
   bool _preparingDashboard = false;
   String _preparingMessage = '';
+  /// True when sync stopped because the session has no auth credentials —
+  /// user must re-login; do not offer "continue offline".
+  bool _blockedNoAuth = false;
 
   @override
   void initState() {
@@ -107,16 +111,56 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     // Normal path: /sync reached directly from a returning-user login.
     // A first-time login or a different user signing into a shared device has
     // no local data worth protecting — wipe before pulling. A same-user
-    // re-login must NOT wipe: push pending offline work first.
+    // re-login must NOT wipe: push pending offline work first (households,
+    // members, assessments, follow-ups) before the inbound cold pull.
     final auth = context.read<AuthState>();
+    final authRepo = context.read<AuthRepository>();
+
+    // Offline password login can mark signed-in without restoring a Bearer
+    // token. Push/pull would 401 and still let the user into /home — block.
+    if (!authRepo.hasSessionCredentials) {
+      debugPrint(
+        '[Sync] blocked — no auth token/session credentials; '
+        'cannot push or pull',
+      );
+      if (!mounted) return;
+      setState(() {
+        _blockedNoAuth = true;
+        _progress = SyncProgress.failed(SyncStrings.syncErrorSessionExpired);
+        _report = SyncReport.empty().copyWith(
+          errors: const ['Not authenticated — sign in again'],
+        );
+      });
+      return;
+    }
+
     SyncReport report;
     if (auth.sameUserRelogin) {
       try {
-        await context
-            .read<AssessmentRepository>()
-            .syncPendingAssessments(syncMode: 'InitialSync');
+        final pushResult = await context
+            .read<OfflinePushService>()
+            .pushAll(syncMode: 'InitialSync');
+        debugPrint(
+          '[Sync] login push before coldSync: success=${pushResult.success} '
+          'hadWork=${pushResult.hadWork} msg=${pushResult.message}',
+        );
+        // Push explicitly rejected for missing auth (race) — stop here.
+        if (!pushResult.success &&
+            (pushResult.message ?? '')
+                .toLowerCase()
+                .contains('not authenticated')) {
+          if (!mounted) return;
+          setState(() {
+            _blockedNoAuth = true;
+            _progress = SyncProgress.failed(SyncStrings.syncErrorSessionExpired);
+            _report = SyncReport.empty().copyWith(
+              errors: [pushResult.message ?? 'Not authenticated'],
+            );
+          });
+          return;
+        }
       } catch (e) {
-        debugPrint('[Sync] pending-assessment push before re-login sync failed: $e');
+        debugPrint('[Sync] login push before coldSync failed: $e');
       }
       // Push before pull is still required: `since` is read from SyncMetaDao
       // at the top of _runSync and syncPendingAssessments doesn't touch it,
@@ -198,17 +242,29 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       _progress = SyncProgress.initial;
       _report = null;
       _syncStarted = false;
+      _blockedNoAuth = false;
     });
     await _startSync();
   }
 
   void _continueOffline() {
+    if (_blockedNoAuth) return;
     context.go('/home');
+  }
+
+  void _returnToLogin() {
+    context.go('/login');
   }
 
   String _friendlyError(String? raw) {
     if (raw == null || raw.isEmpty) return SyncStrings.syncErrorGeneric;
+    if (_blockedNoAuth) return SyncStrings.syncErrorSessionExpired;
     final lower = raw.toLowerCase();
+    if (lower.contains('not authenticated') ||
+        lower.contains('session expired') ||
+        lower.contains('401')) {
+      return SyncStrings.syncErrorSessionExpired;
+    }
     if (lower.contains('host lookup') ||
         lower.contains('no address associated') ||
         lower.contains('connection error') ||
@@ -369,16 +425,24 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               // Action buttons for error state
               if (hasError) ...[
                 const SizedBox(height: 32),
-                FilledButton.icon(
-                  onPressed: _retry,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: Text(SyncStrings.retry),
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: _continueOffline,
-                  child: Text(SyncStrings.continueOffline),
-                ),
+                if (_blockedNoAuth)
+                  FilledButton.icon(
+                    onPressed: _returnToLogin,
+                    icon: const Icon(Icons.login_rounded),
+                    label: Text(SyncStrings.signInAgain),
+                  )
+                else ...[
+                  FilledButton.icon(
+                    onPressed: _retry,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: Text(SyncStrings.retry),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _continueOffline,
+                    child: Text(SyncStrings.continueOffline),
+                  ),
+                ],
               ],
               
               const SizedBox(height: 32),

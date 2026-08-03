@@ -103,6 +103,9 @@ class AuthRepository {
   static const _kVillageIds = 'villageIds';
   static const _kSubVillageIds = 'subVillageIds';
   static const _kSsWorkerIds = 'ssWorkerIds';
+  /// Full SK→SS→village hierarchy snapshot for offline enrollment dropdowns.
+  /// Survives process death / PIN unlock; cleared only on explicit logout.
+  static const _kUserHierarchyCache = 'userHierarchyCache';
   static const _kUserId = 'userId';
   static const _kUserFhirId = 'userFhirId';
   static const _kDeviceId = 'deviceId';
@@ -381,6 +384,34 @@ class AuthRepository {
     await _storage.write(key: _kSsWorkerIds, value: ids.join(','));
   }
 
+  /// Persists the full user-data hierarchy (SS names, villages, sub-villages,
+  /// SK profile, facility) so enrollment dropdowns work after process death
+  /// or offline PIN unlock — IDs alone are not enough for the form UI.
+  Future<void> saveUserHierarchyCache(Map<String, dynamic> cache) async {
+    await _storage.write(key: _kUserHierarchyCache, value: jsonEncode(cache));
+  }
+
+  /// Returns the last successfully fetched hierarchy snapshot, or null.
+  Future<Map<String, dynamic>?> loadUserHierarchyCache() async {
+    final raw = await _storage.read(key: _kUserHierarchyCache);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (e) {
+      debugPrint('[auth] hierarchy cache decode failed: $e');
+    }
+    return null;
+  }
+
+  Future<void> clearUserHierarchyCache() async {
+    await _storage.delete(key: _kUserHierarchyCache);
+  }
+
+  /// Whether the API client currently has credentials to call authenticated
+  /// endpoints (Bearer token and/or auth cookie).
+  bool get hasSessionCredentials => _api.hasSessionCredentials;
+
   Future<void> saveUpazila(String? name) async {
     if (name != null && name.isNotEmpty) {
       await _storage.write(key: _kUpazila, value: name);
@@ -403,6 +434,7 @@ class AuthRepository {
     await _storage.delete(key: _kTenantId);
     await _storage.delete(key: _kOrganizationFhirId);
     await _storage.delete(key: _kUserFhirId);
+    await clearUserHierarchyCache();
     await _clearReentrySession();
     await _storage.delete(key: _kBioEnabled);
     await _storage.delete(key: _kBioUsername);
