@@ -220,10 +220,14 @@ class _PatientCardSkeleton extends StatelessWidget {
 /// shows the real patient name + initials instead of a shimmer box. Avoids
 /// the all-white loader the SK previously saw when tapping a worklist card.
 class SkeletonPatientDetail extends StatelessWidget {
-  const SkeletonPatientDetail({super.key, this.name});
+  const SkeletonPatientDetail({super.key, this.name, this.onBack});
 
   /// Pre-known patient name — shown as real text; skeletons the rest.
   final String? name;
+
+  /// Back-arrow handler. Null disables the button — pass one so the back
+  /// arrow still responds while the real screen's data is still loading.
+  final VoidCallback? onBack;
 
   String _initials(String n) {
     final parts = n.trim().split(RegExp(r'\s+'));
@@ -258,7 +262,7 @@ class SkeletonPatientDetail extends StatelessWidget {
                   HeaderIconButton(
                     icon: Icons.arrow_back,
                     tooltip: PatientContextStrings.backToWorklist,
-                    onTap: null,
+                    onTap: onBack,
                   ),
                   const SizedBox(width: 10),
                   CircleAvatar(

@@ -235,8 +235,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// historical values. Height and weight are resolved independently (latest
   /// non-empty value for each field).
   ///
-  /// When a prior height exists, the field is hard-locked (Spice NCD behaviour)
-  /// even if a draft already held the same value.
+  /// When a prior height exists, the field is hard-locked (and hidden on
+  /// NCD/cataract like ANC visit 2+) even if a draft already held the value.
   Future<void> preloadBiometrics() async {
     var changed = false;
     final alsoId = await _localPatientId();

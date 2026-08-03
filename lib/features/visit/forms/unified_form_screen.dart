@@ -229,6 +229,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       ancVisitNumber: _ancVisitNumber(),
       formType: formType,
       ageInMonths: widget.ageInMonths,
+      priorHeightLocked: notifier.isHeightLockedFromPrior,
     );
   }
 
@@ -433,8 +434,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             validationErrors: notifier.validationErrors,
             onFieldChanged: notifier.updateField,
             previousWeight: _lastRecordedWeight,
-            // NCD/cataract: prior height is shown disabled. ANC visit 2+ hides
-            // height via visibility rules; the pair card still shows weight.
+            // Prior height is locked; NCD/cataract also hide the field (ANC
+            // visit 2+ already hides via visit-number rules). Weight stays.
             heightReadOnly: notifier.isHeightLockedFromPrior,
             gestationalWeeks: effectiveGa,
             ancVisitNumber: _ancVisitNumber(),
@@ -835,8 +836,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// visibility rules used for rendering and validation) but still hold a
   /// value in [notifier] — these are stale and must not reach the payload.
   ///
-  /// [height] is never stripped: on ANC visit 2+ the field is hidden but the
-  /// prior/prefilled value must still reach the payload (Spice continuity).
+  /// [height] is never stripped: when ANC visit 2+ / NCD prior-height hide the
+  /// field, the prefilled value must still reach the payload (BMI + wire).
   Set<String> _computeHiddenFieldIds(
     UnifiedFormNotifier notifier,
     List<AnnotatedFormSection> annotated,
@@ -1757,6 +1758,7 @@ class _SectionCard extends StatelessWidget {
       ancVisitNumber: ancVisitNumber,
       formType: section.formType,
       ageInMonths: ageInMonths,
+      priorHeightLocked: heightReadOnly,
     );
   }
 
@@ -1876,6 +1878,7 @@ class _SectionCard extends StatelessWidget {
         ancVisitNumber: ancVisitNumber,
         formType: section.formType,
         ageInMonths: ageInMonths,
+        priorHeightLocked: heightReadOnly,
       );
       if (section.formType == 'pregnancyOutcome') {
         // ignore: avoid_print
@@ -1963,7 +1966,7 @@ class _SectionCard extends StatelessWidget {
           hasHeightWeightPair &&
           !heightVisible &&
           weightVisible) {
-        // ANC visit 2+: height hidden — same pair shell, weight only.
+        // Height hidden (ANC visit 2+ / NCD prior lock) — weight-only pair.
         if (!heightWeightPairEmitted) {
           heightWeightPairEmitted = true;
           badgeIds = {'weight'};

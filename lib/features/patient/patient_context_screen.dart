@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -98,7 +97,10 @@ class PatientOrMemberData {
   String? get patientId =>
       localPatient?.patient.patientId ?? remoteMember?.patientId;
   int? get age => localPatient?.patient.age ?? remoteMember?.age;
-  bool get isPregnant => remoteMember?.isPregnant ?? false;
+  bool get isPregnant =>
+      pregnancySnapshot != null ||
+      programmes.contains(Programme.anc) ||
+      (remoteMember?.isPregnant ?? false);
   String? get nationalId =>
       localPatient?.patient.nationalId ?? remoteMember?.nationalId;
   String? get dateOfBirth =>
@@ -873,6 +875,23 @@ class _PatientContextScreenState
     );
   }
 
+  /// Go-router-aware back navigation. `Navigator.of(context).maybePop()`
+  /// looks wrong here: when this screen is reached via `context.push(...)`
+  /// from a route outside its own shell branch (e.g. tapping the patient
+  /// name in the visit flow's header, itself a root-level route), the
+  /// nearest raw Flutter Navigator can have nothing to pop even though
+  /// go_router's own location stack does — silently no-opping the back
+  /// arrow. `context.pop()` operates on that router-level stack instead,
+  /// matching the pattern already used elsewhere in this app (e.g.
+  /// `add_household_member_screen.dart`).
+  void _handleBack(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/home');
+    }
+  }
+
   Widget buildPhi(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Scaffold(
@@ -905,6 +924,7 @@ class _PatientContextScreenState
                 top: false,
                 child: SkeletonPatientDetail(
                   name: widget.memberData?['name'] as String?,
+                  onBack: () => _handleBack(context),
                 ),
               ),
             );
@@ -1013,7 +1033,7 @@ class _PatientContextScreenState
             _PatientDetailHeader(
               data: data,
               refreshing: _refreshing,
-              onBack: () => Navigator.of(context).maybePop(),
+              onBack: () => _handleBack(context),
               onRefresh: _refreshing ? null : _refresh,
             ),
             Expanded(
@@ -1036,7 +1056,19 @@ class _PatientContextScreenState
                     const SizedBox(height: 10),
 
                     // ── Active care threads ───────────────────────────────
-                    _CareThreadChipRow(threads: threads),
+                    _CareThreadChipRow(
+                      threads: threads,
+                      onEdit: () => context.push(
+                        '/patients/${widget.patientId}/enroll',
+                        extra: <String, dynamic>{
+                          'patientName': data.name,
+                          'patientAge': data.age,
+                          'patientGender': data.gender,
+                          'villageName': data.villageName,
+                          'existingProgrammes': data.programmes,
+                        },
+                      ),
+                    ),
                     const SizedBox(height: 12),
 
                     // ── Pregnancy LMP/EDD card (active pregnancy only) ────
@@ -2240,11 +2272,13 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
 // ─── Care Thread Chip Row ──────────────────────────────────────────────────
 
 /// Wrapping row of thread chips — one pill per active clinical pathway.
-/// Display-only (not tappable).
+/// The chips themselves are display-only; an optional [onEdit] renders a
+/// trailing "+ Edit" action that opens ProgrammeEnrollScreen.
 class _CareThreadChipRow extends StatelessWidget {
-  const _CareThreadChipRow({required this.threads});
+  const _CareThreadChipRow({required this.threads, this.onEdit});
 
   final List<_CareThread> threads;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -2254,14 +2288,33 @@ class _CareThreadChipRow extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            PatientProfileStrings.activeCareThreads,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textMid,
-              letterSpacing: 0.2,
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  PatientProfileStrings.activeCareThreads,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMid,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+              if (onEdit != null)
+                GestureDetector(
+                  key: const Key('patient_context_edit_programmes'),
+                  onTap: onEdit,
+                  child: Text(
+                    PatientProfileStrings.editProgrammesCta,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         Wrap(
@@ -3572,573 +3625,6 @@ class _DetailRow extends StatelessWidget {
       ),
     );
   }
-}
-
-// ─── BP / BG Trend Charts ──────────────────────────────────────────────────
-
-/// One data point for a trend chart: a visit's reading + tap target.
-class _TrendPoint {
-  const _TrendPoint({
-    required this.date,
-    required this.displayLabel,
-    required this.primaryVal,
-    this.secondaryVal,
-    this.assessment,
-  });
-
-  final DateTime date;
-  final String displayLabel;
-  final double primaryVal;
-  final double? secondaryVal;
-  final MemberAssessment? assessment;
-}
-
-/// Two stacked expandable trend cards (BP + BG).
-/// Each card collapses to sparkline + latest value + date.
-/// Expanded state shows history list; each row taps to full assessment sheet.
-class _BpBgTrendSection extends StatelessWidget {
-  const _BpBgTrendSection({
-    required this.vitalHistory,
-    required this.assessments,
-    required this.patientId,
-    this.patientName,
-  });
-
-  final List<VisitVitals> vitalHistory;
-  final List<MemberAssessment> assessments;
-  final String patientId;
-  final String? patientName;
-
-  List<_TrendPoint> _buildBpPoints() {
-    return vitalHistory
-        .where((v) => v.readings.any((r) =>
-            r.type == VitalType.bloodPressure &&
-            r.systolic != null &&
-            r.diastolic != null))
-        .take(6)
-        .toList()
-        .reversed
-        .map((v) {
-          final r = v.readings.firstWhere((r) => r.type == VitalType.bloodPressure);
-          return _TrendPoint(
-            date: v.date,
-            displayLabel: '${r.systolic!.toInt()}/${r.diastolic!.toInt()} mmHg',
-            primaryVal: r.systolic!,
-            secondaryVal: r.diastolic,
-            assessment: assessments.where((a) => a.id == v.encounterId).firstOrNull,
-          );
-        })
-        .toList();
-  }
-
-  List<_TrendPoint> _buildBgPoints() {
-    return vitalHistory
-        .where((v) =>
-            v.readings.any((r) => r.type == VitalType.glucose && r.value != null))
-        .take(6)
-        .toList()
-        .reversed
-        .map((v) {
-          final r = v.readings.firstWhere((r) => r.type == VitalType.glucose);
-          return _TrendPoint(
-            date: v.date,
-            displayLabel: '${r.value!.toStringAsFixed(1)} mg/dL',
-            primaryVal: r.value!,
-            assessment: assessments.where((a) => a.id == v.encounterId).firstOrNull,
-          );
-        })
-        .toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bpPoints = _buildBpPoints();
-    final bgPoints = _buildBgPoints();
-    if (bpPoints.isEmpty && bgPoints.isEmpty) return const SizedBox.shrink();
-
-    final lc = Theme.of(context).extension<LeapfrogColors>()!;
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          PatientProfileStrings.trendsTitle,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: lc.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (bpPoints.isNotEmpty)
-          _VitalTrendCard(
-            title: PatientProfileStrings.bpChartLabel,
-            points: bpPoints,
-            isBp: true,
-            onAssessmentTap: (ctx, a) => _TimelineEventSheet.show(ctx, a),
-          ),
-        if (bpPoints.isNotEmpty && bgPoints.isNotEmpty) const SizedBox(height: 8),
-        if (bgPoints.isNotEmpty)
-          _VitalTrendCard(
-            title: PatientProfileStrings.bgChartLabel,
-            points: bgPoints,
-            isBp: false,
-            onAssessmentTap: (ctx, a) => _TimelineEventSheet.show(ctx, a),
-          ),
-        const SizedBox(height: 4),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: () => context.push(
-              '/patients/$patientId/trends',
-              extra: <String, dynamic>{
-                'patientName': patientName,
-                'vitalHistory': vitalHistory,
-                'assessments': assessments,
-              },
-            ),
-            icon: const Icon(Icons.trending_up, size: 16),
-            label: Text(PatientProfileStrings.viewAllTrends),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _VitalTrendCard extends StatefulWidget {
-  const _VitalTrendCard({
-    required this.title,
-    required this.points,
-    required this.isBp,
-    this.lineColor = AppColors.statusWarning,
-    this.onAssessmentTap,
-  });
-
-  final String title;
-  final List<_TrendPoint> points; // oldest-first
-  final bool isBp;
-  final Color lineColor;
-  final void Function(BuildContext context, MemberAssessment assessment)? onAssessmentTap;
-
-  @override
-  State<_VitalTrendCard> createState() => _VitalTrendCardState();
-}
-
-class _VitalTrendCardState extends State<_VitalTrendCard> {
-  bool _expanded = false;
-
-  List<VitalReading> get _readingsForChart => widget.points
-      .map((p) => VitalReading(
-            type: widget.isBp ? VitalType.bloodPressure : VitalType.glucose,
-            date: p.date,
-            systolic: p.primaryVal,
-            diastolic: p.secondaryVal,
-            value: widget.isBp ? null : p.primaryVal,
-            unit: widget.isBp ? 'mmHg' : 'mg/dL',
-          ))
-      .toList();
-
-  // Delta = latest primaryVal minus previous primaryVal. Null if < 2 points.
-  double? get _delta {
-    if (widget.points.length < 2) return null;
-    return widget.points.last.primaryVal -
-        widget.points[widget.points.length - 2].primaryVal;
-  }
-
-  Widget _deltaChip(double delta, LeapfrogColors lc) {
-    final isUp = delta > 0;
-    final color = isUp ? AppColors.statusSuccess : AppColors.statusCritical;
-    final prefix = isUp ? '+' : '';
-    final label = widget.isBp
-        ? '$prefix${delta.round()}'
-        : '$prefix${delta.toStringAsFixed(1)}';
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-          color: color,
-          size: 12,
-        ),
-        const SizedBox(width: 1),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final lc = Theme.of(context).extension<LeapfrogColors>()!;
-    final latest = widget.points.last;
-    final dateLabel = DateFormat('d MMM').format(latest.date);
-    final delta = _delta;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: lc.cardSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: lc.borderDefault),
-      ),
-      child: Column(
-        children: [
-          // ── Collapsed header ────────────────────────────────────
-          InkWell(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 80,
-                    height: 62,
-                    child: CustomPaint(
-                      painter: widget.isBp
-                          ? _BpSparklinePainter(readings: _readingsForChart, lc: lc)
-                          : _SingleLinePainter(readings: _readingsForChart, lc: lc, color: widget.lineColor),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: lc.textMuted,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                latest.displayLabel,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: lc.textPrimary,
-                                ),
-                              ),
-                            ),
-                            if (delta != null && delta != 0) ...[
-                              const SizedBox(width: 5),
-                              _deltaChip(delta, lc),
-                            ],
-                          ],
-                        ),
-                        Text(
-                          dateLabel,
-                          style: TextStyle(fontSize: 11, color: lc.textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 20,
-                    color: lc.textMuted,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // ── Expanded history list ───────────────────────────────
-          if (_expanded) ...[
-            Divider(height: 1, thickness: 1, color: lc.borderDefault),
-            // Newest first in list
-            ...widget.points.reversed.map((pt) => _TrendHistoryRow(
-                  point: pt,
-                  lc: lc,
-                  onTap: pt.assessment != null
-                      ? () => widget.onAssessmentTap?.call(context, pt.assessment!)
-                      : null,
-                )),
-            const SizedBox(height: 4),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _TrendHistoryRow extends StatelessWidget {
-  const _TrendHistoryRow({required this.point, required this.lc, this.onTap});
-
-  final _TrendPoint point;
-  final LeapfrogColors lc;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Row(
-          children: [
-            Text(
-              DateFormat('d MMM yyyy').format(point.date),
-              style: TextStyle(
-                fontSize: 12,
-                color: lc.textMuted,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              point.displayLabel,
-              style: TextStyle(
-                fontSize: 13,
-                color: lc.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            if (onTap != null) ...[
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 16, color: lc.textMuted),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Paints systolic (solid navy) + diastolic (lighter blue) lines with a
-/// semi-transparent fill between them.
-class _BpSparklinePainter extends CustomPainter {
-  const _BpSparklinePainter({required this.readings, required this.lc});
-
-  final List<VitalReading> readings;
-  final LeapfrogColors lc;
-
-  static const double _kDateLabelH = 14.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final chartH = size.height - _kDateLabelH;
-    if (readings.length < 2) {
-      _dotAt(canvas, size.width / 2, chartH / 2, AppColors.navy, 4);
-      _drawDateLabels(canvas, size, readings);
-      return;
-    }
-
-    final sys = readings.map((r) => r.systolic!).toList();
-    final dia = readings.map((r) => r.diastolic!).toList();
-
-    final allVals = [...sys, ...dia];
-    final minVal = allVals.reduce((a, b) => a < b ? a : b) - 10;
-    final maxVal = allVals.reduce((a, b) => a > b ? a : b) + 10;
-    final range = (maxVal - minVal).clamp(1.0, double.infinity);
-
-    double xAt(int i) => i / (readings.length - 1) * size.width;
-    double yAt(double v) => chartH - ((v - minVal) / range) * chartH;
-
-    final sysPath = Path()..moveTo(xAt(0), yAt(sys[0]));
-    for (int i = 1; i < sys.length; i++) {
-      sysPath.lineTo(xAt(i), yAt(sys[i]));
-    }
-
-    final diaPath = Path()..moveTo(xAt(0), yAt(dia[0]));
-    for (int i = 1; i < dia.length; i++) {
-      diaPath.lineTo(xAt(i), yAt(dia[i]));
-    }
-
-    // Fill between sys and dia
-    final fillPath = Path()..moveTo(xAt(0), yAt(sys[0]));
-    for (int i = 1; i < sys.length; i++) {
-      fillPath.lineTo(xAt(i), yAt(sys[i]));
-    }
-    for (int i = readings.length - 1; i >= 0; i--) {
-      fillPath.lineTo(xAt(i), yAt(dia[i]));
-    }
-    fillPath.close();
-
-    canvas.drawPath(
-      fillPath,
-      Paint()..color = AppColors.navy.withValues(alpha: 0.10),
-    );
-
-    final sysPaint = Paint()
-      ..color = AppColors.navy
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final diaPaint = Paint()
-      ..color = AppColors.navy.withValues(alpha: 0.50)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    canvas.drawPath(sysPath, sysPaint);
-    canvas.drawPath(diaPath, diaPaint);
-
-    // Data point dots at every reading
-    for (int i = 0; i < readings.length; i++) {
-      _dotAt(canvas, xAt(i), yAt(sys[i]), AppColors.navy,
-          i == sys.length - 1 ? 3.5 : 2.5);
-      _dotAt(canvas, xAt(i), yAt(dia[i]),
-          AppColors.navy.withValues(alpha: 0.60), i == dia.length - 1 ? 3.0 : 2.0);
-    }
-
-    _drawDateLabels(canvas, size, readings);
-  }
-
-  void _drawDateLabels(Canvas canvas, Size size, List<VitalReading> r) {
-    if (r.isEmpty) return;
-    final labelY = size.height - _kDateLabelH + 2;
-    final fmt = DateFormat('d MMM');
-    _paintLabel(canvas, fmt.format(r.first.date), 0, labelY, align: TextAlign.left);
-    if (r.length > 1) {
-      _paintLabel(canvas, fmt.format(r.last.date), size.width, labelY,
-          align: TextAlign.right);
-    }
-  }
-
-  void _paintLabel(Canvas canvas, String text, double x, double y,
-      {TextAlign align = TextAlign.left}) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(
-          fontSize: 8.5,
-          color: AppColors.textMuted,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      textDirection: ui.TextDirection.ltr,
-    )..layout(maxWidth: 36);
-    final dx = align == TextAlign.right ? x - tp.width : x;
-    tp.paint(canvas, Offset(dx, y));
-  }
-
-  void _dotAt(Canvas canvas, double x, double y, Color color, double r) {
-    canvas.drawCircle(Offset(x, y), r, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(_BpSparklinePainter old) => old.readings != readings;
-}
-
-/// Generic single-line sparkline with area fill below. Color-parameterised.
-class _SingleLinePainter extends CustomPainter {
-  const _SingleLinePainter({
-    required this.readings,
-    required this.lc,
-    this.color = AppColors.statusWarning,
-  });
-
-  final List<VitalReading> readings;
-  final LeapfrogColors lc;
-  final Color color;
-
-  static const double _kDateLabelH = 14.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final chartH = size.height - _kDateLabelH;
-    if (readings.isEmpty) return;
-    if (readings.length < 2) {
-      canvas.drawCircle(Offset(size.width / 2, chartH / 2), 4, Paint()..color = color);
-      _drawDateLabels(canvas, size, readings);
-      return;
-    }
-
-    final vals = readings.map((r) => r.value!).toList();
-    final minVal = (vals.reduce((a, b) => a < b ? a : b) - 10).clamp(0.0, double.infinity);
-    final maxVal = vals.reduce((a, b) => a > b ? a : b) + 10;
-    final range = (maxVal - minVal).clamp(1.0, double.infinity);
-
-    double xAt(int i) => i / (readings.length - 1) * size.width;
-    double yAt(double v) => chartH - ((v - minVal) / range) * chartH;
-
-    final line = Path()..moveTo(xAt(0), yAt(vals[0]));
-    for (int i = 1; i < vals.length; i++) {
-      line.lineTo(xAt(i), yAt(vals[i]));
-    }
-
-    final fill = Path()
-      ..moveTo(xAt(0), chartH)
-      ..lineTo(xAt(0), yAt(vals[0]));
-    for (int i = 1; i < vals.length; i++) {
-      fill.lineTo(xAt(i), yAt(vals[i]));
-    }
-    fill.lineTo(xAt(vals.length - 1), chartH);
-    fill.close();
-
-    canvas.drawPath(fill, Paint()..color = color.withValues(alpha: 0.12));
-    canvas.drawPath(
-      line,
-      Paint()
-        ..color = color
-        ..strokeWidth = 2
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    // Data point dots at every reading
-    for (int i = 0; i < vals.length; i++) {
-      canvas.drawCircle(
-        Offset(xAt(i), yAt(vals[i])),
-        i == vals.length - 1 ? 3.5 : 2.5,
-        Paint()..color = color,
-      );
-    }
-
-    _drawDateLabels(canvas, size, readings);
-  }
-
-  void _drawDateLabels(Canvas canvas, Size size, List<VitalReading> r) {
-    if (r.isEmpty) return;
-    final labelY = size.height - _kDateLabelH + 2;
-    final fmt = DateFormat('d MMM');
-    _paintLabel(canvas, fmt.format(r.first.date), 0, labelY, align: TextAlign.left);
-    if (r.length > 1) {
-      _paintLabel(canvas, fmt.format(r.last.date), size.width, labelY,
-          align: TextAlign.right);
-    }
-  }
-
-  void _paintLabel(Canvas canvas, String text, double x, double y,
-      {TextAlign align = TextAlign.left}) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(
-          fontSize: 8.5,
-          color: AppColors.textMuted,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      textDirection: ui.TextDirection.ltr,
-    )..layout(maxWidth: 36);
-    final dx = align == TextAlign.right ? x - tp.width : x;
-    tp.paint(canvas, Offset(dx, y));
-  }
-
-  @override
-  bool shouldRepaint(_SingleLinePainter old) => old.readings != readings || old.color != color;
 }
 
 // ─── Combined Timeline ─────────────────────────────────────────────────────
@@ -6068,220 +5554,6 @@ class _NoServicesCardState extends State<_NoServicesCard> {
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Trends Screen ─────────────────────────────────────────────────────────
-
-/// Full-page trend viewer: BP, BG, Weight, SpO2, Haemoglobin (ANC), Temperature.
-/// Data passed via GoRouter extra from PatientContextScreen to avoid reload.
-class TrendsScreen extends StatelessWidget {
-  const TrendsScreen({
-    super.key,
-    required this.patientId,
-    required this.vitalHistory,
-    required this.assessments,
-    this.patientName,
-  });
-
-  final String patientId;
-  final List<VisitVitals> vitalHistory;
-  final List<MemberAssessment> assessments;
-  final String? patientName;
-
-  static const _lightStatusBar = SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    statusBarBrightness: Brightness.dark,
-  );
-
-  List<_TrendPoint> _pointsForType(VitalType type) {
-    return vitalHistory
-        .where((v) => v.readings.any((r) => r.type == type && _hasValue(r, type)))
-        .take(10)
-        .toList()
-        .reversed
-        .map((v) {
-          final r = v.readings.firstWhere((r) => r.type == type);
-          final match = assessments.where((a) => a.id == v.encounterId).firstOrNull;
-          return _TrendPoint(
-            date: v.date,
-            displayLabel: _formatReading(r, type),
-            primaryVal: type == VitalType.bloodPressure ? r.systolic! : r.value!,
-            secondaryVal: type == VitalType.bloodPressure ? r.diastolic : null,
-            assessment: match,
-          );
-        })
-        .toList();
-  }
-
-  bool _hasValue(VitalReading r, VitalType type) {
-    if (type == VitalType.bloodPressure) return r.systolic != null && r.diastolic != null;
-    return r.value != null;
-  }
-
-  String _formatReading(VitalReading r, VitalType type) {
-    switch (type) {
-      case VitalType.bloodPressure:
-        return '${r.systolic!.toInt()}/${r.diastolic!.toInt()} mmHg';
-      case VitalType.glucose:
-        return '${r.value!.toStringAsFixed(1)} mg/dL';
-      case VitalType.weight:
-        return '${r.value!.toStringAsFixed(1)} kg';
-      case VitalType.spO2:
-        return '${r.value!.toStringAsFixed(0)}%';
-      case VitalType.temperature:
-        return '${r.value!.toStringAsFixed(1)}°C';
-      default:
-        return r.value!.toStringAsFixed(1);
-    }
-  }
-
-  List<_TrendPoint> _haemoglobinPoints() {
-    final pts = <_TrendPoint>[];
-    for (final a in assessments) {
-      if (Programme.fromString(a.type) != Programme.anc) continue;
-      String? hbStr;
-      final rawJson = a.rawJson;
-      hbStr = rawJson['hemoglobin'] as String?;
-      if (hbStr == null || hbStr.isEmpty) {
-        final obs = rawJson['observations'];
-        if (obs is Map) hbStr = obs['hemoglobin'] as String?;
-      }
-      if (hbStr == null || hbStr.isEmpty) {
-        final ad = rawJson['assessmentDetails'];
-        if (ad is Map) {
-          final anc = ad['anc'];
-          hbStr = (anc is Map ? anc['hemoglobin'] : ad['hemoglobin']) as String?;
-        }
-      }
-      if (hbStr == null || hbStr.isEmpty) continue;
-      final val = double.tryParse(hbStr);
-      if (val == null) continue;
-      pts.add(_TrendPoint(
-        date: a.date,
-        displayLabel: '${val.toStringAsFixed(1)} g/dL',
-        primaryVal: val,
-        assessment: a,
-      ));
-    }
-    return pts.take(10).toList().reversed.toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final lc = Theme.of(context).extension<LeapfrogColors>()!;
-    final theme = Theme.of(context);
-
-    final bpPoints = _pointsForType(VitalType.bloodPressure);
-    final bgPoints = _pointsForType(VitalType.glucose);
-    final wtPoints = _pointsForType(VitalType.weight);
-    final spO2Points = _pointsForType(VitalType.spO2);
-    final tempPoints = _pointsForType(VitalType.temperature);
-    final hbPoints = _haemoglobinPoints();
-
-    final cards = <Widget>[];
-
-    void addCard(
-      String title,
-      List<_TrendPoint> points, {
-      bool isBp = false,
-      Color lineColor = AppColors.statusWarning,
-    }) {
-      if (points.isEmpty) return;
-      cards.add(_VitalTrendCard(
-        title: title,
-        points: points,
-        isBp: isBp,
-        lineColor: lineColor,
-        onAssessmentTap: (ctx, a) => _TimelineEventSheet.show(ctx, a),
-      ));
-      cards.add(const SizedBox(height: 10));
-    }
-
-    addCard(PatientProfileStrings.bpChartLabel, bpPoints, isBp: true);
-    addCard(PatientProfileStrings.bgChartLabel, bgPoints);
-    addCard(PatientProfileStrings.weightChartLabel, wtPoints,
-        lineColor: AppColors.navy);
-    addCard(PatientProfileStrings.haemoglobinChartLabel, hbPoints,
-        lineColor: AppColors.statusCritical);
-    addCard(PatientProfileStrings.spO2ChartLabel, spO2Points,
-        lineColor: const Color(0xFF10B981));
-    addCard(PatientProfileStrings.tempChartLabel, tempPoints,
-        lineColor: const Color(0xFFF97316));
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: _lightStatusBar,
-      child: Scaffold(
-        backgroundColor: lc.canvas,
-        body: Column(
-          children: [
-            // ── Navy header matching _PatientDetailHeader ────────────
-            Container(
-              color: AppColors.navy,
-              padding: EdgeInsets.fromLTRB(
-                8,
-                MediaQuery.of(context).padding.top + 8,
-                16,
-                14,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  HeaderIconButton(
-                    icon: Icons.arrow_back,
-                    tooltip: PatientContextStrings.backToWorklist,
-                    onTap: () => Navigator.of(context).maybePop(),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          patientName ?? PatientProfileStrings.allTrendsTitle,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (patientName != null)
-                          Text(
-                            PatientProfileStrings.allTrendsTitle,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // ── Trend cards ──────────────────────────────────────────
-            Expanded(
-              child: cards.isEmpty
-                  ? Center(
-                      child: Text(
-                        PatientProfileStrings.noVitalsYet,
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: lc.textMuted),
-                      ),
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.all(14),
-                      children: cards,
-                    ),
             ),
           ],
         ),

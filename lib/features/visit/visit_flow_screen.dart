@@ -1,4 +1,4 @@
-/// Unified 4-step visit flow — spec §3.1 (`Apon Sushashthya V1`).
+/// Unified 3-step visit flow — spec §3.1 (`Apon Sushashthya V1`).
 ///
 /// One [VisitFlowScreen] owns step state; the SK never leaves this route
 /// while the visit is in progress. Hosted via the route
@@ -6,9 +6,12 @@
 ///
 /// Steps (driven by [_VisitFlowState._step]):
 ///   0 → Step 1: symptom check (AI Scribe) — wraps [SymptomPickerScreen]
-///   1 → Step 2: AI programme recommendation — wraps [ProgrammeSelectionScreen]
-///   2 → Step 3: vitals + full form — wraps [VisitFormScreen]
-///   3 → Step 4: AI recommendation — folded into [_Step3AiReco] here
+///   1 → Step 2: vitals + full form — wraps [VisitFormScreen]. Programme
+///       resolution happens here too, but only via the rule-based
+///       PathwayEngine result from Step 1 — the AI-confirmation screen
+///       (`ProgrammeSelectionScreen`) is built but intentionally disabled;
+///       see [_Step2ProgrammesThenFormState.build].
+///   2 → Step 3: AI recommendation — folded into [_Step3AiReco] here
 ///
 /// Engineering Design Standards:
 ///   - Single-responsibility step widgets, composed by the wrapper.
@@ -52,7 +55,6 @@ import 'forms/childhood_visit.dart';
 import 'forms/rmnch_referral_facility.dart';
 import 'immunisation/epi_visit_summary.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
-import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
 import 'visit_flow_header.dart';
 import 'visit_form_screen.dart';
@@ -1048,18 +1050,11 @@ class _Step2VaccinationState extends State<_Step2Vaccination> {
   }
 }
 
-/// Step 2 — composite "AI programme recommendation → screening form".
-///
-/// Renders the [ProgrammeSelectionScreen] first; once the SK taps Continue,
-/// swaps to [VisitFormScreen] using the confirmed programme set. The phase
-/// switch is owned here so the top-level [VisitFlowScreen] keeps a 3-step
-/// progress header.
-///
-/// Back button behaviour:
-///   - From the form phase, hitting back returns to the programme phase
-///     (programme selection is preserved).
-///   - From the programme phase, back bubbles up to the host which drops to
-///     Step 1.
+/// Step 2 — resolves the programme set (rule-based, from Step 1's
+/// PathwayEngine result — see [_Step2ProgrammesThenFormState.build]), runs
+/// the ANC/PW gating checks in [_Step2ProgrammesThenFormState._hydrate], then
+/// renders [VisitFormScreen]. `ProgrammeSelectionScreen` (an AI-confirmation
+/// step) exists but is not wired into this flow.
 class _Step2ProgrammesThenForm extends StatefulWidget {
   const _Step2ProgrammesThenForm({
     super.key,
@@ -1123,13 +1118,9 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
       _Step2ProgrammesThenFormState();
 }
 
-enum _Step2Phase { programmes, form }
-
 class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
-  _Step2Phase _phase = _Step2Phase.programmes;
   Set<Programme> _currentProgrammes = const <Programme>{};
   Set<Programme> _selectedProgrammes = const <Programme>{};
-  Map<String, dynamic> _request = const <String, dynamic>{};
   bool _ready = false;
 
   @override
@@ -1147,8 +1138,6 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       '${_selectedProgrammes.map((p) => p.name).join(', ')} '
       'isDeliveryVisit=${widget.isDeliveryVisit}',
     );
-    // AI programme recommendation disabled — use rule-based PathwayEngine result directly.
-    _phase = _Step2Phase.form;
     WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
   }
 
@@ -1227,7 +1216,6 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
 
       setState(() {
         _currentProgrammes = progs;
-        _request = _buildRequest(progs);
         _ready = true;
       });
     } catch (e) {
@@ -1235,7 +1223,6 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       if (!mounted) return;
       setState(() {
         _currentProgrammes = const <Programme>{};
-        _request = _buildRequest(const <Programme>{});
         _ready = true;
       });
     }
@@ -1296,49 +1283,14 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
     );
   }
 
-  Map<String, dynamic> _buildRequest(Set<Programme> currentProgrammes) {
-    return <String, dynamic>{
-      'patientId': widget.patientId,
-      if (widget.patientName != null) 'patientName': widget.patientName,
-      if (widget.patientAge != null) 'ageYears': widget.patientAge,
-      if (widget.patientAge != null)
-        'ageMonths': (widget.patientAge ?? 0) * 12,
-      if (widget.patientGender != null) 'gender': widget.patientGender,
-      'isPregnant': widget.gestationalWeeks != null,
-      if (widget.gestationalWeeks != null)
-        'gestationalWeeks': widget.gestationalWeeks,
-      'isPostpartum': widget.isPostpartum,
-      if (widget.postpartumWeeks != null)
-        'postpartumWeeks': widget.postpartumWeeks,
-      'selectedSymptoms': widget.confirmedSymptoms.toList(),
-      if (widget.sicknessDuration != null)
-        'sicknessDuration': widget.sicknessDuration,
-      if (widget.otherSymptoms != null && widget.otherSymptoms!.isNotEmpty)
-        'otherSymptoms': widget.otherSymptoms,
-      'currentProgrammes': currentProgrammes
-          .where((p) => p != Programme.unknown)
-          .map((p) => p.wireTag)
-          .toList(),
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     if (!_ready) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_phase == _Step2Phase.programmes) {
-      return ProgrammeSelectionScreen(
-        request: _request,
-        currentProgrammes: _currentProgrammes,
-        onContinue: (programmes) {
-          setState(() {
-            _selectedProgrammes = programmes;
-            _phase = _Step2Phase.form;
-          });
-        },
-      );
-    }
+    // AI programme-recommendation confirmation (ProgrammeSelectionScreen) is
+    // disabled — the rule-based PathwayEngine result from Step 1 is applied
+    // directly, without a separate SK confirmation screen.
     return _Step2VitalsForm(
       visitId: widget.visitId,
       patientId: widget.patientId,
