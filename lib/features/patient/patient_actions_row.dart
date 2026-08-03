@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/clinical/service_eligibility.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/models/programme.dart';
 import '../visit/visit_controller.dart';
@@ -44,8 +45,22 @@ class PatientActionsRow extends StatefulWidget {
 class _PatientActionsRowState extends State<PatientActionsRow> {
   bool _starting = false;
 
+  void _showNotEligibleToast() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(EnrollStrings.noProgrammes),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ));
+  }
+
   Future<void> _startVisit() async {
     if (_starting) return;
+    if (!hasAnyEligibleProgramme(ageYears: widget.patientAge)) {
+      _showNotEligibleToast();
+      return;
+    }
 
     setState(() => _starting = true);
 
@@ -93,6 +108,7 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final eligible = hasAnyEligibleProgramme(ageYears: widget.patientAge);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,6 +128,9 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
                 label: Text(_starting ? 'Starting...' : PatientContextStrings.startVisit),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
+                  backgroundColor: eligible
+                      ? null
+                      : theme.colorScheme.primary.withValues(alpha: 0.4),
                 ),
               ),
             ),

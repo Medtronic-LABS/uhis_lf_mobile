@@ -32,6 +32,7 @@ import '../../core/db/patient_programmes_dao.dart';
 import '../../core/mission/programme_reason.dart';
 import '../visit/visit_start_helper.dart';
 import '../visit/widgets/widgets.dart';
+import 'dashboard_filter_state.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
@@ -84,10 +85,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Inline village chip + need filter + inline search
   List<String> _inlineVillages = const [];
-  String? _selectedVillageChipName;
-  Set<NeedFilter> _selectedNeeds = const {};
   Set<NeedFilter> _availableNeeds = const {};
-  String _searchQuery = '';
+
+  // User-selected filter state — lives above the router (see main.dart) so
+  // it survives the context.go() round trip into the visit flow and back.
+  late final DashboardFilterState _filterState;
+  String? get _selectedVillageChipName => _filterState.selectedVillageChipName;
+  Set<NeedFilter> get _selectedNeeds => _filterState.selectedNeeds;
+  String get _searchQuery => _filterState.searchQuery;
 
   // Global member search (patients NOT in the priority queue).
   List<MemberHit> _globalSearchHits = const [];
@@ -112,6 +117,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     debugPrint('[_DashboardScreenState] initState');
     super.initState();
+    _filterState = context.read<DashboardFilterState>();
     _reloadStats();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -390,9 +396,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _clearFilters() {
-    _selectedNeeds = const {};
-    _selectedVillageChipName = null;
-    _searchQuery = '';
+    _filterState.clear();
     _queueRevealCount = _kQueuePageSize;
     _globalSearchHits = const [];
     _globalSearchDebounce?.cancel();
@@ -702,8 +706,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               notificationCount: _notificationCount,
               onNotificationTap: () => CceAlertsDrawer.show(context),
               onSearchChanged: (q) {
+                _filterState.setSearchQuery(q);
                 setState(() {
-                  _searchQuery = q;
                   _queueRevealCount = _kQueuePageSize;
                 });
                 _applyFilters();
@@ -817,8 +821,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   '[Dashboard filter] village tap → '
                                   '${name ?? "(all)"}',
                                 );
+                                _filterState.setVillage(name);
                                 setState(() {
-                                  _selectedVillageChipName = name;
                                   _queueRevealCount = _kQueuePageSize;
                                 });
                                 _applyFilters();
@@ -826,15 +830,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               availableNeeds: _availableNeeds,
                               selectedNeeds: _selectedNeeds,
                               onNeedToggled: (need) {
+                                final updated =
+                                    Set<NeedFilter>.from(_selectedNeeds);
+                                if (updated.contains(need)) {
+                                  updated.remove(need);
+                                } else {
+                                  updated.add(need);
+                                }
+                                _filterState.setNeeds(updated);
                                 setState(() {
-                                  final updated =
-                                      Set<NeedFilter>.from(_selectedNeeds);
-                                  if (updated.contains(need)) {
-                                    updated.remove(need);
-                                  } else {
-                                    updated.add(need);
-                                  }
-                                  _selectedNeeds = updated;
                                   _queueRevealCount = _kQueuePageSize;
                                   debugPrint(
                                     '[Dashboard filter] need tap → '
