@@ -149,7 +149,7 @@ class FieldOption {
         return o.id;
       }
     }
-    final aliases = _yesNoAliases(lower);
+    final aliases = _yesNoAliases(lower) ?? _glucoseTypeAliases(lower);
     if (aliases != null) {
       for (final o in options) {
         final idL = o.id.toLowerCase();
@@ -177,6 +177,38 @@ class FieldOption {
     if (lower == 'false' || lower == '0' || lower == 'no') {
       return const {'false', '0', 'no'};
     }
+    return null;
+  }
+
+  /// Natural-language phrasing an ASR extraction may produce for the blood
+  /// glucose type field instead of the canonical `fbs`/`rbs` id — same
+  /// alias-set pattern as [_yesNoAliases]. PPBS (post-prandial) has no
+  /// dedicated option in this app's fasting/non-fasting binary model, so
+  /// it's treated as the clinically closest option, `rbs`.
+  static Set<String>? _glucoseTypeAliases(String lower) {
+    const fbsPhrases = {
+      'fasting',
+      'fasting blood sugar',
+      'fasting glucose',
+      'before meal',
+      'before food',
+      'empty stomach',
+      'pre meal',
+    };
+    const rbsPhrases = {
+      'random',
+      'random blood sugar',
+      'after meal',
+      'after food',
+      'postprandial',
+      'post prandial',
+      'post-prandial',
+      'post meal',
+      'full stomach',
+      'ppbs',
+    };
+    if (fbsPhrases.contains(lower)) return const {'fbs', 'fbs (before meal)'};
+    if (rbsPhrases.contains(lower)) return const {'rbs', 'rbs (after meal)'};
     return null;
   }
 }
