@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/auth_repository.dart';
 import '../auth/auth_state.dart';
-import '../../features/training/coaching_repository.dart';
 import '../../features/visit/assessment_repository.dart';
 import 'offline_push_service.dart';
 import 'offline_sync_service.dart';
@@ -23,7 +22,7 @@ const _retryDelay = Duration(seconds: 30);
 /// The service is intentionally simple:
 /// - When the device moves from *offline → online*, it fires both the outbound
 ///   assessment push (`offline-sync/create`) and the inbound warm pull
-///   (`offline-sync/fetch-synced-data`), then refreshes micro-coaching modules.
+///   (`offline-sync/fetch-synced-data`).
 /// - It checks [AuthState.status] before touching the network; sync never
 ///   runs when the user is logged out or the session is locked.
 /// - Failures are swallowed and logged — the next connectivity event will retry.
@@ -34,20 +33,17 @@ class SyncConnectivityService {
     required OfflinePushService pushService,
     required AuthState authState,
     required AuthRepository authRepo,
-    required CoachingRepository coachingRepo,
   })  : _assessmentRepo = assessmentRepo,
         _syncService = syncService,
         _pushService = pushService,
         _authState = authState,
-        _authRepo = authRepo,
-        _coachingRepo = coachingRepo;
+        _authRepo = authRepo;
 
   final AssessmentRepository _assessmentRepo;
   final OfflineSyncService _syncService;
   final OfflinePushService _pushService;
   final AuthState _authState;
   final AuthRepository _authRepo;
-  final CoachingRepository _coachingRepo;
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   Timer? _retryTimer;
@@ -131,8 +127,8 @@ class SyncConnectivityService {
       return;
     }
 
-    // Push everything pending (outbound), then pull fresh data (inbound), then
-    // refresh micro-coaching. Fire-and-forget; errors are logged.
+    // Push everything pending (outbound), then pull fresh data (inbound).
+    // Fire-and-forget; errors are logged.
     //
     // pushAll goes first because it is the only path that posts households and
     // standalone members — an enrollment saved offline would otherwise sit
@@ -156,9 +152,7 @@ class SyncConnectivityService {
         })
         .then((_) {
           debugPrint('[SyncConnectivity] AutomaticSync warm pull complete');
-          return _coachingRepo.refresh();
         })
-        .then((_) => debugPrint('[SyncConnectivity] Coaching refresh complete'))
         .catchError((Object e) {
           debugPrint('[SyncConnectivity] AutomaticSync error — scheduling retry in ${_retryDelay.inSeconds}s: $e');
           _retryTimer?.cancel();

@@ -15,7 +15,6 @@ import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../referral/referral_repository.dart';
-import '../training/coaching_repository.dart';
 import '../worklist/worklist_repository.dart';
 
 /// Full-screen loading indicator shown during initial data sync after login.
@@ -217,13 +216,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       final missionRepo = context.read<MissionDashboardRepository>();
       final encounterDao = context.read<EncounterDao>();
 
-      // Load in parallel. Coaching sync is non-fatal — Training tab falls
-      // back to SQLite / debug mock if spice-coaching is unreachable.
-      final coaching = context.read<CoachingRepository>();
       await Future.wait([
         missionRepo.refresh(),
         encounterDao.completedTodayPatientIds(),
-        coaching.refresh(),
       ]);
       
       debugPrint('[Sync] Dashboard data prepared');

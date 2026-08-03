@@ -71,8 +71,8 @@ import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
 import 'features/visit/visit_controller.dart';
-import 'features/training/coaching_dao.dart';
-import 'features/training/coaching_repository.dart';
+import 'core/config/app_config.dart';
+import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
@@ -261,20 +261,14 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final UserHierarchyService _userHierarchy =
       UserHierarchyService(widget.api, widget.authRepo);
 
-  // ── Micro-coaching ────────────────────────────────────────────────────────
-  late final CoachingDao _coachingDao = CoachingDao(widget.appDb);
-  late final CoachingRepository _coachingRepo =
-      CoachingRepository(_coachingDao, widget.api, widget.authRepo);
-
-  // Connectivity-aware auto-sync: outbound push + inbound warm pull + coaching
-  // refresh on reconnect (mirrors Android ScheduledSyncWork CONNECTED).
+  // Connectivity-aware auto-sync: outbound push + inbound warm pull on reconnect
+  // (mirrors Android ScheduledSyncWork CONNECTED).
   late final SyncConnectivityService _connectivitySync = SyncConnectivityService(
     assessmentRepo: _assessmentRepo,
     syncService: _sync,
     pushService: _offlinePush,
     authState: widget.authState,
     authRepo: widget.authRepo,
-    coachingRepo: _coachingRepo,
   );
 
   @override
@@ -285,7 +279,6 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Register notification channels + rehydrate any pending repeat alarms
     // from the last session. Both are idempotent.
     unawaited(_bootstrapNotifications());
-    unawaited(_coachingRepo.initialize());
     // Start connectivity monitoring for automatic offline sync retry.
     _connectivitySync.start();
     // These repositories/services are single long-lived instances for the
@@ -297,7 +290,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // progress until something else happened to refresh it.
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
-    widget.authState.registerLogoutHook(_coachingRepo.clear);
+    widget.authState.addListener(_onAuthStateChanged);
     // Reset sync progress so the next user's /sync screen does not see
     // isComplete=true from the previous session and skip their cold sync.
     widget.authState.registerLogoutHook(_sync.resetProgress);
@@ -331,8 +324,34 @@ class _UhisNextAppState extends State<UhisNextApp>
   void dispose() {
     _inactivityTimer?.cancel();
     _connectivitySync.dispose();
+    widget.authState.removeListener(_onAuthStateChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  bool _sdkInitialized = false;
+
+  Future<void> _onAuthStateChanged() async {
+    if (_sdkInitialized) return;
+    if (widget.authState.status != AuthStatus.signedIn) return;
+    _sdkInitialized = true;
+    final token = await widget.authRepo.getToken();
+    if (token == null || token.isEmpty) {
+      debugPrint('[MicroCoaching] token null/empty — SDK init skipped');
+      return;
+    }
+    try {
+      await MicroCoachingService.initialize(
+        authToken: token,
+        backendUrl: AppConfig.coachingServiceUrl,
+        language: 'bn',
+        hfToken: AppConfig.hfToken,
+      );
+      debugPrint('[MicroCoaching] SDK initialized');
+    } catch (e) {
+      _sdkInitialized = false;
+      debugPrint('[MicroCoaching] SDK init failed: $e');
+    }
   }
 
   static const _kLockAfter = Duration(hours: 1);
@@ -515,8 +534,6 @@ class _UhisNextAppState extends State<UhisNextApp>
         // EPI immunisation DAO + repository — exposed for ImmunisationTimelineScreen + PatientContextBuilder
         Provider<ImmunisationDao>.value(value: _immDao),
         Provider<ImmunisationRepository>.value(value: _immRepo),
-        // Micro-coaching: module library + progress (offline-first, syncs from spice-coaching)
-        ChangeNotifierProvider<CoachingRepository>.value(value: _coachingRepo),
       ],
       child: Builder(
         builder: (context) {

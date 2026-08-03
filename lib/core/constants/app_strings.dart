@@ -4015,6 +4015,8 @@ abstract final class AssistantStrings {
   static String get welcomeMessage => getTranslatedString('welcomeMessage', 'How can I help you today? Ask me about patient counselling, clinical protocols, or SPICE.');
   static String get statusOnline => getTranslatedString('statusOnline', 'Online');
   static String get clearHistory => getTranslatedString('clearHistory', 'Clear chat history');
+  static String get launchingMicroCoaching => getTranslatedString('launchingMicroCoaching', 'Opening coaching…');
+  static String get openMicroCoaching => getTranslatedString('openMicroCoaching', 'Open Coaching');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

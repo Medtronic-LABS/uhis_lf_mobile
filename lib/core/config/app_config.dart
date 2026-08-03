@@ -105,13 +105,27 @@ class AppConfig {
   static const int pinLength = 4;
 
   /// Base URL for the micro-coaching service.
-  /// The service is mounted at /micro-coaching/ on the nginx gateway;
-  /// FastAPI routes internally under /medtronics-api/ so the full path is
-  /// /micro-coaching/medtronics-api/<endpoint>.
+  /// Used by Flutter HTTP callers (coaching_repository, telemetry_service) which
+  /// append full paths that already include /medtronics-api/ (e.g. /medtronics-api/sync/modules).
+  /// Do NOT include /medtronics-api in the dart-define value — use just the host+mount prefix.
+  /// Examples:
+  ///   production : https://spice-dev-backend.uhis.labsplatform.com/micro-coaching
+  ///   beehyv QA  : https://agent-qa.beehyv.com
   static const String coachingServiceUrl = String.fromEnvironment(
     'COACHING_SERVICE_URL',
     defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/micro-coaching',
   );
+
+  /// HuggingFace API token for micro-coaching SDK model download.
+  /// Used as a client-side fallback when the backend /api/v1/models/gemma/download
+  /// endpoint is unavailable (404). In production the backend proxies HuggingFace
+  /// using its own server-side HF_TOKEN env var; this is only needed in dev.
+  /// Supply via `--dart-define=HF_TOKEN=hf_xxx` — never hardcode.
+  static const String hfToken = String.fromEnvironment(
+    'HF_TOKEN',
+    defaultValue: '',
+  );
+
 
   /// Base URL for the unified `leapfrog-ai-services` container — AI Visit
   /// Briefing, Programme Recommendation, NABA, AI Scribe, and realtime ASR all

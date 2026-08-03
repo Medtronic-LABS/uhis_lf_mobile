@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../core/auth/auth_repository.dart';
+import '../core/config/app_config.dart';
 import '../core/constants/app_strings.dart';
+import '../core/services/micro_coaching_service.dart';
 import '../core/widgets/mockup_svg_icons.dart';
 import 'theme.dart';
 
@@ -63,7 +67,42 @@ class _BottomNavShellState extends State<BottomNavShell>
     return true;
   }
 
-  void _onTap(BuildContext context, int visibleIndex) {
+  // Assistant tab visible index — tap launches SDK instead of navigating.
+  static const int _assistantVisibleIndex = 2;
+
+  Future<void> _launchMicroCoaching(BuildContext context) async {
+    try {
+      final repo = context.read<AuthRepository>();
+      final userId = await repo.userId();
+      final chwId = userId?.toString() ?? 'chw_unknown';
+      if (!await MicroCoachingService.isInitialized()) {
+        final token = await repo.getToken();
+        if (token == null || token.isEmpty) throw Exception('No auth token');
+        await MicroCoachingService.initialize(
+          authToken: token,
+          backendUrl: AppConfig.coachingServiceUrl,
+          language: 'bn',
+          hfToken: AppConfig.hfToken,
+        );
+      }
+      await MicroCoachingService.launch(chwId);
+    } catch (e) {
+      if (!mounted) return;
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(AssistantStrings.errorMessage),
+          duration: const Duration(seconds: 3),
+        ));
+    }
+  }
+
+  Future<void> _onTap(BuildContext context, int visibleIndex) async {
+    if (visibleIndex == _assistantVisibleIndex) {
+      await _launchMicroCoaching(context);
+      return;
+    }
     // Visit flow now lives on the root navigator (see router.dart), so it's
     // never shown under this bar — no need to guard tab switches against an
     // in-progress visit here; VisitFlowScreen's own PopScope already confirms
