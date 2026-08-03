@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -113,13 +111,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// Loaded once after init; empty until then / for non-ANC visits.
   List<VisitVitals> _priorAncVisits = const [];
 
-  /// Completed ANC count from pregnancy snapshot (Spice ancVisitNo). When set,
-  /// preferred over counting vitals history for the 1-based visit label.
+  /// Completed ANC count from pregnancy snapshot (Spice ancVisitNo).
   int? _ancVisitNoFromSnapshot;
-
-  /// ANC assessments already on file (local + synced history). Counts visits
-  /// [_priorAncVisits] drops because they carry no vitals.
-  int _priorAncVisitCount = 0;
 
   /// Weight (kg) from the patient's most-recent prior visit across ALL
   /// programme types — used for the weight-delta badge.  `null` until loaded.
@@ -210,11 +203,6 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             setState(() => _ancVisitNoFromSnapshot = snap!.ancVisitNo);
           }
         });
-        notifier.priorAncVisitCount().then((count) {
-          if (mounted && count > 0) {
-            setState(() => _priorAncVisitCount = count);
-          }
-        });
         // Load LMP/EDD for the gestational-age card (snapshot → seed → history).
         _reloadPregnancyIfSeeded();
       }
@@ -225,19 +213,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   int? _effectiveGestationalWeeks(UnifiedFormNotifier notifier) =>
       notifier.gestationalWeeks ?? widget.gestationalWeeks;
 
-  /// 1-based ANC visit number: the highest count any source knows about, + 1.
-  ///
-  /// The snapshot counter is authoritative when seeded, but it is missing for
-  /// pregnancies registered on another device, so the assessments on file act
-  /// as a floor. Taking the max means the number can never regress and repeat
-  /// a visit the patient has already had.
-  int _ancVisitNumber() {
-    final completed = math.max(
-      _ancVisitNoFromSnapshot ?? 0,
-      math.max(_priorAncVisitCount, _priorAncVisits.length),
-    );
-    return completed + 1;
-  }
+  /// 1-based ANC visit number: Spice pregnancyDetail.ancVisitNo + 1.
+  int _ancVisitNumber() => (_ancVisitNoFromSnapshot ?? 0) + 1;
 
   bool _isFieldVisible(
     FieldDef field,

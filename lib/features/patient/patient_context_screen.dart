@@ -128,6 +128,22 @@ class PatientOrMemberData {
   static bool _isLocalDraft(MemberAssessment a) =>
       a.rawJson.containsKey('syncStatus');
 
+  /// Same clinical programme for draft↔synced pairing.
+  ///
+  /// Server history uses `PNC` while local drafts use `PNC_MOTHER` — string
+  /// equality missed that pair and showed two "PNC Visit 1" rows (roja).
+  /// Pregnancy outcome must not pair with PNC even though [Programme.fromString]
+  /// maps both to [Programme.pnc].
+  static bool _sameVisitProgramme(MemberAssessment a, MemberAssessment b) {
+    final aOutcome = _isPregnancyOutcomeType(a.type);
+    final bOutcome = _isPregnancyOutcomeType(b.type);
+    if (aOutcome || bOutcome) return aOutcome && bOutcome;
+    final pa = Programme.fromString(a.type);
+    final pb = Programme.fromString(b.type);
+    if (pa != Programme.unknown && pb != Programme.unknown) return pa == pb;
+    return a.type.toUpperCase() == b.type.toUpperCase();
+  }
+
   /// Merged Recent Visits feed — locally-cached first (always available
   /// even offline), then remote-only rows the device hasn't synced yet.
   /// Sorted DESC by date so newest sits at top of the section. Replaces the
@@ -167,7 +183,7 @@ class PatientOrMemberData {
       for (var i = 0; i < out.length; i++) {
         if (absorbed.contains(i)) continue;
         final m = out[i];
-        if (m.type.toUpperCase() != a.type.toUpperCase()) continue;
+        if (!_sameVisitProgramme(m, a)) continue;
         if (_isLocalDraft(m) == _isLocalDraft(a)) continue;
         final delta = m.date.difference(a.date).abs();
         if (delta <= bestDelta) {
@@ -1217,6 +1233,48 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) =>
 /// Used in the detail sheet where space is tighter than the full narrative.
 String _shortReasonLabel(String reason) => shortReasonLabel(reason);
 
+/// True when [type] is a delivery / pregnancy-outcome assessment (not a PNC visit).
+bool _isPregnancyOutcomeType(String type) {
+  final t = type.toUpperCase().replaceAll('_', '');
+  return t.contains('PREGNANCYOUTCOME') || t == 'OUTCOME';
+}
+
+/// ANC visit number stamped on the assessment (several payload shapes).
+String? _ancVisitNumberFrom(MemberAssessment a, Map<String, dynamic> raw) {
+  final anc = raw['anc'];
+  final medHx = raw['medicalHistoryPhysicalExamination'];
+  final candidates = <dynamic>[
+    raw['ancVisitNumber'],
+    raw['visitNo'],
+    a.visitNumber,
+    if (anc is Map) anc['ancVisitNumber'],
+    if (anc is Map) anc['visitNo'],
+    if (medHx is Map) medHx['ancVisitNumber'],
+  ];
+  for (final c in candidates) {
+    final s = c?.toString().trim();
+    if (s != null && s.isNotEmpty) return s;
+  }
+  return null;
+}
+
+/// PNC mother visit number stamped on the assessment.
+String? _pncVisitNumberFrom(MemberAssessment a, Map<String, dynamic> raw) {
+  final pnc = raw['pncMother'] ?? raw['pnc'];
+  final candidates = <dynamic>[
+    raw['pncVisitNumber'],
+    raw['visitNo'],
+    a.visitNumber,
+    if (pnc is Map) pnc['pncVisitNumber'],
+    if (pnc is Map) pnc['visitNo'],
+  ];
+  for (final c in candidates) {
+    final s = c?.toString().trim();
+    if (s != null && s.isNotEmpty) return s;
+  }
+  return null;
+}
+
 _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = true}) {
   final raw = _normalizeRaw(a.rawJson);
   final prog = Programme.fromString(a.type);
@@ -1259,15 +1317,8 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         description = 'Pregnant woman profile created — ANC care started';
         break;
       }
-      final vn = raw['ancVisitNumber']?.toString()
-          ?? (raw['medicalHistoryPhysicalExamination'] is Map
-              ? (raw['medicalHistoryPhysicalExamination'] as Map)['ancVisitNumber']?.toString()
-              : null)
-          ?? (raw['anc'] is Map
-              ? (raw['anc'] as Map)['ancVisitNumber']?.toString()
-              : null)
-          ?? a.visitNumber?.toString();
-      title = vn != null && vn.isNotEmpty ? 'ANC Visit $vn' : 'ANC Checkup';
+      final vn = _ancVisitNumberFrom(a, raw);
+      title = vn != null ? 'ANC Visit $vn' : 'ANC Checkup';
       category = 'Antenatal Care';
 
       final bpANC = raw['bp']?.toString() ?? '';
@@ -1317,10 +1368,18 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     // ─── PNC / Delivery ───────────────────────────────────────────────────
     case Programme.pnc:
       final delivery = raw['modeOfDelivery']?.toString() ?? '';
-      final pncVN = raw['pncVisitNumber']?.toString() ?? '';
+      final pncVN = _pncVisitNumberFrom(a, raw) ?? '';
+      // Prefer assessment type; fall back to delivery-only rows that are not
+      // PNC_MOTHER / plain PNC (legacy payloads).
+      final typeUpper = a.type.toUpperCase();
+      final isPncMotherLike = typeUpper.contains('PNC_MOTHER') ||
+          typeUpper == 'PNC' ||
+          typeUpper == 'POSTNATAL';
+      final isOutcome = _isPregnancyOutcomeType(a.type) ||
+          (delivery.isNotEmpty && pncVN.isEmpty && !isPncMotherLike);
 
-      if (delivery.isNotEmpty && pncVN.isEmpty) {
-        // Pregnancy outcome
+      if (isOutcome) {
+        // Delivery / pregnancy outcome — never label as a PNC visit.
         emoji = '🏥';
         title = 'Pregnancy Outcome';
         category = 'Delivery';
@@ -1343,17 +1402,21 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
               delivery.toLowerCase().contains('c-section') ||
               delivery.toLowerCase().contains('section');
           dotColor = isCs ? _kDotHigh : _kDotOk;
-          badge = isCs ? 'Emergency C-section' : 'Normal delivery';
+          badge = delivery.isEmpty
+              ? 'Delivery'
+              : (isCs ? 'Emergency C-section' : 'Normal delivery');
           badgeColor = isCs ? _kBadgeHighBg : _kBadgeGreenBg;
           badgeFgColor = isCs ? _kBadgeHighFg : _kBadgeGreenFg;
           final babyWt = raw['babyBirthWeight']?.toString() ?? raw['birthWeight']?.toString();
-          description = 'Healthy delivery outcome — mother and baby both doing well.'
-              '${babyWt != null && babyWt.isNotEmpty ? ' Baby $babyWt kg.' : ''}';
+          description = delivery.isEmpty
+              ? 'Pregnancy outcome recorded.'
+              : 'Healthy delivery outcome — mother and baby both doing well.'
+                  '${babyWt != null && babyWt.isNotEmpty ? ' Baby $babyWt kg.' : ''}';
         }
       } else {
         // PNC follow-up
         emoji = '🤱';
-        title = 'PNC Visit${pncVN.isNotEmpty ? ' $pncVN' : ''}';
+        title = pncVN.isNotEmpty ? 'PNC Visit $pncVN' : 'PNC Visit';
         category = 'Postnatal Care';
 
         final dSign = raw['dangerSigns']?.toString() ?? raw['dangerSign']?.toString() ?? '';
@@ -1644,24 +1707,103 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
   return null;
 }
 
+/// One-shot Care History vs snapshot diagnostics (avoids rebuild spam).
+final Set<String> _visitCounterDiagLogged = <String>{};
+
+/// Logs snapshot counters vs each assessment's stamped visit number / timeline
+/// title so we can see why Care History diverges (e.g. patient "roja").
+void _logVisitCounterDiagnostics(
+  PatientOrMemberData data,
+  List<_TimelineEntry> entries,
+) {
+  final key = '${data.name ?? ''}|${data.patientId ?? data.memberId ?? ''}';
+  // Always re-log after hot restart; skip only identical rebuild spam.
+  if (key.trim().isEmpty) return;
+  if (_visitCounterDiagLogged.contains(key)) return;
+  _visitCounterDiagLogged.add(key);
+
+  final snap = data.pregnancySnapshot;
+  final buf = StringBuffer()
+    ..writeln('[VisitCounterDiag] patient="${data.name}" '
+        'patientId=${data.patientId} memberId=${data.memberId} '
+        'localPk=${data.localPatient?.patient.id}')
+    ..writeln('[VisitCounterDiag] snapshot ancVisitNo=${snap?.ancVisitNo} '
+        'pncVisitNo=${snap?.pncVisitNo} snapPatientId=${snap?.patientId}')
+    ..writeln('[VisitCounterDiag] assessment sources: '
+        'local=${data.localAssessments.length} '
+        'remote=${data.remoteAssessments.length} '
+        'merged=${data.assessments.length}');
+
+  for (final a in data.assessments) {
+    final prog = Programme.fromString(a.type);
+    if (prog != Programme.anc &&
+        prog != Programme.pnc &&
+        prog != Programme.pw) {
+      continue;
+    }
+    final raw = _normalizeRaw(a.rawJson);
+    final ancVn = raw['ancVisitNumber']?.toString() ??
+        raw['visitNo']?.toString() ??
+        (raw['anc'] is Map
+            ? (raw['anc'] as Map)['visitNo']?.toString() ??
+                (raw['anc'] as Map)['ancVisitNumber']?.toString()
+            : null);
+    final pncVn = raw['pncVisitNumber']?.toString() ??
+        (raw['pncMother'] is Map
+            ? (raw['pncMother'] as Map)['visitNo']?.toString() ??
+                (raw['pncMother'] as Map)['pncVisitNumber']?.toString()
+            : null);
+    buf.writeln(
+      '[VisitCounterDiag] assess id=${a.id} type=${a.type} '
+      'date=${a.date.toIso8601String()} colVisitNo=${a.visitNumber} '
+      'raw.ancVisitNumber=${raw['ancVisitNumber']} raw.visitNo=${raw['visitNo']} '
+      'raw.pncVisitNumber=${raw['pncVisitNumber']} '
+      'resolvedAnc=$ancVn resolvedPnc=$pncVn '
+      'syncStatus=${raw['syncStatus']} draft=${a.rawJson.containsKey('syncStatus')}',
+    );
+  }
+
+  for (final e in entries) {
+    if (e.title.contains('ANC') ||
+        e.title.contains('PNC') ||
+        e.title.contains('Pregnancy')) {
+      buf.writeln(
+        '[VisitCounterDiag] timeline "${e.title}" '
+        'date=${e.date.toIso8601String()} cat=${e.category}',
+      );
+    }
+  }
+
+  final text = buf.toString();
+  debugPrint(text);
+  ConsoleLog.banner(text);
+}
+
 /// Builds the full display timeline from [data.assessments] + rule-based entries.
 /// Returns newest-first (pending entry at index 0, oldest at end).
 List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
   final entries = <_TimelineEntry>[];
 
-  // Derive ANC visit ordinals from chronological order (oldest = visit 1).
-  // assessments are newest-first; ANC visits in ascending date order get 1,2,3…
-  final ancAssessments = data.assessments
-      .where((a) {
-        final p = Programme.fromString(a.type);
-        return p == Programme.anc || p == Programme.pw;
-      })
-      .toList()
-    ..sort((a, b) => a.date.compareTo(b.date)); // oldest first
-  final ancOrdinal = {
-    for (int i = 0; i < ancAssessments.length; i++)
-      ancAssessments[i].id: i + 1,
-  };
+  // Chronological ordinals for unnumbered rows only. PW registration must NOT
+  // count toward ANC (it inflated "ANC Visit 4" for roja). Outcome is not PNC.
+  Map<String, int> ordinalsFor(
+    bool Function(MemberAssessment a) keep,
+  ) {
+    final rows = data.assessments.where(keep).toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    return {
+      for (var i = 0; i < rows.length; i++) rows[i].id: i + 1,
+    };
+  }
+
+  final ancOrdinal = ordinalsFor(
+    (a) => Programme.fromString(a.type) == Programme.anc,
+  );
+  final pncOrdinal = ordinalsFor(
+    (a) =>
+        Programme.fromString(a.type) == Programme.pnc &&
+        !_isPregnancyOutcomeType(a.type),
+  );
 
   // data.assessments is newest-first. Find the most recent assessment with
   // a referral status so only that entry shows the referral badge + narrative.
@@ -1678,9 +1820,10 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
   for (final a in data.assessments) {
     final showAsReferral = latestReferredId == null || a.id == latestReferredId;
     final entry = _assessmentToEntry(a, showAsReferral: showAsReferral);
-    final ordinal = ancOrdinal[a.id];
-    if (ordinal != null && entry.title == 'ANC Checkup') {
-      entries.add(entry.copyWith(title: 'ANC Visit $ordinal'));
+    if (entry.title == 'ANC Checkup' && ancOrdinal[a.id] != null) {
+      entries.add(entry.copyWith(title: 'ANC Visit ${ancOrdinal[a.id]}'));
+    } else if (entry.title == 'PNC Visit' && pncOrdinal[a.id] != null) {
+      entries.add(entry.copyWith(title: 'PNC Visit ${pncOrdinal[a.id]}'));
     } else {
       entries.add(entry);
     }
@@ -1702,10 +1845,51 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
     ));
   }
 
-  // Sort newest-first so the enrollment milestone naturally falls at the bottom.
-  entries.sort((a, b) => b.date.compareTo(a.date));
+  // Newest-first by date. Same timestamp: ANC above PW, PNC above Outcome.
+  entries.sort(_compareTimelineEntries);
 
+  _logVisitCounterDiagnostics(data, entries);
   return entries;
+}
+
+/// Newest date first. On equal dates, keep PW below ANC and Outcome below PNC.
+int _compareTimelineEntries(_TimelineEntry a, _TimelineEntry b) {
+  final byDate = b.date.compareTo(a.date);
+  if (byDate != 0) return byDate;
+  return _timelineSameDateRank(a).compareTo(_timelineSameDateRank(b));
+}
+
+/// Lower rank appears higher in the newest-first list.
+int _timelineSameDateRank(_TimelineEntry e) {
+  final type = e.source?.type.toUpperCase() ?? '';
+  final title = e.title;
+  final category = e.category;
+
+  if (type.contains('PWPROFILE') ||
+      title == PatientProfileStrings.pregnancyRegistered ||
+      category == PatientProfileStrings.pregnancyRegistrationCategory) {
+    return 2; // below ANC
+  }
+  if (_isPregnancyOutcomeType(type) ||
+      title == 'Pregnancy Outcome' ||
+      category == 'Delivery') {
+    return 3; // below PNC
+  }
+  if (Programme.fromString(type) == Programme.anc ||
+      title.startsWith('ANC') ||
+      category == 'Antenatal Care') {
+    return 0;
+  }
+  if (Programme.fromString(type) == Programme.pnc ||
+      title.startsWith('PNC') ||
+      category == 'Postnatal Care') {
+    return 1;
+  }
+  if (e.badge == 'Enrolled' ||
+      category == PatientProfileStrings.enrollmentMilestone) {
+    return 9;
+  }
+  return 5;
 }
 
 /// Unpacks the `{kind, raw}` envelope written by AssessmentDao so that
