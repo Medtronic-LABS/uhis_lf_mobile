@@ -12,11 +12,11 @@
   "en": "Powered by Medtronic Labs"
  },
  "Assistant.inputHint": {
-  "bn": "একটি ক্লিনিকাল প্রশ্ন করুন…",
+  "bn": "চিকিৎসা বিষয়ক প্রশ্ন জিজ্ঞাসা করুন",
   "en": "Ask a clinical question…"
  },
  "Assistant.poweredBy": {
-  "bn": "Gemini দ্বারা পরিচালিত · শুধুমাত্র ক্লিনিকাল পরামর্শের জন্য",
+  "bn": "জেমিনাই-এর সহায়তায় · শুধুমাত্র চিকিৎসাবিষয়ক নির্দেশনার জন্য",
   "en": "Powered by Gemini · For clinical guidance only"
  },
  "Assistant.subtitle": {
@@ -24,7 +24,7 @@
   "en": "Apon Sushashthya"
  },
  "Assistant.title": {
-  "bn": "এআই সহায়ক",
+  "bn": "এআই এসিস্ট্যান্ট",
   "en": "AI Assistant"
  },
  "BottomNav.patients": {
@@ -32,19 +32,19 @@
   "en": "Patients"
  },
  "Cce.actionCallFamily": {
-  "bn": "পরিবারকে কল করুন",
+  "bn": "পরিবারের কাউকে কল করুন",
   "en": "Call family"
  },
  "Cce.actionLocate": {
-  "bn": "খুঁজে বের করুন",
+  "bn": "অবস্থান চিহ্নিত করুন",
   "en": "Locate"
  },
  "Cce.actionUpdateStatus": {
-  "bn": "অবস্থা আপডেট করুন",
+  "bn": "স্ট্যাটাস আপডেট করুন",
   "en": "Update status"
  },
  "Cce.dialFailed": {
-  "bn": "ডায়ালার খোলা যায়নি",
+  "bn": "কল করার ডায়লার খোলা সম্ভব হয়নি",
   "en": "Could not open the dialer"
  },
  "Cce.done": {
@@ -52,15 +52,15 @@
   "en": "Done"
  },
  "Cce.emptyBody": {
-  "bn": "কোনো SLA লঙ্ঘন নেই। প্রতিটি রেফার করা রোগীর হিসাব এসকে ও প্রতিষ্ঠানের মধ্যে রাখা আছে।",
+  "bn": "সময়মতো কাজ সম্পন্ন · স্বাস্থ্যকেন্দ্রে রেফারকৃত রোগীর হিসাব সঠিক আছে",
   "en": "No SLA breaches. Every referred patient is accounted for between SK and facility."
  },
  "Cce.emptyTitle": {
-  "bn": "সব রেফারেল ঠিকমতো চলছে",
+  "bn": "সব রেফারেল সময়মতো হচ্ছে",
   "en": "All referrals on track"
  },
  "Cce.noPhone": {
-  "bn": "এই রোগীর কোনো ফোন নম্বর নেই",
+  "bn": "এই রোগীর কোন ফোন নাম্বার পাওয়া যায়নি",
   "en": "No phone number on file for this patient"
  },
  "Cce.poweredBy": {
@@ -72,11 +72,11 @@
   "en": "Search by name or village…"
  },
  "Cds.message.anemiaMessage": {
-  "bn": "রক্তাল্পতা সনাক্ত — সাপ্লিমেন্ট দিন ও ফলো-আপ করুন",
+  "bn": "ক্তস্বল্পতা পাওয়া গেছে — পুষ্টি উপাদান দিন এবং ফলো-আপ করুন",
   "en": "Anemia detected — supplement and follow up"
  },
  "Cds.message.bpSevereMessage": {
-  "bn": "তীব্র উচ্চ রক্তচাপ সনাক্ত — এখনই রেফার করুন",
+  "bn": "গুরুতর উচ্চ রক্তচাপ চিহ্নিত — এখনই রেফার করুন",
   "en": "Severe hypertension detected — refer immediately"
  },
  "Cds.message.bpStage1Message": {
@@ -260,15 +260,15 @@
   "en": "WHO: cough ≥ 2 weeks is a TB indicator — screen urgently"
  },
  "ChildAssessment.sectionTitle": {
-  "bn": "শিশু মূল্যায়ন",
+  "bn": "শিশু স্বাস্থ্য",
   "en": "Child Assessment"
  },
  "ChildAssessment.vaccinationCta": {
-  "bn": "💉  টিকাদান  →",
+  "bn": "💉 টিকাদান →",
   "en": "💉  Vaccination  →"
  },
  "Coaching.allModulesTitle": {
-  "bn": "সব মডিউল",
+  "bn": "সকল মডিউল",
   "en": "All Modules"
  },
  "Coaching.seeAll": {
@@ -304,7 +304,7 @@
   "en": "ANC from medical doctor?"
  },
  "Composer.field.fieldAncVisitsOtherProviders": {
-  "bn": "অন্য প্রদানকারীর কাছে ANC ভিজিট",
+  "bn": "অন্য সেবাপ্রদানকারীর কাছে ANC ভিজিট",
   "en": "ANC visits with other providers"
  },
  "Composer.field.fieldAncWeight": {
@@ -324,11 +324,11 @@
   "en": "Blood sugar type"
  },
  "Composer.field.fieldBloodSugarFasting": {
-  "bn": "খালি পেটের রক্তে শর্করা",
+  "bn": "খালি পেটে",
   "en": "Fasting blood sugar"
  },
  "Composer.field.fieldBloodSugarRandom": {
-  "bn": "র‍্যান্ডম রক্তে শর্করা",
+  "bn": "ভরা পেটে",
   "en": "Random blood sugar"
  },
  "Composer.field.fieldBreathsPerMinute": {
@@ -336,11 +336,11 @@
   "en": "Respiratory rate"
  },
  "Composer.field.fieldCalciumConsumed": {
-  "bn": "ক্যালসিয়াম সেবন (গত মাসে)",
+  "bn": "গত মাসে কতটি ক্যালসিয়াম সেবন",
   "en": "Calcium consumed (last month)"
  },
  "Composer.field.fieldCalciumProvided": {
-  "bn": "ক্যালসিয়াম ট্যাবলেট সরবরাহ করা হয়েছে",
+  "bn": "ব্র্যাক হতে কতটি ক্যালসিয়াম বড়ি প্রদান করা হয়েছে",
   "en": "Calcium tablets provided"
  },
  "Composer.field.fieldChestIndrawing": {
@@ -376,7 +376,7 @@
   "en": "Edema"
  },
  "Composer.field.fieldFacilityIdentifiedForDelivery": {
-  "bn": "গর্ভবতী মা কি প্রসবের জন্য কোনো স্বাস্থ্যকেন্দ্র ঠিক করেছেন?",
+  "bn": "প্রসবের জন্য নির্ধারিত স্বাস্থ্যসেবা কেন্দ্র",
   "en": "Has the PW identified a health facility for institutional delivery?"
  },
  "Composer.field.fieldFetalHeartRate": {
@@ -408,7 +408,7 @@
   "en": "Foot wound present"
  },
  "Composer.field.fieldFundalHeight": {
-  "bn": "ফান্ডাল উচ্চতা",
+  "bn": "জরায়ুর উচ্চতা",
   "en": "Fundal height"
  },
  "Composer.field.fieldGlucoseType": {
@@ -448,7 +448,7 @@
   "en": "Night sweats"
  },
  "Composer.field.fieldHasSymptoms": {
-  "bn": "গত ফলো-আপের পর কোনো লক্ষণ ছিল?",
+  "bn": "পূর্ববর্তী ফলো-আপের পর কোনো লক্ষণ দেখা দিয়েছে কি?",
   "en": "Had symptoms since last follow-up?"
  },
  "Composer.field.fieldHasWeightLoss": {
@@ -468,11 +468,11 @@
   "en": "Hemoglobin (Hb)"
  },
  "Composer.field.fieldIfaConsumed": {
-  "bn": "IFA ট্যাবলেট সেবন (গত মাসে)",
+  "bn": "গত মাসে কতটি IFA বড়ি সেবন করেছেন",
   "en": "IFA tablets consumed (last month)"
  },
  "Composer.field.fieldIfaProvided": {
-  "bn": "IFA ট্যাবলেট সরবরাহ করা হয়েছে",
+  "bn": "ব্র্যাক হতে প্রদানকৃত IFA বড়ির সংখ্যা",
   "en": "IFA tablets provided"
  },
  "Composer.field.fieldIsBloodyDiarrhea": {
@@ -484,15 +484,15 @@
   "en": "Regular smoker"
  },
  "Composer.field.fieldLethargic": {
-  "bn": "অলস / অজ্ঞান",
+  "bn": "নিস্তেজ / অজ্ঞান",
   "en": "Lethargic / unconscious"
  },
  "Composer.field.fieldMedAdherence": {
-  "bn": "ওষুধ সেবনে নিয়মিততা",
+  "bn": "নিয়মিত ওষুধ খাচ্ছেন কিনা",
   "en": "Medication adherence"
  },
  "Composer.field.fieldMuacCm": {
-  "bn": "MUAC (সেমি)",
+  "bn": "মুয়াক বা বাহুর মাপ (সেমি)",
   "en": "MUAC (cm)"
  },
  "Composer.field.fieldNcdSymptoms": {
@@ -504,7 +504,7 @@
   "en": "New or worsening symptoms"
  },
  "Composer.field.fieldOedema": {
-  "bn": "ইডিমা (ফোলা)",
+  "bn": "ইডিমা বা ফোলা",
   "en": "Oedema"
  },
  "Composer.field.fieldOrsDispensed": {
@@ -512,7 +512,7 @@
   "en": "ORS dispensed"
  },
  "Composer.field.fieldPallor": {
-  "bn": "রক্তাল্পতার লক্ষণ (পালোর)",
+  "bn": "ফ্যাকাশে ভাব",
   "en": "Pallor"
  },
  "Composer.field.fieldPreviousPregnancyComplications": {
@@ -528,11 +528,11 @@
   "en": "Pulse"
  },
  "Composer.field.fieldRdtResult": {
-  "bn": "RDT ফলাফল",
+  "bn": "আরডিটি (RDT) পরীক্ষার ফলাফল",
   "en": "RDT result"
  },
  "Composer.field.fieldReferralFacility": {
-  "bn": "রেফারেল প্রতিষ্ঠান",
+  "bn": "রেফারেল স্বাস্থ্যকেন্দ্র",
   "en": "Referral facility"
  },
  "Composer.field.fieldRelationshipToIC": {
@@ -564,23 +564,23 @@
   "en": "TT/Td vaccination"
  },
  "Composer.field.fieldUltrasound": {
-  "bn": "আল্ট্রাসাউন্ড",
+  "bn": "আল্ট্রাসোনোগ্রাম",
   "en": "Ultrasound"
  },
  "Composer.field.fieldUnableToBreastfeed": {
-  "bn": "পান করতে / বুকের দুধ খেতে অক্ষম",
+  "bn": "পানি বা মায়ের দুধ খেতে পারছে না",
   "en": "Unable to drink / breastfeed"
  },
  "Composer.field.fieldUrinaryAlbumin": {
-  "bn": "প্রস্রাবে অ্যালবুমিন",
+  "bn": "প্রস্রাব পরীক্ষায় এলবুমিন",
   "en": "Urinary albumin"
  },
  "Composer.field.fieldUrinaryBilirubin": {
-  "bn": "প্রস্রাবে বিলিরুবিন",
+  "bn": "প্রস্রাব পরীক্ষায় বিলিরুবিন",
   "en": "Urinary bilirubin"
  },
  "Composer.field.fieldUrinarySugar": {
-  "bn": "প্রস্রাবে শর্করা",
+  "bn": "প্রস্রাব পরীক্ষায় গ্লুকোজ",
   "en": "Urinary sugar"
  },
  "Composer.field.fieldVomitsEverything": {
@@ -716,7 +716,7 @@
   "en": "Cancel"
  },
  "Enroll.savedToast": {
-  "bn": "প্রোগ্রাম সংরক্ষিত হয়েছে ✓",
+  "bn": "প্রোগ্রাম সেভ করা হয়েছে ✓",
   "en": "Programmes saved ✓"
  },
  "Enroll.screenTitle": {
@@ -724,7 +724,7 @@
   "en": "Add Services"
  },
  "Enroll.subtitle": {
-  "bn": "এই ব্যক্তির প্রয়োজনীয় স্বাস্থ্য প্রোগ্রাম যুক্ত করুন। নির্বাচনের জন্য একটি প্রোগ্রাম চাপুন।",
+  "bn": "রোগীর প্রয়োজনীয় স্বাস্থ্য সেবা যুক্ত করুন। নির্বাচন করতে সেবার ওপর ট্যাপ করুন।",
   "en": "Add the health programmes this person needs. Tap a programme to select it."
  },
  "Enrollment.ageLabel": {
@@ -736,11 +736,11 @@
   "en": "Cancel"
  },
  "Enrollment.save": {
-  "bn": "সংরক্ষণ করুন",
+  "bn": "সেভ করুন",
   "en": "Save"
  },
  "Enrollment.villageLabel": {
-  "bn": "ইউনিয়ন",
+  "bn": "গ্রাম",
   "en": "Union"
  },
  "Enrollment.villageHint": {
@@ -768,11 +768,11 @@
   "en": "Vaccination"
  },
  "FollowUpCall.save": {
-  "bn": "কল সংরক্ষণ করুন",
+  "bn": "কল সেভ করুন",
   "en": "Save call"
  },
  "FollowUpCall.saved": {
-  "bn": "কল লগ হয়েছে — পরের সাইকেলে সিঙ্ক হবে",
+  "bn": "কল সেভ হয়েছে — পরে সিংক হবে",
   "en": "Call logged — will sync on next cycle"
  },
  "FollowUpCall.sheetTitle": {
@@ -784,7 +784,7 @@
   "en": "Form Gallery"
  },
  "HouseholdDetail.householdNumber": {
-  "bn": "পরিবার নং",
+  "bn": "খানা নম্বর",
   "en": "Household No."
  },
  "HouseholdDetail.noMembers": {
@@ -796,23 +796,23 @@
   "en": "N/A"
  },
  "HouseholdDetail.unnamedHousehold": {
-  "bn": "(নামহীন পরিবার)",
+  "bn": "(নামহীন খানা)",
   "en": "(Unnamed household)"
  },
  "HouseholdFollowUp.doneButton": {
-  "bn": "সম্পন্ন — হোমে যান",
+  "bn": "সম্পন্ন — হোমে ফির যান",
   "en": "Done — go to home"
  },
  "HouseholdFollowUp.emptyState": {
-  "bn": "পরিবারের অন্য কোনো সদস্যের ভিজিট প্রয়োজন নেই।",
+  "bn": "খানার অন্য কোনো সদস্যের ভিজিট প্রয়োজন নেই।",
   "en": "No other household members need a visit."
  },
  "HouseholdFollowUp.subtitle": {
-  "bn": "পরিবারের কারও আজ সেবা প্রয়োজন কিনা দেখুন।",
+  "bn": "পরিবারের কারো আজ স্বাস্থ্যসেবা লাগবে কিনা তা খোঁজ নিন",
   "en": "Check if any family members need care today."
  },
  "HouseholdFollowUp.title": {
-  "bn": "এই পরিবারের অন্যরা",
+  "bn": "খানার বাকি সদস্যরা",
   "en": "Others in this household"
  },
  "HouseholdList.loadError": {
@@ -840,7 +840,7 @@
   "en": "Add Member"
  },
  "Lock.households": {
-  "bn": "পরিবার",
+  "bn": "খানা",
   "en": "households"
  },
  "MissionDashboard.aiInsight": {
@@ -860,7 +860,7 @@
   "en": "Enrolled"
  },
  "MissionDashboard.followUpDue": {
-  "bn": "ফলো-আপ বকেয়া",
+  "bn": "ফলো-আপ বাকী",
   "en": "Follow-up Due"
  },
  "MissionDashboard.householdNumber": {
@@ -884,7 +884,7 @@
   "en": "AI is reviewing the assessment. This takes a few seconds."
  },
  "Naba.loadingTitle": {
-  "bn": "কেয়ার প্ল্যান তৈরি হচ্ছে…",
+  "bn": "সেবা পরিকল্পনা তৈরি করা হচ্ছে…",
   "en": "Generating care plan…"
  },
  "Naba.retryButton": {
@@ -932,7 +932,7 @@
   "en": "Skip Anyway"
  },
  "Onboarding.skipButton": {
-  "bn": "এখনের জন্য এড়িয়ে যান",
+  "bn": "এড়িয়ে যান",
   "en": "Skip for Now"
  },
  "Onboarding.skipConfirmBody": {
@@ -964,7 +964,7 @@
   "en": "EPI / Immunization"
  },
  "Pathway.programmeEyeCare": {
-  "bn": "চোখের যত্ন",
+  "bn": "চক্ষু পরীক্ষা",
   "en": "Eye Care"
  },
  "Pathway.programmeFamilyPlanning": {
@@ -1048,7 +1048,7 @@
   "en": "TB screening — WHO 4-symptom screen"
  },
  "Pathway.skipAnywayButton": {
-  "bn": "তবুও এড়িয়ে যান",
+  "bn": "যেকোনোভাবে এড়িয়ে যান",
   "en": "Skip anyway"
  },
  "PatientAi.dialFailed": {
@@ -1080,7 +1080,7 @@
   "en": "Close"
  },
  "PatientContext.comingSoon": {
-  "bn": "ভবিষ্যতের সংস্করণে আসছে",
+  "bn": "পরবর্তী সংস্করণে আসছে",
   "en": "Coming in a future release"
  },
  "PatientContext.fallbackTitle": {
@@ -1252,7 +1252,7 @@
   "en": "Tap Start Listening and speak — the live transcript appears here."
  },
  "Referral.actionCallFamily": {
-  "bn": "পরিবারকে কল করুন",
+  "bn": "পরিবারের কোন সদস্যকে কল করুন",
   "en": "Call Family"
  },
  "Referral.actionLocate": {
@@ -1268,7 +1268,7 @@
   "en": "🟢 COMPLETED"
  },
  "Referral.emptyBody": {
-  "bn": "রেফারাল তৈরি করার পরে বা সুবিধা থেকে সিঙ্ক করার পরে আপনার এসএলএ ড্যাশবোর্ড পূরণ হবে।",
+  "bn": "নতুন রেফারেল তৈরি হলে বা হেলথ সেন্টার থেকে সিংক হওয়ার পর ড্যাশবোর্ড আপডেট হবে",
   "en": "Your SLA dashboard populates after you create a referral or sync from the facility."
  },
  "Referral.emptyTitle": {
@@ -1292,11 +1292,11 @@
   "en": "Model version"
  },
  "ScribeBanner.idle": {
-  "bn": "🎙 এআই স্ক্রাইব — চাপুন এবং তাকে কথা বলতে দিন",
+  "bn": "🎙 এআই স্ক্রাইব — ট্যাপ করুন এবং রোগীকে কথা বলতে দিন",
   "en": "🎙 AI Scribe — tap and let him/her speak"
  },
  "SelectHousehold.emptyState": {
-  "bn": "কোনো পরিবার পাওয়া যায়নি",
+  "bn": "কোনো খানা পাওয়া যায়নি",
   "en": "No households found"
  },
  "SelectHousehold.searchHint": {
@@ -1304,11 +1304,11 @@
   "en": "Search by name, house number, or village..."
  },
  "SelectHousehold.subtitle": {
-  "bn": "এই সদস্যকে যুক্ত করার জন্য পরিবার নির্বাচন করুন",
+  "bn": "এই সদস্যকে যুক্ত করার জন্য খানা নির্বাচন করুন",
   "en": "Choose the household to link this member to"
  },
  "SelectHousehold.title": {
-  "bn": "পরিবার নির্বাচন করুন",
+  "bn": "খানা নির্বাচন করুন",
   "en": "Select Household"
  },
  "Step2Asr.connecting": {
@@ -1328,11 +1328,11 @@
   "en": "Listening…"
  },
  "Step2Asr.micPermissionDenied": {
-  "bn": "মাইক্রোফোনের অনুমতি প্রয়োজন।",
+  "bn": "মাইক্রোফোন ব্যবহারের অনুমতি প্রয়োজন",
   "en": "Microphone permission is required."
  },
  "Step2Asr.notSupportedOnWeb": {
-  "bn": "ওয়েব প্রিভিউতে স্টেপ ২ এআই ফর্ম ফিল উপলব্ধ নয়।",
+  "bn": "ওয়েবে দেখার সময় এআই দিয়ে ফর্ম পূরণের সুবিধাটি পাওয়া যাবে না",
   "en": "Step 2 AI form-fill is not available in the web preview."
  },
  "Step2Asr.stopping": {
@@ -1340,7 +1340,7 @@
   "en": "Stopping…"
  },
  "Step2Asr.transcriptEmpty": {
-  "bn": "কথা বলুন — ট্রান্সক্রিপ্ট এখানে দেখাবে।",
+  "bn": "কথা বলুন — আপনার বলা কথা এখানে লেখা উঠবে",
   "en": "Speak — transcript will appear here."
  },
  "Sync.done": {
@@ -1348,7 +1348,7 @@
   "en": "Ready to go"
  },
  "Sync.households": {
-  "bn": "পরিবার/খানা",
+  "bn": "খানা",
   "en": "households"
  },
  "Sync.patients": {
@@ -1360,7 +1360,7 @@
   "en": "Updating your data…"
  },
  "Sync.subtitle": {
-  "bn": "অফলাইনে কাজ করার জন্য আপনার পরিবার ও রোগীদের তথ্য ডাউনলোড হচ্ছে।",
+  "bn": "অফলাইনে কাজ করার জন্য আপনার খানা ও রোগীদের তথ্য ডাউনলোড হচ্ছে।",
   "en": "Downloading your households and patients so you can work offline."
  },
  "Sync.syncFailed": {
@@ -1400,7 +1400,7 @@
   "en": "See all"
  },
  "Training.subtitle": {
-  "bn": "ছোট ভিডিও · নিজের গতিতে শিখুন",
+  "bn": "শর্ট ভিডিও · নিজের সুবিধা মতো সময়ে শিখুন",
   "en": "Short videos · Learn at your own pace"
  },
  "Training.title": {
@@ -1408,7 +1408,7 @@
   "en": "Training Hub"
  },
  "Triage.eligibleServicesHeader": {
-  "bn": "✦ উপযুক্ত সেবা",
+  "bn": "✦ উপযুক্ত সেবাসমূহ",
   "en": "✦ Eligible services"
  },
  "Triage.eligibleServicesTag": {
@@ -1436,7 +1436,7 @@
   "en": "Anxiety / Worry"
  },
  "Triage.symptom.bloody_diarrhea": {
-  "bn": "রক্ত মিশ্রিত পায়খানা",
+  "bn": "রক্ত মিশ্রিত ডায়রিয়া",
   "en": "Bloody diarrhea"
  },
  "Triage.symptom.blurred_vision": {
@@ -1456,7 +1456,7 @@
   "en": "Breathlessness"
  },
  "Triage.symptom.chest_indrawing": {
-  "bn": "বুক ঢুকে যাওয়া",
+  "bn": "শ্বাস নেওয়ার সময় বুক ভেতরে দেবে যাওয়া",
   "en": "Chest in-drawing"
  },
  "Triage.symptom.chest_pain": {
@@ -1492,7 +1492,7 @@
   "en": "Ear problem"
  },
  "Triage.symptom.edema": {
-  "bn": "ফোলা (ইডিমা)",
+  "bn": "ইডিমা / শরীরে ফোলা ভাব",
   "en": "Edema"
  },
  "Triage.symptom.edema_both_feet": {
@@ -1512,7 +1512,7 @@
   "en": "Eye discharge"
  },
  "Triage.symptom.fast_breathing": {
-  "bn": "দ্রুত শ্বাস",
+  "bn": "ঘন ঘন শ্বাস নেওয়া",
   "en": "Fast breathing"
  },
  "Triage.symptom.fatigue": {
@@ -1560,11 +1560,11 @@
   "en": "Blood in sputum"
  },
  "Triage.symptom.high_bp_known": {
-  "bn": "উচ্চ রক্তচাপ",
+  "bn": "উচ্চ রক্তচাপ (হাই বিপি) নির্ধারিত / সন্দেহজনক",
   "en": "High BP known / suspected"
  },
  "Triage.symptom.jaundice": {
-  "bn": "জন্ডিস (হলুদ ত্বক)",
+  "bn": "জন্ডিস (চোখ/ত্বকে হলুদভাব)",
   "en": "Jaundice (yellow skin / eyes)"
  },
  "Triage.symptom.labor_signs": {
@@ -1608,7 +1608,7 @@
   "en": "Painful urination"
  },
  "Triage.symptom.painful_uterine_contractions": {
-  "bn": "জরায়ু সংকোচনে ব্যথা",
+  "bn": "জরায়ুতে তীব্র বা যন্ত্রণাদায়ক খিঁচুনি/ব্যথা",
   "en": "Painful uterine contractions"
  },
  "Triage.symptom.palpitations": {
@@ -1616,7 +1616,7 @@
   "en": "Palpitations"
  },
  "Triage.symptom.perineal_wound_discharge": {
-  "bn": "পেরিনিয়াল ক্ষত থেকে স্রাব",
+  "bn": "প্রসবের সেলাইয়ের জায়গা থেকে তরল/পুঁজ বের হওয়া",
   "en": "Perineal wound discharge"
  },
  "Triage.symptom.polydipsia": {
@@ -1628,7 +1628,7 @@
   "en": "Frequent urination"
  },
  "Triage.symptom.pregnant": {
-  "bn": "গর্ভবতী",
+  "bn": "গর্ভবতী / চিহ্নিত গর্ভবতী",
   "en": "Pregnant / suspected"
  },
  "Triage.symptom.reduced_fetal_movement": {
@@ -1664,7 +1664,7 @@
   "en": "Swelling of one leg"
  },
  "Triage.symptom.tb_contact": {
-  "bn": "যক্ষ্মা রোগীর সংস্পর্শ",
+  "bn": "যক্ষ্মা রোগীর সংস্পর্শে আসার ইতিহাস",
   "en": "TB contact history"
  },
  "Triage.symptom.umbilicus_red": {
@@ -1784,7 +1784,7 @@
   "en": "Vaccination"
  },
  "Worklist.programmeEyeCare": {
-  "bn": "চোখের যত্ন",
+  "bn": "চক্ষু পরীক্ষা",
   "en": "Eye Care"
  },
  "Worklist.programmeFamilyPlanning": {
@@ -1792,7 +1792,7 @@
   "en": "Family Planning"
  },
  "Worklist.programmeImci": {
-  "bn": "শিশু ভিজিট",
+  "bn": "শিশু ফলোআপ",
   "en": "Child Visit"
  },
  "Worklist.programmeNcd": {
@@ -1920,11 +1920,11 @@
   "en": "Active"
  },
  "activeCareThreads": {
-  "bn": "সক্রিয় সেবা থ্রেড",
+  "bn": "চলমান সেবা কার্যক্রম",
   "en": "Active care threads"
  },
  "addConfirmBody": {
-  "bn": "এটি নির্বাচিত প্রোগ্রামের স্ক্রিনিং প্রশ্ন খুলবে। পরে সুপারিশ তালিকা থেকে এটি বাদ দিতে পারবেন।",
+  "bn": "এখানে চাপ দিলে নির্বাচিত প্রোগ্রামের প্রশ্নমালা খুলবে। প্রয়োজন না হলে পরে রিকমেন্ডেশন তালিকা থেকে এটি বাদ দিতে পারবেন।",
   "en": "This will open the screening questions for the selected programme. You can remove it later from the recommendations list."
  },
  "addConfirmCancel": {
@@ -1944,7 +1944,7 @@
   "en": "Adding to"
  },
  "addMemberTitle": {
-  "bn": "পরিবারের সদস্য যুক্ত করুন",
+  "bn": "খানার সদস্য যুক্ত করুন",
   "en": "Add Household Member"
  },
  "addMoreMembers": {
@@ -1952,11 +1952,11 @@
   "en": "Add Member"
  },
  "addPathwayButton": {
-  "bn": "মূল্যায়নে যুক্ত করুন",
+  "bn": "মূল্যায়ন যুক্ত করুন",
   "en": "Add to assessment"
  },
  "addProgramme": {
-  "bn": "নিজে বিভাগ যুক্ত করুন",
+  "bn": "সেকশন যুক্ত করুন",
   "en": "Add section manually"
  },
  "addProgrammeCta": {
@@ -1964,11 +1964,11 @@
   "en": "Add another programme"
  },
  "addProgrammeSheetEmpty": {
-  "bn": "সব প্রোগ্রাম ইতিমধ্যে নির্বাচিত।",
+  "bn": "সবগুলো প্রোগ্রাম ইতোমধ্যে নির্বাচন করা হয়েছে।",
   "en": "All programmes already selected."
  },
  "addProgrammeSheetSubtitle": {
-  "bn": "নির্বাচন করতে চাপুন। যেগুলো আগেই সুপারিশ করা হয়েছে তা দেখানো হচ্ছে না।",
+  "bn": "সিলেক্ট করতে ট্যাপ করুন। আগে থেকে সাজেস্ট করা প্রোগ্রামগুলো এখানে দেখানো হচ্ছে না।",
   "en": "Tap to select. Already-recommended programmes are hidden."
  },
  "addProgrammeSheetTitle": {
@@ -1988,7 +1988,7 @@
   "en": "Add from list"
  },
  "addSymptomInlineButton": {
-  "bn": "+ যুক্ত করুন",
+  "bn": "#ERROR!",
   "en": "+ Add"
  },
  "addSymptomInlineHint": {
@@ -1996,7 +1996,7 @@
   "en": "Or type a symptom manually…"
  },
  "addSymptomListCollapse": {
-  "bn": "লক্ষণ তালিকা লুকান",
+  "bn": "লক্ষণ তালিকা বন্ধ করুন",
   "en": "Hide symptom list"
  },
  "addSymptomListExpand": {
@@ -2096,11 +2096,11 @@
   "en": "AI · verify"
  },
  "aiInsightUnavailable": {
-  "bn": "এআই অন্তর্দৃষ্টি অনুপলব্ধ — রোগীর রেকর্ড ম্যানুয়ালি পরীক্ষা করুন",
+  "bn": "এআই (AI) তথ্য পাওয়া যাচ্ছে না — রোগীর রেকর্ড নিজে পরীক্ষা করুন",
   "en": "AI insight unavailable — check patient record manually"
  },
  "aiPrioritisedBecause": {
-  "bn": "এআই অগ্রাধিকার দিয়েছে কারণ:",
+  "bn": "এআই (AI) অগ্রাধিকার দেওয়ার কারণ:",
   "en": "AI Prioritised because:"
  },
  "aiReadHerRecordBadge": {
@@ -2160,7 +2160,7 @@
   "en": "All assessments"
  },
  "allCaughtUp": {
-  "bn": "সব সম্পন্ন! দারুণ কাজ।",
+  "bn": "সব কাজ শেষ! দুর্দান্ত কাজ করেছেন।",
   "en": "All caught up! Great work."
  },
  "allTrendsTitle": {
@@ -2180,7 +2180,7 @@
   "en": "ALSO COVER WHILE YOU'RE HERE"
  },
  "alsoInHousehold": {
-  "bn": "এই পরিবারেও আছেন",
+  "bn": "এই খানাতেও আছেন",
   "en": "Also in this household"
  },
  "anc": {
@@ -2200,7 +2200,7 @@
   "en": "This patient has completed a delivery or PNC visit. ANC assessments cannot be started after delivery."
  },
  "ancBlockedPostpartumTitle": {
-  "bn": "এএনসি উপলব্ধ নয়",
+  "bn": "এএনসি সেবা দেওয়া যাবে না",
   "en": "ANC Not Available"
  },
  "ancDeliveryConflictHint": {
@@ -2220,7 +2220,7 @@
   "en": "First ANC Visit — Key Messages"
  },
  "ancFollowUpDue": {
-  "bn": "ANC ফলো-আপ বকেয়া",
+  "bn": "ANC ফলো-আপ বাকি",
   "en": "ANC Follow-up Due"
  },
  "ancFollowUps": {
@@ -2228,7 +2228,7 @@
   "en": "ANC Follow-ups"
  },
  "ancLabel": {
-  "bn": "মাতৃস্বাস্থ্য সেবা",
+  "bn": "এএনসি ভিজিট",
   "en": "ANC Visit"
  },
  "ancSummaryAncGap": {
@@ -2240,7 +2240,7 @@
   "en": "BP elevated"
  },
  "ancSummaryEyebrow": {
-  "bn": "ANC ভিজিট",
+  "bn": "এএনসি ভিজিট",
   "en": "ANC VISIT"
  },
  "ancSummaryGaUnit": {
@@ -2328,11 +2328,11 @@
   "en": "(auto-generated)"
  },
  "autoScanActive": {
-  "bn": "স্বয়ংক্রিয়ভাবে স্ক্যান হচ্ছে — কার্ড স্থির রাখুন",
+  "bn": "কার্ডটি স্থিরভাবে ধরে রাখুন — স্বয়ংক্রিয়ভাবে স্ক্যান হচ্ছে",
   "en": "Auto-scanning — hold card steady"
  },
  "autoScanHint": {
-  "bn": "প্রতি ~২ সেকেন্ডে স্ক্যান হচ্ছে · জোর করে ক্যাপচার করতে বাটন চাপুন",
+  "bn": "প্রতি ~২ সেকেন্ড পর পর স্ক্যান হচ্ছে — সাথে সাথে স্ক্যান করতে বাটনে চাপ দিন",
   "en": "Scanning every ~2 s · tap button to force capture"
  },
  "autofillBadgeDescription": {
@@ -2496,7 +2496,7 @@
   "en": "Transport"
  },
  "beforeYouKnock": {
-  "bn": "দরজায় যাওয়ার আগে · এআই সংক্ষিপ্ত তথ্য",
+  "bn": "রোগীর দ্বারে পৌঁছানোর আগে · এক নজরে এআই তথ্য",
   "en": "Before you knock · AI brief"
  },
  "beginAssessment": {
@@ -2572,15 +2572,15 @@
   "en": "BMI"
  },
  "bookTeleconsult": {
-  "bn": "টেলি-পরামর্শ বুক করুন",
+  "bn": "টেলি-পরামর্শ সেবার জন্য বুক করুন",
   "en": "Book Teleconsult"
  },
  "bootstrapDesc": {
-  "bn": "রেকর্ডিং শুরুতে কতক্ষণ নীরব ধরে নিয়ে ঘরের মৌলিক শব্দ মাপা হয়। বেশি সময় হলে শুরুর বাক্যে ভুল পরিমাপ হওয়ার ঝুঁকি কমে।",
+  "bn": "রেকর্ডিং শুরুতেই কতটুকু সময় নীরবতা ধরে নিয়ে ঘরের নয়েজ বা শোরগোল মাপা হবে। সময়টা একটু বেশি রাখলে মুখের প্রথম কথাগুলোর কারণে নয়েজ মাপা ভুল হওয়ার ঝুঁকি থাকে না।",
   "en": "How long at the very start of a recording is assumed silent, to measure the room's baseline noise. Longer reduces the risk of an immediate opening sentence skewing that baseline."
  },
  "bootstrapLabel": {
-  "bn": "শুরুর ক্যালিব্রেশন সময়",
+  "bn": "রেকর্ডিং শুরুর নয়েজ মাপার সময়",
   "en": "Startup calibration window"
  },
  "bp": {
@@ -2588,7 +2588,7 @@
   "en": "Pre-eclampsia watch"
  },
  "bpAddReadingLabel": {
-  "bn": "+ পাঠ যুক্ত করুন",
+  "bn": "#ERROR!",
   "en": "+ Add Reading"
  },
  "bpCardLabel": {
@@ -2628,7 +2628,7 @@
   "en": "Remove reading"
  },
  "bpReviewPending": {
-  "bn": "BP পর্যালোচনা মুলতুবি",
+  "bn": "বিপি (BP) রিভিউ বাকি আছে",
   "en": "BP Review Pending"
  },
  "bpSystolicHint": {
@@ -2664,19 +2664,19 @@
   "en": "⚠ {name} · current concerns flagged — act today if symptoms persist"
  },
  "briefCard1Title": {
-  "bn": "দরজায় যাওয়ার আগে",
+  "bn": "রোগীর দ্বারে পৌঁছানোর আগে",
   "en": "Before You Knock"
  },
  "briefCardTitle": {
-  "bn": "দরজায় যাওয়ার আগে · এআই সংক্ষিপ্ত তথ্য",
+  "bn": "রোগীর দ্বারে পৌঁছানোর আগে · এক নজরে এআই তথ্য",
   "en": "Before you knock · AI brief"
  },
  "briefingUnavailable": {
-  "bn": "এআই ব্রিফিং উপলব্ধ নেই — রোগীর রেকর্ড নিজে দেখুন।",
+  "bn": "এআই (AI) তথ্য পাওয়া যাচ্ছে না — রোগীর ফাইল নিজে পরীক্ষা করুন",
   "en": "AI briefing unavailable — check patient record manually."
  },
  "calciumPairLabel": {
-  "bn": "ক্যালসিয়াম ট্যাবলেট",
+  "bn": "ক্যালসিয়াম বড়ি",
   "en": "Calcium tablets"
  },
  "calciumPairSubLabel": {
@@ -2688,23 +2688,23 @@
   "en": "Start Video Call"
  },
  "callComingSoon": {
-  "bn": "পরিবারকে কল করার সুবিধা শীঘ্রই আসছে",
+  "bn": "খানার সদস্যকে কল করার সুবিধা শীঘ্রই আসছে",
   "en": "Call household coming soon"
  },
  "callDoctorNow": {
-  "bn": "ডাক্তারকে ফোন করন",
+  "bn": "ডাক্তারকে ফোন করুন",
   "en": "Call a doctor now"
  },
  "callDoctorOfflineHint": {
-  "bn": "অনলাইন থাকলে উপলব্ধ",
+  "bn": "অনলাইনে থাকলে পাওয়া যাবে",
   "en": "Available when online"
  },
  "callFacility": {
-  "bn": "সুবিধায় কল করুন",
+  "bn": "স্বাস্থ্যসেবা কেন্দ্রে কল করুন",
   "en": "Call Facility"
  },
  "callFamily": {
-  "bn": "পরিবারকে কল করুন",
+  "bn": "খানা সদস্যকে কল করুন",
   "en": "Call Family"
  },
  "callHousehold": {
@@ -2716,15 +2716,15 @@
   "en": "Cancel"
  },
  "card1Subtitle": {
-  "bn": "রোগীর ইতিহাসের ভিত্তিতে এআই-তৈরি ব্রিফিং",
+  "bn": "রোগীর ইতিহাস সম্পর্কিত এআই (AI) নির্দেশিকা",
   "en": "AI-generated briefing based on patient history"
  },
  "card2Subtitle": {
-  "bn": "এই রোগীর প্রোগ্রাম ও ইতিহাসের জন্য ব্যক্তিগতকৃত",
+  "bn": "এই রোগীর চিকিৎসা সেবা এবং ইতিহাস অনুযায়ী বিশেষভাবে তৈরি",
   "en": "Personalised for this patient's programmes and history"
  },
  "card2Title": {
-  "bn": "কথোপকথন গাইড",
+  "bn": "আলোচনার নির্দেশিকা",
   "en": "Conversation Guide"
  },
  "card3Subtitle": {
@@ -2732,7 +2732,7 @@
   "en": "Ask the patient how they are feeling — the AI Scribe will start listening"
  },
  "card3Title": {
-  "bn": "পরামর্শ শুরু করুন",
+  "bn": "কাউন্সেলিং শুরু করুন",
   "en": "Begin the Consultation"
  },
  "cardOf": {
@@ -2748,7 +2748,7 @@
   "en": "Care history"
  },
  "catchmentCount": {
-  "bn": "আপনার এলাকার পরিবার",
+  "bn": "আপনার কর্ম এলাকার খানা",
   "en": "households in your catchment"
  },
  "cceEscalations": {
@@ -2768,7 +2768,7 @@
   "en": "Check Answer"
  },
  "checkboxLabel": {
-  "bn": "আমি উপরের বিষয়টি পড়েছি ও বুঝেছি। আমি এই পরিবারের সদস্যদের স্বাস্থ্য তথ্য সংগ্রহের জন্য সম্মতি দিচ্ছি।",
+  "bn": "আমি উপরের বিষয়টি পড়েছি ও বুঝেছি। আমি এই খানা সদস্যদের স্বাস্থ্য তথ্য সংগ্রহের জন্য সম্মতি দিচ্ছি।",
   "en": "I have read and understood the above. I give consent for health data collection for members of this household."
  },
  "chestTightnessTitle": {
@@ -2776,7 +2776,7 @@
   "en": "Chest tightness or shortness of breath?"
  },
  "chiefComplaints": {
-  "bn": "প্রধান অভিযোগ",
+  "bn": "মূল শারীরিক সমস্যাসমূহ",
   "en": "Chief Complaints"
  },
  "child": {
@@ -2784,7 +2784,7 @@
   "en": "Child"
  },
  "childDangerCases": {
-  "bn": "শিশুদের বিপদ চিহ্নিত কেস",
+  "bn": "শিশুদের বিপদ চিহ্নিত সমূহ",
   "en": "Child Danger Cases"
  },
  "childHealthFindingsTitle": {
@@ -2796,11 +2796,11 @@
   "en": "Child immunisation"
  },
  "chipDm": {
-  "bn": "পরিচিত ডায়াবেটিস",
+  "bn": "আগে থেকেই ডায়াবেটিস আক্রান্ত",
   "en": "Known DM"
  },
  "chipHtn": {
-  "bn": "পরিচিত উচ্চ রক্তচাপ",
+  "bn": "আগে থেকেই উচ্চ রক্তচাপ বা হাইপারটেনশন আক্রান্ত",
   "en": "Known HTN"
  },
  "chipPregnant": {
@@ -2820,11 +2820,11 @@
   "en": "Under 5 · IMCI"
  },
  "clearHistory": {
-  "bn": "চ্যাট ইতিহাস পরিষ্কার করুন",
+  "bn": "চ্যাট ইতিহাস মুছে ফেলুন",
   "en": "Clear chat history"
  },
  "clearNeedFilters": {
-  "bn": "সাফ করুন",
+  "bn": "মুছে ফেলুন",
   "en": "Clear"
  },
  "clinicalFindingsTitle": {
@@ -2840,11 +2840,11 @@
   "en": "Close"
  },
  "closedNote": {
-  "bn": "ভুল নম্বর বা সব চেষ্টা শেষ হলে এই ফলো-আপ বন্ধ হবে।",
+  "bn": "ভুল নম্বর অথবা চেষ্টার সীমা শেষ হয়ে গেলে এই ফলো-আপটি বন্ধ হয়ে যাবে।",
   "en": "Wrong number or exhausted attempts will close this follow-up."
  },
  "clusterChildHealth": {
-  "bn": "শিশু স্বাস্থ্য",
+  "bn": "শিশু ফলোআপ",
   "en": "Child Health"
  },
  "clusterDangerSigns": {
@@ -2980,7 +2980,7 @@
   "en": "Selected symptoms are consistent with this programme."
  },
  "consistencyInconsistent": {
-  "bn": "নির্বাচিত লক্ষণ এই প্রোগ্রামের সাথে ভালোভাবে মেলে না।",
+  "bn": "নির্বাচিত লক্ষণগুলো এই প্রোগ্রামের সাথে পুরোপুরি মেলে না।",
   "en": "Selected symptoms do not strongly match this programme."
  },
  "contactCall": {
@@ -3060,15 +3060,15 @@
   "en": "Failed to create referral — please try again"
  },
  "createHousehold": {
-  "bn": "পরিবার তৈরি করুন",
+  "bn": "খানা তৈরি করুন",
   "en": "Create Household"
  },
  "createHouseholdAppBarSubtitle": {
-  "bn": "আপনার এলাকায় একটি নতুন পরিবার নিবন্ধন করুন",
+  "bn": "আপনার এলাকায় একটি নতুন খানা নিবন্ধন করুন",
   "en": "Register a new household in your catchment area"
  },
  "createHouseholdCTA": {
-  "bn": "✓ পরিবার তৈরি করুন",
+  "bn": "✓ খানা তৈরি করুন",
   "en": "✓ Create Household"
  },
  "createHouseholdSubtitle": {
@@ -3076,11 +3076,11 @@
   "en": "Step 1 of 2"
  },
  "createHouseholdTitle": {
-  "bn": "পরিবারের তথ্য",
+  "bn": "খানার তথ্য",
   "en": "Household Information"
  },
  "createNotesHint": {
-  "bn": "গ্রহণকারী স্বাস্থ্য কেন্দ্রের জন্য যেকোনো নোট লিখুন",
+  "bn": "সেবা গ্রহণকারী স্বাস্থ্য কেন্দ্রের জন্য যেকোনো নোট লিখুন",
   "en": "Enter any notes for the receiving facility"
  },
  "createNotesLabel": {
@@ -3132,7 +3132,7 @@
   "en": "🔴 Critical Alert"
  },
  "criticalBannerFmt": {
-  "bn": "লঙ্ঘিত: {patientName} · {tier} · {detail}",
+  "bn": "সময়সীমা পার: {patientName} · {tier} · {detail}",
   "en": "BREACHED: {patientName} · {tier} · {detail}"
  },
  "crossNoticeTitle": {
@@ -3252,7 +3252,7 @@
   "en": "Date of Birth"
  },
  "daysOverdue": {
-  "bn": "{days} দিন বকেয়া",
+  "bn": "{days} দিন বাকী",
   "en": "{days} Days Overdue"
  },
  "daysShort": {
@@ -3280,7 +3280,7 @@
   "en": "Cancel registration"
  },
  "declineWarning": {
-  "bn": "সম্মতি ছাড়া পরিবার নিবন্ধন সম্পন্ন করা যাবে না।",
+  "bn": "সম্মতি ছাড়া খানা নিবন্ধন সম্পন্ন করা যাবে না।",
   "en": "Without consent, household registration cannot be completed."
  },
  "deleteKey": {
@@ -3292,7 +3292,7 @@
   "en": "Delivery"
  },
  "deliveryHint": {
-  "bn": "গর্ভাবস্থার ফলাফল এই পরিদর্শনে জন্ম নথিভুক্ত করে এবং এএনসি সরায়",
+  "bn": "প্রসবের ফলাফল এই পরিদর্শনে জন্ম নথিভুক্ত করে এবং এএনসি সরায়",
   "en": "Pregnancy Outcome documents the birth this visit and clears ANC"
  },
  "deselectProgrammeA11y": {
@@ -3316,7 +3316,7 @@
   "en": "House No."
  },
  "detailLabelHouseholdNo": {
-  "bn": "পরিবার নং",
+  "bn": "খানা নম্বর",
   "en": "Household No."
  },
  "detailLabelTotalMembers": {
@@ -3388,7 +3388,7 @@
   "en": "e.g. 1"
  },
  "disabilityPersonCountLabel": {
-  "bn": "খানায় বিশেষ চাহিদা সম্পন্ন ব্যক্তির সংখ্যা",
+  "bn": "প্রতিবন্ধী ব্যক্তির সংখ্যা",
   "en": "Persons with disability in the HH"
  },
  "disabilityQuestionLabel": {
@@ -3560,11 +3560,11 @@
   "en": "How many days unwell?"
  },
  "durationValue1": {
-  "bn": "১",
+  "bn": "1",
   "en": "1"
  },
  "durationValue2to3": {
-  "bn": "২-৩",
+  "bn": "46056",
   "en": "2-3"
  },
  "durationValue4plus": {
@@ -3996,7 +3996,7 @@
   "en": "Excessive bleeding"
  },
  "fieldHasFamilyHistoryDm": {
-  "bn": "পরিবারে ডায়াবেটিসের ইতিহাস?",
+  "bn": "খানাে ডায়াবেটিসের ইতিহাস?",
   "en": "Family history of diabetes?"
  },
  "fieldHasUterinePain": {
@@ -4008,23 +4008,23 @@
   "en": "High salt in daily food?"
  },
  "fieldHrsBreastFed": {
-  "bn": "জন্মের কত ঘণ্টা পর বুকের দুধ শুরু হয়েছে",
+  "bn": "জন্মের কত ঘণ্টা পর বুকের দুধ খাওয়ানো শুরু করেছিল",
   "en": "Hours after birth breastfeeding started"
  },
  "fieldHtnPatient": {
-  "bn": "পরিচিত উচ্চ রক্তচাপের রোগী?",
+  "bn": "উচ্চ রক্তচাপের পুরাতন রোগী?",
   "en": "Known HTN patient?"
  },
  "fieldIfaTabletsConsumed": {
-  "bn": "IFA ট্যাবলেট সেবন করা হয়েছে",
+  "bn": "আয়রন ফলিক অ্যাসিড ট্যাবলেট সেবন করা হয়েছে",
   "en": "IFA tablets consumed"
  },
  "fieldIfaTabletsProvided": {
-  "bn": "IFA ট্যাবলেট সরবরাহ করা হয়েছে",
+  "bn": "আয়রন ফলিক অ্যাসিড ট্যাবলেট সরবরাহ করা হয়েছে",
   "en": "IFA tablets provided"
  },
  "fieldIsPhysicallyActive": {
-  "bn": "প্রতিদিন ≥ ৩০ মিনিট শারীরিকভাবে সক্রিয়?",
+  "bn": "শারীরিকভাবে সক্রিয় ≥ ৩০ মিনিট/দিন ?",
   "en": "Physically active ≥ 30 min/day?"
  },
  "fieldLivingChildren": {
@@ -4036,7 +4036,7 @@
   "en": "Low birth weight?"
  },
  "fieldMonthAdditionalFeedGiven": {
-  "bn": "কোন মাসে বাড়তি খাবার শুরু হয়েছে",
+  "bn": "কোন মাস থেকে বাড়তি খাবার শুরু হয়েছে",
   "en": "Month additional food started"
  },
  "fieldMorningHeadaches": {
@@ -4044,7 +4044,7 @@
   "en": "Morning headaches?"
  },
  "fieldNcdServiceProvided": {
-  "bn": "NCD সেবা প্রদান করা হয়েছে?",
+  "bn": "এনসিডি সেবা প্রদান করা হয়েছে?",
   "en": "NCD service provided?"
  },
  "fieldNewbornBreastfeeding": {
@@ -4056,7 +4056,7 @@
   "en": "Newborn present"
  },
  "fieldNewbornReferredToSbcu": {
-  "bn": "নবজাতক SBCU-তে রেফার করা হয়েছে?",
+  "bn": "নবজাতক এসবিসিইউ-তে রেফার করা হয়েছে?",
   "en": "Newborn referred to SBCU?"
  },
  "fieldNumberOfLivingChildren": {
@@ -4080,7 +4080,7 @@
   "en": "One-sided weakness or stroke signs?"
  },
  "fieldOtherChildFeed": {
-  "bn": "অন্য খাবার",
+  "bn": "অন্যান্য খাবার",
   "en": "Other feed"
  },
  "fieldOtherPncNeonateSigns": {
@@ -4088,7 +4088,7 @@
   "en": "Other newborn signs"
  },
  "fieldOverdueVaccines": {
-  "bn": "বাকি থাকা টিকা",
+  "bn": "ওভারডিউ টিকা",
   "en": "Overdue vaccines"
  },
  "fieldParity": {
@@ -4104,7 +4104,7 @@
   "en": "Newborn danger signs"
  },
  "fieldPncVitaminsGiven": {
-  "bn": "PNC ভিটামিন দেওয়া হয়েছে",
+  "bn": "পিএনসি (PNC) ভিটামিন দেওয়া হয়েছে",
   "en": "PNC vitamins given"
  },
  "fieldPostpartumDangerSigns": {
@@ -4112,7 +4112,7 @@
   "en": "Postpartum danger signs"
  },
  "fieldRandomBloodSugar": {
-  "bn": "র‍্যান্ডম রক্তে শর্করা (mmol/L)",
+  "bn": "র‍্যান্ডম ব্লাড সুগার (mmol/L)",
   "en": "Random blood sugar (mmol/L)"
  },
  "fieldReceivedVaccine": {
@@ -4120,7 +4120,7 @@
   "en": "Child received vaccines?"
  },
  "fieldReferPlace": {
-  "bn": "রেফারেল প্রতিষ্ঠান",
+  "bn": "রেফারেল ফ্যাসিলিটি",
   "en": "Referral facility"
  },
  "fieldReferredForOperation": {
@@ -4140,7 +4140,7 @@
   "en": "Supplementary food given"
  },
  "fieldVaccinesGivenToday": {
-  "bn": "আজ দেওয়া টিকা",
+  "bn": "আজকে দেওয়া টিকা",
   "en": "Vaccines given today"
  },
  "fieldVisibleWasting": {
@@ -4156,15 +4156,15 @@
   "en": "Waist circumference (cm)"
  },
  "fields": {
-  "bn": "ঘর",
+  "bn": "ফিল্ড",
   "en": "fields"
  },
  "fieldsFilled": {
-  "bn": "টি ঘর পূরণ হয়েছে",
+  "bn": "পূরণকৃত ফিল্ড",
   "en": "fields filled"
  },
  "filterAnc": {
-  "bn": "এএনসি",
+  "bn": "এএনসি (ANC)",
   "en": "ANC"
  },
  "filterByLocation": {
@@ -4224,15 +4224,15 @@
   "en": "First visit for this patient"
  },
  "floorAlphaDesc": {
-  "bn": "পেছনের শব্দের অনুমান কত দ্রুত ঘরের সাথে সামঞ্জস্য করে। বেশি মান = পরিবর্তনশীল পরিবেশে দ্রুত মানিয়ে নেয়।",
+  "bn": "ঘরের পরিবেশ অনুযায়ী ব্যাকগ্রাউন্ড শব্দের মাত্রা কত দ্রুত সমন্বয় করা হয় । বেশি মান = পরিবর্তনশীল পরিবেশে দ্রুত মানিয়ে নেয়।",
   "en": "How quickly the background-noise estimate adjusts to the room. Higher = adapts faster to a changing environment."
  },
  "floorAlphaLabel": {
-  "bn": "নয়েজ ফ্লোর অভিযোজন গতি",
+  "bn": "নয়েজ ফ্লোর সমন্বয়ের গতি",
   "en": "Noise floor adaptation speed"
  },
  "floorCeilingDesc": {
-  "bn": "শব্দময় ঘরে \"পেছনের শব্দ\" অনুমানকে কতটা উপরে উঠতে দেওয়া হবে তা সীমিত করে। কম সীমা = শব্দময় পরিবেশে আস্তে কথা বলা ব্যক্তিকেও শোনা সহজ হয়।",
+  "bn": "কোলাহলপূর্ণ পরিবেশে ব্যাকগ্রাউন্ড শব্দের অনুমান কতটুকু পর্যন্ত বাড়তে পারবে, তার সর্বোচ্চ সীমা নির্ধারণ করে। সীমা কম হলে, আশপাশে বেশি শব্দ থাকলেও কম স্বরে কথা বলা ব্যক্তির কণ্ঠস্বর সহজে শোনা যায়।",
   "en": "Caps how high the \"background noise\" estimate is allowed to climb in a loud room. Lower ceiling = easier for a quiet speaker to be heard over noisy surroundings."
  },
  "floorCeilingLabel": {
@@ -4248,11 +4248,11 @@
   "en": "Folic Acid"
  },
  "followUpsDue": {
-  "bn": "বকেয়া ফলো-আপ",
+  "bn": "ডিউ ফলো-আপ",
   "en": "Follow-Ups Due"
  },
  "forPatient": {
-  "bn": "{name}-এর জন্য",
+  "bn": "{ নাম }-এর জন্য",
   "en": "For {name}"
  },
  "forgotPassword": {
@@ -4260,7 +4260,7 @@
   "en": "Forgot password?"
  },
  "forgotPasswordHint": {
-  "bn": "আপনার নিবন্ধিত ইমেল ঠিকানা লিখুন",
+  "bn": "আপনার নিবন্ধিত ইমেল এড্রেস লিখুন",
   "en": "Enter your registered email address"
  },
  "forgotPasswordSend": {
@@ -4328,19 +4328,19 @@
   "en": "Prescription recorded"
  },
  "glucoseFastingLabel": {
-  "bn": "উপবাসকালীন",
+  "bn": "খালি পেটে",
   "en": "Fasting"
  },
  "glucosePairLabel": {
-  "bn": "রক্তের শর্করা",
+  "bn": "ব্লাড সুগার",
   "en": "Blood Sugar"
  },
  "glucoseRandomLabel": {
-  "bn": "এলোমেলো",
+  "bn": "র‍্যান্ডম",
   "en": "Random"
  },
  "glucoseValidationError": {
-  "bn": "১.০ থেকে ১৫.০ mmol/L-এর মধ্যে গ্লুকোজ পাঠ লিখুন",
+  "bn": "১.০ থেকে ১৫.০ mmol/L-এর মধ্যে গ্লুকোজের মান লিখুন",
   "en": "Enter a glucose reading between 1.0 and 15.0 mmol/L"
  },
  "goodAfternoon": {
@@ -4384,7 +4384,7 @@
   "en": "Eye care"
  },
  "groupFamilyPlanning": {
-  "bn": "পরিবার পরিকল্পনা",
+  "bn": "খানা পরিকল্পনা",
   "en": "Family planning"
  },
  "groupGeneral": {
@@ -4396,7 +4396,7 @@
   "en": "Child health checks"
  },
  "groupNcd": {
-  "bn": "NCD পরীক্ষা",
+  "bn": "এনসিডি পরীক্ষা",
   "en": "NCD checks"
  },
  "groupNutrition": {
@@ -4416,11 +4416,11 @@
   "en": "Growth monitoring"
  },
  "growthTrend": {
-  "bn": "বৃদ্ধির ধারা",
+  "bn": "বৃদ্ধির প্রবণতা",
   "en": "Growth trend"
  },
  "guardianHint": {
-  "bn": "পরিবার থেকে অভিভাবক নির্বাচন করুন",
+  "bn": "খানা থেকে অভিভাবক নির্বাচন করুন",
   "en": "Select guardian from household"
  },
  "guardianLabel": {
@@ -4428,7 +4428,7 @@
   "en": "Guardian"
  },
  "guideUnavailable": {
-  "bn": "কথোপকথন গাইড উপলব্ধ নেই।",
+  "bn": "কথোপকথনের নির্দেশিকা পাওয়া যাচ্ছে না",
   "en": "Conversation guide unavailable."
  },
  "haemoglobinChartLabel": {
@@ -4440,35 +4440,35 @@
   "en": "Haemoglobin"
  },
  "haemoglobinValidationError": {
-  "bn": "১.০ থেকে ২০.০ g/dL-এর মধ্যে Hb পাঠ লিখুন",
+  "bn": "১.০ থেকে ২০.০ gm/dL-এর মধ্যে Hb মান লিখুন",
   "en": "Enter a Hb reading between 1.0 and 20.0 g/dL"
  },
  "hangoverDesc": {
-  "bn": "শব্দ কমে যাওয়ার পরে কতক্ষণ রেকর্ডিং চালু রাখা হবে, যাতে শব্দ বা বাক্যের মধ্যে স্বাভাবিক বিরতি কাটা না পড়ে।",
+  "bn": "শব্দের মাত্রা কমে যাওয়ার পরও কতক্ষণ রেকর্ডিং চালু থাকবে, যাতে শব্দ বা বাক্যের মাঝখানের স্বাভাবিক বিরতিতে রেকর্ডিং বন্ধ না হয়ে যায়",
   "en": "How long to keep recording after volume drops, to bridge a natural pause between words or sentences without cutting them apart."
  },
  "hangoverLabel": {
-  "bn": "পরের নীরবতা সময়",
+  "bn": "কথা শেষ হওয়ার পর নীরবতার সময়সীমা",
   "en": "Trailing silence window"
  },
  "hba1cValidationError": {
-  "bn": "৪.০% থেকে ১৪.০%-এর মধ্যে HbA1c পাঠ লিখুন",
+  "bn": "৪.০% থেকে ১৪.০%-এর মধ্যে HbA1c মান লিখুন",
   "en": "Enter an HbA1c reading between 4.0% and 14.0%"
  },
  "headNameHint": {
-  "bn": "প্রধানের পূর্ণ নাম",
+  "bn": "খানা প্রধানের পূর্ণ নাম",
   "en": "Head's full name"
  },
  "headNameLabel": {
-  "bn": "খানা প্রধানের নাম",
+  "bn": "পূর্ণ নাম",
   "en": "Household Head Name"
  },
  "headPrefilledFromScan": {
-  "bn": "নাম, জন্ম তারিখ ও এনআইডি কার্ড থেকে পড়া হয়েছে — যাচাই করুন, তারপর পিতা ও মাতার নাম (বাংলা) নিজে যুক্ত করুন।",
+  "bn": "কার্ড থেকে নাম, জন্ম তারিখ ও এনআইডি তথ্য নেওয়া হয়েছে— যাচাই করুন, তারপর পিতা ও মাতার নাম (বাংলা) নিজে যুক্ত করুন।",
   "en": "Name, date of birth & NID read from the card — verify, then add father's & mother's names (Bangla) manually."
  },
  "headerTitle": {
-  "bn": "🏠 পরিবার ও রোগী",
+  "bn": "🏠 খানা ও সদস্য",
   "en": "🏠 Households & Patients"
  },
  "headerVisitFallback": {
@@ -4476,11 +4476,11 @@
   "en": "Visit"
  },
  "healthWorkerHint": {
-  "bn": "SS নির্বাচন করুন",
+  "bn": "এসএস নির্বাচন করুন",
   "en": "Select SS"
  },
  "healthWorkerLabel": {
-  "bn": "SS নাম",
+  "bn": "এসএস এর নাম",
   "en": "SS Name"
  },
  "heightLabel": {
@@ -4504,7 +4504,7 @@
   "en": "Height & Weight"
  },
  "heroDesc": {
-  "bn": "ভিজিট সম্পন্ন, রেফারেল অনুসরণ ও SLA পালনের সমন্বয়",
+  "bn": "ভিজিট সম্পন্ন, রেফারেল অনুসরণ এবং SLA অনুসরণ—এই তিনটির তথ্য একত্রে উপস্থাপন করে",
   "en": "Blends visit completion, referral follow-through & SLA compliance"
  },
  "heroScoreLabel": {
@@ -4516,11 +4516,11 @@
   "en": "visits this period"
  },
  "hide": {
-  "bn": "প্রোফাইল লুকান",
+  "bn": "প্রোফাইল লুকান/প্রোফাইল দৃশ্যমানতা বন্ধ করুন",
   "en": "Hide profile"
  },
  "highConfidence": {
-  "bn": "উচ্চ আত্মবিশ্বাস",
+  "bn": "আত্মবিশ্বাস বেশি",
   "en": "High confidence"
  },
  "highRiskDiabeticPatients": {
@@ -4536,7 +4536,7 @@
   "en": "High-Risk\nPatients"
  },
  "highRiskPregnancyWaiting": {
-  "bn": "{name}: উচ্চ-ঝুঁকিপূর্ণ গর্ভাবস্থা {duration} ধরে OB পর্যালোচনার অপেক্ষায়।",
+  "bn": "{নাম}: উচ্চ-ঝুঁকিপূর্ণ গর্ভাবস্থা {duration} ধরে OB পর্যালোচনার অপেক্ষায়।",
   "en": "{name}: High-risk pregnancy waiting {duration} for OB review."
  },
  "highSaltTitle": {
@@ -4556,19 +4556,19 @@
   "en": "✅ Care completed"
  },
  "hintFollowUp": {
-  "bn": "📋 {duration}-এ ফলো-আপ",
+  "bn": "📋 {সময়কাল} পরে ফলো-আপ",
   "en": "📋 Follow-up in {duration}"
  },
  "hintNotCheckedIn": {
-  "bn": "📍 চেক ইন হয়নি",
+  "bn": "📍চেক ইন করা হয়নি",
   "en": "📍 Not checked in"
  },
  "hintQueueWait": {
-  "bn": "⏳ {department} সারি {duration}",
+  "bn": "⏳ {বিভাগ} সারি {সময়কাল}",
   "en": "⏳ {department} queue {duration}"
  },
  "hintTransportBarrier": {
-  "bn": "🚌 পরিবহনে বাধা সম্ভব",
+  "bn": "🚌 সম্ভাব্য পরিবহন বাধা",
   "en": "🚌 Possible transport barrier"
  },
  "home": {
@@ -4576,11 +4576,11 @@
   "en": "Home"
  },
  "houseNumber": {
-  "bn": "#{no}",
+  "bn": "#{no }",
   "en": "#{no}"
  },
  "houseNumberHint": {
-  "bn": "যেমন, ১২৩ A/B",
+  "bn": "যেমন, ১২৩ এ/বি",
   "en": "e.g., 123 A/B"
  },
  "houseNumberLabel": {
@@ -4588,39 +4588,39 @@
   "en": "House Number"
  },
  "householdCreatedSubtitle": {
-  "bn": "আপনার পরিবার সফলভাবে তৈরি হয়েছে।",
+  "bn": "আপনার খানা সফলভাবে তৈরি হয়েছে।",
   "en": "Your household has been created successfully."
  },
  "householdCreatedTitle": {
-  "bn": "পরিবার নিবন্ধিত হয়েছে!",
+  "bn": "খানা নিবন্ধিত হয়েছে!",
   "en": "Household Enrolled!"
  },
  "householdCreatedTitle2": {
-  "bn": "পরিবার তৈরি হয়েছে",
+  "bn": "খানা তৈরি হয়েছে",
   "en": "Household Created"
  },
  "householdDetailNotImplemented": {
-  "bn": "পরিবারের বিস্তারিত তথ্য এখনো পাওয়া যাচ্ছে না",
+  "bn": "খানার বিস্তারিত তথ্য এখনো পাওয়া যাচ্ছে না",
   "en": "Household detail not implemented"
  },
  "householdDetailsTitle": {
-  "bn": "পরিবারের বিবরণ",
+  "bn": "খানার বিবরণ",
   "en": "Household Details"
  },
  "householdFallback": {
-  "bn": "পরিবার {householdId}",
+  "bn": "খানা {householdId}",
   "en": "HH {householdId}"
  },
  "householdHead": {
-  "bn": "পরিবার প্রধান",
+  "bn": "খানা প্রধান",
   "en": "Household head"
  },
  "householdHeadOccupationLabel": {
-  "bn": "পরিবার প্রধানের পেশা",
+  "bn": "খানা প্রধানের পেশা",
   "en": "Household Head Occupation"
  },
  "householdHeadSectionHeader": {
-  "bn": "👤 পরিবার প্রধানের তথ্য",
+  "bn": "👤 খানা প্রধানের তথ্য",
   "en": "👤 Household Head Information"
  },
  "householdHeadSubtitle": {
@@ -4628,31 +4628,31 @@
   "en": "Step 2 of 2"
  },
  "householdHeadTitle": {
-  "bn": "পরিবার প্রধানের তথ্য",
+  "bn": "খানা প্রধানের তথ্য",
   "en": "Household Head Information"
  },
  "householdIdNotAvailable": {
-  "bn": "পরিবার আইডি পাওয়া যায়নি",
+  "bn": "খানা আইডি পাওয়া যায়নি",
   "en": "Household ID not available"
  },
  "householdInfoSectionHeader": {
-  "bn": "🏠 পরিবারের তথ্য",
+  "bn": "🏠 খানার তথ্য",
   "en": "🏠 Household Information"
  },
  "householdLabel": {
-  "bn": "পরিবার",
+  "bn": "খানা",
   "en": "Household"
  },
  "householdMembers": {
-  "bn": "পরিবারের সদস্য",
+  "bn": "খানার সদস্য",
   "en": "Household Members"
  },
  "householdMembersSectionHeader": {
-  "bn": "👪 পরিবারের সদস্য",
+  "bn": "👪 খানার সদস্যরা",
   "en": "👪 Household Members"
  },
  "householdMembersTitle": {
-  "bn": "এই পরিবারের সদস্য",
+  "bn": "এই খানার সদস্যরা",
   "en": "Members in this household"
  },
  "householdNo": {
@@ -4664,11 +4664,11 @@
   "en": "Auto-generated"
  },
  "householdNumberLabel": {
-  "bn": "পরিবার নম্বর",
+  "bn": "খানা নম্বর",
   "en": "Household Number"
  },
  "householdOpportunities": {
-  "bn": "পরিবার সুযোগ",
+  "bn": "খানার সুযোগ",
   "en": "Household Opportunities"
  },
  "householdTypeHint": {
@@ -4676,11 +4676,11 @@
   "en": "Select type"
  },
  "householdTypeLabel": {
-  "bn": "পরিবারের ধরন",
+  "bn": "খানাের ধরন",
   "en": "Household Type"
  },
  "householdsCount": {
-  "bn": "{n} টি পরিবার",
+  "bn": "{n} টি খানা",
   "en": "{n} households"
  },
  "htn": {
@@ -4692,7 +4692,7 @@
   "en": "Human review recommended"
  },
  "humanReviewRequired": {
-  "bn": "মানবিক পর্যালোচনা প্রয়োজন",
+  "bn": "মানুষ দ্বারা পর্যালোচনার প্রয়োজন",
   "en": "Human review required"
  },
  "iconTooltip": {
@@ -4716,11 +4716,11 @@
   "en": "ID Type"
  },
  "idleSub": {
-  "bn": "শুরু করতে একটি মোড চাপুন",
+  "bn": "শুরু করতে একটি মোড ট্যাপ করুন",
   "en": "Tap a mode to start"
  },
  "ifaPairLabel": {
-  "bn": "আইএফএ ট্যাবলেট",
+  "bn": "আয়রন ফলিক অ্যাসিড ট্যাবলেট",
   "en": "IFA tablets"
  },
  "ifaPairSubLabel": {
@@ -4776,11 +4776,11 @@
   "en": "You completed {pct}% more visits than the Manikganj Sadar area average this month."
  },
  "insightNoFacilityArrival": {
-  "bn": "সুবিধায় পৌঁছাননি।",
+  "bn": "স্বাস্থ্যকেন্দ্রে পৌঁছানো যায়নি।",
   "en": "No facility arrival."
  },
  "insightPatientNeverArrived": {
-  "bn": "রোগী কখনও সুবিধায় পৌঁছাননি।",
+  "bn": "রোগী কখনো হাসপাতালে পৌঁছাননি",
   "en": "Patient never arrived at facility."
  },
  "insightPossibleTransportBarrier": {
@@ -4788,11 +4788,11 @@
   "en": "Possible transport barrier."
  },
  "insightReferralOverdue": {
-  "bn": "রেফারেল বকেয়া।",
+  "bn": "রেফারেলের সময়সীমা অতিক্রান্ত হয়েছে",
   "en": "Referral overdue."
  },
  "insightSlaBreached": {
-  "bn": "SLA লঙ্ঘিত হয়েছে।",
+  "bn": "এসএলএ (SLA) লঙ্ঘিত হয়েছে।",
   "en": "SLA breached."
  },
  "insightWeek": {
@@ -4800,11 +4800,11 @@
   "en": "You completed {pct}% more visits than the Manikganj Sadar area average this week."
  },
  "intro": {
-  "bn": "আমার কাছে এই রোগীর রেকর্ড আছে। আমি শুধু তার তথ্য থেকে উত্তর দিব — তার সেবা নিয়ে জিজ্ঞাসা করুন, বা নিচে একটি কাজ চাপুন।",
+  "bn": "আমার কাছে এই রোগীর রেকর্ড আছে। আমি শুধু তার তথ্য থেকেই উত্তর দেব — তার চিকিৎসা সম্পর্কে জিজ্ঞাসা করুন, অথবা নিচের যেকোনো একটি অপসন বেছে নিন।",
   "en": "I have this patient's record. I'll answer only from their data — ask about their care, or tap an action below."
  },
  "introText": {
-  "bn": "এই পরিবার নিবন্ধনের আগে, কমিউনিটি স্বাস্থ্যসেবা প্রদানের উদ্দেশ্যে স্বাস্থ্য তথ্য সংগ্রহ ও ব্যবহারের জন্য আমাদের আপনার অনুমতি প্রয়োজন।",
+  "bn": "এই খানা নিবন্ধনের আগে, কমিউনিটি স্বাস্থ্যসেবা প্রদানের উদ্দেশ্যে স্বাস্থ্য তথ্য সংগ্রহ ও ব্যবহারের জন্য আমাদের আপনার অনুমতি প্রয়োজন।",
   "en": "Before we register this household, we need your permission to collect and use health information for the purpose of providing community healthcare services."
  },
  "invalidAge": {
@@ -4836,7 +4836,7 @@
   "en": "Ref:"
  },
  "labelBirthWeight": {
-  "bn": "জন্ম ওজন",
+  "bn": "জন্মের সময় ওজন",
   "en": "Birth Weight"
  },
  "labelBreastCondition": {
@@ -4848,7 +4848,7 @@
   "en": "Breast Notes"
  },
  "labelDeliveryAt": {
-  "bn": "প্রসব স্থান",
+  "bn": "প্রসবের স্থান",
   "en": "Delivery At"
  },
  "labelDeliveryBy": {
@@ -4880,7 +4880,7 @@
   "en": "Dosage"
  },
  "labelDuration": {
-  "bn": "স্থিতিকাল",
+  "bn": "সময়কাল",
   "en": "Duration"
  },
  "labelEncounterId": {
@@ -4888,7 +4888,7 @@
   "en": "Encounter ID"
  },
  "labelFacility": {
-  "bn": "প্রতিষ্ঠান",
+  "bn": "স্বাস্থ্যকেন্দ্র",
   "en": "Facility"
  },
  "labelFrequency": {
@@ -4920,7 +4920,7 @@
   "en": "Involution of Uterus"
  },
  "labelIsHouseholdHead": {
-  "bn": "পরিবার প্রধান",
+  "bn": "খানা প্রধান",
   "en": "HH Head"
  },
  "labelIsPregnant": {
@@ -4936,7 +4936,7 @@
   "en": "Marital Status"
  },
  "labelMother": {
-  "bn": "মায়ের রেফ",
+  "bn": "মায়ের রেফারেন্স",
   "en": "Mother Ref"
  },
  "labelMotherAlive": {
@@ -4964,7 +4964,7 @@
   "en": "Provider"
  },
  "labelRelation": {
-  "bn": "পরিবার প্রধানের সাথে সম্পর্ক",
+  "bn": "খানা প্রধানের সাথে সম্পর্ক",
   "en": "Relation to HH Head"
  },
  "labelReviewDate": {
@@ -5048,11 +5048,11 @@
   "en": "This Week"
  },
  "leaderboardMotivationPrefix": {
-  "bn": "⚡ ",
+  "bn": "⚡",
   "en": "⚡ "
  },
  "leaderboardMotivationSuffix": {
-  "bn": " পয়েন্ট দূরে ১ম স্থান থেকে · এগিয়ে যেতে আরও ৩টি ভিডিও দেখুন!",
+  "bn": "পয়েন্ট দূরে ১ম স্থান থেকে · এগিয়ে যেতে আরও ৩টি ভিডিও দেখুন!",
   "en": " pts away from 1st place · Watch 3 more videos to catch up!"
  },
  "leaderboardTitle": {
@@ -5136,11 +5136,11 @@
   "en": "Get Directions"
  },
  "locateGetDirectionsSubtitle": {
-  "bn": "রোগীর কাছে নেভিগেট করুন",
+  "bn": "রোগীর কাছে যান",
   "en": "Navigate to patient"
  },
  "locateOpenMaps": {
-  "bn": "গুগল ম্যাপসে খুলুন",
+  "bn": "গুগল ম্যাপে খুলুন",
   "en": "Open in Google Maps"
  },
  "locateOpenMapsSubtitle": {
@@ -5156,15 +5156,15 @@
   "en": "Complete earlier lessons to unlock this one"
  },
  "lockedToastAnc": {
-  "bn": "⚠ ANC আনলক করতে আগে \"গর্ভবতী মা\" নির্বাচন করুন",
+  "bn": "⚠ এএনসি (ANC) আনলক করতে আগে \"গর্ভবতী মা\" নির্বাচন করুন",
   "en": "⚠ Select \"Pregnant Woman\" first to unlock ANC"
  },
  "lockedToastPnc": {
-  "bn": "⚠ PNC আনলক করতে আগে \"গর্ভবতী মা\" নির্বাচন করুন",
+  "bn": "⚠ পিএনসি (PNC) আনলক করতে আগে \"গর্ভবতী মা\" নির্বাচন করুন",
   "en": "⚠ Select \"Pregnant Woman\" first to unlock PNC"
  },
  "logCall": {
-  "bn": "কল লগ করুন",
+  "bn": "কল লগ",
   "en": "Log call"
  },
  "loginFailed": {
@@ -5172,7 +5172,7 @@
   "en": "Login failed"
  },
  "lookUpHouseholds": {
-  "bn": "পরিবার খুঁজতে উপরের সার্চ বার ব্যবহার করুন",
+  "bn": "খানা খুঁজতে উপরের সার্চ বার ব্যবহার করুন",
   "en": "Use the search bar above to look up households"
  },
  "lookUpMembers": {
@@ -5196,7 +5196,7 @@
   "en": "Left arm, patient seated, at rest for 5 minutes"
  },
  "measureBpLabel": {
-  "bn": "রক্তচাপ নিন",
+  "bn": "রক্তচাপ পরিমাপ করুন",
   "en": "Take blood pressure"
  },
  "measureBreathHint": {
@@ -5252,7 +5252,7 @@
   "en": "{count} members"
  },
  "memberDataNotLoaded": {
-  "bn": "এই পরিবারে {count} জন সদস্য আছে।\nডেটা সিঙ্ক হলে বিস্তারিত সদস্যের তথ্য পাওয়া যাবে।",
+  "bn": "এই খানাতে {count} জন সদস্য আছে। ডেটা সিঙ্ক হলে বিস্তারিত সদস্যের তথ্য পাওয়া যাবে।",
   "en": "This household has {count} members.\nDetailed member information will be available once data is synced."
  },
  "memberIdLabel": {
@@ -5312,7 +5312,7 @@
   "en": "Programme:"
  },
  "metaReferralId": {
-  "bn": "রেফ আইডি:",
+  "bn": "রেফারেল আইডি:",
   "en": "Ref ID:"
  },
  "metaReferred": {
@@ -5360,7 +5360,7 @@
   "en": "Live ASR (Sarvam)"
  },
  "modeGemini": {
-  "bn": "Gemini",
+  "bn": "জেমিনি",
   "en": "Gemini"
  },
  "modeGeminiDefault": {
@@ -5372,11 +5372,11 @@
   "en": "Records full consultation. AI analyzes after recording ends."
  },
  "modeGeminiFull": {
-  "bn": "এআই স্ক্রাইব · Gemini",
+  "bn": "এআই স্ক্রাইব · জেমিনি",
   "en": "AI Scribe · Gemini"
  },
  "modeGeminiTitle": {
-  "bn": "এআই স্ক্রাইব (Gemini)",
+  "bn": "এআই স্ক্রাইব (জেমিনি)",
   "en": "AI Scribe (Gemini)"
  },
  "modeOther": {
@@ -5392,11 +5392,11 @@
   "en": "AI Scribe mode"
  },
  "monthlyIncomeInputHint": {
-  "bn": "যেমন ১২০০০",
+  "bn": "যেমন : ১২০০০",
   "en": "e.g. 12000"
  },
  "monthlyIncomeInputLabel": {
-  "bn": "মাসিক পরিবারের আয় (টাকা)",
+  "bn": "মাসিক খানার আয় (টাকা)",
   "en": "Monthly Household Income (BDT)"
  },
  "monthlyIncomeLabel": {
@@ -5428,7 +5428,7 @@
   "en": "Tap to answer"
  },
  "morningHeadachesTitle": {
-  "bn": "সকালে মাথা ব্যথা?",
+  "bn": "সকালে মাথা ব্যথা করে ?",
   "en": "Morning headaches?"
  },
  "mother": {
@@ -5448,43 +5448,43 @@
   "en": "Reply to this message or call us for any queries. Thank you."
  },
  "msgCompleted": {
-  "bn": "আমরা আশা করি আপনি সুস্থ হয়ে উঠছেন। অনুগ্রহ করে নির্ধারিত সময়ে ফলো-আপ অ্যাপয়েন্টমেন্টে আসুন। ",
+  "bn": "আশা করি আপনি ভালোভাবে সেরে উঠছেন। অনুগ্রহ করে নির্ধারিত সময় অনুযায়ী আপনার পরবর্তী সাক্ষাতে উপস্থিত হবেন।",
   "en": "we hope you are recovering well. Please attend your follow-up appointment as scheduled. "
  },
  "msgGenericOutreach": {
-  "bn": "আমরা আপনার স্বাস্থ্যসেবা সম্পর্কে যোগাযোগ করছি। ",
+  "bn": "আমরা আপনার স্বাস্থ্যসেবা সম্পর্কে যোগাযোগ করছি।",
   "en": "we are reaching out regarding your health care. "
  },
  "msgGreeting": {
-  "bn": "প্রিয় {name}, ",
+  "bn": "প্রিয় {name}",
   "en": "Hello {name}, "
  },
  "msgInTreatment": {
-  "bn": "আমরা আপনার চিকিৎসার অগ্রগতি সম্পর্কে খোঁজ নিচ্ছি। কোনো সহায়তার প্রয়োজন হলে আমাদের জানান। ",
+  "bn": "আমরা আপনার চিকিৎসার অগ্রগতি সম্পর্কে খোঁজ নিচ্ছি। কোনো সহায়তার প্রয়োজন হলে আমাদের জানান।",
   "en": "we are following up on your treatment progress. Please let us know if you need any assistance. "
  },
  "msgIntro": {
-  "bn": "এটি UHIS স্বাস্থ্যকর্মী। ",
+  "bn": "এটি UHIS স্বাস্থ্যকর্মী।",
   "en": "this is UHIS Health Worker. "
  },
  "msgNewReferral": {
-  "bn": "অনুগ্রহ করে যত দ্রুত সম্ভব রেফার করা স্বাস্থ্য কেন্দ্রে যান। ",
+  "bn": "অনুগ্রহ করে যত দ্রুত সম্ভব রেফার করা স্বাস্থ্য কেন্দ্রে যান।",
   "en": "please ensure you visit the referred health facility at your earliest convenience. "
  },
  "msgOverdue": {
-  "bn": "আমরা লক্ষ্য করেছি আপনার অ্যাপয়েন্টমেন্টের সময় পেরিয়ে গেছে। অনুগ্রহ করে আমাদের সাথে যোগাযোগ করুন বা যত শীঘ্র সম্ভব স্বাস্থ্য কেন্দ্রে যান। ",
+  "bn": "আমরা লক্ষ্য করেছি আপনার অ্যাপয়েন্টমেন্টের সময় পেরিয়ে গেছে। অনুগ্রহ করে আমাদের সাথে যোগাযোগ করুন বা যত শীঘ্র সম্ভব স্বাস্থ্য কেন্দ্রে যান।",
   "en": "we noticed your appointment is overdue. Please contact us or visit the health facility as soon as possible. "
  },
  "msgReferralFor": {
-  "bn": "{diagnosis}-এর জন্য আপনার রেফারাল সম্পর্কে, ",
+  "bn": "{diagnosis} -এর জন্য আপনার রেফারাল সম্পর্কে",
   "en": "Regarding your referral for {diagnosis}, "
  },
  "msgReferralGeneric": {
-  "bn": "আপনার স্বাস্থ্য রেফারাল সম্পর্কে, ",
+  "bn": "আপনার স্বাস্থ্য রেফারাল সম্পর্কে",
   "en": "Regarding your health referral, "
  },
  "muacMam": {
-  "bn": "MAM",
+  "bn": "মাঝারি মাত্রার তীব্র অপুষ্টি (MAM)",
   "en": "MAM"
  },
  "muacNormal": {
@@ -5492,7 +5492,7 @@
   "en": "Normal"
  },
  "muacSam": {
-  "bn": "SAM",
+  "bn": "গুরুতর তীব্র অপুষ্টি (SAM)",
   "en": "SAM"
  },
  "multiparaWarning": {
@@ -5512,11 +5512,11 @@
   "en": "📱 Call a doctor now"
  },
  "ncdCheckup": {
-  "bn": "NCD চেকআপ",
+  "bn": "এনসিডি (NCD) চেকআপ",
   "en": "NCD checkup"
  },
  "ncdFindingsTitle": {
-  "bn": "NCD স্ক্রিনিং ফলাফল",
+  "bn": "এনসিডি (NCD) স্ক্রিনিং ফলাফল",
   "en": "NCD Screening Findings"
  },
  "ncdLabel": {
@@ -5524,7 +5524,7 @@
   "en": "NCD Check"
  },
  "needAncMnch": {
-  "bn": "ANC / MNCH",
+  "bn": "এএনসি (ANC) / এমএনসিএইচ (MNCH)",
   "en": "ANC / MNCH"
  },
  "needChildImmunisation": {
@@ -5544,7 +5544,7 @@
   "en": "High-risk"
  },
  "needHomeVisit": {
-  "bn": "বাড়ি পরিদর্শন",
+  "bn": "খানা পরিদর্শন",
   "en": "Home visit"
  },
  "needMissedFollowUp": {
@@ -5552,7 +5552,7 @@
   "en": "Missed"
  },
  "needNcd": {
-  "bn": "NCD",
+  "bn": "এনসিডি",
   "en": "NCD"
  },
  "needPendingReferral": {
@@ -5604,7 +5604,7 @@
   "en": "NID {nid}"
  },
  "nidClearScan": {
-  "bn": "স্ক্যান পরিষ্কার করুন",
+  "bn": "পরিষ্কার স্ক্যান করুন",
   "en": "Clear scan"
  },
  "nidDetailsCaptured": {
@@ -5640,7 +5640,7 @@
   "en": "Place ID card here"
  },
  "nidScanError": {
-  "bn": "ক্যামেরা উপলব্ধ নেই। নিচে এনআইডি নম্বর লিখুন।",
+  "bn": "ক্যামেরা নাই । নিচে এনআইডি নম্বর লিখুন।",
   "en": "Camera unavailable. Please type the NID number below."
  },
  "nidScanNoBrnHint": {
@@ -5652,7 +5652,7 @@
   "en": "Could not read the NID number. Try again or type it in below."
  },
  "nidScanOrCreate": {
-  "bn": "অথবা নিজে পরিবার তৈরি করুন",
+  "bn": "অথবা নিজে খানা তৈরি করুন",
   "en": "Or create household manually"
  },
  "nidScanSubtitle": {
@@ -5660,7 +5660,7 @@
   "en": "Position ID card in the frame"
  },
  "nidScanTitle": {
-  "bn": "প্রধানের আইডি স্ক্যান করুন",
+  "bn": "খানা প্রধানের আইডি স্ক্যান করুন",
   "en": "Scan Head's ID"
  },
  "nidScannedBadge": {
@@ -5672,11 +5672,11 @@
   "en": "Age —"
  },
  "noAssessmentsYet": {
-  "bn": "এখনো কোনো মূল্যায়ন নেই",
+  "bn": "এখনো কোনো মূল্যায়ন হয়নি",
   "en": "No assessments yet"
  },
  "noContactAvailable": {
-  "bn": "এই পরিবারের জন্য কোনো যোগাযোগ নম্বর পাওয়া যায়নি",
+  "bn": "এই খানার জন্য কোনো যোগাযোগ নম্বর পাওয়া যায়নি",
   "en": "No contact number available for this household"
  },
  "noCriticalAlerts": {
@@ -5696,11 +5696,11 @@
   "en": "No follow-ups due"
  },
  "noHouseholdMatches": {
-  "bn": "কোনো পরিবার/খানা পাওয়া যায়নি।",
+  "bn": "কোনো খানা পাওয়া যায়নি।",
   "en": "No household matches."
  },
  "noHouseholdOpportunities": {
-  "bn": "কোনো পরিবার সুযোগ শনাক্ত হয়নি",
+  "bn": "কোন পারিবারিক সুযোগ চিহ্নিত করা হয়নি",
   "en": "No household opportunities identified"
  },
  "noLocation": {
@@ -5760,7 +5760,7 @@
   "en": "No speech detected — please speak closer to the microphone and try again."
  },
  "noSsAssigned": {
-  "bn": "নির্ধারিত নেই",
+  "bn": "বরাদ্দ করা হয়নি",
   "en": "Not assigned"
  },
  "noSymptomsRoutineVisit": {
@@ -5796,7 +5796,7 @@
   "en": "Patient not in local cache"
  },
  "notListening": {
-  "bn": "ফর্ম ফিল শুরু করতে ট্যাপ করুন",
+  "bn": "অ্যাম্বিয়েন্ট ফর্ম-ফিল শুরু করতে ট্যাপ করুন",
   "en": "Tap to start ambient form-fill"
  },
  "notNow": {
@@ -5916,7 +5916,7 @@
   "en": "Other symptoms / Notes"
  },
  "otpHelperText": {
-  "bn": "OTP যাচাই প্রয়োজন",
+  "bn": "ওটিপি যাচাই প্রয়োজন",
   "en": "OTP verification required"
  },
  "outcomeDeceased": {
@@ -5976,15 +5976,15 @@
   "en": "Wrong number"
  },
  "overdue": {
-  "bn": "বাকি পড়েছে",
+  "bn": "ওভারডিউ",
   "en": "Overdue"
  },
  "overdueFmt": {
-  "bn": "{relative} মেয়াদোত্তীর্ণ",
+  "bn": "{relative} ওভারডিউ বাই",
   "en": "overdue by {relative}"
  },
  "overdueStatus": {
-  "bn": "{days} মেয়াদোত্তীর্ণ",
+  "bn": "{days} ওভারডিউ",
   "en": "{days} overdue"
  },
  "parityLabel": {
@@ -6036,11 +6036,11 @@
   "en": "Enable referral alerts"
  },
  "personalisedCoaching": {
-  "bn": "ব্যক্তিগতকৃত কোচিং",
+  "bn": "পার্সোনালিসেড কোচিং",
   "en": "Personalised Coaching"
  },
  "pickerSubtitle": {
-  "bn": "প্রযোজ্য সব নির্বাচন করুন",
+  "bn": "প্রযোজ্য সবগুলি নির্বাচন করুন",
   "en": "Select all that apply"
  },
  "pickerTitle": {
@@ -6084,7 +6084,7 @@
   "en": "Uploading…"
  },
  "pinFeatureDesc": {
-  "bn": "বায়োমেট্রিক্স পাওয়া না গেলে ব্যাকআপ বিকল্প।",
+  "bn": "বায়োমেট্রিক্স পাওয়া না গেলে একটি বিকল্প ব্যবস্থা।",
   "en": "A backup option when biometrics are unavailable."
  },
  "pinFeatureTitle": {
@@ -6112,7 +6112,7 @@
   "en": "PNC Visit"
  },
  "pncOnlyPostpartumHint": {
-  "bn": "⚠ প্রসবের পর মায়ের পিএনসি উপলব্ধ — এখন গর্ভাবস্থার ফলাফল ব্যবহার করুন",
+  "bn": "⚠ প্রসবের পর মায়ের পিএনসি (PNC) পাওয়া গেলে — এখন গর্ভাবস্থার ফলাফল ব্যবহার করুন",
   "en": "⚠ Mother PNC is available after delivery — use Pregnancy Outcome now"
  },
  "pncVisitsDone": {
@@ -6148,11 +6148,11 @@
   "en": "Pregnancy Outcome"
  },
  "pregnancyOverviewEdd": {
-  "bn": "EDD",
+  "bn": "ইডিটি (EDD)",
   "en": "EDD"
  },
  "pregnancyOverviewLmp": {
-  "bn": "LMP",
+  "bn": "এলএমপি (LMP)",
   "en": "LMP"
  },
  "pregnancyOverviewNoData": {
@@ -6252,11 +6252,11 @@
   "en": "Opening checklist →"
  },
  "programmeBannerPrefix": {
-  "bn": "এআই চিহ্নিত করেছে: ",
+  "bn": "এআই চিহ্নিত করেছে:",
   "en": "AI identified: "
  },
  "programmeBannerSuffix": {
-  "bn": " প্রোগ্রাম",
+  "bn": "প্রোগ্রাম",
   "en": " programme"
  },
  "programmeNeonate": {
@@ -6296,7 +6296,7 @@
   "en": "This is an AI proposal. Review and accept to proceed."
  },
  "pulseValidationError": {
-  "bn": "৫০ থেকে ৩০০ bpm-এর মধ্যে পালস লিখুন",
+  "bn": "৫০ থেকে ৩০০ বিপিএম-এর মধ্যে পালস লিখুন",
   "en": "Enter a pulse between 50 and 300 bpm"
  },
  "pwAlreadyEnrolledMessage": {
@@ -6564,7 +6564,7 @@
   "en": "Referral alerts need follow-up"
  },
  "referralCceComingSoon": {
-  "bn": "CCE ইন্টিগ্রেশন শীঘ্রই আসছে",
+  "bn": "সিসিই ইন্টিগ্রেশন শীঘ্রই আসছে",
   "en": "CCE integration coming soon"
  },
  "referralCount": {
@@ -6644,7 +6644,7 @@
   "en": "Refreshers"
  },
  "registerCta": {
-  "bn": "🤰  গর্ভধারণ নিবন্ধন করুন",
+  "bn": "🤰 গর্ভধারণ নিবন্ধন করুন",
   "en": "🤰  Register Pregnancy"
  },
  "rejectCta": {
@@ -6804,7 +6804,7 @@
   "en": "⚠ {reason}"
  },
  "sameHousehold": {
-  "bn": "একই পরিবার",
+  "bn": "একই খানা",
   "en": "Same household"
  },
  "saveFailed": {
@@ -6836,7 +6836,7 @@
   "en": "Saved session expired — sign in again"
  },
  "sayHelloFirst": {
-  "bn": " প্রথমে সালাম দিন",
+  "bn": "প্রথমে সালাম দিন",
   "en": " Say hello first"
  },
  "scanAgain": {
@@ -6880,7 +6880,7 @@
   "en": "All"
  },
  "scopeHouseholds": {
-  "bn": "পরিবার/খানা",
+  "bn": "খানা/খানা",
   "en": "Households"
  },
  "scopeNote": {
@@ -7012,7 +7012,7 @@
   "en": "Search symptoms…"
  },
  "section1Body": {
-  "bn": "আমরা UHIS Leapfrog প্রোগ্রামে নিবন্ধিত পরিবারের সদস্যদের নাম, বয়স, স্বাস্থ্য অবস্থা, ভিজিট রেকর্ড ও যোগাযোগের তথ্য সংগ্রহ করি।",
+  "bn": "আমরা UHIS Leapfrog প্রোগ্রামে নিবন্ধিত খানাের সদস্যদের নাম, বয়স, স্বাস্থ্য অবস্থা, ভিজিট রেকর্ড ও যোগাযোগের তথ্য সংগ্রহ করি।",
   "en": "We collect names, ages, health conditions, visit records, and contact details of household members enrolled in the UHIS Leapfrog programme."
  },
  "section1Title": {
@@ -7120,7 +7120,7 @@
   "en": "General"
  },
  "sectionHeader": {
-  "bn": "ভয়েস অ্যাক্টিভিটি গেট (VAD)",
+  "bn": "ভয়েস অ্যাক্টিভিটি গেট (ভিএডি)",
   "en": "Voice activity gate (VAD)"
  },
  "sectionHistory": {
@@ -7128,7 +7128,7 @@
   "en": "OBSTETRIC HISTORY"
  },
  "sectionHousehold": {
-  "bn": "পরিবারে ভূমিকা",
+  "bn": "খানাে ভূমিকা",
   "en": "Household Role"
  },
  "sectionIdentity": {
@@ -7252,7 +7252,7 @@
   "en": "Vitals"
  },
  "sectionWhatsApp": {
-  "bn": "WhatsApp কাউন্সেলিং (বাংলা)",
+  "bn": "হোয়াটসঅ্যাপ কাউন্সেলিং (বাংলা)",
   "en": "WhatsApp counselling (Bangla)"
  },
  "seenDaysAgo": {
@@ -7296,7 +7296,7 @@
   "en": "Select {label}"
  },
  "selectService": {
-  "bn": "📋  সেবা নির্বাচন করুন",
+  "bn": "📋 সেবা নির্বাচন করুন",
   "en": "📋  Select service"
  },
  "selectStatus": {
@@ -7304,7 +7304,7 @@
   "en": "Select the patient's current status"
  },
  "selectedHouseholdLabel": {
-  "bn": "নির্বাচিত পরিবার",
+  "bn": "নির্বাচিত খানা",
   "en": "Selected household"
  },
  "sendCounsellingMessage": {
@@ -7312,7 +7312,7 @@
   "en": "Send Counselling Message"
  },
  "sendSms": {
-  "bn": "SMS-এ পাঠান",
+  "bn": "এসএমএস এর মাধ্যমে পাঠান",
   "en": "Send via SMS"
  },
  "sendThisMessage": {
@@ -7320,19 +7320,19 @@
   "en": "Send this message"
  },
  "sendViaSms": {
-  "bn": "SMS-এ পাঠান",
+  "bn": "এসএমএস এর মাধ্যমে পাঠান",
   "en": "Send via SMS"
  },
  "sendViaWhatsApp": {
-  "bn": "WhatsApp-এ পাঠান",
+  "bn": "হোয়াটসঅ্যাপের মাধ্যমে পাঠান",
   "en": "Send via WhatsApp"
  },
  "sendWhatsApp": {
-  "bn": "WhatsApp-এ পাঠান",
+  "bn": "হোয়াটসঅ্যাপের মাধ্যমে পাঠান",
   "en": "Send via WhatsApp"
  },
  "serviceAnc": {
-  "bn": "ANC",
+  "bn": "এএনসি (ANC)",
   "en": "ANC"
  },
  "serviceChild": {
@@ -7340,7 +7340,7 @@
   "en": "Child / Immunisation"
  },
  "serviceHousehold": {
-  "bn": "পরিবার নিবন্ধন",
+  "bn": "খানা নিবন্ধন",
   "en": "Household enrolment"
  },
  "serviceLabel": {
@@ -7348,11 +7348,11 @@
   "en": "Service"
  },
  "serviceNcd": {
-  "bn": "NCD",
+  "bn": "এনসিডি",
   "en": "NCD"
  },
  "servicePnc": {
-  "bn": "PNC",
+  "bn": "পিএনসি (PNC)",
   "en": "PNC"
  },
  "servicesProvidedTitle": {
@@ -7372,7 +7372,7 @@
   "en": "Visit not found. Please start a new visit."
  },
  "setUpScreenLock": {
-  "bn": "Android Settings-এ একটি স্ক্রিন লক (পিন, প্যাটার্ন বা ফিঙ্গারপ্রিন্ট) সেট আপ করুন, তারপর আবার চেষ্টা করুন।",
+  "bn": "অ্যান্ড্রয়েড সেটিংসে- একটি স্ক্রিন লক (পিন, প্যাটার্ন বা ফিঙ্গারপ্রিন্ট) সেট আপ করুন, তারপর আবার চেষ্টা করুন।",
   "en": "Set up a screen lock (PIN, pattern, or fingerprint) in Android Settings, then try again."
  },
  "settingsBody": {
@@ -7436,11 +7436,11 @@
   "en": "Sign out"
  },
  "skAsksFamily": {
-  "bn": "এসকে পরিবারকে জিজ্ঞাসা করেন ",
+  "bn": "এসকে খানাকে জিজ্ঞাসা করেন",
   "en": "SK ASKS THE FAMILY "
  },
  "skAsksLabel": {
-  "bn": "এসকে পরিবারকে জিজ্ঞাসা করেন 👋",
+  "bn": "এসকে খানাকে জিজ্ঞাসা করেন 👋",
   "en": "SK ASKS THE FAMILY 👋"
  },
  "skIdLabel": {
@@ -7480,7 +7480,7 @@
   "en": "Completed ✓"
  },
  "slaLabel": {
-  "bn": "SLA পালন",
+  "bn": "এসএলএ সম্মতি",
   "en": "SLA COMPLIANCE"
  },
  "slaOnTrack": {
@@ -7488,7 +7488,7 @@
   "en": "On Track"
  },
  "slaWarning": {
-  "bn": "এসএলএ: {remaining} বাকি",
+  "bn": "এসএলএ (SLA): {remaining} বাকি",
   "en": "SLA: {remaining} left"
  },
  "slaWasStatus": {
@@ -7500,7 +7500,7 @@
   "en": "Smoking"
  },
  "smsAction": {
-  "bn": "ডাক্তারকে SMS পাঠান",
+  "bn": "ডাক্তারকে এসএমএস পাঠান",
   "en": "Send SMS to Doctor"
  },
  "smsFailed": {
@@ -7536,7 +7536,7 @@
   "en": "Sphere"
  },
  "splashTagline": {
-  "bn": "বাংলাদেশের প্রতিটি পরিবারের জন্য এআই-চালিত কমিউনিটি স্বাস্থ্যসেবা",
+  "bn": "বাংলাদেশের প্রতিটি খানাের জন্য এআই-চালিত কমিউনিটি স্বাস্থ্যসেবা",
   "en": "AI-powered community health for every household in Bangladesh"
  },
  "ssName": {
@@ -7592,11 +7592,11 @@
   "en": "Avg Visits / Day"
  },
  "statHouseholds": {
-  "bn": "পরিবার",
+  "bn": "খানা",
   "en": "Households"
  },
  "statHouseholdsCovered": {
-  "bn": "কভারকৃত পরিবার",
+  "bn": "কভারকৃত খানা",
   "en": "Households Covered"
  },
  "statHouseholdsSub": {
@@ -7672,7 +7672,7 @@
   "en": "Checked in"
  },
  "statusCompleted": {
-  "bn": "সম্পন্ন",
+  "bn": "দেওয়া হয়েছে",
   "en": "Completed"
  },
  "statusDischarged": {
@@ -7744,7 +7744,7 @@
   "en": "AI Scribe voice capture that pre-ticks symptom cards from what the SK says."
  },
  "step1AsrLabel": {
-  "bn": "ভয়েস লক্ষণ ক্যাপচার",
+  "bn": "কণ্ঠস্বরের লক্ষণ ধারণ",
   "en": "Voice symptom capture"
  },
  "step1Header": {
@@ -7812,7 +7812,7 @@
   "en": "The pre-written WhatsApp message summarising the visit for the patient."
  },
  "step3WhatsAppLabel": {
-  "bn": "WhatsApp খসড়া",
+  "bn": "হোয়াটসঅ্যাপ খসড়া",
   "en": "WhatsApp draft"
  },
  "stepAcknowledged": {
@@ -7872,7 +7872,7 @@
   "en": "Detailed check"
  },
  "stepOneOfThree": {
-  "bn": "ধাপ ১ এর ৩ · এআই ট্রায়াজ · {programme}",
+  "bn": "ধাপ ১/৩ · এআই ট্রায়েজ · {programme}",
   "en": "STEP 1 OF 3 · AI TRIAGE · {programme}"
  },
  "stepPaused": {
@@ -7960,7 +7960,7 @@
   "en": "Blood sugar"
  },
  "suggestedAncDanger": {
-  "bn": "ANC বিপদ চিহ্ন কী কী?",
+  "bn": "এএনসি (ANC) বিপদ চিহ্ন কী কী?",
   "en": "ANC danger signs?"
  },
  "suggestedFindrisc": {
@@ -7972,15 +7972,15 @@
   "en": "You might also ask:"
  },
  "suggestedMuac": {
-  "bn": "MUAC কীভাবে মাপব?",
+  "bn": "এম ইউ এ সি (MUAC) কীভাবে মাপব?",
   "en": "How do I measure MUAC?"
  },
  "suggestedNcd": {
-  "bn": "NCD ওষুধ সেবনের টিপস",
+  "bn": "এনসিডি ওষুধ সেবনের টিপস",
   "en": "NCD medication adherence tips"
  },
  "suggestedReferChild": {
-  "bn": "কখন শিশুকে রেফার করব?",
+  "bn": "কখন শিশুকে রেফার করতে হবে?",
   "en": "When to refer a child?"
  },
  "supplementConsumedLabel": {
@@ -7992,7 +7992,7 @@
   "en": "Provided this visit"
  },
  "supplyConsumedShort": {
-  "bn": "সেবিত",
+  "bn": "সেবন করেছে",
   "en": "Consumed"
  },
  "supplyProvidedShort": {
@@ -8004,11 +8004,11 @@
   "en": "Lower bar used to *stay* in speech mode once started, so a natural dip in volume mid-sentence doesn't cut the recording. Should stay below entry sensitivity."
  },
  "sustainMarginLabel": {
-  "bn": "স্থায়িত্ব সংবেদনশীলতা",
+  "bn": "সংবেদনশীলতা বজায় রাখুন",
   "en": "Sustain sensitivity"
  },
  "symptomsEmpty": {
-  "bn": "এখনো কোনো তথ্য বের করা হয়নি।",
+  "bn": "এখনো কোনো তথ্য পাওয়া যায়নি।",
   "en": "No extraction yet."
  },
  "symptomsSelectedCount": {
@@ -8016,23 +8016,23 @@
   "en": "symptom selected"
  },
  "symptomsTab": {
-  "bn": "লক্ষণ",
+  "bn": "লক্ষণসমূহ",
   "en": "Symptoms"
  },
  "syncErrorGeneric": {
-  "bn": "কিছু একটা ভুল হয়েছে। আবার চেষ্টা করুন।",
+  "bn": "কিছু একটা সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।",
   "en": "Something went wrong. Please try again."
  },
  "syncErrorNoInternet": {
-  "bn": "ইন্টারনেট সংযোগ নেই। আপনার নেটওয়ার্ক চেক করে আবার চেষ্টা করুন।",
+  "bn": "ইন্টারনেট সংযোগ নেই। অনুগ্রহ করে আপনার নেটওয়ার্ক চেক করে আবার চেষ্টা করুন।",
   "en": "No internet connection. Please check your network and try again."
  },
  "syncErrorServer": {
-  "bn": "সার্ভারে পৌঁছানো যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
+  "bn": "সার্ভারে পৌঁছানো যাচ্ছে না। অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।",
   "en": "Could not reach the server. Please try again later."
  },
  "syncErrorTimeout": {
-  "bn": "সংযোগ সময় শেষ হয়ে গেছে। আবার চেষ্টা করুন।",
+  "bn": "সংযোগ সময় শেষ হয়ে গেছে। অনুগ্রহ করে আবার চেষ্টা করুন।",
   "en": "Connection timed out. Please try again."
  },
  "syncNow": {
@@ -8040,11 +8040,11 @@
   "en": "Sync now"
  },
  "syncProgress": {
-  "bn": "{done}-এর মধ্যে {total}টি প্রোগ্রাম সিঙ্ক হয়েছে",
+  "bn": "{done} -এর মধ্যে {total} টি প্রোগ্রাম সিঙ্ক হয়েছে",
   "en": "{done} of {total} programmes synced"
  },
  "syncedAgo": {
-  "bn": "{relative} আগে সিঙ্ক হয়েছে",
+  "bn": "{relative} সিঙ্ক হয়েছে",
   "en": "Synced {relative}"
  },
  "syncedDays": {
@@ -8072,7 +8072,7 @@
   "en": "System Mode"
  },
  "tabAsk": {
-  "bn": "এআইকে জিজ্ঞাসা করুন",
+  "bn": "এআই কে জিজ্ঞাসা করুন",
   "en": "Ask AI"
  },
  "tabCoaching": {
@@ -8088,15 +8088,15 @@
   "en": "Leaderboard"
  },
  "tabTraining": {
-  "bn": "প্রশিক্ষণ",
+  "bn": "ট্রেনিং",
   "en": "Training"
  },
  "tapForDetails": {
-  "bn": "বিস্তারিত দেখতে ট্যাপ করুন",
+  "bn": "বিস্তারিত জানতে ট্যাপ করুন",
   "en": "Tap for details"
  },
  "tapToEdit": {
-  "bn": "নিচের ফর্মে হাইলাইট করা ঘরগুলো যাচাই করুন।",
+  "bn": "নিচের ফর্মে চিহ্নিত ঘরগুলো যাচাই করুন।",
   "en": "Review highlighted fields in the form below."
  },
  "tapToFollowUp": {
@@ -8112,11 +8112,11 @@
   "en": "Tap to place your finger and sign in"
  },
  "tapToSeeWhy": {
-  "bn": "কারণ দেখতে ট্যাপ করুন",
+  "bn": "কারণ জানতে ট্যাপ করুন",
   "en": "Tap to see why"
  },
  "tapToSelect": {
-  "bn": "নির্বাচন করতে চাপুন",
+  "bn": "নির্বাচন করতে ট্যাপ করুন",
   "en": "Tap to select"
  },
  "tasks": {
@@ -8124,23 +8124,23 @@
   "en": "Tasks"
  },
  "tbAddedBannerText": {
-  "bn": "যক্ষ্মা স্ক্রিনিং যুক্ত করা হয়েছে — কাশি ≥ ২ সপ্তাহ",
+  "bn": "যক্ষ্মা স্ক্রিনিং যোগ হয়েছে — কাশি ≥ ২ সপ্তাহ",
   "en": "TB screening added — cough ≥ 2 weeks"
  },
  "tbCheck": {
-  "bn": "TB পরীক্ষা",
+  "bn": "যক্ষ্মা পরীক্ষা",
   "en": "TB check"
  },
  "tbContactLabel": {
-  "bn": "TB সংস্পর্শ",
+  "bn": "যক্ষ্মা সংস্পর্শ",
   "en": "TB Contact"
  },
  "tbFindingsTitle": {
-  "bn": "TB স্ক্রিনিং ফলাফল",
+  "bn": "যক্ষ্মা স্ক্রিনিং ফলাফল",
   "en": "TB Screening Findings"
  },
  "tbLabel": {
-  "bn": "যক্ষ্মা",
+  "bn": "যক্ষ্মা পরীক্ষা",
   "en": "TB Check"
  },
  "tempChartLabel": {
@@ -8164,7 +8164,7 @@
   "en": "Emergency (6h SLA)"
  },
  "tierLabelCritical": {
-  "bn": "জরুরি",
+  "bn": "সংকটাপন্ন",
   "en": "Critical"
  },
  "tierLabelDueToday": {
@@ -8172,11 +8172,11 @@
   "en": "Due today"
  },
  "tierLabelOverdue": {
-  "bn": "বকেয়া",
+  "bn": "ওভার ডিউ",
   "en": "Overdue"
  },
  "tierLabelThisWeek": {
-  "bn": "এই সপ্তাহে",
+  "bn": "এই সপ্তাহ",
   "en": "This week"
  },
  "tierLabelUpcoming": {
@@ -8204,7 +8204,7 @@
   "en": "Arrived"
  },
  "timelineDischarged": {
-  "bn": "ছাড়পত্র",
+  "bn": "ছাড়পত্র দেওয়া হয়েছে",
   "en": "Discharged"
  },
  "timelineOBReview": {
@@ -8256,7 +8256,7 @@
   "en": "Tomorrow"
  },
  "tooEarlyWarning": {
-  "bn": "⚠ LMP ৬ সপ্তাহের কম আগে। শুধু মৌলিক তথ্য সংরক্ষিত হয়েছে — পরের ভিজিটে সম্পূর্ণ ঝুঁকি স্ক্রিনিং হবে।",
+  "bn": "⚠ শেষ মাসিকের তারিখ ৬ সপ্তাহের কম। শুধু মৌলিক তথ্য সংরক্ষিত হয়েছে — পরের ভিজিটে সম্পূর্ণ ঝুঁকি স্ক্রিনিং হবে।",
   "en": "⚠ LMP is less than 6 weeks ago. Only basic details saved — full risk screening at next visit."
  },
  "tooManyAttempts": {
@@ -8264,11 +8264,11 @@
   "en": "Too many attempts — sign in with password"
  },
  "totalHouseholds": {
-  "bn": "মোট\nপরিবার",
+  "bn": "মোট খানা",
   "en": "Total\nHouseholds"
  },
  "totalMembers": {
-  "bn": "মোট\nসদস্য",
+  "bn": "মোট সদস্য",
   "en": "Total\nMembers"
  },
  "totalMembersHint": {
@@ -8276,27 +8276,27 @@
   "en": "e.g. 5"
  },
  "totalMembersLabel": {
-  "bn": "মোট পরিবারের সদস্য",
+  "bn": "মোট খানার সদস্য",
   "en": "Total Household Members"
  },
  "trainingRequestsSection": {
-  "bn": "প্রশিক্ষণ অনুরোধ",
+  "bn": "ট্রেনিং এর অনুরোধ",
   "en": "Training Requests"
  },
  "trainingSection": {
-  "bn": "প্রশিক্ষণ",
+  "bn": "ট্রেনিং",
   "en": "Training"
  },
  "transcriptionFailed": {
-  "bn": "ট্রান্সক্রিপশন ব্যর্থ হয়েছে।",
+  "bn": "প্রতিলিপি করা যায়নি।",
   "en": "Transcription failed."
  },
  "transitionFallback": {
-  "bn": "রোগীকে আজ কেমন লাগছে জিজ্ঞাসা করুন এবং পরামর্শ শুরু করুন।",
+  "bn": "রোগী আজ বোধ করছেন জিজ্ঞাসা করুন এবং পরামর্শ শুরু করুন।",
   "en": "Ask the patient how she is feeling today and begin the consultation."
  },
  "trendCardTitle": {
-  "bn": "এআই তার {n}টি ভিজিটে একটি ধারা দেখছে",
+  "bn": "এআই তার {n} টি পরিদর্শন জুড়ে একটি প্রবণতা লক্ষ্য করেছে",
   "en": "AI sees a trend across her {n} visits"
  },
  "trendDiastolic": {
@@ -8304,11 +8304,11 @@
   "en": "Diastolic"
  },
  "trendFooter": {
-  "bn": "প্রতিটি পাঠ সতর্কতা সীমার নিচে — কিন্তু ভিজিট জুড়ে একসাথে বাড়ছে। একক কোনো নিয়ম সক্রিয় হয় না।",
+  "bn": "প্রতিটি রিডিং সতর্কতা সীমার নিচে — কিন্তু ভিজিট জুড়ে একসাথে বাড়ছে। কোনো একক নিয়ম সক্রিয় হয়নি।",
   "en": "Each reading is below its alert line — but they are climbing together across visits. No single rule fires."
  },
  "trendFooterStable": {
-  "bn": "ভিজিট জুড়ে পাঠ স্থির। কোনো বাড়তি ধারা সনাক্ত হয়নি।",
+  "bn": "রিডিংগুলো পরিদর্শন জুড়ে স্থিতিশীল। কোনো ঊর্ধ্বমুখী প্রবণতা শনাক্ত হয়নি।",
   "en": "Readings are stable across visits. No rising trend detected."
  },
  "trendMissingValue": {
@@ -8368,7 +8368,7 @@
   "en": "Allow"
  },
  "triageConsentDeny": {
-  "bn": "এখন না",
+  "bn": "এখন নয়",
   "en": "Not now"
  },
  "triageConsentPrompt": {
@@ -8376,11 +8376,11 @@
   "en": "Record conversation to auto-select symptoms?"
  },
  "triageSymptomsEmpty": {
-  "bn": "ধাপ ১-এ কোনো লক্ষণ নির্বাচিত নয়।",
+  "bn": "ধাপ ১-এ কোনো লক্ষণ নির্বাচন করা হয়নি।",
   "en": "No symptoms selected in Step 1."
  },
  "triageSymptomsTitle": {
-  "bn": "ধাপ ১ থেকে লক্ষণ",
+  "bn": "ধাপ ১ থেকে লক্ষণসমূহ",
   "en": "Symptoms from Step 1"
  },
  "triggeredByTodaysCases": {
@@ -8420,11 +8420,11 @@
   "en": "Also mentioned"
  },
  "unmappedLabel": {
-  "bn": "মেলেনি:",
+  "bn": "মিল পাওয়া যায়নি:",
   "en": "Not matched:"
  },
  "unnamed": {
-  "bn": "(অনামিত)",
+  "bn": "(নামহীন)",
   "en": "(unnamed)"
  },
  "unnamedMember": {
@@ -8432,7 +8432,7 @@
   "en": "(Unnamed)"
  },
  "upToDate": {
-  "bn": "ডেটা আপ টু ডেট",
+  "bn": "তথ্য হালনাগাদ আছে",
   "en": "Data up to date"
  },
  "upazilaLabel": {
@@ -8452,7 +8452,7 @@
   "en": "Confirm & sync to CCE"
  },
  "updateOptArrived": {
-  "bn": "প্রতিষ্ঠানে পৌঁছেছে",
+  "bn": "স্বাস্থ্যকেন্দ্রে পৌঁছেছে",
   "en": "Arrived at facility"
  },
  "updateOptDischarged": {
@@ -8464,7 +8464,7 @@
   "en": "Not yet left home"
  },
  "updateOptOnWay": {
-  "bn": "প্রতিষ্ঠানের দিকে যাচ্ছে",
+  "bn": "স্বাস্থ্যকেন্দ্রের পথে",
   "en": "On the way to facility"
  },
  "updateOptOther": {
@@ -8472,7 +8472,7 @@
   "en": "Other — add note"
  },
  "updateOptReachedFacility": {
-  "bn": "রোগী প্রতিষ্ঠানে পৌঁছেছে",
+  "bn": "রোগী স্বাস্থ্যকেন্দ্রে পৌঁছেছে",
   "en": "Patient reached facility"
  },
  "updateOptRecoveredHome": {
@@ -8484,11 +8484,11 @@
   "en": "Patient refused referral"
  },
  "updateOptTransportIssue": {
-  "bn": "যাতায়াত করতে পারছেন না — যাতায়াতের সমস্যা",
+  "bn": "যাতায়াত করতে অক্ষম — পরিবহন সমস্যা",
   "en": "Unable to travel — transport issue"
  },
  "updateOptTreated": {
-  "bn": "চিকিৎসক দেখেছেন / চিকিৎসা হয়েছে",
+  "bn": "চিকিৎসক দেখেছেন / চিকিৎসা দেওয়া হয়েছে",
   "en": "Seen by clinician / treated"
  },
  "updateOtherHint": {
@@ -8496,7 +8496,7 @@
   "en": "Describe what happened…"
  },
  "updateOtherRequired": {
-  "bn": "সংরক্ষণের আগে একটি নোট যুক্ত করুন",
+  "bn": "সংরক্ষণের আগে অনুগ্রহ করে একটি নোট লিখুন",
   "en": "Please add a note before saving"
  },
  "updatePrompt": {
@@ -8516,7 +8516,7 @@
   "en": "Update status →"
  },
  "updateSyncNote": {
-  "bn": "CCE এই আপডেট প্রতিষ্ঠান ও সুপারভাইজারের কাছে সিঙ্ক করবে",
+  "bn": "CCE এই আপডেট স্বাস্থ্যকেন্দ্র ও সুপারভাইজারের কাছে সিঙ্ক করবে",
   "en": "CCE will sync this update to the facility and supervisor"
  },
  "updateTitle": {
@@ -8548,7 +8548,7 @@
   "en": "Highest risk: {name} — review first."
  },
  "urgentLabel": {
-  "bn": "জরুরি",
+  "bn": "অতিজরুরি",
   "en": "Urgent"
  },
  "urgentTitle": {
@@ -8580,7 +8580,7 @@
   "en": "Use password"
  },
  "usePin": {
-  "bn": "{len}-সংখ্যার পিন ব্যবহার করুন",
+  "bn": "{len}- সংখ্যার পিন ব্যবহার করুন",
   "en": "Use {len}-digit PIN"
  },
  "usePinShort": {
@@ -8588,11 +8588,11 @@
   "en": "Use PIN"
  },
  "usernameLabel": {
-  "bn": "ব্যবহারকারীর নাম",
+  "bn": "ইউজারনেম",
   "en": "Username"
  },
  "vaccinesDueLabel": {
-  "bn": "এই পর্যায়ে বাকি থাকা টিকা",
+  "bn": "এই পর্যায়ে বাকি থাকা টিকাগুলো",
   "en": "Vaccines due at this milestone"
  },
  "validationBannerTitle": {
@@ -8600,11 +8600,11 @@
   "en": "Please complete required fields"
  },
  "verifyFingerprint": {
-  "bn": "ফিঙ্গারপ্রিন্ট যাচাই করুন",
+  "bn": "আঙুলের ছাপ যাচাই করুন",
   "en": "Verify fingerprint"
  },
  "verifyToAccess": {
-  "bn": "আপনার ওয়ার্ড ড্যাশবোর্ড অ্যাক্সেস করতে আপনার পরিচয় যাচাই করুন।",
+  "bn": "আপনার ওয়ার্ড ড্যাশবোর্ড দেখতে আপনার পরিচয় যাচাই করুন।",
   "en": "Verify your identity to access your ward dashboard."
  },
  "viewAll": {
@@ -8616,7 +8616,7 @@
   "en": "View all {n} assessments"
  },
  "viewAllTrends": {
-  "bn": "সব প্রবণতা দেখুন",
+  "bn": "সকল ট্রেন্ড দেখুন",
   "en": "View all trends"
  },
  "viewAssessmentSemantics": {
@@ -8624,7 +8624,7 @@
   "en": "View {type} assessment on {date}"
  },
  "viewHouseholdDetails": {
-  "bn": "পরিবারের বিবরণ দেখুন",
+  "bn": "খানার বিবরণ দেখুন",
   "en": "View household details"
  },
  "viewPatient": {
@@ -8636,7 +8636,7 @@
   "en": "Village"
  },
  "villageHelperText": {
-  "bn": "শুধু যদি সদস্য এই পরিবারের গ্রামের বাইরে থাকেন",
+  "bn": "শুধু যদি সদস্য এই খানার গ্রামের বাইরে থাকেন",
   "en": "Only if member lives outside this household's village"
  },
  "villageHint": {
@@ -8648,7 +8648,7 @@
   "en": "Leave blank if same village"
  },
  "visitHousehold": {
-  "bn": "পরিবার ভিজিট করুন",
+  "bn": "খানা ভিজিট করুন",
   "en": "Visit Household"
  },
  "visitMissingPatient": {
@@ -8672,7 +8672,7 @@
   "en": "Could not start visit. Try again from the patient screen."
  },
  "visitTrendLabel": {
-  "bn": "ভিজিট ধারা",
+  "bn": "ভিজিট ট্রেন্ড",
   "en": "VISIT TREND"
  },
  "visitsRecommended": {
@@ -8688,11 +8688,11 @@
   "en": "Visits today"
  },
  "vitalFlagHigh": {
-  "bn": "বেশি ⚠",
+  "bn": "উচ্চ ⚠",
   "en": "High ⚠"
  },
  "vitalFlagLow": {
-  "bn": "কম ⚠",
+  "bn": "নিম্ন ⚠",
   "en": "Low ⚠"
  },
  "vitalsConfirmAtVisit": {
@@ -8712,11 +8712,11 @@
   "en": "Listening…"
  },
  "voiceStart": {
-  "bn": "কথা বলতে চাপুন",
+  "bn": "কথা বলতে ট্যাপ করুন",
   "en": "Tap to speak"
  },
  "voiceStop": {
-  "bn": "থামাতে চাপুন",
+  "bn": "থামাতে ট্যাপ করুন",
   "en": "Tap to stop"
  },
  "vsBmiNormal": {
@@ -8736,11 +8736,11 @@
   "en": "Underweight"
  },
  "vsBpElevated": {
-  "bn": "বেড়ে গেছে",
+  "bn": "বর্ধিত",
   "en": "Elevated"
  },
  "vsBpHigh": {
-  "bn": "বেশি",
+  "bn": "উচ্চ",
   "en": "High"
  },
  "vsBpNormal": {
@@ -8752,7 +8752,7 @@
   "en": "Severe"
  },
  "vsBpSlightlyElevated": {
-  "bn": "একটু বেড়ে গেছে",
+  "bn": "সামান্য বর্ধিত",
   "en": "Slightly Elevated"
  },
  "vsFhAhead": {
@@ -8772,11 +8772,11 @@
   "en": "{cm} cm lag ⚠️"
  },
  "vsGlucoseElevated": {
-  "bn": "বেড়ে গেছে",
+  "bn": "বর্ধিত",
   "en": "Elevated"
  },
  "vsGlucoseHigh": {
-  "bn": "বেশি",
+  "bn": "উচ্চ",
   "en": "High"
  },
  "vsGlucoseNormal": {
@@ -8784,11 +8784,11 @@
   "en": "Normal"
  },
  "vsGlucoseWarningElevated": {
-  "bn": "বেড়ে গেছে — খাদ্যাভ্যাস পরিবর্তনের পরামর্শ দিন ও GDM স্ক্রিনিংয়ের জন্য রেফার করুন।",
+  "bn": "বর্ধিত — খাদ্যাভ্যাস পরিবর্তনের পরামর্শ দিন এবং GDM স্ক্রিনিংয়ের জন্য রেফার করুন।",
   "en": "Elevated — advise dietary modification and refer for GDM screening."
  },
  "vsGlucoseWarningHigh": {
-  "bn": "উচ্চ রক্তে শর্করা — ডায়াবেটিস মূল্যায়নের জন্য জরুরি রেফার করুন।",
+  "bn": "উচ্চ রক্তে শর্করা — ডায়াবেটিস মূল্যায়নের জন্য জরুরি ভিত্তিতে রেফার করুন।",
   "en": "High blood sugar — refer urgently for diabetes evaluation."
  },
  "vsHbMild": {
@@ -8816,11 +8816,11 @@
   "en": "Anaemia"
  },
  "vsUrineAbsent": {
-  "bn": "নেই",
+  "bn": "অনুপস্থিত",
   "en": "Absent"
  },
  "vsUrinePresent": {
-  "bn": "আছে",
+  "bn": "উপস্থিত",
   "en": "Present"
  },
  "vsUrineTrace": {
@@ -8828,7 +8828,7 @@
   "en": "Trace"
  },
  "waitingStatus": {
-  "bn": "{duration} অপেক্ষায়",
+  "bn": "{duration} অপেক্ষমাণ",
   "en": "{duration} waiting"
  },
  "wardLabel": {
@@ -8840,7 +8840,7 @@
   "en": "AI flagged a concern"
  },
  "weeklyTarget": {
-  "bn": "সাপ্তাহিক লক্ষ্য",
+  "bn": "সাপ্তাহিক লক্ষ্যমাত্রা",
   "en": "Weekly target"
  },
  "weeksToGo": {
@@ -8868,11 +8868,11 @@
   "en": "Welcome back"
  },
  "welcomeBackNamed": {
-  "bn": "স্বাগতম, {name}",
+  "bn": "আবার স্বাগতম, {name}",
   "en": "Welcome back, {name}"
  },
  "welcomeMessage": {
-  "bn": "আজ আমি কীভাবে সাহায্য করতে পারি? রোগীর কাউন্সেলিং, ক্লিনিকাল প্রোটোকল বা SPICE নিয়ে জিজ্ঞাসা করুন।",
+  "bn": "আজ আমি আপনাকে কীভাবে সাহায্য করতে পারি? রোগীর কাউন্সেলিং, ক্লিনিক্যাল প্রোটোকল, বা SPICE সম্পর্কে জিজ্ঞাসা করুন।",
   "en": "How can I help you today? Ask me about patient counselling, clinical protocols, or SPICE."
  },
  "whatsAppCopied": {
