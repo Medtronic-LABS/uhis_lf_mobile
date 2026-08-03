@@ -1349,18 +1349,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Spice: pregnancyDetail.ancVisitNo / pncVisitNo → next visit number
+      // Spice: pregnancyDetail.ancVisitNo / pncVisitNo → next = counter + 1,
       // stamped onto the payload before save, then written back.
+      // Always key the snapshot by local patients.id (same as persist).
+      final localId = await _localPatientId();
       int? assignedAncVisitNo;
       if (_activeFormTypes.contains('anc') &&
           _data.getValue('ancVisitNumber') == null &&
           _data.getValue('visitNo') == null) {
-        assignedAncVisitNo = await _pregnancySnapshotDao
-            .nextAncVisitNo(_patientId, memberId: _memberId);
+        assignedAncVisitNo = await _pregnancySnapshotDao.nextAncVisitNo(
+          localId,
+          memberId: _memberId,
+        );
         _data = _data.setValue('ancVisitNumber', assignedAncVisitNo);
         debugPrint(
             '[AncVisitNo] assigned visitNo=$assignedAncVisitNo '
-            'patient=$_patientId');
+            'patient=$localId');
       }
 
       final willEmitPnc = _activeFormTypes.contains('pncMother') &&
@@ -1368,12 +1372,14 @@ class UnifiedFormNotifier extends ChangeNotifier {
               _data.getValue('deliveryOutcomeType')?.toString() == 'liveBirth');
       int? assignedPncVisitNo;
       if (willEmitPnc && _data.getValue('pncVisitNumber') == null) {
-        assignedPncVisitNo = await _pregnancySnapshotDao
-            .nextPncVisitNo(_patientId, memberId: _memberId);
+        assignedPncVisitNo = await _pregnancySnapshotDao.nextPncVisitNo(
+          localId,
+          memberId: _memberId,
+        );
         _data = _data.setValue('pncVisitNumber', assignedPncVisitNo);
         debugPrint(
             '[PncVisitNo] assigned visitNo=$assignedPncVisitNo '
-            'patient=$_patientId');
+            'patient=$localId');
       }
 
       // BD NCD: first visit uses threshold referral; follow-up uses color band.

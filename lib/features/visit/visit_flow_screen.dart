@@ -21,7 +21,6 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
@@ -228,39 +227,25 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       // a BuildContext.
       final assessments = context.read<AssessmentRepository>();
       final snapshots = context.read<PregnancySnapshotDao>();
-      final localAssessments = context.read<LocalAssessmentDao>();
       final localId = await _localPatientId();
-      int count;
+      final int next;
       if (isChildhood && !isAnc && !isPnc) {
-        count = await assessments.priorChildhoodVisitCount(widget.patientId);
+        next =
+            await assessments.priorChildhoodVisitCount(widget.patientId) + 1;
       } else if (isAnc) {
-        // Take the highest of the persisted Spice-style counter and the ANC
-        // assessments on file, so a snapshot that never got seeded (or was
-        // written before this visit's ANC synced back) cannot restart at 1.
-        final snap = await snapshots.byPatientOrMember(
+        // Spice: next = pregnancyDetail.ancVisitNo + 1 (null/0 → 1).
+        next = await snapshots.nextAncVisitNo(
           localId,
           memberId: widget.memberId,
         );
-        final recorded = await assessments.priorAncVisitCount(widget.patientId);
-        count = math.max(snap?.ancVisitNo ?? 0, recorded);
       } else {
-        // Prefer the persisted Spice-style counter; fall back to counting
-        // local PNC_MOTHER rows if the snapshot has never been seeded.
-        final snap = await snapshots.byPatientOrMember(
+        // Spice: next = pregnancyDetail.pncVisitNo + 1 (null/0 → 1).
+        next = await snapshots.nextPncVisitNo(
           localId,
           memberId: widget.memberId,
         );
-        if (snap?.pncVisitNo != null) {
-          count = snap!.pncVisitNo!;
-        } else {
-          final rows =
-              await localAssessments.getByPatientId(widget.patientId);
-          count = rows
-              .where((r) => r.assessmentType.toUpperCase() == 'PNC_MOTHER')
-              .length;
-        }
       }
-      if (mounted) setState(() => _visitNumber = count + 1);
+      if (mounted) setState(() => _visitNumber = next);
     } catch (e) {
       debugPrint('[VisitFlow] visit number load failed: $e');
     }
