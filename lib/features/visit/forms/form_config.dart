@@ -471,6 +471,17 @@ class FieldRef {
   /// diverges declares its own here.
   final List<FieldOption>? options;
 
+  /// True when this ref came from a full manifest object (not a bare id string).
+  bool get _manifestSpecifiesMandatory =>
+      fieldName != null || inputType != 0 || options != null;
+
+  /// Programme-specific mandatory flag: layout manifest wins when the ref is a
+  /// full object with [isMandatory]; bare id strings fall back to the library.
+  bool effectiveMandatory(FieldDef def) =>
+      _manifestSpecifiesMandatory
+          ? isMandatory
+          : (isMandatory || def.isMandatory);
+
   factory FieldRef.fromJson(Map<String, dynamic> json) {
     final rawName = (json['fieldName'] as String?)?.trim();
     final rawOptions = json['optionsList'] as List<dynamic>?;

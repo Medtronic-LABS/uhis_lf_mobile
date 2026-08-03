@@ -739,7 +739,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         if (!_isFieldVisible(def, notifier, formType: a.section.formType)) {
           continue;
         }
-        final mandatory = def.isMandatory || ref.isMandatory;
+        final mandatory = ref.effectiveMandatory(def);
         if (!mandatory) continue;
         final v = notifier.data.getValue(ref.id);
         final empty = v == null ||
@@ -817,6 +817,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       annotated: annotated,
       errors: errors,
       sectionKeys: _sectionKeys,
+      scrollController: _scrollCtrl,
     );
   }
 
@@ -2024,7 +2025,16 @@ class _SectionCard extends StatelessWidget {
           badgeIds = {ref.id, providedId};
           final providedDef = config.fields[providedId];
           if (providedDef != null) {
-            child = _supplementPairCard(context, def, ref, providedDef, providedId, meta);
+            final providedRef =
+                section.fieldRefs.firstWhere((r) => r.id == providedId);
+            child = _supplementPairCard(
+              context,
+              def,
+              ref,
+              providedDef,
+              providedRef,
+              meta,
+            );
           } else {
             child = _fieldRow(context, def, ref, questionNumber: questionNumber);
           }
@@ -2035,6 +2045,15 @@ class _SectionCard extends StatelessWidget {
         child = _fieldRow(context, def, ref, questionNumber: questionNumber);
       }
 
+      if (ref.id == 'glucoseType' && hasBloodGlucoseEntry) {
+        badgeIds = {
+          ...badgeIds,
+          'glucose',
+          'bloodSugar',
+          'ancBloodGlucose',
+        };
+      }
+
       if (badgeIds.any(aiPending)) {
         child = _AiFilledBadgeWrap(child: child);
       }
@@ -2042,6 +2061,7 @@ class _SectionCard extends StatelessWidget {
       fieldWidgets.add(Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.lg),
         child: FormScrollTarget(
+          formType: section.formType,
           registry: scrollRegistry,
           ownerFieldId: ref.id,
           aliasIds: badgeIds,
@@ -2136,6 +2156,7 @@ class _SectionCard extends StatelessWidget {
           validationErrors.contains('newbornDetails_${i}_causeOfNeonatalDeath');
 
       cards.add(FormScrollTarget(
+        formType: section.formType,
         registry: scrollRegistry,
         ownerFieldId: 'newbornDetails_$i',
         aliasIds: {
@@ -2256,6 +2277,7 @@ class _SectionCard extends StatelessWidget {
 
     if (babies.isEmpty) {
       cards.add(FormScrollTarget(
+        formType: section.formType,
         registry: scrollRegistry,
         ownerFieldId: 'newbornDetails',
         aliasIds: const {'newbornDetails'},
@@ -2316,12 +2338,11 @@ class _SectionCard extends StatelessWidget {
     final hasError = validationErrors.contains(sysRef.id) ||
         validationErrors.contains(diaRef.id) ||
         (pulseRef != null && validationErrors.contains(pulseRef.id));
-    final isMandatory = sysDef.isMandatory ||
-        sysRef.isMandatory ||
-        diaDef.isMandatory ||
-        diaRef.isMandatory ||
-        (pulseDef?.isMandatory ?? false) ||
-        (pulseRef?.isMandatory ?? false);
+    final isMandatory = sysRef.effectiveMandatory(sysDef) ||
+        diaRef.effectiveMandatory(diaDef) ||
+        (pulseRef != null && pulseDef != null
+            ? pulseRef!.effectiveMandatory(pulseDef!)
+            : false);
     final bpStatus = _VitalStatusEval.bloodPressure(
       _VitalStatusEval.asInt(data.getValue('systolic')),
       _VitalStatusEval.asInt(data.getValue('diastolic')),
@@ -2435,14 +2456,13 @@ class _SectionCard extends StatelessWidget {
     FieldDef consumedDef,
     FieldRef consumedRef,
     FieldDef providedDef,
-    String providedId,
+    FieldRef providedRef,
     ({Set<String> providedIds, String label, String subLabel, String emoji}) meta,
   ) {
     final hasError = validationErrors.contains(consumedRef.id) ||
-        validationErrors.contains(providedId);
-    final isMandatory = consumedDef.isMandatory ||
-        consumedRef.isMandatory ||
-        providedDef.isMandatory;
+        validationErrors.contains(providedRef.id);
+    final isMandatory = consumedRef.effectiveMandatory(consumedDef) ||
+        providedRef.effectiveMandatory(providedDef);
     return _FieldShell(
       label: meta.label,
       // Locale-pure primary label only — no second-language sub-line.
@@ -2498,15 +2518,15 @@ class _SectionCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 _NumericField(
-                  key: Key('unified_form_${providedId}_input'),
+                  key: Key('unified_form_${providedRef.id}_input'),
                   isDecimal: false,
                   hint: providedDef.hintText,
-                  initialValue: data.getValue(providedId)?.toString(),
+                  initialValue: data.getValue(providedRef.id)?.toString(),
                   onChanged: (v) {
                     if (v == null || v.isEmpty) {
-                      onFieldChanged(providedId, null);
+                      onFieldChanged(providedRef.id, null);
                     } else {
-                      onFieldChanged(providedId, int.tryParse(v) ?? v);
+                      onFieldChanged(providedRef.id, int.tryParse(v) ?? v);
                     }
                   },
                 ),
@@ -2533,8 +2553,9 @@ class _SectionCard extends StatelessWidget {
     final glucoseStatus = _VitalStatusEval.bloodGlucose(fastingVal, randomVal);
     final hasError = validationErrors.contains(fastingRef.id) ||
         validationErrors.contains(randomRef.id);
-    final isMandatory = fastingDef.isMandatory || fastingRef.isMandatory ||
-        randomDef.isMandatory || randomRef.isMandatory;
+    final isMandatory =
+        fastingRef.effectiveMandatory(fastingDef) ||
+            randomRef.effectiveMandatory(randomDef);
     return _FieldShell(
       label: UnifiedFormStrings.glucosePairLabel,
       subLabel: UnifiedFormStrings.bloodGlucoseEntryUnit,
@@ -2630,9 +2651,8 @@ class _SectionCard extends StatelessWidget {
     final hasError = (showHeight && validationErrors.contains(heightRef.id)) ||
         validationErrors.contains(weightRef.id);
     final isMandatory = (showHeight &&
-            (heightDef.isMandatory || heightRef.isMandatory)) ||
-        weightDef.isMandatory ||
-        weightRef.isMandatory;
+            heightRef.effectiveMandatory(heightDef)) ||
+        weightRef.effectiveMandatory(weightDef);
     final currentWeight = _VitalStatusEval.asDouble(data.getValue(weightRef.id));
     final weightStatus = _VitalStatusEval.weight(currentWeight, previousWeight);
     // Sub-label: last weight info when available (no second language line).
@@ -2848,7 +2868,7 @@ class _SectionCard extends StatelessWidget {
           subLabel: subParts.isEmpty ? null : subParts.join(' · '),
           emoji: glyph?.emoji,
           emojiBg: glyph?.background,
-          isMandatory: def.isMandatory || ref.isMandatory,
+          isMandatory: ref.effectiveMandatory(def),
           hasError: validationErrors.contains(ref.id),
           statusBadge: vitalStatus != null
               ? _VitalBadge(label: vitalStatus.label, color: vitalStatus.color)
@@ -3014,7 +3034,7 @@ class _SectionCard extends StatelessWidget {
           key: Key('unified_form_${def.id}_input'),
           label: def.displayLabel,
           subLabel: null,
-          isMandatory: def.isMandatory || ref.isMandatory,
+          isMandatory: ref.effectiveMandatory(def),
           hasError: validationErrors.contains(ref.id),
           options: effectiveOptions.map((o) => o.displayName).toList(),
           selectedValues: displayNames,
@@ -3076,7 +3096,7 @@ class _SectionCard extends StatelessWidget {
           options: def.options,
           glucoseType: currentValue as String?,
           glucoseValue: data.getValue('glucose'),
-          isMandatory: def.isMandatory || ref.isMandatory,
+          isMandatory: ref.effectiveMandatory(def),
           hasError: validationErrors.contains(ref.id) ||
               validationErrors.contains('glucose'),
           onTypeChanged: (type) => onFieldChanged(def.id, type),

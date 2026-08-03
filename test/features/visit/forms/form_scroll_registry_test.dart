@@ -5,25 +5,37 @@ import 'package:uhis_next/features/visit/forms/unified_section_rules.dart';
 
 void main() {
   group('FormFieldScrollRegistry', () {
-    test('resolveOwner maps composite aliases to driver field', () {
+    test('resolveOwner maps composite aliases to scoped driver field', () {
       final registry = FormFieldScrollRegistry();
-      expect(registry.resolveOwner('diastolic'), 'systolic');
-      expect(registry.resolveOwner('glucose'), 'glucoseType');
-      expect(registry.resolveOwner('randomBloodSugar'), 'fastingBloodSugar');
-      expect(registry.resolveOwner('newbornDetails_1_sex'), 'newbornDetails_1');
+      expect(
+        registry.resolveOwner('diastolic', formType: 'anc'),
+        'anc:systolic',
+      );
+      expect(
+        registry.resolveOwner('glucose', formType: 'anc'),
+        'anc:glucoseType',
+      );
+      expect(
+        registry.resolveOwner('randomBloodSugar', formType: 'pncMother'),
+        'pncMother:fastingBloodSugar',
+      );
+      expect(
+        registry.resolveOwner('newbornDetails_1_sex', formType: 'pregnancyOutcome'),
+        'pregnancyOutcome:newbornDetails_1',
+      );
     });
 
     test('registerScrollTarget overrides static aliases at build time', () {
       final registry = FormFieldScrollRegistry();
       registry.registerScrollTarget(
-        ownerFieldId: 'weight',
-        aliasIds: {'weight', 'height'},
+        ownerFieldId: 'anc:weight',
+        aliasIds: {'anc:weight', 'anc:height'},
       );
-      expect(registry.resolveOwner('weight'), 'weight');
-      expect(registry.resolveOwner('height'), 'weight');
+      expect(registry.resolveOwner('weight', formType: 'anc'), 'anc:weight');
+      expect(registry.resolveOwner('height', formType: 'anc'), 'anc:weight');
     });
 
-    test('firstErrorInDocumentOrder follows annotated section order', () {
+    test('firstErrorInDocumentOrder returns scoped keys in section order', () {
       final registry = FormFieldScrollRegistry();
       final annotated = [
         AnnotatedFormSection(
@@ -54,16 +66,39 @@ void main() {
 
       expect(
         registry.firstErrorInDocumentOrder({'hemoglobin'}, annotated),
-        'hemoglobin',
+        'anc:hemoglobin',
       );
       expect(
         registry.firstErrorInDocumentOrder({'glucose', 'systolic'}, annotated),
-        'systolic',
+        'anc:systolic',
       );
       expect(
         registry.firstErrorInDocumentOrder({'glucose'}, annotated),
-        'glucose',
+        'anc:glucoseType',
       );
+    });
+
+    test('same field id in two programmes gets distinct scoped keys', () {
+      final registry = FormFieldScrollRegistry();
+      registry.registerScrollTarget(
+        ownerFieldId: 'anc:glucoseType',
+        aliasIds: {'anc:glucoseType', 'anc:glucose'},
+      );
+      registry.registerScrollTarget(
+        ownerFieldId: 'ncd:glucoseType',
+        aliasIds: {'ncd:glucoseType', 'ncd:glucose'},
+      );
+
+      expect(
+        registry.resolveOwner('glucose', formType: 'anc'),
+        'anc:glucoseType',
+      );
+      expect(
+        registry.resolveOwner('glucose', formType: 'ncd'),
+        'ncd:glucoseType',
+      );
+      expect(registry.keyFor('anc:glucoseType'),
+          isNot(same(registry.keyFor('ncd:glucoseType'))));
     });
   });
 }
