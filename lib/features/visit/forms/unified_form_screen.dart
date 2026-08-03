@@ -460,10 +460,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             scrollRegistry: _fieldScrollRegistry,
             onFieldChanged: notifier.updateField,
             previousWeight: _lastRecordedWeight,
-            // Visit 2+: keep height visible but disabled so the height+weight
-            // pair card still renders weight (standalone weight is absorbed).
-            heightReadOnly: notifier.isHeightLockedFromPrior ||
-                (isAnc && _ancVisitNumber() > 1),
+            // NCD/cataract: prior height is shown disabled. ANC visit 2+ hides
+            // height via visibility rules; the pair card still shows weight.
+            heightReadOnly: notifier.isHeightLockedFromPrior,
             gestationalWeeks: effectiveGa,
             ancVisitNumber: _ancVisitNumber(),
             ageInMonths: widget.ageInMonths,
@@ -585,9 +584,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     }
 
     // Range-check numeric fields (BP, fundal height, glucose, Hb, temperature)
-    // — activates the validator:s already attached to the individual
+    // — activates the validators already attached to the individual
     // TextFormFields; Form.validate() renders each one's message inline
-    // under the offending field, so no separate snackbar is needed here.
+    // under the offending field.
     final rangeValid = _formKey.currentState?.validate() ?? true;
     if (!rangeValid) {
       final rangeErrors = _computeRangeErrorFieldIds(notifier, annotated);
@@ -864,8 +863,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// visibility rules used for rendering and validation) but still hold a
   /// value in [notifier] — these are stale and must not reach the payload.
   ///
-  /// [height] is never stripped: on visit 2+ height stays visible (read-only)
-  /// with the prior value for continuity / locked biometric prefill.
+  /// [height] is never stripped: on ANC visit 2+ the field is hidden but the
+  /// prior/prefilled value must still reach the payload (Spice continuity).
   Set<String> _computeHiddenFieldIds(
     UnifiedFormNotifier notifier,
     List<AnnotatedFormSection> annotated,
@@ -1823,8 +1822,14 @@ class _SectionCard extends StatelessWidget {
     final hasBloodGlucoseEntry = sectionIds.contains('glucoseType');
 
     // Height + weight pair: physical measurements shown side-by-side.
-    final hasHeightWeightPair = sectionIds.contains('height') &&
-        sectionIds.contains('weight');
+    // When ANC visit 2+ hides height, keep the pair shell and show weight only
+    // so standalone weight is not dropped with the absorbed consumedIds entry.
+    final heightInSection = sectionIds.contains('height');
+    final weightInSection = sectionIds.contains('weight');
+    final heightVisible = heightInSection && _isVisibleById('height');
+    final weightVisible = weightInSection && _isVisibleById('weight');
+    final hasHeightWeightPair =
+        heightInSection && weightInSection && (heightVisible || weightVisible);
 
     // For each supplement consumed field, find which provided field (if any) is
     // present in the same section, so we can render a combined pair card.
@@ -1854,8 +1859,11 @@ class _SectionCard extends StatelessWidget {
       if (hasGlucosePair) 'randomBloodSugar',
       // BloodGlucoseEntry handles glucose numeric value — skip the standalone field.
       if (hasBloodGlucoseEntry) ...const {'glucose', 'bloodSugar', 'ancBloodGlucose'},
-      // Combined height+weight pair — skip weight (height card drives).
-      if (hasHeightWeightPair) 'weight',
+      // Combined height+weight pair — skip weight (height card drives) when
+      // height is visible; when height is hidden, skip height and let weight
+      // drive the weight-only pair shell.
+      if (hasHeightWeightPair && heightVisible) 'weight',
+      if (hasHeightWeightPair && !heightVisible && weightVisible) 'height',
       // For each supplement pair, skip the "provided" counterpart field —
       // it will be rendered inline inside the consumed field's pair card.
       for (final p in supplementConsumedToProvidedRef.values) ?p,
@@ -1955,15 +1963,52 @@ class _SectionCard extends StatelessWidget {
         } else {
           continue;
         }
-      } else if (ref.id == 'height' && hasHeightWeightPair) {
+      } else if (ref.id == 'height' && hasHeightWeightPair && heightVisible) {
         // Emit the combined height + weight pair card once.
         if (!heightWeightPairEmitted) {
           heightWeightPairEmitted = true;
-          badgeIds = {'height', 'weight'};
-          final weightRef = section.fieldRefs.firstWhere((r) => r.id == 'weight');
+          badgeIds = {
+            if (heightVisible) 'height',
+            if (weightVisible) 'weight',
+          };
+          final weightRef =
+              section.fieldRefs.firstWhere((r) => r.id == 'weight');
           final weightDef = config.fields['weight'];
-          if (weightDef != null) {
-            child = _heightWeightPairCard(context, def, ref, weightDef, weightRef);
+          if (weightDef != null && weightVisible) {
+            child = _heightWeightPairCard(
+              context,
+              def,
+              ref,
+              weightDef,
+              weightRef,
+              showHeight: true,
+            );
+          } else {
+            child = _fieldRow(context, def, ref, questionNumber: questionNumber);
+          }
+        } else {
+          continue;
+        }
+      } else if (ref.id == 'weight' &&
+          hasHeightWeightPair &&
+          !heightVisible &&
+          weightVisible) {
+        // ANC visit 2+: height hidden — same pair shell, weight only.
+        if (!heightWeightPairEmitted) {
+          heightWeightPairEmitted = true;
+          badgeIds = {'weight'};
+          final heightRef =
+              section.fieldRefs.firstWhere((r) => r.id == 'height');
+          final heightDef = config.fields['height'];
+          if (heightDef != null) {
+            child = _heightWeightPairCard(
+              context,
+              heightDef,
+              heightRef,
+              def,
+              ref,
+              showHeight: false,
+            );
           } else {
             child = _fieldRow(context, def, ref, questionNumber: questionNumber);
           }
@@ -2571,99 +2616,110 @@ class _SectionCard extends StatelessWidget {
   /// Renders a combined Height + Weight card — both numeric inputs side-by-side
   /// under a single header.  The weight-delta badge and "Last: X kg" sub-info
   /// are shown in the header when prior weight data is available.
+  ///
+  /// When [showHeight] is false (ANC visit 2+), only the weight column is
+  /// rendered inside the same pair shell — height stays in form data/payload.
   Widget _heightWeightPairCard(
     BuildContext context,
     FieldDef heightDef,
     FieldRef heightRef,
     FieldDef weightDef,
-    FieldRef weightRef,
-  ) {
-    final hasError = validationErrors.contains(heightRef.id) ||
+    FieldRef weightRef, {
+    bool showHeight = true,
+  }) {
+    final hasError = (showHeight && validationErrors.contains(heightRef.id)) ||
         validationErrors.contains(weightRef.id);
-    final isMandatory = heightDef.isMandatory || heightRef.isMandatory ||
-        weightDef.isMandatory || weightRef.isMandatory;
+    final isMandatory = (showHeight &&
+            (heightDef.isMandatory || heightRef.isMandatory)) ||
+        weightDef.isMandatory ||
+        weightRef.isMandatory;
     final currentWeight = _VitalStatusEval.asDouble(data.getValue(weightRef.id));
     final weightStatus = _VitalStatusEval.weight(currentWeight, previousWeight);
     // Sub-label: last weight info when available (no second language line).
     final subLabel = previousWeight != null
         ? UnifiedFormStrings.vsLastWeight(previousWeight!)
         : null;
+    final weightColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showHeight)
+          Text(
+            UnifiedFormStrings.weightSubLabel,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textMuted,
+            ),
+          ),
+        if (showHeight) const SizedBox(height: 5),
+        _NumericField(
+          key: Key('unified_form_${weightRef.id}_input'),
+          isDecimal: true,
+          unit: 'kg',
+          initialValue: data.getValue(weightRef.id)?.toString(),
+          onChanged: (v) {
+            if (v == null || v.isEmpty) {
+              onFieldChanged(weightRef.id, null);
+            } else {
+              onFieldChanged(weightRef.id, double.tryParse(v) ?? v);
+            }
+          },
+        ),
+      ],
+    );
     return _FieldShell(
-      label: UnifiedFormStrings.heightWeightPairLabel,
+      label: showHeight
+          ? UnifiedFormStrings.heightWeightPairLabel
+          : UnifiedFormStrings.weightSubLabel,
       subLabel: subLabel,
-      emoji: '📐',
+      emoji: showHeight ? '📐' : '⚖️',
       emojiBg: const Color(0xFFEEF2FF),
       isMandatory: isMandatory,
       hasError: hasError,
       statusBadge: weightStatus != null
           ? _VitalBadge(label: weightStatus.label, color: weightStatus.color)
           : null,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
+      child: showHeight
+          ? Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  UnifiedFormStrings.heightSubLabel,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        UnifiedFormStrings.heightSubLabel,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      _NumericField(
+                        key: Key('unified_form_${heightRef.id}_input'),
+                        isDecimal: true,
+                        unit: 'cm',
+                        readOnly: heightReadOnly,
+                        initialValue: data.getValue(heightRef.id)?.toString(),
+                        onChanged: (v) {
+                          if (heightReadOnly) return;
+                          if (v == null || v.isEmpty) {
+                            onFieldChanged(heightRef.id, null);
+                          } else {
+                            onFieldChanged(
+                                heightRef.id, double.tryParse(v) ?? v);
+                          }
+                        },
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 5),
-                _NumericField(
-                  key: Key('unified_form_${heightRef.id}_input'),
-                  isDecimal: true,
-                  unit: 'cm',
-                  readOnly: heightReadOnly,
-                  initialValue: data.getValue(heightRef.id)?.toString(),
-                  onChanged: (v) {
-                    if (heightReadOnly) return;
-                    if (v == null || v.isEmpty) {
-                      onFieldChanged(heightRef.id, null);
-                    } else {
-                      onFieldChanged(heightRef.id, double.tryParse(v) ?? v);
-                    }
-                  },
-                ),
+                const SizedBox(width: 10),
+                Expanded(child: weightColumn),
               ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  UnifiedFormStrings.weightSubLabel,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                _NumericField(
-                  key: Key('unified_form_${weightRef.id}_input'),
-                  isDecimal: true,
-                  unit: 'kg',
-                  initialValue: data.getValue(weightRef.id)?.toString(),
-                  onChanged: (v) {
-                    if (v == null || v.isEmpty) {
-                      onFieldChanged(weightRef.id, null);
-                    } else {
-                      onFieldChanged(weightRef.id, double.tryParse(v) ?? v);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+            )
+          : weightColumn,
     );
   }
 

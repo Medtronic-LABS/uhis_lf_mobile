@@ -680,9 +680,9 @@ void main() {
       expect(visible('fetalMovement', ga: 24), isTrue);
     });
 
-    test('height visible all visits; BMI visit-1 only', () {
+    test('height visit-1 only; BMI visit-1 only', () {
       expect(visible('height', visit: 1), isTrue);
-      expect(visible('height', visit: 2), isTrue);
+      expect(visible('height', visit: 2), isFalse);
       expect(visible('bmi', visit: 1, ga: 8), isTrue);
       expect(visible('bmi', visit: 1, ga: 14), isFalse);
       expect(visible('bmi', visit: 2, ga: 8), isFalse);
@@ -836,7 +836,7 @@ void main() {
         ),
         isTrue,
       );
-      // ANC keeps height visible on visit 2+ (read-only in UI for weight pair).
+      // ANC hides height on visit 2+ (Spice AssessmentRMNCHFragment).
       expect(
         FieldVisibilityRules.isFieldVisible(
           field: height,
@@ -846,7 +846,7 @@ void main() {
           ancVisitNumber: 3,
           gestationalWeeks: 28,
         ),
-        isTrue,
+        isFalse,
       );
     });
   });

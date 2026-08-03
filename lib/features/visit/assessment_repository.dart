@@ -185,8 +185,12 @@ class AssessmentRepository extends ChangeNotifier {
   }
 
   /// Resolve the encounter identity from the member row, mirroring the join
-  /// Android's `AssessmentDAO` does at sync time. Caller-supplied values win
-  /// only when the member row has nothing better to offer.
+  /// Android's `AssessmentDAO` does at sync time (`hhm.patient_id as patientId`).
+  ///
+  /// When the member row is found, [patientId] prefers `members.patient_id`
+  /// and falls back to the visit-route id so local lookups still resolve for a
+  /// member the server has not assigned a patient id to yet. Push re-derives
+  /// the outgoing value from `hhm.patient_id`, matching Spice.
   Future<({
     String? memberId,
     String? householdId,
@@ -232,14 +236,20 @@ class AssessmentRepository extends ChangeNotifier {
       final resolved = (
         memberId: keep(member.fhirId) ?? keep(memberId),
         householdId: keep(member.householdFhirId) ?? keep(householdId),
-        patientId: keep(patientId) ?? keep(member.patientId),
+        // Local reads (visit history, visit numbering, same-day ANC guard,
+        // worklist scoring) all key on this column, so keep the local id when
+        // the server has not assigned a patient id yet. The wire value is
+        // re-derived from hhm.patient_id in getUnsyncedForPush, so a local PK
+        // never reaches the server.
+        patientId: keep(member.patientId) ?? keep(patientId),
         villageId: keep(villageId) ??
             keep(member.subVillageId) ??
             keep(member.villageId),
       );
       debugPrint(
           '[Assessment] identity resolved — member=${resolved.memberId} '
-          'household=${resolved.householdId} village=${resolved.villageId}');
+          'patient=${resolved.patientId} household=${resolved.householdId} '
+          'village=${resolved.villageId}');
       return resolved;
     } catch (e) {
       debugPrint('[Assessment] identity lookup failed: $e');
@@ -712,19 +722,14 @@ class AssessmentRepository extends ChangeNotifier {
     });
   }
 
-  /// Most-recent weight (kg) for [patientId].
-  ///
-  /// Order matches prior-visit biometrics for NCD: this device's
-  /// `local_assessments` first (unsynced visits are not in history yet), then
-  /// synced `assessments` rows. NCD local rows store weight under `biometric`.
+  /// Most-recent weight (kg) for [patientId] from any prior ANC, NCD, or
+  /// Cataract assessment (local unsynced rows first, then synced history).
   Future<double?> lastRecordedWeight(String patientId) async {
     return _lastRecordedBiometric(patientId, _BiometricKind.weight);
   }
 
-  /// Most-recent height (cm) for [patientId].
-  ///
-  /// Same local-then-history order as [lastRecordedWeight]. Used to prefill and
-  /// lock height on a subsequent NCD visit (Spice parity).
+  /// Most-recent height (cm) for [patientId] from any prior ANC, NCD, or
+  /// Cataract assessment. Used to prefill and lock height on later visits.
   Future<double?> lastRecordedHeight(String patientId) async {
     return _lastRecordedBiometric(patientId, _BiometricKind.height);
   }
@@ -735,24 +740,17 @@ class AssessmentRepository extends ChangeNotifier {
   ) async {
     if (patientId.isEmpty) return null;
 
-    // 1. Local NCD rows first — includes visits not yet pushed / not yet in
-    //    the assessments history cache.
-    final localRows = await _dao.getByPatientId(patientId); // newest-first
+    // 1. Local rows (newest first) — includes unsynced visits not yet in
+    //    history. Height and weight are resolved independently (most recent
+    //    non-empty value for each field across ANC / NCD / Cataract).
+    final localRows = await _dao.getByPatientId(patientId);
     for (final row in localRows) {
-      if (row.assessmentType.toUpperCase() != 'NCD') continue;
+      if (!_isBiometricSourceLocalType(row.assessmentType)) continue;
       final v = _biometricFromLocalDetails(row.assessmentDetails, kind);
       if (v != null) return v;
     }
-    // Other local programme types (ANC etc.) as a fallback for the weight badge.
-    if (kind == _BiometricKind.weight) {
-      for (final row in localRows) {
-        if (row.assessmentType.toUpperCase() == 'NCD') continue;
-        final v = _biometricFromLocalDetails(row.assessmentDetails, kind);
-        if (v != null) return v;
-      }
-    }
 
-    // 2. Synced history — NCD (and Cataract, matching Spice) observations.
+    // 2. Synced history — same programme types, newest first.
     if (_historyDao == null) return null;
     final historyMap = await _historyDao.forMany([patientId]);
     final historyRows = List<AssessmentRow>.from(
@@ -760,11 +758,28 @@ class AssessmentRepository extends ChangeNotifier {
     )..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
     for (final row in historyRows) {
       final kindTag = row.kind?.toUpperCase() ?? '';
-      if (!_isNcdKind(kindTag) && !_isCataractKind(kindTag)) continue;
+      if (!_isBiometricSourceHistoryKind(kindTag)) continue;
       final v = _biometricFromHistoryRaw(row.rawJson, kind);
       if (v != null) return v;
     }
     return null;
+  }
+
+  /// Local assessment types that may carry adult height/weight biometrics.
+  static bool _isBiometricSourceLocalType(String assessmentType) {
+    switch (assessmentType.toUpperCase()) {
+      case 'ANC':
+      case 'NCD':
+      case 'CATARACT':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /// Synced history kind tags that may carry adult height/weight biometrics.
+  static bool _isBiometricSourceHistoryKind(String kind) {
+    return _isAncVisitKind(kind) || _isNcdKind(kind) || _isCataractKind(kind);
   }
 
   /// Height/weight from a locally saved assessment_details blob.
@@ -801,7 +816,8 @@ class AssessmentRepository extends ChangeNotifier {
     return null;
   }
 
-  /// Height/weight from a synced assessments.raw_json row (observations.*).
+  /// Height/weight from a synced assessments.raw_json row (observations.*,
+  /// ANC medicalHistoryPhysicalExamination, NCD biometric/bpLog, etc.).
   static double? _biometricFromHistoryRaw(
     String rawJson,
     _BiometricKind kind,
@@ -814,11 +830,26 @@ class AssessmentRepository extends ChangeNotifier {
     }
     final key = kind == _BiometricKind.height ? 'height' : 'weight';
     final obs = raw['observations'];
+    final details = raw['assessmentDetails'];
+    final medHx = raw['medicalHistoryPhysicalExamination'];
+    final detailsMedHx = details is Map
+        ? details['medicalHistoryPhysicalExamination']
+        : null;
     final candidates = <dynamic>[
       if (obs is Map) obs[key],
       raw[key],
       if (raw['bpLog'] is Map) (raw['bpLog'] as Map)[key],
-      if (raw['assessmentDetails'] is Map) (raw['assessmentDetails'] as Map)[key],
+      if (raw['biometric'] is Map) (raw['biometric'] as Map)[key],
+      if (details is Map) details[key],
+      if (medHx is Map) medHx[key],
+      if (detailsMedHx is Map) detailsMedHx[key],
+      if (raw['ncd'] is Map) ...[
+        (raw['ncd'] as Map)[key],
+        if ((raw['ncd'] as Map)['biometric'] is Map)
+          ((raw['ncd'] as Map)['biometric'] as Map)[key],
+        if ((raw['ncd'] as Map)['bpLog'] is Map)
+          ((raw['ncd'] as Map)['bpLog'] as Map)[key],
+      ],
     ];
     for (final rawVal in candidates) {
       final v = _positiveDouble(rawVal);
