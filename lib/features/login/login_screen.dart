@@ -77,21 +77,40 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('[_LoginScreenState] post-login: onboardingComplete=${auth.onboardingComplete} pinEnabled=${auth.pinEnabled} biometricEnabled=${auth.biometricEnabled}');
       if (!auth.onboardingComplete && !auth.pinEnabled) {
         // New user — kick off sync in background immediately so data arrives
-        // while they complete PIN setup, then go to onboarding.
+        // while they complete PIN setup, then go to onboarding. A wiping
+        // full sync is only correct for a genuinely new device/user; if this
+        // is actually the same SK re-authenticating (e.g. onboarding was
+        // interrupted after a session-expiry relogin), defer to /sync's own
+        // push-then-incremental-delta sequence instead — see the else-if
+        // below for why that path isn't safe to shortcut in the background.
         debugPrint(
-          '[_LoginScreenState] new user → background sync + /onboarding',
+          '[_LoginScreenState] new user → background sync + /onboarding '
+          '(sameUserRelogin=${auth.sameUserRelogin})',
         );
-        _startBackgroundColdSync(context);
+        if (!auth.sameUserRelogin) {
+          _startBackgroundColdSync(context);
+        }
         context.go('/onboarding');
       } else if (!auth.pinEnabled && !auth.biometricEnabled) {
         // Returning user with no security enrolled (e.g. pre-PIN-mandate accounts).
         // Re-enter onboarding so user sees the "Set up security / Skip" choice.
-        // Same background head start as the new-user branch above — this
-        // path also lands on mandatory PIN setup, so it should benefit too.
+        //
+        // Only fire the background head start for a genuinely new
+        // device/user. If this is the same SK re-authenticating after a
+        // session-expiry sign-out (auth.sameUserRelogin), a wiping
+        // coldSync() here would discard local data and force a full resync
+        // for what should be an incremental change sync — SyncProgressScreen
+        // already does the correct push-pending-work-then-reloginSync()
+        // sequence once /sync is reached (sync_progress_screen.dart:136-170);
+        // let that run in the foreground rather than racing it with a
+        // background call that skips the push step.
         debugPrint(
-          '[_LoginScreenState] returning user, no security → background sync + /onboarding',
+          '[_LoginScreenState] returning user, no security → /onboarding '
+          '(sameUserRelogin=${auth.sameUserRelogin})',
         );
-        _startBackgroundColdSync(context);
+        if (!auth.sameUserRelogin) {
+          _startBackgroundColdSync(context);
+        }
         context.go('/onboarding');
       } else {
         // Returning user with PIN or biometric — go to sync screen as normal.
