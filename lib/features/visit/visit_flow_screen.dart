@@ -35,6 +35,7 @@ import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import 'models/anc_assessment.dart';
+import '../../core/db/health_facility_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import 'assessment_repository.dart';
 import '../../core/db/member_dao.dart';
@@ -42,6 +43,7 @@ import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
+import '../../core/risk/ncd_status.dart';
 import '../../core/theme/app_theme.dart';
 import 'naba/naba_models.dart';
 import 'naba/naba_repository.dart';
@@ -1398,6 +1400,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   /// Spice ANC/PNC summary facility spinner selection (option id).
   String? _selectedRmnchFacilityId;
 
+  /// NCD Community Clinic PHU sites from offline `health_facilities`.
+  List<HealthFacilityRow> _ncdFacilities = const [];
+  String? _selectedNcdSiteId;
+
   Color _headerColor(Programme p) => switch (p) {
         Programme.anc || Programme.pnc => AppColors.ancHeader,
         Programme.ncd => AppColors.ncdHeader,
@@ -1437,6 +1443,31 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     )..repeat(reverse: true);
     _loadPatientPhone();
     _loadHouseholdMembers();
+    _loadNcdFacilities();
+  }
+
+  Future<void> _loadNcdFacilities() async {
+    try {
+      final rows = await context.read<HealthFacilityDao>().nearestFacilities();
+      if (!mounted) return;
+      HealthFacilityRow? pick;
+      for (final r in rows) {
+        if (r.isDefault && (r.fhirId?.isNotEmpty ?? false)) {
+          pick = r;
+          break;
+        }
+      }
+      pick ??= rows.cast<HealthFacilityRow?>().firstWhere(
+            (r) => r!.fhirId?.isNotEmpty ?? false,
+            orElse: () => null,
+          );
+      setState(() {
+        _ncdFacilities = rows;
+        _selectedNcdSiteId = pick?.fhirId ?? _selectedNcdSiteId;
+      });
+    } on Object catch (e) {
+      debugPrint('[_Step3AiRecoState] load NCD facilities failed: $e');
+    }
   }
 
   Future<void> _loadPatientPhone() async {
@@ -2366,6 +2397,11 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             ))
         : widget.referralFacility;
 
+    // Android BDNCDAssessmentSummaryFragment: Community Clinic → PHU site id.
+    final referredSiteId = _showNcdFacilitySpinner(isReferred)
+        ? _selectedNcdSiteId
+        : null;
+
     // Spice updateOtherAssessmentDetails: stamp nextVisitDate /
     // referralFacilityType onto assessments[].summary before sync.
     try {
@@ -2374,6 +2410,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         nextVisitDate: followUpDate,
         isReferred: isReferred,
         referralFacilityType: referralFacilityType,
+        referredSiteId: referredSiteId,
       );
       // Now that summary is stamped, release the hold and push (Spice Done).
       unawaited(assessmentRepo.syncPendingAssessments().then(
@@ -2630,6 +2667,15 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     );
   }
 
+  /// Android BDNCD summary: show PHU spinner when referred to Community Clinic.
+  bool _showNcdFacilitySpinner(bool isReferred) {
+    if (!isReferred) return false;
+    final isNcd = widget.primaryProgramme == Programme.ncd ||
+        widget.confirmedProgrammes.contains(Programme.ncd);
+    if (!isNcd) return false;
+    return widget.referralFacility == NcdStatus.facilityCommunityClinic;
+  }
+
   Widget _buildResult(NabaResponse naba) {
     final referral =
         naba.referralRecommendation?.required_ ?? widget.referralRecommended;
@@ -2644,6 +2690,19 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               preferredId: widget.referralFacility,
             ))
         : null;
+    final showNcdFacility = _showNcdFacilitySpinner(referral);
+    final ncdSites = _ncdFacilities
+        .where((f) => f.fhirId != null && f.fhirId!.isNotEmpty)
+        .toList();
+    String? ncdSiteId;
+    if (showNcdFacility) {
+      ncdSiteId = _selectedNcdSiteId;
+      if (ncdSiteId == null ||
+          !ncdSites.any((f) => f.fhirId == ncdSiteId)) {
+        final def = ncdSites.where((f) => f.isDefault).firstOrNull;
+        ncdSiteId = def?.fhirId ?? ncdSites.firstOrNull?.fhirId;
+      }
+    }
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 40),
@@ -2723,6 +2782,18 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             ),
             const SizedBox(height: 16),
           ],
+
+          // Android BDNCDAssessmentSummaryFragment PHU site spinner.
+          if (showNcdFacility &&
+              ncdSites.isNotEmpty &&
+              ncdSiteId != null) ...[
+            _NcdReferralFacilityPicker(
+              facilities: ncdSites,
+              selectedFhirId: ncdSiteId,
+              onChanged: (id) => setState(() => _selectedNcdSiteId = id),
+            ),
+            const SizedBox(height: 16),
+          ],
               ], // end inner Column children
             ),   // end inner Column
           ),     // end Padding
@@ -2747,6 +2818,81 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 }
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
+
+/// Android BDNCDAssessmentSummaryFragment nearest-facility spinner.
+/// Selection fhirId → `summary.referredSiteId`.
+class _NcdReferralFacilityPicker extends StatelessWidget {
+  const _NcdReferralFacilityPicker({
+    required this.facilities,
+    required this.selectedFhirId,
+    required this.onChanged,
+  });
+
+  final List<HealthFacilityRow> facilities;
+  final String selectedFhirId;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final validIds = facilities.map((f) => f.fhirId!).toSet();
+    final value =
+        validIds.contains(selectedFhirId) ? selectedFhirId : facilities.first.fhirId!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          EpiStrings.referralFacilityLabel,
+          style: theme.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: ValueKey(value),
+          isExpanded: true,
+          initialValue: value,
+          onChanged: (id) {
+            if (id != null) onChanged(id);
+          },
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppColors.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.navy, width: 1.5),
+            ),
+            filled: true,
+            fillColor: AppColors.cardSurface,
+          ),
+          items: facilities
+              .map(
+                (f) => DropdownMenuItem<String>(
+                  value: f.fhirId,
+                  child: Text(
+                    f.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+}
 
 /// Spice AssessmentRMNCHSummaryFragment facility spinner — shown after the
 /// follow-up date when ANC/PNC is Referred. Selection id is stamped onto

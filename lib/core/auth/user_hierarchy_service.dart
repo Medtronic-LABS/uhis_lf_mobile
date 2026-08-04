@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
+import '../db/health_facility_dao.dart';
 import 'auth_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -246,10 +247,15 @@ class HealthFacilityRef {
 /// [prefetch] is the preferred entry-point — call it once after login so all
 /// downstream getters are guaranteed to return without a network round-trip.
 class UserHierarchyService extends ChangeNotifier {
-  UserHierarchyService(this._api, this._auth);
+  UserHierarchyService(
+    this._api,
+    this._auth, {
+    HealthFacilityDao? healthFacilities,
+  }) : _healthFacilities = healthFacilities;
 
   final ApiClient _api;
   final AuthRepository _auth;
+  final HealthFacilityDao? _healthFacilities;
 
   List<SsWorker>? _ssWorkers;
   List<VillageRef>? _villages;
@@ -476,6 +482,20 @@ class UserHierarchyService extends ChangeNotifier {
     if (orgFhirId != null && orgFhirId.isNotEmpty) {
       await _auth.saveOrganizationFhirId(orgFhirId);
       debugPrint('[UserHierarchyService] Saved orgFhirId: $orgFhirId');
+    }
+
+    // Android MetaRepository.saveHealthFacilityInDb — nearest + user sites
+    // filtered by villages[].linkedVillages intersection, into SQLite.
+    final facilitiesDao = _healthFacilities;
+    if (facilitiesDao != null) {
+      try {
+        final n = await facilitiesDao.replaceFromUserDataEntity(entity);
+        debugPrint(
+          '[UserHierarchyService] Saved $n health facilities for referral spinner',
+        );
+      } on Object catch (e) {
+        debugPrint('[UserHierarchyService] health facilities persist failed: $e');
+      }
     }
   }
 
