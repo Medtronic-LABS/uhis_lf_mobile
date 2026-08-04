@@ -1555,6 +1555,8 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
   final raw = _normalizeRaw(a.rawJson);
   final prog = Programme.fromString(a.type);
   final relDate = _relativeDate(a.date);
+  final typeCompact =
+      a.type.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
 
   final dx = (raw['confirmDiagnosis'] as String? ?? '').toLowerCase();
   final notesLower = (a.notes ?? '').toLowerCase();
@@ -1579,6 +1581,30 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
   Color? badgeColor;
   Color? badgeFgColor;
   Color dotColor;
+
+  // UHIS serviceProvided="enrollment" is NCD programme enrollment (history,
+  // lifestyle flags), not household registration in Apon Sushashthya.
+  if (typeCompact == 'ENROLLMENT') {
+    emoji = '❤️';
+    title = PatientProfileStrings.ncdEnrollment;
+    category = PatientProfileStrings.ncdEnrollmentCategory;
+    dotColor = _kDotOk;
+    description = 'NCD programme enrollment recorded.';
+    return _TimelineEntry(
+      emoji: emoji,
+      title: title,
+      relativeDate: relDate,
+      category: category,
+      date: a.date,
+      dotColor: dotColor,
+      description: description,
+      badge: badge,
+      badgeColor: badgeColor,
+      badgeFgColor: badgeFgColor,
+      programme: Programme.ncd,
+      source: a,
+    );
+  }
 
   switch (prog) {
     // ─── ANC / Antenatal ──────────────────────────────────────────────────
@@ -1744,8 +1770,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     // ─── NCD ──────────────────────────────────────────────────────────────
     case Programme.ncd:
       emoji = '❤️';
-      title = 'NCD Visit';
-      category = 'NCD Follow-up';
+      // ncdmedicalreview / medicalReview → "NCD Follow Up"; plain NCD stays visit.
+      final isNcdMedicalReview = typeCompact.contains('NCDMEDICALREVIEW') ||
+          typeCompact == 'MEDICALREVIEW';
+      title = isNcdMedicalReview
+          ? PatientProfileStrings.ncdFollowUp
+          : 'NCD Visit';
+      category = PatientProfileStrings.ncdFollowUpCategory;
 
       final bpNCD = raw['bp']?.toString() ?? '';
       final sysNCD = _sys(bpNCD);
@@ -1753,7 +1784,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       final bgNCD = double.tryParse(raw['bg']?.toString() ?? '') ?? 0;
       final bgTypeNCD = raw['bgType']?.toString() ?? 'RBS';
       final bpHighNCD = sysNCD >= 140 || diaNCD >= 90;
-      final bgThreshold = bgTypeNCD == 'FBS' ? 7.0 : 11.1;
+      final bgThreshold = bgTypeNCD.toUpperCase() == 'FBS' ? 7.0 : 11.1;
       final bgHighNCD = bgNCD > 0 && bgNCD >= bgThreshold;
 
       if (bpHighNCD && bgHighNCD) {
@@ -1970,7 +2001,7 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
         emoji: '🔔',
         title: 'Follow-up overdue',
         relativeDate: 'Today',
-        category: 'NCD Follow-up',
+        category: PatientProfileStrings.ncdFollowUpCategory,
         date: DateTime.now(),
         dotColor: _kDotPending,
         description: 'NCD follow-up due — last visit $daysSince days ago',
@@ -2085,6 +2116,9 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
   // a referral status so only that entry shows the referral badge + narrative.
   final latestReferredId = data.assessments
       .where((a) {
+        final tc =
+            a.type.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+        if (tc == 'MEDICALREVIEWVISIT') return false;
         final s = (_normalizeRaw(a.rawJson)['referralStatus'] as String? ?? a.status ?? '')
             .toLowerCase()
             .trim();
@@ -2094,6 +2128,11 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       ?.id;
 
   for (final a in data.assessments) {
+    // Android MEDICAL_REVIEW_VISIT_SERVICE — not a care-history visit.
+    final typeCompact =
+        a.type.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+    if (typeCompact == 'MEDICALREVIEWVISIT') continue;
+
     final showAsReferral = latestReferredId == null || a.id == latestReferredId;
     final entry = _assessmentToEntry(a, showAsReferral: showAsReferral);
     if (entry.title == 'ANC Checkup' && ancOrdinal[a.id] != null) {
@@ -2105,7 +2144,7 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
     }
   }
 
-  // Enrollment milestone — pinned at bottom (oldest event in the patient's history).
+  // Registration milestone — pinned at bottom (oldest event in the patient's history).
   if (data.enrolledAt != null) {
     entries.add(_TimelineEntry(
       emoji: '📋',
@@ -2114,8 +2153,8 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       category: PatientProfileStrings.enrollmentMilestone,
       date: data.enrolledAt!,
       dotColor: _kDotEnrollment,
-      description: 'Patient added to Apon Sushashthya',
-      badge: 'Enrolled',
+      description: 'Patient registered in Apon Sushashthya',
+      badge: 'Registered',
       badgeColor: const Color(0xFFE0F2FE),
       badgeFgColor: const Color(0xFF0369A1),
     ));

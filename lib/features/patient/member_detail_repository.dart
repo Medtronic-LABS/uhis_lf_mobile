@@ -78,6 +78,17 @@ class MemberAssessment {
         upper.contains('UNDER_2')) {
       return 'IMCI';
     }
+    // Keep NCD medical-review / programme-enrollment distinct from plain NCD
+    // so Care History can label them "NCD Follow Up" / "NCD Enrollment".
+    // medicalReview (Android MenuConstants.MEDICAL_REVIEW_SERVICE) == ncdmedicalreview.
+    // medicalreviewvisit is a separate encounter type (skipped in Care History).
+    if (compact == 'MEDICALREVIEWVISIT') return 'MEDICAL_REVIEW_VISIT';
+    if (compact == 'NCDMEDICALREVIEW' ||
+        compact.contains('NCDMEDICALREVIEW') ||
+        compact == 'MEDICALREVIEW') {
+      return 'NCD_MEDICAL_REVIEW';
+    }
+    if (compact == 'ENROLLMENT') return 'ENROLLMENT';
     if (upper.contains('NCD')) return 'NCD';
     if (upper.contains('TB')) return 'TB';
     return type;

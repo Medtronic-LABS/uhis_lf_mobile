@@ -27,7 +27,7 @@ Programme primaryProgrammeOf(Set<Programme> programmes) {
   return programmes.isNotEmpty ? programmes.first : Programme.unknown;
 }
 
-/// Visit-count-aware badge label, e.g. "ANC Visit 3 due", "Enrolled",
+/// Visit-count-aware badge label, e.g. "ANC Visit 3 due", "Registered",
 /// "NCD checkup". Replaces the raw risk-driver reason text with an
 /// actionable label (v13 design).
 String programmeReason({

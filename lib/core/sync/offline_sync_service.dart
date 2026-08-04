@@ -659,12 +659,23 @@ class OfflineSyncService extends ChangeNotifier {
       );
     }
 
-    // uhis-dev backend ships `members` as the canonical patient list.
-    if (patients.isEmpty && bridgedPatients.isNotEmpty) {
-      patients.addAll(bridgedPatients);
+    // Always bridge members → patients. Babies created at pregnancy outcome
+    // (and any member absent from a non-empty `patients[]` bundle) must still
+    // get a `patients` row — SymptomPicker / PatientContextBuilder look there
+    // and otherwise show "Patient not found in local database".
+    if (bridgedPatients.isNotEmpty) {
+      final fromBundle = patients.length;
+      final existingIds = patients.map((p) => p.id).toSet();
+      var added = 0;
+      for (final p in bridgedPatients) {
+        if (existingIds.add(p.id)) {
+          patients.add(p);
+          added++;
+        }
+      }
       debugPrint(
-        '[OfflineSyncService] Bridged ${patients.length} patients from members '
-        '(local PK identity)',
+        '[OfflineSyncService] Bridged $added members→patients '
+        '(bundle patients=$fromBundle, total=${patients.length})',
       );
     }
 

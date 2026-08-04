@@ -856,8 +856,8 @@
   "en": "Close"
  },
  "MissionDashboard.enrolled": {
-  "bn": "নথিভুক্ত",
-  "en": "Enrolled"
+  "bn": "নিবন্ধিত",
+  "en": "Registered"
  },
  "MissionDashboard.followUpDue": {
   "bn": "ফলো-আপ বাকী",
@@ -3660,8 +3660,8 @@
   "en": "Enrolled Programmes"
  },
  "enrolledInApp": {
-  "bn": "আপন সুস্বাস্থ্যে নথিভুক্ত",
-  "en": "Enrolled in Apon Sushashthya"
+  "bn": "আপন সুস্বাস্থ্যে নিবন্ধিত",
+  "en": "Registered in Apon Sushashthya"
  },
  "enrolledProgrammeA11y": {
   "bn": "নিবন্ধিত {label} — এই ভিজিটে অন্তর্ভুক্ত বা বাদ দিতে চাপুন",
@@ -3676,8 +3676,24 @@
   "en": "Enrollment failed"
  },
  "enrollmentMilestone": {
-  "bn": "নথিভুক্তির তারিখ",
-  "en": "Enrollment date"
+  "bn": "নিবন্ধনের তারিখ",
+  "en": "Registration date"
+ },
+ "ncdFollowUp": {
+  "bn": "এনসিডি ফলো-আপ",
+  "en": "NCD Follow Up"
+ },
+ "ncdFollowUpCategory": {
+  "bn": "এনসিডি ফলো-আপ",
+  "en": "NCD Follow-up"
+ },
+ "ncdEnrollment": {
+  "bn": "এনসিডি নথিভুক্তি",
+  "en": "NCD Enrollment"
+ },
+ "ncdEnrollmentCategory": {
+  "bn": "এনসিডি নথিভুক্তি",
+  "en": "NCD Enrollment"
  },
  "enrollmentSuccess": {
   "bn": "পরিবার সফলভাবে নিবন্ধিত হয়েছে",

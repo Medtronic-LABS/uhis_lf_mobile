@@ -853,10 +853,14 @@ abstract final class PatientProfileStrings {
   static String get aiInsightNotSynced => AppLocale.isBangla
       ? 'অফলাইন মোডে তথ্য পাওয়া যাচ্ছে না'
       : 'Data not available in offline mode';
-  static String get enrolledInApp => getTranslatedString('enrolledInApp', 'Enrolled in Apon Sushashthya');
-  static String get enrollmentMilestone => getTranslatedString('enrollmentMilestone', 'Enrollment date');
+  static String get enrolledInApp => getTranslatedString('enrolledInApp', 'Registered in Apon Sushashthya');
+  static String get enrollmentMilestone => getTranslatedString('enrollmentMilestone', 'Registration date');
   static String get pregnancyRegistered => getTranslatedString('pregnancyRegistered', 'Pregnancy Registered');
   static String get pregnancyRegistrationCategory => getTranslatedString('pregnancyRegistrationCategory', 'Pregnancy Registration');
+  static String get ncdFollowUp => getTranslatedString('ncdFollowUp', 'NCD Follow Up');
+  static String get ncdFollowUpCategory => getTranslatedString('ncdFollowUpCategory', 'NCD Follow-up');
+  static String get ncdEnrollment => getTranslatedString('ncdEnrollment', 'NCD Enrollment');
+  static String get ncdEnrollmentCategory => getTranslatedString('ncdEnrollmentCategory', 'NCD Enrollment');
 }
 
 abstract final class ContactSheetStrings {
@@ -1049,7 +1053,7 @@ abstract final class MissionDashboardStrings {
   static String get aiInsight => getTranslatedString('MissionDashboard.aiInsight', 'AI Insight');
 
   // ── Programme-smart reason badge (v13 design) ───────────────────────────
-  static String get enrolled => getTranslatedString('MissionDashboard.enrolled', 'Enrolled');
+  static String get enrolled => getTranslatedString('MissionDashboard.enrolled', 'Registered');
   static String get ancVisitLabel => getTranslatedString('MissionDashboard.ancVisitLabel', 'ANC Visit');
   static String get pncVisitLabel => getTranslatedString('MissionDashboard.pncVisitLabel', 'PNC Visit');
   static String get childImmunisation => getTranslatedString('childImmunisation', 'Child immunisation');
