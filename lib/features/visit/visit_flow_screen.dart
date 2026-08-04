@@ -2054,7 +2054,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       buf.writeln('• Avoid tobacco and alcohol');
       buf.writeln('• Go to facility immediately for: one-sided weakness, sudden severe headache, or chest pain');
       buf.writeln();
-      buf.writeln('*Next visit: in 4 weeks.*');
+      buf.writeln('*Next visit: in 2 weeks.*');
     }
 
     if (hasPnc) {
@@ -2368,9 +2368,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     // Prefer the SK-picked date, then the first timeline item's resolved date,
     // then a programme-aware Spice default. Null when this programme's summary
     // does not stamp nextVisitDate (e.g. childhood keeps its age-band stamp).
+    // Soonest follow-up wins — same order as the Step 3 timeline UI — so the
+    // stamped nextVisitDate matches the date shown next to "Follow-up".
+    final followUps = _FollowUpTimeline.sortedBySoonest(naba.followUp);
     final followUpDate = _selectedFollowUpDate ??
-        (naba.followUp.isNotEmpty
-            ? _FollowUpDateRowState.resolveDate(naba.followUp.first)
+        (followUps.isNotEmpty
+            ? _FollowUpDateRowState.resolveDate(followUps.first)
             : _defaultSummaryFollowUpDate(
                 widget.primaryProgramme,
                 referred: widget.referralRecommended,
@@ -3352,21 +3355,31 @@ class _FollowUpTimeline extends StatelessWidget {
   });
   final List<NabaFollowUpItem> items;
 
-  /// Primary programme, used to apply the routine follow-up cadence
-  /// (ANC = 4 weeks, NCD = 2 weeks) to the editable date row.
+  /// Primary programme, used only when a timeline string cannot be parsed.
   final Programme programme;
   final ValueChanged<DateTime>? onDateChanged;
 
+  /// Earliest follow-up first so the date picker matches the soonest message
+  /// (e.g. NCD "In 2 days" before ANC "In 4 weeks" on a combined visit).
+  static List<NabaFollowUpItem> sortedBySoonest(List<NabaFollowUpItem> items) {
+    if (items.length <= 1) return items;
+    final sorted = [...items];
+    sorted.sort((a, b) => _FollowUpDateRowState.resolveDate(a)
+        .compareTo(_FollowUpDateRowState.resolveDate(b)));
+    return sorted;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final ordered = sortedBySoonest(items);
     return Column(
       children: [
         _FollowUpDateRow(
-          item: items.first,
+          item: ordered.first,
           programme: programme,
           onDateChanged: onDateChanged,
         ),
-        for (final item in items.skip(1)) ...[
+        for (final item in ordered.skip(1)) ...[
           const SizedBox(height: 6),
           _FollowUpTimelineItem(item: item),
         ],
@@ -3489,41 +3502,31 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
 
   /// Public static helper so _Step3AiRecoState can compute the default date
   /// for a follow-up item without needing to instantiate the widget.
-  static DateTime resolveDate(NabaFollowUpItem item) {
+  ///
+  /// Timeline text is the source of truth when it parses (so "In 2 days" never
+  /// becomes +28 via an ANC programme default). Programme cadence is only a
+  /// fallback for unparseable / empty timelines.
+  static DateTime resolveDate(NabaFollowUpItem item, [Programme? fallbackProgramme]) {
     if (item.resolvedDate != null) return item.resolvedDate!;
-    final t = item.timeline.toLowerCase();
-    final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
-    if (!isUrgentDays) {
-      final days = _followUpDays(item.programme);
-      if (days != null) return DateTime.now().add(Duration(days: days));
+    final fromTimeline = _tryParseTimeline(item.timeline);
+    if (fromTimeline != null) return fromTimeline;
+    final days = _followUpDays(item.programme) ??
+        (fallbackProgramme != null
+            ? _programmeFollowUpDays(fallbackProgramme)
+            : null);
+    if (days != null) {
+      final now = DateTime.now();
+      return DateTime(now.year, now.month, now.day).add(Duration(days: days));
     }
-    return _dateFromTimeline(item.timeline);
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day).add(const Duration(days: 28));
   }
 
   @override
   void initState() {
     super.initState();
     debugPrint('[_FollowUpDateRowState] initState');
-    _date = _initialDate();
-  }
-
-  /// Default follow-up date.
-  ///
-  /// Urgent, day-scoped timelines (danger signs / referrals, e.g. "In 2 days")
-  /// always win.  Otherwise the routine programme cadence applies — ANC = 4
-  /// weeks, NCD = 2 weeks — keyed off this item's own programme first, then the
-  /// screen's primary programme, and finally the item's own timeline for other
-  /// programmes.  The SK can still override via the date picker.
-  DateTime _initialDate() {
-    if (widget.item.resolvedDate != null) return widget.item.resolvedDate!;
-    final t = widget.item.timeline.toLowerCase();
-    final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
-    if (!isUrgentDays) {
-      final days = _followUpDays(widget.item.programme) ??
-          _programmeFollowUpDays(widget.programme);
-      if (days != null) return DateTime.now().add(Duration(days: days));
-    }
-    return _dateFromTimeline(widget.item.timeline);
+    _date = resolveDate(widget.item, widget.programme);
   }
 
   /// Routine follow-up interval (in days) for a programme name string.
@@ -3550,25 +3553,29 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
     }
   }
 
-  static DateTime _dateFromTimeline(String timeline) {
+  /// Parses "in X day(s) / week(s) / month(s)". Null when the string has no
+  /// recognisable interval (caller falls back to programme cadence).
+  static DateTime? _tryParseTimeline(String timeline) {
     final t = timeline.toLowerCase();
     final now = DateTime.now();
-    // parse "in X week(s)"
+    final today = DateTime(now.year, now.month, now.day);
     final weekMatch = RegExp(r'(\d+)\s*week').firstMatch(t);
     if (weekMatch != null) {
-      return now.add(Duration(days: int.parse(weekMatch.group(1)!) * 7));
+      return today.add(Duration(days: int.parse(weekMatch.group(1)!) * 7));
     }
-    // parse "in X day(s)"
     final dayMatch = RegExp(r'(\d+)\s*day').firstMatch(t);
     if (dayMatch != null) {
-      return now.add(Duration(days: int.parse(dayMatch.group(1)!)));
+      return today.add(Duration(days: int.parse(dayMatch.group(1)!)));
     }
-    // parse "in X month(s)"
     final monthMatch = RegExp(r'(\d+)\s*month').firstMatch(t);
     if (monthMatch != null) {
-      return DateTime(now.year, now.month + int.parse(monthMatch.group(1)!), now.day);
+      return DateTime(
+        today.year,
+        today.month + int.parse(monthMatch.group(1)!),
+        today.day,
+      );
     }
-    return now.add(const Duration(days: 28));
+    return null;
   }
 
   String get _formatted =>
