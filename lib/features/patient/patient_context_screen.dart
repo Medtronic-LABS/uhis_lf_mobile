@@ -1442,22 +1442,25 @@ class _TimelineEntry {
 // ─── Timeline synthesis helpers ────────────────────────────────────────────
 
 /// Human-readable relative date from [date] to now.
-String _relativeDate(DateTime date) {
-  final diff = DateTime.now().difference(date);
-  if (diff.inDays == 0) return 'Today';
-  if (diff.inDays == 1) return 'Yesterday';
-  if (diff.inDays < 7) return '${diff.inDays} days ago';
-  if (diff.inDays < 14) return '1 week ago';
-  if (diff.inDays < 60) {
-    final w = (diff.inDays / 7).round();
+///
+/// Uses calendar days (local midnight), not `Duration.inDays` — elapsed-hour
+/// math skips "Yesterday" (e.g. yesterday 10pm → today 8am is still 0 days).
+String _relativeDate(DateTime date, [DateTime? now]) {
+  final days = CalendarDay.daysBetween(date, now ?? DateTime.now());
+  if (days <= 0) return 'Today';
+  if (days == 1) return 'Yesterday';
+  if (days < 7) return '$days days ago';
+  if (days < 14) return '1 week ago';
+  if (days < 60) {
+    final w = (days / 7).round();
     return '$w week${w > 1 ? 's' : ''} ago';
   }
-  if (diff.inDays < 365) {
-    final m = (diff.inDays / 30.5).round();
+  if (days < 365) {
+    final m = (days / 30.5).round();
     return '$m month${m > 1 ? 's' : ''} ago';
   }
-  final yrs = diff.inDays ~/ 365;
-  final rem = diff.inDays - yrs * 365;
+  final yrs = days ~/ 365;
+  final rem = days - yrs * 365;
   final mos = (rem / 30.5).round();
   if (mos == 0) return '$yrs yr${yrs > 1 ? 's' : ''} ago';
   return '$yrs yr${yrs > 1 ? 's' : ''} $mos mo ago';
