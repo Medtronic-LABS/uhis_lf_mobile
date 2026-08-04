@@ -30,6 +30,7 @@ import 'core/db/app_database.dart';
 import 'core/db/assessment_dao.dart';
 import 'core/db/encounter_dao.dart';
 import 'core/db/follow_up_dao.dart';
+import 'core/db/health_facility_dao.dart';
 import 'core/db/household_dao.dart';
 import 'core/db/immunisation_dao.dart';
 import 'features/visit/immunisation/immunisation_repository.dart';
@@ -165,6 +166,8 @@ class _UhisNextAppState extends State<UhisNextApp>
 
   // ── Referral SLA Engine wiring (initialized early for sync) ─────────────
   late final ReferralDao _referralDao = ReferralDao(widget.appDb);
+  late final HealthFacilityDao _healthFacilityDao =
+      HealthFacilityDao(widget.appDb);
 
   late final OfflineSyncService _sync = OfflineSyncService(
     api: widget.api,
@@ -186,6 +189,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // P1: share the same UserHierarchyService instance so OfflineSyncService
     // can reuse already-fetched static-data without a second user-data call.
     hierarchy: _userHierarchy,
+    healthFacilities: _healthFacilityDao,
   );
   late final WorklistRepository _worklist = WorklistRepository(
     patients: _patientDao,
@@ -258,8 +262,11 @@ class _UhisNextAppState extends State<UhisNextApp>
   );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
   late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);
-  late final UserHierarchyService _userHierarchy =
-      UserHierarchyService(widget.api, widget.authRepo);
+  late final UserHierarchyService _userHierarchy = UserHierarchyService(
+    widget.api,
+    widget.authRepo,
+    healthFacilities: _healthFacilityDao,
+  );
 
   // Connectivity-aware auto-sync: outbound push + inbound warm pull on reconnect
   // (mirrors Android ScheduledSyncWork CONNECTED).
@@ -451,6 +458,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<FollowUpDao>.value(value: _followUpDao),
         Provider<FollowUpCallService>.value(value: _followUpCallService),
         Provider<AssessmentDao>.value(value: _assessmentDao),
+        Provider<HealthFacilityDao>.value(value: _healthFacilityDao),
         Provider<LocalAssessmentDao>.value(value: _localAssessmentDao),
         Provider<LocalDashboardRepository>.value(value: _localDashboard),
         Provider<PatientProgrammesDao>.value(value: _progDao),

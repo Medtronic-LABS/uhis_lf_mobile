@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 39;
+  static const int schemaVersion = 40;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -53,6 +53,7 @@ class AppDatabase {
   static const String tableDiagnoses = 'diagnoses';
   static const String tableTreatmentDetails = 'treatment_details';
   static const String tableRxBuddyCheckins = 'rx_buddy_checkins';
+  static const String tableHealthFacilities = 'health_facilities';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -673,6 +674,23 @@ class AppDatabase {
         'CREATE INDEX idx_rx_buddy_date ON $tableRxBuddyCheckins(check_date DESC)');
     await db.execute(
         'CREATE INDEX idx_rx_buddy_sync ON $tableRxBuddyCheckins(sync_status)');
+
+    // v40 — Android HealthFacilityEntity parity for NCD / PHU site spinner.
+    await db.execute('''
+      CREATE TABLE $tableHealthFacilities (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        fhir_id TEXT,
+        phone_number TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        is_user_site INTEGER NOT NULL DEFAULT 0,
+        tenant_id TEXT,
+        district_id TEXT,
+        chiefdom_id TEXT
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_health_facilities_default '
+        'ON $tableHealthFacilities(is_default DESC)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -1680,6 +1698,25 @@ class AppDatabase {
         }
       }
     }
+    if (from < 40) {
+      // v40 — nearest / user health facilities for NCD referral site spinner
+      // (Android HealthFacilityEntity from static-data user-data).
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableHealthFacilities (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          fhir_id TEXT,
+          phone_number TEXT,
+          is_default INTEGER NOT NULL DEFAULT 0,
+          is_user_site INTEGER NOT NULL DEFAULT 0,
+          tenant_id TEXT,
+          district_id TEXT,
+          chiefdom_id TEXT
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_health_facilities_default '
+          'ON $tableHealthFacilities(is_default DESC)');
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -1695,6 +1732,7 @@ class AppDatabase {
     tableChatMessages, tableCoachingFaqs,
     tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
     tableTreatmentDetails, tableRxBuddyCheckins,
+    tableHealthFacilities,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

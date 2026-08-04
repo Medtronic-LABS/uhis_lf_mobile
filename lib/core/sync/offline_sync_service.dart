@@ -16,6 +16,7 @@ import '../db/app_database.dart';
 import '../db/assessment_dao.dart';
 import '../db/encounter_dao.dart';
 import '../db/follow_up_dao.dart';
+import '../db/health_facility_dao.dart';
 import '../db/household_dao.dart';
 import '../db/immunisation_dao.dart';
 import '../db/member_dao.dart';
@@ -64,6 +65,7 @@ class OfflineSyncService extends ChangeNotifier {
     // P1: injected so OfflineSyncService can reuse already-fetched static-data
     // instead of making a second user-data HTTP call on every full sync.
     UserHierarchyService? hierarchy,
+    HealthFacilityDao? healthFacilities,
   })  : _api = api,
         _auth = auth,
         _db = db,
@@ -79,7 +81,8 @@ class OfflineSyncService extends ChangeNotifier {
         _treatmentPresence = treatmentPresence,
         _encounterDao = encounterDao,
         _referrals = referrals,
-        _hierarchy = hierarchy;
+        _hierarchy = hierarchy,
+        _healthFacilities = healthFacilities;
 
   static const String _entityKey = 'worklist';
 
@@ -106,6 +109,7 @@ class OfflineSyncService extends ChangeNotifier {
   final ReferralDao? _referrals;
   // P1: shared hierarchy service — avoids second user-data call on full sync
   final UserHierarchyService? _hierarchy;
+  final HealthFacilityDao? _healthFacilities;
 
   bool _running = false;
 
@@ -1645,6 +1649,22 @@ class OfflineSyncService extends ChangeNotifier {
         await _auth.saveOrganizationFhirId(orgFhirId);
       } else {
         debugPrint('[OfflineSyncService] WARNING: orgFhirId not found — entity keys: ${entity.keys.toList()}');
+      }
+
+      // Android MetaRepository.saveHealthFacilityInDb — keep spinner data
+      // fresh when this path fetches user-data without UserHierarchyService.
+      final facilitiesDao = _healthFacilities;
+      if (facilitiesDao != null) {
+        try {
+          final n = await facilitiesDao.replaceFromUserDataEntity(entity);
+          debugPrint(
+            '[OfflineSyncService] Saved $n health facilities for referral spinner',
+          );
+        } on Object catch (e) {
+          debugPrint(
+            '[OfflineSyncService] health facilities persist failed: $e',
+          );
+        }
       }
 
       // Mirror Android MetaRepository: use sub-villages nested within

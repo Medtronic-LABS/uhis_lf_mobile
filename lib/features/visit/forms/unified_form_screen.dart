@@ -3066,6 +3066,13 @@ class _SectionCard extends StatelessWidget {
                   ?.displayName ??
               sid;
         }).toList();
+        // Mutual-exclusion "none" options are identified by option id
+        // (Android isNone), not English label prefixes — "Not taking any
+        // treatment" / Bangla culture labels do not start with "none".
+        final noneLabels = effectiveOptions
+            .where((o) => o.id.toLowerCase() == 'none')
+            .map((o) => o.displayName)
+            .toSet();
         return _InlineListSelectField(
           key: Key('unified_form_${def.id}_input'),
           label: def.displayLabel,
@@ -3074,6 +3081,7 @@ class _SectionCard extends StatelessWidget {
           hasError: validationErrors.contains(ref.id),
           options: effectiveOptions.map((o) => o.displayName).toList(),
           selectedValues: displayNames,
+          noneOptionLabels: noneLabels,
           onChanged: (names) {
             final ids = names.map((n) {
               return effectiveOptions
@@ -4628,6 +4636,7 @@ class _InlineListSelectField extends StatelessWidget {
     this.label,
     this.subLabel,
     this.isMandatory = false,
+    this.noneOptionLabels = const {},
   });
 
   final List<String> options;
@@ -4638,17 +4647,16 @@ class _InlineListSelectField extends StatelessWidget {
   final String? subLabel;
   final bool isMandatory;
 
+  /// Display labels for options with id `none` (locale-aware). Preferred over
+  /// English string heuristics so "Not taking any treatment" / Bangla work.
+  final Set<String> noneOptionLabels;
+
   static const _noneKey = 'none';
 
-  String? get _noneOption =>
-      options.cast<String?>().firstWhere(
-            (o) => o!.toLowerCase().startsWith(_noneKey),
-            orElse: () => null,
-          );
-
   bool _isNone(String opt) {
+    if (noneOptionLabels.contains(opt)) return true;
     final lower = opt.toLowerCase();
-    // "None", "none", and Android's "Not taking any treatment".
+    // Fallback when [noneOptionLabels] is empty (e.g. newborn cause list).
     return lower == _noneKey ||
         lower.startsWith('$_noneKey ') ||
         lower.contains('not taking any treatment');
@@ -4661,11 +4669,11 @@ class _InlineListSelectField extends StatelessWidget {
       onChanged(current.contains(option) ? [] : [option]);
       return;
     }
-    // Selecting any real option clears "None" if it was active.
+    // Selecting any real option clears every "none"-class selection.
     if (current.contains(option)) {
       current.remove(option);
     } else {
-      current.remove(_noneOption);
+      current.removeWhere(_isNone);
       current.add(option);
     }
     onChanged(current);
