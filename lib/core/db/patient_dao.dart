@@ -103,6 +103,10 @@ class PatientDao {
   /// diverge for exactly those members, and a plain [byId] misses them. Tries
   /// `patients.id`, then the server id in `patients.patient_id`, then bridges
   /// through `members` to recover the local PK.
+  ///
+  /// Neonates registered at pregnancy outcome often exist in `members` before
+  /// (or without) a `patients` row after a partial sync — when a member is
+  /// found but the patient row is missing, this self-heals by bridging.
   Future<Patient?> byAnyId(String id) async {
     if (id.isEmpty) return null;
 
@@ -120,13 +124,27 @@ class PatientDao {
       return Patient.fromDb(byServerId.first);
     }
 
+    // Direct members.id (household chips / Start Visit often pass this).
+    final byMemberPk = await _db.db.query(
+      AppDatabase.tableMembers,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (byMemberPk.length == 1) {
+      final healed = await _ensurePatientFromMemberRow(byMemberPk.first);
+      if (healed != null) {
+        debugPrint('[PatientDao] byAnyId: "$id" resolved via members.id');
+        return healed;
+      }
+    }
+
     // Probed one column at a time, most-specific first: a single OR query
     // could match a different member on a lower-priority column and silently
     // open the wrong patient's visit.
     for (final column in const ['patient_id', 'fhir_id', 'reference_id']) {
       final memberRows = await _db.db.query(
         AppDatabase.tableMembers,
-        columns: ['id'],
         where: '$column = ?',
         whereArgs: [id],
         limit: 2,
@@ -135,17 +153,70 @@ class PatientDao {
       if (memberRows.length != 1) continue;
 
       final localId = memberRows.first['id']?.toString();
-      if (localId == null || localId.isEmpty || localId == id) continue;
+      if (localId == null || localId.isEmpty) continue;
 
-      final bridged = await byId(localId);
-      if (bridged != null) {
+      final existing = await byId(localId);
+      if (existing != null) {
         debugPrint(
           '[PatientDao] byAnyId: "$id" resolved via members.$column → $localId',
         );
-        return bridged;
+        return existing;
+      }
+
+      final healed = await _ensurePatientFromMemberRow(memberRows.first);
+      if (healed != null) {
+        debugPrint(
+          '[PatientDao] byAnyId: "$id" healed patients row via members.$column → $localId',
+        );
+        return healed;
       }
     }
     return null;
+  }
+
+  /// Upserts a minimal [Patient] from a `members` row when the bridge is missing.
+  Future<Patient?> _ensurePatientFromMemberRow(Map<String, dynamic> row) async {
+    final localId = row['id']?.toString();
+    if (localId == null || localId.isEmpty) return null;
+
+    final existing = await byId(localId);
+    if (existing != null) return existing;
+
+    int? ageYears;
+    final dob = row['dob'] as String?;
+    if (dob != null && dob.isNotEmpty) {
+      final parsed = DateTime.tryParse(dob);
+      if (parsed != null) {
+        final now = DateTime.now();
+        ageYears = now.year - parsed.year;
+        if (now.month < parsed.month ||
+            (now.month == parsed.month && now.day < parsed.day)) {
+          ageYears--;
+        }
+        if (ageYears < 0) ageYears = 0;
+      }
+    }
+
+    final patient = Patient(
+      id: localId,
+      patientId: (row['fhir_id'] as String?) ?? (row['patient_id'] as String?),
+      name: row['name'] as String?,
+      gender: row['gender'] as String?,
+      dob: dob,
+      phone: row['phone'] as String?,
+      nationalId: row['national_id'] as String?,
+      householdId: row['household_id']?.toString(),
+      villageId: (row['sub_village_id'] as String?) ??
+          (row['village_id'] as String?),
+      villageName: (row['sub_village_name'] as String?) ??
+          (row['village_name'] as String?),
+      isActive: (row['is_active'] as int?) != 0,
+      updatedAt: row['updated_at'] as int?,
+      rawJson: (row['raw_json'] as String?) ?? '{}',
+      age: ageYears,
+    );
+    await upsertMany([patient]);
+    return patient;
   }
 
   Future<List<Patient>> allForVillages(List<String> villageIds) async {

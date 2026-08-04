@@ -92,6 +92,12 @@ enum Programme {
       case 'DM':
       case 'DIABETES_MELLITUS':
       case 'CVD':
+      // UHIS assessment-history serviceProvided for NCD follow-up visits.
+      // medicalReview == ncdmedicalreview (Android MenuConstants).
+      case 'NCDMEDICALREVIEW':
+      case 'NCD_MEDICAL_REVIEW':
+      case 'MEDICALREVIEW':
+      case 'MEDICAL_REVIEW':
         return Programme.ncd;
       case 'TB':
       case 'TUBERCULOSIS':
