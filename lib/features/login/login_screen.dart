@@ -81,17 +81,17 @@ class _LoginScreenState extends State<LoginScreen> {
         debugPrint(
           '[_LoginScreenState] new user → background sync + /onboarding',
         );
-        context
-            .read<OfflineSyncService>()
-            .coldSync(wipeBeforeSync: true)
-            .ignore();
+        _startBackgroundColdSync(context);
         context.go('/onboarding');
       } else if (!auth.pinEnabled && !auth.biometricEnabled) {
         // Returning user with no security enrolled (e.g. pre-PIN-mandate accounts).
         // Re-enter onboarding so user sees the "Set up security / Skip" choice.
+        // Same background head start as the new-user branch above — this
+        // path also lands on mandatory PIN setup, so it should benefit too.
         debugPrint(
-          '[_LoginScreenState] returning user, no security → /onboarding',
+          '[_LoginScreenState] returning user, no security → background sync + /onboarding',
         );
+        _startBackgroundColdSync(context);
         context.go('/onboarding');
       } else {
         // Returning user with PIN or biometric — go to sync screen as normal.
@@ -136,6 +136,25 @@ class _LoginScreenState extends State<LoginScreen> {
         ).showSnackBar(SnackBar(content: Text(msg)));
       }
     }
+  }
+
+  /// Fire-and-forget cold sync started right after login so data arrives
+  /// while the user completes onboarding/PIN setup. Deliberately not awaited
+  /// by callers — `SyncProgressScreen` attaches to this in-flight/completed
+  /// sync instead of restarting it (see sync_progress_screen.dart). Logs the
+  /// outcome since the caller can't observe it directly.
+  void _startBackgroundColdSync(BuildContext context) {
+    context.read<OfflineSyncService>().coldSync(wipeBeforeSync: true).then((
+      report,
+    ) {
+      debugPrint(
+        '[_LoginScreenState] background coldSync done: '
+        'households=${report.households} members=${report.members} '
+        'patients=${report.patients} errors=${report.errors}',
+      );
+    }).catchError((Object e) {
+      debugPrint('[_LoginScreenState] background coldSync failed: $e');
+    });
   }
 
   @override

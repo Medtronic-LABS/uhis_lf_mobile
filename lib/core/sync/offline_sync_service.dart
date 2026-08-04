@@ -203,25 +203,30 @@ class OfflineSyncService extends ChangeNotifier {
       // most authoritative scope (shasthyaShebikas[].subVillages) to avoid
       // over-broad bundles. Two paths:
       //
-      // P1 fast-path: if UserHierarchyService has already fetched static-data
-      // (e.g. it ran prefetch() during login), reuse the cached ids already
-      // persisted to AuthRepository — no second HTTP call.
+      // P1 fast-path: if UserHierarchyService has already fetched static-data,
+      // or has one in flight (e.g. login_screen.dart fires prefetch() and
+      // coldSync() in the same tick after login), await/reuse it — prefetch()
+      // is single-flight internally, so this never fires a second, concurrent
+      // static-data call even when the fetch it started moments earlier
+      // hasn't resolved yet.
       //
       // Fallback: call _fetchAndSaveVillageIds() ourselves so that a cold
-      // OfflineSyncService start (no UserHierarchyService, or hierarchy not
-      // yet fetched) still gets the authoritative ids.
+      // OfflineSyncService start (no UserHierarchyService reference at all)
+      // still gets the authoritative ids.
       // reloginSync() forces this true even on a delta pull — a relogin gap
       // is exactly when a server-side village reassignment is most plausible,
       // so warmSync's cheaper "just reuse the cached list" isn't safe there.
       final resolveVillageIds = refreshVillageIds ?? fullSync;
       var villageIds = <int>[];
       if (resolveVillageIds) {
-        final hierarchyReady = _hierarchy?.ssWorkers != null;
-        if (hierarchyReady) {
+        if (_hierarchy != null) {
+          if (_hierarchy.ssWorkers == null) {
+            await _hierarchy.prefetch();
+          }
           villageIds = await _auth.villageIds();
           debugPrint(
             '[OfflineSyncService] P1: reusing hierarchy cache — '
-            '${villageIds.length} village IDs, no 2nd user-data call',
+            '${villageIds.length} village IDs, no independent user-data call',
           );
         } else {
           villageIds = await _fetchAndSaveVillageIds();
