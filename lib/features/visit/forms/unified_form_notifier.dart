@@ -118,8 +118,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// server didn't supply one). Keyed by fieldId, AI-filled fields only.
   final Map<String, String?> _fieldSourceSegments = {};
 
-  /// When true, height was taken from a prior NCD/Cataract visit and must not
-  /// be edited — mirrors Spice `view.isEnabled = false` after prefill.
+  /// When true, height was taken from a prior visit and must not be edited /
+  /// re-shown — mirrors Spice readonly prefill; Flutter also hides the field.
   bool _heightLockedFromPrior = false;
 
   /// Field library, supplied by the form screen once `field_library.json` is
@@ -215,19 +215,25 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   /// Returns the most-recent weight (kg) recorded for this patient from ANY
   /// prior visit, or `null` when no prior weight exists.
-  Future<double?> lastRecordedWeight() async =>
-      _assessmentRepo.lastRecordedWeight(
-        _patientId,
-        alsoId: await _localPatientId(),
-      );
+  Future<double?> lastRecordedWeight() async {
+    final aliases = await _patientAliasIds();
+    return _assessmentRepo.lastRecordedWeight(
+      _patientId,
+      extraIds: aliases,
+      memberId: _memberId,
+    );
+  }
 
   /// Returns the most-recent height (cm) recorded for this patient from ANY
   /// prior visit, or `null` when no prior height exists.
-  Future<double?> lastRecordedHeight() async =>
-      _assessmentRepo.lastRecordedHeight(
-        _patientId,
-        alsoId: await _localPatientId(),
-      );
+  Future<double?> lastRecordedHeight() async {
+    final aliases = await _patientAliasIds();
+    return _assessmentRepo.lastRecordedHeight(
+      _patientId,
+      extraIds: aliases,
+      memberId: _memberId,
+    );
+  }
 
   /// Pre-seeds height and weight from the patient's most-recent prior ANC,
   /// NCD, or Cataract assessment when those fields are not yet filled in this
@@ -236,16 +242,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// non-empty value for each field).
   ///
   /// When a prior height exists, the field is hard-locked (and hidden on
-  /// NCD/cataract like ANC visit 2+) even if a draft already held the value.
+  /// NCD/cataract/ANC) even if a draft already held the value.
   Future<void> preloadBiometrics() async {
     var changed = false;
-    final alsoId = await _localPatientId();
+    final aliases = await _patientAliasIds();
     final priorHeight = await _assessmentRepo.lastRecordedHeight(
       _patientId,
-      alsoId: alsoId,
+      extraIds: aliases,
+      memberId: _memberId,
     );
     if (priorHeight != null) {
-      if (_data.getValue('height') == null) {
+      if (_isBlankField(_data.getValue('height'))) {
         _data = _data.setValue('height', priorHeight);
         changed = true;
       }
@@ -254,10 +261,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
         changed = true;
       }
     }
-    if (_data.getValue('weight') == null) {
+    if (_isBlankField(_data.getValue('weight'))) {
       final w = await _assessmentRepo.lastRecordedWeight(
         _patientId,
-        alsoId: alsoId,
+        extraIds: aliases,
+        memberId: _memberId,
       );
       if (w != null) {
         _data = _data.setValue('weight', w);
@@ -268,6 +276,30 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _recomputeBmi();
       notifyListeners();
     }
+  }
+
+  /// Local PK + server patient id + member id — assessments / history may be
+  /// keyed by any of these depending on sync path.
+  Future<List<String>> _patientAliasIds() async {
+    final ids = <String>{};
+    if (_patientId.isNotEmpty) ids.add(_patientId);
+    final memberId = _memberId?.trim();
+    if (memberId != null && memberId.isNotEmpty) ids.add(memberId);
+    try {
+      final patient = await _patientDao.byAnyId(_patientId);
+      if (patient != null) {
+        if (patient.id.isNotEmpty) ids.add(patient.id);
+        final serverId = patient.patientId?.trim();
+        if (serverId != null && serverId.isNotEmpty) ids.add(serverId);
+      }
+    } catch (_) {}
+    return ids.toList(growable: false);
+  }
+
+  static bool _isBlankField(dynamic value) {
+    if (value == null) return true;
+    if (value is String && value.trim().isEmpty) return true;
+    return false;
   }
 
   /// Pre-fills `pregnantWomanExistingIllness` and `pregnantWomanOnTreatment`

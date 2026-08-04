@@ -849,6 +849,46 @@ void main() {
         isFalse,
       );
     });
+
+    test('prior height hides on ANC visit 1 / NCD', () {
+      final height = _fieldDef('height', {
+        'label': 'Height',
+        'visibility': 'visible',
+      });
+      // ANC visit 1 without prior height still shows.
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: height,
+          data: const CanonicalVisitData(),
+          rulesByTargetId: const {},
+          formType: 'anc',
+          ancVisitNumber: 1,
+        ),
+        isTrue,
+      );
+      // Prior NCD/ANC height → hide even on ANC visit 1.
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: height,
+          data: const CanonicalVisitData(),
+          rulesByTargetId: const {},
+          formType: 'anc',
+          ancVisitNumber: 1,
+          priorHeightLocked: true,
+        ),
+        isFalse,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: height,
+          data: const CanonicalVisitData(),
+          rulesByTargetId: const {},
+          formType: 'ncd',
+          priorHeightLocked: true,
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('pregnantWomanOnTreatment (Android illness-gated)', () {

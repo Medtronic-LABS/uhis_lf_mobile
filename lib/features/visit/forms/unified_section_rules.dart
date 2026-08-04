@@ -554,17 +554,19 @@ abstract final class FieldVisibilityRules {
   ///    interpreted here.
   /// 5. ANC gestational-age / visit-number gates — only when [formType] is
   ///    `anc`.
-  /// 6. NCD/cataract height — hidden when a prior height was prefilled/locked
-  ///    (same UX as ANC visit 2+; value stays in data for BMI / payload).
+  /// 6. Adult height — hidden when a prior height was prefilled/locked
+  ///    (NCD/cataract/ANC; value stays in data for BMI / payload).
   /// 7. The field's own declared base `visibility` ("visible"/"gone").
   ///
   /// [gestationalWeeks] — current GA from LMP/snapshot; null when unknown.
   /// [ancVisitNumber] — 1-based ANC visit count; null treated as visit 1 for
   /// BMI / previous-pregnancy-complications / height gates. Height is visit-1
-  /// only (Spice AssessmentRMNCHFragment); the form still renders weight in
-  /// the height+weight pair shell when height is hidden.
+  /// only when no prior height is locked (Spice AssessmentRMNCHFragment); the
+  /// form still renders weight in the height+weight pair shell when height is
+  /// hidden.
   /// [priorHeightLocked] — true when height was seeded from a prior visit and
-  /// must not be re-entered (NCD/cataract hide the field; ANC uses visit #).
+  /// must not be re-entered; hides the field on programmes that collect
+  /// height (NCD, cataract, ANC). PNC mother has no height field.
   /// [formType] — owning programme layout key (e.g. `ncd`, `anc`).
   static bool isFieldVisible({
     required FieldDef field,
@@ -625,6 +627,14 @@ abstract final class FieldVisibilityRules {
       return place == 'home' && mode != 'cesareanSection';
     }
 
+    // Prior adult height wins over ANC visit-1 show: once NCD/ANC/etc. already
+    // recorded height, keep the weight-only pair shell (value stays in data).
+    if (field.id == 'height' &&
+        priorHeightLocked &&
+        _adultHeightHideOnPriorFormTypes.contains(formType)) {
+      return false;
+    }
+
     final rules = rulesByTargetId[field.id];
     if (rules != null && rules.isNotEmpty) {
       for (final rule in rules) {
@@ -662,16 +672,16 @@ abstract final class FieldVisibilityRules {
       if (ancGate != null) return ancGate;
     }
 
-    // NCD / cataract: hide height once a prior value is locked — same weight-
-    // only pair shell as ANC visit 2+. Weight stays visible and editable.
-    if (field.id == 'height' &&
-        priorHeightLocked &&
-        (formType == 'ncd' || formType == 'cataract')) {
-      return false;
-    }
-
     return field.visibility != 'gone';
   }
+
+  /// Programmes that collect adult height and should hide the field once a
+  /// prior value is locked (prefilled from NCD / ANC / Cataract history).
+  static const Set<String> _adultHeightHideOnPriorFormTypes = {
+    'ncd',
+    'cataract',
+    'anc',
+  };
 
   /// Fields Spice reveals only when `ncdServiceProvided == yes` on cataract.
   static const Set<String> _cataractNcdYesFieldIds = {
@@ -862,8 +872,9 @@ abstract final class FieldVisibilityRules {
       case 'previousPregnancyComplications':
         return visit == 1 && gravida > 1;
 
-      // Spice AssessmentRMNCHFragment: height only on ANC visit 1. Visit 2+
-      // hides the field; the Flutter pair card still renders weight alone.
+      // Spice AssessmentRMNCHFragment: height only on ANC visit 1 when no
+      // prior height is locked (priorHeightLocked is applied earlier). Visit
+      // 2+ hides the field; the Flutter pair card still renders weight alone.
       case 'height':
         return visit == 1;
 

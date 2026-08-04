@@ -656,10 +656,16 @@ class AssessmentRepository extends ChangeNotifier {
   /// (usually `members.patient_id`), while sync files `assessments` under the
   /// local member PK — see [MemberDao.patientIdsByMemberIds]. Reading only one
   /// of them hides half the patient's ANC history.
-  static List<String> _idsFor(String patientId, String? alsoId) =>
-      <String>{patientId, if (alsoId != null) alsoId}
-          .where((id) => id.isNotEmpty)
-          .toList(growable: false);
+  static List<String> _idsFor(
+    String patientId,
+    String? alsoId, {
+    Iterable<String>? extraIds,
+  }) =>
+      <String>{
+        patientId,
+        if (alsoId != null) alsoId,
+        ...?extraIds,
+      }.where((id) => id.isNotEmpty).toList(growable: false);
 
   /// Local rows across [ids], newest-first and de-duplicated by row id.
   Future<List<LocalAssessmentEntity>> _localRows(List<String> ids) async {
@@ -736,16 +742,21 @@ class AssessmentRepository extends ChangeNotifier {
   /// Most-recent weight (kg) for [patientId] from any prior ANC, NCD, or
   /// Cataract assessment (local unsynced rows first, then synced history).
   ///
-  /// Pass [alsoId] when the caller's screen id and the local member PK differ
-  /// — same dual-key rule as [ancVitalsHistory] / [priorAncVisitCount].
+  /// Pass [alsoId] / [extraIds] when the caller's screen id, local member PK,
+  /// and server `members.patient_id` differ — same multi-key rule as
+  /// [ancVitalsHistory] / [priorAncVisitCount].
   Future<double?> lastRecordedWeight(
     String patientId, {
     String? alsoId,
+    Iterable<String>? extraIds,
+    String? memberId,
   }) async {
     return _lastRecordedBiometric(
       patientId,
       _BiometricKind.weight,
       alsoId: alsoId,
+      extraIds: extraIds,
+      memberId: memberId,
     );
   }
 
@@ -754,11 +765,15 @@ class AssessmentRepository extends ChangeNotifier {
   Future<double?> lastRecordedHeight(
     String patientId, {
     String? alsoId,
+    Iterable<String>? extraIds,
+    String? memberId,
   }) async {
     return _lastRecordedBiometric(
       patientId,
       _BiometricKind.height,
       alsoId: alsoId,
+      extraIds: extraIds,
+      memberId: memberId,
     );
   }
 
@@ -766,21 +781,37 @@ class AssessmentRepository extends ChangeNotifier {
     String patientId,
     _BiometricKind kind, {
     String? alsoId,
+    Iterable<String>? extraIds,
+    String? memberId,
   }) async {
-    final ids = _idsFor(patientId, alsoId);
-    if (ids.isEmpty) return null;
+    final ids = _idsFor(patientId, alsoId, extraIds: extraIds);
+    if (ids.isEmpty && (memberId == null || memberId.isEmpty)) return null;
 
     // 1. Local rows (newest first) — includes unsynced visits not yet in
     //    history. Height and weight are resolved independently (most recent
     //    non-empty value for each field across ANC / NCD / Cataract).
-    final localRows = await _localRows(ids);
-    for (final row in localRows) {
-      if (!_isBiometricSourceLocalType(row.assessmentType)) continue;
-      final v = _biometricFromLocalDetails(row.assessmentDetails, kind);
-      if (v != null) return v;
+    final seenLocal = <String>{};
+    if (ids.isNotEmpty) {
+      for (final row in await _localRows(ids)) {
+        if (!seenLocal.add(row.id)) continue;
+        if (!_isBiometricSourceLocalType(row.assessmentType)) continue;
+        final v = _biometricFromLocalDetails(row.assessmentDetails, kind);
+        if (v != null) return v;
+      }
+    }
+    // Assessments are sometimes keyed only by member FHIR id when patient_id
+    // was unresolved at save time.
+    if (memberId != null && memberId.isNotEmpty) {
+      for (final row in await _dao.getByMemberId(memberId)) {
+        if (!seenLocal.add(row.id)) continue;
+        if (!_isBiometricSourceLocalType(row.assessmentType)) continue;
+        final v = _biometricFromLocalDetails(row.assessmentDetails, kind);
+        if (v != null) return v;
+      }
     }
 
     // 2. Synced history — same programme types, newest first.
+    if (ids.isEmpty) return null;
     final historyRows = List<AssessmentRow>.from(await _historyRows(ids))
       ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
     for (final row in historyRows) {
@@ -821,29 +852,7 @@ class AssessmentRepository extends ChangeNotifier {
     } catch (_) {
       return null;
     }
-    final key = kind == _BiometricKind.height ? 'height' : 'weight';
-    final anc = map['anc'];
-    final ancMedHx = anc is Map ? anc['medicalHistoryPhysicalExamination'] : null;
-    final candidates = <dynamic>[
-      map[key],
-      if (map['biometric'] is Map) (map['biometric'] as Map)[key],
-      if (map['bpLog'] is Map) (map['bpLog'] as Map)[key],
-      if (map['ncd'] is Map) ...[
-        (map['ncd'] as Map)[key],
-        if ((map['ncd'] as Map)['biometric'] is Map)
-          ((map['ncd'] as Map)['biometric'] as Map)[key],
-        if ((map['ncd'] as Map)['bpLog'] is Map)
-          ((map['ncd'] as Map)['bpLog'] as Map)[key],
-      ],
-      if (map['medicalHistoryPhysicalExamination'] is Map)
-        (map['medicalHistoryPhysicalExamination'] as Map)[key],
-      if (ancMedHx is Map) ancMedHx[key],
-    ];
-    for (final raw in candidates) {
-      final v = _positiveDouble(raw);
-      if (v != null) return v;
-    }
-    return null;
+    return _biometricFromMap(map, kind);
   }
 
   /// Height/weight from a synced assessments.raw_json row (observations.*,
@@ -858,39 +867,74 @@ class AssessmentRepository extends ChangeNotifier {
     } catch (_) {
       return null;
     }
-    final key = kind == _BiometricKind.height ? 'height' : 'weight';
+    // Flat observations.height (Android MemberAssessmentObservations) first.
     final obs = raw['observations'];
+    if (obs is Map) {
+      final fromObs = _biometricFromMap(Map<String, dynamic>.from(obs), kind);
+      if (fromObs != null) return fromObs;
+    }
+    final fromRoot = _biometricFromMap(raw, kind);
+    if (fromRoot != null) return fromRoot;
+    // Flutter NCD wire / history DTO nests biometric under assessmentDetails
+    // (and often assessmentDetails.ncd.biometric) — previously missed here.
     final details = raw['assessmentDetails'];
-    final medHx = raw['medicalHistoryPhysicalExamination'];
-    final detailsMedHx = details is Map
-        ? details['medicalHistoryPhysicalExamination']
-        : null;
-    final anc = raw['anc'] is Map
-        ? raw['anc'] as Map
-        : (details is Map && details['anc'] is Map)
-            ? details['anc'] as Map
-            : null;
-    final ancMedHx =
-        anc != null ? anc['medicalHistoryPhysicalExamination'] : null;
+    if (details is Map) {
+      final fromDetails =
+          _biometricFromMap(Map<String, dynamic>.from(details), kind);
+      if (fromDetails != null) return fromDetails;
+    }
+    return null;
+  }
+
+  /// Shared height/weight extraction for local details and history JSON maps.
+  @visibleForTesting
+  static double? biometricFromMapForTest(
+    Map<String, dynamic> map,
+    String field, // 'height' | 'weight'
+  ) {
+    final kind =
+        field == 'weight' ? _BiometricKind.weight : _BiometricKind.height;
+    return _biometricFromMap(map, kind);
+  }
+
+  static double? _biometricFromMap(
+    Map<String, dynamic> map,
+    _BiometricKind kind,
+  ) {
+    final key = kind == _BiometricKind.height ? 'height' : 'weight';
+    final anc = map['anc'];
+    final ancMedHx = anc is Map ? anc['medicalHistoryPhysicalExamination'] : null;
+    final details = map['assessmentDetails'];
     final candidates = <dynamic>[
-      if (obs is Map) obs[key],
-      raw[key],
-      if (raw['bpLog'] is Map) (raw['bpLog'] as Map)[key],
-      if (raw['biometric'] is Map) (raw['biometric'] as Map)[key],
-      if (details is Map) details[key],
-      if (medHx is Map) medHx[key],
-      if (detailsMedHx is Map) detailsMedHx[key],
+      map[key],
+      if (map['biometric'] is Map) (map['biometric'] as Map)[key],
+      if (map['bpLog'] is Map) (map['bpLog'] as Map)[key],
+      if (map['ncd'] is Map) ...[
+        (map['ncd'] as Map)[key],
+        if ((map['ncd'] as Map)['biometric'] is Map)
+          ((map['ncd'] as Map)['biometric'] as Map)[key],
+        if ((map['ncd'] as Map)['bpLog'] is Map)
+          ((map['ncd'] as Map)['bpLog'] as Map)[key],
+      ],
+      if (map['medicalHistoryPhysicalExamination'] is Map)
+        (map['medicalHistoryPhysicalExamination'] as Map)[key],
       if (ancMedHx is Map) ancMedHx[key],
-      if (raw['ncd'] is Map) ...[
-        (raw['ncd'] as Map)[key],
-        if ((raw['ncd'] as Map)['biometric'] is Map)
-          ((raw['ncd'] as Map)['biometric'] as Map)[key],
-        if ((raw['ncd'] as Map)['bpLog'] is Map)
-          ((raw['ncd'] as Map)['bpLog'] as Map)[key],
+      // Nested assessmentDetails (history DTO / wrapped wire).
+      if (details is Map) ...[
+        details[key],
+        if (details['biometric'] is Map) (details['biometric'] as Map)[key],
+        if (details['bpLog'] is Map) (details['bpLog'] as Map)[key],
+        if (details['ncd'] is Map) ...[
+          (details['ncd'] as Map)[key],
+          if ((details['ncd'] as Map)['biometric'] is Map)
+            ((details['ncd'] as Map)['biometric'] as Map)[key],
+          if ((details['ncd'] as Map)['bpLog'] is Map)
+            ((details['ncd'] as Map)['bpLog'] as Map)[key],
+        ],
       ],
     ];
-    for (final rawVal in candidates) {
-      final v = _positiveDouble(rawVal);
+    for (final raw in candidates) {
+      final v = _positiveDouble(raw);
       if (v != null) return v;
     }
     return null;
@@ -898,7 +942,15 @@ class AssessmentRepository extends ChangeNotifier {
 
   static double? _positiveDouble(dynamic raw) {
     if (raw == null) return null;
-    final v = raw is num ? raw.toDouble() : double.tryParse(raw.toString().trim());
+    if (raw is num) {
+      final v = raw.toDouble();
+      return v > 0 ? v : null;
+    }
+    var s = raw.toString().trim();
+    if (s.isEmpty) return null;
+    // History observations sometimes include units ("165 cm", "60.5 kg").
+    s = s.replaceAll(RegExp(r'(cm|kg)$', caseSensitive: false), '').trim();
+    final v = double.tryParse(s);
     if (v == null || v <= 0) return null;
     return v;
   }
