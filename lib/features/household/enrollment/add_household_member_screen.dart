@@ -688,6 +688,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         ),
       ]);
       debugPrint('[AddMember] standalone saved localId=$memberLocalId');
+      // Select Household (and other HH cards) read households.member_count —
+      // bump it to the live members-table headcount after each link.
+      final liveCount = await memberDao.countByHousehold(localHhId);
+      await hhDao.setMemberCount(localHhId, liveCount);
       bumpRosterRevision();
 
       // The member is safely on disk, so the save is already done as far as the
