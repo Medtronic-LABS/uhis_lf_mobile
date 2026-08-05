@@ -20,3 +20,9 @@
 -dontwarn com.google.protobuf.Internal$ProtoNonnullApi
 -dontwarn com.google.protobuf.ProtoPresenceBits
 -dontwarn com.google.protobuf.**
+
+# ExoPlayer v2 used by audio_waveforms — not bundled directly, suppress R8 warnings
+-dontwarn com.google.android.exoplayer2.ExoPlayer$Builder
+-dontwarn com.google.android.exoplayer2.ExoPlayer
+-dontwarn com.google.android.exoplayer2.MediaItem
+-dontwarn com.google.android.exoplayer2.Player$Listener

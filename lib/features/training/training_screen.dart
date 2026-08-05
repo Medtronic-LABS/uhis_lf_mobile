@@ -30,7 +30,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
       debugPrint('[MicroCoaching] TrainingScreen: userId=$userId chwId=$chwId');
       final initialized = await MicroCoachingService.isInitialized();
       debugPrint('[MicroCoaching] TrainingScreen: isInitialized=$initialized');
-      await MicroCoachingService.launch(chwId);
+      await MicroCoachingService.launchLearnModule(chwId);
       debugPrint('[MicroCoaching] TrainingScreen: launch returned (user came back from SDK)');
     } catch (e) {
       debugPrint('[MicroCoaching] TrainingScreen: launch error=$e');

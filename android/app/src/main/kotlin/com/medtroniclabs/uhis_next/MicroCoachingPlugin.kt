@@ -123,6 +123,19 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
                 result.success(null)
             }
 
+            "launchLearnModule" -> {
+                val act = activity
+                    ?: return result.error("NO_ACTIVITY", "Activity not attached", null)
+                if (!MicroCoachingSDK.isInitialized())
+                    return result.error("NOT_INITIALIZED", "Call initialize first", null)
+                val chwId = call.argument<String>("chwId")
+                    ?: return result.error("MISSING_ARG", "chwId required", null)
+                Log.d(TAG, "launchLearnModule: chwId=$chwId")
+                MicroCoachingSDK.getInstance().onHomeScreenShown(chwId)
+                CoachingFlowActivity.launchLearnModule(act, chwId = chwId)
+                result.success(null)
+            }
+
             // ── Visit / assessment hooks (mirror spice-coaching-android SDK contract) ──
 
             "onAssessmentSubmitted" -> {

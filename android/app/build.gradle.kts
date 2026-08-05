@@ -125,3 +125,9 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }
+
+// audio_waveforms pulls com.google.android.exoplayer:2.17.1 (ExoPlayer v2) which conflicts
+// with androidx.media3 used by the coaching SDK AAR. Strip it from all configs.
+configurations.all {
+    exclude(group = "com.google.android.exoplayer")
+}

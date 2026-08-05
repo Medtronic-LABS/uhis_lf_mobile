@@ -85,7 +85,7 @@ class _BottomNavShellState extends State<BottomNavShell>
           hfToken: AppConfig.hfToken,
         );
       }
-      await MicroCoachingService.launch(chwId);
+      await MicroCoachingService.launchLearnModule(chwId);
     } catch (e) {
       if (!mounted) return;
       // ignore: use_build_context_synchronously

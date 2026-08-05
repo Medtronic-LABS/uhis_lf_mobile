@@ -45,7 +45,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
           hfToken: AppConfig.hfToken,
         );
       }
-      await MicroCoachingService.launch(chwId);
+      await MicroCoachingService.launchLearnModule(chwId);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {

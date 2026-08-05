@@ -36,6 +36,14 @@ class MicroCoachingService {
     debugPrint('[MicroCoaching] launch ✓');
   }
 
+  /// Launch directly to the module list (bypasses onboarding). Shows the
+  /// Coaching tab (modules + training requests) and Leaderboard tab.
+  static Future<void> launchLearnModule(String chwId) async {
+    debugPrint('[MicroCoaching] launchLearnModule chwId=$chwId');
+    await _channel.invokeMethod('launchLearnModule', {'chwId': chwId});
+    debugPrint('[MicroCoaching] launchLearnModule ✓');
+  }
+
   static Future<bool> isInitialized() async {
     final v = await _channel.invokeMethod<bool>('isInitialized') ?? false;
     debugPrint('[MicroCoaching] isInitialized=$v');
