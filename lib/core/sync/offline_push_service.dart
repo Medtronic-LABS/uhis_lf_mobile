@@ -6,9 +6,11 @@ import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../config/app_config.dart';
+import '../db/follow_up_dao.dart';
 import '../db/household_dao.dart';
 import '../db/local_assessment_dao.dart';
 import '../db/member_dao.dart';
+import '../debug/console_log.dart';
 import '../models/provance_dto.dart';
 import 'sync_activity.dart';
 import '../../features/patient/followup_call_service.dart';
@@ -67,10 +69,14 @@ class _PushPollOutcome {
   const _PushPollOutcome({
     required this.overall,
     required this.assessmentStatus,
+    this.followUpFailed = false,
   });
 
   final _PushPollResult overall;
   final Map<int, String> assessmentStatus;
+
+  /// True when any `FollowUp` entity in this request finished as Failed.
+  final bool followUpFailed;
 }
 
 /// Spice-style Manual Offline Sync: one `offline-sync/create` for all pending
@@ -179,15 +185,25 @@ class OfflinePushService extends ChangeNotifier {
       final userFhirId = await _auth.userFhirId() ?? '';
       final orgId = await _auth.organizationFhirId() ?? '';
       final deviceId = await _auth.deviceId();
+      final profile = await _auth.userProfileSummary();
+      final callerFullName = [
+        profile.firstName?.trim() ?? '',
+        profile.lastName?.trim() ?? '',
+      ].where((s) => s.isNotEmpty).join(' ');
 
       final provenance = ProvanceDto.fromMap({
-        'modifiedDate': DateTime.now().toUtc().toIso8601String(),
+        // Match Android ProvanceDto / Instant.parse-friendly offset datetime.
+        'modifiedDate': toOfflineOffsetDateTime(DateTime.now()),
         'organizationId': orgId,
         'spiceUserId': userId,
         if (userFhirId.isNotEmpty) 'userId': userFhirId else 'userId': '$userId',
         'spiceRole': 'SHASTIYA_KORMI',
       });
       final provenanceJson = provenance.toJson();
+      // Android FollowUp provenance omits spiceRole on create; keep assessments
+      // on the richer provenance, slim the follow-up copy.
+      final followUpProvenance = Map<String, dynamic>.from(provenanceJson)
+        ..remove('spiceRole');
 
       for (final hh in unsyncedHouseholds) {
         final nested = await _members.getUnsyncedForHousehold(
@@ -267,7 +283,11 @@ class OfflinePushService extends ChangeNotifier {
       if (_followUpCalls != null) {
         try {
           final result = await _followUpCalls.serializePendingForPush(
-            provenance: provenanceJson,
+            provenance: followUpProvenance,
+            calledByUserId: '$userId',
+            calledByUserFullName:
+                callerFullName.isNotEmpty ? callerFullName : 'SK $userId',
+            calledByUserRole: 'SHASTIYA_KORMI',
           );
           followUpPayloads = result.wire;
           pushedFollowUpIds = result.ids;
@@ -314,6 +334,11 @@ class OfflinePushService extends ChangeNotifier {
         'hh=${householdPayloads.length} members=${standalonePayloads.length} '
         'assessments=${assessmentPayloads.length} '
         'followUps=${followUpPayloads.length}',
+      );
+      ConsoleLog.json(
+        '[OfflinePush] offline-sync/create payload '
+        '(requestId=$requestId)',
+        request,
       );
 
       try {
@@ -413,6 +438,18 @@ class OfflinePushService extends ChangeNotifier {
         }
       }
 
+      // FollowUp Failed leaves referenceId null — reopen the batch we marked
+      // InProgress on create-accept so Manual Sync can retry.
+      if (outcome.followUpFailed &&
+          pushedFollowUpIds.isNotEmpty &&
+          _followUpCalls != null) {
+        try {
+          await _followUpCalls.markPushFailed(pushedFollowUpIds);
+        } catch (e) {
+          debugPrint('[OfflinePush] follow-up markPushFailed skipped: $e');
+        }
+      }
+
       _progress = 1;
       await refreshCounts();
 
@@ -421,7 +458,9 @@ class OfflinePushService extends ChangeNotifier {
           success: false,
           hadWork: true,
           requestId: requestId,
-          message: 'Sync reported Failed for some records',
+          message: outcome.followUpFailed
+              ? 'Follow-up sync failed — retry Offline Sync'
+              : 'Sync reported Failed for some records',
         );
       }
       if (poll == _PushPollResult.inProgress) {
@@ -462,6 +501,7 @@ class OfflinePushService extends ChangeNotifier {
     Duration delayBetween = const Duration(seconds: 8),
   }) async {
     var sawFailed = false;
+    var followUpFailed = false;
     final assessmentStatus = <int, String>{};
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) await Future<void>.delayed(delayBetween);
@@ -499,7 +539,12 @@ class OfflinePushService extends ChangeNotifier {
             anyInProgress = true;
             continue;
           }
-          if (status == 'Failed') sawFailed = true;
+          if (status == 'Failed') {
+            sawFailed = true;
+            // FollowUp rows often have referenceId:null on failure — still
+            // need to reopen them for retry (create already marked InProgress).
+            if (type == 'FollowUp') followUpFailed = true;
+          }
           if (refId == null || refId.isEmpty) continue;
           if (status != 'Success' && status != 'Failed') continue;
 
@@ -538,6 +583,7 @@ class OfflinePushService extends ChangeNotifier {
             overall:
                 sawFailed ? _PushPollResult.failed : _PushPollResult.success,
             assessmentStatus: assessmentStatus,
+            followUpFailed: followUpFailed,
           );
         }
       } on DioException catch (e) {
@@ -547,6 +593,7 @@ class OfflinePushService extends ChangeNotifier {
     return _PushPollOutcome(
       overall: sawFailed ? _PushPollResult.failed : _PushPollResult.inProgress,
       assessmentStatus: assessmentStatus,
+      followUpFailed: followUpFailed,
     );
   }
 

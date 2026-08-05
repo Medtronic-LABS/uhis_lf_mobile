@@ -14,7 +14,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/household_dao.dart';
-import '../../core/db/patient_dao.dart';
+import '../../core/db/follow_up_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
 import '../../core/debug/console_log.dart';
@@ -24,7 +24,6 @@ import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import '../search/member_search_repository.dart';
 import '../../core/widgets/patient_filter_panel.dart';
-import '../referral/referral_repository.dart';
 import 'widgets/dashboard_search_field.dart';
 import '../visit/assessment_repository.dart';
 import '../visit/visit_controller.dart';
@@ -146,13 +145,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // The bell opens the CCE drawer, so its badge must match the drawer's
       // "N actions needed" (breached + warning), not raw active count.
       final cce = CceRepository(
-        referrals: context.read<ReferralRepository>(),
-        patients: context.read<PatientDao>(),
+        followUps: context.read<FollowUpDao>(),
+        members: context.read<MemberDao>(),
       );
       final alerts = await cce.loadAlerts();
       if (!mounted) return;
       setState(() => _notificationCount = cce.actionsNeededCount(alerts));
     } catch (_) {}
+  }
+
+  /// Open CCE alerts, then re-query the badge so a closed follow-up
+  /// (wrong number / attempts exhausted) is reflected immediately.
+  Future<void> _openCceAlerts() async {
+    await CceAlertsDrawer.show(context);
+    if (!mounted) return;
+    await _refreshNotificationCount();
   }
 
   @override
@@ -473,6 +480,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // refresh() fires _changes once → _onMissionChanges() → _loadMissionData().
     // No explicit call here; that would double-load.
     _reloadStats();
+    await _refreshNotificationCount();
   }
 
   String _greeting() {
@@ -704,7 +712,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               settingsMenu: const _SettingsMenu(),
               notificationCount: _notificationCount,
-              onNotificationTap: () => CceAlertsDrawer.show(context),
+              onNotificationTap: _openCceAlerts,
               searchQuery: _searchQuery,
               onSearchChanged: (q) {
                 _filterState.setSearchQuery(q);
@@ -719,7 +727,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // so it reads as a system-level alert before the worklist.
             _ReferralAlertBanner(
               key: ValueKey('referral_banner_$_refreshVersion'),
-              onTap: () => CceAlertsDrawer.show(context),
+              onTap: _openCceAlerts,
               count: _notificationCount,
             ),
             Expanded(

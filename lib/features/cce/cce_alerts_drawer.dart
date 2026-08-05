@@ -4,33 +4,28 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
-import '../../core/widgets/empty_state_card.dart';
+import '../../core/db/follow_up_dao.dart';
 import '../../core/db/household_dao.dart';
-import '../../core/db/patient_dao.dart';
-import '../referral/referral_repository.dart';
+import '../../core/db/member_dao.dart';
+import '../../core/sync/offline_push_service.dart';
+import '../../core/widgets/empty_state_card.dart';
 import 'cce_alert.dart';
 import 'cce_repository.dart';
 import 'widgets/cce_alert_card.dart';
+import 'widgets/cce_call_result_sheet.dart';
 import 'widgets/cce_journey_strip.dart';
-import 'widgets/cce_update_status_sheet.dart';
 
-/// The Care Coordination Alerts drawer — a full-height sheet listing open
-/// referrals as action-first SLA alerts, sorted worst-first.
-///
-/// Self-contained: it builds its own [CceRepository] from the already-provided
-/// [ReferralRepository] + [PatientDao], so wiring it in is a single call from
-/// the Tasks screen with no provider-tree changes.
+/// CCE drawer — open REFERRED follow-ups from offline fetch only, with
+/// Android SK-style dial → call-result flow.
 class CceAlertsDrawer extends StatefulWidget {
   const CceAlertsDrawer({super.key, required this.repository});
 
   final CceRepository repository;
 
-  /// Open the drawer. Constructs the CCE repository from context, so callers
-  /// only need a [BuildContext] under the app's provider scope.
   static Future<void> show(BuildContext context) {
     final repository = CceRepository(
-      referrals: context.read<ReferralRepository>(),
-      patients: context.read<PatientDao>(),
+      followUps: context.read<FollowUpDao>(),
+      members: context.read<MemberDao>(),
       households: context.read<HouseholdDao>(),
     );
     return showModalBottomSheet<void>(
@@ -45,14 +40,34 @@ class CceAlertsDrawer extends StatefulWidget {
   State<CceAlertsDrawer> createState() => _CceAlertsDrawerState();
 }
 
-class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
+class _CceAlertsDrawerState extends State<CceAlertsDrawer>
+    with WidgetsBindingObserver {
   late Future<List<CceAlert>> _future;
   String _searchQuery = '';
+
+  /// Pending dial context — when the app resumes, show the call-result sheet.
+  CceAlert? _pendingCallAlert;
+  DateTime? _callStartedAt;
+  bool _showingCallResult = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _reload();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _onReturnFromDialer();
+    }
   }
 
   void _reload() {
@@ -65,7 +80,8 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
     return alerts
         .where((a) =>
             a.patientName.toLowerCase().contains(q) ||
-            (a.villageName?.toLowerCase().contains(q) ?? false))
+            (a.villageName?.toLowerCase().contains(q) ?? false) ||
+            (a.programmeLabel?.toLowerCase().contains(q) ?? false))
         .toList();
   }
 
@@ -201,40 +217,77 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
     return CceAlertCard(
       alert: alert,
       journey: CceJourneyStrip(steps: alert.journey),
-      onUpdateStatus: () => _onUpdateStatus(alert),
-      onCall: () => _onCall(alert),
+      onCall: alert.canCall ? () => _onCall(alert) : null,
       onLocate: () => _onLocate(alert),
       onWhatsapp: alert.hasPhone ? () => _onWhatsapp(alert) : null,
     );
   }
 
-  Future<void> _onUpdateStatus(CceAlert alert) async {
-    final saved = await CceUpdateStatusSheet.show(
-      context,
-      alert: alert,
-      repository: widget.repository,
-    );
-    if (!mounted) return;
-    if (saved) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(CceStrings.updateSaved)),
-      );
-      setState(_reload);
-    }
-  }
-
   Future<void> _onCall(CceAlert alert) async {
     final phone = alert.patientPhone;
-    if (phone == null || phone.trim().isEmpty) {
+    if (!alert.canCall || phone == null || phone.trim().isEmpty) {
       _snack(CceStrings.noPhone);
       return;
     }
+    _pendingCallAlert = alert;
+    _callStartedAt = DateTime.now();
     final uri = Uri(scheme: 'tel', path: phone.trim());
     try {
       final ok = await launchUrl(uri);
-      if (!ok && mounted) _snack(CceStrings.dialFailed);
+      if (!ok && mounted) {
+        _pendingCallAlert = null;
+        _snack(CceStrings.dialFailed);
+      }
+      // Some platforms never pause the app for tel:; open the sheet shortly.
+      Future<void>.delayed(const Duration(milliseconds: 800), () {
+        if (!mounted) return;
+        if (_pendingCallAlert?.followUpId == alert.followUpId &&
+            WidgetsBinding.instance.lifecycleState ==
+                AppLifecycleState.resumed) {
+          _onReturnFromDialer();
+        }
+      });
     } catch (_) {
+      _pendingCallAlert = null;
       if (mounted) _snack(CceStrings.dialFailed);
+    }
+  }
+
+  Future<void> _onReturnFromDialer() async {
+    final alert = _pendingCallAlert;
+    if (alert == null || _showingCallResult) return;
+    _showingCallResult = true;
+    _pendingCallAlert = null;
+
+    final started = _callStartedAt;
+    _callStartedAt = null;
+    final durationMinutes = started == null
+        ? null
+        : DateTime.now().difference(started).inSeconds / 60.0;
+
+    if (!mounted) {
+      _showingCallResult = false;
+      return;
+    }
+
+    final saved = await CceCallResultSheet.show(
+      context,
+      alert: alert,
+      durationMinutes: durationMinutes,
+    );
+    _showingCallResult = false;
+    if (!mounted) return;
+
+    if (saved) {
+      _snack(CceStrings.callLogged);
+      widget.repository.notifyChanged();
+      setState(_reload);
+      // Best-effort flush; assessment sync also attaches pending follow-ups.
+      try {
+        final push = context.read<OfflinePushService>();
+        // ignore: unawaited_futures
+        push.pushAll(syncMode: 'ManualSync');
+      } catch (_) {}
     }
   }
 
@@ -255,8 +308,6 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
   }
 
   Future<void> _onLocate(CceAlert alert) async {
-    // Precise pin when the household has coordinates; otherwise fall back to a
-    // name search enriched with the landmark + village + facility.
     final Uri uri;
     if (alert.hasGeo) {
       final lat = alert.latitude!;
