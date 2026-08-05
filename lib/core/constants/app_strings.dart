@@ -3761,7 +3761,7 @@ abstract final class EnrollmentStrings {
   static String get idTypeLabel => getTranslatedString('idTypeLabel', 'ID Type');
 
   static String get mobileNumberLabel => getTranslatedString('mobileNumberLabel', 'Mobile Number');
-  static String get mobileNumberHint => getTranslatedString('mobileNumberHint', '+880 1XXX XXXXXX');
+  static String get mobileNumberHint => getTranslatedString('mobileNumberHint', '01XXXXXXXXX');
   static String get mobileNotAvailableLabel => getTranslatedString('mobileNotAvailableLabel', 'Not Available');
 
   static String get dateOfBirthLabel => getTranslatedString('dateOfBirthLabel', 'Date of Birth');
