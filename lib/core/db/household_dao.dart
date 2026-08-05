@@ -418,6 +418,20 @@ class HouseholdDao {
     );
   }
 
+  /// Keep [member_count] in sync with the local members table after link /
+  /// enroll (Android bumps `noOfPeople` when actual headcount grows).
+  Future<void> setMemberCount(String householdId, int count) async {
+    await _db.db.update(
+      AppDatabase.tableHouseholds,
+      {
+        'member_count': count,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [int.tryParse(householdId) ?? householdId],
+    );
+  }
+
   /// Bulk merge from sync pull — each row goes through [insertOrUpdateFromBE].
   /// Returns map of fhirId → localId for member FK resolution.
   Future<Map<String, String>> upsertManyFromBE(

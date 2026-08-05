@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/household_dao.dart';
+import '../../../core/db/member_dao.dart';
 import '../../../core/theme/app_theme.dart';
 
 /// Screen shown when linking a new member to an existing household.
@@ -56,15 +57,27 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
   Future<void> _loadHouseholds() async {
     debugPrint('[_SelectHouseholdScreenState] _loadHouseholds');
     final dao = context.read<HouseholdDao>();
+    final memberDao = context.read<MemberDao>();
     // The local DB already contains only this SK's assigned households
     // (synced by village scope). Village-ID filtering would use sub-village
     // IDs from auth, which don't match the parent villageId stored on
     // households — so we load all local households and let search filter.
     final hhs = await dao.getAll(limit: 500);
+    // Prefer live members-table counts — households.member_count can lag
+    // after link-member until the next sync rewrite. Keep the stored value
+    // only when the live query finds nobody (id-key mismatch / empty HH).
+    final withLiveCounts = <HouseholdEntity>[];
+    for (final h in hhs) {
+      final live = await memberDao.countByHousehold(h.id);
+      final stored = h.memberCount ?? 0;
+      withLiveCounts.add(
+        h.copyWith(memberCount: live > 0 ? live : stored),
+      );
+    }
     if (mounted) {
       setState(() {
-        _households = hhs;
-        _filtered = hhs;
+        _households = withLiveCounts;
+        _filtered = withLiveCounts;
         _loading = false;
       });
     }
