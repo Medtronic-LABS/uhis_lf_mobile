@@ -5972,8 +5972,8 @@
   "en": "Patient not yet arrived at facility"
  },
  "outcomeSuccessful": {
-  "bn": "পৌঁছানো গেছে — সফল",
-  "en": "Reached — successful"
+  "bn": "সফল",
+  "en": "Successful"
  },
  "outcomeUnsuccessful": {
   "bn": "পৌঁছানো যায়নি",

@@ -1138,7 +1138,7 @@ MANUAL_BANGLA = {
     'Log call': 'কল লগ করুন',
     'Log follow-up call': 'ফলো-আপ কল লগ করুন',
     'How did the call go?': 'কল কেমন হয়েছে?',
-    'Reached — successful': 'পৌঁছানো গেছে — সফল',
+    'Successful': 'সফল',
     'Could not reach': 'পৌঁছানো যায়নি',
     'Wrong number': 'ভুল নম্বর',
     'Note (optional)': 'নোট (ঐচ্ছিক)',

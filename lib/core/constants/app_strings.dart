@@ -4275,6 +4275,27 @@ abstract final class CceStrings {
   static String get updateCancel => getTranslatedString('updateCancel', 'Cancel');
   static String get updateOtherHint => getTranslatedString('updateOtherHint', 'Describe what happened…');
   static String get updateOtherRequired => getTranslatedString('updateOtherRequired', 'Please add a note before saving');
+
+  // ── Referred call result (SK parity) ─────────────────────────────────────
+  static String get callResultTitle =>
+      getTranslatedString('Cce.callResultTitle', 'Call result');
+  static String get callResultPrompt =>
+      getTranslatedString('Cce.callResultPrompt', 'How did the call go?');
+  static String get willingToVisitUhc =>
+      getTranslatedString('Cce.willingToVisitUhc', 'Willing to visit UHC?');
+  static String get willingYes =>
+      getTranslatedString('Cce.willingYes', 'Yes');
+  static String get willingNo => getTranslatedString('Cce.willingNo', 'No');
+  static String get notWillingReason =>
+      getTranslatedString('Cce.notWillingReason', 'Reason for not visiting');
+  static String get otherReasonHint =>
+      getTranslatedString('Cce.otherReasonHint', 'Describe the reason…');
+  static String get callResultSubmit =>
+      getTranslatedString('Cce.callResultSubmit', 'Submit');
+  static String get callLogged => getTranslatedString(
+        'Cce.callLogged',
+        'Call logged — will sync on next cycle',
+      );
 }
 
 /// Follow-up call logging — the device-side close/update flow.
@@ -4284,7 +4305,7 @@ abstract final class FollowUpCallStrings {
   static String get logCall => getTranslatedString('logCall', 'Log call');
   static String get sheetTitle => getTranslatedString('FollowUpCall.sheetTitle', 'Log follow-up call');
   static String get outcomePrompt => getTranslatedString('outcomePrompt', 'How did the call go?');
-  static String get outcomeSuccessful => getTranslatedString('outcomeSuccessful', 'Reached — successful');
+  static String get outcomeSuccessful => getTranslatedString('outcomeSuccessful', 'Successful');
   static String get outcomeUnsuccessful => getTranslatedString('outcomeUnsuccessful', 'Could not reach');
   static String get outcomeWrongNumber => getTranslatedString('outcomeWrongNumber', 'Wrong number');
   static String get reasonLabel => getTranslatedString('reasonLabel', 'Note (optional)');

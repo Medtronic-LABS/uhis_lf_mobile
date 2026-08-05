@@ -14,6 +14,7 @@ library;
 
 import 'dart:convert';
 
+import '../../core/db/follow_up_dao.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/referral.dart';
 import '../../core/models/sla.dart';
@@ -80,6 +81,12 @@ class CceAlert {
     this.longitude,
     this.landmark,
     this.followUpDate,
+    this.followUpId,
+    this.backendId,
+    this.attempts = 0,
+    this.remainingAttempts,
+    this.programmeLabel,
+    this.isWrongNumber = false,
   });
 
   final String referralId;
@@ -124,7 +131,26 @@ class CceAlert {
   /// Priority score carried through for stable secondary sort.
   final int priorityScore;
 
-  bool get hasPhone => patientPhone != null && patientPhone!.trim().isNotEmpty;
+  /// Local follow-up row id when this alert is backed by a fetch CallRegister.
+  final String? followUpId;
+
+  /// Server CallRegister id — required for call logging + sync.
+  final int? backendId;
+
+  final int attempts;
+  final int? remainingAttempts;
+  final String? programmeLabel;
+  final bool isWrongNumber;
+
+  bool get hasPhone {
+    final p = patientPhone?.trim() ?? '';
+    if (p.isEmpty || p == '0') return false;
+    return !isWrongNumber;
+  }
+
+  /// Call is allowed only for open fetched follow-ups with a valid number.
+  bool get canCall =>
+      followUpId != null && backendId != null && hasPhone && !isWrongNumber;
 
   /// Short label rendered inside the donut ring: "+4d" (breached), "4h"
   /// (warning with countdown), "!" (warning with no countdown), empty for
@@ -146,6 +172,127 @@ class CceAlert {
   /// Formatted follow-up date string (e.g. "27 May") if a follow-up is
   /// scheduled after discharge. Null when not applicable or not yet populated.
   final String? followUpDate;
+
+  /// Derive a [CceAlert] from a fetched REFERRED [FollowUpRow].
+  factory CceAlert.fromFollowUp(
+    FollowUpRow fu, {
+    Patient? patient,
+    double? latitude,
+    double? longitude,
+    String? landmark,
+    required DateTime now,
+    int retryAttempts = 3,
+  }) {
+    final raw = _decodeMap(fu.rawJson);
+    final programme = _programmeLabel(raw);
+    final reason = _firstString(raw, const [
+          'reason',
+          'referredReasons',
+          'referralReason',
+        ]) ??
+        programme ??
+        _CceCopy.referralReasonFallback;
+    final facility = _firstString(raw, const [
+      'referredSiteName',
+      'facilityName',
+      'referredTo',
+      'referredSite',
+    ]);
+    final attempts = fu.attempts ?? 0;
+    final remaining = (retryAttempts - attempts).clamp(1, retryAttempts);
+    final createdMs = _parseDateMs(raw['encounterDate']) ??
+        fu.updatedAt ??
+        now.millisecondsSinceEpoch;
+    final ageDays =
+        now.difference(DateTime.fromMillisecondsSinceEpoch(createdMs)).inDays;
+
+    final CceSeverity severity;
+    if (fu.isCompleted || fu.isLost) {
+      severity = CceSeverity.completed;
+    } else if (remaining <= 1 || ageDays >= 7) {
+      severity = CceSeverity.breached;
+    } else if (remaining <= 2 || ageDays >= 3) {
+      severity = CceSeverity.warning;
+    } else {
+      severity = CceSeverity.onTrack;
+    }
+
+    final date = _dateShort(createdMs);
+    final phone = patient?.phone;
+    final validPhone = phone != null &&
+        phone.trim().isNotEmpty &&
+        phone.trim() != '0' &&
+        !fu.isLost;
+
+    // Prefer identity resolved via members.fhir_id (patient.id); fall back to
+    // follow-up patientId / memberId from the wire payload.
+    final resolvedPatientId = patient?.id ??
+        _firstString(raw, const ['memberId', 'householdMemberId']) ??
+        fu.patientId;
+
+    return CceAlert(
+      referralId: fu.id,
+      followUpId: fu.id,
+      backendId: fu.backendId,
+      patientId: resolvedPatientId,
+      patientName: patient?.name?.trim().isNotEmpty == true
+          ? patient!.name!.trim()
+          : _CceCopy.unknownPatient,
+      patientAge: patient?.age,
+      patientGender: patient?.gender,
+      patientPhone: validPhone ? phone : patient?.phone,
+      villageName: patient?.villageName ??
+          _firstString(raw, const ['villageName', 'village']),
+      facilityName: facility,
+      latitude: latitude,
+      longitude: longitude,
+      landmark: landmark,
+      severity: severity,
+      slaBadge: severity == CceSeverity.breached
+          ? _CceCopy.breachBadge('${ageDays}d')
+          : (severity == CceSeverity.warning
+              ? _CceCopy.attentionBadge
+              : (severity == CceSeverity.completed
+                  ? _CceCopy.completedBadge
+                  : _CceCopy.onTrackBadge)),
+      referredMeta: _CceCopy.referredMeta(date, facility, reason),
+      statusLine: fu.isLost
+          ? 'Wrong number · closed'
+          : '$attempts of $retryAttempts calls · $remaining left',
+      intelTags: [
+        if (programme != null) programme,
+        if (remaining <= 1) 'Last attempt',
+      ],
+      journey: [
+        CceJourneyStep(
+          label: _CceCopy.stepSkVisit,
+          sublabel: date,
+          state: CceStepState.done,
+        ),
+        CceJourneyStep(
+          label: _CceCopy.stepReferred,
+          sublabel: programme ?? date,
+          state: CceStepState.done,
+        ),
+        CceJourneyStep(
+          label: _CceCopy.stepFacility,
+          sublabel: attempts > 0 ? 'Following up' : _CceCopy.stepPending,
+          state: attempts > 0 ? CceStepState.done : CceStepState.pending,
+        ),
+        CceJourneyStep(
+          label: _CceCopy.stepTreatment,
+          sublabel: _CceCopy.stepPending,
+          state: CceStepState.pending,
+        ),
+      ],
+      priorityScore: (retryAttempts - remaining) * 10 + ageDays,
+      followUpDate: null,
+      attempts: attempts,
+      remainingAttempts: remaining,
+      programmeLabel: programme,
+      isWrongNumber: fu.isLost,
+    );
+  }
 
   /// Derive a [CceAlert] from a referral row + (optional) cached patient.
   ///
@@ -441,6 +588,50 @@ class CceAlert {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${d.day} ${months[d.month - 1]}';
+  }
+
+  static Map<String, dynamic> _decodeMap(String raw) {
+    try {
+      final m = jsonDecode(raw);
+      if (m is Map) return Map<String, dynamic>.from(m);
+    } catch (_) {}
+    return const {};
+  }
+
+  static String? _firstString(Map<String, dynamic> raw, List<String> keys) {
+    for (final k in keys) {
+      final v = raw[k];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+    }
+    return null;
+  }
+
+  static int? _parseDateMs(Object? v) {
+    if (v == null) return null;
+    if (v is num) return v.toInt();
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    final asInt = int.tryParse(s);
+    if (asInt != null) {
+      return asInt < 100000000000 ? asInt * 1000 : asInt;
+    }
+    return DateTime.tryParse(s)?.millisecondsSinceEpoch;
+  }
+
+  /// Normalise wire encounterName / encounterType into a short CCE label.
+  static String? _programmeLabel(Map<String, dynamic> raw) {
+    final name = (_firstString(raw, const ['encounterName', 'encounterType']) ??
+            '')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s-]'), '_');
+    if (name.isEmpty) return null;
+    if (name == 'anc' || name.contains('anc')) return 'ANC';
+    if (name.contains('pnc')) return 'PNC';
+    if (name == 'epi' || name.contains('immunis') || name.contains('immuniz')) {
+      return 'EPI';
+    }
+    if (name == 'ncd' || name.contains('ncd')) return 'NCD';
+    return null;
   }
 }
 
