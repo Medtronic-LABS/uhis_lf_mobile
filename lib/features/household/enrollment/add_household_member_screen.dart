@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -24,6 +23,7 @@ import 'enrollment_controller.dart';
 import 'enrollment_dob.dart';
 import 'enrollment_entry_sheet.dart';
 import 'enrollment_id_number.dart';
+import 'enrollment_mobile_number.dart';
 import 'enrollment_repository.dart';
 import 'nid_ocr_service.dart';
 import 'patient_lookup_repository.dart';
@@ -227,14 +227,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         return;
       }
     }
-  }
-
-  static String? _validatePhone(String? value) {
-    if (value == null || value.isEmpty) return null;
-    final digits = value.replaceAll(RegExp(r'\D'), '');
-    if (digits.length < 10) return 'Invalid phone number';
-    if (RegExp(r'(\d)\1{4,}').hasMatch(digits)) return 'Invalid phone number';
-    return null;
   }
 
   /// Set when the scanned NID matches a patient already registered on the
@@ -487,6 +479,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       if (_ageInYears < 1 && _guardianName == null) 'guardian': 'Required',
       if (_mobileCtrl.text.trim().isNotEmpty && _phoneCategory == null)
         'phoneCategory': 'Required',
+      'mobile': ?EnrollmentMobileNumber.validate(_mobileCtrl.text),
     };
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -1140,10 +1133,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       hint: EnrollmentStrings.mobileNumberHint,
                       controller: _mobileCtrl,
                       keyboardType: TextInputType.phone,
-                      validator: _validatePhone,
+                      validator: EnrollmentMobileNumber.validate,
                       onChanged: (_) => _clearError('mobile'),
                       errorText: _fieldErrors['mobile'],
-                      inputFormatters: [LengthLimitingTextInputFormatter(14)],
+                      inputFormatters: EnrollmentMobileNumber.formatters,
                     ),
                     const SizedBox(height: 20),
 

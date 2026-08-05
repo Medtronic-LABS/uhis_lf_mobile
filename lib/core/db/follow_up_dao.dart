@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 
 import 'app_database.dart';
@@ -31,6 +33,14 @@ abstract final class FollowUpSyncStatus {
   static const List<String> pending = [notSynced, networkError];
 }
 
+/// Android `Long.convertToUtcDateTime` /
+/// `DateTimeFormatter.ISO_OFFSET_DATE_TIME` without fractional seconds:
+/// `2026-08-05T08:59:05+00:00`. Offline + spice date fields expect this shape.
+String toOfflineOffsetDateTime(DateTime dt) {
+  final s = dt.toUtc().toIso8601String().replaceFirst(RegExp(r'\.\d+'), '');
+  return s.endsWith('Z') ? '${s.substring(0, s.length - 1)}+00:00' : s;
+}
+
 /// Outcome of a single call attempt (mirrors Android `FollowUpCallStatus` →
 /// backend `CallStatus`). The backend enum only knows SUCCESSFUL/UNSUCCESSFUL;
 /// a wrong number is an unsuccessful call that also closes the ticket.
@@ -42,7 +52,8 @@ abstract final class FollowUpCallStatus {
   static const String wrongNumber = 'WRONG_NUMBER';
 
   /// Wire value the backend `CallStatus` enum accepts (wrong-number folds to
-  /// UNSUCCESSFUL on the wire; the closure is carried by `isCompleted`).
+  /// UNSUCCESSFUL on the wire; the closure is carried by `isCompleted` /
+  /// `isWrongNumber` / detail `reason`).
   static String toWire(String status) =>
       status == successful ? successful : unsuccessful;
 }
@@ -217,23 +228,70 @@ class FollowUpCallRow {
         'raw_json': rawJson,
       };
 
+  /// Android SK display / `DefinedParams.WRONG_NUMBER` wire text.
+  static const String wrongNumberReasonLabel = 'Wrong Number';
+
   /// Serialize into one `followUpDetails[]` entry for the offline-sync push.
-  /// Field names match the backend `FollowUpDetailDTO` (no @JsonProperty, so
-  /// Java field name == wire name).
-  Map<String, Object?> toWire() => {
-        'callDate': DateTime.fromMillisecondsSinceEpoch(callDate)
-            .toUtc()
-            .toIso8601String(),
-        'duration': duration,
-        'status': FollowUpCallStatus.toWire(status),
-        'reason': reason,
-        'otherReason': otherReason,
-        'patientStatus': patientStatus,
-        'attempts': attempts,
-        'latitude': latitude,
-        'longitude': longitude,
-        'isInitiated': true,
-      };
+  /// Matches Android Room `FollowUpCall` Gson shape (not the slim DTO).
+  Map<String, Object?> toWire({
+    required int serverFollowUpId,
+    required String calledByUserId,
+    required String calledByUserFullName,
+    required String calledByUserRole,
+  }) {
+    Map<String, dynamic> extras = const {};
+    try {
+      final decoded = jsonDecode(rawJson);
+      if (decoded is Map) {
+        extras = Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {}
+
+    final willing = extras['isWillingToVisitUHC'];
+    final wrong = extras['wrongNumber'] == true ||
+        status == FollowUpCallStatus.wrongNumber;
+    // Local numeric id — Android uses Room autoincrement; hash is stable enough
+    // for a create-only detail row (server assigns its own id).
+    final localId = id.hashCode & 0x7fffffff;
+    final lat = double.tryParse(latitude ?? '') ?? 0.0;
+    final lng = double.tryParse(longitude ?? '') ?? 0.0;
+
+    return {
+      'id': localId == 0 ? 1 : localId,
+      'followUpId': serverFollowUpId,
+      'callRegisterId': 0,
+      'callDate': toOfflineOffsetDateTime(
+        DateTime.fromMillisecondsSinceEpoch(callDate),
+      ),
+      'duration': duration,
+      'attempts': attempts,
+      'status': FollowUpCallStatus.toWire(status),
+      'callType': extras['callType'] ?? 'SCREENED',
+      // Android stores DefinedParams.WRONG_NUMBER ("Wrong Number") in
+      // unSuccessfulCallReason and emits it as `reason` on the wire.
+      'reason': wrong
+          ? wrongNumberReasonLabel
+          : (reason ?? extras['visitRejectReason']),
+      if (wrong) 'unSuccessfulCallReason': wrongNumberReasonLabel,
+      'wrongNumber': wrong,
+      'isSynced': false,
+      'latitude': lat,
+      'longitude': lng,
+      'calledByUserId': calledByUserId,
+      'calledByUserFullName': calledByUserFullName,
+      'calledByUserRole': calledByUserRole,
+      if (willing != null) 'isWillingToVisitUHC': willing == true,
+      if (extras['visitRejectReason'] != null)
+        'visitRejectReason': extras['visitRejectReason'],
+      if (extras['otherVisitRejectReason'] != null)
+        'otherVisitRejectReason': extras['otherVisitRejectReason'],
+      if (!wrong && otherReason != null) 'otherReason': otherReason,
+      if (!wrong &&
+          extras['otherVisitRejectReason'] != null &&
+          otherReason == null)
+        'otherReason': extras['otherVisitRejectReason'],
+    };
+  }
 
   static FollowUpCallRow fromDb(Map<String, Object?> row) => FollowUpCallRow(
         id: row['id'] as String,
@@ -306,6 +364,22 @@ class FollowUpDao {
     );
     if (rows.isEmpty) return null;
     return FollowUpRow.fromDb(rows.first);
+  }
+
+  /// Open fetch-origin **REFERRED** follow-ups (`backend_id` present) for CCE.
+  /// Local/schedule-only rows and non-REFERRED types (e.g. `HH_VISIT`) are
+  /// excluded.
+  Future<List<FollowUpRow>> openReferredFetched({int limit = 500}) async {
+    final rows = await _db.db.query(
+      AppDatabase.tableFollowUps,
+      where: 'backend_id IS NOT NULL '
+          "AND UPPER(COALESCE(type, '')) = 'REFERRED' "
+          'AND completed_at IS NULL '
+          'AND (is_lost IS NULL OR is_lost = 0)',
+      orderBy: 'updated_at DESC',
+      limit: limit,
+    );
+    return rows.map(FollowUpRow.fromDb).toList(growable: false);
   }
 
   /// Replace a single follow-up row (used by the call/close lifecycle).
@@ -386,7 +460,8 @@ class FollowUpDao {
   }
 
   /// After a failed push: mark the given follow-ups NetworkError so they are
-  /// retried on the next connectivity event.
+  /// retried on the next connectivity event. Also reopen call rows that
+  /// [markPushed] may have stamped `is_synced=1` before the status poll.
   Future<void> markPushFailed(List<String> followUpIds) async {
     if (followUpIds.isEmpty) return;
     final placeholders = List.filled(followUpIds.length, '?').join(',');
@@ -394,6 +469,12 @@ class FollowUpDao {
       AppDatabase.tableFollowUps,
       {'sync_status': FollowUpSyncStatus.networkError},
       where: 'id IN ($placeholders)',
+      whereArgs: followUpIds,
+    );
+    await _db.db.update(
+      AppDatabase.tableFollowUpCalls,
+      {'is_synced': 0},
+      where: 'follow_up_id IN ($placeholders)',
       whereArgs: followUpIds,
     );
   }

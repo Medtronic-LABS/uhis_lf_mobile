@@ -19,16 +19,16 @@ class CceAlertCard extends StatelessWidget {
     super.key,
     required this.alert,
     required this.journey,
-    required this.onUpdateStatus,
-    required this.onCall,
     required this.onLocate,
+    this.onUpdateStatus,
+    this.onCall,
     this.onWhatsapp,
   });
 
   final CceAlert alert;
   final Widget journey;
-  final VoidCallback onUpdateStatus;
-  final VoidCallback onCall;
+  final VoidCallback? onUpdateStatus;
+  final VoidCallback? onCall;
   final VoidCallback onLocate;
 
   /// WhatsApp action — shown on warning-severity cards when the patient has a
@@ -161,12 +161,14 @@ class CceAlertCard extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (alert.severity != CceSeverity.completed && alert.hasPhone) ...[
+        if (alert.severity != CceSeverity.completed &&
+            onCall != null &&
+            alert.canCall) ...[
           _miniIcon(
             Icons.phone_rounded,
             const Color(0xFFEC4899),
             const Color(0x1FEC4899),
-            onCall,
+            onCall!,
           ),
           const SizedBox(width: 6),
         ],
@@ -181,19 +183,14 @@ class CceAlertCard extends StatelessWidget {
           ),
           const SizedBox(width: 6),
         ],
-        if (alert.severity == CceSeverity.completed)
+        if (onUpdateStatus != null)
           _miniIcon(
-            Icons.calendar_today_rounded,
+            alert.severity == CceSeverity.completed
+                ? Icons.calendar_today_rounded
+                : Icons.refresh_rounded,
             AppColors.aiPurple,
             const Color(0x1F6B63D4),
-            onUpdateStatus,
-          )
-        else
-          _miniIcon(
-            Icons.refresh_rounded,
-            AppColors.aiPurple,
-            const Color(0x1F6B63D4),
-            onUpdateStatus,
+            onUpdateStatus!,
           ),
       ],
     );
@@ -222,7 +219,7 @@ class CceAlertCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: GestureDetector(
-        onTap: onUpdateStatus,
+        onTap: onUpdateStatus ?? () {},
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(

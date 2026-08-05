@@ -402,8 +402,20 @@ class AssessmentRepository extends ChangeNotifier {
     var pushedFollowUpIds = <String>[];
     if (_followUpCalls != null) {
       try {
+        final profile = await _auth.userProfileSummary();
+        final callerFullName = [
+          profile.firstName?.trim() ?? '',
+          profile.lastName?.trim() ?? '',
+        ].where((s) => s.isNotEmpty).join(' ');
+        final followUpProvenance =
+            Map<String, dynamic>.from(provenance.toJson())..remove('spiceRole');
         final result = await _followUpCalls.serializePendingForPush(
-          provenance: provenance.toJson(),
+          provenance: followUpProvenance,
+          calledByUserId: '${userId ?? ''}',
+          calledByUserFullName: callerFullName.isNotEmpty
+              ? callerFullName
+              : 'SK ${userId ?? ''}',
+          calledByUserRole: 'SHASTIYA_KORMI',
         );
         followUpPayloads = result.wire;
         pushedFollowUpIds = result.ids;

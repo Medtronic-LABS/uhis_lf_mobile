@@ -11,6 +11,7 @@ import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
 import 'enrollment_dob.dart';
 import 'enrollment_id_number.dart';
+import 'enrollment_mobile_number.dart';
 import 'widgets/enrollment_section_header.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
@@ -113,7 +114,11 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       if (_nameCtrl.text.trim().isEmpty) 'headName': req,
       if (_idType == null) 'idType': req,
       'idNumber': ?idError,
-      if (_mobileCtrl.text.trim().isEmpty) 'mobile': req,
+      'mobile': ?EnrollmentMobileNumber.validate(
+        _mobileCtrl.text,
+        required: true,
+        requiredMessage: req,
+      ),
       if (_phoneCategory == null) 'phoneCategory': req,
       if (_dobCtrl.text.trim().isEmpty) 'dob': 'Date of birth required',
       if (_gender == null) 'gender': req,
@@ -897,12 +902,14 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       controller: _mobileCtrl,
                       keyboardType: TextInputType.number,
                       isRequired: true,
+                      validator: (v) => EnrollmentMobileNumber.validate(
+                        v,
+                        required: true,
+                        requiredMessage: 'Required',
+                      ),
                       onChanged: (_) => _clearError('mobile'),
                       errorText: _fieldErrors['mobile'],
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(14),
-                      ],
+                      inputFormatters: EnrollmentMobileNumber.formatters,
                     ),
                     const SizedBox(height: 14),
 

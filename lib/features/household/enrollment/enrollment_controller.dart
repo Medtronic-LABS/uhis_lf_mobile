@@ -14,6 +14,7 @@ import '../../../core/db/roster_revision.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/services/location_service.dart';
 import 'enrollment_id_number.dart';
+import 'enrollment_mobile_number.dart';
 import 'enrollment_repository.dart';
 import 'models/household_enrollment_models.dart';
 
@@ -246,9 +247,13 @@ class EnrollmentController extends ChangeNotifier {
     if (_householdHead!.maritalStatus.isEmpty) {
       errors.add('Marital status is required');
     }
-    if (_householdHead!.mobileAvailable &&
-        (_householdHead!.mobileNumber?.trim().isEmpty ?? true)) {
-      errors.add('Mobile number is required');
+    if (_householdHead!.mobileAvailable) {
+      final mobileError = EnrollmentMobileNumber.validate(
+        _householdHead!.mobileNumber,
+        required: true,
+        requiredMessage: 'Mobile number is required',
+      );
+      if (mobileError != null) errors.add(mobileError);
     }
 
     return errors;
@@ -278,6 +283,12 @@ class EnrollmentController extends ChangeNotifier {
     if (!member.mobileAvailable &&
         (member.mobileNumber?.trim().isEmpty ?? true)) {
       errors.add('Mobile number is required or mark as not available');
+    } else {
+      final mobileError = EnrollmentMobileNumber.validate(
+        member.mobileNumber,
+        required: false,
+      );
+      if (mobileError != null) errors.add(mobileError);
     }
     if (member.maritalStatus.isEmpty) {
       errors.add('Marital status is required');
