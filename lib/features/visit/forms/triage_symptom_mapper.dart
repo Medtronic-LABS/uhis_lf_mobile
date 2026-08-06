@@ -32,17 +32,9 @@ abstract final class TriageSymptomMapper {
     'chest_pain': '8',
     'headache_severe': '10',
     'headache': '10',
-    // No dedicated checkbox — Android "Any new or worsening symptoms".
-    'numbness': 'anyNewOrWorseningSymptoms',
-    'foot_numbness': 'anyNewOrWorseningSymptoms',
-    'polyuria': 'anyNewOrWorseningSymptoms',
-    'polydipsia': 'anyNewOrWorseningSymptoms',
-    'excessive_thirst': 'anyNewOrWorseningSymptoms',
-    'weight_loss': 'anyNewOrWorseningSymptoms',
-    'foot_pain': 'anyNewOrWorseningSymptoms',
-    'foot_wound': 'anyNewOrWorseningSymptoms',
-    'weakness': 'anyNewOrWorseningSymptoms',
-    'fatigue': 'anyNewOrWorseningSymptoms',
+    // Metabolic / other triage codes have no dedicated NCD checkbox —
+    // SK records them in the free-text "Any new or worsening symptoms"
+    // field after selecting hasSymptoms = Yes.
   };
 
   // ── ANC danger signs ──────────────────────────────────────────────────────

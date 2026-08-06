@@ -621,7 +621,7 @@ abstract final class HouseholdListStrings {
   static String otherMembersToggle(int n) => AppLocale.isBangla
       ? '+$n জন অন্যান্য পরিবার সদস্য'
       : '+$n other household member${n == 1 ? '' : 's'}';
-  static String get enrolledTag => getTranslatedString('enrolledTag', 'Enrolled');
+  static String get enrolledTag => getTranslatedString('enrolledTag', 'Registered');
 
   // Manual server refresh
   static String refreshSummary(int patients, int assessments, int followUps) => getTranslatedString('refreshSummary', 'Updated: {patients} patients · {assessments} assessments · {followUps} follow-ups', params: {'patients': '$patients', 'assessments': '$assessments', 'followUps': '$followUps'});

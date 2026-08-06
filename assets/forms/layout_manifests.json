@@ -208,7 +208,7 @@
     "sections": [
       {
         "sectionId": "pregnancyDetailsAndHistory",
-        "title": "Pregnancy Details & History",
+        "title": "",
         "fieldRefs": [
           {
             "isMandatory": false,
@@ -1146,6 +1146,11 @@
           {
             "id": "newWorseningSymptoms",
             "fieldName": "New or worsening symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "ncdSymptomsMedication",
+            "fieldName": "Are you taking medication regularly?",
             "isMandatory": false
           }
         ]
