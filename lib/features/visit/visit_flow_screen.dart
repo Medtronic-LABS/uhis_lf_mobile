@@ -398,7 +398,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// replaced in the widget tree.
   ScribeController? _step1Scribe;
 
-  /// Smart age label: months for under-2, years otherwise.
+  /// Compact age for the visit header: `4m` under 24 months, else years.
   /// Falls back to DOB when age-in-years is null (common for infants).
   String? get _ageDisplay {
     final dob = _patientDob;
@@ -407,16 +407,22 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         final birth = DateTime.parse(dob);
         final months = ChildhoodVisit.ageInMonths(birth);
         if (months < 24) {
-          return '$months month${months == 1 ? '' : 's'}';
+          if (months < 1) {
+            final days = DateTime.now()
+                .difference(DateTime(birth.year, birth.month, birth.day))
+                .inDays;
+            if (days < 1) return '<1d';
+            return '${days}d';
+          }
+          return '${months}m';
         }
-        final years = months ~/ 12;
-        return '$years yr${years == 1 ? '' : 's'}';
+        return '${months ~/ 12}';
       } catch (_) {}
     }
     final age = _patientAge;
     if (age == null) return null;
-    if (age < 2) return '< 2 yrs';
-    return '$age yrs';
+    if (age < 2) return '<2y';
+    return '$age';
   }
 
   /// Whole months from DOB (Spice childhood visit age bands). Falls back to
@@ -610,6 +616,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             key: ValueKey('flow-step2-vacc-${widget.visitId}'),
             patientId: widget.patientId,
             patientName: widget.patientName,
+            // Header already resolved DOB via byAnyId — seed so EPI schedule
+            // still builds if Step 2's own lookup races or misses.
+            seedDob: _patientDob,
             encounterId: widget.visitId,
             memberId: widget.memberId,
             householdMemberLocalId: _householdMemberLocalId,
@@ -982,6 +991,7 @@ class _Step2Vaccination extends StatefulWidget {
     required this.patientId,
     required this.onAdvance,
     this.patientName,
+    this.seedDob,
     this.encounterId,
     this.memberId,
     this.householdMemberLocalId,
@@ -990,6 +1000,9 @@ class _Step2Vaccination extends StatefulWidget {
 
   final String patientId;
   final String? patientName;
+
+  /// DOB already loaded by the visit-flow host (via [PatientDao.byAnyId]).
+  final String? seedDob;
   final void Function(EpiVisitSummary summary) onAdvance;
 
   /// The visit encounter ID — forwarded to [ImmunisationTimelineScreen] so
@@ -1021,16 +1034,21 @@ class _Step2VaccinationState extends State<_Step2Vaccination> {
     debugPrint('[_Step2VaccinationState] _loadDob');
     try {
       final dao = context.read<PatientDao>();
-      final patient = await dao.byId(widget.patientId);
+      // Same resolver as the visit header — byId misses server patient_id /
+      // members.id and leaves infants without a schedule.
+      final patient = await dao.byAnyId(widget.patientId);
       if (!mounted) return;
       setState(() {
-        _dob = patient?.dob;
+        _dob = patient?.dob ?? widget.seedDob;
         _dobLoaded = true;
       });
     } catch (e) {
       debugPrint('[Step2Vaccination] DOB lookup failed: $e');
       if (!mounted) return;
-      setState(() => _dobLoaded = true);
+      setState(() {
+        _dob = widget.seedDob;
+        _dobLoaded = true;
+      });
     }
   }
 
@@ -1042,7 +1060,7 @@ class _Step2VaccinationState extends State<_Step2Vaccination> {
     return ImmunisationTimelineScreen(
       patientId: widget.patientId,
       patientName: widget.patientName,
-      dob: _dob,
+      dob: _dob ?? widget.seedDob,
       onVisitComplete: widget.onAdvance,
       encounterId: widget.encounterId,
       memberId: widget.memberId,
@@ -1404,14 +1422,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   List<HealthFacilityRow> _ncdFacilities = const [];
   String? _selectedNcdSiteId;
 
-  Color _headerColor(Programme p) => switch (p) {
-        Programme.anc || Programme.pnc => AppColors.ancHeader,
-        Programme.ncd => AppColors.ncdHeader,
-        Programme.imci => AppColors.imciHeader,
-        Programme.tb => AppColors.tbHeader,
-        _ => AppColors.navy,
-      };
-
   // Save & Go Home / Skip — go to home always land on the home tab,
   // regardless of which screen launched the visit.
   String get _returnPath => '/home';
@@ -1473,7 +1483,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     // always written by sync — try that first as fallback.
     if ((hid == null || hid.isEmpty) && mounted) {
       try {
-        final patient = await context.read<PatientDao>().byId(widget.patientId);
+        final patient =
+            await context.read<PatientDao>().byAnyId(widget.patientId);
         hid = patient?.householdId;
       } on Object catch (_) {}
     }
@@ -2787,15 +2798,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
           // ── 6. CTA: accept + call/refer ─────────────────────────────
           _BottomCtaBar(
-            naba: naba,
             accepted: _accepted,
-            headerColor: _headerColor(widget.primaryProgramme),
-            referral: referral,
-            primaryProgramme: widget.primaryProgramme,
             patientLabel: widget.patientLabel,
             memberId: widget.memberId,
-            patientPhone: _patientPhone,
-            returnPath: _returnPath,
             onAccepted: () => _onAccepted(naba),
           ),
         ],
@@ -3791,27 +3796,15 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
 
 class _BottomCtaBar extends StatelessWidget {
   const _BottomCtaBar({
-    required this.naba,
     required this.accepted,
-    required this.headerColor,
-    required this.referral,
-    required this.primaryProgramme,
-    required this.returnPath,
     required this.onAccepted,
     this.patientLabel,
     this.memberId,
-    this.patientPhone,
   });
-  final NabaResponse naba;
   final bool accepted;
-  final Color headerColor;
-  final bool referral;
-  final Programme primaryProgramme;
-  final String returnPath;
   final VoidCallback onAccepted;
   final String? patientLabel;
   final String? memberId;
-  final String? patientPhone;
 
   @override
   Widget build(BuildContext context) {
@@ -3860,36 +3853,9 @@ class _BottomCtaBar extends StatelessWidget {
                   ),
                 ),
               ),
-              // EPI (child immunization) is intentionally excluded: the
-              // inline AI Counselling Guide card above already renders this
-              // same WhatsApp message with its own working send action, so a
-              // second full-screen entry point is redundant for EPI visits.
-              if (primaryProgramme == Programme.imci &&
-                  naba.whatsappSummary != null) ...[
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => context.push(
-                      '/counselling',
-                      extra: {
-                        'patientLabel': patientLabel ?? '',
-                        'patientId': memberId ?? '',
-                        'whatsappMessage': naba.whatsappSummary,
-                        'patientPhone': patientPhone,
-                      },
-                    ),
-                    icon: const Icon(Icons.chat_rounded),
-                    label: Text(VisitCompleteStrings.sendCounsellingMessage),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: headerColor,
-                      side: BorderSide(
-                          color: headerColor.withValues(alpha: 0.4)),
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                    ),
-                  ),
-                ),
-              ],
+              // "Send Counselling Message" is intentionally omitted here —
+              // the AI Counselling Guide card above already has "Send this
+              // message" for the same WhatsApp content.
             ],
           ),
         ],

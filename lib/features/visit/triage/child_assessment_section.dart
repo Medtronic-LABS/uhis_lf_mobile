@@ -91,6 +91,58 @@ String? childWeightRangeError(double? kg) {
   return null;
 }
 
+/// Labels of mandatory Child Assessment questions that are still unanswered
+/// (or invalid). Used by Vaccination + Child Health Done to block advance —
+/// same gate the Childhood Visit [VisitFormScreen] applies on submit.
+///
+/// Always-required: Q6–Q12 (+ feed last 24h). Conditional: complications and
+/// referral when illness = Yes; referral place when referral = Yes.
+List<String> childAssessmentMissingRequired(ChildAssessmentData data) {
+  final missing = <String>[];
+
+  if (data.congenitalDefect == null) {
+    missing.add(ChildAssessmentStrings.q6Label);
+  }
+  if (data.weightKg == null) {
+    missing.add(ChildAssessmentStrings.q7Label);
+  } else if (childWeightRangeError(data.weightKg) != null) {
+    missing.add(ChildAssessmentStrings.q7RangeError);
+  }
+  if (data.feedLast24h.isEmpty) {
+    missing.add(ChildAssessmentStrings.q7bLabel);
+  }
+  if (data.isBreastfeeding == null) {
+    missing.add(ChildAssessmentStrings.q8Label);
+  }
+  if (data.additionalFoodLast24h == null) {
+    missing.add(ChildAssessmentStrings.q9Label);
+  }
+  if (data.vaccinesReceived == null) {
+    missing.add(ChildAssessmentStrings.q10Label);
+  }
+  if (data.dewormingTaken == null) {
+    missing.add(ChildAssessmentStrings.q11Label);
+  }
+  if (data.anyIllness == null) {
+    missing.add(ChildAssessmentStrings.q12Label);
+  }
+
+  if (data.anyIllness == true) {
+    if (data.complications.isEmpty) {
+      missing.add(ChildAssessmentStrings.q13Label);
+    }
+    if (data.referralMade == null) {
+      missing.add(ChildAssessmentStrings.q14Label);
+    }
+    if (data.referralMade == true &&
+        (data.referralPlace == null || data.referralPlace!.isEmpty)) {
+      missing.add(ChildAssessmentStrings.q15Label);
+    }
+  }
+
+  return missing;
+}
+
 // ── Widget ────────────────────────────────────────────────────────────────────
 
 /// Child-specific assessment questions (Q6–Q15) shown in Step 1 of the visit

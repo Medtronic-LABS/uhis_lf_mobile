@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/core/constants/app_strings.dart';
 import 'package:uhis_next/features/visit/triage/child_assessment_section.dart';
 
 void main() {
@@ -17,6 +18,66 @@ void main() {
     test('out-of-range weight surfaces an error', () {
       expect(childWeightRangeError(-1), isNotNull);
       expect(childWeightRangeError(30.1), isNotNull);
+    });
+  });
+
+  group('childAssessmentMissingRequired', () {
+    test('empty form lists all always-required questions', () {
+      final missing = childAssessmentMissingRequired(ChildAssessmentData());
+      expect(missing, isNotEmpty);
+      expect(missing.length, greaterThanOrEqualTo(8));
+    });
+
+    test('complete form with no illness has no missing fields', () {
+      final data = ChildAssessmentData(
+        congenitalDefect: false,
+        weightKg: 6.5,
+        feedLast24h: const ['mothersBreastMilk'],
+        isBreastfeeding: true,
+        additionalFoodLast24h: false,
+        vaccinesReceived: true,
+        dewormingTaken: false,
+        anyIllness: false,
+      );
+      expect(childAssessmentMissingRequired(data), isEmpty);
+    });
+
+    test('illness Yes requires complications, referral, and place', () {
+      final base = ChildAssessmentData(
+        congenitalDefect: false,
+        weightKg: 6.5,
+        feedLast24h: const ['mothersBreastMilk'],
+        isBreastfeeding: true,
+        additionalFoodLast24h: false,
+        vaccinesReceived: true,
+        dewormingTaken: false,
+        anyIllness: true,
+      );
+      expect(childAssessmentMissingRequired(base), isNotEmpty);
+
+      final withReferral = base.copyWith(
+        complications: const ['Diarrhea'],
+        referralMade: true,
+        referralPlace: 'communityClinic',
+      );
+      expect(childAssessmentMissingRequired(withReferral), isEmpty);
+    });
+
+    test('out-of-range weight is treated as missing/invalid', () {
+      final data = ChildAssessmentData(
+        congenitalDefect: false,
+        weightKg: 40,
+        feedLast24h: const ['mothersBreastMilk'],
+        isBreastfeeding: true,
+        additionalFoodLast24h: false,
+        vaccinesReceived: true,
+        dewormingTaken: false,
+        anyIllness: false,
+      );
+      expect(
+        childAssessmentMissingRequired(data),
+        contains(ChildAssessmentStrings.q7RangeError),
+      );
     });
   });
 
