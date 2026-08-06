@@ -527,17 +527,14 @@ abstract final class FieldVisibilityRules {
   /// Option name Android uses inside the NCD symptoms dialog to reveal the
   /// free-text "Any new or worsening symptoms" field
   /// (`BDNCDAssessmentFragment.hideOrShowAnyNewWorseningSymptomView`).
-  static const String ncdAnyNewOrWorseningSymptomOption =
-      'Any new or worsening symptoms';
-
   /// Returns whether [field] should render, given the current form [data]
   /// and the [rulesByTargetId] lookup built by
   /// `FormConfig.buildVisibilityRules`.
   ///
   /// Evaluation order:
   /// 0. `isSummary` fields — hide only on RMNCH fill forms (Android parity).
-  /// 1. NCD `newWorseningSymptoms` — shown when that option is ticked in
-  ///    `ncdSymptoms` (Android code path, not JSON `condition`).
+  /// 1. NCD `newWorseningSymptoms` — always hidden for SK (Android option
+  ///    absent from list). `ncdSymptomsMedication` — follow-up only.
   /// 2. A generic `condition` rule targeting this field (another field's
   ///    value equals a declared trigger value) — the common case, covers
   ///    ~96 Yes/No/Other-dependent follow-up fields.
@@ -567,6 +564,8 @@ abstract final class FieldVisibilityRules {
   /// [priorHeightLocked] — true when height was seeded from a prior visit and
   /// must not be re-entered; hides the field on programmes that collect
   /// height (NCD, cataract, ANC). PNC mother has no height field.
+  /// [isNcdFollowUp] — Android BDNCD: `ncdSymptomsMedication` is shown only
+  /// when a prior NCD assessment exists (SK follow-up visit).
   /// [formType] — owning programme layout key (e.g. `ncd`, `anc`).
   static bool isFieldVisible({
     required FieldDef field,
@@ -577,6 +576,7 @@ abstract final class FieldVisibilityRules {
     String? formType,
     int? ageInMonths,
     bool priorHeightLocked = false,
+    bool isNcdFollowUp = false,
   }) {
     if (field.isSummary &&
         formType != null &&
@@ -584,10 +584,15 @@ abstract final class FieldVisibilityRules {
       return false;
     }
 
-    // Android BDNCD: free-text field appears only when the matching symptom
-    // checkbox is selected — not merely when hasSymptoms == Yes.
+    // Android SK: free-text is toggled only when the (missing) "Any new or
+    // worsening symptoms" checkbox is selected — so it never appears.
     if (field.id == 'newWorseningSymptoms') {
-      return _ncdSymptomsIncludeAnyNewOrWorsening(data);
+      return false;
+    }
+
+    // Android SK BDNCD: medication adherence spinner is follow-up only.
+    if (field.id == 'ncdSymptomsMedication') {
+      return isNcdFollowUp;
     }
 
     // Childhood visit: Spice exclusive age bands (showHideOptionsForChildHealth).
@@ -827,23 +832,6 @@ abstract final class FieldVisibilityRules {
     }
 
     return null;
-  }
-
-  /// True when the NCD symptoms multi-select includes the Android
-  /// "Any new or worsening symptoms" option (by id or display name).
-  static bool _ncdSymptomsIncludeAnyNewOrWorsening(CanonicalVisitData data) {
-    final raw = data.getValue('ncdSymptoms');
-    if (raw == null) return false;
-    final values = raw is List
-        ? raw.map((e) => e.toString()).toList()
-        : <String>[raw.toString()];
-    final needle = ncdAnyNewOrWorseningSymptomOption.toLowerCase();
-    return values.any((v) {
-      final s = v.trim().toLowerCase();
-      return s == needle ||
-          s == 'anyneworworseningsymptoms' ||
-          s == 'any_new_or_worsening_symptoms';
-    });
   }
 
   /// Android SPICE ANC field gates. Returns `null` when [fieldId] is not an

@@ -3668,8 +3668,8 @@
   "en": "Enrolled {label} — tap to include or exclude from this visit"
  },
  "enrolledTag": {
-  "bn": "নথিভুক্ত",
-  "en": "Enrolled"
+  "bn": "নিবন্ধিত",
+  "en": "Registered"
  },
  "enrollmentFailed": {
   "bn": "নিবন্ধন ব্যর্থ হয়েছে",

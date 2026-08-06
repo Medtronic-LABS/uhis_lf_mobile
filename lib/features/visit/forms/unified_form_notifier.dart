@@ -122,6 +122,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// re-shown — mirrors Spice readonly prefill; Flutter also hides the field.
   bool _heightLockedFromPrior = false;
 
+  /// Android BDNCD SK: true when this patient already has a prior NCD
+  /// assessment — drives follow-up-only fields (e.g. medication adherence).
+  bool _isNcdFollowUp = false;
+
   /// Field library, supplied by the form screen once `field_library.json` is
   /// parsed. Used at submit time to translate stored option ids into the wire
   /// `value` codes Spice sends (see [_withWireOptionValues]), and to clear
@@ -166,6 +170,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   /// True when height was prefilled from a prior visit and is hard-locked.
   bool get isHeightLockedFromPrior => _heightLockedFromPrior;
+
+  /// True when a prior NCD assessment exists (SK follow-up visit).
+  bool get isNcdFollowUp => _isNcdFollowUp;
 
   /// Height is locked when prefilled from a prior visit, or on ANC visit 2+
   /// (field is hidden in the UI; value is still kept for payload / BMI).
@@ -271,6 +278,14 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _data = _data.setValue('weight', w);
         changed = true;
       }
+    }
+    // Resolve SK follow-up early so ncdSymptomsMedication visibility matches
+    // Android BDNCD (shown only when prior NCD history exists).
+    final priorNcd = _patientId.isNotEmpty &&
+        await _assessmentRepo.hasPriorNcdAssessment(_patientId);
+    if (priorNcd != _isNcdFollowUp) {
+      _isNcdFollowUp = priorNcd;
+      changed = true;
     }
     if (changed) {
       _recomputeBmi();
