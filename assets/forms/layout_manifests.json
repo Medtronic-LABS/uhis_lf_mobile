@@ -6,7 +6,7 @@
     "sections": [
       {
         "sectionId": "pncNeonatal",
-        "title": "PNC Visit - Neonate",
+        "title": "",
         "fieldRefs": [
           {
             "isMandatory": false,
@@ -41,7 +41,7 @@
     "sections": [
       {
         "sectionId": "pregnancyHistory",
-        "title": "Pregnancy History",
+        "title": "",
         "fieldRefs": [
           {
             "inputType": 2,
@@ -62,7 +62,7 @@
       },
       {
         "sectionId": "maternalHealthAssessment",
-        "title": "Maternal Health Assessment",
+        "title": "",
         "fieldRefs": [
           {
             "inputType": 8192,
@@ -182,7 +182,7 @@
       },
       {
         "sectionId": "postpartumContraception",
-        "title": "Postpartum Contraception",
+        "title": "",
         "fieldRefs": [
           {
             "isMandatory": false,
@@ -192,7 +192,7 @@
       },
       {
         "sectionId": "counselling",
-        "title": "COUNSELING & EDUCATION",
+        "title": "",
         "fieldRefs": [
           "counsellingMotherCare",
           "motherCare",
@@ -255,7 +255,7 @@
     "sections": [
       {
         "sectionId": "ancServicesBirthPreparedness",
-        "title": "ANC services and Birth Preparedness",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "No. of ANC visits conducted with other providers",
@@ -267,7 +267,7 @@
       },
       {
         "sectionId": "outcomeType",
-        "title": "Pregnancy Outcome",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Pregnancy Outcome",
@@ -278,7 +278,7 @@
       },
       {
         "sectionId": "maternalDeath",
-        "title": "Maternal Death",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Time of death",
@@ -300,7 +300,7 @@
       },
       {
         "sectionId": "abortion",
-        "title": "Abortion",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Gestation month at the time of abortion",
@@ -317,7 +317,7 @@
       },
       {
         "sectionId": "deliveryOutcomes",
-        "title": "Delivery outcomes",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Delivery outcome",
@@ -370,7 +370,7 @@
       },
       {
         "sectionId": "newbornDetails",
-        "title": "Newborn details",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Is the baby alive?",
@@ -391,7 +391,7 @@
       },
       {
         "sectionId": "counsellingAdverseEvent",
-        "title": "Counselling in case of adverse event",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Emotional Support",
@@ -584,7 +584,7 @@
     "sections": [
       {
         "sectionId": "ancMedicalHistory",
-        "title": "Medical History",
+        "title": "",
         "fieldRefs": [
           {
             "id": "previousPregnancyComplications",
@@ -605,7 +605,7 @@
       },
       {
         "sectionId": "ancSpecificVitals",
-        "title": "Clinical Examination",
+        "title": "",
         "fieldRefs": [
           {
             "id": "bloodPressure",
@@ -669,7 +669,7 @@
       },
       {
         "sectionId": "labInvestigations",
-        "title": "Laboratory Investigations",
+        "title": "",
         "fieldRefs": [
           {
             "id": "urinaryAlbumin",
@@ -695,7 +695,7 @@
       },
       {
         "sectionId": "vaccinationAndSupplements",
-        "title": "Vaccination & Supplements",
+        "title": "",
         "fieldRefs": [
           {
             "id": "ttTdCompleted",
@@ -742,7 +742,7 @@
       },
       {
         "sectionId": "ancServicesBirthPreparedness",
-        "title": "ANC Services & Birth Preparedness",
+        "title": "",
         "fieldRefs": [
           {
             "id": "ancVisitsOtherProviders",
@@ -769,7 +769,7 @@
       },
       {
         "sectionId": "ancDangerSignsSection",
-        "title": "Danger Signs",
+        "title": "",
         "fieldRefs": [
           {
             "id": "dangerSignsExperienced12",
@@ -797,7 +797,7 @@
     "sections": [
       {
         "sectionId": "pncChild",
-        "title": "Child Details",
+        "title": "",
         "fieldRefs": [
           {
             "isMandatory": false,
@@ -904,7 +904,7 @@
     "sections": [
       {
         "sectionId": "cataract",
-        "title": "Eye Problems",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Types of Eye Diseases",
@@ -1002,7 +1002,7 @@
       },
       {
         "sectionId": "bpLog",
-        "title": "Blood Pressure & Vitals",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Have you been diagnosed with High Blood Pressure or Hypertension before?",
@@ -1041,7 +1041,7 @@
       },
       {
         "sectionId": "glucoseLog",
-        "title": "Blood Glucose",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Have you been diagnosed with High Blood Sugar or Diabetes before?",
@@ -1068,7 +1068,7 @@
       },
       {
         "sectionId": "referralInformation",
-        "title": "Referral Information",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Who referred this person",
@@ -1086,7 +1086,7 @@
     "sections": [
       {
         "sectionId": "ncdBiometrics",
-        "title": "Biometrics",
+        "title": "",
         "fieldRefs": [
           {
             "id": "height",
@@ -1105,7 +1105,7 @@
       },
       {
         "sectionId": "bpLog",
-        "title": "Blood Pressure",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Have you been diagnosed with High Blood Pressure or Hypertension before?",
@@ -1131,7 +1131,7 @@
       },
       {
         "sectionId": "symptomsLog",
-        "title": "Symptoms",
+        "title": "",
         "fieldRefs": [
           {
             "id": "hasSymptoms",
@@ -1152,7 +1152,7 @@
       },
       {
         "sectionId": "glucoseLog",
-        "title": "Diabetes",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Have you been diagnosed with High Blood Sugar or Diabetes before?",
@@ -1179,7 +1179,7 @@
       },
       {
         "sectionId": "eyeCare",
-        "title": "Eye Care",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Eye Test Outcome",
@@ -1227,7 +1227,7 @@
     "sections": [
       {
         "sectionId": "eyeCare",
-        "title": "Eye Care",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Eye Test Outcome",
