@@ -3503,6 +3503,10 @@
   "bn": "সম্পন্ন → ভিজিট চালিয়ে যান",
   "en": "Done → Continue Visit"
  },
+ "childAssessmentFieldsRequired": {
+  "bn": "এগিয়ে যাওয়ার আগে {n}টি প্রয়োজনীয় ঘর পূরণ করতে হবে।",
+  "en": "{n} required field(s) must be filled before continuing."
+ },
  "dosesCompleted": {
   "bn": "ডোজ সম্পন্ন",
   "en": "Doses completed"

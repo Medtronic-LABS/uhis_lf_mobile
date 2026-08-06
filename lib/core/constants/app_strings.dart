@@ -4085,6 +4085,11 @@ abstract final class EpiStrings {
   static String get missedReasonHint => getTranslatedString('missedReasonHint', 'e.g. Child was sick on scheduled date');
   static String get missedReasonRequired => getTranslatedString('missedReasonRequired', 'Please enter a reason.');
   static String get childAssessmentSaveError => getTranslatedString('childAssessmentSaveError', 'Could not save the Child Health form. Please try again.');
+  static String childAssessmentFieldsRequired(int n) => getTranslatedString(
+        'childAssessmentFieldsRequired',
+        '{n} required field(s) must be filled before continuing.',
+        params: {'n': '$n'},
+      );
 }
 
 /// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral

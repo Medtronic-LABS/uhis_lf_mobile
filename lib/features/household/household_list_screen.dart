@@ -742,7 +742,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     final queueItem = pid != null ? _queueItems[pid] : null;
     return _WireframeMemberRow(
       name: member.name,
-      age: member.age,
+      ageLabel: member.ageLabel,
       gender: member.gender,
       phoneNumber: member.phoneNumber,
       programmes: member.programmes,
@@ -1061,11 +1061,14 @@ class _OtherMemberRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lc = Theme.of(context).extension<LeapfrogColors>()!;
-    final age = _MemberInfo._calculateAge(member.dateOfBirth);
+    final ageLabel = _MemberInfo.ageDisplayLabel(member.dateOfBirth);
+    final genderInitial = (member.gender != null && member.gender!.isNotEmpty)
+        ? member.gender![0].toUpperCase()
+        : null;
     final ageGender = [
-      if (age != null) '$age',
-      if (member.gender != null) member.gender,
-    ].whereType<String>().join('/');
+      if (ageLabel != null) ageLabel,
+      if (genderInitial != null) genderInitial,
+    ].join('/');
     final subtitle = [
       if (member.relation != null && member.relation!.isNotEmpty)
         member.relation,
@@ -1424,6 +1427,7 @@ class _MemberInfo {
     this.relation,
     this.gender,
     this.age,
+    this.ageLabel,
     this.dateOfBirth,
     this.phoneNumber,
     this.isPregnant = false,
@@ -1444,6 +1448,9 @@ class _MemberInfo {
   final String? relation;
   final String? gender;
   final int? age;
+
+  /// Compact UI label: `4m` under 24 months, otherwise whole years (`27`).
+  final String? ageLabel;
   final String? dateOfBirth;
   final String? phoneNumber;
   final bool isPregnant;
@@ -1461,7 +1468,7 @@ class _MemberInfo {
   final int ancVisitCount;
   final int pncVisitCount;
 
-  /// Calculate age from date of birth if not directly provided.
+  /// Whole years from DOB (0 for infants) — kept for navigation extras.
   static int? _calculateAge(String? dateOfBirth) {
     if (dateOfBirth == null) return null;
     try {
@@ -1472,10 +1479,38 @@ class _MemberInfo {
           (now.month == dob.month && now.day < dob.day)) {
         age--;
       }
-      return age;
+      return age < 0 ? 0 : age;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Age for list chips. Infants show months (`4m`) / days (`12d`) so under-1
+  /// members are not displayed as `0/F`.
+  static String? ageDisplayLabel(String? dateOfBirth, {int? fallbackYears}) {
+    if (dateOfBirth != null && dateOfBirth.isNotEmpty) {
+      try {
+        final dob = DateTime.parse(dateOfBirth);
+        final now = DateTime.now();
+        var months =
+            (now.year - dob.year) * 12 + now.month - dob.month;
+        if (now.day < dob.day) months--;
+        if (months < 0) months = 0;
+        if (months < 24) {
+          if (months < 1) {
+            final days = now.difference(DateTime(dob.year, dob.month, dob.day))
+                .inDays;
+            if (days < 1) return '<1d';
+            return '${days}d';
+          }
+          return '${months}m';
+        }
+        return '${months ~/ 12}';
+      } catch (_) {}
+    }
+    if (fallbackYears == null) return null;
+    if (fallbackYears < 1) return '<1y';
+    return '$fallbackYears';
   }
 
   /// Create from _HouseholdMember and household context.
@@ -1490,6 +1525,7 @@ class _MemberInfo {
       relation: member.relation,
       gender: member.gender,
       age: _calculateAge(member.dateOfBirth),
+      ageLabel: ageDisplayLabel(member.dateOfBirth),
       dateOfBirth: member.dateOfBirth,
       phoneNumber: member.phoneNumber,
       isPregnant: member.isPregnant ?? false,
@@ -1532,7 +1568,7 @@ class _WireframeMemberRow extends StatelessWidget {
   const _WireframeMemberRow({
     required this.name,
     required this.onTap,
-    this.age,
+    this.ageLabel,
     this.gender,
     this.phoneNumber,
     this.programmes = const {},
@@ -1544,7 +1580,7 @@ class _WireframeMemberRow extends StatelessWidget {
   });
 
   final String? name;
-  final int? age;
+  final String? ageLabel;
   final String? gender;
   final String? phoneNumber;
   final Set<Programme> programmes;
@@ -1589,12 +1625,12 @@ class _WireframeMemberRow extends StatelessWidget {
                         name ?? CommonStrings.unnamed,
                         style: AppTextStyles.worklistPatientName,
                       ),
-                      if (age != null || gender != null)
+                      if (ageLabel != null || gender != null)
                         Text(
                           [
-                            if (age != null) '$age',
-                            if (gender != null)
-                              gender!.substring(0, 1).toUpperCase(),
+                            if (ageLabel != null) ageLabel!,
+                            if (gender != null && gender!.isNotEmpty)
+                              gender![0].toUpperCase(),
                           ].join('/'),
                           style: AppTextStyles.worklistPatientMeta,
                         ),

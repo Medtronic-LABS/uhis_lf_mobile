@@ -5474,24 +5474,33 @@ class _PatientDetailHeader extends StatelessWidget {
     }
   }
 
-  /// Smart age label: months for under-2, years otherwise.
-  /// Mirrors the logic in [_VisitFlowState._ageDisplay].
+  /// Compact age for the header chip: `4m` under 24 months, else years.
+  /// Matches household list / visit-header shorthand (not "4 months").
   static String? _ageLabelFromDob(String? dob, int? ageYears) {
     if (dob != null && dob.isNotEmpty) {
       try {
         final birth = DateTime.parse(dob);
         final now = DateTime.now();
-        final months = (now.year - birth.year) * 12 +
+        var months = (now.year - birth.year) * 12 +
             (now.month - birth.month) -
             (now.day < birth.day ? 1 : 0);
-        if (months < 24) return '$months month${months == 1 ? '' : 's'}';
-        final years = months ~/ 12;
-        return 'Age $years';
+        if (months < 0) months = 0;
+        if (months < 24) {
+          if (months < 1) {
+            final days = now
+                .difference(DateTime(birth.year, birth.month, birth.day))
+                .inDays;
+            if (days < 1) return '<1d';
+            return '${days}d';
+          }
+          return '${months}m';
+        }
+        return '${months ~/ 12}';
       } catch (_) {}
     }
     if (ageYears == null) return null;
-    if (ageYears == 0) return '< 1 yr';
-    return 'Age $ageYears';
+    if (ageYears < 1) return '<1y';
+    return '$ageYears';
   }
 }
 

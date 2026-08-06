@@ -96,6 +96,13 @@ class _ImmunisationTimelineScreenState
   String? _error;
   ChildAssessmentData _childAssessmentData = ChildAssessmentData();
 
+  /// Local `patients.id` after [PatientDao.byAnyId] resolution. Household /
+  /// Start Visit often pass server `patient_id` or `members.id`; immunisation
+  /// rows and DOB live on the local PK.
+  String? _localPatientId;
+
+  String get _patientKey => _localPatientId ?? widget.patientId;
+
   @override
   void initState() {
     super.initState();
@@ -109,7 +116,13 @@ class _ImmunisationTimelineScreenState
     final immunisationRepo = context.read<ImmunisationRepository>();
     final patientDao = context.read<PatientDao>();
 
-    final patient = await patientDao.byId(widget.patientId);
+    // Resolve server patient_id / members.id / fhir_id → local patients row
+    // (same as visit-flow header). Plain byId misses those id spaces and
+    // falsely reports "DOB not available" for infants who do have a DOB.
+    final patient = await patientDao.byAnyId(widget.patientId);
+    final localId = patient?.id ?? widget.patientId;
+    final serverId = patient?.patientId ?? widget.patientId;
+    _localPatientId = localId;
 
     DateTime? dob;
     final dobStr = widget.dob ?? patient?.dob;
@@ -125,8 +138,13 @@ class _ImmunisationTimelineScreenState
       return;
     }
 
-    final rowMap = await immunisationDao.forMany([widget.patientId]);
-    final localRows = rowMap[widget.patientId] ?? [];
+    // Load rows under local PK; also merge any legacy rows keyed by the
+    // navigation id when it differs (pre-fix saves under server id).
+    final idsToLoad = <String>{localId, widget.patientId};
+    final rowMap = await immunisationDao.forMany(idsToLoad.toList());
+    final localRows = [
+      for (final id in idsToLoad) ...(rowMap[id] ?? const <ImmunisationRow>[]),
+    ];
     final history = await _fetchHistoricalOutcomes(patient);
 
     // History fills gaps the backend/schedule doesn't know about yet;
@@ -136,8 +154,8 @@ class _ImmunisationTimelineScreenState
     // rows are appended after, so they overwrite on the same vaccine name).
     final historyRows = history
         .map((h) => ImmunisationRow(
-              id: 'history_${widget.patientId}_${h.vaccineName}',
-              patientId: widget.patientId,
+              id: 'history_${localId}_${h.vaccineName}',
+              patientId: localId,
               vaccineCode: h.vaccineName,
               givenAt: h.givenAtMs,
               status: h.status,
@@ -187,8 +205,8 @@ class _ImmunisationTimelineScreenState
       // On success the response is the authoritative schedule + statuses.
       final dtos = await immunisationRepo
           .fetchSchedule(
-            patientId: widget.patientId,
-            patientReference: widget.patientId,
+            patientId: serverId,
+            patientReference: serverId,
             birthDate: dobStr!.substring(0, 10),
           )
           .timeout(const Duration(seconds: 5));
@@ -309,9 +327,11 @@ class _ImmunisationTimelineScreenState
     }
 
     try {
-      final rowMap = await assessmentDao.forMany([widget.patientId]);
-      final rows = (rowMap[widget.patientId] ?? []).where(
-          (r) => (r.kind ?? '').toUpperCase().contains('IMMUNIZATION'));
+      final ids = <String>{_patientKey, widget.patientId};
+      final rowMap = await assessmentDao.forMany(ids.toList());
+      final rows = [
+        for (final id in ids) ...(rowMap[id] ?? const []),
+      ].where((r) => (r.kind ?? '').toUpperCase().contains('IMMUNIZATION'));
       final rawJsons = <Map<String, dynamic>>[];
       for (final r in rows) {
         try {
@@ -590,6 +610,24 @@ class _ImmunisationTimelineScreenState
               : EpiStrings.submitCta,
           onSubmit: () async {
             final data = _childAssessmentData;
+
+            // Vaccination + Child Health: block Done until mandatory Child
+            // Assessment answers are complete (parity with VisitFormScreen).
+            // Vaccination-only visits skip this gate (section is hidden).
+            if (widget.showChildAssessment) {
+              final missing = childAssessmentMissingRequired(data);
+              if (missing.isNotEmpty) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(
+                    EpiStrings.childAssessmentFieldsRequired(missing.length),
+                  ),
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                ));
+                return;
+              }
+            }
+
             // Android's wire ids for every yes/no question are the literal
             // strings "yes"/"no", not booleans (AssessmentDefinedParams.kt).
             String? yesNo(bool? v) => v == null ? null : (v ? 'yes' : 'no');
@@ -626,8 +664,7 @@ class _ImmunisationTimelineScreenState
             };
 
             if (details.isEmpty) {
-              // Nothing entered — don't save/sync an empty child assessment;
-              // still advance the visit.
+              // Vaccination-only (no Child Health section) — nothing to save.
               final onComplete = widget.onVisitComplete;
               if (onComplete != null) {
                 onComplete(buildEpiVisitSummary(_milestones!));
@@ -656,7 +693,7 @@ class _ImmunisationTimelineScreenState
                 assessmentDetails: details,
                 householdMemberLocalId: widget.householdMemberLocalId ?? 0,
                 memberId: widget.memberId,
-                patientId: widget.patientId,
+                patientId: _patientKey,
                 villageId: _patient?.villageId,
                 encounterId: widget.encounterId,
                 isReferred: data.referralMade ?? false,
@@ -731,7 +768,7 @@ class _ImmunisationTimelineScreenState
         }
         return _UpdateStatusSheet(
           milestone: milestone,
-          patientId: widget.patientId,
+          patientId: _patientKey,
           patient: _patient,
           patientName: patientName,
           ageLabel: _ageLabel(_patient),
