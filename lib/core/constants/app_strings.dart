@@ -4438,7 +4438,7 @@ abstract final class CareThreadStrings {
   static String get growth => getTranslatedString('growth', 'Growth monitoring');
   static String get pnc => getTranslatedString('pnc', 'Postnatal recovery');
   static String get newborn => getTranslatedString('newborn', 'Newborn care');
-  static String get general => getTranslatedString('general', 'General enrollment');
+  static String get general => getTranslatedString('general', 'Registered');
   static String get illness => getTranslatedString('illness', 'Past illness');
   static String get highrisk => getTranslatedString('highrisk', 'High-risk pregnancy');
   static String get csection => getTranslatedString('csection', 'Emergency C-section');

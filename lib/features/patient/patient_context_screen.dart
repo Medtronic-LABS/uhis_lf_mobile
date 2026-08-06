@@ -2157,9 +2157,6 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       date: data.enrolledAt!,
       dotColor: _kDotEnrollment,
       description: 'Patient registered in Apon Sushashthya',
-      badge: 'Registered',
-      badgeColor: const Color(0xFFE0F2FE),
-      badgeFgColor: const Color(0xFF0369A1),
     ));
   }
 
