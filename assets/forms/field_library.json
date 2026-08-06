@@ -8886,11 +8886,6 @@
         "name": "Headache",
         "cultureValue": "মাথাব্যথা",
         "value": "headache"
-      },
-      {
-        "id": "anyNewOrWorseningSymptoms",
-        "name": "Any new or worsening symptoms",
-        "cultureValue": "নতুন বা আগের তুলনায় বেড়ে যাওয়া উপসর্গ"
       }
     ],
     "condition": []
@@ -11248,5 +11243,50 @@
         "workflowName": "TB"
       }
     ]
+  },
+  "ncdSymptomsMedication": {
+    "id": "ncdSymptomsMedication",
+    "label": "Are you taking medication regularly?",
+    "widgetHint": "Spinner",
+    "fieldName": "Are you taking medication regularly?",
+    "family": "symptomsLog",
+    "orderId": 4.0,
+    "isMandatory": true,
+    "isEnabled": true,
+    "visibility": "gone",
+    "titleCulture": "আপনি কি নিয়মিত ঔষধ খাচ্ছেন?",
+    "errorMessage": "Please select the medication",
+    "cultureErrorMessage": "অনুগ্রহ করে ঔষধ নির্বাচন করুন",
+    "isSummary": true,
+    "titleSummary": "Medication Adherence",
+    "titleSummaryCulture": "ঔষধ আনুগত্য",
+    "isNeededDefault": true,
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "418633004",
+        "display": "Medication compliance"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "ncd",
+        "workflowId": 21,
+        "workflowName": "NCD"
+      }
+    ],
+    "optionsList": [
+      {
+        "id": "Yes",
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
+      },
+      {
+        "id": "No",
+        "name": "No",
+        "cultureValue": "না"
+      }
+    ],
+    "condition": []
   }
 }

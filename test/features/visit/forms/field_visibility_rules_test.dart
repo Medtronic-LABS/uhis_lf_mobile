@@ -791,30 +791,43 @@ void main() {
       );
     });
 
-    test('newWorsening only when that symptom option is selected', () {
+    test('newWorsening free-text never shows (Android SK — option absent)', () {
       expect(
         FieldVisibilityRules.isFieldVisible(
           field: newWorsening,
           data: CanonicalVisitData({
             'hasSymptoms': 'Yes',
-            'ncdSymptoms': ['Headache'],
+            'ncdSymptoms': ['10'],
           }),
           rulesByTargetId: const {},
           formType: 'ncd',
         ),
         isFalse,
       );
+    });
+
+    test('ncdSymptomsMedication only on NCD follow-up (Android SK)', () {
+      final medication = _fieldDef('ncdSymptomsMedication', {
+        'label': 'Are you taking medication regularly?',
+        'visibility': 'gone',
+      });
       expect(
         FieldVisibilityRules.isFieldVisible(
-          field: newWorsening,
-          data: CanonicalVisitData({
-            'hasSymptoms': 'Yes',
-            'ncdSymptoms': [
-              FieldVisibilityRules.ncdAnyNewOrWorseningSymptomOption,
-            ],
-          }),
+          field: medication,
+          data: const CanonicalVisitData(),
           rulesByTargetId: const {},
           formType: 'ncd',
+          isNcdFollowUp: false,
+        ),
+        isFalse,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: medication,
+          data: const CanonicalVisitData(),
+          rulesByTargetId: const {},
+          formType: 'ncd',
+          isNcdFollowUp: true,
         ),
         isTrue,
       );

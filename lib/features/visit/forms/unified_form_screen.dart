@@ -276,6 +276,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       formType: formType,
       ageInMonths: widget.ageInMonths,
       priorHeightLocked: notifier.isHeightLockedFromPrior,
+      isNcdFollowUp: notifier.isNcdFollowUp,
     );
   }
 
@@ -488,6 +489,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             gestationalWeeks: effectiveGa,
             ancVisitNumber: _ancVisitNumber(),
             ageInMonths: widget.ageInMonths,
+            isNcdFollowUp: notifier.isNcdFollowUp,
             isNewEnrolment: isNew,
           ));
         }
@@ -1739,6 +1741,7 @@ class _SectionCard extends StatelessWidget {
     this.gestationalWeeks,
     this.ancVisitNumber = 1,
     this.ageInMonths,
+    this.isNcdFollowUp = false,
     this.isNewEnrolment = false,
   });
 
@@ -1772,6 +1775,9 @@ class _SectionCard extends StatelessWidget {
 
   /// Child age in whole months — childhood visit age bands / weight range.
   final int? ageInMonths;
+
+  /// Android BDNCD SK: prior NCD assessment exists (follow-up visit).
+  final bool isNcdFollowUp;
 
   /// True when this section belongs to a newly enrolled programme.
   /// Renders with a tinted background + accent border.
@@ -1845,6 +1851,7 @@ class _SectionCard extends StatelessWidget {
       formType: section.formType,
       ageInMonths: ageInMonths,
       priorHeightLocked: heightReadOnly,
+      isNcdFollowUp: isNcdFollowUp,
     );
   }
 
@@ -1965,6 +1972,7 @@ class _SectionCard extends StatelessWidget {
         formType: section.formType,
         ageInMonths: ageInMonths,
         priorHeightLocked: heightReadOnly,
+        isNcdFollowUp: isNcdFollowUp,
       );
       if (section.formType == 'pregnancyOutcome') {
         // ignore: avoid_print

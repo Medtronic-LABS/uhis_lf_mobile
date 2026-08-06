@@ -1042,7 +1042,7 @@ class _HouseholdCard extends StatelessWidget {
 }
 
 /// One row in a household card's expanded "other members" panel — initials
-/// avatar, name, relation + age/gender, and an "Enrolled" tag, matching the
+/// avatar, name, relation + age/gender, and a "Registered" tag, matching the
 /// v13 mockup's `otherMembers` treatment. The mockup's static prototype has
 /// no tap action here; this app has a real Patient Details page, so tapping
 /// opens it — real capability shouldn't regress just because the mockup

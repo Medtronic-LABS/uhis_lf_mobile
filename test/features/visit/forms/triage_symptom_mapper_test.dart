@@ -23,13 +23,14 @@ void main() {
       ]);
     });
 
-    test('unmapped metabolic codes seed anyNewOrWorseningSymptoms', () {
-      final prefills = TriageSymptomMapper.prefillsFor('ncd', [
-        'polydipsia',
-        'numbness',
-      ]);
-      expect(prefills['hasSymptoms'], 'Yes');
-      expect(prefills['ncdSymptoms'], ['anyNewOrWorseningSymptoms']);
+    test('unmapped metabolic codes do not seed a removed checkbox option', () {
+      expect(
+        TriageSymptomMapper.prefillsFor('ncd', [
+          'polydipsia',
+          'numbness',
+        ]),
+        isEmpty,
+      );
     });
 
     test('returns empty when no NCD-mappable codes', () {
