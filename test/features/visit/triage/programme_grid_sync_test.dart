@@ -50,6 +50,16 @@ void main() {
       );
       expect(seeded, {Programme.pnc});
     });
+
+    test('never seeds tb or nutrition even when enrolled (paused pending form alignment)',
+        () {
+      final seeded = ProgrammeGridSync.applicableEnrolledSeed(
+        enrolled: {Programme.ncd, Programme.tb, Programme.nutrition},
+        isPregnant: false,
+        isPostpartum: false,
+      );
+      expect(seeded, {Programme.ncd});
+    });
   });
 
   group('ProgrammeGridSync.catalogProgrammesFor', () {
@@ -86,6 +96,77 @@ void main() {
       );
       expect(next.selected, {Programme.ncd, Programme.pnc});
       expect(next.dismissedBySk, {Programme.anc, Programme.pw});
+    });
+  });
+
+  // ===========================================================================
+  // Regression: Pregnancy Outcome must not be selectable without an actual
+  // open pregnancy episode. Previously the card's lock only checked the
+  // legacy `isPregnant` flag (derived from synced pregnancyFacts / enrolled
+  // programmes / a raw JSON flag — see PatientContextBuilder), independent of
+  // PregnancyEpisodeDao's own open-episode row. A patient could be flagged
+  // pregnant by a stale legacy signal with no actual PW registration, and
+  // Pregnancy Outcome would still show as available — offering to record the
+  // outcome of a pregnancy that was never formally registered. Found via
+  // manual device testing: "Patient P1 is not registered for PW, still
+  // Pregnancy Outcome is showing."
+  // ===========================================================================
+  group('ProgrammeGridSync.isPregnancyOutcomeLocked', () {
+    test('locked when not pregnant at all', () {
+      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
+        isPregnant: false,
+        isPostpartum: false,
+        hasOpenPregnancyEpisode: false,
+      );
+      expect(locked, isTrue);
+    });
+
+    test(
+        'BUG SCENARIO: locked when isPregnant flag is true but there is no '
+        'open pregnancy episode (never actually registered for PW)', () {
+      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
+        isPregnant: true,
+        isPostpartum: false,
+        hasOpenPregnancyEpisode: false,
+      );
+      expect(locked, isTrue,
+          reason: 'Nothing was ever registered via PW — there is no '
+              'pregnancy episode to record an outcome for, regardless of '
+              'what the legacy isPregnant flag says.');
+    });
+
+    test('unlocked when pregnant AND an open pregnancy episode exists', () {
+      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
+        isPregnant: true,
+        isPostpartum: false,
+        hasOpenPregnancyEpisode: true,
+      );
+      expect(locked, isFalse,
+          reason: 'A real, open PW registration exists — this is the '
+              'normal case where recording the outcome makes sense.');
+    });
+
+    test('locked when already postpartum, even with a stale open episode flag', () {
+      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
+        isPregnant: true,
+        isPostpartum: true,
+        hasOpenPregnancyEpisode: true,
+      );
+      expect(locked, isTrue,
+          reason: 'Outcome already recorded once postpartum — should not '
+              'be offered again.');
+    });
+
+    test('locked when an episode exists but the legacy isPregnant flag is false', () {
+      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
+        isPregnant: false,
+        isPostpartum: false,
+        hasOpenPregnancyEpisode: true,
+      );
+      expect(locked, isTrue,
+          reason: 'Both signals must agree there is an active, open '
+              'pregnancy — a lagging/unsynced legacy flag should not by '
+              'itself unlock the card either.');
     });
   });
 }

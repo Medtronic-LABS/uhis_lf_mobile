@@ -2,16 +2,19 @@
 
 ## Overview
 
-The visit feature is the core clinical workflow for the SK (community health worker). It implements a
-3-step flow: symptom selection → triage review → multi-programme assessment form.
+The visit feature is the core clinical workflow for the SK (community health worker). It is a
+single-route, 3-step flow hosted entirely inside `VisitFlowScreen` (`visit_flow_screen.dart`) —
+the SK never navigates away from `/patients/visit/:visitId/flow` while the visit is in progress;
+step transitions are internal state changes (`_VisitFlowState._step`), not route pushes.
 
 ```
-SymptomPickerScreen  →  TriageResultScreen  →  VisitFormScreen
-   (Step 1)                 (Step 2)           → SectionedAssessmentScreen
-                                                    (Step 3)
+_Step1Symptoms          →  _Step2ProgrammesThenForm       →  _Step3AiReco
+(SymptomPickerScreen)      or _Step2Vaccination (under-5)     (AI recommendation)
+   Step 1                  (VisitFormScreen)                     Step 3
+                              Step 2
 ```
 
-All three screens share `VisitStepHeader`, a progress-bar app bar that shows the current step.
+All steps share `VisitFlowHeader`, a progress-bar app bar that shows the current step.
 
 ---
 
@@ -19,43 +22,61 @@ All three screens share `VisitStepHeader`, a progress-bar app bar that shows the
 
 ### Step 1 — SymptomPickerScreen (`triage/symptom_picker_screen.dart`)
 
-The SK selects symptoms from a clustered list. Symptoms are defined in
-`UnifiedSymptomCatalog` and grouped by `SymptomCluster`.
+The SK selects symptoms from a clustered list (`UnifiedSymptomCatalog`, grouped by
+`SymptomCluster`), and reviews/edits the **Eligible Services** grid (`_InlineServiceSelector`) —
+the SK-facing surface for which programmes are active this visit.
 
-Key filtering:
-- `requiresFemale: true` symptoms are hidden for male patients (e.g. vaginal bleeding, reduced fetal
-  movement).
-- `maxAgeMonths` symptoms are hidden when the patient exceeds the age cap (e.g. neonatal findings).
+`TriageViewModel` maintains selected symptoms and drives `PathwayEngine.activate()` on every
+toggle, producing rule-based `ActivatedPathway`s live. `ProgrammeGridSync` merges three sources
+into the grid: rule-engine activations, `UnifiedSymptomCatalog` per-symptom programme tags
+(finer-grained than the rule engine), and the patient's enrolled programmes (`PatientContext`,
+gated by current pregnancy/postpartum state).
 
-`TriageViewModel` maintains selected symptoms and drives `PathwayEngine.activate()` on every toggle.
-The pathway list updates live as the SK picks symptoms, giving instant visual feedback.
+**`ServiceSelectionResolver` (`triage/service_selection_resolver.dart`) is the single,
+authoritative choke point for finalizing that selection**, run in `_doAdvance()` right before the
+SK leaves Step 1:
+- Canonical clinical-priority ordering (`canonicalPriority`) — the final set is always
+  priority-sorted, so "primary programme" and section ordering downstream are deterministic.
+- Business-rule gating: PW-once-only (silent drop), ANC blocked postpartum or within the
+  risk-based revisit interval (dialog, SK stays on Step 1 with the correction applied), PW
+  auto-added alongside a first-time ANC selection.
+- Pilot-scope exclusion (`excludedFromSelection`) — filters programmes whose form isn't ready yet
+  (currently `nutrition`, no formType exists; `tb`, form content not yet aligned) regardless of how
+  they entered the set. `epi` is deliberately **not** filtered here — it's handled entirely by the
+  `_isChildVisit` → `_Step2Vaccination` route, which never reaches this pipeline.
 
-On "Confirm" the screen navigates to Step 2, passing `List<ActivatedPathway>` via router `extra`.
+**Step 2 does not re-derive or re-gate this set** — it renders whatever `ServiceSelectionResolver`
+produced. If you're adding a new business rule about which programmes can be selected, it belongs
+in `ServiceSelectionResolver`, not in Step 2.
 
-Route: `/patients/visit/:visitId/triage-result`
+### Step 2 — `_Step2ProgrammesThenForm` / `_Step2Vaccination` → `VisitFormScreen`
 
-### Step 2 — TriageResultScreen (`triage/triage_result_screen.dart`)
+Under-5 / EPI visits route to `_Step2Vaccination` (immunisation timeline,
+`immunisation/immunisation_timeline_screen.dart`) — structurally separate from the generic form
+pipeline below.
 
-A pure read-only widget (no I/O, no ChangeNotifier) that:
-1. Shows an urgency card: **Urgent** (red) for IMCI danger signs, **Warning** (amber) for other
-   pathways, **Info** (blue) for routine visits.
-2. Renders 2-3 measurement instruction cards tailored to the primary programme.
-3. Shows a "Programme identified" banner listing all activated programmes.
-4. CTA button navigates to Step 3.
+All other visits render `VisitFormScreen` (`visit_form_screen.dart`), which:
+1. Resolves programme names → formType keys via `FormTypeResolver.resolve()`
+   (`forms/form_type_resolver.dart` — e.g. `pnc` → `pncMother`, `imci` → `pncChild`).
+2. Builds a `UnifiedFormNotifier` (`forms/unified_form_notifier.dart`) with those formTypes.
+3. Renders `UnifiedFormScreen` (`forms/unified_form_screen.dart`), which composes sections via
+   `UnifiedSectionRules.activeSections()` (`forms/unified_section_rules.dart`) reading
+   `assets/forms/layout_manifests.json` — enrolled formTypes render first, then remaining active
+   ones; field ownership/de-duplication is resolved by a `claimedFieldIds` set (first section to
+   include a field claims it).
 
-Urgency is derived from `_primaryPathway.triggerSymptoms` — if any of
-`{chest_indrawing, convulsions, stridor, unconscious}` are present in an IMCI pathway, the card is
-red.
+CDS/referral evaluation runs per-formType in `UnifiedFormNotifier._computeReferral()`, gated by
+`if (activeFormTypes.contains('<formtype>'))` — see `NcdReferralEvaluator`, `AncReferralEvaluator`,
+`PncReferralEvaluator` in `../../core/clinical/referral_evaluator.dart`. There is currently no
+cross-programme "field value → activate another programme mid-form" mechanism (e.g. a high BP on
+an ANC-only visit does not add the NCD section) — referral evaluators can only fire for a formType
+that's already active.
 
-### Step 3 — VisitFormScreen + SectionedAssessmentScreen
+### Step 3 — `_Step3AiReco`
 
-`VisitFormScreen` (`visit_form_screen.dart`) receives `activatedPathways` (programme name strings)
-from Step 2, reconstructs them as `ActivatedPathway` objects, and mounts
-`SectionedAssessmentScreen`.
-
-`SectionedAssessmentScreen` (`composer/sectioned_assessment_screen.dart`) renders a scrollable form
-grouped by programme ("NCD checks", "ANC checks", etc.). CDS alerts and TB section injection run
-live on every field change via `SectionedAssessmentViewModel`.
+Calls `NabaRepository.generate()` with the visit context assembled from prior steps, renders the
+structured care plan (danger signs, findings, next actions, counselling, referral). The response
+is a *proposal* — accepting it is what writes FHIR resources and logs the rationale snapshot.
 
 ---
 
@@ -63,16 +84,14 @@ live on every field change via `SectionedAssessmentViewModel`.
 
 ### PathwayEngine (`pathway/pathway_engine.dart`)
 
-Pure function: `PathwayEngine.activate(symptoms, context) → List<ActivatedPathway>`
+Pure function: `PathwayEngine.activate(symptoms, context) → List<ActivatedPathway>`, sorted
+ascending by priority (lower = higher urgency) and deduped by programme.
 
-Evaluates `PathwayRulesV1` against the symptom set and patient demographics. Rules are AND-gated
-on:
-- `combinations` — ALL symptoms in at least one combination set must be present.
-- `anyOf` — at least one symptom from this set must also be present (optional, enhancing specificity).
-- `DemographicGate` — `minAgeMonths`, `maxAgeMonths`, `sex`, `requiresPregnant`, `requiresPostpartum`.
-
-Rules also fire from `historyTriggers` — known condition codes on `PatientContext` (e.g. `DIABETES`
-activates NCD-DM regardless of selected symptoms).
+Evaluates `PathwayRulesV1.all` against the symptom set and patient demographics/history
+(`DemographicGate`, `anyOf`, `combinations`, `historyTriggers`), plus two synthetic additions
+outside the rule table: an EPI-due pathway (`Programme.imci`, priority 100 — "EPI uses IMCI
+programme type") and an elevated-BP NCD pathway. `PathwayRulesV1.forProgramme()` is the only other
+public entry point on the rule table.
 
 **Important age gates (pathway_rules_v1.dart):**
 
@@ -80,95 +99,51 @@ activates NCD-DM regardless of selected symptoms).
 |---|---|---|---|
 | IMCI | Various | — | maxAgeMonths: 60 (under-5 only) |
 | NCD-HTN | bp_stage1 etc. | 216 (18 yr) | Adults only |
-| NCD-DM | polyuria+polydipsia | 216 (18 yr) | Fixed in Phase 4.5 — was `any` which caused false activation for toddlers |
+| NCD-DM | polyuria+polydipsia | 216 (18 yr) | Was `any` which caused false activation for toddlers |
 | ANC | pregnant + dizziness | — | requiresPregnant: true |
 | PNC | postpartum | — | requiresPostpartum: true |
 
-### SectionRegistry (`composer/section_registry.dart`)
+### PregnancyCohortRules (`../../core/risk/pregnancy_cohort_rules.dart`)
 
-Static list of all `FormSection` definitions across 7 programmes. Sections are programme-tagged
-and priority-ordered. `SectionRegistry.forProgrammes(Set<Programme>)` returns only the sections
-relevant to the given programme set.
+Pure, live-derived pregnancy-episode state (`isActivePregnancy`, `isPostnatal`,
+`daysSinceLmp`/`daysSinceDelivery`) computed from `PregnancySnapshotRow` against `now` — ported
+from Android Spice's `PregnancyCohortRules`. Used by `ServiceSelectionResolver`'s callers to decide
+the ANC/PW gating inputs; not a persisted status field on either side of the port.
 
-**All 7 programme families and their sections:**
+### FormTypeResolver / UnifiedSectionRules (`forms/`)
 
-| Programme | Sections | Priority |
-|---|---|---|
-| IMCI | vitals, danger-signs, symptom-detail, iccm-classify | 10, 12, 30, 40 |
-| TB | tb-screen-detail | 25 |
-| ANC | anc-vitals, anc-specific | 12, 45 |
-| NCD | ncd-htn, ncd-dm | 42, 43 |
-| EPI | epi-review | 55 |
-| NUTRITION | nutrition-detail | 35 |
-| PNC | pnc-mother, pnc-neonatal, pnc-child | 46, 47, 48 |
-
-**Shared fields** — when two sections both define a field (e.g. `bloodPressureSystolic` in both
-`anc-vitals` and `ncd-htn`), the section with the **lower priority number** wins ownership.
-`sharedFieldIds` on the section declares which fields may also appear in other sections.
-`FormCompositor` builds a `fieldOwnership` map from this to prevent duplicate data collection.
-
-### FormCompositor (`composer/form_compositor.dart`)
-
-`FormCompositor.compose(List<ActivatedPathway>) → ComposedForm`
-
-1. Calls `SectionRegistry.forProgrammes()` with the activated programme set.
-2. Removes sections whose `minPathwayPriority` is above the pathway priority.
-3. Deduplicates by `sectionId`.
-4. Sorts ascending by `section.priority`.
-5. Resolves `fieldOwnership` — lower-priority section wins on conflict.
-
-`ComposedForm` exposes `sections` (ordered) and `fieldOwnership` (Map<fieldId, sectionId>).
-
-### CDS Rules (`composer/cds_rules.dart`)
-
-`CdsRules.evaluate(fieldValues, activeProgammes) → List<CdsAlert>`
-
-Fires clinical decision support alerts based on field values. The key alert `bp_stage1`:
-- Triggers at systolic ≥ 140 or diastolic ≥ 90.
-- If `Programme.ncd` is **not** in `activeProgammes`: `action = CdsAction.addPathway, addPathway = Programme.ncd`.
-- If NCD is already active: `action = CdsAction.continueAssessment, addPathway = null`.
-
-This ensures the SK is prompted to activate the NCD pathway when BP crosses stage-1 threshold during
-an ANC visit.
+Replace the old `SectionRegistry`/`FormCompositor` — form composition is now data-driven from
+`assets/forms/layout_manifests.json` rather than a static Dart registry. See "Step 2" above.
 
 ---
 
 ## Routing
 
-All visit routes are nested under `/patients/`:
+Single route for the whole flow:
 
 ```
-/patients/visit/:visitId/triage-result   → TriageResultScreen
-/patients/visit/:visitId/form            → VisitFormScreen → SectionedAssessmentScreen
+/patients/visit/:visitId/flow   → VisitFlowScreen (all 3 steps, internal state)
 ```
 
-`TriageResultScreen` receives pathways via `state.extra['pathwayObjects']` (List<ActivatedPathway>).
-`VisitFormScreen` receives programme name strings via `state.extra['activatedPathways']`
-(List<String>) which it reconstructs into ActivatedPathway objects at priority=10.
+`VisitFlowScreen` is constructed from `router.dart` with the patient/visit identifiers via route
+`extra`; there is no `initialStep`/`seedProgrammes` — the flow always starts at Step 1 and derives
+its programme set from `ServiceSelectionResolver`, not a caller-supplied seed.
 
 ---
 
 ## Submission
 
-`UnifiedSubmissionOrchestrator.submit(draft)` fans out **one `LocalAssessmentEntity` row per
-activated programme**. All rows share the same `encounterId` and each gets a unique `legId` (UUID).
-Rows are inserted as `AssessmentSyncStatus.pending` and synced to the server on next connection.
-
-The server endpoint is `POST /patientvisit/create`. A known 500 from `fhir-mapper` (provenance NPE)
-does not block the SK — the offline queue holds rows and retries automatically.
+`UnifiedFormNotifier.submit()` fans out one `LocalAssessmentEntity` row per active programme,
+sharing the same `encounterId`. Rows are inserted as pending and synced to the server on next
+connection.
 
 ---
 
 ## String constants
 
-All user-facing strings live in `lib/core/constants/app_strings.dart`. Field labels are exposed via
-`AppStrings.fieldLabel(fieldId)` and section titles via `AppStrings.sectionTitle(sectionId)`.
-
-When adding a new field to `SectionRegistry`, also add:
-1. A `static const String field<Name>` constant in `AppStrings` (or the relevant nested class).
-2. A case in `AppStrings.fieldLabel()`.
-
-When adding a new section, also add a case in `AppStrings.sectionTitle()`.
+All user-facing strings live in `lib/core/constants/app_strings.dart`, grouped by feature class
+(e.g. `TriageStrings`, `VisitFormStrings`, `ComposerStrings`). No hardcoded copy in widgets — add a
+new getter to the relevant class instead.
 
 ---
 
@@ -176,13 +151,12 @@ When adding a new section, also add a case in `AppStrings.sectionTitle()`.
 
 ```
 test/features/visit/
-├── gate3_flagship_test.dart          # ANC+NCD end-to-end: pathway → form → CDS → submission
-├── composer/
-│   └── section_registry_breadth_test.dart  # EPI, NUTRITION, PNC section coverage
-├── pathway/
-│   └── pathway_engine_test.dart       # Rule activation across all programmes
-└── triage/
-    └── triage_view_model_test.dart    # Pre-ticks, AI merge, scribe integration
+├── visit_flow_screen_test.dart      # Step 3 header/body (runs via debugInitialStep — Steps 1-2
+│                                       need the full Provider tree of DAOs)
+├── forms/                           # FormTypeResolver, UnifiedSectionRules, payload mapper
+├── pathway/                         # PathwayEngine rule activation, AI pathway client
+└── triage/                          # TriageViewModel, ServiceSelectionResolver,
+                                        ProgrammeGridSync, symptom catalogue
 ```
 
 Run all: `flutter test test/features/visit/`
@@ -193,8 +167,8 @@ Run all: `flutter test test/features/visit/`
 
 | Mistake | Fix |
 |---|---|
-| NCD-DM fires for a child | `PathwayRulesV1` NCD-DM rule must have `minAgeMonths: 216`. Was `DemographicGate.any` — fixed in Phase 4.5. |
-| New field not showing label | Add `fieldLabel()` case in `app_strings.dart`. |
-| New section duplicated in composed form | Check `sharedFieldIds` — both sections must declare the shared field set, lower priority wins. |
-| BP owned by wrong section | Lower `priority` number wins ownership. `anc-vitals` is priority 12; `ncd-htn` is 42. ANC wins. |
-| `patientvisit/create` returns 500 | Known server-side fhir-mapper NPE on `provenance`. App queues offline; not a Flutter bug. |
+| NCD-DM fires for a child | `PathwayRulesV1` NCD-DM rule must have `minAgeMonths: 216`. |
+| A business rule about which programmes can be selected lives in Step 2 | It belongs in `ServiceSelectionResolver` (Step 1) — Step 2 only renders. |
+| New formType renders blank | Check it has an entry in `assets/forms/layout_manifests.json`, and isn't in `ServiceSelectionResolver.excludedFromSelection`. |
+| New field not showing label | Add a case in the relevant `AppStrings` class. |
+| `patientvisit/create` / offline-sync errors | App queues offline and retries; check `OfflineSyncService`, not this feature, first. |

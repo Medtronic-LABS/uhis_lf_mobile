@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/clinical/ai_context_fields.dart';
@@ -17,8 +18,10 @@ import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/models/programme.dart';
+import '../../../core/risk/pregnancy_cohort_rules.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/db/patient_programmes_dao.dart';
+import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../patient/followup_repository.dart';
 import '../../patient/vitals_repository.dart';
@@ -29,6 +32,7 @@ import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'programme_grid_sync.dart';
+import 'service_selection_resolver.dart';
 import 'symptom_catalog.dart';
 import 'unified_symptom_catalog.dart';
 import 'visit_step_header.dart';
@@ -55,6 +59,7 @@ class SymptomPickerScreen extends StatefulWidget {
     this.onAdvance,
     this.onSymptomsConfirmed,
     this.onProgrammesSelected,
+    this.onEnrolledProgrammesResolved,
     this.onProgrammesLive,
     this.onDeliverySelected,
   });
@@ -94,6 +99,11 @@ class SymptomPickerScreen extends StatefulWidget {
   /// child visits (under-5) skip the grid and use the vaccination path.
   final ValueChanged<Set<Programme>>? onProgrammesSelected;
 
+  /// Fired alongside [onProgrammesSelected] with the patient's enrolled
+  /// programmes (already loaded via [PatientContext] for this screen) so
+  /// Step 2 can order sections enrolled-first without a second DB read.
+  final ValueChanged<Set<Programme>>? onEnrolledProgrammesResolved;
+
   /// Fired on every service-card toggle so the host can update the visit
   /// header badge in real time without waiting for the SK to tap Continue.
   final ValueChanged<Set<Programme>>? onProgrammesLive;
@@ -104,6 +114,32 @@ class SymptomPickerScreen extends StatefulWidget {
 
   @override
   State<SymptomPickerScreen> createState() => _SymptomPickerScreenState();
+}
+
+/// Result of checking whether a new ANC visit falls within the risk-based
+/// revisit interval — see [_SymptomPickerScreenState._computeAncRevisitStatus].
+class _AncRevisitStatus {
+  const _AncRevisitStatus({
+    required this.tooSoon,
+    this.lastVisitMs,
+    this.highRisk = false,
+    this.revisitDays,
+  });
+
+  static const unknown = _AncRevisitStatus(tooSoon: false);
+
+  /// True when a new ANC visit is currently blocked by the revisit interval.
+  final bool tooSoon;
+
+  /// Epoch ms of the last ANC visit, when known.
+  final int? lastVisitMs;
+
+  /// Whether that last visit was flagged high-risk.
+  final bool highRisk;
+
+  /// The interval applied — 1 day (high-risk) or 15 days (normal), null when
+  /// [lastVisitMs] is unavailable and this fell back to [_ancVisitedToday].
+  final int? revisitDays;
 }
 
 class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
@@ -150,6 +186,18 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// a second ANC visit on the same calendar day.
   bool _ancVisitedToday = false;
 
+  /// The patient's currently open pregnancy episode, if any — locks the PW
+  /// card (already registered, re-registration would only be silently
+  /// dropped by `ServiceSelectionResolver` at Continue-time) and shows its
+  /// LMP/EDD on the card. Null for a patient with no open episode.
+  PregnancyEpisodeRow? _openPregnancyEpisode;
+
+  /// Whether ANC is currently within its risk-based revisit interval — locks
+  /// the ANC card and shows the last-visit date (see
+  /// [_computeAncRevisitStatus]) so the grid always matches what Continue
+  /// would actually do.
+  _AncRevisitStatus _ancRevisitStatus = _AncRevisitStatus.unknown;
+
   /// Under-5 only: vaccination is always included for a child visit — Step 2
   /// of the visit flow shows the vaccination timeline regardless, so this
   /// was never really a user choice. Forced true whenever the card would
@@ -179,6 +227,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     final patientDao = context.read<PatientDao>();
     final programmesDao = context.read<PatientProgrammesDao>();
     final pregnancyDao = context.read<PregnancySnapshotDao>();
+    final episodeDao = context.read<PregnancyEpisodeDao>();
 
     try {
       // Get patientId - either from widget or look up from encounter
@@ -249,6 +298,30 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       final ancToday = await context
           .read<LocalAssessmentDao>()
           .hasAncAssessmentTodayForPatient(ctx.patientId);
+      // Whether this patient currently has an open pregnancy episode — locks
+      // the PW card (see _InlineServiceSelector._isLocked) so the SK can't
+      // select a re-registration that ServiceSelectionResolver would only
+      // silently drop later. Deliberately NOT used to gate _isPW/ANC below —
+      // ANC must stay selectable for an already-pregnant woman.
+      final openEpisode = await episodeDao.openEpisodeFor(ctx.patientId);
+      final mostRecentEpisode = await episodeDao.mostRecentFor(ctx.patientId);
+      debugPrint(
+        '[PwLockDebug] patientId=${ctx.patientId} isPw=$isPw '
+        'activeProgrammes=${ctx.activeProgrammes} isPregnant=${ctx.isPregnant} '
+        'openEpisode=${openEpisode?.id} '
+        'mostRecentEpisode=${mostRecentEpisode?.id} '
+        'mostRecentClosedAt=${mostRecentEpisode?.closedAt} '
+        'mostRecentLmp=${mostRecentEpisode?.obstetric.lmpDate}',
+      );
+      // Risk-based ANC revisit interval (1 day high-risk / 15 days normal) —
+      // locks the ANC card so the grid matches what Continue would actually
+      // do, instead of just the same-day check above. fallbackTooSoon uses
+      // the freshly computed ancToday, not the (still stale, pre-setState)
+      // _ancVisitedToday field.
+      final ancRevisitStatus = await _computeAncRevisitStatus(
+        patientId: ctx.patientId,
+        fallbackTooSoon: ancToday,
+      );
       // Pregnancy Outcome is an explicit SK choice — never auto-on.
       // Postpartum mothers get PNC via [enrolledSeed], not this flag.
       final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
@@ -267,12 +340,28 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           // (e.g. skip enrolled PNC while still pregnant). SK can still add
           // or remove cards after load.
           ..addAll(enrolledSeed);
+        if (openEpisode != null) {
+          // Already registered — PW is locked in the grid (see
+          // _InlineServiceSelector._isLocked) so this should rarely matter,
+          // but keeps _selectedProgrammes honest if enrolledSeed pre-ticked
+          // it. Does NOT touch _isPW — ANC's own lock reads that flag
+          // separately and must stay unlocked for an already-pregnant woman.
+          _selectedProgrammes.remove(Programme.pw);
+        }
+        if (ancRevisitStatus.tooSoon) {
+          // Within the revisit interval — ANC is locked in the grid (see
+          // _InlineServiceSelector._isLocked), keeps _selectedProgrammes
+          // honest if enrolledSeed pre-ticked it.
+          _selectedProgrammes.remove(Programme.anc);
+        }
         _pathwayActivatedProgrammes
           ..clear()
           ..addAll(pathwaySet);
         _isPW = isPw;
         _isDelivery = false;
         _ancVisitedToday = ancToday;
+        _ancRevisitStatus = ancRevisitStatus;
+        _openPregnancyEpisode = openEpisode;
         _isLoading = false;
       });
       debugPrint(
@@ -386,8 +475,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _skDismissedProgrammes.remove(Programme.anc);
         _skDismissedProgrammes.remove(Programme.pw);
         _selectedProgrammes.add(Programme.pw);
-        if (_patientContext!.activeProgrammes.contains(Programme.anc) ||
-            _pathwayActivatedProgrammes.contains(Programme.anc)) {
+        // Don't resurrect ANC here if it's within its revisit interval —
+        // otherwise toggling PW off/on would silently re-add an ANC
+        // selection that Continue would only drop again.
+        if ((_patientContext!.activeProgrammes.contains(Programme.anc) ||
+                _pathwayActivatedProgrammes.contains(Programme.anc)) &&
+            !_ancRevisitStatus.tooSoon) {
           _selectedProgrammes.add(Programme.anc);
         }
       }
@@ -491,11 +584,18 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       ));
     }
 
+    // Exclude programmes currently locked in the grid — a newly-selected
+    // symptom must not silently resurrect ANC (within its revisit interval)
+    // or PW (already registered) after they were stripped/locked at load.
     final unseen = ProgrammeGridSync.additionsFromPathways(
       activated: activated,
       selected: _selectedProgrammes,
       dismissedBySk: _skDismissedProgrammes,
-    );
+    ).where((p) {
+      if (p == Programme.anc && _ancRevisitStatus.tooSoon) return false;
+      if (p == Programme.pw && _openPregnancyEpisode != null) return false;
+      return true;
+    }).toSet();
     if (unseen.isNotEmpty) {
       setState(() {
         _selectedProgrammes.addAll(unseen);
@@ -579,20 +679,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // that cause demographic gates to fail — see issue #127).
     var pathways = vm.activatedPathways;
     if (pathways.isEmpty && _patientContext != null) {
-      const priorityByProgramme = {
-        Programme.anc: 20,
-        Programme.pnc: 25,
-        Programme.imci: 10,
-        Programme.ncd: 40,
-        Programme.tb: 30,
-        Programme.epi: 100,
-      };
       pathways = _patientContext!.activeProgrammes
-          .where(priorityByProgramme.containsKey)
+          .where(ServiceSelectionResolver.canonicalPriority.containsKey)
           .map(
             (p) => ActivatedPathway(
               programme: p,
-              priority: priorityByProgramme[p]!,
+              priority: ServiceSelectionResolver.canonicalPriority[p]!,
               confidence: 1.0,
               trigger: PathwayTrigger.rule,
               rationaleKey: 'pathwayEnrolmentFallback',
@@ -619,18 +711,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           final lastType = assessments.first.assessmentType;
           final programme = Programme.fromTag(lastType);
           if (programme != null) {
-            const priorityByProgramme = {
-              Programme.anc: 20,
-              Programme.pnc: 25,
-              Programme.imci: 10,
-              Programme.ncd: 40,
-              Programme.tb: 30,
-              Programme.epi: 100,
-            };
             pathways = [
               ActivatedPathway(
                 programme: programme,
-                priority: priorityByProgramme[programme] ?? 50,
+                priority:
+                    ServiceSelectionResolver.canonicalPriority[programme] ??
+                        50,
                 confidence: 1.0,
                 trigger: PathwayTrigger.rule,
                 rationaleKey: 'pathwayLastAssessmentFallback',
@@ -655,22 +741,78 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       // explicitly selected and can show the IMCI form after vaccination.
       // vaccinationOnly = true clears programmes so auto-activated pathways
       // (e.g. EPI_DUE) don't smuggle IMCI into a vaccination-only visit.
-      {
-        final Set<Programme> programmes;
-        if (vaccinationOnly) {
-          programmes = const <Programme>{};
-        } else if (_isDelivery) {
-          programmes = Set<Programme>.from(_selectedProgrammes)..add(Programme.pnc);
-        } else {
-          final base = Set<Programme>.from(_selectedProgrammes);
-          // Include epi so VisitFlowScreen knows vaccination was selected;
-          // without it the vaccination step is skipped for IMCI-only visits.
-          if (vaccinationSelected) base.add(Programme.epi);
-          programmes = base;
-        }
-        widget.onProgrammesSelected?.call(Set.unmodifiable(programmes));
-        widget.onDeliverySelected?.call(_isDelivery);
+      final Set<Programme> programmes;
+      if (vaccinationOnly) {
+        programmes = const <Programme>{};
+      } else {
+        final base = Set<Programme>.from(_selectedProgrammes);
+        // Include epi so VisitFlowScreen knows vaccination was selected;
+        // without it the vaccination step is skipped for IMCI-only visits.
+        if (vaccinationSelected) base.add(Programme.epi);
+        programmes = base;
       }
+
+      // Finalize the selection through the single service-selection choke
+      // point — all business-rule gating (PW-once-only, ANC-blocked-
+      // postpartum/revisit-too-soon, PW-auto-add) runs here, before the SK
+      // ever leaves Step 1. Short-circuit the extra DAO reads unless the
+      // selection actually touches PW/ANC.
+      final needsPwCheck = programmes.contains(Programme.pw) ||
+          programmes.contains(Programme.anc);
+      final pwBlocked =
+          needsPwCheck ? await _isPwRegistrationBlocked() : false;
+      final ancRevisitBlocked = programmes.contains(Programme.anc)
+          ? await _isAncRevisitTooSoon()
+          : false;
+      if (!mounted) return;
+
+      final result = ServiceSelectionResolver.finalize(
+        selected: programmes,
+        pwRegistrationBlocked: pwBlocked,
+        isPostpartum: _patientContext?.isPostpartum ?? false,
+        ancRevisitBlocked: ancRevisitBlocked,
+        isDeliveryVisit: _isDelivery,
+      );
+
+      if (result.blockedReason != null) {
+        await _showAncBlockedDialog(result.blockedReason!);
+        if (!mounted) return;
+        // Stay on Step 1 with the corrected selection applied — the SK's
+        // symptom picks and other selected services survive; they can
+        // review/adjust and tap Continue again.
+        setState(() {
+          _selectedProgrammes
+            ..clear()
+            ..addAll(result.programmes);
+          _skDismissedProgrammes.add(Programme.anc);
+        });
+        _fireProgrammesLive();
+        return;
+      }
+
+      if (result.silentlyEmptied) {
+        // PW (or an excluded programme) was the only selection and got
+        // dropped — hint instead of a dialog, stay on Step 1.
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Text(AppStrings.pwAlreadyEnrolledMessage),
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ));
+        setState(() {
+          _selectedProgrammes.clear();
+          _skDismissedProgrammes.add(Programme.pw);
+        });
+        _fireProgrammesLive();
+        return;
+      }
+
+      widget.onProgrammesSelected?.call(Set.unmodifiable(result.programmes));
+      widget.onEnrolledProgrammesResolved?.call(
+        Set.unmodifiable(_patientContext?.activeProgrammes ?? const {}),
+      );
+      widget.onDeliverySelected?.call(_isDelivery);
       widget.onSymptomsConfirmed?.call(
         vm.selectedSymptoms,
         vm.sicknessDuration,
@@ -683,6 +825,125 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
     // Bypass the triage-result interstitial and go straight to the form.
     _navigateToForm(pathways);
+  }
+
+  /// Whether starting a new PW registration should be blocked because this
+  /// pregnancy is already on file — now a direct query against real episode
+  /// boundaries instead of guessing from a singleton's stale fields. Blocked
+  /// if there's a currently open episode (already pregnant — one open
+  /// episode at a time), or if the most recent episode closed within the
+  /// 42-day postnatal window ([PregnancyCohortRules.isPostnatal]).
+  ///
+  /// This replaces the old check based on `PregnancySnapshotRow.lmpDate !=
+  /// null` — a field that, once ever set, was never cleared, so it blocked
+  /// re-registration forever after any historical pregnancy. That was the
+  /// bug preventing a woman from ever registering a second pregnancy.
+  Future<bool> _isPwRegistrationBlocked() async {
+    final ctx = _patientContext;
+    if (ctx == null) return false;
+    try {
+      final episodeDao = context.read<PregnancyEpisodeDao>();
+      final open = await episodeDao.openEpisodeFor(_patientId);
+      if (open != null) return true;
+      final recent = await episodeDao.mostRecentFor(_patientId);
+      return PregnancyCohortRules.isPostnatal(recent?.obstetric);
+    } catch (e) {
+      debugPrint('[SymptomPicker] pregnancy episode lookup failed: $e');
+      return false;
+    }
+  }
+
+  /// Whether a new ANC visit is too soon after the last one, and the
+  /// context behind that decision (last visit date, risk level, the
+  /// interval applied) — a risk-based revisit interval (1 day if the last
+  /// visit was high-risk, else 15 days), ported from Android Spice's
+  /// `isAncMenuDisabledByLastVisit` / `getAncMenuRevisitDays`. Falls back to
+  /// [fallbackTooSoon] (the same-calendar-day check) when no dated snapshot
+  /// is available yet (e.g. sync hasn't landed a `PregnancySnapshotDao` row).
+  ///
+  /// Shared by the Continue-time gate ([_isAncRevisitTooSoon]) and the
+  /// Eligible Services grid (locks the ANC card, shows why) so the two can
+  /// never drift from each other. [patientId] and [fallbackTooSoon] are
+  /// explicit parameters rather than reading [_patientId]/[_ancVisitedToday]
+  /// internally, since the grid calls this *during* `_loadPatientContext`,
+  /// before those fields are updated for the current load.
+  Future<_AncRevisitStatus> _computeAncRevisitStatus({
+    required String patientId,
+    required bool fallbackTooSoon,
+  }) async {
+    try {
+      final snapshots = context.read<PregnancySnapshotDao>();
+      final snapshot = await snapshots.byPatientOrMember(
+        patientId,
+        memberId: widget.memberId,
+      );
+      final lastVisitMs = snapshot?.lastAncVisitDateMs;
+      if (lastVisitMs == null) {
+        debugPrint(
+          '[AncRevisitDebug] READ patientId=$patientId memberId=${widget.memberId} '
+          'snapshotFound=${snapshot != null} lastAncVisitDateMs=null '
+          '→ fallbackTooSoon=$fallbackTooSoon',
+        );
+        return _AncRevisitStatus(tooSoon: fallbackTooSoon);
+      }
+      final daysSince = DateTime.now()
+          .difference(DateTime.fromMillisecondsSinceEpoch(lastVisitMs))
+          .inDays;
+      final highRisk = snapshot?.facts.highRiskPregnantWoman ?? false;
+      final revisitDays = highRisk ? 1 : 15;
+      final tooSoon = daysSince < revisitDays;
+      debugPrint(
+        '[AncRevisitDebug] READ patientId=$patientId memberId=${widget.memberId} '
+        'lastAncVisitDateMs=$lastVisitMs daysSince=$daysSince highRisk=$highRisk '
+        'revisitDays=$revisitDays → tooSoon=$tooSoon',
+      );
+      return _AncRevisitStatus(
+        tooSoon: tooSoon,
+        lastVisitMs: lastVisitMs,
+        highRisk: highRisk,
+        revisitDays: revisitDays,
+      );
+    } catch (e) {
+      debugPrint('[SymptomPicker] ANC revisit-interval lookup failed: $e');
+      return _AncRevisitStatus(tooSoon: fallbackTooSoon);
+    }
+  }
+
+  Future<bool> _isAncRevisitTooSoon() async => (await _computeAncRevisitStatus(
+        patientId: _patientId,
+        fallbackTooSoon: _ancVisitedToday,
+      ))
+          .tooSoon;
+
+  /// Shows the ANC-blocked dialog, relocated here from
+  /// `_Step2ProgrammesThenFormState._showAncBlockedDialog` — Step 2 no
+  /// longer re-derives or re-gates the selection, so this only ever fires
+  /// from Step 1 now.
+  Future<void> _showAncBlockedDialog(ServiceSelectionBlockReason reason) {
+    final String title;
+    final String message;
+    switch (reason) {
+      case ServiceSelectionBlockReason.ancBlockedPostpartum:
+        title = AppStrings.ancBlockedPostpartumTitle;
+        message = AppStrings.ancBlockedPostpartumMessage;
+      case ServiceSelectionBlockReason.ancBlockedRevisit:
+        title = AppStrings.ancBlockedDuplicateTitle;
+        message = AppStrings.ancBlockedDuplicateMessage;
+    }
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: Text(ComposerStrings.dismissOkButton),
+          ),
+        ],
+      ),
+    );
   }
 
   void _navigateToForm(List<ActivatedPathway> pathways) {
@@ -884,7 +1145,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         enrolledProgrammes: _patientContext!.activeProgrammes.toSet(),
                         isPW: _isPW,
                         isDelivery: _isDelivery,
-                        ancVisitedToday: _ancVisitedToday,
+                        ancRevisitStatus: _ancRevisitStatus,
+                        openPregnancyEpisode: _openPregnancyEpisode,
                         onProgrammeToggle: (programme, selected) {
                           setState(() {
                             if (selected) {
@@ -1921,8 +2183,13 @@ class _ServiceCardDef {
 // Card order matches the Eligible Services wireframe (apon_sushashthya_v14):
 // Row 1: PW, ANC, Pregnancy Outcome
 // Row 2: PNC, FP, NCD
-// Row 3: TB, Eye care
+// Row 3: Eye Care, Cataract
 // Under-5 row: Vaccination, Child Health
+//
+// TB has no card here by design — its form content isn't yet aligned, so it
+// stays unreachable rather than exposed (see Programme.tb's doc comment and
+// ServiceSelectionResolver.excludedFromSelection, which also blocks it from
+// sneaking in via the rule engine, catalogue tags, or an enrolled record).
 const _kAllServiceCards = [
   _ServiceCardDef(kind: _ServiceCardKind.pw,          emoji: '🤰', label: 'PW'),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🏥', label: 'ANC',               programme: Programme.anc),
@@ -1945,7 +2212,8 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.enrolledProgrammes,
     required this.isPW,
     required this.isDelivery,
-    required this.ancVisitedToday,
+    this.ancRevisitStatus = _AncRevisitStatus.unknown,
+    this.openPregnancyEpisode,
     required this.onProgrammeToggle,
     required this.onPWToggle,
     required this.onDeliveryToggle,
@@ -1964,7 +2232,17 @@ class _InlineServiceSelector extends StatelessWidget {
 
   final bool isPW;
   final bool isDelivery;
-  final bool ancVisitedToday;
+
+  /// Whether ANC is currently within its risk-based revisit interval — locks
+  /// the ANC card and shows the last-visit date/next-due date.
+  final _AncRevisitStatus ancRevisitStatus;
+
+  /// The patient's currently open pregnancy episode, if any — locks the PW
+  /// card and shows its LMP/EDD. Deliberately independent of [isPW]: ANC's
+  /// own lock reads [isPW], not this field, so ANC stays selectable for an
+  /// already-pregnant woman regardless of this value.
+  final PregnancyEpisodeRow? openPregnancyEpisode;
+
   final void Function(Programme programme, bool selected) onProgrammeToggle;
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
@@ -1994,16 +2272,21 @@ class _InlineServiceSelector extends StatelessWidget {
           return ctx.isUnder5;
         case _ServiceCardKind.pw:
         case _ServiceCardKind.delivery:
-          return ctx.isFemale && ctx.ageYears >= 15 && !ctx.isUnder5;
+          // isReproductiveAge's 168-month floor is already stricter than
+          // isUnder5's 60-month ceiling, so no separate !isUnder5 check needed.
+          return ctx.isFemale && ctx.isReproductiveAge;
         case _ServiceCardKind.programme:
           final p = c.programme!;
           if (p == Programme.imci) return ctx.isUnder5;
           if (ctx.isUnder5) return false;
-          if (p == Programme.anc || p == Programme.pnc) {
-            return ctx.isFemale && ctx.ageYears >= 15;
+          if (p == Programme.anc ||
+              p == Programme.pnc ||
+              p == Programme.familyPlanning) {
+            return ctx.isFemale && ctx.isReproductiveAge;
           }
-          if (p == Programme.familyPlanning) {
-            return ctx.isFemale && ctx.ageYears >= 15;
+          if (p == Programme.ncd) return ctx.isAdult;
+          if (p == Programme.eyeCare || p == Programme.cataract) {
+            return ctx.isEyeCareCataractEligible;
           }
           return ctx.ageYears >= 15;
         case _ServiceCardKind.rmnch:
@@ -2030,14 +2313,25 @@ class _InlineServiceSelector extends StatelessWidget {
     final ctx = patientContext;
     final pregnant = ctx.isPregnant && !ctx.isPostpartum;
     // PW: starts a new pregnancy registration — never requires prior pregnancy record.
-    // Blocked only during delivery visit or when already postpartum.
-    if (card.isPW) return isDelivery || ctx.isPostpartum;
-    if (card.programme == Programme.anc) {
-      // ANC requires PW selection first; also blocked if ANC already done today.
-      // !pregnant removed: SK may start ANC for a new pregnancy (no prior PW record).
-      return !isPW || isDelivery || ancVisitedToday;
+    // Blocked during a delivery visit, when already postpartum, or when this
+    // patient already has an open pregnancy episode (re-registration would
+    // only be silently dropped later by ServiceSelectionResolver).
+    if (card.isPW) {
+      return isDelivery || ctx.isPostpartum || openPregnancyEpisode != null;
     }
-    if (card.isDelivery) return !pregnant;
+    if (card.programme == Programme.anc) {
+      // ANC requires PW selection first; also blocked within the risk-based
+      // revisit interval (1 day if high-risk, 15 days otherwise).
+      // !pregnant removed: SK may start ANC for a new pregnancy (no prior PW record).
+      return !isPW || isDelivery || ancRevisitStatus.tooSoon;
+    }
+    if (card.isDelivery) {
+      return ProgrammeGridSync.isPregnancyOutcomeLocked(
+        isPregnant: ctx.isPregnant,
+        isPostpartum: ctx.isPostpartum,
+        hasOpenPregnancyEpisode: openPregnancyEpisode != null,
+      );
+    }
     if (card.programme == Programme.pnc) return !ctx.isPostpartum;
     // FP is contraindicated during active pregnancy; available post-delivery.
     if (card.programme == Programme.familyPlanning) return pregnant;
@@ -2046,7 +2340,26 @@ class _InlineServiceSelector extends StatelessWidget {
 
   bool _isCardSelected(_ServiceCardDef card) {
     if (card.isVaccination) return vaccinationSelected;
-    if (card.isPW) return isPW && !isDelivery;
+    // Already-registered PW never shows as selected — it isn't part of this
+    // visit's submission at all once an episode is open. Independent of
+    // isPW, which ANC's own lock still reads unchanged. Also excludes a
+    // postpartum patient: her prior pregnancy's episode is closed (so
+    // openPregnancyEpisode is null, same as a brand-new patient actively
+    // selecting PW this visit) but isPW stays true from that pregnancy's
+    // history — without this check the card would misleadingly render as
+    // checked while postpartum-locked, when nothing is actually selected.
+    if (card.isPW) {
+      return isPW &&
+          !isDelivery &&
+          openPregnancyEpisode == null &&
+          !patientContext.isPostpartum;
+    }
+    // ANC never shows as selected once its revisit interval blocks a new
+    // visit — mirrors the PW-episode treatment above.
+    if (card.programme == Programme.anc) {
+      return selectedProgrammes.contains(Programme.anc) &&
+          !ancRevisitStatus.tooSoon;
+    }
     if (card.isDelivery) return isDelivery;
     if (card.isRMNCH) {
       final ctx = patientContext;
@@ -2079,9 +2392,16 @@ class _InlineServiceSelector extends StatelessWidget {
     }
     final alreadySelected = _isCardSelected(card);
     if (_isLocked(card) && !alreadySelected) {
-      final hint = isDelivery
-          ? TriageStrings.ancDeliveryConflictHint
-          : TriageStrings.pwHint;
+      final String hint;
+      if (isDelivery) {
+        hint = TriageStrings.ancDeliveryConflictHint;
+      } else if (card.isPW && openPregnancyEpisode != null) {
+        hint = AppStrings.pwAlreadyEnrolledMessage;
+      } else if (card.programme == Programme.anc && ancRevisitStatus.tooSoon) {
+        hint = _ancRevisitMessage(ancRevisitStatus);
+      } else {
+        hint = TriageStrings.pwHint;
+      }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
@@ -2158,11 +2478,51 @@ class _InlineServiceSelector extends StatelessWidget {
                     isLocked: _isLocked(c),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
+                    subtitle: (c.isPW && openPregnancyEpisode != null)
+                        ? _pwEpisodeSubtitle(openPregnancyEpisode!)
+                        : (c.programme == Programme.anc &&
+                                ancRevisitStatus.tooSoon)
+                            ? _ancRevisitMessage(ancRevisitStatus)
+                            : null,
                     onTap: () => _handleTap(context, c),
                   ))
               .toList(),
         ),
       ],
+    );
+  }
+
+  /// Compact "LMP … · EDD …" subtitle shown on the locked PW card.
+  String _pwEpisodeSubtitle(PregnancyEpisodeRow episode) {
+    final fmt = DateFormat('d MMM yyyy');
+    final lmpMs = episode.obstetric.lmpDate;
+    final eddMs = episode.obstetric.eddDate;
+    return TriageStrings.pwEpisodeSubtitle(
+      lmp: lmpMs != null
+          ? fmt.format(DateTime.fromMillisecondsSinceEpoch(lmpMs))
+          : '—',
+      edd: eddMs != null
+          ? fmt.format(DateTime.fromMillisecondsSinceEpoch(eddMs))
+          : '—',
+    );
+  }
+
+  /// Message shown both on the locked ANC card's subtitle and its tap toast
+  /// — deliberately the same string in both places (unlike the PW fix).
+  String _ancRevisitMessage(_AncRevisitStatus status) {
+    final lastVisitMs = status.lastVisitMs;
+    if (lastVisitMs == null) return TriageStrings.ancVisitedTodayMessage;
+    final fmt = DateFormat('d MMM yyyy');
+    final lastVisitStr =
+        fmt.format(DateTime.fromMillisecondsSinceEpoch(lastVisitMs));
+    if (status.highRisk) {
+      return TriageStrings.ancRevisitMessageHighRisk(lastVisit: lastVisitStr);
+    }
+    final revisitDays = status.revisitDays ?? 15;
+    final nextDueMs = lastVisitMs + Duration(days: revisitDays).inMilliseconds;
+    return TriageStrings.ancRevisitMessageNormal(
+      lastVisit: lastVisitStr,
+      nextDue: fmt.format(DateTime.fromMillisecondsSinceEpoch(nextDueMs)),
     );
   }
 }
@@ -2175,11 +2535,16 @@ class _ServiceTile extends StatelessWidget {
     required this.isLocked,
     required this.isPathwaySuggested,
     required this.onTap,
+    this.subtitle,
   });
 
   final _ServiceCardDef def;
   final String label;
   final bool isSelected;
+
+  /// Small persistent caption shown under the label — currently only used
+  /// by the locked PW card to show its open episode's LMP/EDD.
+  final String? subtitle;
   final bool isLocked;
   final bool isPathwaySuggested;
   final VoidCallback onTap;
@@ -2272,6 +2637,20 @@ class _ServiceTile extends StatelessWidget {
                                   color: labelColor,
                                 ),
                               ),
+                              if (subtitle != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  subtitle!,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: labelColor,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),

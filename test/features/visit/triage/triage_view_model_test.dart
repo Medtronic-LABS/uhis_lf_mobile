@@ -238,23 +238,6 @@ void main() {
       expect(programmes.contains(Programme.ncd), isTrue);
     });
 
-    test('TB symptoms → TB pathway', () {
-      final ctx = PatientContext(
-        patientId: 'test-path-2',
-        ageMonths: 408, // 34 years
-        sex: Sex.male,
-        isPregnant: false,
-        knownConditions: {},
-        activeProgrammes: {},
-      );
-
-      final vm = TriageViewModel(patientContext: ctx);
-      vm.selectSymptoms({'cough_over_2_weeks', 'weight_loss', 'fever'});
-
-      final programmes = vm.activatedPathways.map((p) => p.programme).toSet();
-      expect(programmes.contains(Programme.tb), isTrue);
-    });
-
     test('Child with MUAC red → IMCI pathway', () {
       final ctx = PatientContext(
         patientId: 'test-path-3',

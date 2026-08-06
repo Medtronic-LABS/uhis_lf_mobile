@@ -20,8 +20,14 @@ This document describes the WHO-derived rules that map patient symptoms to clini
 | **PNC** | postpartum ♀ | fever, vaginal_bleeding, headache_severe, blurred_vision, swelling_face_hands, abdominal_pain | — |
 | **TB_SCREEN** | any | cough_over_2_weeks, hemoptysis, tb_contact | {night_sweats + weight_loss}, {night_sweats + fever} |
 | **NCD-HTN** | age ≥ 18y | high_bp_known, headache_severe, dizziness, chest_pain, blurred_vision | — |
-| **NCD-DM** | any | numbness, foot_wound, weight_loss | {polyuria + polydipsia} |
-| **NUTRITION** | age < 5y | muac_red, visible_wasting, edema_both_feet | {not_eating + visible_wasting} |
+| **NCD-DM** | age ≥ 18y | numbness, foot_wound, weight_loss | {polyuria + polydipsia} |
+| **NUTRITION** † | age < 5y | muac_red, visible_wasting, edema_both_feet | {not_eating + visible_wasting} |
+
+† Despite the name, this rule's `programme` target is `Programme.imci`, not a distinct
+`Programme.nutrition` — `Programme.nutrition` is excluded from `kPilotProgrammes` (and from
+`ServiceSelectionResolver`'s selectable set) and has no formType in `layout_manifests.json`. The
+row is kept here because it still shapes IMCI pathway priority/trigger symptoms; don't read it as
+evidence that a separate Nutrition programme activates.
 
 ---
 
@@ -129,7 +135,10 @@ Pathways can activate from patient history flags even without symptoms:
 
 ## Code References
 
-- **Symptom Catalog**: `unified_symptom_catalog.dart`
+- **Symptom Catalog**: `../triage/unified_symptom_catalog.dart`
 - **Pathway Rules**: `pathway_rules_v1.dart`
 - **Pathway Engine**: `pathway_engine.dart`
-- **Patient Context**: `patient_context_builder.dart`
+- **Patient Context**: `../triage/patient_context_builder.dart`
+- **Service selection choke point** (where a visit's final programme set is
+  decided, including pilot-scope exclusions on top of these rules):
+  `../triage/service_selection_resolver.dart`

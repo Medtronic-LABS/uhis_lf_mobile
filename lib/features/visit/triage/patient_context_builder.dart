@@ -112,6 +112,18 @@ class PatientContext {
   /// Whether patient is an adult (18+ years).
   bool get isAdult => ageMonths >= 216; // 18 * 12
 
+  /// Eye Care / Cataract eligibility — Spice `service_eligibility_logic.json`
+  /// `minAge: 420` (35 years), no upper bound, any gender.
+  bool get isEyeCareCataractEligible => ageMonths >= 420; // 35 * 12
+
+  /// Reproductive-age window for PW/ANC/PNC/Family Planning — Spice
+  /// `service_eligibility_logic.json` `minAge: 168, maxAge: 661` (14–55
+  /// years). Inclusive lower bound, exclusive upper bound, matching the
+  /// server's own SQL gate (`maxAge > age`) exactly — comparing on whole
+  /// years instead would wrongly reject an exactly-55-year-0-month patient,
+  /// since 661 months is 55 years *and 1 month*, not an even year boundary.
+  bool get isReproductiveAge => ageMonths >= 168 && ageMonths < 661;
+
   /// Whether patient is female.
   bool get isFemale => sex == Sex.female;
 

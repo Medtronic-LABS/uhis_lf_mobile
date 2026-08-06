@@ -22,6 +22,7 @@ import '../db/immunisation_dao.dart';
 import '../db/member_dao.dart';
 import '../db/patient_dao.dart';
 import '../db/patient_programmes_dao.dart';
+import '../db/pregnancy_episode_dao.dart';
 import '../db/pregnancy_snapshot_dao.dart';
 import '../db/referral_dao.dart';
 import '../db/roster_revision.dart';
@@ -57,6 +58,7 @@ class OfflineSyncService extends ChangeNotifier {
     HouseholdDao? households,
     MemberDao? members,
     PregnancySnapshotDao? pregnancySnapshot,
+    PregnancyEpisodeDao? pregnancyEpisode,
     TreatmentPresenceDao? treatmentPresence,
     EncounterDao? encounterDao,
     // CCE: ingest open referrals from followUps / assessment history into
@@ -78,6 +80,7 @@ class OfflineSyncService extends ChangeNotifier {
         _households = households,
         _members = members,
         _pregnancySnapshot = pregnancySnapshot,
+        _pregnancyEpisode = pregnancyEpisode,
         _treatmentPresence = treatmentPresence,
         _encounterDao = encounterDao,
         _referrals = referrals,
@@ -104,6 +107,7 @@ class OfflineSyncService extends ChangeNotifier {
   final AssessmentDao _assessments;
   final SyncMetaDao _syncMeta;
   final PregnancySnapshotDao? _pregnancySnapshot;
+  final PregnancyEpisodeDao? _pregnancyEpisode;
   final TreatmentPresenceDao? _treatmentPresence;
   final EncounterDao? _encounterDao;
   final ReferralDao? _referrals;
@@ -899,21 +903,48 @@ class OfflineSyncService extends ChangeNotifier {
       await _members.propagateVillageFromHouseholdTable();
     }
 
-    // Mission Dashboard side tables (schema v8). Replace-then-write so a
-    // re-sync drops stale per-patient flags — but preserve LMP/EDD (and
-    // local-only enroll rows) when the server omits dates or drops a row.
-    if (_pregnancySnapshot != null) {
+    // Pregnancy episodes: route each patient's coalesced incoming data
+    // through PregnancyEpisodeDao rather than writing patient_pregnancy_snapshot
+    // directly — updates the currently open episode if one exists (the
+    // server payload has no stable per-episode id today, so "is there a
+    // local open episode" is the disambiguator), or backfills a single
+    // episode row if the patient has none locally yet (fresh install / first
+    // sync). Each write also refreshes the patient_pregnancy_snapshot
+    // projection for that one patient, so patients untouched by this sync
+    // keep their existing projection row unchanged (no more clearAll()).
+    //
+    // Follow-up: if/when the server starts sending a stable per-episode id,
+    // this should key on that id directly instead of "assume at most one
+    // open episode per patient."
+    if (_pregnancyEpisode != null) {
+      final coalesced = PregnancySnapshotDao.coalesceByPatient(pregnancyRows);
+      for (final row in coalesced) {
+        final open = await _pregnancyEpisode.openEpisodeFor(row.patientId);
+        if (open != null) {
+          await _pregnancyEpisode.updateOpenEpisode(
+            patientId: row.patientId,
+            patch: row,
+          );
+        } else {
+          await _pregnancyEpisode.startNewEpisode(
+            patientId: row.patientId,
+            obstetric: row,
+          );
+        }
+      }
+      final coalescedWithLmp =
+          coalesced.where((r) => r.lmpDate != null).length;
+      debugPrint(
+        '[LMP] pregnancy episode sync — incoming=${pregnancyRows.length} '
+        'patientsTouched=${coalesced.length} withLmp=$coalescedWithLmp',
+      );
+    } else if (_pregnancySnapshot != null) {
+      // No PregnancyEpisodeDao injected (e.g. a test harness that only wires
+      // the snapshot dao) — fall back to the pre-episode direct-write path.
       final prior = await _pregnancySnapshot.getAllRows();
       final merged = PregnancySnapshotDao.mergePreservingDates(
         incoming: pregnancyRows,
         prior: prior,
-      );
-      final mergedWithLmp =
-          merged.where((r) => r.lmpDate != null).length;
-      debugPrint(
-        '[LMP] snapshot merge prior=${prior.length} '
-        'incoming=${pregnancyRows.length} merged=${merged.length} '
-        'mergedWithLmp=$mergedWithLmp',
       );
       await _pregnancySnapshot.clearAll();
       if (merged.isNotEmpty) {
@@ -1388,6 +1419,7 @@ class OfflineSyncService extends ChangeNotifier {
       final newProgrammes = <String, Set<Programme>>{};
       final latestVisitMs = <String, int>{};   // patientId → ms of last visit
       final nextFollowUpMs = <String, int>{};  // patientId → ms of next appt
+      final lastAncVisitMs = <String, int>{};  // patientId → ms of last ANC visit
 
       for (final item in items) {
         final patientId = memberToPatient[item.householdMemberId];
@@ -1415,6 +1447,18 @@ class OfflineSyncService extends ChangeNotifier {
         final visitMs = item.visitDate.millisecondsSinceEpoch;
         final prev = latestVisitMs[patientId];
         if (prev == null || visitMs > prev) latestVisitMs[patientId] = visitMs;
+
+        // Track latest ANC visit specifically — feeds the pregnancy episode's
+        // lastAncVisitDateMs (revisit-interval lock), which otherwise only
+        // gets set by a local ANC form submission on this install and is lost
+        // whenever the local DB is wiped (logout) and rebuilt from a fresh
+        // login sync.
+        if (programme == Programme.anc) {
+          final prevAnc = lastAncVisitMs[patientId];
+          if (prevAnc == null || visitMs > prevAnc) {
+            lastAncVisitMs[patientId] = visitMs;
+          }
+        }
 
         // nextFollowUpDate: use the date from the MOST RECENT assessment.
         // Items are sorted newest-first so the first non-null nfd seen per
@@ -1451,6 +1495,38 @@ class OfflineSyncService extends ChangeNotifier {
           nextDueAt: nextFollowUpMs[pid], // null for most NCD patients
         );
         schedUpdated++;
+      }
+
+      // Seed lastAncVisitDateMs onto the patient's open pregnancy episode so
+      // the ANC revisit-interval lock (symptom_picker_screen.dart) survives a
+      // logout/relogin cycle, not just the current install's local form
+      // submissions. Only writes when an episode is already open — if none
+      // is open, ANC is locked by !isPW regardless, so there's nothing to
+      // seed (and we must not fabricate a new episode just for this date).
+      // Never regresses an already-newer local value (e.g. a visit submitted
+      // today, ahead of what a delta assessment-history pull returns).
+      int ancDateSeeded = 0;
+      if (_pregnancyEpisode != null) {
+        for (final entry in lastAncVisitMs.entries) {
+          final open = await _pregnancyEpisode.openEpisodeFor(entry.key);
+          if (open == null) continue;
+          final existingMs = open.obstetric.lastAncVisitDateMs;
+          if (existingMs != null && existingMs >= entry.value) continue;
+          await _pregnancyEpisode.updateOpenEpisode(
+            patientId: entry.key,
+            patch: PregnancySnapshotRow(
+              patientId: entry.key,
+              facts: open.obstetric.facts,
+              lastAncVisitDateMs: entry.value,
+            ),
+          );
+          ancDateSeeded++;
+        }
+        if (ancDateSeeded > 0) {
+          debugPrint(
+            '[OfflineSyncService] seeded lastAncVisitDateMs for $ancDateSeeded patient(s) from assessment history',
+          );
+        }
       }
 
       // P3: Synthesise FollowUpRow entries from assessment-history nextFollowUpDate

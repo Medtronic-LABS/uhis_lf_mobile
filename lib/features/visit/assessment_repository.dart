@@ -12,6 +12,7 @@ import '../../core/config/app_config.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
+import '../../core/db/pregnancy_episode_dao.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
 import '../../core/sync/offline_push_service.dart';
@@ -92,15 +93,12 @@ class AssessmentRepository extends ChangeNotifier {
     final id = const Uuid().v4();
     final now = DateTime.now();
     final type = assessmentType.toUpperCase();
+    // See kPregnancyEpisodeLinkedTypes — single source of truth matching
+    // Android's OfflineSyncRepository.getPregnancyEpisodeId(). This fallback
+    // UUID only fires if a caller didn't already resolve a real episode id
+    // (UnifiedFormNotifier always does today via PregnancyEpisodeDao).
     final resolvedEpisodeId = pregnancyEpisodeId ??
-        (type == 'ANC' ||
-                type == 'PNC' ||
-                type == 'PNC_MOTHER' ||
-                type == 'PNC_NEONATE' ||
-                type == 'PNC_CHILD' ||
-                type == 'PWPROFILE' ||
-                type == 'PREGNANCY_OUTCOME' ||
-                type == 'PREGNANCYOUTCOME'
+        (kPregnancyEpisodeLinkedTypes.contains(type)
             ? const Uuid().v4()
             : null);
 

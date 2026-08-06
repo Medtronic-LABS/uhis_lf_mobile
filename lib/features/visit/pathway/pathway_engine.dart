@@ -122,8 +122,13 @@ class PathwayEngine {
       ));
     }
 
-    // Check for elevated BP triggering NCD
-    if (!activated.any((a) => a.programme == Programme.ncd) && ctx.hasElevatedBp) {
+    // Check for elevated BP triggering NCD. This synthetic pathway bypasses
+    // PathwayRule's DemographicGate entirely, so it needs its own explicit
+    // age check — otherwise a toddler with a mis-cuffed/artifactual BP
+    // reading would activate NCD through here even with the rule table gated.
+    if (!activated.any((a) => a.programme == Programme.ncd) &&
+        ctx.hasElevatedBp &&
+        ctx.ageMonths >= PathwayThresholds.adultMinAgeMonths) {
       activated.add(ActivatedPathway(
         programme: Programme.ncd,
         priority: 40,
@@ -137,16 +142,21 @@ class PathwayEngine {
     // Apply suppression rules (neonate suppresses ICCM)
     final suppressed = <ActivatedPathway>[];
     for (final pathway in activated) {
-      // Find the rule that activated this pathway
-      final rule = PathwayRulesV1.all.firstWhere(
-        (r) =>
-            r.programme == pathway.programme && r.priority == pathway.priority,
-        orElse: () => PathwayRulesV1.all.first,
-      );
+      // Find the rule that activated this pathway. Synthetic pathways added
+      // outside the rule table (the EPI-due and elevated-BP NCD pathways
+      // above) have no matching entry — skip suppression entirely for those
+      // rather than falling back to an unrelated rule's suppression config.
+      PathwayRule? rule;
+      for (final r in PathwayRulesV1.all) {
+        if (r.programme == pathway.programme && r.priority == pathway.priority) {
+          rule = r;
+          break;
+        }
+      }
 
-      if (rule.suppressedBy != null) {
+      if (rule?.suppressedBy != null) {
         // Check if the suppressing programme is also activated
-        if (activated.any((a) => a.programme == rule.suppressedBy)) {
+        if (activated.any((a) => a.programme == rule!.suppressedBy)) {
           suppressed.add(pathway);
         }
       }
