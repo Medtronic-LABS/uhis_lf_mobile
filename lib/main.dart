@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'app/locale_provider.dart';
+import 'core/i18n/app_locale.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
 import 'app/theme_provider.dart';
@@ -351,7 +352,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       await MicroCoachingService.initialize(
         authToken: token,
         backendUrl: AppConfig.coachingServiceUrl,
-        language: 'bn',
+        language: AppLocale.isBangla ? 'bn' : 'en',
         hfToken: AppConfig.hfToken,
       );
       debugPrint('[MicroCoaching] SDK initialized');

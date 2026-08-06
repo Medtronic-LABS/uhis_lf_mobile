@@ -110,7 +110,7 @@ class AppConfig {
   /// Do NOT include /medtronics-api in the dart-define value — use just the host+mount prefix.
   /// Examples:
   ///   production : https://spice-dev-backend.uhis.labsplatform.com/micro-coaching
-  ///   beehyv QA  : https://agent-qa.beehyv.com
+  ///   UHIS dev   : https://spice-dev-backend.uhis.labsplatform.com/micro-coaching
   static const String coachingServiceUrl = String.fromEnvironment(
     'COACHING_SERVICE_URL',
     defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/micro-coaching',

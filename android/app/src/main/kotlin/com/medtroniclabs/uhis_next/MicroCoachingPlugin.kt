@@ -56,7 +56,7 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
                 val token = call.argument<String>("authToken")
                     ?: return result.error("MISSING_ARG", "authToken required", null)
                 val url = call.argument<String>("backendUrl")
-                    ?: "https://agent-qa.beehyv.com/medtronics-api/"
+                    ?: "https://spice-dev-backend.uhis.labsplatform.com/micro-coaching/medtronics-api/"
                 val lang = call.argument<String>("language") ?: "bn"
                 val hfToken = call.argument<String>("hfToken") ?: ""
                 Log.d(TAG, "initialize: url=$url lang=$lang hfToken=${hfToken.isNotEmpty()} token=${token.take(10)}...")
