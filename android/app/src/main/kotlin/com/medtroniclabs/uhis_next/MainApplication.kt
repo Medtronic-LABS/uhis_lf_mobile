@@ -35,7 +35,7 @@ class MainApplication : Application() {
             val token = p.getString(K_TOKEN, null) ?: return
             _initSdkInternal(
                 authToken = token,
-                backendUrl = p.getString(K_URL, "https://agent-qa.beehyv.com/medtronics-api/") ?: "https://agent-qa.beehyv.com/medtronics-api/",
+                backendUrl = p.getString(K_URL, "https://spice-dev-backend.uhis.labsplatform.com/micro-coaching/medtronics-api/") ?: "https://spice-dev-backend.uhis.labsplatform.com/micro-coaching/medtronics-api/",
                 language = p.getString(K_LANG, "bn") ?: "bn",
                 hfToken = p.getString(K_HF, "") ?: "",
             )
@@ -49,6 +49,8 @@ class MainApplication : Application() {
         ) {
             val prefs = instance.getSharedPreferences(PREFS_SDK, Context.MODE_PRIVATE)
             val previousHfToken = prefs.getString(K_HF, "") ?: ""
+            val previousLang = prefs.getString(K_LANG, "bn") ?: "bn"
+            val previousUrl = prefs.getString(K_URL, "") ?: ""
 
             // Persist config so Application.onCreate() can restore SDK on next process start.
             prefs.edit()
@@ -59,12 +61,16 @@ class MainApplication : Application() {
                 .apply()
 
             if (MicroCoachingSDK.isInitialized()) {
-                // SDK already running. Re-init only if HF token upgraded (e.g. process was
-                // restored with an empty token; this call brings the real one). Builder.build()
-                // calls shutdown() internally — safe because _initSdkInternal() re-writes
-                // mc_onboarded_v1=true immediately after.
-                if (hfToken.isNotEmpty() && hfToken != previousHfToken) {
+                // SDK already running. Re-init if backend URL, HF token, or auth token changed.
+                // Builder.build() calls shutdown() internally — safe because _initSdkInternal()
+                // re-writes mc_onboarded_v1=true immediately after.
+                if (backendUrl != previousUrl || (hfToken.isNotEmpty() && hfToken != previousHfToken)) {
                     _initSdkInternal(authToken, backendUrl, language, hfToken)
+                } else if (language != previousLang) {
+                    // Language switched without other config change — update running SDK via
+                    // setLanguage so CoachingFlowActivity reflects the user's current app language.
+                    val lang = if (language == "bn") Language.BANGLA else Language.ENGLISH
+                    MicroCoachingSDK.getInstance().setLanguage(lang)
                 }
                 return
             }
@@ -100,6 +106,7 @@ class MainApplication : Application() {
                 .backendUrl(backendUrl)
                 .language(lang)
                 .enableChat(true)
+                .enableVoice(true)
                 .selectedModel(selectedModelId)
                 .modelDownloadStrategy(downloadStrategy)
                 .modelProviders(listOf(ModelProvider.HuggingFace))

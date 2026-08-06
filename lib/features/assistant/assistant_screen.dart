@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/i18n/app_locale.dart';
 import '../../core/services/micro_coaching_service.dart';
 
 /// Assistant tab — launches CoachingFlowActivity (MicroCoaching SDK).
@@ -41,7 +42,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         await MicroCoachingService.initialize(
           authToken: token,
           backendUrl: AppConfig.coachingServiceUrl,
-          language: 'bn',
+          language: AppLocale.isBangla ? 'bn' : 'en',
           hfToken: AppConfig.hfToken,
         );
       }
