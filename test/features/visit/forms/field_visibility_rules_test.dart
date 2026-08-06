@@ -238,6 +238,10 @@ void main() {
             if (field.compositeGroup == 'obstetricHistory') continue;
             // Android-gated ANC field — revealed when illness ≠ None.
             if (field.id == 'pregnantWomanOnTreatment') continue;
+            // NCD-follow-up-gated field — revealed via the isNcdFollowUp
+            // parameter, not a field-to-field rule (see the dedicated
+            // 'ncdSymptomsMedication only on NCD follow-up' test below).
+            if (field.id == 'ncdSymptomsMedication') continue;
             // anc / pncMother / pregnancyOutcome isSummary cards are
             // fill-form-hidden by design (Android RMNCH filter).
             if (field.isSummary &&
