@@ -110,7 +110,7 @@ class MainApplication : Application() {
                 .enableVoice(true)
                 .enableLearnModule(true)
                 .enableApplyModule(true)
-                .enableTelemetry(true)
+                .enableTelemetry(false)
                 .forceMode(CoachingMode.ONLINE)
                 .selectedModel(selectedModelId)
                 .modelDownloadStrategy(downloadStrategy)
