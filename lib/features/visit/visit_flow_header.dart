@@ -65,7 +65,7 @@ class VisitFlowHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final step2Title = (primaryProgramme == Programme.anc ||
             primaryProgramme == Programme.pnc)
-        ? 'Pregnancy checks'
+        ? VisitFlowStrings.step2TitlePregnancyChecks
         : VisitFlowStrings.step2Title;
     final stepLabels = <String>[
       '1. ${VisitFlowStrings.step1Title}',
