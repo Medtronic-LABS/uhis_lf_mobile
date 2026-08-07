@@ -105,6 +105,7 @@ class WorklistRepository {
       patientId: p.id,
       displayName: p.name ?? '(Unnamed patient)',
       age: age,
+      dob: p.dob,
       gender: p.gender,
       phoneNumber: p.phone,
       nid: p.nationalId,

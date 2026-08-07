@@ -12,11 +12,15 @@ String _titleCase(String s) => s
     .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
     .join(' ');
 
-/// Formats age and gender initial into "22/F", "22", or "F" depending on
-/// which values are available.
-String _ageGender(int? age, String? genderInitial) {
-  if (age != null && genderInitial != null) return '$age/$genderInitial';
-  if (age != null) return '$age';
+/// Formats age and gender initial into "22/F", "9m/F", "22", or "F"
+/// depending on which values are available. A floored age of 0 renders in
+/// months instead (when [ageMonths] was resolved) — otherwise a <1-year-old
+/// would misleadingly show as "0".
+String _ageGender(int? age, int? ageMonths, String? genderInitial) {
+  final ageDisplay =
+      age == 0 && ageMonths != null ? PatientContextStrings.ageMonthsCompact(ageMonths) : age?.toString();
+  if (ageDisplay != null && genderInitial != null) return '$ageDisplay/$genderInitial';
+  if (ageDisplay != null) return ageDisplay;
   return genderInitial!;
 }
 
@@ -132,7 +136,7 @@ class MissionQueueCard extends StatelessWidget {
                                 ),
                                 if (item.age != null || item.genderInitial != null)
                                   Text(
-                                    _ageGender(item.age, item.genderInitial),
+                                    _ageGender(item.age, item.ageMonths, item.genderInitial),
                                     style: const TextStyle(
                                       fontFamily: AppFonts.body,
                                       fontSize: 11.5,

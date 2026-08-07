@@ -710,6 +710,8 @@ abstract final class PatientContextStrings {
       ? '$months মাস'
       : '$months month${months == 1 ? '' : 's'}';
   static String get ageUnderOneYear => getTranslatedString('ageUnderOneYear', '< 1 yr');
+  /// Compact "9m" form for space-constrained cards (dashboard patient card).
+  static String ageMonthsCompact(int months) => getTranslatedString('PatientContext.ageMonthsCompact', '{months}m', params: {'months': '$months'});
   static String householdFallback(String householdId) => getTranslatedString('householdFallback', 'HH {householdId}', params: {'householdId': '$householdId'});
   static String get pregnantChip => getTranslatedString('pregnantChip', 'Pregnant');
 

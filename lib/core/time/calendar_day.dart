@@ -35,4 +35,18 @@ abstract final class CalendarDay {
     }
     return years < 0 ? 0 : years;
   }
+
+  /// Age in whole months from an ISO-8601 date-of-birth string, or null if
+  /// [dob] is null, empty, or unparseable. Calendar-aware (day-of-month
+  /// matters, not a naive `years * 12`) — used where [ageFromDob] would
+  /// floor a young infant to "0 years" and lose all resolution.
+  static int? ageMonthsFromDob(String? dob, [DateTime? now]) {
+    if (dob == null || dob.isEmpty) return null;
+    final parsed = DateTime.tryParse(dob);
+    if (parsed == null) return null;
+    final at = now ?? DateTime.now();
+    var months = (at.year - parsed.year) * 12 + (at.month - parsed.month);
+    if (at.day < parsed.day) months--;
+    return months < 0 ? 0 : months;
+  }
 }
