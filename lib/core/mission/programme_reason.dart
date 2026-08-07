@@ -37,12 +37,14 @@ String programmeReason({
 }) {
   if (programmes.contains(Programme.anc)) {
     return ancVisitCount > 0
-        ? '${MissionDashboardStrings.ancVisitLabel} ${ancVisitCount + 1} due'
+        ? '${MissionDashboardStrings.ancVisitLabel} ${ancVisitCount + 1} '
+            '${MissionDashboardStrings.dueSuffix}'
         : MissionDashboardStrings.enrolled;
   }
   if (programmes.contains(Programme.pnc)) {
     return pncVisitCount > 0
-        ? '${MissionDashboardStrings.pncVisitLabel} ${pncVisitCount + 1} Due'
+        ? '${MissionDashboardStrings.pncVisitLabel} ${pncVisitCount + 1} '
+            '${MissionDashboardStrings.dueSuffixTitleCase}'
         : MissionDashboardStrings.enrolled;
   }
   if (programmes.contains(Programme.imci) || programmes.contains(Programme.epi)) {
