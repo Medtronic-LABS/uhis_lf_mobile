@@ -13,6 +13,7 @@ import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
+import '../../core/db/pregnancy_episode_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/mission/mission_pregnancy_facts.dart';
 import '../../core/models/programme.dart';
@@ -22,24 +23,24 @@ import '../scribe/scribe_session.dart';
 import '../scribe/widgets/scribe_review_sheet.dart';
 import '../referral/referral_repository.dart';
 import '../worklist/worklist_repository.dart';
-import 'pathway/pathway_engine.dart';
 import 'assessment_repository.dart';
 import 'forms/canonical_visit_data.dart';
 import 'forms/form_type_resolver.dart';
 import 'forms/pregnancy_outcome_side_effects.dart';
 import 'forms/unified_form_notifier.dart';
 import 'forms/unified_form_screen.dart';
+import 'triage/service_selection_resolver.dart';
 import 'visit_controller.dart';
 import 'visit_session.dart';
 
-/// Step 3 of the 3-step visit flow: sectioned assessment driven by activated
-/// pathways from triage.
+/// Step 2 of the visit flow: sectioned assessment driven by the programme
+/// set Step 1 already finalized via `ServiceSelectionResolver`.
 ///
-/// Receives [activatedPathways] (programme name strings) from
-/// [TriageResultScreen], rebuilds them into [ActivatedPathway] objects, and
-/// delegates to [SectionedAssessmentScreen] for field rendering and CDS.
-/// Submission fans out one [LocalAssessmentEntity] per programme via
-/// [UnifiedSubmissionOrchestrator].
+/// Receives [activatedPathways] (programme name strings, already priority-
+/// ordered by `ServiceSelectionResolver.finalize`) from `VisitFlowScreen`,
+/// resolves them to formTypes via [FormTypeResolver], and delegates to
+/// [UnifiedFormScreen] for field rendering and CDS. Submission fans out one
+/// `LocalAssessmentEntity` per programme via [UnifiedFormNotifier.submit].
 class VisitFormScreen extends StatefulWidget {
   const VisitFormScreen({
     super.key,
@@ -208,15 +209,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     return out;
   }
 
-  Programme _getPrimaryProgramme() {
-    if (widget.activatedPathways != null) {
-      for (final name in widget.activatedPathways!) {
-        final p = Programme.fromString(name);
-        if (p != Programme.unknown) return p;
-      }
-    }
-    return Programme.unknown;
-  }
+  Programme _getPrimaryProgramme() =>
+      ServiceSelectionResolver.primaryFrom(widget.activatedPathways ?? const []);
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
@@ -317,6 +311,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         assessmentRepo: ctx.read<AssessmentRepository>(),
         patientDao: ctx.read<PatientDao>(),
         pregnancySnapshotDao: ctx.read<PregnancySnapshotDao>(),
+        pregnancyEpisodeDao: ctx.read<PregnancyEpisodeDao>(),
         memberId: widget.memberId,
         householdId: widget.householdId,
         villageId: widget.villageId,
@@ -374,7 +369,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     final memberDao = ctx.read<MemberDao>();
     final worklistRepo = ctx.read<WorklistRepository>();
     final progDao = ctx.read<PatientProgrammesDao>();
-    final pregnancySnapshotDao = ctx.read<PregnancySnapshotDao>();
+    final pregnancyEpisodeDao = ctx.read<PregnancyEpisodeDao>();
     // Read referral result computed by UnifiedFormNotifier.submit() so
     // _referralRecommended propagates correctly to Step-3's onAdvance callback.
     setState(() => _sectionedReferralTriggered = formNotifier.lastIsReferred);
@@ -446,17 +441,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               final local =
                   await patientDao.byAnyId(patientId);
               final localId = local?.id ?? patientId;
-              final existing =
-                  await pregnancySnapshotDao.byPatientOrMember(
-                localId,
-                memberId: widget.memberId,
-              );
-              final updated = (existing ??
-                      PregnancySnapshotRow(
-                        patientId: localId,
-                        facts: PregnancyFacts.empty,
-                      ))
-                  .copyWith(
+              await pregnancyEpisodeDao.closeEpisode(
+                patientId: localId,
+                deliveryDateMillis:
+                    deliveryMs ?? DateTime.now().millisecondsSinceEpoch,
                 facts: const PregnancyFacts(
                   isPostpartumWindow: true,
                   highRiskPregnantWoman: false,
@@ -465,14 +453,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
                   hadDeliveryComplications: false,
                   hasPncIllness: false,
                 ),
-                updatedAt: DateTime.now().millisecondsSinceEpoch,
-                deliveryDateMillis: deliveryMs ??
-                    DateTime.now().millisecondsSinceEpoch,
               );
-              await pregnancySnapshotDao.upsertOne(
-                updated.copyWith(patientId: localId),
-              );
-              debugPrint('[VisitForm] pregnancy snapshot → postpartum '
+              debugPrint('[VisitForm] pregnancy episode closed → postpartum '
                   'deliveryMs=$deliveryMs patientId=$localId');
             }
 

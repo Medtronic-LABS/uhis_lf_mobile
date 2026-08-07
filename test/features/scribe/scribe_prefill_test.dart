@@ -339,7 +339,7 @@ void main() {
       () {
         final toddler = PatientContext(
           patientId: 'p-kid',
-          ageMonths: 36, // 3 yrs
+          ageMonths: 18, // within the RMNCH childhoodVisit window (< 25mo)
           sex: Sex.male,
           isPregnant: false,
           knownConditions: {},

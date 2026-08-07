@@ -12,11 +12,15 @@ String _titleCase(String s) => s
     .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
     .join(' ');
 
-/// Formats age and gender initial into "22/F", "22", or "F" depending on
-/// which values are available.
-String _ageGender(int? age, String? genderInitial) {
-  if (age != null && genderInitial != null) return '$age/$genderInitial';
-  if (age != null) return '$age';
+/// Formats age and gender initial into "22/F", "9m/F", "22", or "F"
+/// depending on which values are available. A floored age of 0 renders in
+/// months instead (when [ageMonths] was resolved) — otherwise a <1-year-old
+/// would misleadingly show as "0".
+String _ageGender(int? age, int? ageMonths, String? genderInitial) {
+  final ageDisplay =
+      age == 0 && ageMonths != null ? PatientContextStrings.ageMonthsCompact(ageMonths) : age?.toString();
+  if (ageDisplay != null && genderInitial != null) return '$ageDisplay/$genderInitial';
+  if (ageDisplay != null) return ageDisplay;
   return genderInitial!;
 }
 
@@ -132,7 +136,7 @@ class MissionQueueCard extends StatelessWidget {
                                 ),
                                 if (item.age != null || item.genderInitial != null)
                                   Text(
-                                    _ageGender(item.age, item.genderInitial),
+                                    _ageGender(item.age, item.ageMonths, item.genderInitial),
                                     style: const TextStyle(
                                       fontFamily: AppFonts.body,
                                       fontSize: 11.5,
@@ -333,6 +337,7 @@ class PatientBadgeRow extends StatelessWidget {
     required this.name,
     required this.onTap,
     this.age,
+    this.ageLabel,
     this.gender,
     this.phoneNumber,
     this.programmes = const {},
@@ -344,6 +349,10 @@ class PatientBadgeRow extends StatelessWidget {
 
   final String? name;
   final int? age;
+
+  /// Prefer over [age] when set — e.g. `4m` / `12d` for infants so the chip
+  /// is never `0/F`. Callers should use [EnrollmentAge.compactChipLabel].
+  final String? ageLabel;
   final String? gender;
   final String? phoneNumber;
   final Set<Programme> programmes;
@@ -396,11 +405,14 @@ class PatientBadgeRow extends StatelessWidget {
                         name ?? CommonStrings.unnamed,
                         style: AppTextStyles.worklistPatientName,
                       ),
-                      if (age != null || gender != null)
+                      if (ageLabel != null || age != null || gender != null)
                         Text(
                           [
-                            if (age != null) '$age',
-                            if (gender != null)
+                            if (ageLabel != null)
+                              ageLabel!
+                            else if (age != null)
+                              '$age',
+                            if (gender != null && gender!.isNotEmpty)
                               gender!.substring(0, 1).toUpperCase(),
                           ].join('/'),
                           style: AppTextStyles.worklistPatientMeta,

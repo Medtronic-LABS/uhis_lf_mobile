@@ -560,6 +560,11 @@ class MissionDashboardService {
       householdId: entry.householdNo,
       householdNumber: data.householdNumbersById[entry.householdNo],
       age: entry.age,
+      // Only worth resolving when age has floored to 0 — that's the one case
+      // the card needs month resolution for.
+      ageMonths: entry.age == 0
+          ? CalendarDay.ageMonthsFromDob(entry.dob)
+          : null,
       gender: entry.gender,
       nid: entry.nid,
       phoneNumber: entry.phoneNumber,

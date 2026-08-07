@@ -10,7 +10,8 @@ enum AppLanguage { english, bangla }
 abstract final class AppLocale {
   AppLocale._();
 
-  static AppLanguage current = AppLanguage.english;
+  /// Default Bangla for first launch / before storage loads (BD SK primary).
+  static AppLanguage current = AppLanguage.bangla;
 
   static bool get isBangla => current == AppLanguage.bangla;
 }

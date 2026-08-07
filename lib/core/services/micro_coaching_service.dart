@@ -2,21 +2,31 @@
 // Channel: com.medtroniclabs.uhis_next/micro_coaching
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import '../config/app_config.dart';
 
 class MicroCoachingService {
   static const _channel = MethodChannel('com.medtroniclabs.uhis_next/micro_coaching');
 
+  // Retrofit requires base URL to end with '/' and include the full path prefix.
+  // AppConfig.coachingServiceUrl omits 'medtronics-api/' for Dio callers — normalize here.
+  static String _sdkUrl(String url) {
+    var u = url.endsWith('/') ? url : '$url/';
+    if (!u.contains('medtronics-api')) u = '${u}medtronics-api/';
+    return u;
+  }
+
   /// Initialize SDK after login. Maps to MicroCoachingSDK.Builder(...).build().
   static Future<void> initialize({
     required String authToken,
-    String backendUrl = 'https://agent-qa.beehyv.com/medtronics-api/',
+    String? backendUrl,
     String language = 'bn',
     String hfToken = '',
   }) async {
-    debugPrint('[MicroCoaching] initialize url=$backendUrl lang=$language');
+    final sdkUrl = _sdkUrl(backendUrl ?? AppConfig.coachingServiceUrl);
+    debugPrint('[MicroCoaching] initialize url=$sdkUrl lang=$language');
     await _channel.invokeMethod('initialize', {
       'authToken': authToken,
-      'backendUrl': backendUrl,
+      'backendUrl': sdkUrl,
       'language': language,
       'hfToken': hfToken,
     });
@@ -40,5 +50,11 @@ class MicroCoachingService {
     final v = await _channel.invokeMethod<bool>('isInitialized') ?? false;
     debugPrint('[MicroCoaching] isInitialized=$v');
     return v;
+  }
+
+  /// Update SDK language without full re-init. No-op if SDK not initialized.
+  static Future<void> setLanguage(String language) async {
+    debugPrint('[MicroCoaching] setLanguage=$language');
+    await _channel.invokeMethod('setLanguage', {'language': language});
   }
 }

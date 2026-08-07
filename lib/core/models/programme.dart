@@ -9,7 +9,15 @@
 /// Non-pilot programmes remain in the enum so wire data from the server still
 /// deserialises correctly; they are simply gated out of the UI and pathway engine.
 /// To expand scope post-pilot, add programmes back to [kPilotProgrammes].
-/// Search for `PILOT-SCOPE` across the codebase to find every disabled block.
+///
+/// The actual selectable set enforced at runtime is stricter than
+/// [kPilotProgrammes] alone — see
+/// `ServiceSelectionResolver.excludedFromSelection`
+/// (`lib/features/visit/triage/service_selection_resolver.dart`), the single
+/// choke point where a visit's final programme set is filtered before Step 2
+/// renders. `tb` is currently paused there (form content not yet aligned)
+/// despite being listed in [kPilotProgrammes] below — the two lists
+/// intentionally diverge until that work lands.
 enum Programme {
   imci,
   anc,

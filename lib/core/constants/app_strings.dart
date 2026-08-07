@@ -24,6 +24,7 @@ import 'package:intl/intl.dart';
 import '../../features/visit/immunisation/epi_visit_summary.dart';
 import '../i18n/app_locale.dart';
 import '../models/dashboard_tier.dart';
+import '../models/programme.dart';
 
 Map<String, Map<String, String>>? _translations;
 
@@ -710,6 +711,8 @@ abstract final class PatientContextStrings {
       ? '$months মাস'
       : '$months month${months == 1 ? '' : 's'}';
   static String get ageUnderOneYear => getTranslatedString('ageUnderOneYear', '< 1 yr');
+  /// Compact "9m" form for space-constrained cards (dashboard patient card).
+  static String ageMonthsCompact(int months) => getTranslatedString('PatientContext.ageMonthsCompact', '{months}m', params: {'months': '$months'});
   static String householdFallback(String householdId) => getTranslatedString('householdFallback', 'HH {householdId}', params: {'householdId': '$householdId'});
   static String get pregnantChip => getTranslatedString('pregnantChip', 'Pregnant');
 
@@ -1942,9 +1945,16 @@ abstract final class TriageStrings {
   /// Chip label — Android "Pregnancy Outcome" menu (not mother PNC).
   static String get pregnancyOutcomeChip => getTranslatedString('pregnancyOutcomeChip', 'Pregnancy Outcome');
   static String get deliveryHint => getTranslatedString('deliveryHint', 'Pregnancy Outcome documents the birth this visit and clears ANC');
-  static String get ancDeliveryConflictHint => getTranslatedString('ancDeliveryConflictHint', '⚠ ANC is unavailable on a pregnancy-outcome visit — deselect Pregnancy Outcome first');
+  static String get ancDeliveryConflictHint => getTranslatedString('ancDeliveryConflictHint', '⚠ Unavailable on a pregnancy-outcome visit — deselect Pregnancy Outcome first');
   static String get pncOnlyPostpartumHint => getTranslatedString('pncOnlyPostpartumHint', '⚠ Mother PNC is available after delivery — use Pregnancy Outcome now');
+  static String get pwLockedPostpartumHint => getTranslatedString('pwLockedPostpartumHint', '⚠ This pregnancy has already ended — PW registration is only for a new pregnancy');
+  static String get pregnancyOutcomeLockedHint => getTranslatedString('pregnancyOutcomeLockedHint', '⚠ Pregnancy Outcome is not available for this patient right now');
+  static String get fpLockedPregnantHint => getTranslatedString('fpLockedPregnantHint', '⚠ Family Planning is unavailable during an active pregnancy');
   static String get vaccinationDefaultHint => getTranslatedString('vaccinationDefaultHint', 'Vaccination is always included for this visit — only Child Health is optional');
+  static String pwEpisodeSubtitle({required String lmp, required String edd}) => getTranslatedString('Triage.pwEpisodeSubtitle', 'LMP: {lmp} · EDD: {edd}', params: {'lmp': lmp, 'edd': edd});
+  static String get ancVisitedTodayMessage => getTranslatedString('Triage.ancVisitedTodayMessage', 'ANC already recorded today');
+  static String ancRevisitMessageNormal({required String lastVisit, required String nextDue}) => getTranslatedString('Triage.ancRevisitMessageNormal', 'Last visit: {lastVisit} · next due {nextDue}', params: {'lastVisit': lastVisit, 'nextDue': nextDue});
+  static String ancRevisitMessageHighRisk({required String lastVisit}) => getTranslatedString('Triage.ancRevisitMessageHighRisk', 'Last visit: {lastVisit} (high-risk — 1-day interval)', params: {'lastVisit': lastVisit});
 
   static String selectProgrammeA11y(String label) => getTranslatedString('selectProgrammeA11y', 'Select {label}', params: {'label': '$label'});
   static String deselectProgrammeA11y(String label) => getTranslatedString('deselectProgrammeA11y', 'Deselect {label}', params: {'label': '$label'});
@@ -2664,230 +2674,6 @@ abstract final class ComposerStrings {
   static String get supplyProvidedShort => getTranslatedString('supplyProvidedShort', 'Provided today');
 }
 
-/// CDS (Clinical Decision Support) alert strings.
-/// Phase 3: Symptom-Driven Unified Assessment — CDS rules layer.
-///
-/// All keys used in [CdsAlert.messageKey] and [CdsAlert.rationaleKey]
-/// must resolve through this class.  No string literals in widgets.
-abstract final class CdsStrings {
-  CdsStrings._();
-
-  // ── Alert messages ──────────────────────────────────────────────────────────
-  static const String bpSevereMessage =
-      'Severe hypertension detected — refer immediately';
-  static const String bpStage1Message =
-      'High BP — add NCD hypertension assessment';
-  static const String dangerSignMessage =
-      'Danger sign present — refer immediately';
-  static const String severePneumoniaMessage =
-      'Severe pneumonia — refer immediately';
-  static const String pneumoniaMessage =
-      'Pneumonia — treat or refer if worsening';
-  static const String samMessage =
-      'Severe acute malnutrition — refer immediately';
-  static const String mamMessage = 'Moderate malnutrition — treat at community';
-  static const String severeAnemiaMessage = 'Severe anemia — refer immediately';
-  static const String anemiaMessage =
-      'Anemia detected — supplement and follow up';
-  static const String glucoseHighMessage =
-      'High blood glucose — diabetes screening indicated';
-  static const String tbScreenAddMessage =
-      'TB screening added — cough ≥ 2 weeks';
-  static const String conflictReferralOverridesKey =
-      'Referral recommended — treat-at-community overridden';
-
-  // ── Alert actions ───────────────────────────────────────────────────────────
-  static String get referNowButton => getTranslatedString('referNowButton', 'Refer now');
-  static String get addPathwayButton => getTranslatedString('addPathwayButton', 'Add to assessment');
-  static String get dismissButton => getTranslatedString('dismissButton', 'Dismiss');
-
-  // ── Rationale / explainability keys ────────────────────────────────────────
-  static const String rationaleWhoHeartsBpSevere =
-      'WHO HEARTS: systolic ≥ 160 or diastolic ≥ 100 = severe hypertension';
-  static const String rationaleWhoHeartsStage1 =
-      'WHO HEARTS: systolic ≥ 140 or diastolic ≥ 90 = stage 1 hypertension';
-  static const String rationaleWhoImciDangerSign =
-      'WHO IMCI: general danger sign = refer urgently';
-  static const String rationaleWhoImciSeverePneumonia =
-      'WHO IMCI: chest indrawing = severe pneumonia';
-  static const String rationaleWhoImciPneumonia =
-      'WHO IMCI: fast breathing without chest indrawing = pneumonia';
-  static const String rationaleWhoMuacSam =
-      'WHO: MUAC < 11.5 cm = severe acute malnutrition';
-  static const String rationaleWhoMuacMam =
-      'WHO: MUAC 11.5–12.5 cm = moderate acute malnutrition';
-  static const String rationaleWhoAncAnemia =
-      'WHO ANC: Hb < 7 g/dL = severe anemia requiring referral';
-  static const String rationaleWhoAncMildAnemia =
-      'WHO ANC: Hb < 11 g/dL = anemia in pregnancy';
-  static const String rationaleWhoPenDm =
-      'WHO PEN: glucose > 200 mg/dL random or > 126 mg/dL fasting = diabetes threshold';
-  static const String rationaleWhoTb4Symptom =
-      'WHO: cough ≥ 2 weeks is a TB indicator — screen urgently';
-
-  // ── CDSS algorithm rationales ────────────────────────────────────────────────
-  static const String rationaleFindriscModerate =
-      'FINDRISC score 12–14: moderate diabetes risk (1 in 6 chance over 10 years)';
-  static const String rationaleFindriscHigh =
-      'FINDRISC score 15–20: high diabetes risk (1 in 3 chance over 10 years)';
-  static const String rationaleFindriscVeryHigh =
-      'FINDRISC score ≥ 21: very high diabetes risk (1 in 2 chance over 10 years)';
-  static const String rationaleFraminghamTrigger =
-      'Framingham No-Lab: 10-year CVD risk ≥ 10% — NCD management indicated';
-  static const String rationaleFraminghamHigh =
-      'Framingham No-Lab: 10-year CVD risk ≥ 20% — high cardiovascular risk';
-  static const String rationaleBpTrendCusum =
-      'CUSUM: cumulative BP rise exceeds decision threshold (h = 40 mmHg)';
-  static const String rationaleBpTrendEwma =
-      'EWMA: smoothed BP trend has crossed the upper control limit';
-  static const String rationaleBpTrendSlope =
-      'Linear slope: BP increasing at > 4 mmHg per visit';
-  static const String rationaleMiniPiersHigh =
-      'miniPIERS: predicted adverse maternal outcome risk ≥ 25%';
-  static const String rationaleMiniPiersCritical =
-      'miniPIERS: predicted adverse maternal outcome risk ≥ 50% — refer now';
-  static const String rationaleCataractNcdCoenroll =
-      'NCD service provided during cataract visit — NCD enrolment recommended';
-  static const String rationaleEyeCareReferral =
-      'Eye test outcome requires specialist referral';
-
-  // ── CDSS algorithm alert messages ────────────────────────────────────────────
-  static const String findriscModerateMessage =
-      'Diabetes risk moderate (FINDRISC 12–14) — add NCD assessment';
-  static const String findriscHighMessage =
-      'Diabetes risk high (FINDRISC 15–20) — add NCD assessment';
-  static const String findriscVeryHighMessage =
-      'Diabetes risk very high (FINDRISC ≥ 21) — add NCD assessment';
-  static const String framinghamTriggerMessage =
-      'CVD risk ≥ 10% (Framingham) — NCD management indicated';
-  static const String framinghamHighMessage =
-      'CVD risk ≥ 20% (Framingham) — high cardiovascular risk';
-  static const String bpTrendCusumMessage =
-      'BP trend alert (CUSUM) — rising blood pressure pattern detected';
-  static const String bpTrendEwmaMessage =
-      'BP trend alert (EWMA) — blood pressure control worsening';
-  static const String bpTrendSlopeMessage =
-      'BP trend alert — increasing > 4 mmHg per visit';
-  static const String miniPiersHighMessage =
-      'High risk of adverse outcome (miniPIERS ≥ 25%) — close monitoring needed';
-  static const String miniPiersCriticalMessage =
-      'Critical risk of adverse outcome (miniPIERS ≥ 50%) — refer immediately';
-  static const String cataractNcdCoenrollMessage =
-      'NCD service provided — enrol patient in NCD programme';
-  static const String eyeCareReferralMessage =
-      'Patient requires eye care referral — document referral facility';
-
-  /// Resolve a message string by its key (as stored in [CdsAlert.messageKey]).
-  static String message(String key) {
-    switch (key) {
-      case 'bpSevereMessage':
-        return getTranslatedString('Cds.message.bpSevereMessage', 'Severe hypertension detected — refer immediately');
-      case 'bpStage1Message':
-        return getTranslatedString('Cds.message.bpStage1Message', 'High BP — add NCD hypertension assessment');
-      case 'dangerSignMessage':
-        return getTranslatedString('Cds.message.dangerSignMessage', 'Danger sign present — refer immediately');
-      case 'severePneumoniaMessage':
-        return getTranslatedString('Cds.message.severePneumoniaMessage', 'Severe pneumonia — refer immediately');
-      case 'pneumoniaMessage':
-        return getTranslatedString('Cds.message.pneumoniaMessage', 'Pneumonia — treat or refer if worsening');
-      case 'samMessage':
-        return getTranslatedString('Cds.message.samMessage', 'Severe acute malnutrition — refer immediately');
-      case 'mamMessage':
-        return getTranslatedString('Cds.message.mamMessage', 'Moderate malnutrition — treat at community');
-      case 'severeAnemiaMessage':
-        return getTranslatedString('Cds.message.severeAnemiaMessage', 'Severe anemia — refer immediately');
-      case 'anemiaMessage':
-        return getTranslatedString('Cds.message.anemiaMessage', 'Anemia detected — supplement and follow up');
-      case 'glucoseHighMessage':
-        return getTranslatedString('Cds.message.glucoseHighMessage', 'High blood glucose — diabetes screening indicated');
-      case 'tbScreenAddMessage':
-        return getTranslatedString('Cds.message.tbScreenAddMessage', 'TB screening added — cough ≥ 2 weeks');
-      case 'conflictReferralOverridesKey':
-        return getTranslatedString('Cds.message.conflictReferralOverridesKey', 'Referral recommended — treat-at-community overridden');
-      case 'findriscModerateMessage':
-        return getTranslatedString('Cds.message.findriscModerateMessage', 'Diabetes risk moderate (FINDRISC 12–14) — add NCD assessment');
-      case 'findriscHighMessage':
-        return getTranslatedString('Cds.message.findriscHighMessage', 'Diabetes risk high (FINDRISC 15–20) — add NCD assessment');
-      case 'findriscVeryHighMessage':
-        return getTranslatedString('Cds.message.findriscVeryHighMessage', 'Diabetes risk very high (FINDRISC ≥ 21) — add NCD assessment');
-      case 'framinghamTriggerMessage':
-        return getTranslatedString('Cds.message.framinghamTriggerMessage', 'CVD risk ≥ 10% (Framingham) — NCD management indicated');
-      case 'framinghamHighMessage':
-        return getTranslatedString('Cds.message.framinghamHighMessage', 'CVD risk ≥ 20% (Framingham) — high cardiovascular risk');
-      case 'bpTrendCusumMessage':
-        return getTranslatedString('Cds.message.bpTrendCusumMessage', 'BP trend alert (CUSUM) — rising blood pressure pattern detected');
-      case 'bpTrendEwmaMessage':
-        return getTranslatedString('Cds.message.bpTrendEwmaMessage', 'BP trend alert (EWMA) — blood pressure control worsening');
-      case 'bpTrendSlopeMessage':
-        return getTranslatedString('Cds.message.bpTrendSlopeMessage', 'BP trend alert — increasing > 4 mmHg per visit');
-      case 'miniPiersHighMessage':
-        return getTranslatedString('Cds.message.miniPiersHighMessage', 'High risk of adverse outcome (miniPIERS ≥ 25%) — close monitoring needed');
-      case 'miniPiersCriticalMessage':
-        return getTranslatedString('Cds.message.miniPiersCriticalMessage', 'Critical risk of adverse outcome (miniPIERS ≥ 50%) — refer immediately');
-      case 'cataractNcdCoenrollMessage':
-        return getTranslatedString('Cds.message.cataractNcdCoenrollMessage', 'NCD service provided — enrol patient in NCD programme');
-      case 'eyeCareReferralMessage':
-        return getTranslatedString('Cds.message.eyeCareReferralMessage', 'Patient requires eye care referral — document referral facility');
-      default:
-        return key;
-    }
-  }
-
-  /// Resolve a rationale string by its key (as stored in [CdsAlert.rationaleKey]).
-  static String rationale(String key) {
-    switch (key) {
-      case 'rationaleWhoHeartsBpSevere':
-        return getTranslatedString('Cds.rationale.rationaleWhoHeartsBpSevere', 'WHO HEARTS: systolic ≥ 160 or diastolic ≥ 100 = severe hypertension');
-      case 'rationaleWhoHeartsStage1':
-        return getTranslatedString('Cds.rationale.rationaleWhoHeartsStage1', 'WHO HEARTS: systolic ≥ 140 or diastolic ≥ 90 = stage 1 hypertension');
-      case 'rationaleWhoImciDangerSign':
-        return getTranslatedString('Cds.rationale.rationaleWhoImciDangerSign', 'WHO IMCI: general danger sign = refer urgently');
-      case 'rationaleWhoImciSeverePneumonia':
-        return getTranslatedString('Cds.rationale.rationaleWhoImciSeverePneumonia', 'WHO IMCI: chest indrawing = severe pneumonia');
-      case 'rationaleWhoImciPneumonia':
-        return getTranslatedString('Cds.rationale.rationaleWhoImciPneumonia', 'WHO IMCI: fast breathing without chest indrawing = pneumonia');
-      case 'rationaleWhoMuacSam':
-        return getTranslatedString('Cds.rationale.rationaleWhoMuacSam', 'WHO: MUAC < 11.5 cm = severe acute malnutrition');
-      case 'rationaleWhoMuacMam':
-        return getTranslatedString('Cds.rationale.rationaleWhoMuacMam', 'WHO: MUAC 11.5–12.5 cm = moderate acute malnutrition');
-      case 'rationaleWhoAncAnemia':
-        return getTranslatedString('Cds.rationale.rationaleWhoAncAnemia', 'WHO ANC: Hb < 7 g/dL = severe anemia requiring referral');
-      case 'rationaleWhoAncMildAnemia':
-        return getTranslatedString('Cds.rationale.rationaleWhoAncMildAnemia', 'WHO ANC: Hb < 11 g/dL = anemia in pregnancy');
-      case 'rationaleWhoPenDm':
-        return getTranslatedString('Cds.rationale.rationaleWhoPenDm', 'WHO PEN: glucose > 200 mg/dL random or > 126 mg/dL fasting = diabetes threshold');
-      case 'rationaleWhoTb4Symptom':
-        return getTranslatedString('Cds.rationale.rationaleWhoTb4Symptom', 'WHO: cough ≥ 2 weeks is a TB indicator — screen urgently');
-      case 'rationaleFindriscModerate':
-        return getTranslatedString('Cds.rationale.rationaleFindriscModerate', 'FINDRISC score 12–14: moderate diabetes risk (1 in 6 chance over 10 years)');
-      case 'rationaleFindriscHigh':
-        return getTranslatedString('Cds.rationale.rationaleFindriscHigh', 'FINDRISC score 15–20: high diabetes risk (1 in 3 chance over 10 years)');
-      case 'rationaleFindriscVeryHigh':
-        return getTranslatedString('Cds.rationale.rationaleFindriscVeryHigh', 'FINDRISC score ≥ 21: very high diabetes risk (1 in 2 chance over 10 years)');
-      case 'rationaleFraminghamTrigger':
-        return getTranslatedString('Cds.rationale.rationaleFraminghamTrigger', 'Framingham No-Lab: 10-year CVD risk ≥ 10% — NCD management indicated');
-      case 'rationaleFraminghamHigh':
-        return getTranslatedString('Cds.rationale.rationaleFraminghamHigh', 'Framingham No-Lab: 10-year CVD risk ≥ 20% — high cardiovascular risk');
-      case 'rationaleBpTrendCusum':
-        return getTranslatedString('Cds.rationale.rationaleBpTrendCusum', 'CUSUM: cumulative BP rise exceeds decision threshold (h = 40 mmHg)');
-      case 'rationaleBpTrendEwma':
-        return getTranslatedString('Cds.rationale.rationaleBpTrendEwma', 'EWMA: smoothed BP trend has crossed the upper control limit');
-      case 'rationaleBpTrendSlope':
-        return getTranslatedString('Cds.rationale.rationaleBpTrendSlope', 'Linear slope: BP increasing at > 4 mmHg per visit');
-      case 'rationaleMiniPiersHigh':
-        return getTranslatedString('Cds.rationale.rationaleMiniPiersHigh', 'miniPIERS: predicted adverse maternal outcome risk ≥ 25%');
-      case 'rationaleMiniPiersCritical':
-        return getTranslatedString('Cds.rationale.rationaleMiniPiersCritical', 'miniPIERS: predicted adverse maternal outcome risk ≥ 50% — refer now');
-      case 'rationaleCataractNcdCoenroll':
-        return getTranslatedString('Cds.rationale.rationaleCataractNcdCoenroll', 'NCD service provided during cataract visit — NCD enrolment recommended');
-      case 'rationaleEyeCareReferral':
-        return getTranslatedString('Cds.rationale.rationaleEyeCareReferral', 'Eye test outcome requires specialist referral');
-      default:
-        return key;
-    }
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // TriageResultStrings
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2918,6 +2704,16 @@ abstract final class TriageResultStrings {
 // ─────────────────────────────────────────────────────────────────────────────
 // SymptomPickerStrings
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Which service the Greet Warmly card's fallback content is written for —
+/// see [SymptomPickerStrings.sitWithGreetEnglishFor]. Only pregnancy and
+/// postpartum get a distinct question; every other service (TB, NCD, or
+/// nothing selected) shares one generic wellbeing question.
+enum _GreetWarmlyService { pregnancy, postpartum, general }
+
+/// Pregnancy stage bucket gating the fetal-movement question — see
+/// [SymptomPickerStrings.sitWithGreetEnglishFor].
+enum _PregnancyStage { early, mid, late }
 
 abstract final class SymptomPickerStrings {
   SymptomPickerStrings._();
@@ -2971,29 +2767,188 @@ abstract final class SymptomPickerStrings {
       'Sit with ${isFemale ? 'her' : 'him'} — greet them.';
 
   // ── "Sit with her / him — greet warmly" card (Step 1, between
-  // Before-You-Knock and the AI Scribe). All static — never AI-generated.
+  // Before-You-Knock and the AI Scribe). Header and hint are app UI/
+  // instructions *to the SK* — locale-aware via getTranslatedString, so they
+  // follow the app's language setting; the greeting line the SK reads aloud
+  // is also locale-aware (single language, never both at once — see
+  // GreetWarmlyCard). All four are AI-preferred (from the briefing
+  // response's `greeting` block) with these as the offline / AI-unavailable
+  // fallback.
+  //
+  // `isChild` (under-5 patient) redirects every line to the guardian —
+  // an under-5 patient cannot answer for themselves, so the SK greets and
+  // questions the guardian *about* the child rather than addressing the
+  // child directly. Gender-neutral: a guardian greeting doesn't depend on
+  // the child's sex.
+  //
+  // The greeting line and hint also key off `selectedProgrammes` (the SK's
+  // currently-ticked service cards) so an ANC visit asks pregnancy-relevant
+  // questions and a PNC visit asks about postpartum recovery, instead of
+  // one question assumed for every adult woman regardless of why she's
+  // being seen. Every other service (TB, NCD, or nothing selected) shares
+  // one generic wellbeing question — no distinct question was worth
+  // maintaining for those. Within the pregnancy branch, `gestationalWeeks`
+  // further gates the
+  // fetal-movement question to when it's actually meaningful — quickening
+  // isn't felt in early pregnancy, so a 1-week patient must never be asked
+  // "is the baby moving".
 
-  /// Header (uppercase, small). Gendered.
-  static String sitWithGreetHeaderFor({required bool isFemale}) =>
-      isFemale ? 'SIT WITH HER — GREET WARMLY' : 'SIT WITH HIM — GREET WARMLY';
+  /// Which service the greeting/hint content should be written for, derived
+  /// from the SK's currently-selected programme cards. Pregnancy takes
+  /// priority over any other simultaneously-selected service since it's the
+  /// most safety-relevant context to greet correctly. TB and NCD don't get
+  /// a distinct question — they fall through to the general bucket.
+  static _GreetWarmlyService _greetWarmlyServiceFor(
+    Set<Programme>? selectedProgrammes,
+  ) {
+    final p = selectedProgrammes ?? const <Programme>{};
+    if (p.contains(Programme.anc) || p.contains(Programme.pw)) {
+      return _GreetWarmlyService.pregnancy;
+    }
+    if (p.contains(Programme.pnc)) return _GreetWarmlyService.postpartum;
+    return _GreetWarmlyService.general;
+  }
 
-  /// Bangla greeting the SK opens with. ANC variant for women of reproductive
-  /// age; NCD/general variant otherwise. Includes the second-line ask so the
-  /// SK has a natural pause before the AI Scribe records.
-  static String sitWithGreetBanglaFor({required bool isFemale}) => isFemale
-      ? '"আপু, আপনি কেমন আছেন?\nবাচ্চা কেমন নড়াচড়া করছে?"'
-      : '"কাকা, আপনি কেমন আছেন?\nকোথাও কষ্ট আছে কি?"';
+  /// Pregnancy stage bucket for the greeting line. Quickening (the mother
+  /// first feeling fetal movement) isn't reliable before roughly 24 weeks,
+  /// so the movement question is reserved for [_PregnancyStage.late] —
+  /// unknown gestational age is treated as [_PregnancyStage.early] rather
+  /// than risk asking a too-early patient about movement.
+  static _PregnancyStage _pregnancyStageFor(int? gestationalWeeks) {
+    final weeks = gestationalWeeks;
+    if (weeks == null || weeks < 13) return _PregnancyStage.early;
+    if (weeks < 24) return _PregnancyStage.mid;
+    return _PregnancyStage.late;
+  }
 
-  /// English translation of [sitWithGreetBanglaFor].
-  static String sitWithGreetEnglishFor({required bool isFemale}) => isFemale
-      ? 'Sister, how are you? Is the baby moving well?'
-      : 'Brother, how are you? Are you feeling any discomfort?';
+  /// Header (uppercase, small). Gendered + locale-aware; guardian-directed
+  /// for a child patient. Not service-specific — the instruction to the SK
+  /// doesn't change with the visit type.
+  static String sitWithGreetHeaderFor({
+    required bool isFemale,
+    bool isChild = false,
+  }) {
+    if (isChild) {
+      return getTranslatedString(
+        'sitWithGreetHeaderGuardian',
+        '👋 SIT WITH THE GUARDIAN — GREET WARMLY',
+      );
+    }
+    return getTranslatedString(
+      isFemale ? 'sitWithGreetHeaderFemale' : 'sitWithGreetHeaderMale',
+      isFemale
+          ? '👋 SIT WITH HER — GREET WARMLY'
+          : '👋 SIT WITH HIM — GREET WARMLY',
+    );
+  }
+
+  /// Bangla greeting the SK opens with — branches on the currently-selected
+  /// service (and, for pregnancy, gestational stage) so the question
+  /// actually fits the visit. For a child patient, addresses the guardian
+  /// about the child instead.
+  static String sitWithGreetBanglaFor({
+    required bool isFemale,
+    bool isChild = false,
+    Set<Programme>? selectedProgrammes,
+    int? gestationalWeeks,
+  }) {
+    if (isChild) {
+      return '"বাবুটি কেমন আছে? ঠিকমতো খাচ্ছে ও ঘুমাচ্ছে তো?"';
+    }
+    switch (_greetWarmlyServiceFor(selectedProgrammes)) {
+      case _GreetWarmlyService.pregnancy:
+        switch (_pregnancyStageFor(gestationalWeeks)) {
+          case _PregnancyStage.early:
+            return '"আপু, আপনি কেমন বোধ করছেন?\nবমি ভাব বা খেতে অসুবিধা হচ্ছে কি?"';
+          case _PregnancyStage.mid:
+            return '"আপু, আপনি কেমন আছেন?\nসম্প্রতি ফোলা বা মাথাব্যথা হয়েছে কি?"';
+          case _PregnancyStage.late:
+            return '"আপু, আপনি কেমন আছেন?\nবাচ্চা আজ ভালোভাবে নড়াচড়া করছে তো?"';
+        }
+      case _GreetWarmlyService.postpartum:
+        return '"আপু, প্রসবের পর আপনি কেমন বোধ করছেন?\nবাচ্চা কেমন খাচ্ছে?"';
+      case _GreetWarmlyService.general:
+        return isFemale
+            ? '"আপু, আপনি কেমন বোধ করছেন?\nকোনো সমস্যা আছে কি?"'
+            : '"কাকা, আপনি কেমন বোধ করছেন?\nকোনো সমস্যা আছে কি?"';
+    }
+  }
+
+  /// English translation of [sitWithGreetBanglaFor] — same service +
+  /// gestational-stage branching.
+  static String sitWithGreetEnglishFor({
+    required bool isFemale,
+    bool isChild = false,
+    Set<Programme>? selectedProgrammes,
+    int? gestationalWeeks,
+  }) {
+    if (isChild) {
+      return isFemale
+          ? 'How is the little one? Is she eating and sleeping well?'
+          : 'How is the little one? Is he eating and sleeping well?';
+    }
+    switch (_greetWarmlyServiceFor(selectedProgrammes)) {
+      case _GreetWarmlyService.pregnancy:
+        switch (_pregnancyStageFor(gestationalWeeks)) {
+          case _PregnancyStage.early:
+            return 'Sister, how are you feeling? Any nausea or difficulty eating?';
+          case _PregnancyStage.mid:
+            return 'Sister, how are you? Any swelling or headaches lately?';
+          case _PregnancyStage.late:
+            return 'Sister, how are you? Is the baby moving well today?';
+        }
+      case _GreetWarmlyService.postpartum:
+        return 'Sister, how are you feeling since delivery? How is the baby feeding?';
+      case _GreetWarmlyService.general:
+        return isFemale
+            ? 'Sister, how are you feeling? Do you have any concern?'
+            : 'Brother, how are you feeling? Do you have any concern?';
+    }
+  }
 
   /// Helper hint below the greeting — primes the SK to talk about home life
-  /// before launching the clinical conversation.
-  static String sitWithGreetHintFor({required bool isFemale}) => isFemale
-      ? 'Ask how she feels at home, with family, and about her sleep — before the pregnancy checkup'
-      : 'Ask how he feels at home, with family, and about his sleep — before the visit';
+  /// before launching the clinical conversation. Gendered + locale-aware;
+  /// guardian-directed for a child patient; names the actual visit type
+  /// instead of always assuming a pregnancy checkup.
+  static String sitWithGreetHintFor({
+    required bool isFemale,
+    bool isChild = false,
+    Set<Programme>? selectedProgrammes,
+  }) {
+    if (isChild) {
+      return getTranslatedString(
+        'sitWithGreetHintGuardian',
+        'Ask the guardian about feeding, sleep, and any danger signs — before starting the checkup',
+      );
+    }
+    if (!isFemale) {
+      // No non-pregnancy male branch needed — sitWithGreetHintMale was
+      // already visit-type-neutral ("before the visit").
+      return _sitWithGreetHintAdultFor(isFemale: false);
+    }
+    switch (_greetWarmlyServiceFor(selectedProgrammes)) {
+      case _GreetWarmlyService.pregnancy:
+        return _sitWithGreetHintAdultFor(isFemale: true);
+      case _GreetWarmlyService.postpartum:
+        return getTranslatedString(
+          'sitWithGreetHintPostpartum',
+          'Ask how she feels at home, with family, and about her sleep — before the postnatal checkup',
+        );
+      case _GreetWarmlyService.general:
+        return getTranslatedString(
+          'sitWithGreetHintFemaleGeneral',
+          'Ask how she feels at home, with family, and about her sleep — before the visit',
+        );
+    }
+  }
+
+  static String _sitWithGreetHintAdultFor({required bool isFemale}) =>
+      getTranslatedString(
+        isFemale ? 'sitWithGreetHintFemale' : 'sitWithGreetHintMale',
+        isFemale
+            ? 'Ask how she feels at home, with family, and about her sleep — before the pregnancy checkup'
+            : 'Ask how he feels at home, with family, and about his sleep — before the visit',
+      );
 
   // ── "How is she feeling today?" heading shown just above the AI Scribe.
   static String howFeelingTodayHeadingFor({required bool isFemale}) =>
@@ -3788,7 +3743,16 @@ abstract final class EnrollmentStrings {
         'Select single if (Separated/Divorced/Partner deceased)',
       );
 
-  static String get disabilityStatusLabel => getTranslatedString('disabilityStatusLabel', 'Disability');
+  /// Member-level disability (Spice member_registration.json title / titleCulture).
+  static String get disabilityStatusLabel =>
+      getTranslatedString('disabilityMemberQuestion', 'Disability');
+
+  /// Spice member_registration.json `infoTitle` under Disability.
+  static String get disabilityMemberInfo => getTranslatedString(
+        'disabilityMemberInfo',
+        'Who has great difficulty or cannot see, hear, walk, climb, do things independently',
+      );
+
   static const List<String> disabilityStatuses = [
     'None',
     'Physical',
@@ -3882,6 +3846,9 @@ abstract final class EnrollmentStrings {
   static String get guardianHint => getTranslatedString('guardianHint', 'Select guardian from household');
   // Spice member_registration.json shows the `disability` question as Yes/No;
   // the wire values stay present/absent (see EnrollmentRepository).
+  /// Wire values for member disability (mapped to present/absent on sync).
+  /// Display stays Yes/No ids so [_disabilityValue] keeps working; Bangla
+  /// mode shows translated labels via [disabilityStatusDisplay].
   static const List<String> disabilityStatusesV2 = ['Yes', 'No'];
   static const List<String> disabilityYesNo = ['Yes', 'No'];
 

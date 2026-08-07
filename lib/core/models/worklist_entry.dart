@@ -14,6 +14,7 @@ class WorklistEntry {
     required this.patientId,
     required this.displayName,
     this.age,
+    this.dob,
     this.gender,
     this.phoneNumber,
     this.nid,
@@ -35,6 +36,10 @@ class WorklistEntry {
   final String patientId;
   final String displayName;
   final int? age;
+
+  /// ISO date string, when available — lets the dashboard card show a
+  /// <1-year-old's age in months instead of a floored "0" years.
+  final String? dob;
   final String? gender;
   final String? phoneNumber;
   final String? nid;

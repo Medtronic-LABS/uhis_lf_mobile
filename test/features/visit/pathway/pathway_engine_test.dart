@@ -28,32 +28,15 @@ void main() {
     });
 
     // =========================================================================
-    // Golden Case 2: M 34y, cough_over_2_weeks + weight_loss + fever → {TB_SCREEN}
-    // =========================================================================
-    test('Golden Case 2: adult male with TB symptoms activates TB_SCREEN', () {
-      final ctx = PatientContext(
-        patientId: 'test-2',
-        ageMonths: 34 * 12, // 34 years
-        sex: Sex.male,
-        isPregnant: false,
-      );
-
-      final symptoms = <String>{'cough_over_2_weeks', 'weight_loss', 'fever'};
-      final activated = PathwayEngine.activate(symptoms, ctx);
-
-      // Should have TB
-      final programmes = activated.map((a) => a.programme).toSet();
-      expect(programmes, contains(Programme.tb), reason: 'Should activate TB screening');
-    });
-
-    // =========================================================================
-    // Golden Case 3: 30mo, muac_red, MR vaccine overdue → {ICCM, NUTRITION, EPI}
-    // Ordered: acute-first
+    // Golden Case 3: 20mo, muac_red, MR vaccine overdue → {ICCM, NUTRITION, EPI}
+    // Ordered: acute-first. Age kept inside both the IMCI/nutrition gate
+    // (imciMaxAgeMonths, 24mo) and the young-child EPI-due gate (isYoungChild,
+    // 25mo, RMNCH childhoodVisit).
     // =========================================================================
     test('Golden Case 3: malnourished child with overdue vaccine activates ICCM + EPI', () {
       final ctx = PatientContext(
         patientId: 'test-3',
-        ageMonths: 30, // 30 months / 2.5 years
+        ageMonths: 20,
         sex: Sex.male,
         isPregnant: false,
         overdueImmunizations: ['MR'],
@@ -72,6 +55,23 @@ void main() {
         expect(priorities[i], greaterThanOrEqualTo(priorities[i - 1]),
             reason: 'Pathways should be ordered by priority (acute before scheduled)');
       }
+    });
+
+    test('Golden Case 3b: same malnourished/overdue-vaccine patient at 30mo — outside the young-child window, activates nothing', () {
+      final ctx = PatientContext(
+        patientId: 'test-3b',
+        ageMonths: 30, // outside both imciMaxAgeMonths (24) and isYoungChild (25)
+        sex: Sex.male,
+        isPregnant: false,
+        overdueImmunizations: ['MR'],
+      );
+
+      final symptoms = <String>{'muac_red'};
+      final activated = PathwayEngine.activate(symptoms, ctx);
+
+      expect(activated, isEmpty,
+          reason: 'RMNCH childhoodVisit narrowing (25mo) intentionally leaves 26-59mo without a '
+              'child-assessment pathway — see lib/features/visit/README.md');
     });
 
     // =========================================================================
@@ -181,21 +181,6 @@ void main() {
     // =========================================================================
     
     group('Edge cases', () {
-      test('Night sweats + weight loss combo activates TB', () {
-        final ctx = PatientContext(
-          patientId: 'edge-1',
-          ageMonths: 40 * 12,
-          sex: Sex.male,
-          isPregnant: false,
-        );
-
-        final symptoms = <String>{'night_sweats', 'weight_loss'};
-        final activated = PathwayEngine.activate(symptoms, ctx);
-
-        final programmes = activated.map((a) => a.programme).toSet();
-        expect(programmes, contains(Programme.tb), reason: 'Should activate TB from combo');
-      });
-
       test('Polyuria + polydipsia combo activates NCD-DM', () {
         final ctx = PatientContext(
           patientId: 'edge-2',
@@ -299,7 +284,7 @@ void main() {
       test('Trigger symptoms are captured for explainability', () {
         final ctx = PatientContext(
           patientId: 'edge-5',
-          ageMonths: 3 * 12,
+          ageMonths: 12, // within the IMCI gate (2-24mo)
           sex: Sex.male,
           isPregnant: false,
         );
@@ -312,6 +297,91 @@ void main() {
             reason: 'Should capture trigger symptoms');
         expect(iccm.triggerSymptoms, containsAll(['fever', 'cough']),
             reason: 'Should contain the symptoms that triggered');
+      });
+    });
+
+    // =========================================================================
+    // Regression: NCD age gate must be 18y (216mo), on both the rule-table
+    // path and the synthetic elevated-BP path — a prior constant mix-up
+    // silently regressed this to 24mo, letting a toddler's dizziness/weight
+    // loss/BP reading activate NCD. See pathway/README.md and
+    // features/visit/README.md's "Important age gates" table.
+    // =========================================================================
+    group('NCD age gate (18y / 216mo)', () {
+      test('toddler (24mo) with NCD-HTN symptoms does not activate NCD', () {
+        final ctx = PatientContext(
+          patientId: 'ncd-age-1',
+          ageMonths: 24,
+          sex: Sex.female,
+          isPregnant: false,
+        );
+
+        final symptoms = <String>{'dizziness', 'high_bp_known'};
+        final activated = PathwayEngine.activate(symptoms, ctx);
+
+        expect(activated.map((a) => a.programme), isNot(contains(Programme.ncd)),
+            reason: 'NCD-HTN must not fire below 18y');
+      });
+
+      test('toddler (24mo) with NCD-DM symptoms does not activate NCD', () {
+        final ctx = PatientContext(
+          patientId: 'ncd-age-2',
+          ageMonths: 24,
+          sex: Sex.female,
+          isPregnant: false,
+        );
+
+        final symptoms = <String>{'weight_loss', 'foot_wound'};
+        final activated = PathwayEngine.activate(symptoms, ctx);
+
+        expect(activated.map((a) => a.programme), isNot(contains(Programme.ncd)),
+            reason: 'NCD-DM must not fire below 18y');
+      });
+
+      test('toddler (24mo) with elevated BP does not activate NCD via the '
+          'synthetic path', () {
+        final ctx = PatientContext(
+          patientId: 'ncd-age-3',
+          ageMonths: 24,
+          sex: Sex.female,
+          isPregnant: false,
+          lastBpSystolic: 150,
+          lastBpDiastolic: 95,
+        );
+
+        final activated = PathwayEngine.activate(<String>{}, ctx);
+
+        expect(activated.map((a) => a.programme), isNot(contains(Programme.ncd)),
+            reason: 'the synthetic elevated-BP→NCD trigger bypasses '
+                'DemographicGate entirely and needs its own age check');
+      });
+
+      test('exactly 18y (216mo) with high_bp_known activates NCD', () {
+        final ctx = PatientContext(
+          patientId: 'ncd-age-4',
+          ageMonths: 216,
+          sex: Sex.female,
+          isPregnant: false,
+        );
+
+        final activated = PathwayEngine.activate(<String>{'high_bp_known'}, ctx);
+
+        expect(activated.map((a) => a.programme), contains(Programme.ncd),
+            reason: '216mo is the inclusive boundary — exactly 18y must qualify');
+      });
+
+      test('17y11mo (215mo) with high_bp_known does not activate NCD', () {
+        final ctx = PatientContext(
+          patientId: 'ncd-age-5',
+          ageMonths: 215,
+          sex: Sex.female,
+          isPregnant: false,
+        );
+
+        final activated = PathwayEngine.activate(<String>{'high_bp_known'}, ctx);
+
+        expect(activated.map((a) => a.programme), isNot(contains(Programme.ncd)),
+            reason: 'one month under 18y must not qualify');
       });
     });
   });

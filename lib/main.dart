@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'app/locale_provider.dart';
+import 'core/i18n/app_locale.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
 import 'app/theme_provider.dart';
@@ -39,6 +40,7 @@ import 'core/db/local_dashboard_repository.dart';
 import 'core/db/member_dao.dart';
 import 'core/db/patient_dao.dart';
 import 'core/db/patient_programmes_dao.dart';
+import 'core/db/pregnancy_episode_dao.dart';
 import 'core/db/pregnancy_snapshot_dao.dart';
 import 'core/db/treatment_presence_dao.dart';
 import 'core/db/referral_dao.dart';
@@ -140,6 +142,7 @@ class UhisNextApp extends StatefulWidget {
 class _UhisNextAppState extends State<UhisNextApp>
     with WidgetsBindingObserver {
   late final GoRouter _router = buildRouter(widget.authState);
+  final _localeProvider = LocaleProvider();
   late final PatientDao _patientDao = PatientDao(widget.appDb);
   late final PatientProgrammesDao _progDao =
       PatientProgrammesDao(widget.appDb);
@@ -155,6 +158,8 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final MemberDao _memberDao = MemberDao(widget.appDb);
   late final PregnancySnapshotDao _pregnancySnapshotDao =
       PregnancySnapshotDao(widget.appDb);
+  late final PregnancyEpisodeDao _pregnancyEpisodeDao =
+      PregnancyEpisodeDao(widget.appDb, _pregnancySnapshotDao);
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
   late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
@@ -182,6 +187,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     households: _householdDao,
     members: _memberDao,
     pregnancySnapshot: _pregnancySnapshotDao,
+    pregnancyEpisode: _pregnancyEpisodeDao,
     treatmentPresence: _treatmentPresenceDao,
     encounterDao: _encounterDao,
     // CCE: project followUp / assessment-history referrals into `referrals`.
@@ -298,6 +304,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
     widget.authState.addListener(_onAuthStateChanged);
+    _localeProvider.addListener(_onLocaleChanged);
     // Reset sync progress so the next user's /sync screen does not see
     // isComplete=true from the previous session and skip their cold sync.
     widget.authState.registerLogoutHook(_sync.resetProgress);
@@ -332,8 +339,16 @@ class _UhisNextAppState extends State<UhisNextApp>
     _inactivityTimer?.cancel();
     _connectivitySync.dispose();
     widget.authState.removeListener(_onAuthStateChanged);
+    _localeProvider.removeListener(_onLocaleChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Called whenever the user switches app language. Updates SDK language
+  /// via setLanguage (no re-init needed — SDK supports live language swap).
+  void _onLocaleChanged() {
+    final lang = AppLocale.isBangla ? 'bn' : 'en';
+    MicroCoachingService.setLanguage(lang);
   }
 
   bool _sdkInitialized = false;
@@ -348,13 +363,18 @@ class _UhisNextAppState extends State<UhisNextApp>
       return;
     }
     try {
+      final lang = AppLocale.isBangla ? 'bn' : 'en';
       await MicroCoachingService.initialize(
         authToken: token,
         backendUrl: AppConfig.coachingServiceUrl,
-        language: 'bn',
+        language: lang,
         hfToken: AppConfig.hfToken,
       );
-      debugPrint('[MicroCoaching] SDK initialized');
+      // Re-sync language immediately after init in case LocaleProvider's
+      // async _loadFromStorage() completed after AppLocale.current was read
+      // above (race window on cold start). setLanguage is a no-op if unchanged.
+      await MicroCoachingService.setLanguage(AppLocale.isBangla ? 'bn' : 'en');
+      debugPrint('[MicroCoaching] SDK initialized lang=$lang');
     } catch (e) {
       _sdkInitialized = false;
       debugPrint('[MicroCoaching] SDK init failed: $e');
@@ -419,7 +439,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<AppDatabase>.value(value: widget.appDb),
         ChangeNotifierProvider<AuthState>.value(value: widget.authState),
         ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
+        ChangeNotifierProvider<LocaleProvider>.value(value: _localeProvider),
         ChangeNotifierProvider<DashboardFilterState>(
             create: (_) => DashboardFilterState()),
         Provider<DashboardRepository>(
@@ -463,6 +483,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<LocalDashboardRepository>.value(value: _localDashboard),
         Provider<PatientProgrammesDao>.value(value: _progDao),
         Provider<PregnancySnapshotDao>.value(value: _pregnancySnapshotDao),
+        Provider<PregnancyEpisodeDao>.value(value: _pregnancyEpisodeDao),
         Provider<ObservationRepository>(
             create: (_) => ObservationRepository(widget.api)),
         Provider<MemberDetailRepository>(

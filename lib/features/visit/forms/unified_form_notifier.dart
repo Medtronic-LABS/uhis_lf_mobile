@@ -3,13 +3,13 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
+import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/mission/mission_pregnancy_facts.dart';
@@ -49,6 +49,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     required AssessmentRepository assessmentRepo,
     required PatientDao patientDao,
     required PregnancySnapshotDao pregnancySnapshotDao,
+    required PregnancyEpisodeDao pregnancyEpisodeDao,
     String? memberId,
     String? householdId,
     String? villageId,
@@ -63,6 +64,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _assessmentRepo = assessmentRepo,
         _patientDao = patientDao,
         _pregnancySnapshotDao = pregnancySnapshotDao,
+        _pregnancyEpisodeDao = pregnancyEpisodeDao,
         _memberId = memberId,
         _householdId = householdId,
         _villageId = villageId,
@@ -78,6 +80,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
   final AssessmentRepository _assessmentRepo;
   final PatientDao _patientDao;
   final PregnancySnapshotDao _pregnancySnapshotDao;
+  final PregnancyEpisodeDao _pregnancyEpisodeDao;
   final String? _memberId;
   final String? _householdId;
   final String? _villageId;
@@ -1677,20 +1680,24 @@ class UnifiedFormNotifier extends ChangeNotifier {
             )
           : null;
 
-      // One pregnancy episode across PO + PNC assessments in the same visit.
-      final sharedPregnancyEpisodeId = _pregnancyEpisodeId ??
-          (payloads.any((p) {
-            final t = p.assessmentType.toUpperCase();
-            return t == 'PREGNANCY_OUTCOME' ||
-                t == 'PREGNANCYOUTCOME' ||
-                t == 'PNC_MOTHER' ||
-                t == 'PNC_NEONATE' ||
-                t == 'PNC_CHILD' ||
-                t == 'ANC' ||
-                t == 'PWPROFILE';
-          })
-              ? const Uuid().v4()
-              : null);
+      // One real, persisted pregnancy episode id shared across every payload
+      // in this submit — starts/updates/reads the episode in
+      // PregnancyEpisodeDao (must run before the saveAssessment loop below so
+      // every payload shares the same id; previously this was a fresh random
+      // UUID per visit that never linked sequential visits to the same
+      // pregnancy).
+      String? sharedPregnancyEpisodeId = _pregnancyEpisodeId;
+      if (sharedPregnancyEpisodeId == null) {
+        try {
+          sharedPregnancyEpisodeId = await _persistPregnancyEpisodeAfterSubmit(
+            payloads: payloads,
+            assignedAncVisitNo: assignedAncVisitNo,
+            assignedPncVisitNo: assignedPncVisitNo,
+          );
+        } catch (e) {
+          debugPrint('[PregnancyEpisode] persist after submit skipped: $e');
+        }
+      }
 
       for (final payload in payloads) {
         ConsoleLog.banner(
@@ -1744,18 +1751,6 @@ class UnifiedFormNotifier extends ChangeNotifier {
         savedIds.add(id);
       }
 
-      // Persist completed ANC / PNC counts (Spice PregnancyDetail.*VisitNo)
-      // and merge episode clinical fields captured on this visit.
-      try {
-        await _persistPregnancyEpisodeAfterSubmit(
-          payloads: payloads,
-          assignedAncVisitNo: assignedAncVisitNo,
-          assignedPncVisitNo: assignedPncVisitNo,
-        );
-      } catch (e) {
-        debugPrint('[PregnancySnapshot] persist after submit skipped: $e');
-      }
-
       // CCE: bridge referred assessments into the local referrals table so
       // the dashboard bell / drawer see the case without waiting for sync.
       if (isReferred && savedIds.isNotEmpty) {
@@ -1790,19 +1785,57 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   /// Write PW + ANC episode fields back to the local pregnancy snapshot
   /// (Spice `savePregnancyDetails` / `saveAncPregnancyDetails`).
-  Future<void> _persistPregnancyEpisodeAfterSubmit({
+  /// Starts, updates, or reads the pregnancy episode this visit belongs to,
+  /// returning its id for use as the shared `pregnancyEpisodeId` on every
+  /// [saveAssessment] call in this submit — the caller must run this
+  /// *before* that loop so every payload shares the same real episode id
+  /// (previously a fresh random UUID per visit that never actually linked
+  /// sequential visits to the same pregnancy).
+  Future<String?> _persistPregnancyEpisodeAfterSubmit({
     required List<ProgrammePayload> payloads,
     int? assignedAncVisitNo,
     int? assignedPncVisitNo,
   }) async {
     final types = payloads.map((p) => p.assessmentType.toUpperCase()).toSet();
+    if (!types.any(kPregnancyEpisodeLinkedTypes.contains)) return null;
+
     final hasPw = types.contains('PWPROFILE') ||
-        types.contains('PW') ||
+        types.contains('PW_PROFILE') ||
         _activeFormTypes.contains('pwProfile');
     final hasAnc = types.contains('ANC');
-    final hasPnc = types.contains('PNC_MOTHER');
+    final hasPnc = types.contains('PNC_MOTHER') || types.contains('PNC');
+    final localId = await _localPatientId();
 
-    if (!hasPw && !hasAnc && !hasPnc) return;
+    if (!hasPw && !hasAnc && !hasPnc) {
+      // PREGNANCY_OUTCOME / CHILDHOOD_VISIT / CHILD_MENU only — these read
+      // the relevant episode id but don't mutate it, EXCEPT for a direct-
+      // entry Pregnancy Outcome (see below). Pregnancy Outcome's actual
+      // close normally happens later, in VisitFormScreen's background
+      // housekeeping (after this submit returns); a childhood/IMCI visit for
+      // an already-born baby must reuse the mother's episode, not start a
+      // new one, even if that episode is already closed.
+      final open = await _pregnancyEpisodeDao.openEpisodeFor(localId);
+      if (open != null) return open.id;
+      final mostRecent = await _pregnancyEpisodeDao.mostRecentFor(localId);
+      if (mostRecent != null) return mostRecent.id;
+      // CHILDHOOD_VISIT/CHILD_MENU must never create an episode — only a
+      // direct-entry Pregnancy Outcome (no PW/ANC ever ran, no episode ever
+      // existed) creates-and-closes one here, so this submit's own payload
+      // carries the new episode id instead of syncing with a null one.
+      final isOutcome = types.contains('PREGNANCY_OUTCOME') ||
+          types.contains('PREGNANCYOUTCOME');
+      if (!isOutcome) return null;
+      final deliveryRaw =
+          _data.getValue('dateOfDelivery') ?? _data.getValue('deliveryDate');
+      final deliveryMs = deliveryRaw is String
+          ? DateTime.tryParse(deliveryRaw)?.millisecondsSinceEpoch
+          : null;
+      final created = await _pregnancyEpisodeDao.closeEpisode(
+        patientId: localId,
+        deliveryDateMillis: deliveryMs ?? DateTime.now().millisecondsSinceEpoch,
+      );
+      return created.id;
+    }
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     int? ancNo;
@@ -1834,7 +1867,6 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
     final weight = PregnancySnapshotRow.asDouble(_data.getValue('weight'));
 
-    final localId = await _localPatientId();
     final patch = PregnancySnapshotRow(
       patientId: localId,
       facts: PregnancyFacts.empty,
@@ -1880,21 +1912,41 @@ class UnifiedFormNotifier extends ChangeNotifier {
       lastAncVisitDateMs: hasAnc ? nowMs : null,
     );
 
-    // Preserve existing mission facts when we only have empty defaults here.
-    final existing = await _pregnancySnapshotDao.byPatientOrMember(
-      localId,
-      memberId: _memberId,
-    );
-    final withFacts = existing == null
-        ? patch
-        : patch.copyWith(facts: existing.facts);
-    await _pregnancySnapshotDao.mergeUpsert(withFacts);
+    final PregnancyEpisodeRow episode;
+    if (hasPw) {
+      // New pregnancy episode — mirrors Android's savePregnancyDetails().
+      episode = await _pregnancyEpisodeDao.startNewEpisode(
+        patientId: localId,
+        obstetric: patch,
+      );
+    } else {
+      // ANC/PNC continuity — merge onto the currently open episode. Preserve
+      // its existing mission facts first: PregnancyEpisodeDao.updateOpenEpisode
+      // merges via PregnancySnapshotRow.mergedWith, which takes patch.facts
+      // unconditionally, and this patch's facts are always PregnancyFacts.empty
+      // (this method doesn't compute mission facts).
+      final existing = await _pregnancyEpisodeDao.openEpisodeFor(localId);
+      final withFacts = existing == null
+          ? patch
+          : patch.copyWith(facts: existing.obstetric.facts);
+      episode = await _pregnancyEpisodeDao.updateOpenEpisode(
+        patientId: localId,
+        patch: withFacts,
+      );
+    }
     if (ancNo != null) {
       debugPrint('[AncVisitNo] persisted ancVisitNo=$ancNo patient=$localId');
     }
     if (pncNo != null) {
       debugPrint('[PncVisitNo] persisted pncVisitNo=$pncNo patient=$localId');
     }
+    debugPrint(
+      '[AncRevisitDebug] WRITE localId=$localId hasPw=$hasPw hasAnc=$hasAnc '
+      'episodeId=${episode.id} isOpen=${episode.isOpen} '
+      'lastAncVisitDateMs=${episode.obstetric.lastAncVisitDateMs} '
+      'highRisk=${episode.obstetric.facts.highRiskPregnantWoman}',
+    );
+    return episode.id;
   }
 
   /// The `eyeCare` card body of a programme payload — the standalone eye care

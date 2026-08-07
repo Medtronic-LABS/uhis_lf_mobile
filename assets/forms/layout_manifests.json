@@ -878,7 +878,7 @@
     "sections": [
       {
         "sectionId": "clientProfileAssessment",
-        "title": "Client Profile & Assessment",
+        "title": "",
         "fieldRefs": [
           {
             "fieldName": "Number of Living Children",

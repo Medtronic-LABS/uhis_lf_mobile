@@ -22,6 +22,7 @@ import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
+import 'enrollment/enrollment_dob.dart';
 import 'enrollment/enrollment_entry_sheet.dart';
 import 'enrollment/nid_ocr_service.dart';
 import 'enrollment/widgets/enrollment_sticky_bar.dart';
@@ -1164,6 +1165,10 @@ class _MemberCard extends StatelessWidget {
           : PatientBadgeRow(
               name: member.name,
               age: member.age,
+              ageLabel: EnrollmentAge.compactChipLabel(
+                member.dateOfBirth,
+                fallbackYears: member.age,
+              ),
               gender: member.gender,
               phoneNumber: member.phoneNumber,
               programmes: member.programmes,

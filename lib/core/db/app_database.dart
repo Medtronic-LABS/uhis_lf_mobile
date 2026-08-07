@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
+import 'package:uuid/uuid.dart';
 
 import '../debug/console_log.dart';
 import 'key_store.dart';
@@ -21,7 +22,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 40;
+  static const int schemaVersion = 41;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -39,6 +40,7 @@ class AppDatabase {
   static const String tableEncounters = 'encounters';
   static const String tableLocalAssessments = 'local_assessments';
   static const String tablePregnancySnapshot = 'patient_pregnancy_snapshot';
+  static const String tablePregnancyEpisodes = 'pregnancy_episodes';
   static const String tableTreatmentPresence = 'patient_treatment_presence';
   static const String tableAssessmentDraft = 'assessment_draft';
   static const String tableAiSuggestions = 'ai_suggestions';
@@ -463,6 +465,49 @@ class AppDatabase {
         anc_weight REAL,
         last_anc_visit_date_ms INTEGER
       )''');
+    // One row per pregnancy episode (mirrors Android's PregnancyDetail — a
+    // fresh row per pregnancy), unlike $tablePregnancySnapshot above which is
+    // a single-row-per-patient "current state" projection derived from this
+    // table. See lib/core/db/pregnancy_episode_dao.dart.
+    await db.execute('''
+      CREATE TABLE $tablePregnancyEpisodes (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        closed_at INTEGER,
+        high_risk_pregnant_woman INTEGER NOT NULL DEFAULT 0,
+        has_gaps_in_anc INTEGER NOT NULL DEFAULT 0,
+        is_postpartum_window INTEGER NOT NULL DEFAULT 0,
+        is_near_term_anc INTEGER NOT NULL DEFAULT 0,
+        had_delivery_complications INTEGER NOT NULL DEFAULT 0,
+        has_pnc_illness INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER,
+        edd_date INTEGER,
+        lmp_date INTEGER,
+        delivery_date_millis INTEGER,
+        anc_visit_no INTEGER,
+        pnc_visit_no INTEGER,
+        gravida INTEGER,
+        parity INTEGER,
+        living_children INTEGER,
+        age_of_last_child TEXT,
+        pregnancy_test TEXT,
+        previous_pregnancy_complications TEXT,
+        existing_illness TEXT,
+        on_treatment TEXT,
+        tt_td_completed TEXT,
+        facility_identified_for_delivery TEXT,
+        anc_weight REAL,
+        last_anc_visit_date_ms INTEGER
+      )''');
+    await db.execute(
+      'CREATE INDEX idx_pregnancy_episodes_patient_open '
+      'ON $tablePregnancyEpisodes(patient_id, closed_at)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_pregnancy_episodes_patient_started '
+      'ON $tablePregnancyEpisodes(patient_id, started_at DESC)',
+    );
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
         patient_id TEXT PRIMARY KEY,
@@ -1717,6 +1762,99 @@ class AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_health_facilities_default '
           'ON $tableHealthFacilities(is_default DESC)');
     }
+    if (from < 41) {
+      // v41 — pregnancy_episodes: a real per-pregnancy entity (one row per
+      // pregnancy, UUID id = pregnancyEpisodeId) replacing the ambiguity of
+      // $tablePregnancySnapshot's single-row-per-patient model. See
+      // lib/core/db/pregnancy_episode_dao.dart.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tablePregnancyEpisodes (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          started_at INTEGER NOT NULL,
+          closed_at INTEGER,
+          high_risk_pregnant_woman INTEGER NOT NULL DEFAULT 0,
+          has_gaps_in_anc INTEGER NOT NULL DEFAULT 0,
+          is_postpartum_window INTEGER NOT NULL DEFAULT 0,
+          is_near_term_anc INTEGER NOT NULL DEFAULT 0,
+          had_delivery_complications INTEGER NOT NULL DEFAULT 0,
+          has_pnc_illness INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER,
+          edd_date INTEGER,
+          lmp_date INTEGER,
+          delivery_date_millis INTEGER,
+          anc_visit_no INTEGER,
+          pnc_visit_no INTEGER,
+          gravida INTEGER,
+          parity INTEGER,
+          living_children INTEGER,
+          age_of_last_child TEXT,
+          pregnancy_test TEXT,
+          previous_pregnancy_complications TEXT,
+          existing_illness TEXT,
+          on_treatment TEXT,
+          tt_td_completed TEXT,
+          facility_identified_for_delivery TEXT,
+          anc_weight REAL,
+          last_anc_visit_date_ms INTEGER
+        )''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_pregnancy_episodes_patient_open '
+        'ON $tablePregnancyEpisodes(patient_id, closed_at)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_pregnancy_episodes_patient_started '
+        'ON $tablePregnancyEpisodes(patient_id, started_at DESC)',
+      );
+
+      // One-time backfill: one episode row per existing snapshot row. This
+      // can only recover the single most-recent pregnancy per patient — the
+      // snapshot table already collapsed any earlier episode's data before
+      // this migration ever ran, so there is nothing earlier to recover.
+      // Open/closed is inferred from delivery_date_millis.
+      final snapshotRows = await db.query(tablePregnancySnapshot);
+      const uuid = Uuid();
+      for (final row in snapshotRows) {
+        final deliveryMs = row['delivery_date_millis'] as int?;
+        final lmpMs = row['lmp_date'] as int?;
+        final updatedAt = row['updated_at'] as int?;
+        final startedAt = lmpMs ?? updatedAt ?? DateTime.now().millisecondsSinceEpoch;
+        await db.insert(tablePregnancyEpisodes, {
+          'id': uuid.v4(),
+          'patient_id': row['patient_id'],
+          'started_at': startedAt,
+          'closed_at': deliveryMs,
+          'high_risk_pregnant_woman': row['high_risk_pregnant_woman'],
+          'has_gaps_in_anc': row['has_gaps_in_anc'],
+          'is_postpartum_window': row['is_postpartum_window'],
+          'is_near_term_anc': row['is_near_term_anc'],
+          'had_delivery_complications': row['had_delivery_complications'],
+          'has_pnc_illness': row['has_pnc_illness'],
+          'updated_at': row['updated_at'],
+          'edd_date': row['edd_date'],
+          'lmp_date': row['lmp_date'],
+          'delivery_date_millis': row['delivery_date_millis'],
+          'anc_visit_no': row['anc_visit_no'],
+          'pnc_visit_no': row['pnc_visit_no'],
+          'gravida': row['gravida'],
+          'parity': row['parity'],
+          'living_children': row['living_children'],
+          'age_of_last_child': row['age_of_last_child'],
+          'pregnancy_test': row['pregnancy_test'],
+          'previous_pregnancy_complications': row['previous_pregnancy_complications'],
+          'existing_illness': row['existing_illness'],
+          'on_treatment': row['on_treatment'],
+          'tt_td_completed': row['tt_td_completed'],
+          'facility_identified_for_delivery': row['facility_identified_for_delivery'],
+          'anc_weight': row['anc_weight'],
+          'last_anc_visit_date_ms': row['last_anc_visit_date_ms'],
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      ConsoleLog.step(
+        '  → v41 backfilled ${snapshotRows.length} pregnancy_episodes row(s) '
+        'from $tablePregnancySnapshot',
+      );
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -1727,6 +1865,7 @@ class AppDatabase {
     tableImmunisations, tableAssessments,
     tableReferrals, tableReferralStatusEvents, tableNotificationLog,
     tableEncounters, tableLocalAssessments, tablePregnancySnapshot,
+    tablePregnancyEpisodes,
     tableTreatmentPresence, tableAssessmentDraft, tableAiSuggestions,
     tableEvalLog, tableAiResponseCache, tableCoachingModules, tableCoachingProgress,
     tableChatMessages, tableCoachingFaqs,

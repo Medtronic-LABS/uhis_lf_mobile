@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/mission/mission_pregnancy_facts.dart';
 
@@ -117,7 +118,7 @@ class _PregnancyRegistrationSheetState
     }
     setState(() => _saving = true);
     try {
-      final dao = context.read<PregnancySnapshotDao>();
+      final episodeDao = context.read<PregnancyEpisodeDao>();
       final row = PregnancySnapshotRow(
         patientId: widget.patientId,
         facts: PregnancyFacts(
@@ -138,7 +139,13 @@ class _PregnancyRegistrationSheetState
         ancVisitNo: 0,
         pncVisitNo: 0,
       );
-      await dao.mergeUpsert(row);
+      // Always a brand-new episode — mirrors Android's savePregnancyDetails(),
+      // which never reuses a prior PregnancyDetail row for a fresh PW
+      // registration.
+      await episodeDao.startNewEpisode(
+        patientId: widget.patientId,
+        obstetric: row,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(PregnancyRegStrings.savedToast)),
