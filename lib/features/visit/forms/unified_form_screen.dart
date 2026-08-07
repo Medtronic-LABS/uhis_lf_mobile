@@ -854,7 +854,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
     final form = PncMandatoryFormSignals(
       heavyBleedingDangerSign:
-          listIncludes(notifier.data.getValue('postpartumDangerSigns'), 'heavyBleeding'),
+          // Spice postpartumDangerSigns option id for heavy bleeding is "1".
+          listIncludes(notifier.data.getValue('postpartumDangerSigns'), '1'),
       excessiveBleedingAtDelivery: listIncludes(
         notifier.data.getValue('complicationsDuringDelivery'),
         'excessiveBleeding',
@@ -1903,15 +1904,18 @@ class _SectionCard extends StatelessWidget {
   // each option by clinical meaning rather than the generic navy selected
   // state — keyed by field id, then by the option's exact display name
   // (not id) since RadioFormField operates on display names.
+  /// Severity colors keyed by option **id** (Android stores id, not label).
   static const Map<String, Map<String, Color>> _severityColorsByField = {
     'urinaryAlbumin': {
       'Present': AppColors.statusCritical,
+      'present': AppColors.statusCritical,
       'Absent': AppColors.statusSuccess,
+      'absent': AppColors.statusSuccess,
     },
     'fetalMovement': {
-      'Not felt': AppColors.statusCritical,
-      'Less than usual': AppColors.statusWarning,
-      'Yes — normal': AppColors.statusSuccess,
+      'notFelt': AppColors.statusCritical,
+      'lessThanUsual': AppColors.statusWarning,
+      'normal': AppColors.statusSuccess,
     },
   };
 
@@ -2355,20 +2359,12 @@ class _SectionCard extends StatelessWidget {
                 hasError: aliveError,
                 child: RadioFormField(
                   key: Key('unified_form_newborn_${i}_alive'),
-                  options: aliveOptions.map((o) => o.displayName).toList(),
-                  currentValue: FieldOption.find(alive, aliveOptions)
-                      ?.displayName,
-                  onChanged: (name) {
-                    if (name == null) {
-                      notifier.updateNewbornField(i, 'isBabyAlive', null);
-                      return;
-                    }
-                    notifier.updateNewbornField(
-                      i,
-                      'isBabyAlive',
-                      FieldOption.matchId(name, aliveOptions) ?? name,
-                    );
-                  },
+                  options: aliveOptions
+                      .map((o) => RadioOption(id: o.id, label: o.displayName))
+                      .toList(),
+                  currentValue: FieldOption.matchId(alive, aliveOptions),
+                  onChanged: (id) =>
+                      notifier.updateNewbornField(i, 'isBabyAlive', id),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -2378,20 +2374,12 @@ class _SectionCard extends StatelessWidget {
                 hasError: sexError,
                 child: RadioFormField(
                   key: Key('unified_form_newborn_${i}_sex'),
-                  options: sexOptions.map((o) => o.displayName).toList(),
-                  currentValue:
-                      FieldOption.find(sex, sexOptions)?.displayName,
-                  onChanged: (name) {
-                    if (name == null) {
-                      notifier.updateNewbornField(i, 'sex', null);
-                      return;
-                    }
-                    notifier.updateNewbornField(
-                      i,
-                      'sex',
-                      FieldOption.matchId(name, sexOptions) ?? name,
-                    );
-                  },
+                  options: sexOptions
+                      .map((o) => RadioOption(id: o.id, label: o.displayName))
+                      .toList(),
+                  currentValue: FieldOption.matchId(sex, sexOptions),
+                  onChanged: (id) =>
+                      notifier.updateNewbornField(i, 'sex', id),
                 ),
               ),
               if (showCause) ...[
@@ -2523,7 +2511,7 @@ class _SectionCard extends StatelessWidget {
       statusBadge: bpStatus != null
           ? _VitalBadge(label: bpStatus.label, color: bpStatus.color)
           : null,
-      infoText: sysDef.isInfoVisible ? sysDef.infoTitle : null,
+      infoText: sysDef.isInfoVisible ? sysDef.displayInfoTitle : null,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -2666,7 +2654,7 @@ class _SectionCard extends StatelessWidget {
                 _NumericField(
                   key: Key('unified_form_${consumedRef.id}_input'),
                   isDecimal: false,
-                  hint: consumedDef.hintText,
+                  hint: consumedDef.displayHint,
                   initialValue: data.getValue(consumedRef.id)?.toString(),
                   onChanged: (v) {
                     if (v == null || v.isEmpty) {
@@ -2696,7 +2684,7 @@ class _SectionCard extends StatelessWidget {
                 _NumericField(
                   key: Key('unified_form_${providedId}_input'),
                   isDecimal: false,
-                  hint: providedDef.hintText,
+                  hint: providedDef.displayHint,
                   initialValue: data.getValue(providedId)?.toString(),
                   onChanged: (v) {
                     if (v == null || v.isEmpty) {
@@ -3031,14 +3019,22 @@ class _SectionCard extends StatelessWidget {
         }
 
         // Layout fieldName disambiguates shared library labels (e.g. three
-        // medication questions on NCD). Prefer Bangla [displayLabel] when
-        // the locale switcher is on — layout fieldName is English-only.
+        // medication questions on NCD). Bangla uses fieldNameCulture when set,
+        // else library titleCulture; English uses fieldName when set.
         final override = ref.fieldName?.trim();
-        final primary = (!AppLocale.isBangla &&
-                override != null &&
-                override.isNotEmpty)
-            ? override
-            : def.displayLabel;
+        final overrideBn = ref.fieldNameCulture?.trim();
+        final String primary;
+        if (AppLocale.isBangla &&
+            overrideBn != null &&
+            overrideBn.isNotEmpty) {
+          primary = overrideBn;
+        } else if (!AppLocale.isBangla &&
+            override != null &&
+            override.isNotEmpty) {
+          primary = override;
+        } else {
+          primary = def.displayLabel;
+        }
         return _FieldShell(
           label: questionNumber != null ? '$questionNumber. $primary' : primary,
           subLabel: subParts.isEmpty ? null : subParts.join(' · '),
@@ -3050,7 +3046,7 @@ class _SectionCard extends StatelessWidget {
               ? _VitalBadge(label: vitalStatus.label, color: vitalStatus.color)
               : null,
           inlineWarning: vitalStatus?.warning,
-          infoText: def.isInfoVisible ? def.infoTitle : null,
+          infoText: def.isInfoVisible ? def.displayInfoTitle : null,
           child: control,
         );
     }
@@ -3232,27 +3228,17 @@ class _SectionCard extends StatelessWidget {
   }) {
     switch (def.widgetHint) {
       case WidgetHint.radioGroup:
-        // Canonical store uses option id; RadioFormField works with display names.
-        // Translate: stored id → locale display name for render, selected → id.
+        // Android SingleSelectionCustomView: show cultureValue/label, store id.
         // Prefill/history may leave a Dart bool (e.g. isRegularSmoker) — never
-        // cast with `as String?`.
-        final matched = FieldOption.find(currentValue, def.options);
+        // cast with `as String?`; matchId coerces aliases to option id.
         return RadioFormField(
           key: Key('unified_form_${def.id}_input'),
-          options: def.options.map((o) => o.displayName).toList(),
-          currentValue: matched?.displayName,
+          options: def.options
+              .map((o) => RadioOption(id: o.id, label: o.displayName))
+              .toList(),
+          currentValue: FieldOption.matchId(currentValue, def.options),
           severityColors: _severityColorsByField[def.id],
-          onChanged: (name) {
-            if (name == null) {
-              // Toggle-deselect: tapping the active pill clears the value.
-              onFieldChanged(def.id, null);
-              return;
-            }
-            onFieldChanged(
-              def.id,
-              FieldOption.matchId(name, def.options) ?? name,
-            );
-          },
+          onChanged: (id) => onFieldChanged(def.id, id),
         );
 
       case WidgetHint.dialogCheckbox:
@@ -3288,11 +3274,15 @@ class _SectionCard extends StatelessWidget {
                   ?.displayName ??
               sid;
         }).toList();
-        // Mutual-exclusion "none" options are identified by option id
-        // (Android isNone), not English label prefixes — "Not taking any
-        // treatment" / Bangla culture labels do not start with "none".
+        // Mutual-exclusion "none" options: Spice uses id "none" or a numeric
+        // id with name "None" (ANC dangerSignsExperienced* → 6/7). Match by
+        // English name so Bangla culture labels still work via displayName.
         final noneLabels = effectiveOptions
-            .where((o) => o.id.toLowerCase() == 'none')
+            .where(
+              (o) =>
+                  o.id.toLowerCase() == 'none' ||
+                  o.name.toLowerCase() == 'none',
+            )
             .map((o) => o.displayName)
             .toSet();
         return _InlineListSelectField(
@@ -3328,21 +3318,13 @@ class _SectionCard extends StatelessWidget {
         // SK expects. Genuine multi-option spinners (e.g. deliveryFacilityType)
         // keep the dropdown.
         if (_isYesNoOptions(def.options)) {
-          final matched = FieldOption.find(currentValue, def.options);
           return RadioFormField(
             key: Key('unified_form_${def.id}_input'),
-            options: def.options.map((o) => o.displayName).toList(),
-            currentValue: matched?.displayName,
-            onChanged: (name) {
-              if (name == null) {
-                onFieldChanged(def.id, null);
-                return;
-              }
-              onFieldChanged(
-                def.id,
-                FieldOption.matchId(name, def.options) ?? name,
-              );
-            },
+            options: def.options
+                .map((o) => RadioOption(id: o.id, label: o.displayName))
+                .toList(),
+            currentValue: FieldOption.matchId(currentValue, def.options),
+            onChanged: (id) => onFieldChanged(def.id, id),
           );
         }
         return _SpinnerField(
@@ -3376,7 +3358,7 @@ class _SectionCard extends StatelessWidget {
           return TextFormField(
             initialValue: currentValue?.toString(),
             style: Theme.of(context).textTheme.bodyMedium,
-            decoration: _filledInputDecoration(hintText: def.hintText),
+            decoration: _filledInputDecoration(hintText: def.displayHint),
             maxLines: 3,
             onChanged: (v) => onFieldChanged(def.id, v.isEmpty ? null : v),
           );
@@ -3391,7 +3373,7 @@ class _SectionCard extends StatelessWidget {
           key: Key('unified_form_${def.id}_input'),
           isDecimal: isDecimal,
           unit: def.unitMeasurement,
-          hint: def.hintText,
+          hint: def.displayHint,
           readOnly: def.id == 'height' && heightReadOnly,
           initialValue: currentValue?.toString(),
           onChanged: (v) {

@@ -1,13 +1,21 @@
-/// Radio group field — API viewType `RadioGroup`.
+/// Radio group field — API viewType `RadioGroup` / `SingleSelectionView`.
 ///
-/// Renders a horizontal row of pill buttons for 2-option (Yes/No) questions.
-/// For 3+ options, the buttons wrap automatically. Selected option is navy;
-/// unselected options are white with a border. Value is the raw option string.
+/// Mirrors Android `SingleSelectionCustomView`: the pill shows a translated
+/// [RadioOption.label], but selection state and [onChanged] always use the
+/// stable option [RadioOption.id] (never the display string).
 library;
 
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
+
+/// One selectable radio pill — id for wire/state, label for UI.
+class RadioOption {
+  const RadioOption({required this.id, required this.label});
+
+  final String id;
+  final String label;
+}
 
 class RadioFormField extends StatelessWidget {
   const RadioFormField({
@@ -18,23 +26,20 @@ class RadioFormField extends StatelessWidget {
     this.severityColors,
   });
 
-  final List<String> options;
+  final List<RadioOption> options;
+
+  /// Stored option **id** (Android `DefinedParams.ID`), not the label.
   final String? currentValue;
 
-  /// Called with the tapped option's string, or `null` when the already-
+  /// Called with the tapped option's **id**, or `null` when the already-
   /// selected option is tapped again (toggle-deselect).
   final ValueChanged<String?> onChanged;
 
-  /// Optional per-option selected-state color, keyed by the option's display
-  /// name — e.g. `{'Present': red, 'Absent': green}` for a danger-sign-
-  /// adjacent tri-state field. Options not present in the map (or when this
-  /// is null) fall back to the default navy selected color.
+  /// Optional per-option selected-state color, keyed by option **id**.
   final Map<String, Color>? severityColors;
 
   @override
   Widget build(BuildContext context) {
-    // Label is provided by the enclosing field shell; this widget renders the
-    // pill row only.
     return options.length <= 3
         ? Row(
             children: _buildOptions(context, withFlex: true),
@@ -50,14 +55,12 @@ class RadioFormField extends StatelessWidget {
     final List<Widget> items = [];
     for (int i = 0; i < options.length; i++) {
       final opt = options[i];
-      final selected = opt == currentValue;
+      final selected = opt.id == currentValue;
       final tile = _PillButton(
-        label: opt,
+        label: opt.label,
         selected: selected,
-        selectedColor: severityColors?[opt],
-        // Tapping the already-selected pill deselects (sends null); tapping
-        // an unselected pill selects it.
-        onTap: () => onChanged(selected ? null : opt),
+        selectedColor: severityColors?[opt.id],
+        onTap: () => onChanged(selected ? null : opt.id),
       );
       if (withFlex) {
         items.add(Expanded(child: tile));
@@ -81,9 +84,6 @@ class _PillButton extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-
-  /// Overrides the default navy selected-state color (see
-  /// [RadioFormField.severityColors]).
   final Color? selectedColor;
 
   @override

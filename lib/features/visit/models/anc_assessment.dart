@@ -97,18 +97,30 @@ class DangerSignsRiskIdentification {
   /// Danger signs in third trimester (weeks 28-40).
   final List<String> dangerSignsExperienced28To40;
 
-  /// Whether any danger signs are present.
+  /// Whether any real danger signs are present (excludes Spice "None").
+  ///
+  /// Android option ids: weeks ≤12 none=`6`; weeks 13–27 / 28–40 none=`7`.
+  /// Legacy Flutter drafts may still store `"none"`.
   bool get hasDangerSigns =>
-      dangerSignsExperienced12.isNotEmpty ||
-      dangerSignsExperienced13To27.isNotEmpty ||
-      dangerSignsExperienced28To40.isNotEmpty;
+      _hasRealDangerSign(dangerSignsExperienced12, noneId: '6') ||
+      _hasRealDangerSign(dangerSignsExperienced13To27, noneId: '7') ||
+      _hasRealDangerSign(dangerSignsExperienced28To40, noneId: '7');
 
-  /// All danger signs across trimesters.
+  /// All danger signs across trimesters (includes None/Other tokens if stored).
   List<String> get allDangerSigns => [
         ...dangerSignsExperienced12,
         ...dangerSignsExperienced13To27,
         ...dangerSignsExperienced28To40,
       ];
+
+  static bool _hasRealDangerSign(List<String> signs, {required String noneId}) {
+    for (final raw in signs) {
+      final s = raw.trim().toLowerCase();
+      if (s.isEmpty || s == 'none' || s == noneId) continue;
+      return true;
+    }
+    return false;
+  }
 
   DangerSignsRiskIdentification copyWith({
     List<String>? dangerSignsExperienced12,

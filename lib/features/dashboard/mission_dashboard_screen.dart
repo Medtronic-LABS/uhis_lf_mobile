@@ -14,6 +14,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/assessment_dao.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
@@ -147,6 +148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final cce = CceRepository(
         followUps: context.read<FollowUpDao>(),
         members: context.read<MemberDao>(),
+        assessments: context.read<AssessmentDao>(),
       );
       final alerts = await cce.loadAlerts();
       if (!mounted) return;

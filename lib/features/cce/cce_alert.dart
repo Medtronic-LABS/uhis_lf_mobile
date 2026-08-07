@@ -58,6 +58,23 @@ class CceJourneyStep {
   final CceStepState state;
 }
 
+/// Lightweight assessment signal used to advance Facility / Treatment on
+/// NCD CCE cards. [id] is the FHIR Encounter id (`assessments.id` /
+/// history `encounterId`); [kind] is `serviceProvided`.
+class CceAssessmentSignal {
+  const CceAssessmentSignal({
+    required this.id,
+    this.kind,
+    this.occurredAt,
+  });
+
+  final String id;
+  final String? kind;
+
+  /// Epoch ms of the visit (`assessments.occurred_at` / history `visitDate`).
+  final int? occurredAt;
+}
+
 /// A single CCE alert — one open (or recently-closed) referral, enriched with
 /// patient identity and reduced to the fields the drawer renders.
 class CceAlert {
@@ -174,6 +191,12 @@ class CceAlert {
   final String? followUpDate;
 
   /// Derive a [CceAlert] from a fetched REFERRED [FollowUpRow].
+  ///
+  /// For NCD follow-ups, [assessments] advances Facility / Treatment from
+  /// post–NCD-visit history (`medicalreviewvisit` / `ncdmedicalreview`),
+  /// anchored on the community NCD visit date (`encounterDate`, or the
+  /// assessment whose id equals follow-up `encounterId`). Non-NCD programmes
+  /// keep the call-attempt Facility heuristic.
   factory CceAlert.fromFollowUp(
     FollowUpRow fu, {
     Patient? patient,
@@ -182,6 +205,7 @@ class CceAlert {
     String? landmark,
     required DateTime now,
     int retryAttempts = 3,
+    List<CceAssessmentSignal> assessments = const [],
   }) {
     final raw = _decodeMap(fu.rawJson);
     final programme = _programmeLabel(raw);
@@ -200,7 +224,12 @@ class CceAlert {
     ]);
     final attempts = fu.attempts ?? 0;
     final remaining = (retryAttempts - attempts).clamp(1, retryAttempts);
-    final createdMs = _parseDateMs(raw['encounterDate']) ??
+    final encounterId = _firstString(raw, const ['encounterId']);
+    final createdMs = _ncdVisitMs(
+          encounterId: encounterId,
+          encounterDateRaw: raw['encounterDate'],
+          assessments: assessments,
+        ) ??
         fu.updatedAt ??
         now.millisecondsSinceEpoch;
     final ageDays =
@@ -229,6 +258,14 @@ class CceAlert {
     final resolvedPatientId = patient?.id ??
         _firstString(raw, const ['memberId', 'householdMemberId']) ??
         fu.patientId;
+
+    final progress = _followUpProgress(
+      programme: programme,
+      attempts: attempts,
+      ncdVisitMs: createdMs,
+      encounterId: encounterId,
+      assessments: assessments,
+    );
 
     return CceAlert(
       referralId: fu.id,
@@ -261,6 +298,7 @@ class CceAlert {
           : '$attempts of $retryAttempts calls · $remaining left',
       intelTags: [
         if (programme != null) programme,
+        if (progress.atFacility && !progress.treated) _CceCopy.tagAtFacility,
         if (remaining <= 1) 'Last attempt',
       ],
       journey: [
@@ -276,13 +314,24 @@ class CceAlert {
         ),
         CceJourneyStep(
           label: _CceCopy.stepFacility,
-          sublabel: attempts > 0 ? 'Following up' : _CceCopy.stepPending,
-          state: attempts > 0 ? CceStepState.done : CceStepState.pending,
+          sublabel: progress.atFacility
+              ? (progress.treated
+                  ? _CceCopy.stepArrived
+                  : (programme == 'NCD'
+                      ? _CceCopy.stepArrived
+                      : 'Following up'))
+              : _CceCopy.stepPending,
+          state:
+              progress.atFacility ? CceStepState.done : CceStepState.pending,
         ),
         CceJourneyStep(
-          label: _CceCopy.stepTreatment,
-          sublabel: _CceCopy.stepPending,
-          state: CceStepState.pending,
+          label: progress.treated
+              ? _CceCopy.stepTreated
+              : _CceCopy.stepTreatment,
+          sublabel: progress.treated
+              ? _CceCopy.stepInProgress
+              : _CceCopy.stepPending,
+          state: progress.treated ? CceStepState.done : CceStepState.pending,
         ),
       ],
       priorityScore: (retryAttempts - remaining) * 10 + ageDays,
@@ -293,6 +342,69 @@ class CceAlert {
       isWrongNumber: fu.isLost,
     );
   }
+
+  /// NCD visit anchor: prefer the assessment whose id equals follow-up
+  /// `encounterId`, else `encounterDate` from the CallRegister wire.
+  static int? _ncdVisitMs({
+    required String? encounterId,
+    required Object? encounterDateRaw,
+    required List<CceAssessmentSignal> assessments,
+  }) {
+    if (encounterId != null) {
+      for (final a in assessments) {
+        if (a.id == encounterId && a.occurredAt != null) {
+          return a.occurredAt;
+        }
+      }
+    }
+    return _parseDateMs(encounterDateRaw);
+  }
+
+  /// Facility / Treatment progress for a REFERRED follow-up card.
+  ///
+  /// NCD: `medicalreviewvisit` after NCD visit → Facility;
+  /// `ncdmedicalreview` / `medicalReview` after NCD visit → Treatment
+  /// (Treatment implies Facility). Non-NCD: Facility when call attempts > 0.
+  static ({bool atFacility, bool treated}) _followUpProgress({
+    required String? programme,
+    required int attempts,
+    required int ncdVisitMs,
+    required String? encounterId,
+    required List<CceAssessmentSignal> assessments,
+  }) {
+    if (programme != 'NCD') {
+      return (atFacility: attempts > 0, treated: false);
+    }
+
+    var atFacility = false;
+    var treated = false;
+    for (final a in assessments) {
+      final at = a.occurredAt;
+      if (at == null) continue;
+      // Exclude the community NCD encounter that created the referral.
+      if (encounterId != null && a.id == encounterId) continue;
+      // Must be on/after the NCD visit (same-day facility visits count).
+      if (at < ncdVisitMs) continue;
+      final kind = _compactKind(a.kind);
+      if (_isFacilityKind(kind)) atFacility = true;
+      if (_isTreatmentKind(kind)) treated = true;
+    }
+    if (treated) atFacility = true;
+    return (atFacility: atFacility, treated: treated);
+  }
+
+  static String _compactKind(String? kind) =>
+      (kind ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]'), '');
+
+  /// Facility check-in shell (`medicalreviewvisit`).
+  static bool _isFacilityKind(String compact) =>
+      compact == 'MEDICALREVIEWVISIT';
+
+  /// Clinical NCD medical review (`ncdmedicalreview` / `medicalReview`).
+  static bool _isTreatmentKind(String compact) =>
+      compact == 'NCDMEDICALREVIEW' ||
+      compact == 'MEDICALREVIEW' ||
+      compact.contains('NCDMEDICALREVIEW');
 
   /// Derive a [CceAlert] from a referral row + (optional) cached patient.
   ///

@@ -11,7 +11,8 @@ void main() {
       final findings = evaluatePncFindings(
         latest: {
           'maternalHealthAssessment': {
-            'postpartumDangerSigns': ['heavyBleeding'],
+            // Spice option id for Heavy bleeding.
+            'postpartumDangerSigns': ['1'],
           },
         },
         pncVisitCount: 1,

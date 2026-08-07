@@ -478,9 +478,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
               icon: const Icon(Icons.arrow_back, color: Colors.white),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title: const Text(
-              'Enroll Household',
-              style: TextStyle(
+            title: Text(
+              EnrollmentStrings.enrollHouseholdAppBar,
+              style: const TextStyle(
                 fontFamily: AppFonts.display,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -614,6 +614,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.householdTypeLabel,
                       options: EnrollmentStrings.householdTypesV2,
                       selectedValue: _householdType,
+                      optionLabel: EnrollmentStrings.optionDisplay,
                       onChanged: (v) => setState(() {
                         _householdType = v;
                         _fieldErrors.remove('householdType');
@@ -644,7 +645,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                                   color: AppColors.navy.withValues(alpha: 0.7)),
                               const SizedBox(width: 6),
                               Text(
-                                'Household No: ${controller.household!.householdNumber}',
+                                '${EnrollmentStrings.householdNumberLabel}: ${controller.household!.householdNumber}',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
@@ -677,12 +678,13 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.householdHeadOccupationLabel,
                       options: EnrollmentStrings.occupationOptions,
                       value: _selectedOccupation,
+                      optionLabel: EnrollmentStrings.optionDisplay,
                       onChanged: (v) => setState(() {
                         _selectedOccupation = v;
                         if (v != 'Other') _otherOccupationCtrl.clear();
                         _fieldErrors.remove('otherOccupation');
                       }),
-                      hint: 'Select occupation',
+                      hint: EnrollmentStrings.occupationSelectHint,
                     ),
                     const SizedBox(height: 14),
 
@@ -704,6 +706,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.monthlyIncomeRangeLabel,
                       options: EnrollmentStrings.incomeRangeOptions,
                       value: _selectedIncomeRange,
+                      optionLabel: EnrollmentStrings.optionDisplay,
                       onChanged: (v) => setState(() {
                         _selectedIncomeRange = v;
                         _fieldErrors.remove('income');
@@ -849,6 +852,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.idTypeLabel,
                       options: EnrollmentStrings.idTypesV2,
                       selectedValue: _idType,
+                      optionLabel: EnrollmentStrings.optionDisplay,
                       onChanged: (v) => setState(() {
                         _idType = v;
                         _fieldErrors.remove('idType');
@@ -887,6 +891,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                           .where((o) => o != 'Head of Household')
                           .toList(),
                       value: _phoneCategory,
+                      optionLabel: EnrollmentStrings.optionDisplay,
                       onChanged: (v) => setState(() {
                         _phoneCategory = v;
                         _fieldErrors.remove('phoneCategory');
@@ -969,6 +974,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       label: EnrollmentStrings.genderLabel,
                       options: EnrollmentStrings.gendersHead,
                       selectedValue: _gender,
+                      optionLabel: EnrollmentStrings.optionDisplay,
                       onChanged: (v) => setState(() {
                         _gender = v;
                         _fieldErrors.remove('gender');
@@ -984,13 +990,22 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                         label: EnrollmentStrings.maritalStatusLabel,
                         options: EnrollmentStrings.maritalStatusesV2,
                         value: _maritalStatus,
+                        optionLabel: EnrollmentStrings.optionDisplay,
                         onChanged: (v) => setState(() {
                           _maritalStatus = v;
                           _fieldErrors.remove('maritalStatus');
                         }),
-                        hint: 'Select status',
+                        hint: EnrollmentStrings.maritalStatusHint,
                         isRequired: true,
                         errorText: _fieldErrors['maritalStatus'],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        EnrollmentStrings.maritalStatusInfo,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
                       ),
                       const SizedBox(height: 14),
                     ],
