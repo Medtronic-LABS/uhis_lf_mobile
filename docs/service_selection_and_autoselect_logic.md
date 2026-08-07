@@ -15,7 +15,7 @@ Source files: `lib/features/visit/triage/symptom_picker_screen.dart` (`_InlineSe
 |---|---|---|
 | `isNeonate` | age < 2 months | 0–1 |
 | `isInfant` | age < 12 months | 0–11 |
-| `isUnder5` | age < 60 months | 0–59 |
+| `isYoungChild` | age < 25 months (RMNCH `childhoodVisit`) | 0–24 |
 | `isReproductiveAge` | 14y ≤ age < 55y | 168–660 |
 | `isAdult` | age ≥ 18y | ≥216 |
 | `isEyeCareCataractEligible` | age ≥ 35y, any sex | ≥420 |
@@ -28,18 +28,20 @@ Source files: `lib/features/visit/triage/symptom_picker_screen.dart` (`_InlineSe
 |---|---|---|
 | PW / Pregnancy | — | female ∧ reproductive age |
 | Pregnancy Outcome | — | female ∧ reproductive age |
-| ANC | anc | female ∧ reproductive age ∧ not under-5 |
-| PNC | pnc | female ∧ reproductive age ∧ not under-5 |
-| Family Planning | familyPlanning | female ∧ reproductive age ∧ not under-5 |
+| ANC | anc | female ∧ reproductive age ∧ not young-child |
+| PNC | pnc | female ∧ reproductive age ∧ not young-child |
+| Family Planning | familyPlanning | female ∧ reproductive age ∧ not young-child |
 | NCD | ncd | `isAdult` (≥18y) |
 | Eye Care | eyeCare | `isEyeCareCataractEligible` (≥35y) |
 | Cataract | cataract | `isEyeCareCataractEligible` (≥35y) |
-| Child Health (IMCI) | imci | `isUnder5` |
-| Vaccination | — | `isUnder5` |
+| Child Health (IMCI) | imci | `isYoungChild` |
+| Vaccination | — | `isYoungChild` |
 | **TB** | tb | **no card exists — by design, unreachable** |
 | EPI | epi | no dedicated card; added silently at Continue if due |
 
-Any adult-only card is blanket-hidden for an under-5 patient (line 2281) before its specific rule runs.
+Any adult-only card is blanket-hidden for a young-child patient (~line 2282) before its specific rule
+runs. Note the reproductive-age lower bound (14y/168mo) is far above `isYoungChild`'s 25-month
+ceiling, so there's no overlap band needing a separate check.
 
 ## 3. Step 1 card — lock gate (`_isLocked`, ~line 2310)
 

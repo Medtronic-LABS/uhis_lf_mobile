@@ -9,7 +9,7 @@ step transitions are internal state changes (`_VisitFlowState._step`), not route
 
 ```
 _Step1Symptoms          →  _Step2ProgrammesThenForm       →  _Step3AiReco
-(SymptomPickerScreen)      or _Step2Vaccination (under-5)     (AI recommendation)
+(SymptomPickerScreen)      or _Step2Vaccination (young child) (AI recommendation)
    Step 1                  (VisitFormScreen)                     Step 3
                               Step 2
 ```
@@ -51,9 +51,9 @@ in `ServiceSelectionResolver`, not in Step 2.
 
 ### Step 2 — `_Step2ProgrammesThenForm` / `_Step2Vaccination` → `VisitFormScreen`
 
-Under-5 / EPI visits route to `_Step2Vaccination` (immunisation timeline,
-`immunisation/immunisation_timeline_screen.dart`) — structurally separate from the generic form
-pipeline below.
+Young-child (`PatientContext.isYoungChild`, < 25 months — RMNCH `childhoodVisit`) / EPI visits route
+to `_Step2Vaccination` (immunisation timeline, `immunisation/immunisation_timeline_screen.dart`) —
+structurally separate from the generic form pipeline below.
 
 All other visits render `VisitFormScreen` (`visit_form_screen.dart`), which:
 1. Resolves programme names → formType keys via `FormTypeResolver.resolve()`
@@ -97,7 +97,7 @@ public entry point on the rule table.
 
 | Programme | Rule | minAgeMonths | Note |
 |---|---|---|---|
-| IMCI | Various | — | maxAgeMonths: 60 (under-5 only) |
+| IMCI | Various | 2 (`neonateMaxAgeMonths`) | maxAgeMonths: 24 (`imciMaxAgeMonths`) — not the same as `PatientContext.isYoungChild`'s 25-month Step-2-routing gate above; different source ("Bangladesh UHIS Phase 1 spec" vs. RMNCH `childhoodVisit`), one month apart, reviewed and left as two distinct constants |
 | NCD-HTN | bp_stage1 etc. | 216 (18 yr) | Adults only |
 | NCD-DM | polyuria+polydipsia | 216 (18 yr) | Was `any` which caused false activation for toddlers |
 | ANC | pregnant + dizziness | — | requiresPregnant: true |
