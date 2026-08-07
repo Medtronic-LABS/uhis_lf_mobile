@@ -202,7 +202,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   static const _validationOrder = [
     'name', 'idType', 'idNumber', 'phoneCategory', 'mobile', 'dob', 'gender',
-    'maritalStatus', 'guardian',
+    'maritalStatus', 'guardian', 'disability',
   ];
 
   GlobalKey _key(String name) =>
@@ -469,6 +469,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     // Skipped for "Not Available", digits-and-length checked for National ID.
     final idError = EnrollmentIdNumber.validate(_idType, _brnCtrl.text);
 
+    // Android member_registration.json: phone_number_category, phone_number,
+    // and disability are all isMandatory: true — do not soft-default them.
     final errors = <String, String?>{
       if (_idType == null) 'idType': 'Required',
       'idNumber': ?idError,
@@ -477,9 +479,13 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       if (_gender == null) 'gender': 'Required',
       if (maritalRequired && _maritalStatus == null) 'maritalStatus': 'Required',
       if (_ageInYears < 1 && _guardianName == null) 'guardian': 'Required',
-      if (_mobileCtrl.text.trim().isNotEmpty && _phoneCategory == null)
-        'phoneCategory': 'Required',
-      'mobile': ?EnrollmentMobileNumber.validate(_mobileCtrl.text),
+      if (_phoneCategory == null) 'phoneCategory': 'Required',
+      'mobile': ?EnrollmentMobileNumber.validate(
+        _mobileCtrl.text,
+        required: true,
+        requiredMessage: 'Required',
+      ),
+      if (_disabilityStatus == null) 'disability': 'Required',
     };
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -516,11 +522,11 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       idNumber: EnrollmentIdNumber.isCollected(_idType)
           ? (nid.isNotEmpty ? nid : null)
           : null,
-      mobileNumber: mobile.isNotEmpty ? mobile : null,
-      phoneNumberCategory: mobile.isNotEmpty ? _phoneCategory : null,
-      mobileAvailable: mobile.isNotEmpty,
+      mobileNumber: mobile,
+      phoneNumberCategory: _phoneCategory,
+      mobileAvailable: true,
       maritalStatus: _maritalStatus ?? '',
-      disabilityStatus: _disabilityStatus ?? 'Absent',
+      disabilityStatus: _disabilityStatus!,
       relationshipToHead: 'Other',
       villageId: controller.household?.subVillageId?.isNotEmpty == true
           ? controller.household!.subVillageId
@@ -1133,7 +1139,12 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       hint: EnrollmentStrings.mobileNumberHint,
                       controller: _mobileCtrl,
                       keyboardType: TextInputType.phone,
-                      validator: EnrollmentMobileNumber.validate,
+                      isRequired: true,
+                      validator: (v) => EnrollmentMobileNumber.validate(
+                        v,
+                        required: true,
+                        requiredMessage: 'Required',
+                      ),
                       onChanged: (_) => _clearError('mobile'),
                       errorText: _fieldErrors['mobile'],
                       inputFormatters: EnrollmentMobileNumber.formatters,
@@ -1284,15 +1295,32 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ],
 
                     // ── Q9: Disability ─────────────────────────────────────
-                    _QuestionLabel(number: 'Q9', text: 'Disability'),
+                    SizedBox(key: _key('disability'), height: 0),
+                    _QuestionLabel(
+                      number: 'Q9',
+                      text: EnrollmentStrings.disabilityStatusLabel,
+                    ),
                     const SizedBox(height: 10),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.disabilityStatusLabel,
                       options: EnrollmentStrings.disabilityStatusesV2,
                       selectedValue: _disabilityStatus,
-                      onChanged: (v) =>
-                          setState(() => _disabilityStatus = v),
+                      optionLabel: EnrollmentStrings.disabilityStatusDisplay,
+                      onChanged: (v) => setState(() {
+                        _disabilityStatus = v;
+                        _fieldErrors.remove('disability');
+                      }),
                       isRequired: true,
+                      allowDeselect: false,
+                      errorText: _fieldErrors['disability'],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      EnrollmentStrings.disabilityMemberInfo,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                     const SizedBox(height: 20),
 

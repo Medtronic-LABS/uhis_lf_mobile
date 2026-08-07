@@ -32,8 +32,9 @@ class LocaleProvider extends ChangeNotifier {
   Future<void> _loadFromStorage() async {
     try {
       final stored = await _storage.read(key: _key);
+      // Explicit 'en' keeps English; missing / 'bn' / anything else → Bangla.
       AppLocale.current =
-          stored == 'bn' ? AppLanguage.bangla : AppLanguage.english;
+          stored == 'en' ? AppLanguage.english : AppLanguage.bangla;
       notifyListeners();
     } catch (_) {
       // Ignore storage errors on startup

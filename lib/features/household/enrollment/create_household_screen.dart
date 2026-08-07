@@ -86,7 +86,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     'ssWorker', 'village', 'householdType', 'totalMembers',
     'occupation', 'otherOccupation', 'income', 'disabilityCount',
     'headName', 'idType', 'idNumber', 'phoneCategory', 'mobile', 'dob',
-    'gender', 'maritalStatus',
+    'gender', 'maritalStatus', 'disability',
   ];
 
   GlobalKey _key(String name) =>
@@ -123,6 +123,8 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       if (_dobCtrl.text.trim().isEmpty) 'dob': 'Date of birth required',
       if (_gender == null) 'gender': req,
       if (_ageInYears > 5 && _maritalStatus == null) 'maritalStatus': req,
+      // Same as add-member: Spice member_registration.json disability mandatory.
+      if (_disabilityStatus == null) 'disability': req,
     };
   }
 
@@ -404,7 +406,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       phoneNumberCategory: _phoneCategory,
       mobileAvailable: true,
       maritalStatus: _maritalStatus ?? '',
-      disabilityStatus: _disabilityStatus ?? 'Absent',
+      disabilityStatus: _disabilityStatus!,
       nidScanned: widget.fromNidScan && _prefilledFromScan,
     );
 
@@ -993,12 +995,27 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       const SizedBox(height: 14),
                     ],
 
+                    SizedBox(key: _key('disability'), height: 0),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.disabilityStatusLabel,
                       options: EnrollmentStrings.disabilityStatusesV2,
                       selectedValue: _disabilityStatus,
-                      onChanged: (v) =>
-                          setState(() => _disabilityStatus = v),
+                      optionLabel: EnrollmentStrings.disabilityStatusDisplay,
+                      onChanged: (v) => setState(() {
+                        _disabilityStatus = v;
+                        _fieldErrors.remove('disability');
+                      }),
+                      isRequired: true,
+                      allowDeselect: false,
+                      errorText: _fieldErrors['disability'],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      EnrollmentStrings.disabilityMemberInfo,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                     const SizedBox(height: 8),
                   ],

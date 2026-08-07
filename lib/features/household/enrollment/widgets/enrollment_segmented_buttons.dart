@@ -16,6 +16,7 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
     this.isRequired = false,
     this.allowDeselect = true,
     this.errorText,
+    this.optionLabel,
     super.key,
   });
 
@@ -26,6 +27,10 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
   final bool isRequired;
   final bool allowDeselect;
   final String? errorText;
+
+  /// Optional display label for an option id (e.g. Bangla "হ্যাঁ" for "Yes").
+  /// Wire value stays [options] entry; UI text uses this when provided.
+  final String Function(String option)? optionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +108,7 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
                           borderRadius: BorderRadius.circular(AppRadius.field),
                         ),
                         child: Text(
-                          option,
+                          optionLabel?.call(option) ?? option,
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: isSelected

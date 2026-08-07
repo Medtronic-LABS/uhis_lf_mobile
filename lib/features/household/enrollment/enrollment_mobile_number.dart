@@ -31,8 +31,9 @@ abstract final class EnrollmentMobileNumber {
 
   /// Returns an error message, or null when valid.
   ///
-  /// When [required] is false, empty input is allowed (member forms). When
-  /// true, empty fails with [requiredMessage] (household head).
+  /// When [required] is false, empty input is allowed. When true (household
+  /// head and add-member — Spice `isMandatory: true`), empty fails with
+  /// [requiredMessage].
   static String? validate(
     String? value, {
     bool required = false,

@@ -247,6 +247,13 @@ class EnrollmentController extends ChangeNotifier {
     if (_householdHead!.maritalStatus.isEmpty) {
       errors.add('Marital status is required');
     }
+    // Android member_registration.json: disability mandatory for head too.
+    final headDisability = _householdHead!.disabilityStatus.trim();
+    if (headDisability.isEmpty ||
+        headDisability.toLowerCase() == 'none' ||
+        headDisability.toLowerCase() == 'absent') {
+      errors.add('Disability status is required');
+    }
     if (_householdHead!.mobileAvailable) {
       final mobileError = EnrollmentMobileNumber.validate(
         _householdHead!.mobileNumber,
@@ -280,18 +287,25 @@ class EnrollmentController extends ChangeNotifier {
     if (memberIdError != null) {
       errors.add(memberIdError);
     }
-    if (!member.mobileAvailable &&
-        (member.mobileNumber?.trim().isEmpty ?? true)) {
-      errors.add('Mobile number is required or mark as not available');
-    } else {
-      final mobileError = EnrollmentMobileNumber.validate(
-        member.mobileNumber,
-        required: false,
-      );
-      if (mobileError != null) errors.add(mobileError);
+    // Android member_registration.json: phone + category + disability mandatory.
+    if (member.phoneNumberCategory == null ||
+        member.phoneNumberCategory!.trim().isEmpty) {
+      errors.add('Mobile number category is required');
     }
+    final mobileError = EnrollmentMobileNumber.validate(
+      member.mobileNumber,
+      required: true,
+      requiredMessage: 'Mobile number is required',
+    );
+    if (mobileError != null) errors.add(mobileError);
     if (member.maritalStatus.isEmpty) {
       errors.add('Marital status is required');
+    }
+    final disability = member.disabilityStatus.trim().toLowerCase();
+    if (disability.isEmpty ||
+        disability == 'none' ||
+        disability == 'absent') {
+      errors.add('Disability status is required');
     }
 
     return errors;
