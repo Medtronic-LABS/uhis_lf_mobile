@@ -3776,7 +3776,16 @@ abstract final class EnrollmentStrings {
 
   static String get maritalStatusLabel => getTranslatedString('maritalStatusLabel', 'Marital Status');
 
-  static String get disabilityStatusLabel => getTranslatedString('disabilityStatusLabel', 'Disability');
+  /// Member-level disability (Spice member_registration.json title / titleCulture).
+  static String get disabilityStatusLabel =>
+      getTranslatedString('disabilityMemberQuestion', 'Disability');
+
+  /// Spice member_registration.json `infoTitle` under Disability.
+  static String get disabilityMemberInfo => getTranslatedString(
+        'disabilityMemberInfo',
+        'Who has great difficulty or cannot see, hear, walk, climb, do things independently',
+      );
+
   static const List<String> disabilityStatuses = [
     'None',
     'Physical',
@@ -3868,8 +3877,22 @@ abstract final class EnrollmentStrings {
   static String get guardianHint => getTranslatedString('guardianHint', 'Select guardian from household');
   // Spice member_registration.json shows the `disability` question as Yes/No;
   // the wire values stay present/absent (see EnrollmentRepository).
+  /// Wire values for member disability (mapped to present/absent on sync).
+  /// Display stays Yes/No ids so [_disabilityValue] keeps working; Bangla
+  /// mode shows translated labels via [disabilityStatusDisplay].
   static const List<String> disabilityStatusesV2 = ['Yes', 'No'];
   static const List<String> disabilityYesNo = ['Yes', 'No'];
+
+  static String disabilityStatusDisplay(String wire) {
+    switch (wire) {
+      case 'Yes':
+        return getTranslatedString('PatientContext.yes', 'Yes');
+      case 'No':
+        return getTranslatedString('PatientContext.no', 'No');
+      default:
+        return wire;
+    }
+  }
   static const List<String> gendersMember = ['Male', 'Female', 'Other'];
 
   /// Spice member_registration.json `phone_number_category` options, in order.

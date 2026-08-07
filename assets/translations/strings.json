@@ -8954,5 +8954,13 @@
  "yourAnswers": {
   "bn": "আপনার উত্তর",
   "en": "Your answers"
+ },
+ "disabilityMemberInfo": {
+  "bn": "যার খুব অসুবিধা হয় অথবা সে স্বাধীনভাবে দেখতে, শুনতে, হাঁটতে, আরোহণ করতে, কিছু করতে পারে না",
+  "en": "Who has great difficulty or cannot see, hear, walk, climb, do things independently"
+ },
+ "disabilityMemberQuestion": {
+  "bn": "এই সদস্যের কি কোনো প্রতিবন্ধকতা রয়েছে?",
+  "en": "Disability"
  }
 }
