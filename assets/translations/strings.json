@@ -43,6 +43,22 @@
     "bn": "স্ট্যাটাস আপডেট করুন",
     "en": "Update status"
   },
+  "Cce.callLogged": {
+    "bn": "কল রেকর্ড করা হয়েছে — পরবর্তী চক্রে সিঙ্ক হবে",
+    "en": "Call logged — will sync on next cycle"
+  },
+  "Cce.callResultPrompt": {
+    "bn": "কলটি কেমন হলো?",
+    "en": "How did the call go?"
+  },
+  "Cce.callResultSubmit": {
+    "bn": "জমা দিন",
+    "en": "Submit"
+  },
+  "Cce.callResultTitle": {
+    "bn": "কলের ফলাফল",
+    "en": "Call result"
+  },
   "Cce.dialFailed": {
     "bn": "কল করার ডায়লার খোলা সম্ভব হয়নি",
     "en": "Could not open the dialer"
@@ -63,6 +79,14 @@
     "bn": "এই রোগীর কোন ফোন নাম্বার পাওয়া যায়নি",
     "en": "No phone number on file for this patient"
   },
+  "Cce.notWillingReason": {
+    "bn": "না যাওয়ার কারণ",
+    "en": "Reason for not visiting"
+  },
+  "Cce.otherReasonHint": {
+    "bn": "কারণটি লিখুন…",
+    "en": "Describe the reason…"
+  },
   "Cce.poweredBy": {
     "bn": "CCE দ্বারা পরিচালিত · কেয়ার কোঅর্ডিনেশন ইঞ্জিন",
     "en": "Powered by CCE · Care Coordination Engine"
@@ -70,6 +94,18 @@
   "Cce.searchHint": {
     "bn": "নাম বা গ্রাম দিয়ে খুঁজুন…",
     "en": "Search by name or village…"
+  },
+  "Cce.willingNo": {
+    "bn": "না",
+    "en": "No"
+  },
+  "Cce.willingToVisitUhc": {
+    "bn": "উপজেলা স্বাস্থ্য কমপ্লেক্সে যেতে রাজি?",
+    "en": "Willing to visit UHC?"
+  },
+  "Cce.willingYes": {
+    "bn": "হ্যাঁ",
+    "en": "Yes"
   },
   "Cds.message.anemiaMessage": {
     "bn": "ক্তস্বল্পতা পাওয়া গেছে — পুষ্টি উপাদান দিন এবং ফলো-আপ করুন",
@@ -723,6 +759,66 @@
     "bn": "বাতিল",
     "en": "Cancel"
   },
+  "DebugDb.close": {
+    "bn": "বন্ধ করুন",
+    "en": "Close"
+  },
+  "DebugDb.columnCount": {
+    "bn": "{n} কলাম",
+    "en": "{n} cols"
+  },
+  "DebugDb.countFailed": {
+    "bn": "গণনা ব্যর্থ",
+    "en": "Count failed"
+  },
+  "DebugDb.counting": {
+    "bn": "গণনা করা হচ্ছে…",
+    "en": "Counting…"
+  },
+  "DebugDb.emptyTable": {
+    "bn": "কোনো সারি নেই",
+    "en": "No rows"
+  },
+  "DebugDb.loadError": {
+    "bn": "ডাটাবেস পড়া যায়নি: {error}",
+    "en": "Could not read the database: {error}"
+  },
+  "DebugDb.nextPage": {
+    "bn": "পরের পৃষ্ঠা",
+    "en": "Next page"
+  },
+  "DebugDb.pageLabel": {
+    "bn": "{total}টির মধ্যে {from}–{to} দেখানো হচ্ছে",
+    "en": "Showing {from}–{to} of {total}"
+  },
+  "DebugDb.prevPage": {
+    "bn": "আগের পৃষ্ঠা",
+    "en": "Previous page"
+  },
+  "DebugDb.refresh": {
+    "bn": "রিফ্রেশ",
+    "en": "Refresh"
+  },
+  "DebugDb.rowCount": {
+    "bn": "{n} সারি",
+    "en": "{n} rows"
+  },
+  "DebugDb.searchHint": {
+    "bn": "সারি খুঁজুন…",
+    "en": "Search rows…"
+  },
+  "DebugDb.subtitle": {
+    "bn": "লোকাল SQLCipher টেবিল",
+    "en": "Local SQLCipher tables"
+  },
+  "DebugDb.summary": {
+    "bn": "{tables} টেবিল · {rows} সারি",
+    "en": "{tables} tables · {rows} rows"
+  },
+  "DebugDb.title": {
+    "bn": "অফলাইন ডাটাবেস",
+    "en": "Offline Database"
+  },
   "Enroll.savedToast": {
     "bn": "প্রোগ্রাম সেভ করা হয়েছে ✓",
     "en": "Programmes saved ✓"
@@ -1135,6 +1231,10 @@
     "bn": "ইউনিয়ন",
     "en": "Union"
   },
+  "Epi.back": {
+    "bn": "পেছনে",
+    "en": "Back"
+  },
   "Epi.cancel": {
     "bn": "বাতিল",
     "en": "Cancel"
@@ -1195,6 +1295,10 @@
     "bn": "{count}টি টিকা বকেয়া — {milestone} ডোজ এখনই দিতে হবে।",
     "en": "{count} {unit} overdue — {milestone} doses due now."
   },
+  "EpiVisitReco.visitSummaryTitle": {
+    "bn": "টিকাদান ভিজিট — নির্দেশিকা অনুযায়ী সেবা পরিকল্পনা",
+    "en": "Vaccination Visit — Guideline Care Plan"
+  },
   "EpiVisitReco.whatsappNextMilestone": {
     "bn": " পরবর্তী ধাপ: {milestone} — {names}।",
     "en": " Next milestone: {milestone} — {names}."
@@ -1238,6 +1342,62 @@
   "FormGallery.screenTitle": {
     "bn": "ফর্ম গ্যালারি",
     "en": "Form Gallery"
+  },
+  "FormSection.bioData": {
+    "bn": "মৌলিক তথ্য",
+    "en": "Bio Data"
+  },
+  "FormSection.bioMetrics": {
+    "bn": "শারীরিক পরিমাপ",
+    "en": "Bio metrics"
+  },
+  "FormSection.commonVitals": {
+    "bn": "শারীরিক লক্ষণ",
+    "en": "Vitals"
+  },
+  "FormSection.contactTracing": {
+    "bn": "সংস্পর্শ অনুসন্ধান",
+    "en": "Contact Tracing"
+  },
+  "FormSection.householdInformation": {
+    "bn": "পরিবারের তথ্য",
+    "en": "Household Information"
+  },
+  "FormSection.iccmClassification": {
+    "bn": "শ্রেণিবিভাগ",
+    "en": "Classification"
+  },
+  "FormSection.iccmDangerSigns": {
+    "bn": "বিপদচিহ্ন",
+    "en": "Danger Signs"
+  },
+  "FormSection.iccmPresentation": {
+    "bn": "প্রধান অভিযোগ",
+    "en": "Presenting Complaint"
+  },
+  "FormSection.iccmTreatment": {
+    "bn": "চিকিৎসা ও রেফারেল",
+    "en": "Treatment & Referral"
+  },
+  "FormSection.iccmVitals": {
+    "bn": "শারীরিক লক্ষণ",
+    "en": "Vitals"
+  },
+  "FormSection.patientDiagnosisStatus": {
+    "bn": "রোগীর অবস্থা",
+    "en": "Patient Status"
+  },
+  "FormSection.patientHealthHistory": {
+    "bn": "স্বাস্থ্য ইতিহাস",
+    "en": "Health History"
+  },
+  "FormSection.qrCard": {
+    "bn": "কিউআর কোড স্ক্যান করুন",
+    "en": "Scan QR Code"
+  },
+  "FormSection.tbScreening": {
+    "bn": "যক্ষ্মার লক্ষণ স্ক্রিনিং",
+    "en": "TB Symptom Screening"
   },
   "HouseholdDetail.householdNumber": {
     "bn": "খানা নম্বর",
@@ -1543,6 +1703,78 @@
     "bn": "অফলাইনে কাজ করে",
     "en": "Works offline"
   },
+  "OfflineSync.alreadyRunning": {
+    "bn": "একটি সিঙ্ক ইতিমধ্যে চলছে",
+    "en": "A sync is already in progress"
+  },
+  "OfflineSync.assessments": {
+    "bn": "অ্যাসেসমেন্ট",
+    "en": "Assessments"
+  },
+  "OfflineSync.cancel": {
+    "bn": "বাতিল",
+    "en": "Cancel"
+  },
+  "OfflineSync.completed": {
+    "bn": "অফলাইন ডেটা সিঙ্ক সম্পন্ন হয়েছে",
+    "en": "Offline data sync completed"
+  },
+  "OfflineSync.failed": {
+    "bn": "অফলাইন ডেটা সিঙ্ক ব্যর্থ হয়েছে",
+    "en": "Offline data sync failed"
+  },
+  "OfflineSync.failedPendingRetry": {
+    "bn": "ব্যর্থ — “শুরু” চাপলে আবার চেষ্টা হবে",
+    "en": "Failed — will retry on Start"
+  },
+  "OfflineSync.followUps": {
+    "bn": "ফলো-আপ",
+    "en": "Follow-ups"
+  },
+  "OfflineSync.householdMembers": {
+    "bn": "পরিবারের সদস্য",
+    "en": "Household Members"
+  },
+  "OfflineSync.households": {
+    "bn": "পরিবার",
+    "en": "Households"
+  },
+  "OfflineSync.lastSyncedAt": {
+    "bn": "সর্বশেষ সিঙ্ক",
+    "en": "Last synced at"
+  },
+  "OfflineSync.offlineData": {
+    "bn": "অফলাইন ডেটা",
+    "en": "Offline data"
+  },
+  "OfflineSync.okay": {
+    "bn": "ঠিক আছে",
+    "en": "Okay"
+  },
+  "OfflineSync.progressPercent": {
+    "bn": "{pct}%",
+    "en": "{pct}%"
+  },
+  "OfflineSync.retry": {
+    "bn": "আবার চেষ্টা করুন",
+    "en": "Retry"
+  },
+  "OfflineSync.start": {
+    "bn": "শুরু",
+    "en": "Start"
+  },
+  "OfflineSync.startPrompt": {
+    "bn": "এখনই অফলাইন সিঙ্ক শুরু করবেন?",
+    "en": "Start offline sync now?"
+  },
+  "OfflineSync.started": {
+    "bn": "অফলাইন ডেটা সিঙ্ক শুরু হয়েছে",
+    "en": "Offline data has started to sync"
+  },
+  "OfflineSync.title": {
+    "bn": "অফলাইন সিঙ্ক",
+    "en": "Offline Sync"
+  },
   "Onboarding.notAvailable": {
     "bn": "পাওয়া যাচ্ছে না",
     "en": "Not available"
@@ -1690,6 +1922,10 @@
   "PatientContext.ageLabel": {
     "bn": "বয়স {age}",
     "en": "Age {age}"
+  },
+  "PatientContext.ageMonthsCompact": {
+    "bn": "{months} মাস",
+    "en": "{months}m"
   },
   "PatientContext.ageMonthsLabel": {
     "bn": "{months} মাস",
@@ -2011,6 +2247,22 @@
     "bn": "খানা নির্বাচন করুন",
     "en": "Select Household"
   },
+  "Settings.debugDbViewer": {
+    "bn": "অফলাইন ডাটাবেস",
+    "en": "Offline Database"
+  },
+  "Settings.debugDbViewerSubtitle": {
+    "bn": "লোকাল SQLCipher টেবিল দেখুন",
+    "en": "Browse local SQLCipher tables"
+  },
+  "Settings.offlineSync": {
+    "bn": "অফলাইন সিঙ্ক",
+    "en": "Offline Sync"
+  },
+  "Settings.offlineSyncSubtitle": {
+    "bn": "অপেক্ষমাণ পরিবার, সদস্য ও ভিজিট পাঠান",
+    "en": "Push pending households, members & visits"
+  },
   "Step2Asr.connecting": {
     "bn": "সংযুক্ত হচ্ছে…",
     "en": "Connecting…"
@@ -2091,6 +2343,10 @@
     "bn": "আপনার ডেটা আপডেট হচ্ছে…",
     "en": "Updating your data…"
   },
+  "Sync.signInAgain": {
+    "bn": "আবার সাইন ইন করুন",
+    "en": "Sign in again"
+  },
   "Sync.subtitle": {
     "bn": "অফলাইনে কাজ করার জন্য আপনার খানা ও রোগীদের তথ্য ডাউনলোড হচ্ছে।",
     "en": "Downloading your households and patients so you can work offline."
@@ -2139,6 +2395,18 @@
     "bn": "প্রশিক্ষণ হাব",
     "en": "Training Hub"
   },
+  "Triage.ancRevisitMessageHighRisk": {
+    "bn": "সর্বশেষ ভিজিট: {lastVisit} (উচ্চ ঝুঁকি — ১ দিনের ব্যবধান)",
+    "en": "Last visit: {lastVisit} (high-risk — 1-day interval)"
+  },
+  "Triage.ancRevisitMessageNormal": {
+    "bn": "সর্বশেষ ভিজিট: {lastVisit} · পরবর্তী নির্ধারিত {nextDue}",
+    "en": "Last visit: {lastVisit} · next due {nextDue}"
+  },
+  "Triage.ancVisitedTodayMessage": {
+    "bn": "আজ প্রসবপূর্ব সেবা ইতিমধ্যে রেকর্ড করা হয়েছে",
+    "en": "ANC already recorded today"
+  },
   "Triage.eligibleServicesHeader": {
     "bn": "✦ উপযুক্ত সেবাসমূহ",
     "en": "✦ Eligible services"
@@ -2146,6 +2414,10 @@
   "Triage.eligibleServicesTag": {
     "bn": "বয়স ও লিঙ্গ ভিত্তিক",
     "en": "Age & gender based"
+  },
+  "Triage.pwEpisodeSubtitle": {
+    "bn": "শেষ মাসিক: {lmp} · সম্ভাব্য প্রসব: {edd}",
+    "en": "LMP: {lmp} · EDD: {edd}"
   },
   "Triage.pwHint": {
     "bn": "⚠ ANC আনলক করতে আগে 'PW' নির্বাচন করুন",
@@ -4155,6 +4427,10 @@
     "bn": "এগিয়ে যাওয়ার আগে {n}টি প্রয়োজনীয় ঘর পূরণ করতে হবে।",
     "en": "{n} required field(s) must be filled before continuing."
   },
+  "childAssessmentSaveError": {
+    "bn": "শিশু স্বাস্থ্য ফর্মটি সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।",
+    "en": "Could not save the Child Health form. Please try again."
+  },
   "childDangerCases": {
     "bn": "শিশুদের বিপদ চিহ্নিত সমূহ",
     "en": "Child Danger Cases"
@@ -4322,6 +4598,10 @@
   "confirmDisableDeviceUnlockBody": {
     "bn": "পরের বার সাইন ইন করতে আপনাকে পাসওয়ার্ড বা পিন ব্যবহার করতে হবে।",
     "en": "You will need to use your password or PIN to sign in next time."
+  },
+  "confirmReferralCta": {
+    "bn": "রেফারেল নিশ্চিত করুন",
+    "en": "Confirm Referral"
   },
   "confirmRemoveBody": {
     "bn": "{programmeName} সুপারিশ করা হয়েছিল কারণ: {trigger}।\n\nএড়িয়ে গেলে একটি ফলো-আপ কাজ তৈরি হবে যা পরের ভিজিটে দেখা যাবে।",
@@ -4707,6 +4987,10 @@
     "bn": "খানা নম্বর",
     "en": "Household No."
   },
+  "detailLabelHouseholdType": {
+    "bn": "পরিবারের ধরন",
+    "en": "Household Type"
+  },
   "detailLabelTotalMembers": {
     "bn": "মোট সদস্য",
     "en": "Total Members"
@@ -4978,6 +5262,10 @@
   "eddLabel": {
     "bn": "EDD",
     "en": "EDD"
+  },
+  "editProgrammesCta": {
+    "bn": "+ সম্পাদনা",
+    "en": "+ Edit"
   },
   "emailLabel": {
     "bn": "ইমেল",
@@ -5738,6 +6026,10 @@
   "forgotPasswordTitle": {
     "bn": "পাসওয়ার্ড রিসেট করুন",
     "en": "Reset password"
+  },
+  "fpLockedPregnantHint": {
+    "bn": "⚠ গর্ভাবস্থা চলাকালীন পরিবার পরিকল্পনা সেবা পাওয়া যাবে না",
+    "en": "⚠ Family Planning is unavailable during an active pregnancy"
   },
   "fromLockBanner": {
     "bn": "বায়োমেট্রিক বাতিল করা হয়েছে — পাসওয়ার্ড দিয়ে সাইন ইন করুন।",
@@ -6523,6 +6815,10 @@
     "bn": "সর্বশেষ",
     "en": "Latest"
   },
+  "launchingMicroCoaching": {
+    "bn": "কোচিং খোলা হচ্ছে…",
+    "en": "Opening coaching…"
+  },
   "leaderboardContext": {
     "bn": "ধামরাই উপজেলা · ২৮ জন এসকে",
     "en": "Dhamrai Upazila · 28 SKs"
@@ -6842,6 +7138,22 @@
   "mismatch": {
     "bn": "পিন মিলছে না — আবার চেষ্টা করুন",
     "en": "PINs do not match — try again"
+  },
+  "missedReasonHint": {
+    "bn": "যেমন: নির্ধারিত দিনে শিশু অসুস্থ ছিল",
+    "en": "e.g. Child was sick on scheduled date"
+  },
+  "missedReasonInlineLabel": {
+    "bn": "কারণ",
+    "en": "Reason"
+  },
+  "missedReasonLabel": {
+    "bn": "ডোজ বাদ পড়ার কারণ",
+    "en": "Reason for Missed Dose"
+  },
+  "missedReasonRequired": {
+    "bn": "অনুগ্রহ করে একটি কারণ লিখুন।",
+    "en": "Please enter a reason."
   },
   "mobileNotAvailableHint": {
     "bn": "নেই",
@@ -7459,6 +7771,10 @@
     "bn": "কেস খুলুন",
     "en": "Open Case"
   },
+  "openMicroCoaching": {
+    "bn": "কোচিং খুলুন",
+    "en": "Open Coaching"
+  },
   "openReferral": {
     "bn": "রেফারেল খুলুন",
     "en": "Open Referral"
@@ -7755,6 +8071,10 @@
     "bn": "গর্ভাবস্থার ফলাফল",
     "en": "Pregnancy Outcome"
   },
+  "pregnancyOutcomeLockedHint": {
+    "bn": "⚠ এই রোগীর জন্য এখন গর্ভধারণের ফলাফল যোগ করা যাবে না",
+    "en": "⚠ Pregnancy Outcome is not available for this patient right now"
+  },
   "pregnancyOutcomeTitle": {
     "bn": "গর্ভাবস্থার ফলাফল",
     "en": "Pregnancy Outcome"
@@ -7923,6 +8243,10 @@
     "bn": "ইতিমধ্যে নিবন্ধিত",
     "en": "Already Registered"
   },
+  "pwLockedPostpartumHint": {
+    "bn": "⚠ এই গর্ভাবস্থা ইতিমধ্যে শেষ হয়েছে — নতুন গর্ভাবস্থার জন্যই কেবল নিবন্ধন করা যায়",
+    "en": "⚠ This pregnancy has already ended — PW registration is only for a new pregnancy"
+  },
   "q10Label": {
     "bn": "শিশু টিকা পেয়েছে?",
     "en": "Has the child received vaccines?"
@@ -7962,6 +8286,10 @@
   "q7Label": {
     "bn": "ওজন",
     "en": "Weight"
+  },
+  "q7RangeError": {
+    "bn": "ওজন ০ থেকে ৩০ কেজির মধ্যে হতে হবে",
+    "en": "Weight must be between 0 and 30 kg"
   },
   "q7Unit": {
     "bn": "কেজি",
@@ -8147,6 +8475,10 @@
     "bn": "{count}টি রেকর্ড · ভিজিট দেখতে ট্যাপ করুন",
     "en": "{count} record(s)  ·  tap to open visit"
   },
+  "referCta": {
+    "bn": "স্বাস্থ্যকেন্দ্রে রেফার করুন",
+    "en": "Refer to facility"
+  },
   "referNowButton": {
     "bn": "এখনই রেফার করুন",
     "en": "Refer now"
@@ -8166,6 +8498,18 @@
   "referralEmergency": {
     "bn": "অত্যন্ত জরুরি",
     "en": "Emergency"
+  },
+  "referralFacilityLabel": {
+    "bn": "রেফারেল স্বাস্থ্যকেন্দ্র",
+    "en": "Referral Facility"
+  },
+  "referralFacilityRequired": {
+    "bn": "অনুগ্রহ করে একটি স্বাস্থ্যকেন্দ্র নির্বাচন করুন।",
+    "en": "Please select a facility."
+  },
+  "referralFacilitySelectHint": {
+    "bn": "স্বাস্থ্যকেন্দ্র নির্বাচন করুন…",
+    "en": "Select facility…"
   },
   "referralNotRequired": {
     "bn": "রেফারেলের প্রয়োজন নেই",
@@ -8202,6 +8546,10 @@
   "referralWarning": {
     "bn": "ক্লিনিকাল ফলাফলের ভিত্তিতে রেফারেল সুপারিশ করা হয়েছে",
     "en": "Referral recommended based on clinical findings"
+  },
+  "referredToFacilityLabel": {
+    "bn": "স্বাস্থ্যকেন্দ্রে রেফার করা হয়েছে",
+    "en": "Referred to facility"
   },
   "refresh": {
     "bn": "সার্ভার থেকে রিফ্রেশ করুন",
@@ -8971,6 +9319,10 @@
     "bn": "অ্যান্ড্রয়েড সেটিংসে- একটি স্ক্রিন লক (পিন, প্যাটার্ন বা ফিঙ্গারপ্রিন্ট) সেট আপ করুন, তারপর আবার চেষ্টা করুন।",
     "en": "Set up a screen lock (PIN, pattern, or fingerprint) in Android Settings, then try again."
   },
+  "settings": {
+    "bn": "সেটিংস",
+    "en": "Settings"
+  },
   "settingsBody": {
     "bn": "পরামর্শ রেকর্ড করতে এআই স্ক্রাইবের মাইক্রোফোন অ্যাক্সেস প্রয়োজন। সেটিংস → অ্যাপ পারমিশনে এটি চালু করুন।",
     "en": "AI Scribe needs microphone access to record consultations. Enable it in Settings → App permissions."
@@ -8982,6 +9334,10 @@
   "settingsOpen": {
     "bn": "সেটিংস খুলুন",
     "en": "Open Settings"
+  },
+  "settingsSubtitle": {
+    "bn": "অ্যাকাউন্ট, নিরাপত্তা ও অ্যাপ পছন্দ",
+    "en": "Account, security & app preferences"
   },
   "settingsTitle": {
     "bn": "মাইক্রোফোন অ্যাক্সেস প্রয়োজন",
@@ -9038,6 +9394,18 @@
   "signOut": {
     "bn": "সাইন আউট",
     "en": "Sign out"
+  },
+  "signOutAnyway": {
+    "bn": "তবুও সাইন আউট করুন",
+    "en": "Sign out anyway"
+  },
+  "signOutOfflineWarningBody": {
+    "bn": "আপনার {count}টি অসিঙ্ক রেকর্ড রয়েছে। এখন সাইন আউট করলে সেগুলি এই ডিভাইস থেকে স্থায়ীভাবে মুছে যাবে। চালিয়ে যাবেন?",
+    "en": "You have {count} unsynced record(s). Signing out now will permanently delete them from this device. Continue?"
+  },
+  "signOutOfflineWarningTitle": {
+    "bn": "আপনি অফলাইনে আছেন",
+    "en": "You\\'re offline"
   },
   "sitWithGreetHeaderFemale": {
     "bn": "👋 তার পাশে বসুন — উষ্ণভাবে শুভেচ্ছা জানান",
@@ -9335,6 +9703,10 @@
     "bn": "লক করা",
     "en": "Locked"
   },
+  "statusMissed": {
+    "bn": "বাদ পড়েছে",
+    "en": "Missed"
+  },
   "statusNotArrived": {
     "bn": "স্বাস্থ্য কেন্দ্রে পৌঁছাননি",
     "en": "Not arrived at facility"
@@ -9366,6 +9738,10 @@
   "statusPillToday": {
     "bn": "আজ",
     "en": "Today"
+  },
+  "statusReferred": {
+    "bn": "রেফার করা হয়েছে",
+    "en": "Referred"
   },
   "statusUpcoming": {
     "bn": "আসন্ন",
@@ -9671,6 +10047,10 @@
     "bn": "সার্ভারে পৌঁছানো যাচ্ছে না। অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।",
     "en": "Could not reach the server. Please try again later."
   },
+  "syncErrorSessionExpired": {
+    "bn": "আপনার সেশনের মেয়াদ শেষ হয়েছে। সিঙ্ক করার আগে অনলাইনে আবার সাইন ইন করুন।",
+    "en": "Your session expired. Sign in again online before syncing."
+  },
   "syncErrorTimeout": {
     "bn": "সংযোগ সময় শেষ হয়ে গেছে। অনুগ্রহ করে আবার চেষ্টা করুন।",
     "en": "Connection timed out. Please try again."
@@ -9706,6 +10086,10 @@
   "syncing": {
     "bn": "সিঙ্ক হচ্ছে…",
     "en": "Syncing…"
+  },
+  "syncingBeforeSignOut": {
+    "bn": "সাইন আউট করার আগে আপনার ডেটা সিঙ্ক করা হচ্ছে…",
+    "en": "Syncing your data before signing out…"
   },
   "systemMode": {
     "bn": "সিস্টেম মোড",
@@ -10251,6 +10635,10 @@
     "bn": "ইউজারনেম",
     "en": "Username"
   },
+  "vaccinationDefaultHint": {
+    "bn": "এই ভিজিটে টিকাদান সবসময় অন্তর্ভুক্ত — কেবল শিশু স্বাস্থ্য ঐচ্ছিক",
+    "en": "Vaccination is always included for this visit — only Child Health is optional"
+  },
   "vaccinesDueLabel": {
     "bn": "এই পর্যায়ে বাকি থাকা টিকাগুলো",
     "en": "Vaccines due at this milestone"
@@ -10266,6 +10654,10 @@
   "verifyToAccess": {
     "bn": "আপনার ওয়ার্ড ড্যাশবোর্ড দেখতে আপনার পরিচয় যাচাই করুন।",
     "en": "Verify your identity to access your ward dashboard."
+  },
+  "versionLabel": {
+    "bn": "সংস্করণ {version}",
+    "en": "v{version}"
   },
   "viewAll": {
     "bn": "সব দেখুন",
