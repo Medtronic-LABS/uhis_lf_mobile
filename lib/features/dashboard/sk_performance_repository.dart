@@ -1,3 +1,4 @@
+import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/local_assessment_dao.dart';
 
@@ -88,10 +89,10 @@ class SkPerformanceStats {
   static const int visitsTargetMonth = 160;
 
   String ratingFor(int score) {
-    if (score >= 90) return 'Excellent';
-    if (score >= 75) return 'Good';
-    if (score >= 60) return 'Fair';
-    return 'Needs Improvement';
+    if (score >= 90) return PerformanceStrings.ratingExcellent;
+    if (score >= 75) return PerformanceStrings.ratingGood;
+    if (score >= 60) return PerformanceStrings.ratingFair;
+    return PerformanceStrings.ratingNeedsImprovement;
   }
 
   String emojiFor(int score) {

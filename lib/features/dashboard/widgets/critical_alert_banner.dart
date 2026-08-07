@@ -50,7 +50,7 @@ class CriticalAlertBanner extends StatelessWidget {
         ],
       ),
       child: Semantics(
-        label: 'Open critical case: ${topAlert.patientName}',
+        label: MissionDashboardStrings.openCriticalCase(topAlert.patientName),
         button: true,
         child: Material(
         color: Colors.transparent,
@@ -93,7 +93,7 @@ class CriticalAlertBanner extends StatelessWidget {
                           if (alerts.length > 1) ...[
                             const SizedBox(height: 2),
                             Text(
-                              '+${alerts.length - 1} more alert${alerts.length > 2 ? 's' : ''}',
+                              MissionDashboardStrings.moreAlerts(alerts.length - 1),
                               style:
                                   Theme.of(context).textTheme.bodySmall?.copyWith(
                                         color: Colors.white.withValues(alpha: 0.8),
@@ -105,7 +105,7 @@ class CriticalAlertBanner extends StatelessWidget {
                     ),
                     if (onDismiss != null)
                       IconButton(
-                        tooltip: 'Dismiss alert',
+                        tooltip: MissionDashboardStrings.dismissAlertTooltip,
                         onPressed: onDismiss,
                         icon: Icon(
                           Icons.close,
@@ -201,7 +201,7 @@ class CriticalAlertBanner extends StatelessWidget {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            '+${topAlert.daysOverdue}d',
+                            MissionDashboardStrings.daysOverdueSuffix(topAlert.daysOverdue!),
                             style:
                                 Theme.of(context).textTheme.labelSmall?.copyWith(
                                       fontWeight: FontWeight.bold,

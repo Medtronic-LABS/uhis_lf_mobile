@@ -887,9 +887,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       color: Color(0xFF6B7280),
                                     ),
                                     const SizedBox(width: 6),
-                                    const Text(
-                                      'Search results — not in today\'s queue',
-                                      style: TextStyle(
+                                    Text(
+                                      MissionDashboardStrings.searchResultsNotInQueue,
+                                      style: const TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
                                         color: Color(0xFF6B7280),
@@ -1372,7 +1372,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
         : AppColors.referralAlertBg;
     return Semantics(
           button: true,
-          label: 'Referral alerts: $total',
+          label: MissionDashboardStrings.referralAlertsSemantic(total),
           child: Container(
             decoration: BoxDecoration(
               color: bannerColor,
@@ -1683,7 +1683,9 @@ class _NotificationBellState extends State<_NotificationBell>
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final count = widget.count;
     return Semantics(
-      label: count > 0 ? '$count notifications' : 'Notifications',
+      label: count > 0
+          ? MissionDashboardStrings.notificationsCountSemantic(count)
+          : MissionDashboardStrings.notificationsTitle,
       button: true,
       child: GestureDetector(
         onTap: widget.onTap,
@@ -1789,7 +1791,7 @@ class _GlobalSearchResultCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  hit.name ?? 'Unknown',
+                  hit.name ?? PatientContextStrings.unknownMemberName,
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -1797,7 +1799,7 @@ class _GlobalSearchResultCard extends StatelessWidget {
                 ),
                 if (hit.gender != null)
                   Text(
-                    hit.gender!,
+                    MissionDashboardStrings.genderLabel(hit.gender!),
                     style: const TextStyle(
                       fontSize: 12,
                       color: Color(0xFF6B7280),

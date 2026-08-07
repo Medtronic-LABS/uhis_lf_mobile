@@ -236,7 +236,9 @@ class _AIBriefCardState extends State<AIBriefCard> {
                 if (brief.riskFactors.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Semantics(
-                    label: _expanded ? 'Collapse risk factors' : 'Expand risk factors',
+                    label: _expanded
+                        ? MissionDashboardStrings.collapseRiskFactors
+                        : MissionDashboardStrings.expandRiskFactors,
                     button: true,
                     child: InkWell(
                     onTap: () => setState(() => _expanded = !_expanded),

@@ -42,7 +42,7 @@ class ReferralOperationsWidget extends StatelessWidget {
         ),
       ),
       child: Semantics(
-        label: 'View referral status',
+        label: MissionDashboardStrings.viewReferralStatusSemantic,
         button: true,
         child: InkWell(
         onTap: onOpenReferrals,
@@ -262,7 +262,7 @@ class _TopBreachCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        '🔴 SLA BREACHED',
+                        ReferralStrings.notifCriticalTitle,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -273,7 +273,7 @@ class _TopBreachCard extends StatelessWidget {
                     if (item.daysOverdue != null && item.daysOverdue! > 0) ...[
                       const SizedBox(width: 6),
                       Text(
-                        '+${item.daysOverdue}d',
+                        MissionDashboardStrings.daysOverdueSuffix(item.daysOverdue!),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               color: scheme.error,
                               fontWeight: FontWeight.bold,

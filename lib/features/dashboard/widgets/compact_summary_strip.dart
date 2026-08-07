@@ -25,7 +25,9 @@ class CompactSummaryStrip extends StatelessWidget {
     final accentColor = hasCritical ? scheme.error : scheme.primary;
 
     return Semantics(
-      label: hasCritical ? 'Open AI brief — critical items today' : 'Open AI brief',
+      label: hasCritical
+          ? MissionDashboardStrings.openAiBriefCritical
+          : MissionDashboardStrings.openAiBrief,
       button: true,
       child: GestureDetector(
       key: const Key('compact_summary_strip_tap'),
@@ -66,7 +68,7 @@ class CompactSummaryStrip extends StatelessWidget {
                   // Visits recommended
                   _MetricChip(
                     value: brief.visitsRecommended.toString(),
-                    label: 'visits',
+                    label: MissionDashboardStrings.visitsUnitLabel,
                     icon: Icons.directions_walk,
                     color: accentColor,
                   ),
@@ -77,7 +79,7 @@ class CompactSummaryStrip extends StatelessWidget {
                     _MetricChip(
                       value: (brief.childDangerCases + brief.slaBreachedReferrals)
                           .toString(),
-                      label: 'urgent',
+                      label: MissionDashboardStrings.urgentSuffix,
                       icon: Icons.warning_amber,
                       color: scheme.error,
                     ),
@@ -90,7 +92,7 @@ class CompactSummaryStrip extends StatelessWidget {
                       value: brief.expectedWorkloadHours >= 1
                           ? '${brief.expectedWorkloadHours.toStringAsFixed(0)}h'
                           : '${(brief.expectedWorkloadHours * 60).toInt()}m',
-                      label: 'work',
+                      label: MissionDashboardStrings.workSuffix,
                       icon: Icons.schedule,
                       color: scheme.onSurfaceVariant,
                     ),

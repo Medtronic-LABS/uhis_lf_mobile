@@ -51,7 +51,9 @@ class MissionProgressCard extends StatelessWidget {
           children: [
             // Header
             Text(
-              "Today's Progress · ${DateFormat('d MMM').format(DateTime.now())}",
+              MissionDashboardStrings.todaysProgressHeader(
+                DateFormat('d MMM').format(DateTime.now()),
+              ),
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: scheme.onSurface,
