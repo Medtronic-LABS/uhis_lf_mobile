@@ -141,6 +141,7 @@ class UhisNextApp extends StatefulWidget {
 class _UhisNextAppState extends State<UhisNextApp>
     with WidgetsBindingObserver {
   late final GoRouter _router = buildRouter(widget.authState);
+  final _localeProvider = LocaleProvider();
   late final PatientDao _patientDao = PatientDao(widget.appDb);
   late final PatientProgrammesDao _progDao =
       PatientProgrammesDao(widget.appDb);
@@ -299,12 +300,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
     widget.authState.addListener(_onAuthStateChanged);
-    // Propagate locale changes to the SDK language without a full re-init.
-    // Deferred to post-frame so LocaleProvider is resolvable via context.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final localeProvider = context.read<LocaleProvider>();
-      localeProvider.addListener(_onLocaleChanged);
-    });
+    _localeProvider.addListener(_onLocaleChanged);
     // Reset sync progress so the next user's /sync screen does not see
     // isComplete=true from the previous session and skip their cold sync.
     widget.authState.registerLogoutHook(_sync.resetProgress);
@@ -339,10 +335,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     _inactivityTimer?.cancel();
     _connectivitySync.dispose();
     widget.authState.removeListener(_onAuthStateChanged);
-    // Best-effort remove locale listener; context may be gone so guard it.
-    try {
-      context.read<LocaleProvider>().removeListener(_onLocaleChanged);
-    } catch (_) {}
+    _localeProvider.removeListener(_onLocaleChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -442,7 +435,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<AppDatabase>.value(value: widget.appDb),
         ChangeNotifierProvider<AuthState>.value(value: widget.authState),
         ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
+        ChangeNotifierProvider<LocaleProvider>.value(value: _localeProvider),
         ChangeNotifierProvider<DashboardFilterState>(
             create: (_) => DashboardFilterState()),
         Provider<DashboardRepository>(
