@@ -1314,7 +1314,7 @@ class _AiBriefingSection extends StatelessWidget {
         GreetWarmlyCard(
           isFemale: isFemale,
           loading: briefingLoading,
-          isChild: patientContext.isUnder5,
+          isChild: patientContext.isYoungChild,
           selectedProgrammes: selectedProgrammes,
           gestationalWeeks: patientContext.gestationalWeeks,
           greeting: briefingData?.greeting,
