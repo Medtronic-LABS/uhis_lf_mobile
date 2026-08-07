@@ -20,8 +20,7 @@ void main() {
   });
 
   group('AssistantAction.defaultLabel', () {
-    test('delegates to AssistantStrings.actionLabel for every action type',
-        () {
+    test('resolves every action type through AssistantStrings', () {
       expect(AssistantAction.defaultLabel(AssistantActionType.startVisit),
           'Start visit');
       expect(AssistantAction.defaultLabel(AssistantActionType.openReferral),
@@ -35,18 +34,12 @@ void main() {
     });
   });
 
-  group('AssistantStrings.actionLabel', () {
-    test('returns the exact English label for every action type', () {
-      expect(AssistantStrings.actionLabel(AssistantActionType.startVisit),
-          'Start visit');
-      expect(AssistantStrings.actionLabel(AssistantActionType.openReferral),
-          'Open referral');
-      expect(
-          AssistantStrings.actionLabel(AssistantActionType.scheduleFollowUp),
-          'Schedule follow-up');
-      expect(AssistantStrings.actionLabel(AssistantActionType.callPatient),
-          'Call patient');
-      expect(AssistantStrings.actionLabel(AssistantActionType.none), '');
+  group('AssistantStrings action labels', () {
+    test('return the exact English label for every action type', () {
+      expect(AssistantStrings.actionStartVisit, 'Start visit');
+      expect(AssistantStrings.actionOpenReferral, 'Open referral');
+      expect(AssistantStrings.actionScheduleFollowUp, 'Schedule follow-up');
+      expect(AssistantStrings.actionCallPatient, 'Call patient');
     });
   });
 

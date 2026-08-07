@@ -21,7 +21,6 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 
-import '../../features/assistant/assistant_models.dart';
 import '../../features/visit/immunisation/epi_visit_summary.dart';
 import '../i18n/app_locale.dart';
 import '../models/dashboard_tier.dart';
@@ -4590,22 +4589,17 @@ abstract final class AssistantStrings {
   static String get thinkingIndicator =>
       getTranslatedString('Assistant.thinkingIndicator', '✦ thinking…');
 
-  /// Single home for the action-chip labels; [AssistantAction.defaultLabel]
-  /// delegates here rather than carrying a second copy of the switch.
-  static String actionLabel(AssistantActionType type) {
-    switch (type) {
-      case AssistantActionType.startVisit:
-        return getTranslatedString('Assistant.actionStartVisit', 'Start visit');
-      case AssistantActionType.openReferral:
-        return getTranslatedString('Assistant.actionOpenReferral', 'Open referral');
-      case AssistantActionType.scheduleFollowUp:
-        return getTranslatedString('Assistant.actionScheduleFollowUp', 'Schedule follow-up');
-      case AssistantActionType.callPatient:
-        return getTranslatedString('Assistant.actionCallPatient', 'Call patient');
-      case AssistantActionType.none:
-        return '';
-    }
-  }
+  // Action-chip labels. Kept as plain getters, and the switch over
+  // AssistantActionType lives with the enum in assistant_models.dart, so this
+  // core file does not import the feature layer.
+  static String get actionStartVisit =>
+      getTranslatedString('Assistant.actionStartVisit', 'Start visit');
+  static String get actionOpenReferral =>
+      getTranslatedString('Assistant.actionOpenReferral', 'Open referral');
+  static String get actionScheduleFollowUp =>
+      getTranslatedString('Assistant.actionScheduleFollowUp', 'Schedule follow-up');
+  static String get actionCallPatient =>
+      getTranslatedString('Assistant.actionCallPatient', 'Call patient');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

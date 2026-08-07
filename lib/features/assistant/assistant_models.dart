@@ -53,7 +53,20 @@ class AssistantAction {
     );
   }
 
-  static String defaultLabel(AssistantActionType t) => AssistantStrings.actionLabel(t);
+  static String defaultLabel(AssistantActionType t) {
+    switch (t) {
+      case AssistantActionType.startVisit:
+        return AssistantStrings.actionStartVisit;
+      case AssistantActionType.openReferral:
+        return AssistantStrings.actionOpenReferral;
+      case AssistantActionType.scheduleFollowUp:
+        return AssistantStrings.actionScheduleFollowUp;
+      case AssistantActionType.callPatient:
+        return AssistantStrings.actionCallPatient;
+      case AssistantActionType.none:
+        return '';
+    }
+  }
 }
 
 /// One module hit retrieved during a coaching RAG lookup.
