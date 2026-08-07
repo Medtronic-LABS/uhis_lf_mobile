@@ -333,6 +333,7 @@ class PatientBadgeRow extends StatelessWidget {
     required this.name,
     required this.onTap,
     this.age,
+    this.ageLabel,
     this.gender,
     this.phoneNumber,
     this.programmes = const {},
@@ -344,6 +345,10 @@ class PatientBadgeRow extends StatelessWidget {
 
   final String? name;
   final int? age;
+
+  /// Prefer over [age] when set — e.g. `4m` / `12d` for infants so the chip
+  /// is never `0/F`. Callers should use [EnrollmentAge.compactChipLabel].
+  final String? ageLabel;
   final String? gender;
   final String? phoneNumber;
   final Set<Programme> programmes;
@@ -396,11 +401,14 @@ class PatientBadgeRow extends StatelessWidget {
                         name ?? CommonStrings.unnamed,
                         style: AppTextStyles.worklistPatientName,
                       ),
-                      if (age != null || gender != null)
+                      if (ageLabel != null || age != null || gender != null)
                         Text(
                           [
-                            if (age != null) '$age',
-                            if (gender != null)
+                            if (ageLabel != null)
+                              ageLabel!
+                            else if (age != null)
+                              '$age',
+                            if (gender != null && gender!.isNotEmpty)
                               gender!.substring(0, 1).toUpperCase(),
                           ].join('/'),
                           style: AppTextStyles.worklistPatientMeta,
