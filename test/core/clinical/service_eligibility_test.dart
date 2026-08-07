@@ -7,13 +7,13 @@ void main() {
       expect(hasAnyEligibleProgramme(ageYears: null), isTrue);
     });
 
-    test('under-5 is eligible (vaccination/IMCI)', () {
+    test('under-3 is eligible (vaccination/IMCI, conservative approximation of the 25-month cutoff)', () {
       expect(hasAnyEligibleProgramme(ageYears: 0), isTrue);
-      expect(hasAnyEligibleProgramme(ageYears: 4), isTrue);
+      expect(hasAnyEligibleProgramme(ageYears: 2), isTrue);
     });
 
-    test('ages 5-14 are the eligibility gap', () {
-      expect(hasAnyEligibleProgramme(ageYears: 5), isFalse);
+    test('ages 3-14 are the eligibility gap', () {
+      expect(hasAnyEligibleProgramme(ageYears: 3), isFalse);
       expect(hasAnyEligibleProgramme(ageYears: 10), isFalse);
       expect(hasAnyEligibleProgramme(ageYears: 14), isFalse);
     });

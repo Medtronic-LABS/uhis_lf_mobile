@@ -96,7 +96,7 @@ class SymptomPickerScreen extends StatefulWidget {
 
   /// Fired just before [onAdvance] with the SK's confirmed programme set from
   /// the inline eligible-services grid. Only called for adult patients —
-  /// child visits (under-5) skip the grid and use the vaccination path.
+  /// child visits (young child) skip the grid and use the vaccination path.
   final ValueChanged<Set<Programme>>? onProgrammesSelected;
 
   /// Fired alongside [onProgrammesSelected] with the patient's enrolled
@@ -198,13 +198,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// would actually do.
   _AncRevisitStatus _ancRevisitStatus = _AncRevisitStatus.unknown;
 
-  /// Under-5 only: vaccination is always included for a child visit — Step 2
-  /// of the visit flow shows the vaccination timeline regardless, so this
-  /// was never really a user choice. Forced true whenever the card would
-  /// render (the card itself is only ever shown for under-5 patients); the
-  /// getter naturally evaluates false for non-under5 patients, for whom the
+  /// Young-child only: vaccination is always included for a child visit —
+  /// Step 2 of the visit flow shows the vaccination timeline regardless, so
+  /// this was never really a user choice. Forced true whenever the card
+  /// would render (the card itself is only ever shown for young-child
+  /// patients); the getter naturally evaluates false otherwise, for whom the
   /// card never renders and this value has no effect.
-  bool get _vaccinationSelected => _patientContext?.isUnder5 ?? false;
+  bool get _vaccinationSelected => _patientContext?.isYoungChild ?? false;
 
   @override
   void initState() {
@@ -573,14 +573,14 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // Each UnifiedSymptomDef.programmes names every service that symptom
     // belongs to, providing finer-grained auto-selection than the rule engine.
     // See ProgrammeGridSync.catalogProgrammesFor for why imci/epi are gated
-    // on the patient actually being under-5.
-    final isUnder5 = _patientContext?.isUnder5 == true;
+    // on the patient actually being a young child.
+    final isYoungChild = _patientContext?.isYoungChild == true;
     for (final code in currentSymptoms) {
       final def = UnifiedSymptomCatalog.byCode(code);
       if (def == null) continue;
       activated.addAll(ProgrammeGridSync.catalogProgrammesFor(
         def.programmes,
-        isUnder5: isUnder5,
+        isChildVisitEligible: isYoungChild,
       ));
     }
 
@@ -736,7 +736,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // In-flow host (VisitFlowScreen) intercepts via callback.
     final onAdvance = widget.onAdvance;
     if (onAdvance != null) {
-      // Always report the SK's confirmed programme set — including under-5
+      // Always report the SK's confirmed programme set — including young-child
       // visits so VisitFlowScreen knows whether Child Health (IMCI) was
       // explicitly selected and can show the IMCI form after vaccination.
       // vaccinationOnly = true clears programmes so auto-activated pathways
@@ -1133,8 +1133,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   ),
 
                 // Eligible services grid — shown for all patients.
-                // Under-5: Vaccination + Child Health cards only.
-                // Adults: full programme card set.
+                // Young child: Vaccination + Child Health cards only.
+                // Everyone else: full programme card set.
                 SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     sliver: SliverToBoxAdapter(
@@ -1175,8 +1175,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // ── Under-5 CTA — driven by vaccination + child-health selection
-                        if (_patientContext!.isUnder5) ...[
+                        // ── Young-child CTA — driven by vaccination + child-health selection
+                        if (_patientContext!.isYoungChild) ...[
                           const SizedBox(height: 4),
                           Builder(builder: (context) {
                             final imciSelected = _selectedProgrammes
@@ -1213,8 +1213,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                           }),
                         ],
 
-                        // ── Start Checkup button (adults only) ────────────
-                        if (!(_patientContext!.isUnder5)) ...[
+                        // ── Start Checkup button (non-young-child only) ────
+                        if (!(_patientContext!.isYoungChild)) ...[
                           const SizedBox(height: 4),
                           Builder(builder: (context) {
                             final eligible = hasAnyEligibleProgramme(
@@ -1635,7 +1635,7 @@ class _BriefingFallbackContent extends StatelessWidget {
     if (ctx.isTbScreenDue) {
       chips.add((SymptomPickerStrings.chipTbDue, AppColors.statusSuccess));
     }
-    if (ctx.isUnder5) {
+    if (ctx.isYoungChild) {
       chips.add((SymptomPickerStrings.chipUnder5, AppColors.statusInfo));
     }
     if (chips.isEmpty) {
@@ -2156,7 +2156,7 @@ class _PickerChip extends StatelessWidget {
 //
 // 8-card grid matching the wireframe (apon_sushashthya_v14.html).
 // Meta-cards PW and Delivery are UI gates (not Programme enums) that lock/unlock
-// ANC and PNC respectively. Under-5 patients skip this widget entirely.
+// ANC and PNC respectively. Young-child patients skip this widget entirely.
 
 enum _ServiceCardKind { programme, pw, delivery, general, rmnch, vaccination }
 
@@ -2184,7 +2184,7 @@ class _ServiceCardDef {
 // Row 1: PW, ANC, Pregnancy Outcome
 // Row 2: PNC, FP, NCD
 // Row 3: Eye Care, Cataract
-// Under-5 row: Vaccination, Child Health
+// Young-child row: Vaccination, Child Health
 //
 // TB has no card here by design — its form content isn't yet aligned, so it
 // stays unreachable rather than exposed (see Programme.tb's doc comment and
@@ -2199,7 +2199,7 @@ const _kAllServiceCards = [
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '💊', label: 'NCD',               programme: Programme.ncd),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🔍', label: 'Cataract',           programme: Programme.cataract),
-  // Under-5 cards — shown only when ctx.isUnder5
+  // Young-child cards — shown only when ctx.isYoungChild
   _ServiceCardDef(kind: _ServiceCardKind.vaccination, emoji: '💉', label: 'Vaccination'),
   _ServiceCardDef(kind: _ServiceCardKind.programme,   emoji: '🧒', label: 'Child Health',      programme: Programme.imci),
 ];
@@ -2247,7 +2247,7 @@ class _InlineServiceSelector extends StatelessWidget {
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
-  /// Whether the Vaccination card shows as selected (under-5 only) — always
+  /// Whether the Vaccination card shows as selected (young-child only) — always
   /// true whenever the card renders, since vaccination is no longer a
   /// genuine choice; see [vaccinationLocked].
   final bool vaccinationSelected;
@@ -2269,16 +2269,17 @@ class _InlineServiceSelector extends StatelessWidget {
     return _kAllServiceCards.where((c) {
       switch (c.kind) {
         case _ServiceCardKind.vaccination:
-          return ctx.isUnder5;
+          return ctx.isYoungChild;
         case _ServiceCardKind.pw:
         case _ServiceCardKind.delivery:
           // isReproductiveAge's 168-month floor is already stricter than
-          // isUnder5's 60-month ceiling, so no separate !isUnder5 check needed.
+          // isYoungChild's 25-month ceiling, so no separate !isYoungChild
+          // check needed.
           return ctx.isFemale && ctx.isReproductiveAge;
         case _ServiceCardKind.programme:
           final p = c.programme!;
-          if (p == Programme.imci) return ctx.isUnder5;
-          if (ctx.isUnder5) return false;
+          if (p == Programme.imci) return ctx.isYoungChild;
+          if (ctx.isYoungChild) return false;
           if (p == Programme.anc ||
               p == Programme.pnc ||
               p == Programme.familyPlanning) {

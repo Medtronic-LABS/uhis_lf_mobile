@@ -106,8 +106,13 @@ class PatientContext {
   /// Whether patient is an infant (< 12 months).
   bool get isInfant => ageMonths < 12;
 
-  /// Whether patient is under 5 years old.
-  bool get isUnder5 => ageMonths < 60;
+  /// RMNCH `childhoodVisit` gate — Spice `service_eligibility_logic.json`
+  /// `minAge: 0, maxAge: 25` (months, exclusive). Gates the Vaccination /
+  /// Child Health (IMCI) service cards, child-visit routing, and the
+  /// pediatric Scribe-code pre-screen. NOT the same concept as
+  /// `ChildhoodVisit.maxVisitMonth` (15mo, next-visit stamping only) in
+  /// lib/features/visit/forms/childhood_visit.dart.
+  bool get isYoungChild => ageMonths < 25;
 
   /// Whether patient is an adult (18+ years).
   bool get isAdult => ageMonths >= 216; // 18 * 12

@@ -28,13 +28,15 @@ void main() {
     });
 
     // =========================================================================
-    // Golden Case 3: 30mo, muac_red, MR vaccine overdue → {ICCM, NUTRITION, EPI}
-    // Ordered: acute-first
+    // Golden Case 3: 20mo, muac_red, MR vaccine overdue → {ICCM, NUTRITION, EPI}
+    // Ordered: acute-first. Age kept inside both the IMCI/nutrition gate
+    // (imciMaxAgeMonths, 24mo) and the young-child EPI-due gate (isYoungChild,
+    // 25mo, RMNCH childhoodVisit).
     // =========================================================================
     test('Golden Case 3: malnourished child with overdue vaccine activates ICCM + EPI', () {
       final ctx = PatientContext(
         patientId: 'test-3',
-        ageMonths: 30, // 30 months / 2.5 years
+        ageMonths: 20,
         sex: Sex.male,
         isPregnant: false,
         overdueImmunizations: ['MR'],
@@ -53,6 +55,23 @@ void main() {
         expect(priorities[i], greaterThanOrEqualTo(priorities[i - 1]),
             reason: 'Pathways should be ordered by priority (acute before scheduled)');
       }
+    });
+
+    test('Golden Case 3b: same malnourished/overdue-vaccine patient at 30mo — outside the young-child window, activates nothing', () {
+      final ctx = PatientContext(
+        patientId: 'test-3b',
+        ageMonths: 30, // outside both imciMaxAgeMonths (24) and isYoungChild (25)
+        sex: Sex.male,
+        isPregnant: false,
+        overdueImmunizations: ['MR'],
+      );
+
+      final symptoms = <String>{'muac_red'};
+      final activated = PathwayEngine.activate(symptoms, ctx);
+
+      expect(activated, isEmpty,
+          reason: 'RMNCH childhoodVisit narrowing (25mo) intentionally leaves 26-59mo without a '
+              'child-assessment pathway — see docs/service_eligibility_verification.md');
     });
 
     // =========================================================================

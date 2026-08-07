@@ -62,17 +62,18 @@ abstract final class ProgrammeGridSync {
 
   /// Programmes a selected symptom's catalogue tag set should contribute to
   /// auto-selection. Excludes [Programme.imci]/[Programme.epi] unless
-  /// [isUnder5] -- several everyday adult symptoms (fever, vomiting, edema,
-  /// convulsions, unconscious, difficulty breathing) are cross-tagged with
-  /// imci in `UnifiedSymptomCatalog` for clinical-rule relevance elsewhere,
-  /// and folding that tag into an adult's selection would falsely mark the
-  /// visit as a child visit (see `VisitFlowScreen._isChildVisit`), routing
-  /// Step 2 to the immunisation timeline instead of the real programme form.
+  /// [isChildVisitEligible] -- several everyday adult symptoms (fever,
+  /// vomiting, edema, convulsions, unconscious, difficulty breathing) are
+  /// cross-tagged with imci in `UnifiedSymptomCatalog` for clinical-rule
+  /// relevance elsewhere, and folding that tag into an adult's selection
+  /// would falsely mark the visit as a child visit (see
+  /// `VisitFlowScreen._isChildVisit`), routing Step 2 to the immunisation
+  /// timeline instead of the real programme form.
   static Set<Programme> catalogProgrammesFor(
     Set<Programme> symptomProgrammes, {
-    required bool isUnder5,
+    required bool isChildVisitEligible,
   }) =>
-      isUnder5
+      isChildVisitEligible
           ? symptomProgrammes
           : symptomProgrammes.difference({Programme.imci, Programme.epi});
 

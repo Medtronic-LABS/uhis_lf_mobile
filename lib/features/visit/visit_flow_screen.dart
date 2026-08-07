@@ -418,17 +418,18 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     return null;
   }
 
-  /// True when the patient is under-5 or confirmed programmes contain EPI/IMCI.
-  /// Age-based detection handles the no-symptoms case (no pathways activated
-  /// → _confirmedProgrammes empty) so the vaccination path still fires for
-  /// children who have no complaints on this visit.
+  /// True when the patient is a young child (RMNCH `childhoodVisit`, < 25
+  /// months — see `PatientContext.isYoungChild`) or confirmed programmes
+  /// contain EPI/IMCI. Age-based detection handles the no-symptoms case (no
+  /// pathways activated → _confirmedProgrammes empty) so the vaccination
+  /// path still fires for children who have no complaints on this visit.
   bool get _isChildVisit =>
       _confirmedProgrammes.any(
         (p) => p == Programme.epi || p == Programme.imci,
       ) ||
-      // patientAge is in years; under-5 always routes to vaccination step
-      // even when no symptoms were selected (no pathways → empty _confirmedProgrammes).
-      (_patientAge != null && _patientAge! < 5);
+      // Calendar-aware months, not patientAge*12, so this stays precise at
+      // the 25-month boundary even when only years-of-age is on record.
+      (_ageInMonths != null && _ageInMonths! < 25);
 
   @override
   Widget build(BuildContext context) {

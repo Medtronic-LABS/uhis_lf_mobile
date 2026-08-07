@@ -66,7 +66,7 @@ void main() {
     test('drops imci/epi for a symptom cross-tagged with them when not under-5', () {
       final result = ProgrammeGridSync.catalogProgrammesFor(
         {Programme.imci, Programme.anc, Programme.tb},
-        isUnder5: false,
+        isChildVisitEligible: false,
       );
       expect(result, {Programme.anc, Programme.tb});
     });
@@ -74,7 +74,7 @@ void main() {
     test('keeps imci/epi for the same tag set when the patient is under-5', () {
       final result = ProgrammeGridSync.catalogProgrammesFor(
         {Programme.imci, Programme.anc, Programme.tb},
-        isUnder5: true,
+        isChildVisitEligible: true,
       );
       expect(result, {Programme.imci, Programme.anc, Programme.tb});
     });
@@ -82,7 +82,7 @@ void main() {
     test('unaffected when the symptom carries no imci/epi tag', () {
       final result = ProgrammeGridSync.catalogProgrammesFor(
         {Programme.ncd},
-        isUnder5: false,
+        isChildVisitEligible: false,
       );
       expect(result, {Programme.ncd});
     });

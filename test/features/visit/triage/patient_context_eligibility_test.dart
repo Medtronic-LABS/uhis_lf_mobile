@@ -44,4 +44,13 @@ void main() {
       expect(_ctx(661).isReproductiveAge, isFalse);
     });
   });
+
+  group('PatientContext.isYoungChild (RMNCH childhoodVisit, 0-25mo exclusive)', () {
+    test('24mo is within the window', () {
+      expect(_ctx(24).isYoungChild, isTrue);
+    });
+    test('25mo is outside the window (exclusive upper bound)', () {
+      expect(_ctx(25).isYoungChild, isFalse);
+    });
+  });
 }

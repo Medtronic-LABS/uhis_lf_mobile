@@ -55,19 +55,31 @@ constant used for ANC/PNC's lower bound; the selectable card had no upper bound 
 the `588` literal with a new shared `reproductiveMaxAgeMonths = 661` constant, applied to FP, ANC, and
 PNC consistently in `pathway_rules_v1.dart` (ANC/PNC previously had no upper bound at all either).
 
-## Explicitly not changed, and why
+**5. RMNCH `childhoodVisit` (JSON: 0-25 months) vs. `PatientContext.isUnder5`'s under-5-year (0-59
+month) routing.** `isUnder5` was the only thing gating the Vaccination/Child Health (IMCI) service
+cards and `VisitFlowScreen._isChildVisit`'s routing into the vaccination/IMCI flow — a much broader
+band than RMNCH's `childhoodVisit` submodule. This was originally deferred (see git history) because
+narrowing it to 25 months removes the only working child-assessment flow for 26-59-month-olds, with no
+replacement built for that age band — a real coverage loss, not a pure parity fix. **Decision: fix it
+anyway, accepting that coverage loss**, since the JSON is the source of truth for this doc. Fixed:
+renamed `isUnder5` → `PatientContext.isYoungChild` (`ageMonths < 25`) — renamed rather than just
+re-thresholded, so the getter's name doesn't keep claiming "under 5" once its value means "under ~2"
+(the exact class of drift bug found elsewhere in this doc). Propagated to every consumer: the service
+cards and `_isChildVisit` in `symptom_picker_screen.dart`/`visit_flow_screen.dart`,
+`ProgrammeGridSync.catalogProgrammesFor`'s `isChildVisitEligible` parameter,
+`TriageViewModel`'s pediatric-context symptom pre-screen (which also drops NCD-tagged AI-Scribe codes
+for a "child" — now a 25-month band, not a 5-year one) and pre-expanded clusters, `PathwayEngine`'s
+EPI-due gate, and `BriefingFindingsAggregator`'s child-specific findings gate. Also updated
+`hasAnyEligibleProgramme` (`lib/core/clinical/service_eligibility.dart`), a years-only, best-effort
+duplicate of this same rule — its young-end band moved from `ageYears < 5` to a conservative,
+fail-open `ageYears < 3` approximation of the 25-month cutoff (months precision isn't available at
+its call sites without a larger plumbing change, out of scope here).
 
-**RMNCH `childhoodVisit` (JSON: 0-25 months) vs. `VisitFlowScreen._isChildVisit`'s under-5-year (0-59
-month) routing.** This looked like a candidate discrepancy but is a different concern, not a wrong
-number: `_isChildVisit` routes to a broader "child/EPI/IMCI" flow (`_Step2Vaccination` →
-`ImmunisationTimelineScreen` → `ChildAssessmentSection`, per `design/screen-map.md`) that handles
-sick-child assessment (IMCI) generally for the whole under-5 population — IMCI/EPI/TB do not appear as
-tools in this JSON at all, so the JSON has nothing to say about that routing decision. RMNCH's own
-narrow `childhoodVisit` submodule (0-25mo) is a distinct, currently-unimplemented concept (no Flutter
-code gates specifically on it) rather than an existing gate with the wrong threshold. Narrowing
-`_isChildVisit` to 25 months would stop routing 26-59-month-olds to the working IMCI/vaccination flow
-with no JSON-specified replacement — a functional regression, not a parity fix. **Needs a product/
-clinical scoping conversation before any code change here.**
+**Deliberately left alone:** `PathwayThresholds.imciMaxAgeMonths = 24` in `pathway_rules_v1.dart`,
+which gates whether IMCI/ICCM is *suggested* as a pathway (a different purpose than card/flow gating)
+and is sourced from "Bangladesh UHIS Phase 1 spec," not this JSON — it happens to be one month off
+from the JSON's 25 (24 exclusive vs. 25 exclusive), but that's a different, already-reviewed
+constant from a different authority, not the same bug.
 
 **Confirm Diagnosis** — no Flutter counterpart found. Android itself routes this around the per-patient
 age/gender gate entirely (a static, role-based provider menu item, not a per-patient clinical service),
@@ -85,4 +97,21 @@ community-worker app.
   `eyeCareCataractMinAgeMonths` (420) constants; Eye Care/Cataract gates now use the latter instead of
   `DemographicGate.any`; ANC/PNC/FamilyPlanning gates now include the shared upper bound.
 - `test/features/visit/triage/patient_context_eligibility_test.dart` (new) — boundary tests for the two
-  new getters.
+  new getters, plus `isYoungChild`.
+- `lib/features/visit/triage/patient_context_builder.dart` — renamed `isUnder5` → `isYoungChild`,
+  threshold `ageMonths < 60` → `ageMonths < 25`.
+- `lib/features/visit/triage/symptom_picker_screen.dart`,
+  `lib/features/visit/triage/triage_view_model.dart`,
+  `lib/features/visit/triage/programme_grid_sync.dart` (parameter rename to `isChildVisitEligible`),
+  `lib/features/visit/pathway/pathway_engine.dart`,
+  `lib/core/clinical/briefing_rules/briefing_findings_aggregator.dart` — propagated the
+  `isYoungChild` rename.
+- `lib/features/visit/visit_flow_screen.dart` — `_isChildVisit` now compares the existing
+  calendar-aware `_ageInMonths` getter against 25 months instead of `_patientAge! < 5` (years).
+- `lib/core/clinical/service_eligibility.dart` — `hasAnyEligibleProgramme`'s young-end band moved to
+  a conservative `ageYears < 3` approximation of the new 25-month cutoff.
+- `test/features/visit/triage/triage_view_model_test.dart`,
+  `test/features/scribe/scribe_prefill_test.dart`,
+  `test/core/clinical/service_eligibility_test.dart`,
+  `test/features/visit/triage/programme_grid_sync_test.dart` — updated fixtures/boundaries/parameter
+  name for the new 25-month cutoff.

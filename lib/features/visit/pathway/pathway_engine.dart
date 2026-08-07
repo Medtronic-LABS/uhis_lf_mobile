@@ -111,7 +111,7 @@ class PathwayEngine {
     }
 
     // Add EPI pathway if immunizations are overdue (scheduled pathway)
-    if (ctx.isEpiDue && ctx.isUnder5) {
+    if (ctx.isEpiDue && ctx.isYoungChild) {
       activated.add(ActivatedPathway(
         programme: Programme.imci, // EPI uses IMCI programme type
         priority: 100, // Scheduled pathways have priority >= 100
