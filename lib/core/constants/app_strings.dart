@@ -2921,8 +2921,10 @@ abstract final class TriageResultStrings {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Which service the Greet Warmly card's fallback content is written for —
-/// see [SymptomPickerStrings.sitWithGreetEnglishFor].
-enum _GreetWarmlyService { pregnancy, postpartum, tb, ncd, general }
+/// see [SymptomPickerStrings.sitWithGreetEnglishFor]. Only pregnancy and
+/// postpartum get a distinct question; every other service (TB, NCD, or
+/// nothing selected) shares one generic wellbeing question.
+enum _GreetWarmlyService { pregnancy, postpartum, general }
 
 /// Pregnancy stage bucket gating the fetal-movement question — see
 /// [SymptomPickerStrings.sitWithGreetEnglishFor].
@@ -2996,9 +2998,12 @@ abstract final class SymptomPickerStrings {
   //
   // The greeting line and hint also key off `selectedProgrammes` (the SK's
   // currently-ticked service cards) so an ANC visit asks pregnancy-relevant
-  // questions, an NCD visit asks about medicines, etc., instead of one
-  // question assumed for every adult woman regardless of why she's being
-  // seen. Within the pregnancy branch, `gestationalWeeks` further gates the
+  // questions and a PNC visit asks about postpartum recovery, instead of
+  // one question assumed for every adult woman regardless of why she's
+  // being seen. Every other service (TB, NCD, or nothing selected) shares
+  // one generic wellbeing question — no distinct question was worth
+  // maintaining for those. Within the pregnancy branch, `gestationalWeeks`
+  // further gates the
   // fetal-movement question to when it's actually meaningful — quickening
   // isn't felt in early pregnancy, so a 1-week patient must never be asked
   // "is the baby moving".
@@ -3006,7 +3011,8 @@ abstract final class SymptomPickerStrings {
   /// Which service the greeting/hint content should be written for, derived
   /// from the SK's currently-selected programme cards. Pregnancy takes
   /// priority over any other simultaneously-selected service since it's the
-  /// most safety-relevant context to greet correctly.
+  /// most safety-relevant context to greet correctly. TB and NCD don't get
+  /// a distinct question — they fall through to the general bucket.
   static _GreetWarmlyService _greetWarmlyServiceFor(
     Set<Programme>? selectedProgrammes,
   ) {
@@ -3015,8 +3021,6 @@ abstract final class SymptomPickerStrings {
       return _GreetWarmlyService.pregnancy;
     }
     if (p.contains(Programme.pnc)) return _GreetWarmlyService.postpartum;
-    if (p.contains(Programme.tb)) return _GreetWarmlyService.tb;
-    if (p.contains(Programme.ncd)) return _GreetWarmlyService.ncd;
     return _GreetWarmlyService.general;
   }
 
@@ -3078,18 +3082,10 @@ abstract final class SymptomPickerStrings {
         }
       case _GreetWarmlyService.postpartum:
         return '"আপু, প্রসবের পর আপনি কেমন বোধ করছেন?\nবাচ্চা কেমন খাচ্ছে?"';
-      case _GreetWarmlyService.tb:
-        return isFemale
-            ? '"আপু, আপনি কেমন বোধ করছেন?\nআজ কাশি বা জ্বর আছে কি?"'
-            : '"কাকা, আপনি কেমন বোধ করছেন?\nআজ কাশি বা জ্বর আছে কি?"';
-      case _GreetWarmlyService.ncd:
-        return isFemale
-            ? '"আপু, আপনি কেমন বোধ করছেন?\nনিয়মিত ওষুধ খাচ্ছেন তো?"'
-            : '"কাকা, আপনি কেমন বোধ করছেন?\nনিয়মিত ওষুধ খাচ্ছেন তো?"';
       case _GreetWarmlyService.general:
         return isFemale
-            ? '"আপু, আপনি কেমন আছেন?\nআজ কোনো কষ্ট হচ্ছে কি?"'
-            : '"কাকা, আপনি কেমন আছেন?\nকোথাও কষ্ট আছে কি?"';
+            ? '"আপু, আপনি কেমন বোধ করছেন?\nকোনো সমস্যা আছে কি?"'
+            : '"কাকা, আপনি কেমন বোধ করছেন?\nকোনো সমস্যা আছে কি?"';
     }
   }
 
@@ -3118,18 +3114,10 @@ abstract final class SymptomPickerStrings {
         }
       case _GreetWarmlyService.postpartum:
         return 'Sister, how are you feeling since delivery? How is the baby feeding?';
-      case _GreetWarmlyService.tb:
-        return isFemale
-            ? 'Sister, how are you feeling? Any cough or fever today?'
-            : 'Brother, how are you feeling? Any cough or fever today?';
-      case _GreetWarmlyService.ncd:
-        return isFemale
-            ? 'Sister, how are you feeling? Are you taking your medicines regularly?'
-            : 'Brother, how are you feeling? Are you taking your medicines regularly?';
       case _GreetWarmlyService.general:
         return isFemale
-            ? 'Sister, how are you? Is there anything troubling you today?'
-            : 'Brother, how are you? Are you feeling any discomfort?';
+            ? 'Sister, how are you feeling? Do you have any concern?'
+            : 'Brother, how are you feeling? Do you have any concern?';
     }
   }
 
@@ -3161,8 +3149,6 @@ abstract final class SymptomPickerStrings {
           'sitWithGreetHintPostpartum',
           'Ask how she feels at home, with family, and about her sleep — before the postnatal checkup',
         );
-      case _GreetWarmlyService.tb:
-      case _GreetWarmlyService.ncd:
       case _GreetWarmlyService.general:
         return getTranslatedString(
           'sitWithGreetHintFemaleGeneral',

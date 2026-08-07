@@ -651,7 +651,9 @@ void main() {
       );
     });
 
-    testWidgets('an NCD patient is asked about medicine adherence, not pregnancy',
+    testWidgets(
+        'an NCD patient is asked the generic wellbeing question, not '
+        'pregnancy or a medicine-specific one',
         (tester) async {
       await tester.pumpWidget(buildCard(
         isFemale: true,
@@ -659,7 +661,7 @@ void main() {
       ));
 
       expect(
-        find.text('Sister, how are you feeling? Are you taking your medicines regularly?'),
+        find.text('Sister, how are you feeling? Do you have any concern?'),
         findsOneWidget,
       );
 
@@ -669,19 +671,22 @@ void main() {
       ));
 
       expect(
-        find.text('Brother, how are you feeling? Are you taking your medicines regularly?'),
+        find.text('Brother, how are you feeling? Do you have any concern?'),
         findsOneWidget,
       );
     });
 
-    testWidgets('a TB patient is asked about cough/fever', (tester) async {
+    testWidgets(
+        'a TB patient is asked the same generic wellbeing question, not a '
+        'cough/fever-specific one',
+        (tester) async {
       await tester.pumpWidget(buildCard(
         isFemale: true,
         selectedProgrammes: {Programme.tb},
       ));
 
       expect(
-        find.text('Sister, how are you feeling? Any cough or fever today?'),
+        find.text('Sister, how are you feeling? Do you have any concern?'),
         findsOneWidget,
       );
     });
@@ -722,7 +727,7 @@ void main() {
       await tester.pumpWidget(buildCard(isFemale: true));
 
       expect(
-        find.text('Sister, how are you? Is there anything troubling you today?'),
+        find.text('Sister, how are you feeling? Do you have any concern?'),
         findsOneWidget,
       );
     });
