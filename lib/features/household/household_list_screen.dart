@@ -23,6 +23,7 @@ import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../visit/widgets/mission_queue_card.dart' show programmeBadgeColors;
+import 'enrollment/enrollment_dob.dart';
 import 'household_detail_screen.dart';
 
 /// Watches the Patients branch navigator; registered in `router.dart`.
@@ -1487,31 +1488,11 @@ class _MemberInfo {
 
   /// Age for list chips. Infants show months (`4m`) / days (`12d`) so under-1
   /// members are not displayed as `0/F`.
-  static String? ageDisplayLabel(String? dateOfBirth, {int? fallbackYears}) {
-    if (dateOfBirth != null && dateOfBirth.isNotEmpty) {
-      try {
-        final dob = DateTime.parse(dateOfBirth);
-        final now = DateTime.now();
-        var months =
-            (now.year - dob.year) * 12 + now.month - dob.month;
-        if (now.day < dob.day) months--;
-        if (months < 0) months = 0;
-        if (months < 24) {
-          if (months < 1) {
-            final days = now.difference(DateTime(dob.year, dob.month, dob.day))
-                .inDays;
-            if (days < 1) return '<1d';
-            return '${days}d';
-          }
-          return '${months}m';
-        }
-        return '${months ~/ 12}';
-      } catch (_) {}
-    }
-    if (fallbackYears == null) return null;
-    if (fallbackYears < 1) return '<1y';
-    return '$fallbackYears';
-  }
+  static String? ageDisplayLabel(String? dateOfBirth, {int? fallbackYears}) =>
+      EnrollmentAge.compactChipLabel(
+        dateOfBirth,
+        fallbackYears: fallbackYears,
+      );
 
   /// Create from _HouseholdMember and household context.
   factory _MemberInfo.fromMember(

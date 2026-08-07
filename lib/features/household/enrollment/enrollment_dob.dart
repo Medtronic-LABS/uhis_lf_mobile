@@ -111,4 +111,25 @@ class EnrollmentAge {
     if (months > 0) return '$months month${months == 1 ? '' : 's'} old';
     return days < 1 ? '< 1 day old' : '$days days old';
   }
+
+  /// Compact list/header chip: `12d` / `4m` under 24 months, else whole years.
+  /// Prefer this over raw `age` years so infants are never shown as `0/F`.
+  static String? compactChipLabel(String? dateOfBirth, {int? fallbackYears}) {
+    final dob = EnrollmentDob.parse(dateOfBirth);
+    if (dob != null) {
+      final age = EnrollmentAge.from(dob);
+      final totalMonths = age.years * 12 + age.months;
+      if (totalMonths < 24) {
+        if (totalMonths < 1) {
+          if (age.days < 1) return '<1d';
+          return '${age.days}d';
+        }
+        return '${totalMonths}m';
+      }
+      return '${age.years}';
+    }
+    if (fallbackYears == null) return null;
+    if (fallbackYears < 1) return '<1y';
+    return '$fallbackYears';
+  }
 }

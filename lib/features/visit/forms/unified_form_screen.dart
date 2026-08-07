@@ -11,6 +11,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/i18n/app_locale.dart';
 import '../../../core/theme/app_theme.dart';
+import '../widgets/form_fields/age_or_dob_field.dart';
 import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'childhood_visit.dart';
@@ -3465,7 +3466,19 @@ class _SectionCard extends StatelessWidget {
           onChanged: (v) => onFieldChanged(def.id, v),
         );
 
+      case WidgetHint.ageOrDob:
       case WidgetHint.ageYmd:
+        // Android AgeOrDob — DOB + age side-by-side (Add Member maths).
+        // ageOfLastChild saves via `_asDobWire` (date string or years→Jan 1).
+        // FP caps last-child age at 18; other AgeOrDob fields use enrollment max.
+        final maxAge = def.id == 'ageOfLastChild' ? 18 : 130;
+        return AgeOrDobField(
+          key: Key('unified_form_${def.id}_input'),
+          currentValue: currentValue?.toString(),
+          maxAgeYears: maxAge,
+          onChanged: (v) => onFieldChanged(def.id, v),
+        );
+
       case WidgetHint.pregnancyProfile:
       case WidgetHint.unknown:
         // Complex fields delegated to specialised widgets in Section overrides.

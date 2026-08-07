@@ -28,6 +28,7 @@ enum WidgetHint {
   dateField,
   bpField,
   ageYmd,
+  ageOrDob,
   infoLabel,
   textLabel,
   unknown;
@@ -63,6 +64,9 @@ enum WidgetHint {
         return WidgetHint.bpField;
       case 'AgeYmd':
         return WidgetHint.ageYmd;
+      // Android AgeOrDob (member registration / ageOfLastChild) — DOB + age.
+      case 'AgeOrDob':
+        return WidgetHint.ageOrDob;
       case 'InfoLabel':
       case 'InformationLabel':
         return WidgetHint.infoLabel;

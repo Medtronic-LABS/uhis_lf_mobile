@@ -37,6 +37,7 @@ import 'contact_sheet.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/widgets/gestational_age_card.dart';
 import '../../core/widgets/skeleton.dart';
+import '../household/enrollment/enrollment_dob.dart';
 import '../visit/triage/patient_context_builder.dart';
 import '../visit/visit_controller.dart';
 import '../visit/visit_start_helper.dart';
@@ -5476,32 +5477,8 @@ class _PatientDetailHeader extends StatelessWidget {
 
   /// Compact age for the header chip: `4m` under 24 months, else years.
   /// Matches household list / visit-header shorthand (not "4 months").
-  static String? _ageLabelFromDob(String? dob, int? ageYears) {
-    if (dob != null && dob.isNotEmpty) {
-      try {
-        final birth = DateTime.parse(dob);
-        final now = DateTime.now();
-        var months = (now.year - birth.year) * 12 +
-            (now.month - birth.month) -
-            (now.day < birth.day ? 1 : 0);
-        if (months < 0) months = 0;
-        if (months < 24) {
-          if (months < 1) {
-            final days = now
-                .difference(DateTime(birth.year, birth.month, birth.day))
-                .inDays;
-            if (days < 1) return '<1d';
-            return '${days}d';
-          }
-          return '${months}m';
-        }
-        return '${months ~/ 12}';
-      } catch (_) {}
-    }
-    if (ageYears == null) return null;
-    if (ageYears < 1) return '<1y';
-    return '$ageYears';
-  }
+  static String? _ageLabelFromDob(String? dob, int? ageYears) =>
+      EnrollmentAge.compactChipLabel(dob, fallbackYears: ageYears);
 }
 
 class _HeaderChip {

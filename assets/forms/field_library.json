@@ -2442,14 +2442,14 @@
   "ageOfLastChild": {
     "id": "ageOfLastChild",
     "label": "Age of last child",
-    "widgetHint": "AgeYMD",
+    "widgetHint": "AgeOrDob",
     "family": "pregnancyDetailsAndHistory",
     "orderId": 11,
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "gone",
-    "hint": "Enter number\n______ Yrs ______ Months\nIf child is under 1 year old, show in months only (enter 0 years and the number of months)",
-    "hintCulture": "সংখ্যা লিখুন\n______ বছর ______ মাস\nশিশুর বয়স ১ বছরের কম হলে শুধুমাত্র মাসে দেখানো হবে (০ বছর এবং মোট মাস লিখুন)।",
+    "hint": "DD/MM/YYYY",
+    "hintCulture": "দিন/মাস/বছর",
     "titleCulture": "সবচেয়ে ছোট সন্তানের বয়স কত?",
     "clinicalConcept": [
       {
