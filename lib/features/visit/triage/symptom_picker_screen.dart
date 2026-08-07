@@ -772,6 +772,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         isPostpartum: _patientContext?.isPostpartum ?? false,
         ancRevisitBlocked: ancRevisitBlocked,
         isDeliveryVisit: _isDelivery,
+        pncDismissedBySk: _skDismissedProgrammes.contains(Programme.pnc),
       );
 
       if (result.blockedReason != null) {
@@ -2333,7 +2334,13 @@ class _InlineServiceSelector extends StatelessWidget {
         hasOpenPregnancyEpisode: openPregnancyEpisode != null,
       );
     }
-    if (card.programme == Programme.pnc) return !ctx.isPostpartum;
+    // PNC's normal rule ("available once postpartum") can't fire during the
+    // very visit that records the delivery — isPostpartum isn't true until
+    // that submission lands. Carved out here so PNC is a genuinely optional,
+    // freely-toggleable card specifically on a delivery visit (default
+    // selected via ProgrammeGridSync.applyDeliverySelected, but the SK can
+    // untick it — see ServiceSelectionResolver.finalize's pncDismissedBySk).
+    if (card.programme == Programme.pnc) return !ctx.isPostpartum && !isDelivery;
     // FP is contraindicated during active pregnancy; available post-delivery.
     if (card.programme == Programme.familyPlanning) return pregnant;
     return false;
@@ -2372,6 +2379,32 @@ class _InlineServiceSelector extends StatelessWidget {
     return false;
   }
 
+  /// Message shown when the SK taps a locked card — mirrors [_isLocked]'s
+  /// per-card reasoning, branch for branch, so the two can't drift apart.
+  /// That drift was the root cause of a locked FP card (patient pregnant)
+  /// showing the ANC/PW-specific hint instead of an FP-specific one, and of
+  /// two more mismatches found alongside it (PW-locked-by-postpartum and
+  /// PW-locked-by-delivery both fell into the same generic fallback).
+  String _lockMessageFor(_ServiceCardDef card) {
+    final ctx = patientContext;
+    if (card.isPW) {
+      if (openPregnancyEpisode != null) return AppStrings.pwAlreadyEnrolledMessage;
+      if (isDelivery) return TriageStrings.ancDeliveryConflictHint;
+      if (ctx.isPostpartum) return TriageStrings.pwLockedPostpartumHint;
+    }
+    if (card.programme == Programme.anc) {
+      if (isDelivery) return TriageStrings.ancDeliveryConflictHint;
+      if (ancRevisitStatus.tooSoon) return _ancRevisitMessage(ancRevisitStatus);
+      return TriageStrings.pwHint; // locked because PW isn't selected yet
+    }
+    if (card.isDelivery) return TriageStrings.pregnancyOutcomeLockedHint;
+    if (card.programme == Programme.pnc) return TriageStrings.pncOnlyPostpartumHint;
+    if (card.programme == Programme.familyPlanning) {
+      return TriageStrings.fpLockedPregnantHint;
+    }
+    return TriageStrings.pwHint; // unreachable — every lockable card is covered above
+  }
+
   void _handleTap(BuildContext context, _ServiceCardDef card) {
     if (card.isVaccination) {
       if (vaccinationLocked) {
@@ -2393,20 +2426,10 @@ class _InlineServiceSelector extends StatelessWidget {
     }
     final alreadySelected = _isCardSelected(card);
     if (_isLocked(card) && !alreadySelected) {
-      final String hint;
-      if (isDelivery) {
-        hint = TriageStrings.ancDeliveryConflictHint;
-      } else if (card.isPW && openPregnancyEpisode != null) {
-        hint = AppStrings.pwAlreadyEnrolledMessage;
-      } else if (card.programme == Programme.anc && ancRevisitStatus.tooSoon) {
-        hint = _ancRevisitMessage(ancRevisitStatus);
-      } else {
-        hint = TriageStrings.pwHint;
-      }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
-          content: Text(hint),
+          content: Text(_lockMessageFor(card)),
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
         ));

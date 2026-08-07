@@ -90,7 +90,9 @@ abstract final class ServiceSelectionResolver {
   ///
   /// Ports, in order, the 4 rules that used to run in Step 2's
   /// `_hydrate()`:
-  /// 1. Delivery visits always include PNC.
+  /// 1. Delivery visits include PNC by default, unless the SK explicitly
+  ///    deselected it in the grid ([pncDismissedBySk]) — Pregnancy Outcome
+  ///    and PNC are independently selectable on a delivery visit.
   /// 2. **PW-once-only** — dropped silently when [pwRegistrationBlocked].
   ///    If that empties the selection, returns immediately with
   ///    [ServiceSelectionResult.silentlyEmptied] (no further rules run —
@@ -113,10 +115,11 @@ abstract final class ServiceSelectionResolver {
     required bool isPostpartum,
     required bool ancRevisitBlocked,
     bool isDeliveryVisit = false,
+    bool pncDismissedBySk = false,
   }) {
     var programmes = Set<Programme>.from(selected);
 
-    if (isDeliveryVisit) {
+    if (isDeliveryVisit && !pncDismissedBySk) {
       programmes.add(Programme.pnc);
     }
 

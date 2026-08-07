@@ -130,7 +130,7 @@ void main() {
   });
 
   group('ServiceSelectionResolver.finalize — delivery visit', () {
-    test('always includes PNC on a delivery visit', () {
+    test('includes PNC by default on a delivery visit', () {
       final result = ServiceSelectionResolver.finalize(
         selected: {Programme.ncd},
         pwRegistrationBlocked: false,
@@ -140,6 +140,22 @@ void main() {
       );
 
       expect(result.programmes, {Programme.ncd, Programme.pnc});
+    });
+
+    test('omits PNC when the SK explicitly deselected it in the grid', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.ncd},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        isDeliveryVisit: true,
+        pncDismissedBySk: true,
+      );
+
+      expect(result.programmes, {Programme.ncd},
+          reason: 'Pregnancy Outcome and PNC are independently selectable — '
+              'an explicit SK deselection must survive finalize(), not be '
+              'silently re-forced back on.');
     });
   });
 

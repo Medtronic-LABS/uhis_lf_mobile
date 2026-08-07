@@ -100,39 +100,49 @@ void main() {
   });
 
   // ===========================================================================
-  // Regression: Pregnancy Outcome must not be selectable without an actual
-  // open pregnancy episode. Previously the card's lock only checked the
-  // legacy `isPregnant` flag (derived from synced pregnancyFacts / enrolled
-  // programmes / a raw JSON flag — see PatientContextBuilder), independent of
-  // PregnancyEpisodeDao's own open-episode row. A patient could be flagged
-  // pregnant by a stale legacy signal with no actual PW registration, and
-  // Pregnancy Outcome would still show as available — offering to record the
-  // outcome of a pregnancy that was never formally registered. Found via
-  // manual device testing: "Patient P1 is not registered for PW, still
-  // Pregnancy Outcome is showing."
+  // Regression: when an open pregnancy episode DOES exist, Pregnancy Outcome
+  // must not be selectable based on the legacy `isPregnant` flag alone.
+  // Previously the card's lock only checked that flag (derived from synced
+  // pregnancyFacts / enrolled programmes / a raw JSON flag — see
+  // PatientContextBuilder), independent of PregnancyEpisodeDao's own
+  // open-episode row. A patient could be flagged pregnant by a stale legacy
+  // signal with no actual PW registration, and Pregnancy Outcome would still
+  // show as available — offering to record the outcome of a pregnancy that
+  // was never formally registered. Found via manual device testing: "Patient
+  // P1 is not registered for PW, still Pregnancy Outcome is showing."
+  //
+  // Deliberately narrower than the original fix: when NO episode exists at
+  // all, Outcome is now allowed regardless of `isPregnant` — direct entry for
+  // an SK reaching a household after the child is already born, with no
+  // prior PW/ANC visit. See the two tests below with `hasOpenPregnancyEpisode:
+  // false` — they now expect `isFalse`, not a regression of the bug above.
   // ===========================================================================
   group('ProgrammeGridSync.isPregnancyOutcomeLocked', () {
-    test('locked when not pregnant at all', () {
+    test('unlocked for direct entry — not pregnant, no episode, not postpartum', () {
       final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
         isPregnant: false,
         isPostpartum: false,
         hasOpenPregnancyEpisode: false,
       );
-      expect(locked, isTrue);
+      expect(locked, isFalse,
+          reason: 'No episode exists — this is the direct-entry case (SK '
+              'reached the household after delivery, no prior PW/ANC visit). '
+              'The legacy isPregnant flag has nothing to say when there is no '
+              'episode to check it against.');
     });
 
     test(
-        'BUG SCENARIO: locked when isPregnant flag is true but there is no '
-        'open pregnancy episode (never actually registered for PW)', () {
+        'unlocked for direct entry even when the legacy isPregnant flag is '
+        'true, as long as no episode exists', () {
       final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
         isPregnant: true,
         isPostpartum: false,
         hasOpenPregnancyEpisode: false,
       );
-      expect(locked, isTrue,
-          reason: 'Nothing was ever registered via PW — there is no '
-              'pregnancy episode to record an outcome for, regardless of '
-              'what the legacy isPregnant flag says.');
+      expect(locked, isFalse,
+          reason: 'Same direct-entry case — nothing was ever registered via '
+              'PW, but that is exactly the scenario this unlocks for, not a '
+              'reason to keep it locked.');
     });
 
     test('unlocked when pregnant AND an open pregnancy episode exists', () {

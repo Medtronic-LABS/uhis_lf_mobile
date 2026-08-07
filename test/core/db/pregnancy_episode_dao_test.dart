@@ -190,5 +190,26 @@ void main() {
       expect(projected?.lmpDate, 50000);
       expect(projected?.deliveryDateMillis, isNull);
     });
+
+    test(
+        'creates-and-closes a fresh episode in one shot when no episode ever '
+        'existed (direct Pregnancy Outcome entry, no prior PW/ANC)', () async {
+      final (_, snapshotDao, episodeDao) = await openTestDb();
+      const patientId = 'direct-outcome-entry';
+      expect(await episodeDao.openEpisodeFor(patientId), isNull);
+      expect(await episodeDao.mostRecentFor(patientId), isNull);
+
+      final closed = await episodeDao.closeEpisode(
+        patientId: patientId,
+        deliveryDateMillis: 12345,
+      );
+
+      expect(closed.isOpen, isFalse);
+      expect(closed.closedAt, isNotNull);
+      expect(closed.obstetric.deliveryDateMillis, 12345);
+
+      final projected = await snapshotDao.byPatient(patientId);
+      expect(projected?.deliveryDateMillis, 12345);
+    });
   });
 }

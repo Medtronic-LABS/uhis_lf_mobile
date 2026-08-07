@@ -100,22 +100,32 @@ abstract final class ProgrammeGridSync {
   /// Whether the Pregnancy Outcome (delivery) card should be locked
   /// (disabled) in the Step 1 service grid.
   ///
-  /// Recording a pregnancy outcome only makes sense when there's an actual
-  /// open pregnancy episode to close out. [isPregnant] alone isn't enough to
-  /// gate this — it's derived from three legacy signals (synced
+  /// When an open pregnancy episode exists, [isPregnant] alone isn't enough
+  /// to unlock this — it's derived from three legacy signals (synced
   /// `pregnancyFacts`, `activeProgrammes.contains(Programme.pw)`, or a raw
   /// JSON flag on the patient record, see `PatientContextBuilder`) that can
   /// disagree with `PregnancyEpisodeDao`'s own open-episode row — e.g. a
   /// patient flagged pregnant by a stale/legacy signal but never actually
-  /// registered (no open episode). Locked whenever either signal alone would
-  /// say "nothing to record": not pregnant, already postpartum, or no open
-  /// episode exists.
+  /// registered (no open episode). This is the original bug this function
+  /// was written to fix: *"Patient P1 is not registered for PW, still
+  /// Pregnancy Outcome is showing."*
+  ///
+  /// When NO episode exists at all, though, Outcome is deliberately
+  /// unlocked regardless of `isPregnant` — this supports an SK reaching a
+  /// household *after* the child is already born, with no prior PW/ANC visit
+  /// and therefore no local episode to check `isPregnant` against.
+  /// Submitting in this state creates-and-closes a fresh episode in one
+  /// shot (see `PregnancyEpisodeDao.closeEpisode` and
+  /// `UnifiedFormNotifier._persistPregnancyEpisodeAfterSubmit`). Don't
+  /// re-lock this branch — it's an intentional allowance, not a regression
+  /// of the bug fix above.
   static bool isPregnancyOutcomeLocked({
     required bool isPregnant,
     required bool isPostpartum,
     required bool hasOpenPregnancyEpisode,
   }) {
-    final pregnant = isPregnant && !isPostpartum;
-    return !pregnant || !hasOpenPregnancyEpisode;
+    if (isPostpartum) return true;
+    if (hasOpenPregnancyEpisode) return !isPregnant;
+    return false;
   }
 }

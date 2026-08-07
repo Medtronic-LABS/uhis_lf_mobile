@@ -1698,14 +1698,33 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
     if (!hasPw && !hasAnc && !hasPnc) {
       // PREGNANCY_OUTCOME / CHILDHOOD_VISIT / CHILD_MENU only — these read
-      // the relevant episode id but don't mutate it. Pregnancy Outcome's
-      // actual close happens later, in VisitFormScreen's background
+      // the relevant episode id but don't mutate it, EXCEPT for a direct-
+      // entry Pregnancy Outcome (see below). Pregnancy Outcome's actual
+      // close normally happens later, in VisitFormScreen's background
       // housekeeping (after this submit returns); a childhood/IMCI visit for
       // an already-born baby must reuse the mother's episode, not start a
       // new one, even if that episode is already closed.
       final open = await _pregnancyEpisodeDao.openEpisodeFor(localId);
       if (open != null) return open.id;
-      return (await _pregnancyEpisodeDao.mostRecentFor(localId))?.id;
+      final mostRecent = await _pregnancyEpisodeDao.mostRecentFor(localId);
+      if (mostRecent != null) return mostRecent.id;
+      // CHILDHOOD_VISIT/CHILD_MENU must never create an episode — only a
+      // direct-entry Pregnancy Outcome (no PW/ANC ever ran, no episode ever
+      // existed) creates-and-closes one here, so this submit's own payload
+      // carries the new episode id instead of syncing with a null one.
+      final isOutcome = types.contains('PREGNANCY_OUTCOME') ||
+          types.contains('PREGNANCYOUTCOME');
+      if (!isOutcome) return null;
+      final deliveryRaw =
+          _data.getValue('dateOfDelivery') ?? _data.getValue('deliveryDate');
+      final deliveryMs = deliveryRaw is String
+          ? DateTime.tryParse(deliveryRaw)?.millisecondsSinceEpoch
+          : null;
+      final created = await _pregnancyEpisodeDao.closeEpisode(
+        patientId: localId,
+        deliveryDateMillis: deliveryMs ?? DateTime.now().millisecondsSinceEpoch,
+      );
+      return created.id;
     }
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
