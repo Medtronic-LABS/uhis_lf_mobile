@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 
+import '../../features/assistant/assistant_models.dart';
 import '../../features/visit/immunisation/epi_visit_summary.dart';
 import '../i18n/app_locale.dart';
 import '../models/dashboard_tier.dart';
@@ -133,6 +134,8 @@ abstract final class LoginStrings {
   static String get forgotPasswordSend => getTranslatedString('forgotPasswordSend', 'Send reset link');
   static String get forgotPasswordSuccess => getTranslatedString('forgotPasswordSuccess', 'Password reset link sent. Check your email.');
   static String get emailLabel => getTranslatedString('emailLabel', 'Email');
+  static String get showPasswordTooltip => getTranslatedString('Login.showPasswordTooltip', 'Show password');
+  static String get hidePasswordTooltip => getTranslatedString('Login.hidePasswordTooltip', 'Hide password');
 }
 
 /// Lock / unlock screen + mid-session lock barrier.
@@ -188,6 +191,7 @@ abstract final class LockStrings {
   static String get programSubtitle => getTranslatedString('programSubtitle', 'Apon Sushashthya · Community Health');
   static String orUsePin(int len) => getTranslatedString('orUsePin', 'Use {len}-digit PIN', params: {'len': '$len'});
   static String get orDividerLabel => getTranslatedString('Lock.orDividerLabel', 'OR');
+  static String get fingerprintSemanticLabel => getTranslatedString('Lock.fingerprintSemanticLabel', 'Authenticate with fingerprint');
 }
 
 /// Android `BiometricPrompt` copy + biometric unlock messages.
@@ -205,6 +209,34 @@ abstract final class AuthStrings {
 
   static String get savedSessionExpired => getTranslatedString('savedSessionExpired', 'Saved session expired — sign in again');
   static String get sessionExpired => getTranslatedString('sessionExpired', 'Session expired');
+  static String get invalidCredentials => getTranslatedString('Auth.invalidCredentials', 'Invalid credentials');
+  static String get tenantIdMissing => getTranslatedString('Auth.tenantIdMissing', 'Login response missing tenantId');
+  static String get noActiveSessionToEnrol => getTranslatedString('Auth.noActiveSessionToEnrol', 'No active session to enrol');
+}
+
+/// Network / transport failure copy. Single source for every message
+/// `NetworkErrorMapper` surfaces in login, lock, PIN, scribe and assistant.
+abstract final class NetworkErrorStrings {
+  NetworkErrorStrings._();
+
+  static String get connectionTimedOut => getTranslatedString(
+      'NetworkError.connectionTimedOut', 'Connection timed out. Check your signal and try again.');
+  static String get requestCancelled => getTranslatedString(
+      'NetworkError.requestCancelled', 'Request was cancelled. Please try again.');
+  static String get noInternet => getTranslatedString(
+      'NetworkError.noInternet', 'No internet connection. Check your signal and try again.');
+  static String get accessDenied => getTranslatedString(
+      'NetworkError.accessDenied', 'Access denied. Please log out and log back in.');
+  static String get notFound => getTranslatedString(
+      'NetworkError.notFound', 'The requested data was not found.');
+  static String get serverBusy => getTranslatedString(
+      'NetworkError.serverBusy', 'Server is busy. Please try again in a moment.');
+  static String get serverError => getTranslatedString(
+      'NetworkError.serverError', 'Server error. Please try again in a moment.');
+
+  /// Reuses [SyncStrings.syncErrorGeneric] — identical English copy, so it
+  /// shares that translation key rather than registering a duplicate.
+  static String get somethingWentWrong => SyncStrings.syncErrorGeneric;
 }
 
 /// Dashboard screen: greeting, stat cards, biometric-offer dialog, menu.
@@ -477,6 +509,29 @@ abstract final class RealtimeAsrStrings {
   static String get chiefComplaints => getTranslatedString('chiefComplaints', 'Chief Complaints');
   static String get comorbidities => getTranslatedString('comorbidities', 'Comorbidities');
   static String get complications => getTranslatedString('complications', 'Complications');
+
+  static String connectionError(String detail) => getTranslatedString(
+      'RealtimeAsr.connectionError', 'Connection error: {detail}', params: {'detail': detail});
+  static String couldNotStart(String detail) => getTranslatedString(
+      'RealtimeAsr.couldNotStart', 'Could not start real-time ASR: {detail}', params: {'detail': detail});
+  static String get noMicSignal => getTranslatedString(
+      'RealtimeAsr.noMicSignal', 'No mic signal detected — check the device microphone.');
+  static String get micSignalStuck => getTranslatedString(
+      'RealtimeAsr.micSignalStuck',
+      'Mic signal looks stuck/invalid — check the device microphone '
+          '(on an emulator, try a cold restart with host audio input enabled, '
+          'or test on a physical device).');
+
+  // "Label: {value}" prefixes for the live-extraction summary line. Distinct
+  // from the bare-label getters above, which carry no colon and no value.
+  static String bloodPressurePrefix(String bp) => getTranslatedString(
+      'RealtimeAsr.bloodPressurePrefix', 'BP: {bp}', params: {'bp': bp});
+  static String glucosePrefix(String glucose) => getTranslatedString(
+      'RealtimeAsr.glucosePrefix', 'Glucose: {glucose}', params: {'glucose': glucose});
+  static String diagnosisPrefix(String diagnosis) => getTranslatedString(
+      'RealtimeAsr.diagnosisPrefix', 'Diagnosis: {diagnosis}', params: {'diagnosis': diagnosis});
+  static String comorbiditiesPrefix(String list) => getTranslatedString(
+      'RealtimeAsr.comorbiditiesPrefix', 'Comorbidities: {list}', params: {'list': list});
 }
 
 /// Global search bar, scopes, result sections, and detail snackbars.
@@ -533,6 +588,7 @@ abstract final class PinStrings {
   static String usePin(int len) => getTranslatedString('usePin', 'Use {len}-digit PIN', params: {'len': '$len'});
   static String get usePinShort => getTranslatedString('usePinShort', 'Use PIN');
   static String attemptsRemaining(int n) => getTranslatedString('attemptsRemaining', '{n} attempts remaining', params: {'n': '$n'});
+  static String get backTooltip => getTranslatedString('Pin.backTooltip', 'Back');
 }
 
 /// First-login data sync: the guided "downloading your ward" gate and the
@@ -652,6 +708,27 @@ abstract final class HouseholdListStrings {
 }
 
 /// Household detail screen strings.
+/// Shared date-formatting copy. Single home for month abbreviations, which
+/// were previously duplicated as a raw `['Jan', 'Feb', …]` array in three files.
+abstract final class DateFormatStrings {
+  DateFormatStrings._();
+
+  static const _codes = [
+    'DateFormat.monthJan', 'DateFormat.monthFeb', 'DateFormat.monthMar',
+    'DateFormat.monthApr', 'DateFormat.monthMay', 'DateFormat.monthJun',
+    'DateFormat.monthJul', 'DateFormat.monthAug', 'DateFormat.monthSep',
+    'DateFormat.monthOct', 'DateFormat.monthNov', 'DateFormat.monthDec',
+  ];
+  static const _fallbacks = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  /// [month] is 1-indexed (1 = January).
+  static String monthAbbrev(int month) =>
+      getTranslatedString(_codes[month - 1], _fallbacks[month - 1]);
+}
+
 abstract final class HouseholdDetailStrings {
   HouseholdDetailStrings._();
 
@@ -672,6 +749,8 @@ abstract final class HouseholdDetailStrings {
   static String get householdIdNotAvailable => getTranslatedString('householdIdNotAvailable', 'Household ID not available');
 
   static String memberDataNotLoaded(int count) => getTranslatedString('memberDataNotLoaded', 'This household has {count} members.\nDetailed member information will be available once data is synced.', params: {'count': '$count'});
+
+  static String get addMember => getTranslatedString('HouseholdDetail.addMember', 'Add Member');
 }
 
 /// AI Worklist (Screen 2): chip filter labels, programme tags, urgent banner,
@@ -682,6 +761,7 @@ abstract final class WorklistStrings {
 
   static String get urgencyToday => getTranslatedString('Worklist.urgencyToday', 'Today');
   static String get urgencyThisWeek => getTranslatedString('Worklist.urgencyThisWeek', 'This week');
+  static String get unnamedPatient => getTranslatedString('Worklist.unnamedPatient', '(Unnamed patient)');
 }
 
 /// Patient Context Screen (stub) strings. Full design lives in a later spec.
@@ -863,6 +943,9 @@ abstract final class PatientContextStrings {
         '$count record${count == 1 ? '' : 's'}  ·  tap to open visit',
         params: {'count': '$count'},
       );
+
+  static String get startVisitFailed => getTranslatedString('PatientContext.startVisitFailed', 'Failed to start visit');
+  static String get startingEllipsis => getTranslatedString('PatientContext.startingEllipsis', 'Starting...');
 }
 
 /// Copy for the patient profile card — collapsible demographic section
@@ -1031,6 +1114,24 @@ abstract final class ReferralStrings {
   static String notifWarningBody(String patient, String reason) => getTranslatedString('notifWarningBody', '{patient} — {reason}', params: {'patient': '$patient', 'reason': '$reason'});
   static String notifCompletionBody(String patient) => getTranslatedString('notifCompletionBody', '{patient} discharged successfully.', params: {'patient': '$patient'});
 
+  // `ReferralRepository._titleFor` / `._bodyFor`. Deliberately distinct from
+  // notifCriticalTitle ('🔴 SLA BREACHED') and notifCompletionTitle
+  // ('🟢 Treatment completed') — that copy differs and must not be swapped in.
+  static String get notifSlaBreachTitle =>
+      getTranslatedString('Referral.notifSlaBreachTitle', '🔴 SLA breach');
+  static String get notifReferralCompletedTitle =>
+      getTranslatedString('Referral.notifReferralCompletedTitle', '🟢 Referral completed');
+  static String get notifGenericTitle =>
+      getTranslatedString('Referral.notifGenericTitle', 'Referral update');
+  static String get notifDefaultBody =>
+      getTranslatedString('Referral.notifDefaultBody', 'Open referral needs your attention.');
+
+  // Status-event reasons, persisted on ReferralStatusEventRow.reason.
+  static String escalatedToLevel(int level) => getTranslatedString(
+      'Referral.escalatedToLevel', 'Escalated to level {level}', params: {'level': '$level'});
+  static String bulkClosedBy(String actor) => getTranslatedString(
+      'Referral.bulkClosedBy', 'Bulk closed by {actor}', params: {'actor': actor});
+
   // ── Permission rationale (in-app card before OS prompt) ─────────────────
   static String get permissionRationaleTitle => getTranslatedString('permissionRationaleTitle', 'Enable referral alerts');
   static String get permissionRationaleBody => getTranslatedString('permissionRationaleBody', 'Get notified when a referral is delayed or breaches its SLA — even when the app is closed.');
@@ -1060,6 +1161,106 @@ abstract final class ReferralStrings {
   static String msgGreeting(String name) => getTranslatedString('msgGreeting', 'Hello {name}, ', params: {'name': '$name'});
   static String get msgIntro => getTranslatedString('msgIntro', 'this is UHIS Health Worker. ');
   static String get msgGenericOutreach => getTranslatedString('msgGenericOutreach', 'we are reaching out regarding your health care. ');
+
+  // ── Narrative — short reason labels (referral_narrative.shortReasonLabel) ─
+  // 'Danger sign' / 'High BP' duplicate PatientContextStrings.dangerSignBadge /
+  // .highBpBadge by text only — those back timeline badges, an unrelated
+  // surface, so they stay independently translatable.
+  static String get shortReasonBloodGlucoseElevated =>
+      getTranslatedString('Referral.shortReasonBloodGlucoseElevated', 'Blood glucose elevated');
+  static String get shortReasonAbnormalPulse =>
+      getTranslatedString('Referral.shortReasonAbnormalPulse', 'Abnormal pulse');
+  static String get shortReasonHighBp =>
+      getTranslatedString('Referral.shortReasonHighBp', 'High BP');
+  static String get shortReasonLowHbAnemia =>
+      getTranslatedString('Referral.shortReasonLowHbAnemia', 'Low Hb / Anemia');
+  static String get shortReasonDangerSign =>
+      getTranslatedString('Referral.shortReasonDangerSign', 'Danger sign');
+  static String get shortReasonElevatedTemp =>
+      getTranslatedString('Referral.shortReasonElevatedTemp', 'Elevated temperature');
+  static String get shortReasonLowWeight =>
+      getTranslatedString('Referral.shortReasonLowWeight', 'Low weight');
+  static String get shortReasonLowAdherence =>
+      getTranslatedString('Referral.shortReasonLowAdherence', 'Low medication adherence');
+  static String get shortReasonNoFpMethod =>
+      getTranslatedString('Referral.shortReasonNoFpMethod', 'No FP method');
+  static String get shortReasonSupplementGap =>
+      getTranslatedString('Referral.shortReasonSupplementGap', 'Supplement gap');
+  static String get shortReasonVisitOverdue =>
+      getTranslatedString('Referral.shortReasonVisitOverdue', 'Visit overdue');
+  static String get shortReasonClinicalSymptoms =>
+      getTranslatedString('Referral.shortReasonClinicalSymptoms', 'Clinical symptoms');
+
+  // ── Narrative — findings sentences (referral_narrative.buildReferralNarrative)
+  static String dangerSignReported(String dSign) => getTranslatedString(
+      'Referral.dangerSignReported', 'Danger sign reported: {dSign}.', params: {'dSign': dSign});
+  static String get dangerSignReportedGeneric => getTranslatedString(
+      'Referral.dangerSignReportedGeneric', 'Danger sign reported — urgent attention required.');
+
+  static String bpDangerouslyElevated(String bp) => getTranslatedString(
+      'Referral.bpDangerouslyElevated', 'BP {bp} is dangerously elevated — urgent referral needed.',
+      params: {'bp': bp});
+  static String bpAboveNormal(String bp) => getTranslatedString(
+      'Referral.bpAboveNormal', 'BP {bp} is above the normal — review and follow-up required.',
+      params: {'bp': bp});
+  static String get bpAboveNormalGeneric => getTranslatedString(
+      'Referral.bpAboveNormalGeneric', 'BP is above the normal — review and follow-up required.');
+
+  static String bloodSugarElevated(String bg, String bgType) => getTranslatedString(
+      'Referral.bloodSugarElevated',
+      'Blood sugar {bg} mmol/L ({bgType}) is elevated — review and follow-up required.',
+      params: {'bg': bg, 'bgType': bgType});
+  static String get bloodSugarElevatedGeneric => getTranslatedString(
+      'Referral.bloodSugarElevatedGeneric', 'Blood sugar is elevated — review and follow-up required.');
+
+  static String severeAnemiaWithValue(String hb) => getTranslatedString(
+      'Referral.severeAnemiaWithValue', 'Severe anemia (Hb {hb} g/dL) — urgent review needed.',
+      params: {'hb': hb});
+  static String anemiaWithValue(String hb) => getTranslatedString(
+      'Referral.anemiaWithValue', 'Anemia (Hb {hb} g/dL) — review iron supplementation.',
+      params: {'hb': hb});
+  static String get severeAnemiaGeneric => getTranslatedString(
+      'Referral.severeAnemiaGeneric', 'Severe anemia — urgent review needed.');
+
+  // Two full sentences rather than splicing a translated 'above'/'below'
+  // fragment mid-sentence, which breaks word order in many languages.
+  static String pulseAboveNormal(String pulse) => getTranslatedString(
+      'Referral.pulseAboveNormal', 'Pulse {pulse} bpm is above normal — needs urgent attention.',
+      params: {'pulse': pulse});
+  static String pulseBelowNormal(String pulse) => getTranslatedString(
+      'Referral.pulseBelowNormal', 'Pulse {pulse} bpm is below normal — needs urgent attention.',
+      params: {'pulse': pulse});
+  static String get pulseAbnormalGeneric => getTranslatedString(
+      'Referral.pulseAbnormalGeneric', 'Pulse is abnormal — needs urgent attention.');
+
+  static String temperatureElevated(String tempC) => getTranslatedString(
+      'Referral.temperatureElevated', 'Temperature {tempC}°C is elevated — needs urgent attention.',
+      params: {'tempC': tempC});
+  static String get elevatedTemperatureGeneric => getTranslatedString(
+      'Referral.elevatedTemperatureGeneric', 'Elevated temperature — needs urgent attention.');
+
+  static String lowWeightWithValue(String wt) => getTranslatedString(
+      'Referral.lowWeightWithValue', 'Low weight ({wt} kg) — monitor nutrition.', params: {'wt': wt});
+  static String get lowWeightGeneric => getTranslatedString(
+      'Referral.lowWeightGeneric', 'Low weight detected — monitor nutrition.');
+
+  static String get medicationAdherenceLow => getTranslatedString(
+      'Referral.medicationAdherenceLow', 'Medication adherence is low — confirm daily intake.');
+  static String get noContraceptionMethod => getTranslatedString(
+      'Referral.noContraceptionMethod', 'No contraception method in use — counsel on options.');
+  static String get supplementGapNarrative => getTranslatedString(
+      'Referral.supplementGapNarrative', 'Supplement gap — ensure continued supplementation.');
+  static String get visitOverdueNarrative => getTranslatedString(
+      'Referral.visitOverdueNarrative', 'Visit overdue — schedule follow-up urgently.');
+  static String get clinicalSymptomsPresent => getTranslatedString(
+      'Referral.clinicalSymptomsPresent', 'Clinical symptoms present — review and follow-up required.');
+
+  /// Terminates an already-localized [label]; a getter so locales that end
+  /// sentences differently (e.g. '।') can override the punctuation.
+  static String labelWithPeriod(String label) => getTranslatedString(
+      'Referral.labelWithPeriod', '{label}.', params: {'label': label});
+  static String get referredForClinicalReviewFallback => getTranslatedString(
+      'Referral.referredForClinicalReviewFallback', 'Referred for clinical review — follow-up required.');
 }
 
 /// AI Mission Dashboard strings (Screen 2 redesign).
@@ -1225,6 +1426,8 @@ abstract final class MissionDashboardStrings {
   static String get discharged => getTranslatedString('discharged', 'Discharged');
   static String get followUpDue => getTranslatedString('MissionDashboard.followUpDue', 'Follow-up Due');
   static String get tomorrow => getTranslatedString('tomorrow', 'Tomorrow');
+  static String get yesterday => getTranslatedString('MissionDashboard.yesterday', 'Yesterday');
+  static String daysAgo(int n) => getTranslatedString('MissionDashboard.daysAgo', '{n} days ago', params: {'n': '$n'});
   static String get today => getTranslatedString('MissionDashboard.today', 'Today');
   static String daysAway(int days) {
     if (days == 0) return today;
@@ -1449,6 +1652,97 @@ abstract final class MissionDashboardStrings {
     }
   }
 
+  // ── `_buildAiInsight` envelope sentences ─────────────────────────────────
+  static String get insightScheduledCheckUp =>
+      getTranslatedString('MissionDashboard.insightScheduledCheckUp', 'Scheduled for regular check-up.');
+  static String get insightRequiresAttention =>
+      getTranslatedString('MissionDashboard.insightRequiresAttention', 'Requires attention.');
+
+  /// AI-insight sentence for a driver tag. Twin of [driverLabel].
+  /// [days] carries the numeric suffix of an `overdue:<n>` tag.
+  static String driverInsight(String tag, {String? days}) =>
+      driverInsightOrNull(tag, days: days) ?? insightRequiresAttention;
+
+  /// Null-returning variant. `MissionDashboardService._buildAiInsight` relies
+  /// on `null` to mean "this tag contributes no sentence" (e.g. `band1-severe`,
+  /// `danger-sign`, `stroke-sign`, `eclampsia`); substituting the generic
+  /// default there would add a sentence that today's output does not have.
+  static String? driverInsightOrNull(String tag, {String? days}) {
+    switch (tag) {
+      case 'sla-breached':
+        return getTranslatedString(
+            'MissionDashboard.driverInsightSlaBreached', 'SLA breached — immediate action required.');
+      case 'child-under-5':
+        return getTranslatedString(
+            'MissionDashboard.driverInsightChildUnder5', 'Child under 5 — higher priority.');
+      case 'pregnancy':
+        return insightHighRiskPregnancy;
+      case 'urgent-risk':
+        return getTranslatedString(
+            'MissionDashboard.driverInsightUrgentRisk', 'Urgent clinical risk identified.');
+      case 'high-risk':
+        return getTranslatedString('MissionDashboard.driverInsightHighRisk', 'High clinical risk.');
+      case 'overdue':
+        return (days != null && days.isNotEmpty)
+            ? getTranslatedString('MissionDashboard.driverInsightOverdueDays',
+                'Overdue by {days} days.', params: {'days': days})
+            : getTranslatedString('MissionDashboard.driverInsightVisitOverdue', 'Visit overdue.');
+      case 'no-arrival':
+        return insightPatientNeverArrived;
+      case 'emergency-dx':
+        return insightEmergencyDiagnosis;
+      case 'missed-follow-up':
+        return getTranslatedString(
+            'MissionDashboard.driverInsightMissedFollowUp', 'Missed scheduled follow-up.');
+      case 'referral':
+        return getTranslatedString(
+            'MissionDashboard.driverInsightReferral', 'Active referral requires tracking.');
+      case 'follow-up':
+        return getTranslatedString(
+            'MissionDashboard.driverInsightFollowUp', 'Post-discharge follow-up due.');
+      default:
+        return null;
+    }
+  }
+
+  // ── MissionDashboardService fallbacks ────────────────────────────────────
+  static String get memberFallback => getTranslatedString('MissionDashboard.memberFallback', 'Member');
+  static String get checkUpFallback => getTranslatedString('MissionDashboard.checkUpFallback', 'Check-up');
+
+  /// Placeholder title for a referral whose patient record has not synced yet.
+  /// The caller passes the already-truncated id, so one getter covers both the
+  /// long- and short-id branches.
+  static String patientLabel(String id) =>
+      getTranslatedString('MissionDashboard.patientLabel', 'Patient {id}', params: {'id': id});
+
+  /// Distinct from `badgeReferral`, whose block is deliberately kept in Latin
+  /// script; this reason line must stay translatable.
+  static String get referralFallback =>
+      getTranslatedString('MissionDashboard.referralFallback', 'Referral');
+
+  /// Distinct from `followUpDue` ('Follow-up Due') — this fallback is lower-case.
+  static String get followUpDueFallback =>
+      getTranslatedString('MissionDashboard.followUpDueFallback', 'Follow-up due');
+
+  // AI brief risk factors — no trailing periods, matching the live literals.
+  static String riskReferralOverdue(int days) => getTranslatedString(
+      'MissionDashboard.riskReferralOverdue', 'Referral overdue by {days} days', params: {'days': '$days'});
+  static String riskPatientsWaiting(int n) => getTranslatedString(
+      'MissionDashboard.riskPatientsWaiting', '{n} patient(s) waiting for facility review',
+      params: {'n': '$n'});
+  static String riskMissedFollowUps(int n) => getTranslatedString(
+      'MissionDashboard.riskMissedFollowUps', '{n} patient(s) missed follow-up', params: {'n': '$n'});
+
+  /// Trailing word of the visit badge, e.g. 'ANC Visit 3 due'.
+  static String get dueSuffix => getTranslatedString('MissionDashboard.dueSuffix', 'due');
+
+  /// Title-case twin used only by the PNC badge, which renders 'PNC Visit 2 Due'
+  /// today. Both badges are drawn by byte-identical `Text` widgets, so this is
+  /// an inconsistency rather than deliberate title-case — kept separate to
+  /// preserve current rendering until product signs off on unifying the casing.
+  static String get dueSuffixTitleCase =>
+      getTranslatedString('MissionDashboard.dueSuffixTitleCase', 'Due');
+
   // ── Notification drawer ──────────────────────────────────────────────────
   static String get notificationsTitle => getTranslatedString('notificationsTitle', 'Notifications');
   static String get close => getTranslatedString('MissionDashboard.close', 'Close');
@@ -1473,6 +1767,77 @@ abstract final class MissionDashboardStrings {
   static String get noVisitsScheduledToday => getTranslatedString('MissionDashboard.noVisitsScheduledToday', 'No visits scheduled today');
   static String get aiIdentifiedMultiServiceVisits => getTranslatedString('MissionDashboard.aiIdentifiedMultiServiceVisits', 'AI-identified multi-service visits');
   static String get celebrationEmoji => getTranslatedString('MissionDashboard.celebrationEmoji', '🎉');
+
+  // ── Shared filter-chip Semantics template ────────────────────────────────
+  static String filterBy(String label) =>
+      getTranslatedString('MissionDashboard.filterBy', 'Filter by {label}', params: {'label': label});
+  static String filterSelected(String label) => getTranslatedString(
+      'MissionDashboard.filterSelected', '{label} filter, selected', params: {'label': label});
+  static String filterUnavailable(String label) => getTranslatedString(
+      'MissionDashboard.filterUnavailable', '{label} filter, unavailable', params: {'label': label});
+
+  /// Selected-state Semantics label for `VisitTierChip`. Deliberately NOT the
+  /// same text as [filterSelected] — the tier chip toggles off, the need
+  /// bubble does not.
+  static String removeFilter(String label) => getTranslatedString(
+      'MissionDashboard.removeFilter', 'Remove filter: {label}', params: {'label': label});
+
+  static String get searchResultsNotInQueue => getTranslatedString(
+      'MissionDashboard.searchResultsNotInQueue', "Search results — not in today's queue");
+
+  /// Gender wire value → display label. The value arrives raw and unnormalised
+  /// from the sync payload's `gender`/`sex` field, so unrecognised values pass
+  /// through untranslated rather than being swallowed.
+  static const Map<String, String> _genderFallbackLabels = {
+    'male': 'Male',
+    'm': 'Male',
+    'female': 'Female',
+    'f': 'Female',
+    'other': 'Other',
+    'o': 'Other',
+  };
+
+  static String genderLabel(String raw) {
+    final key = raw.trim().toLowerCase();
+    final fallback = _genderFallbackLabels[key];
+    if (fallback == null) return raw;
+    return getTranslatedString('MissionDashboard.gender_$key', fallback);
+  }
+
+  static String referralAlertsSemantic(int total) => getTranslatedString(
+      'MissionDashboard.referralAlertsSemantic', 'Referral alerts: {total}', params: {'total': '$total'});
+  static String notificationsCountSemantic(int count) => getTranslatedString(
+      'MissionDashboard.notificationsCountSemantic', '{count} notifications', params: {'count': '$count'});
+
+  static String get expandRiskFactors =>
+      getTranslatedString('MissionDashboard.expandRiskFactors', 'Expand risk factors');
+  static String get collapseRiskFactors =>
+      getTranslatedString('MissionDashboard.collapseRiskFactors', 'Collapse risk factors');
+
+  static String get openAiBriefCritical =>
+      getTranslatedString('MissionDashboard.openAiBriefCritical', 'Open AI brief — critical items today');
+  static String get openAiBrief => getTranslatedString('MissionDashboard.openAiBrief', 'Open AI brief');
+
+  static String get urgentSuffix => getTranslatedString('MissionDashboard.urgentSuffix', 'urgent');
+  static String get workSuffix => getTranslatedString('MissionDashboard.workSuffix', 'work');
+
+  static String todaysProgressHeader(String date) => getTranslatedString(
+      'MissionDashboard.todaysProgressHeader', "Today's Progress · {date}", params: {'date': date});
+
+  static String openCriticalCase(String name) => getTranslatedString(
+      'MissionDashboard.openCriticalCase', 'Open critical case: {name}', params: {'name': name});
+  static String moreAlerts(int n) => getTranslatedString(
+      'MissionDashboard.moreAlerts', '+$n more alert${n == 1 ? '' : 's'}', params: {'n': '$n'});
+  static String get dismissAlertTooltip =>
+      getTranslatedString('MissionDashboard.dismissAlertTooltip', 'Dismiss alert');
+
+  /// Compact overdue badge, e.g. `+3d`. Shared by `critical_alert_banner.dart`
+  /// and `referral_operations_widget.dart`, where it was duplicated verbatim.
+  static String daysOverdueSuffix(int n) =>
+      getTranslatedString('MissionDashboard.daysOverdueSuffix', '+{n}d', params: {'n': '$n'});
+
+  static String get viewReferralStatusSemantic =>
+      getTranslatedString('MissionDashboard.viewReferralStatusSemantic', 'View referral status');
 }
 
 /// Visit triage step (HTML composition) — bilingual symptom prompts.
@@ -1558,6 +1923,34 @@ abstract final class ScribeStrings {
   static String get recordingStartFailed => getTranslatedString('recordingStartFailed', 'Could not start recording. Check microphone permissions and try again.');
   static String get noteNotAvailable => getTranslatedString('noteNotAvailable', 'Note not available.');
   static String get transcriptLabel => getTranslatedString('transcriptLabel', 'Transcript');
+
+  // Mic-permission rationale sheet bullets.
+  static String get bulletRecordsAudio =>
+      getTranslatedString('Scribe.bulletRecordsAudio', 'Records consultation audio');
+  static String get bulletReviewBeforeSave =>
+      getTranslatedString('Scribe.bulletReviewBeforeSave', 'You review and accept before it saves');
+  static String get bulletAudioDeletedAfterProcessing => getTranslatedString(
+      'Scribe.bulletAudioDeletedAfterProcessing', 'Audio deleted from server after processing');
+
+  // SOAP section headings in the review sheet.
+  static String get soapSubjectiveTitle => getTranslatedString('Scribe.soapSubjectiveTitle', 'Subjective');
+  static String get soapSubjectiveSubtitle =>
+      getTranslatedString('Scribe.soapSubjectiveSubtitle', "Patient's reported symptoms");
+  static String get soapObjectiveTitle => getTranslatedString('Scribe.soapObjectiveTitle', 'Objective');
+  static String get soapObjectiveSubtitle =>
+      getTranslatedString('Scribe.soapObjectiveSubtitle', 'Clinical findings & vitals');
+  static String get soapAssessmentTitle => getTranslatedString('Scribe.soapAssessmentTitle', 'Assessment');
+  static String get soapAssessmentSubtitle =>
+      getTranslatedString('Scribe.soapAssessmentSubtitle', 'Diagnosis / impression');
+  static String get soapPlanTitle => getTranslatedString('Scribe.soapPlanTitle', 'Plan');
+  static String get soapPlanSubtitle =>
+      getTranslatedString('Scribe.soapPlanSubtitle', 'Treatment & follow-up');
+
+  static String get aiModelFallback => getTranslatedString('Scribe.aiModelFallback', 'AI');
+  /// [pct] arrives pre-formatted (`toStringAsFixed(0)`) from the call site.
+  static String confidencePctModel(String pct, String model) => getTranslatedString(
+      'Scribe.confidencePctModel', '{pct}% confidence · {model}',
+      params: {'pct': pct, 'model': model});
 }
 
 /// AI Scribe inline banner strings (replaces FAB labels for the new single-form layout).
@@ -1588,6 +1981,22 @@ abstract final class ScribeBannerStrings {
   static String get preFillTitle => getTranslatedString('ScribeBanner.preFillTitle', 'AI Scribe');
   static String get reviewAllCta => getTranslatedString('ScribeBanner.reviewAllCta', 'Review All');
   static String get acceptAllCta => getTranslatedString('ScribeBanner.acceptAllCta', 'Accept All');
+
+  static String get confidenceHigh => getTranslatedString('ScribeBanner.confidenceHigh', 'High confidence');
+  static String get confidenceMedium => getTranslatedString('ScribeBanner.confidenceMedium', 'Medium');
+  static String get confidenceReviewNeeded => getTranslatedString('ScribeBanner.confidenceReviewNeeded', 'Review needed');
+  static String get statusAccepted => getTranslatedString('ScribeBanner.statusAccepted', 'Accepted');
+  static String get statusModified => getTranslatedString('ScribeBanner.statusModified', 'Modified');
+  /// Source literal is three ASCII periods, not U+2026 — kept byte-identical.
+  static String get processingEllipsis => getTranslatedString('ScribeBanner.processingEllipsis', 'Processing...');
+  static String get stopLabel => getTranslatedString('ScribeBanner.stopLabel', 'Stop');
+  static String get aiScribeLabel => getTranslatedString('ScribeBanner.aiScribeLabel', 'AI Scribe');
+  static String fieldsExtractedCount(int n) => getTranslatedString(
+      'ScribeBanner.fieldsExtractedCount', '{fieldCount} fields extracted from recording',
+      params: {'fieldCount': '$n'});
+  static String get acceptTooltip => getTranslatedString('ScribeBanner.acceptTooltip', 'Accept');
+  static String get editTooltip => getTranslatedString('ScribeBanner.editTooltip', 'Edit');
+  static String get rejectTooltip => getTranslatedString('ScribeBanner.rejectTooltip', 'Reject');
 }
 
 /// Bottom-nav tab labels + placeholder copy.
@@ -3201,6 +3610,11 @@ abstract final class VisitFlowStrings {
   // name (which is only known after the SK confirms).
   static String get step1Title => getTranslatedString('step1Title', 'How are you?');
   static String get step2Title => getTranslatedString('step2Title', 'Assessment forms');
+
+  /// ANC/PNC variant of the Step-2 pill title, chosen by `VisitFlowHeader`
+  /// when the primary programme is anc or pnc.
+  static String get step2TitlePregnancyChecks =>
+      getTranslatedString('VisitFlow.step2TitlePregnancyChecks', 'Pregnancy checks');
   // Retained for backwards-compatibility with tests pinning the legacy
   // interpolation contract — the header no longer references this string.
   static String get step2TitleSuffix => getTranslatedString('step2TitleSuffix', 'form');
@@ -3589,6 +4003,7 @@ abstract final class TrainingStrings {
   static String get xpSuffix => getTranslatedString('xpSuffix', 'XP');
   static String get streakDaySuffix => getTranslatedString('streakDaySuffix', 'd');
   static String get youLabel => getTranslatedString('youLabel', 'You');
+  static String get loadFailedGeneric => getTranslatedString('Training.loadFailedGeneric', 'Something went wrong loading this content.');
 }
 
 /// Micro-coaching pilot strings — three-loop system:
@@ -4008,8 +4423,21 @@ abstract final class PerformanceStrings {
   static String get statMissedOverdue => getTranslatedString('statMissedOverdue', 'Missed / Overdue');
   static String get sectionServiceBreakdown => getTranslatedString('sectionServiceBreakdown', 'SERVICE-WISE BREAKDOWN');
   static String get insightBoldPhrase => getTranslatedString('insightBoldPhrase', 'more visits');
-  static const List<String> weekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  static const List<String> weekLabels = ['W1', 'W2', 'W3', 'W4'];
+  static List<String> get weekdayLabels => [
+        getTranslatedString('Performance.weekdayMon', 'M'),
+        getTranslatedString('Performance.weekdayTue', 'T'),
+        getTranslatedString('Performance.weekdayWed', 'W'),
+        getTranslatedString('Performance.weekdayThu', 'T'),
+        getTranslatedString('Performance.weekdayFri', 'F'),
+        getTranslatedString('Performance.weekdaySat', 'S'),
+        getTranslatedString('Performance.weekdaySun', 'S'),
+      ];
+  static List<String> get weekLabels => [
+        getTranslatedString('Performance.week1', 'W1'),
+        getTranslatedString('Performance.week2', 'W2'),
+        getTranslatedString('Performance.week3', 'W3'),
+        getTranslatedString('Performance.week4', 'W4'),
+      ];
   static String get serviceAnc => getTranslatedString('serviceAnc', 'ANC');
   static String get serviceNcd => getTranslatedString('serviceNcd', 'NCD');
   static String get serviceChild => getTranslatedString('serviceChild', 'Child / Immunisation');
@@ -4020,6 +4448,35 @@ abstract final class PerformanceStrings {
 
   static String insightMonth(int pct) => getTranslatedString('insightMonth', 'You completed {pct}% more visits than the Manikganj Sadar area average this month.', params: {'pct': '$pct'});
   static String get noPatients => getTranslatedString('Performance.noPatients', 'No patients');
+
+  static String get performanceTab => getTranslatedString('Performance.performanceTab', 'Performance');
+  static String get myPatientsTab => getTranslatedString('Performance.myPatientsTab', 'My Patients');
+
+  // Namespaced separately from PatientContextStrings.serviceLabel /
+  // HouseholdDetailStrings.lastVisitDate, which carry the same English for
+  // unrelated surfaces, so this screen stays independently translatable.
+  static String get serviceLabel => getTranslatedString('Performance.serviceLabel', 'Service');
+  static String get nextVisitLabel => getTranslatedString('Performance.nextVisitLabel', 'Next Visit');
+  static String get lastVisitLabel => getTranslatedString('Performance.lastVisitLabel', 'Last Visit');
+
+  static String get outOf100 => getTranslatedString('Performance.outOf100', '/ 100');
+
+  // `_SpiceDueText._resolve()` branch labels — that method returns a
+  // `(String, Color)` record; only the String comes from here.
+  static String get dueRoutine => getTranslatedString('Performance.dueRoutine', 'Routine');
+  static String get dueTomorrow => getTranslatedString('Performance.dueTomorrow', 'Tomorrow');
+  static String dueUpcomingInDays(int days) => getTranslatedString(
+      'Performance.dueUpcomingInDays', 'Upcoming in {days} days', params: {'days': '$days'});
+  /// Preserves the existing literal `day(s)` — it is not pluralised in code.
+  static String overdueByDays(int d) => getTranslatedString(
+      'Performance.overdueByDays', '{d} day(s) Overdue', params: {'d': '$d'});
+
+  // `SkPerformanceStats.ratingFor()` branch labels.
+  static String get ratingExcellent => getTranslatedString('Performance.ratingExcellent', 'Excellent');
+  static String get ratingGood => getTranslatedString('Performance.ratingGood', 'Good');
+  static String get ratingFair => getTranslatedString('Performance.ratingFair', 'Fair');
+  static String get ratingNeedsImprovement =>
+      getTranslatedString('Performance.ratingNeedsImprovement', 'Needs Improvement');
 }
 
 /// Household enrollment flow strings.
@@ -4502,6 +4959,34 @@ abstract final class AssistantStrings {
   static String get clearHistory => getTranslatedString('clearHistory', 'Clear chat history');
   static String get launchingMicroCoaching => getTranslatedString('launchingMicroCoaching', 'Opening coaching…');
   static String get openMicroCoaching => getTranslatedString('openMicroCoaching', 'Open Coaching');
+
+  static String get enterAtLeast3Chars =>
+      getTranslatedString('Assistant.enterAtLeast3Chars', 'Please enter at least 3 characters.');
+  static String get settingUpRetryLater => getTranslatedString(
+      'Assistant.settingUpRetryLater', 'Coaching assistant is being set up. Please try again later.');
+  static String get emptyResponse =>
+      getTranslatedString('Assistant.emptyResponse', 'Empty response');
+  static String get noAnswerInResponse =>
+      getTranslatedString('Assistant.noAnswerInResponse', 'No answer in response');
+  static String get thinkingIndicator =>
+      getTranslatedString('Assistant.thinkingIndicator', '✦ thinking…');
+
+  /// Single home for the action-chip labels; [AssistantAction.defaultLabel]
+  /// delegates here rather than carrying a second copy of the switch.
+  static String actionLabel(AssistantActionType type) {
+    switch (type) {
+      case AssistantActionType.startVisit:
+        return getTranslatedString('Assistant.actionStartVisit', 'Start visit');
+      case AssistantActionType.openReferral:
+        return getTranslatedString('Assistant.actionOpenReferral', 'Open referral');
+      case AssistantActionType.scheduleFollowUp:
+        return getTranslatedString('Assistant.actionScheduleFollowUp', 'Schedule follow-up');
+      case AssistantActionType.callPatient:
+        return getTranslatedString('Assistant.actionCallPatient', 'Call patient');
+      case AssistantActionType.none:
+        return '';
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4708,6 +5193,112 @@ abstract final class EpiVisitRecoStrings {
   }
 }
 
+/// Patient-facing clinical finding messages shown in the AI-insight /
+/// "Before You Knock" summary (`ClinicalFinding.message`). Display only —
+/// never sent to the backend and never compared by value.
+///
+/// Do NOT reuse these for `referral_evaluator.dart`: that file's reason/gap
+/// strings cross the wire into the offline-sync payload and are compared by
+/// value, so they are deliberately left unlocalized.
+abstract final class ClinicalFindingStrings {
+  ClinicalFindingStrings._();
+
+  // ── Shared across programmes ──────────────────────────────────────────
+  /// Shared by the ANC and PNC rules (three call sites, identical template).
+  static String dangerSignReported(String label) => getTranslatedString(
+      'ClinicalFinding.dangerSignReported', 'Danger sign reported: {label}.', params: {'label': label});
+
+  /// Shared by the ANC and PNC rules — both emit byte-identical English.
+  static String get pncSevereAnemia =>
+      getTranslatedString('ClinicalFinding.pncSevereAnemia', 'Severe anemia.');
+
+  // ── ANC ───────────────────────────────────────────────────────────────
+  static String get ancBpAboveSafeThreshold => getTranslatedString(
+      'ClinicalFinding.ancBpAboveSafeThreshold', 'BP is above the safe threshold. Watch for pre-eclampsia.');
+  static String get ancBpRisingTwoVisits => getTranslatedString(
+      'ClinicalFinding.ancBpRisingTwoVisits', 'BP has risen over the last two visits. Monitor closely.');
+  static String get ancAnemiaReinforceIron => getTranslatedString(
+      'ClinicalFinding.ancAnemiaReinforceIron', 'Anemia noted. Reinforce iron-folic intake.');
+  static String get ancIronFolicBelowExpected => getTranslatedString(
+      'ClinicalFinding.ancIronFolicBelowExpected', 'Iron-folic intake is below the expected daily rate.');
+  static String ancMissedVisit(int daysOverdue) => getTranslatedString(
+      'ClinicalFinding.ancMissedVisit', 'Missed ANC — gap of {daysOverdue} days.',
+      params: {'daysOverdue': '$daysOverdue'});
+  static String ancRoutineVisit(int visitNumber) => getTranslatedString(
+      'ClinicalFinding.ancRoutineVisit', 'Routine visit — no concerns flagged. Visit {visitNumber} on track.',
+      params: {'visitNumber': '$visitNumber'});
+
+  // ── NCD ───────────────────────────────────────────────────────────────
+  static String get ncdBpAndGlucoseCombined => getTranslatedString(
+      'ClinicalFinding.ncdBpAndGlucoseCombined',
+      'Both BP and blood sugar are above target — needs review today and planned follow-up.');
+  static String get ncdBpAboveNormal => getTranslatedString(
+      'ClinicalFinding.ncdBpAboveNormal', 'BP is above normal. Requires review and follow-up.');
+  static String get ncdBloodSugarElevated => getTranslatedString(
+      'ClinicalFinding.ncdBloodSugarElevated', 'Blood sugar is elevated. Requires review and follow-up.');
+  static String get ncdTrendingDown => getTranslatedString(
+      'ClinicalFinding.ncdTrendingDown', 'BP/sugar trending down — continue current plan.');
+  static String get ncdWithinTarget => getTranslatedString(
+      'ClinicalFinding.ncdWithinTarget', 'Vitals within target — continue current management.');
+  static String get ncdLowAdherence => getTranslatedString(
+      'ClinicalFinding.ncdLowAdherence', 'Medication adherence is low — confirm daily intake.');
+
+  // ── PNC ───────────────────────────────────────────────────────────────
+  static String get pncUrgentTemperature => getTranslatedString(
+      'ClinicalFinding.pncUrgentTemperature', 'Temperature is above normal (≥102°F). Needs urgent attention.');
+  static String get pncUrgentPulse => getTranslatedString(
+      'ClinicalFinding.pncUrgentPulse', 'Pulse is abnormal (outside 60–90 bpm). Needs urgent attention.');
+  static String get pncUrgentBp => getTranslatedString(
+      'ClinicalFinding.pncUrgentBp', 'BP is above normal (≥140/90). Needs urgent attention.');
+  static String get pncNoContraception => getTranslatedString(
+      'ClinicalFinding.pncNoContraception', 'No contraception method in use — counsel on options.');
+  static String get pncSupplementGapVitaminA => getTranslatedString(
+      'ClinicalFinding.pncSupplementGapVitaminA', 'Supplement gap — Vitamin A not on track.');
+  static String get pncSupplementGapIfa => getTranslatedString(
+      'ClinicalFinding.pncSupplementGapIfa', 'Supplement gap — Iron-folic acid not on track.');
+  static String get pncSupplementGapCalcium => getTranslatedString(
+      'ClinicalFinding.pncSupplementGapCalcium', 'Supplement gap — Calcium not on track.');
+  static String pncOverdueVisit(int visitNumber, int daysOverdue) => getTranslatedString(
+      'ClinicalFinding.pncOverdueVisit', 'PNC Visit {visitNumber} is overdue by {daysOverdue} days.',
+      params: {'visitNumber': '$visitNumber', 'daysOverdue': '$daysOverdue'});
+  static String get pncRoutine => getTranslatedString(
+      'ClinicalFinding.pncRoutine', 'Recovering well — no concerns at this PNC visit.');
+
+  // ── Child immunization ────────────────────────────────────────────────
+  static String childImmunizationOverdueDoses(int count, String names) => getTranslatedString(
+      'ClinicalFinding.childImmunizationOverdueDoses', '{count} dose(s) overdue: {names}.',
+      params: {'count': '$count', 'names': names});
+  static String get childImmunizationWeightGainSlowed => getTranslatedString(
+      'ClinicalFinding.childImmunizationWeightGainSlowed',
+      'Weight gain has slowed since the last check — monitor nutrition.');
+  static String childImmunizationDueSoon(String display) => getTranslatedString(
+      'ClinicalFinding.childImmunizationDueSoon', '{display} due soon — plan for next visit.',
+      params: {'display': display});
+  static String get childImmunizationOnSchedule => getTranslatedString(
+      'ClinicalFinding.childImmunizationOnSchedule', 'Immunization on schedule, growth on track.');
+
+  // ── Pregnancy outcome ─────────────────────────────────────────────────
+  static String get pregnancyOutcomeStillbirthOrNeonatalDeath => getTranslatedString(
+      'ClinicalFinding.pregnancyOutcomeStillbirthOrNeonatalDeath', 'Stillbirth or neonatal death recorded.');
+  static String pregnancyOutcomeAbortion(String abortionTypeLabel) => getTranslatedString(
+      'ClinicalFinding.pregnancyOutcomeAbortion',
+      'Pregnancy loss (abortion, {abortionTypeLabel}) recorded — follow-up care advised.',
+      params: {'abortionTypeLabel': abortionTypeLabel});
+  static String get pregnancyOutcomeHealthy => getTranslatedString(
+      'ClinicalFinding.pregnancyOutcomeHealthy',
+      'Healthy delivery outcome — mother and baby both doing well.');
+}
+
+/// Labels for [VitalClassification] band names.
+abstract final class VitalClassifierStrings {
+  VitalClassifierStrings._();
+
+  static String get normal => getTranslatedString('VitalClassifier.normal', 'Normal');
+  static String get low => getTranslatedString('VitalClassifier.low', 'Low');
+  static String get high => getTranslatedString('VitalClassifier.high', 'High');
+  static String get critical => getTranslatedString('VitalClassifier.critical', 'Critical');
+}
+
 abstract final class ChildAssessmentStrings {
   ChildAssessmentStrings._();
 
@@ -4904,19 +5495,17 @@ abstract final class EnrollStrings {
   static String get sectionChronic => getTranslatedString('sectionChronic', 'CHRONIC CONDITIONS');
   static String get sectionChild => getTranslatedString('sectionChild', 'CHILD HEALTH');
   static String get pregnantWomanLabel => getTranslatedString('pregnantWomanLabel', 'Pregnant Woman');
-  static const String pregnantWomanBengali = 'গর্ভবতী মা';
+  static String get pregnantWomanBengali => getTranslatedString('Enroll.pregnantWomanBengali', 'গর্ভবতী মা');
   static String get ancLabel => getTranslatedString('ancLabel', 'ANC Visit');
-  static const String ancBengali = 'মাতৃস্বাস্থ্য সেবা';
+  static String get ancBengali => getTranslatedString('Enroll.ancBengali', 'মাতৃস্বাস্থ্য সেবা');
   static String get pncLabel => getTranslatedString('pncLabel', 'PNC Visit');
-  static const String pncBengali = 'প্রসবোত্তর সেবা';
+  static String get pncBengali => getTranslatedString('Enroll.pncBengali', 'প্রসবোত্তর সেবা');
   static String get ncdLabel => getTranslatedString('ncdLabel', 'NCD Check');
-  static const String ncdBengali = 'অসংক্রামক রোগ';
-  static String get tbLabel => getTranslatedString('tbLabel', 'TB Check');
-  static const String tbBengali = 'যক্ষ্মা';
+  static String get ncdBengali => getTranslatedString('Enroll.ncdBengali', 'অসংক্রামক রোগ');
   static String get imciLabel => getTranslatedString('imciLabel', 'Child Visit');
-  static const String imciBengali = 'শিশু স্বাস্থ্য সেবা';
+  static String get imciBengali => getTranslatedString('Enroll.imciBengali', 'শিশু স্বাস্থ্য সেবা');
   static String get epiLabel => getTranslatedString('epiLabel', 'Vaccination');
-  static const String epiBengali = 'টিকা';
+  static String get epiBengali => getTranslatedString('Enroll.epiBengali', 'টিকা');
   static String get lockedToastAnc => getTranslatedString('lockedToastAnc', '⚠ Select "Pregnant Woman" first to unlock ANC');
   static String get lockedToastPnc => getTranslatedString('lockedToastPnc', '⚠ Select "Pregnant Woman" first to unlock PNC');
   static String get noProgrammes => getTranslatedString('noProgrammes', 'No eligible programmes for this patient based on age and gender.');
@@ -4973,11 +5562,11 @@ abstract final class PatientAiStrings {
   static String get dialFailed => getTranslatedString('PatientAi.dialFailed', 'Could not open the dialer');
   static String get fabTooltip => getTranslatedString('fabTooltip', 'Ask AI about this patient');
 
-  static const List<String> starters = [
-    'Any danger signs to check?',
-    'What should I do this visit?',
-    'Is a referral needed?',
-  ];
+  static List<String> get starters => [
+        getTranslatedString('PatientAi.starter1', 'Any danger signs to check?'),
+        getTranslatedString('PatientAi.starter2', 'What should I do this visit?'),
+        getTranslatedString('PatientAi.starter3', 'Is a referral needed?'),
+      ];
 }
 
 abstract final class ConsentStrings {
