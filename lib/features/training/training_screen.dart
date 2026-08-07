@@ -49,7 +49,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
             ? Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(_error!, textAlign: TextAlign.center),
+                  Text(TrainingStrings.loadFailedGeneric, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   ElevatedButton(onPressed: _launch, child: Text(CommonStrings.retry)),
                 ],

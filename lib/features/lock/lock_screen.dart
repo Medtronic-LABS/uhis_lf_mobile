@@ -629,7 +629,7 @@ class _FingerprintCardState extends State<_FingerprintCard>
       scale: _isPressed ? 0.97 : 1.0,
       duration: AppAnimations.pressFeedback,
       child: Semantics(
-        label: 'Authenticate with fingerprint',
+        label: LockStrings.fingerprintSemanticLabel,
         button: true,
         child: GestureDetector(
           onTapDown: (_) => setState(() => _isPressed = true),

@@ -6,6 +6,8 @@
 /// via [AppStrings], and exposes the result through [AsyncValue].
 library;
 
+import '../constants/app_strings.dart';
+
 /// Base class for all application-level exceptions.
 abstract class DomainException implements Exception {
   final String? localizedMessage;
@@ -101,11 +103,11 @@ class NetworkErrorMapper {
         case 0:
         case 1:
         case 2:
-          return 'Connection timed out. Check your signal and try again.';
+          return NetworkErrorStrings.connectionTimedOut;
         case 5:
-          return 'Request was cancelled. Please try again.';
+          return NetworkErrorStrings.requestCancelled;
         case 6:
-          return 'No internet connection. Check your signal and try again.';
+          return NetworkErrorStrings.noInternet;
         case 4:
           return _fromStatusCode(statusCode);
         default:
@@ -119,15 +121,15 @@ class NetworkErrorMapper {
   static String _fromStatusCode(int? code) {
     if (code == null) return _generic();
     if (code == 401 || code == 403) {
-      return 'Access denied. Please log out and log back in.';
+      return NetworkErrorStrings.accessDenied;
     }
-    if (code == 404) return 'The requested data was not found.';
-    if (code == 408 || code == 429) return 'Server is busy. Please try again in a moment.';
-    if (code >= 500) return 'Server error. Please try again in a moment.';
+    if (code == 404) return NetworkErrorStrings.notFound;
+    if (code == 408 || code == 429) return NetworkErrorStrings.serverBusy;
+    if (code >= 500) return NetworkErrorStrings.serverError;
     return _generic();
   }
 
-  static String _generic() => 'Something went wrong. Please try again.';
+  static String _generic() => NetworkErrorStrings.somethingWentWrong;
 }
 
 // ── AI services ───────────────────────────────────────────────────────────────
