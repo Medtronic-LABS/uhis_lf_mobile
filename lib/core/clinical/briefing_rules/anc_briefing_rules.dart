@@ -13,6 +13,7 @@ library;
 import '../../../features/visit/forms/form_config.dart';
 import '../assessment_thresholds.dart';
 import '../referral_evaluator.dart';
+import '../../constants/app_strings.dart';
 import 'clinical_finding.dart';
 
 const _ancDangerSignFieldIds = [
@@ -52,7 +53,7 @@ List<ClinicalFinding> evaluateAncFindings({
       final label = _resolveOptionLabel(_ancDangerSignFieldIds, code);
       findings.add(ClinicalFinding(
         code: 'anc.dangerSign',
-        message: 'Danger sign reported: $label.',
+        message: ClinicalFindingStrings.dangerSignReported(label),
         programme: 'anc',
       ));
     }
@@ -65,9 +66,9 @@ List<ClinicalFinding> evaluateAncFindings({
       (diastolic != null && diastolic >= bpHighDiastolic) ||
       hasKnownHypertension;
   if (highBp) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'anc.highBp',
-      message: 'BP is above the safe threshold. Watch for pre-eclampsia.',
+      message: ClinicalFindingStrings.ancBpAboveSafeThreshold,
       programme: 'anc',
     ));
   } else {
@@ -76,9 +77,9 @@ List<ClinicalFinding> evaluateAncFindings({
         ?.cast<String, dynamic>();
     final prevSystolic = _num(prevMedHx?['systolic']);
     if (systolic != null && prevSystolic != null && systolic > prevSystolic) {
-      findings.add(const ClinicalFinding(
+      findings.add(ClinicalFinding(
         code: 'anc.bpRisingTrend',
-        message: 'BP has risen over the last two visits. Monitor closely.',
+        message: ClinicalFindingStrings.ancBpRisingTwoVisits,
         programme: 'anc',
       ));
     }
@@ -88,15 +89,15 @@ List<ClinicalFinding> evaluateAncFindings({
   final hb = _num(poci?['hemoglobin']);
   if (hb != null) {
     if (hb < hbSevereAnaemia) {
-      findings.add(const ClinicalFinding(
+      findings.add(ClinicalFinding(
         code: 'anc.severeAnaemia',
-        message: 'Severe anemia.',
+        message: ClinicalFindingStrings.pncSevereAnemia,
         programme: 'anc',
       ));
     } else if (hb <= 10.9) {
-      findings.add(const ClinicalFinding(
+      findings.add(ClinicalFinding(
         code: 'anc.anaemiaNoted',
-        message: 'Anemia noted. Reinforce iron-folic intake.',
+        message: ClinicalFindingStrings.ancAnemiaReinforceIron,
         programme: 'anc',
       ));
     }
@@ -110,9 +111,9 @@ List<ClinicalFinding> evaluateAncFindings({
   final hasSupplementGap = gaps.gaps.any((g) =>
       g.contains('IFA consumption') || g.contains('Calcium consumption'));
   if (hasSupplementGap) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'anc.supplementGap',
-      message: 'Iron-folic intake is below the expected daily rate.',
+      message: ClinicalFindingStrings.ancIronFolicBelowExpected,
       programme: 'anc',
     ));
   }
@@ -121,7 +122,7 @@ List<ClinicalFinding> evaluateAncFindings({
   if (missedVisitDaysOverdue != null) {
     findings.add(ClinicalFinding(
       code: 'anc.missedVisit',
-      message: 'Missed ANC — gap of $missedVisitDaysOverdue days.',
+      message: ClinicalFindingStrings.ancMissedVisit(missedVisitDaysOverdue),
       programme: 'anc',
     ));
   }
@@ -130,7 +131,7 @@ List<ClinicalFinding> evaluateAncFindings({
   if (findings.isEmpty) {
     findings.add(ClinicalFinding(
       code: 'anc.routine',
-      message: 'Routine visit — no concerns flagged. Visit ${ancVisitCount + 1} on track.',
+      message: ClinicalFindingStrings.ancRoutineVisit(ancVisitCount + 1),
       programme: 'anc',
     ));
   }

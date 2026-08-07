@@ -18,6 +18,7 @@
 library;
 
 import '../../../features/visit/forms/form_config.dart';
+import '../../constants/app_strings.dart';
 import 'clinical_finding.dart';
 
 List<ClinicalFinding> evaluatePregnancyOutcomeFindings({
@@ -41,10 +42,10 @@ List<ClinicalFinding> evaluatePregnancyOutcomeFindings({
   final isNeonatalDeath = isBabyAlive == false;
 
   if (isStillbirth || isNeonatalDeath) {
-    return const [
+    return [
       ClinicalFinding(
         code: 'pregnancyOutcome.stillbirthOrNeonatalDeath',
-        message: 'Stillbirth or neonatal death recorded.',
+        message: ClinicalFindingStrings.pregnancyOutcomeStillbirthOrNeonatalDeath,
         programme: 'pregnancyOutcome',
       ),
     ];
@@ -55,8 +56,8 @@ List<ClinicalFinding> evaluatePregnancyOutcomeFindings({
     return [
       ClinicalFinding(
         code: 'pregnancyOutcome.abortion',
-        message:
-            'Pregnancy loss (abortion, ${_resolveAbortionTypeLabel(abortionType)}) recorded — follow-up care advised.',
+        message: ClinicalFindingStrings.pregnancyOutcomeAbortion(
+            _resolveAbortionTypeLabel(abortionType)),
         programme: 'pregnancyOutcome',
       ),
     ];
@@ -65,10 +66,10 @@ List<ClinicalFinding> evaluatePregnancyOutcomeFindings({
   final hasComplications =
       deliveryOutcomes?['anyComplicationsDuringDelivery'] == 'Yes';
   if (outcome == 'liveBirth' && isBabyAlive != false && !hasComplications) {
-    return const [
+    return [
       ClinicalFinding(
         code: 'pregnancyOutcome.healthy',
-        message: 'Healthy delivery outcome — mother and baby both doing well.',
+        message: ClinicalFindingStrings.pregnancyOutcomeHealthy,
         programme: 'pregnancyOutcome',
       ),
     ];
