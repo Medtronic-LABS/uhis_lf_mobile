@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/ai_extracted_field.dart';
 
@@ -457,9 +458,9 @@ class AIPreFillBanner extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'AI Scribe',
-                      style: TextStyle(
+                    Text(
+                      ScribeBannerStrings.preFillTitle,
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),
@@ -489,7 +490,7 @@ class AIPreFillBanner extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: onReviewAll,
                   icon: const Icon(Icons.visibility, size: 18),
-                  label: const Text('Review All'),
+                  label: Text(ScribeBannerStrings.reviewAllCta),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.tagBlueText,
                     side: const BorderSide(color: AppColors.aiBorder),
@@ -501,7 +502,7 @@ class AIPreFillBanner extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: onAcceptAll,
                   icon: const Icon(Icons.check_circle, size: 18),
-                  label: const Text('Accept All'),
+                  label: Text(ScribeBannerStrings.acceptAllCta),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.statusSuccessAction,
                     foregroundColor: Colors.white,

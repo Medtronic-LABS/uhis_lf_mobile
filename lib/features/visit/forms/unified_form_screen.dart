@@ -2270,7 +2270,7 @@ class _SectionCard extends StatelessWidget {
         children: [
           if (section.title.isNotEmpty) ...[
             Text(
-              section.title.toUpperCase(),
+              FormSectionStrings.headerFor(section.sectionId, section.title),
               style: AppTextStyles.sectionLabel,
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -2349,7 +2349,7 @@ class _SectionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Baby ${i + 1}',
+                UnifiedFormStrings.babyNumberLabel(i + 1),
                 style: AppTextStyles.sectionLabel,
               ),
               const SizedBox(height: AppSpacing.md),
@@ -2433,7 +2433,7 @@ class _SectionCard extends StatelessWidget {
       cards.add(Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.lg),
         child: Text(
-          'Enter number of live births to add newborn details.',
+          UnifiedFormStrings.newbornDetailsPrompt,
           style: AppTextStyles.subText,
         ),
       ));
@@ -2446,7 +2446,7 @@ class _SectionCard extends StatelessWidget {
         children: [
           if (section.title.isNotEmpty) ...[
             Text(
-              section.title.toUpperCase(),
+              FormSectionStrings.headerFor(section.sectionId, section.title),
               style: AppTextStyles.sectionLabel,
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -4924,7 +4924,7 @@ class _InlineListSelectField extends StatelessWidget {
         if (hasError) ...[
           const SizedBox(height: 2),
           Text(
-            'Please select at least one option',
+            UnifiedFormStrings.selectAtLeastOneOptionError,
             style: const TextStyle(
               fontSize: 10.5,
               color: AppColors.statusCritical,

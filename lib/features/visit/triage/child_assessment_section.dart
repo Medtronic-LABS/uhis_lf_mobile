@@ -707,9 +707,9 @@ class _ReferralPlacePicker extends StatelessWidget {
         DropdownButtonFormField<String>(
           isExpanded: true,
           initialValue: value,
-          hint: const Text(
-            'Select…',
-            style: TextStyle(fontSize: 13, color: Color(0xFF9CA3AF)),
+          hint: Text(
+            ChildAssessmentStrings.q15Hint,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF9CA3AF)),
           ),
           onChanged: onChanged,
           decoration: InputDecoration(

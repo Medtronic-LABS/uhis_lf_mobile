@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+import '../../../core/constants/app_strings.dart';
+
 /// Date-of-birth parsing, formatting and age maths shared by the household-head
 /// form ([CreateHouseholdScreen]) and the member form
 /// ([AddHouseholdMemberScreen]), which previously each had their own copy and
@@ -97,19 +99,30 @@ class EnrollmentAge {
   }
 
   String get unit {
-    if (years >= 1) return years == 1 ? 'year' : 'years';
-    if (months > 0) return months == 1 ? 'month' : 'months';
-    return value == 1 ? 'day' : 'days';
+    if (years >= 1) {
+      return years == 1 ? EnrollmentStrings.ageUnitYear : EnrollmentStrings.ageUnitYears;
+    }
+    if (months > 0) {
+      return months == 1 ? EnrollmentStrings.ageUnitMonth : EnrollmentStrings.ageUnitMonths;
+    }
+    return value == 1 ? EnrollmentStrings.ageUnitDay : EnrollmentStrings.ageUnitDays;
   }
 
   String get summary {
     if (years >= 1) {
-      return months > 0
-          ? '$years yr ${months}m old'
-          : '$years year${years == 1 ? '' : 's'} old';
+      if (months > 0) return EnrollmentStrings.ageSummaryYearMonth(years, months);
+      return years == 1
+          ? EnrollmentStrings.ageSummaryYearSingular(years)
+          : EnrollmentStrings.ageSummaryYearPlural(years);
     }
-    if (months > 0) return '$months month${months == 1 ? '' : 's'} old';
-    return days < 1 ? '< 1 day old' : '$days days old';
+    if (months > 0) {
+      return months == 1
+          ? EnrollmentStrings.ageSummaryMonthSingular(months)
+          : EnrollmentStrings.ageSummaryMonthPlural(months);
+    }
+    return days < 1
+        ? EnrollmentStrings.ageSummaryUnderOneDay
+        : EnrollmentStrings.ageSummaryDays(days);
   }
 
   /// Compact list/header chip: `12d` / `4m` under 24 months, else whole years.

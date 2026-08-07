@@ -1813,7 +1813,7 @@ class _GlobalSearchResultCard extends StatelessWidget {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: const Text('Start Visit', style: TextStyle(fontSize: 12)),
+            child: Text(MissionDashboardStrings.startVisit, style: const TextStyle(fontSize: 12)),
           ),
         ],
       ),

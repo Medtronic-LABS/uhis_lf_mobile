@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../constants/app_strings.dart';
+
 /// A reusable banner widget that indicates offline capability.
 /// Displays "Works offline · On-device model · No internet needed" with a wifi-off icon.
 /// Currently unconsumed — reserved for the offline-state contract rollout
@@ -29,7 +31,7 @@ class OfflineCapabilityBanner extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            'Works offline',
+            OfflineCapabilityStrings.worksOffline,
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
               fontWeight: FontWeight.w500,
@@ -70,7 +72,7 @@ class OfflineCapabilityBanner extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Works offline',
+                  OfflineCapabilityStrings.worksOffline,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurface,
                     fontWeight: FontWeight.w600,
@@ -78,7 +80,7 @@ class OfflineCapabilityBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'On-device model · No internet needed',
+                  OfflineCapabilityStrings.onDeviceSubtitle,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -117,7 +119,7 @@ class OfflineCapabilityIndicator extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            'Offline ready',
+            OfflineCapabilityStrings.offlineReady,
             style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.primary,
               fontWeight: FontWeight.w600,

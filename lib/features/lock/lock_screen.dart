@@ -379,7 +379,7 @@ class _OrDivider extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
-            'OR',
+            LockStrings.orDividerLabel,
             style: TextStyle(
               fontFamily: AppFonts.body,
               fontSize: 11,

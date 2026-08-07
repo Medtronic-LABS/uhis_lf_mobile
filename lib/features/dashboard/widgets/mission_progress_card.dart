@@ -188,7 +188,7 @@ class MissionProgressCard extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('🎉', style: TextStyle(fontSize: 24)),
+                    Text(MissionDashboardStrings.celebrationEmoji, style: const TextStyle(fontSize: 24)),
                     const SizedBox(width: 12),
                     Text(
                       MissionDashboardStrings.allCaughtUp,

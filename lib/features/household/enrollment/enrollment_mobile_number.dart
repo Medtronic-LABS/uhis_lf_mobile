@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../../../core/constants/app_strings.dart';
+
 /// Mobile-number rules shared by household-head and member enrollment forms.
 ///
 /// Mirrors Spice `member_registration.json` + `FormGenerator` checks:
@@ -12,14 +14,14 @@ abstract final class EnrollmentMobileNumber {
   static const String requiredPrefix = '01';
 
   /// R.string.start_with_validation with %1$s = "01"
-  static const String startsWithError =
-      'Phone number should starts with $requiredPrefix';
+  static String get startsWithError =>
+      EnrollmentStrings.mobileStartsWithError(requiredPrefix);
 
   /// Length mismatch vs Android `phoneNumberContainMaxLength` (exact).
-  static const String lengthError = 'Mobile number must be $maxLength digits';
+  static String get lengthError => EnrollmentStrings.mobileLengthError(maxLength);
 
   /// R.string.phone_number_invalid
-  static const String invalidError = 'Please enter a valid mobile number';
+  static String get invalidError => EnrollmentStrings.mobileInvalidError;
 
   static final RegExp _digitsOnly = RegExp(r'^\d+$');
   static final RegExp _fiveSameDigits = RegExp(r'(\d)\1{4}');

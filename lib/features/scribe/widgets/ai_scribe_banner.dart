@@ -302,7 +302,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       child: Semantics(
         button: !isProcessing,
         label: liveActive
-            ? 'Stop live ASR'
+            ? RealtimeAsrStrings.stopLiveLabel
             : isRecording
                 ? SymptomPickerStrings.scribeStopRecordingLabel
                 : isError

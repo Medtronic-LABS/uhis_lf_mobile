@@ -396,9 +396,9 @@ class _HeadMemberCard extends StatelessWidget {
               color: AppColors.statusWarningSurface,
               borderRadius: BorderRadius.circular(AppRadius.pill),
             ),
-            child: const Text(
-              'Head',
-              style: TextStyle(
+            child: Text(
+              EnrollmentStrings.headBadgeLabel,
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: AppColors.statusWarningText,

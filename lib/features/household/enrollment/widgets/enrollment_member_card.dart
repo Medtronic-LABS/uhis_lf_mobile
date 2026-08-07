@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../models/household_enrollment_models.dart';
 
@@ -119,18 +120,18 @@ class EnrollmentMemberCard extends StatelessWidget {
                 color: AppColors.statusSuccessSurface,
                 borderRadius: BorderRadius.circular(AppRadius.button),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.check_circle,
                     size: 12,
                     color: AppColors.statusSuccess,
                   ),
-                  SizedBox(width: 4),
+                  const SizedBox(width: 4),
                   Text(
-                    'NID Scanned',
-                    style: TextStyle(
+                    EnrollmentStrings.nidScannedChipLabel,
+                    style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                       color: AppColors.statusSuccessText,
@@ -158,9 +159,9 @@ class EnrollmentMemberCard extends StatelessWidget {
                         borderRadius:
                             BorderRadius.circular(AppRadius.button),
                       ),
-                      child: const Text(
-                        'Remove',
-                        style: TextStyle(
+                      child: Text(
+                        CommonStrings.remove,
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                           color: AppColors.statusCritical,

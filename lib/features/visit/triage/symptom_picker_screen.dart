@@ -1740,13 +1740,13 @@ class _BriefingFallbackContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
-            Icon(Icons.wifi_off, size: 12, color: AppColors.textMuted),
-            SizedBox(width: 4),
+            const Icon(Icons.wifi_off, size: 12, color: AppColors.textMuted),
+            const SizedBox(width: 4),
             Text(
-              'AI offline · local context',
-              style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+              SymptomPickerStrings.aiOfflineLocalContext,
+              style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
             ),
           ],
         ),

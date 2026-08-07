@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_brief.dart';
 
 /// Compact summary strip showing AI brief + progress in a single row.
@@ -226,7 +227,7 @@ class EmptySummaryStrip extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'No visits scheduled today',
+              MissionDashboardStrings.noVisitsScheduledToday,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),

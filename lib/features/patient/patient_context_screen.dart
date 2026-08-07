@@ -1624,8 +1624,10 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         break;
       }
       final vn = _ancVisitNumberFrom(a, raw);
-      title = vn != null ? 'ANC Visit $vn' : 'ANC Checkup';
-      category = 'Antenatal Care';
+      title = vn != null
+          ? '${PatientContextStrings.ancVisitLabel} $vn'
+          : PatientContextStrings.ancCheckupTitle;
+      category = PatientContextStrings.antenatalCareCategory;
 
       final bpANC = raw['bp']?.toString() ?? '';
       final sysANC = _sys(bpANC);
@@ -1635,19 +1637,19 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
 
       if (sysANC >= 160 || diaANC >= 110) {
         dotColor = _kDotCritical;
-        badge = 'Danger — High BP';
+        badge = PatientContextStrings.dangerHighBpBadge;
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
         description = 'BP $bpANC is dangerously elevated — urgent referral needed.';
       } else if (hbANC > 0 && hbANC < 7) {
         dotColor = _kDotCritical;
-        badge = 'Severe anemia';
+        badge = PatientContextStrings.severeAnemiaBadge;
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
         description = 'Hb ${hbANC}g/dL — severe anemia. Urgent review needed.';
       } else if (sysANC >= 140 || diaANC >= 90) {
         dotColor = _kDotHigh;
-        badge = 'High-risk pregnancy';
+        badge = CareThreadStrings.highrisk;
         badgeColor = _kBadgeHighBg;
         badgeFgColor = _kBadgeHighFg;
         final dp = <String>[];
@@ -1656,13 +1658,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         description = dp.isEmpty ? 'High BP detected — monitor closely.' : dp.join(' · ');
       } else if (hbANC > 0 && hbANC < 10) {
         dotColor = _kDotModerate;
-        badge = 'Anemia';
+        badge = PatientContextStrings.anemiaBadge;
         badgeColor = _kBadgeAmberBg;
         badgeFgColor = _kBadgeAmberFg;
         description = 'Hb ${hbANC}g/dL — anemia. Review iron supplementation.';
       } else if (hbANC >= 10 && hbANC < 11) {
         dotColor = _kDotModerate;
-        badge = 'Mild anemia';
+        badge = PatientContextStrings.mildAnemiaBadge;
         badgeColor = _kBadgeAmberBg;
         badgeFgColor = _kBadgeAmberFg;
         description = 'Hb ${hbANC}g/dL — mild anemia. Ensure iron supplementation continues.';
@@ -1687,19 +1689,19 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       if (isOutcome) {
         // Delivery / pregnancy outcome — never label as a PNC visit.
         emoji = '🏥';
-        title = 'Pregnancy Outcome';
-        category = 'Delivery';
+        title = PatientContextStrings.pregnancyOutcomeTitle;
+        category = PatientContextStrings.deliveryCategory;
 
         final allVals = raw.values.map((v) => v.toString().toLowerCase()).join(' ');
         if (allVals.contains('stillbirth') || allVals.contains('neonatal death')) {
           dotColor = _kDotCritical;
-          badge = 'Stillbirth / Neonatal death';
+          badge = PatientContextStrings.stillbirthNeonatalDeathBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
           description = 'Stillbirth or neonatal death recorded — follow-up and counselling needed.';
         } else if (allVals.contains('abortion') || allVals.contains('miscarriage')) {
           dotColor = _kDotHigh;
-          badge = 'Pregnancy loss';
+          badge = PatientContextStrings.pregnancyLossBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
           description = 'Pregnancy loss (abortion) recorded — follow-up care advised.';
@@ -1709,8 +1711,8 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
               delivery.toLowerCase().contains('section');
           dotColor = isCs ? _kDotHigh : _kDotOk;
           badge = delivery.isEmpty
-              ? 'Delivery'
-              : (isCs ? 'Emergency C-section' : 'Normal delivery');
+              ? PatientContextStrings.deliveryCategory
+              : (isCs ? CareThreadStrings.csection : PatientContextStrings.normalDeliveryBadge);
           badgeColor = isCs ? _kBadgeHighBg : _kBadgeGreenBg;
           badgeFgColor = isCs ? _kBadgeHighFg : _kBadgeGreenFg;
           final babyWt = raw['babyBirthWeight']?.toString() ?? raw['birthWeight']?.toString();
@@ -1722,8 +1724,10 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       } else {
         // PNC follow-up
         emoji = '🤱';
-        title = pncVN.isNotEmpty ? 'PNC Visit $pncVN' : 'PNC Visit';
-        category = 'Postnatal Care';
+        title = pncVN.isNotEmpty
+            ? '${PatientContextStrings.pncVisitLabel} $pncVN'
+            : PatientContextStrings.pncVisitLabel;
+        category = PatientContextStrings.postnatalCareCategory;
 
         final dSign = raw['dangerSigns']?.toString() ?? raw['dangerSign']?.toString() ?? '';
         final bpPNC = raw['bp']?.toString() ?? '';
@@ -1741,13 +1745,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
 
         if (dSign.isNotEmpty && !['none', 'no', 'false', ''].contains(dSign.trim().toLowerCase())) {
           dotColor = _kDotCritical;
-          badge = 'Danger sign';
+          badge = PatientContextStrings.dangerSignBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
           description = 'Danger sign reported: $dSign.';
         } else if (bpHighPNC || tempHighC || pulseHigh || pulseLow) {
           dotColor = _kDotCritical;
-          badge = 'Urgent';
+          badge = PatientContextStrings.urgentPncBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
           final urgentParts = <String>[];
@@ -1758,7 +1762,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
           description = '${urgentParts.join(', ')} — needs urgent attention.';
         } else if (hbPNC > 0 && hbPNC < 8) {
           dotColor = _kDotHigh;
-          badge = 'Severe anemia';
+          badge = PatientContextStrings.severeAnemiaBadge;
           badgeColor = _kBadgeAmberBg;
           badgeFgColor = _kBadgeAmberFg;
           description = 'Severe anemia (Hb $hbPNC g/dL).';
@@ -1779,7 +1783,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
           typeCompact == 'MEDICALREVIEW';
       title = isNcdMedicalReview
           ? PatientProfileStrings.ncdFollowUp
-          : 'NCD Visit';
+          : PatientContextStrings.ncdVisitTitle;
       category = PatientProfileStrings.ncdFollowUpCategory;
 
       final bpNCD = raw['bp']?.toString() ?? '';
@@ -1793,19 +1797,19 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
 
       if (bpHighNCD && bgHighNCD) {
         dotColor = _kDotCritical;
-        badge = 'High-risk';
+        badge = PatientContextStrings.ncdHighRiskBadge;
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
         description = 'Both BP and blood sugar are above target — needs review today and planned follow-up.';
       } else if (bpHighNCD) {
         dotColor = _kDotHigh;
-        badge = 'High BP';
+        badge = PatientContextStrings.highBpBadge;
         badgeColor = _kBadgeHighBg;
         badgeFgColor = _kBadgeHighFg;
         description = 'BP is above the normal. Require review and follow-up';
       } else if (bgHighNCD) {
         dotColor = _kDotModerate;
-        badge = 'High blood sugar';
+        badge = PatientContextStrings.highBloodSugarBadge;
         badgeColor = _kBadgeAmberBg;
         badgeFgColor = _kBadgeAmberFg;
         description = 'Blood sugar is elevated. Require review and follow-up';
@@ -1817,8 +1821,8 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     // ─── EPI / Vaccination ────────────────────────────────────────────────
     case Programme.epi:
       emoji = '💉';
-      title = 'Vaccination';
-      category = 'Immunization';
+      title = EpiStrings.screenTitle;
+      category = CareThreadStrings.imm;
       dotColor = _kDotEpi;
       final vacName = raw['vaccineName']?.toString() ?? raw['vaccine']?.toString() ?? '';
       final dose = raw['dose']?.toString() ?? '';
@@ -1829,12 +1833,12 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     // ─── IMCI ─────────────────────────────────────────────────────────────
     case Programme.imci:
       emoji = '👶';
-      title = 'Child health visit';
-      category = 'IMCI / Child care';
+      title = PatientContextStrings.childHealthVisitTitle;
+      category = PatientContextStrings.imciChildCareCategory;
       dotColor = _kDotImci;
       final dSignImci = raw['dangerSigns']?.toString() ?? '';
       if (dSignImci.isNotEmpty && dSignImci.toLowerCase() != 'none') {
-        badge = 'Danger sign';
+        badge = PatientContextStrings.dangerSignBadge;
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
         dotColor = _kDotCritical;
@@ -1852,16 +1856,16 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     // ─── TB ───────────────────────────────────────────────────────────────
     case Programme.tb:
       emoji = '🫁';
-      title = 'TB follow-up';
-      category = 'TB Programme';
+      title = PatientContextStrings.tbFollowUpTitle;
+      category = PatientContextStrings.tbProgrammeCategory;
       dotColor = _kDotTb;
       description = dx.isNotEmpty ? 'Status: $dx' : null;
 
     // ─── Family Planning ──────────────────────────────────────────────────
     case Programme.familyPlanning:
       emoji = '🌸';
-      title = 'Family Planning';
-      category = 'Family Planning';
+      title = PatientContextStrings.familyPlanningLabel;
+      category = PatientContextStrings.familyPlanningLabel;
       dotColor = _kDotFp;
       final fpM = _rawStr(raw['familyPlanningMethods']) ?? '';
       description = fpM.isNotEmpty ? 'Method: $fpM' : null;
@@ -1871,32 +1875,32 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       dotColor = _kDotGeneral;
       if (combined.contains('malaria')) {
         emoji = '🦟';
-        title = 'Malaria — treated';
-        category = 'Past illness';
-        badge = 'Past illness';
+        title = PatientContextStrings.malariaTreatedTitle;
+        category = CareThreadStrings.illness;
+        badge = CareThreadStrings.illness;
         badgeColor = _kBadgeGrayBg;
         badgeFgColor = _kBadgeGrayFg;
         description = 'Tested positive, completed antimalarial course';
       } else if (combined.contains('diarrhea') || combined.contains('diarrhoea') || combined.contains('vomit')) {
         emoji = '🤢';
-        title = 'Severe diarrhea & vomiting — treated';
-        category = 'Past illness';
-        badge = 'Past illness';
+        title = PatientContextStrings.severeDiarrheaVomitingTreatedTitle;
+        category = CareThreadStrings.illness;
+        badge = CareThreadStrings.illness;
         badgeColor = _kBadgeGrayBg;
         badgeFgColor = _kBadgeGrayFg;
         description = 'Treated with ORS & antibiotics, fully recovered';
       } else if (combined.contains('fever')) {
         emoji = '🌡️';
-        title = 'Fever — treated';
-        category = 'Past illness';
-        badge = 'Past illness';
+        title = PatientContextStrings.feverTreatedTitle;
+        category = CareThreadStrings.illness;
+        badge = CareThreadStrings.illness;
         badgeColor = _kBadgeGrayBg;
         badgeFgColor = _kBadgeGrayFg;
         description = dx.isNotEmpty ? dx : null;
       } else {
         emoji = '📝';
-        title = prog == Programme.unknown ? 'General visit' : prog.displayName;
-        category = 'General';
+        title = prog == Programme.unknown ? PatientContextStrings.generalVisitTitle : prog.displayName;
+        category = PatientContextStrings.generalCategory;
         description = a.notes?.isNotEmpty == true ? a.notes : null;
       }
   }
@@ -1908,13 +1912,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
   // recent referral entry gets the badge and narrative (see _buildTimelineEntries).
   if (showAsReferral && rawStatus == 'referred') {
     dotColor = _kDotCritical;
-    badge = 'Referred';
+    badge = PatientContextStrings.referredBadge;
     badgeColor = _kBadgeCriticalBg;
     badgeFgColor = _kBadgeCriticalFg;
     description = _buildReferralNarrative(referralReasons, raw);
   } else if (showAsReferral && rawStatus == 'ontreatment') {
     dotColor = _kDotHigh;
-    badge = 'On treatment';
+    badge = PatientContextStrings.onTreatmentBadge;
     badgeColor = _kBadgeHighBg;
     badgeFgColor = _kBadgeHighFg;
     description = _buildReferralNarrative(referralReasons, raw);
@@ -2812,9 +2816,9 @@ class _AiInsightCardState extends State<_AiInsightCard> {
         children: [
           if (riskReasons.isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Text(
-              'WHY',
-              style: TextStyle(
+            Text(
+              PatientProfileStrings.whyHeader,
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textMuted,
@@ -3194,7 +3198,7 @@ class _PregnancyProgressSection extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            'Wk $gaWeeks',
+                            PatientProfileStrings.gestationalWeekBadge(gaWeeks),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 12,
@@ -3217,9 +3221,9 @@ class _PregnancyProgressSection extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'LMP',
-                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      Text(
+                        PatientProfileStrings.lmpLabel,
+                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -3238,9 +3242,9 @@ class _PregnancyProgressSection extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      const Text(
-                        'EDD',
-                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      Text(
+                        PatientProfileStrings.eddLabel,
+                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -3266,9 +3270,9 @@ class _PregnancyProgressSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'PREGNANCY SNAPSHOT',
-          style: TextStyle(
+        Text(
+          PatientProfileStrings.pregnancySnapshotHeader,
+          style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: AppColors.textMuted,
@@ -3418,7 +3422,7 @@ class _StatsGrid extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${history.length} record${history.length == 1 ? '' : 's'}  ·  tap to open visit',
+                    PatientContextStrings.recordsTapToOpen(history.length),
                     style:
                         const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
@@ -3526,9 +3530,9 @@ class _StatsGrid extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: const Text(
-                'Check-up history',
-                style: TextStyle(
+              child: Text(
+                PatientProfileStrings.checkupHistoryTitle,
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: AppColors.navy,
@@ -3628,9 +3632,9 @@ class _StatsGrid extends StatelessWidget {
     final result = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'AT A GLANCE',
-          style: TextStyle(
+        Text(
+          PatientProfileStrings.atAGlanceHeader,
+          style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: AppColors.textMuted,
@@ -3646,7 +3650,7 @@ class _StatsGrid extends StatelessWidget {
               final hist = _extractVisitHistory(visitEntries);
               tiles.add(GestureDetector(
                 onTap: hist.isNotEmpty
-                    ? () => _showStatHistory(context, 'Visit history', hist)
+                    ? () => _showStatHistory(context, PatientContextStrings.visitHistoryTitle, hist)
                     : null,
                 child: _StatTile(
                   label: e.key,
@@ -3816,9 +3820,9 @@ class _LastCheckupTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Last check-up',
-                  style: TextStyle(
+                Text(
+                  PatientProfileStrings.lastCheckupLabel,
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textMuted,
@@ -4038,9 +4042,9 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
     final result = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'CARE HISTORY',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted, letterSpacing: 0.8),
+        Text(
+          PatientProfileStrings.careHistoryHeader,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted, letterSpacing: 0.8),
         ),
         const SizedBox(height: 8),
         body,
@@ -4244,6 +4248,24 @@ class _TimelineBadge extends StatelessWidget {
 
 
 
+/// Maps a wire referral-status string (e.g. "Referred", "OnTreatment",
+/// "Recovered") to its translated display label. Mirrors [Programme.fromString]'s
+/// normalize-then-map pattern for wire-string → label lookups; falls back to
+/// the raw value for statuses not in the known set.
+String _referralStatusLabel(String status) {
+  final key = status.toLowerCase().replaceAll(' ', '');
+  switch (key) {
+    case 'referred':
+      return PatientContextStrings.referredBadge;
+    case 'ontreatment':
+      return PatientContextStrings.onTreatmentBadge;
+    case 'recovered':
+      return PatientContextStrings.recoveredBadge;
+    default:
+      return status;
+  }
+}
+
 /// Small coloured status chip (Referred / OnTreatment / Recovered).
 class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.status});
@@ -4274,7 +4296,7 @@ class _StatusChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
-        status,
+        _referralStatusLabel(status),
         style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
       ),
     );
@@ -4571,7 +4593,7 @@ class _TimelineEventSheet extends StatelessWidget {
         ? PatientProfileStrings.pregnancyRegistrationCategory
         : assessment.type;
     final sheetHeading = assessment.visitNumber != null
-        ? '$sheetTitle — Visit ${assessment.visitNumber}'
+        ? '$sheetTitle — ${PatientContextStrings.visitNumberLabel(assessment.visitNumber!)}'
         : sheetTitle;
 
     final result = DraggableScrollableSheet(
@@ -4670,9 +4692,9 @@ class _TimelineEventSheet extends StatelessWidget {
                   ),
                 if (assessment.notes != null && assessment.notes!.isNotEmpty) ...[
                   const Divider(height: 24),
-                  const Text(
-                    'Notes',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMid),
+                  Text(
+                    PatientProfileStrings.notesLabel,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMid),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -5063,7 +5085,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
               children: [
                 Icon(Icons.event_outlined, size: 16, color: headerColor),
                 const SizedBox(width: 6),
-                Text('Scheduling',
+                Text(PatientProfileStrings.schedulingSectionTitle,
                     style: Theme.of(context)
                         .textTheme
                         .titleSmall
@@ -5077,7 +5099,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'Overdue $overdueDays day${overdueDays == 1 ? '' : 's'}',
+                      PatientProfileStrings.overdueByDaysBadge(overdueDays),
                       style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -5092,7 +5114,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'Due in $dueSoonDays day${dueSoonDays == 1 ? '' : 's'}',
+                      PatientProfileStrings.dueSoonBadge(dueSoonDays),
                       style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -5201,13 +5223,13 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
               children: [
                 Icon(Icons.favorite_outline_rounded, size: 16, color: scheme.primary),
                 const SizedBox(width: 6),
-                Text('Last Vitals',
+                Text(PatientProfileStrings.lastVitalsSectionTitle,
                     style: Theme.of(context)
                         .textTheme
                         .titleSmall
                         ?.copyWith(fontWeight: FontWeight.w700)),
                 const Spacer(),
-                Text('Recorded $date',
+                Text(PatientProfileStrings.vitalsRecordedOn(date),
                     style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
               ],
             ),

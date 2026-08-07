@@ -194,7 +194,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
               if (items.isEmpty) {
                 return Center(
                   child: Text(
-                    'No patients',
+                    PerformanceStrings.noPatients,
                     style: TextStyle(color: AppColors.textMuted),
                   ),
                 );

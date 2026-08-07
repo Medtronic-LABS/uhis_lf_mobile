@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth/auth_repository.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/services/micro_coaching_service.dart';
 
 class TrainingScreen extends StatefulWidget {
@@ -50,7 +51,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                 children: [
                   Text(_error!, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
-                  ElevatedButton(onPressed: _launch, child: const Text('Retry')),
+                  ElevatedButton(onPressed: _launch, child: Text(CommonStrings.retry)),
                 ],
               )
             : _busy ? const CircularProgressIndicator() : const SizedBox.shrink(),
