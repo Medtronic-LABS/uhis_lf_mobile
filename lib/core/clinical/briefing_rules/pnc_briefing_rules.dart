@@ -105,7 +105,8 @@ List<ClinicalFinding> evaluatePncFindings({
     familyPlanningMethod: contraception?['familyPlanningMethods'] as String?,
   );
   for (final gap in gaps.gaps) {
-    if (gap.contains('No contraception method')) {
+    if (gap.contains('No contraception') ||
+        gap.contains('postpartum contraception')) {
       findings.add(const ClinicalFinding(
         code: 'pnc.noContraception',
         message: 'No contraception method in use — counsel on options.',

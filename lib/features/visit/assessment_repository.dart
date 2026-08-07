@@ -1154,6 +1154,152 @@ class AssessmentRepository extends ChangeNotifier {
     return null;
   }
 
+  /// Prior `pncIllness` flags from the most recent PNC_MOTHER assessment
+  /// (Android subsequent-visit Hb / glucose mandatory gates).
+  ///
+  /// Returns `{ anemia, bloodSugar, dmPatient, gdmPatient }` when found.
+  Future<Map<String, dynamic>?> lastPncIllnessFlags(String patientId) async {
+    if (patientId.isEmpty) return null;
+    const subObjects = ['pncMother', 'pncIllness', 'assessmentDetails'];
+    const keys = ['anemia', 'bloodSugar', 'dmPatient', 'gdmPatient', 'pncIllness'];
+
+    Map<String, dynamic>? fromJson(String jsonStr) {
+      try {
+        final raw = jsonDecode(jsonStr) as Map<String, dynamic>;
+        // Prefer nested pncIllness object (Spice wire).
+        final nested = raw['pncIllness'] ??
+            (raw['pncMother'] is Map
+                ? (raw['pncMother'] as Map)['pncIllness']
+                : null) ??
+            (raw['assessmentDetails'] is Map
+                ? ((raw['assessmentDetails'] as Map)['pncMother'] is Map
+                    ? ((raw['assessmentDetails'] as Map)['pncMother']
+                        as Map)['pncIllness']
+                    : (raw['assessmentDetails'] as Map)['pncIllness'])
+                : null);
+        if (nested is Map) {
+          return {
+            if (nested['anemia'] != null) 'anemia': nested['anemia'],
+            if (nested['bloodSugar'] != null)
+              'bloodSugar': nested['bloodSugar'],
+            if (nested['dmPatient'] != null) 'dmPatient': nested['dmPatient'],
+            if (nested['gdmPatient'] != null) 'gdmPatient': nested['gdmPatient'],
+          };
+        }
+        final flat = _extractKeys(jsonStr, keys, subObjects);
+        if (flat == null) return null;
+        if (flat['pncIllness'] is Map) {
+          final m = flat['pncIllness'] as Map;
+          return {
+            if (m['anemia'] != null) 'anemia': m['anemia'],
+            if (m['bloodSugar'] != null) 'bloodSugar': m['bloodSugar'],
+            if (m['dmPatient'] != null) 'dmPatient': m['dmPatient'],
+            if (m['gdmPatient'] != null) 'gdmPatient': m['gdmPatient'],
+          };
+        }
+        return {
+          if (flat['anemia'] != null) 'anemia': flat['anemia'],
+          if (flat['bloodSugar'] != null) 'bloodSugar': flat['bloodSugar'],
+          if (flat['dmPatient'] != null) 'dmPatient': flat['dmPatient'],
+          if (flat['gdmPatient'] != null) 'gdmPatient': flat['gdmPatient'],
+        };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final localRows = await _dao.getByPatientId(patientId);
+    for (final row in localRows) {
+      if (row.assessmentType.toUpperCase() != 'PNC_MOTHER') continue;
+      final r = fromJson(row.assessmentDetails);
+      if (r != null && r.isNotEmpty) return r;
+    }
+    if (_historyDao == null) return null;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
+      ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    for (final row in rows) {
+      if (!_isPncMotherKind(row.kind?.toUpperCase() ?? '')) continue;
+      final r = fromJson(row.rawJson);
+      if (r != null && r.isNotEmpty) return r;
+    }
+    return null;
+  }
+
+  /// True when the latest ANC indicates anemia in pregnancy — Hb &lt; 11 or
+  /// `highRiskPregnantWoman` text/structure contains "anemia"
+  /// (Android `highRiskPregnantWoman.contains("Anemia")`).
+  Future<bool> hadAnemiaDuringPregnancy(String patientId) async {
+    if (patientId.isEmpty) return false;
+
+    bool fromMap(Map<String, dynamic> flat) {
+      final hb = flat['hemoglobin'];
+      final hbNum = hb is num
+          ? hb.toDouble()
+          : (hb is String ? double.tryParse(hb) : null);
+      if (hbNum != null && hbNum > 0 && hbNum < 11) return true;
+
+      final risk = flat['highRiskPregnantWoman'];
+      if (_textContainsAnemia(risk)) return true;
+      final summary = flat['summary'];
+      if (summary is Map &&
+          _textContainsAnemia(summary['highRiskPregnantWoman'])) {
+        return true;
+      }
+      return false;
+    }
+
+    final localRows = await _dao.getByPatientId(patientId);
+    for (final row in localRows) {
+      if (row.assessmentType.toUpperCase() != 'ANC') continue;
+      try {
+        final raw = jsonDecode(row.assessmentDetails) as Map<String, dynamic>;
+        if (fromMap(_flattenMap(raw, [
+          ..._ancSubObjects,
+          'summary',
+          'pointOfCareInvestigations',
+        ]))) {
+          return true;
+        }
+      } catch (_) {}
+    }
+    if (_historyDao == null) return false;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
+      ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    for (final row in rows) {
+      if (!_isAncVisitKind(row.kind?.toUpperCase() ?? '')) continue;
+      try {
+        final raw = jsonDecode(row.rawJson) as Map<String, dynamic>;
+        if (fromMap(_flattenMap(raw, [
+          ..._ancSubObjects,
+          'summary',
+          'pointOfCareInvestigations',
+        ]))) {
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  static bool _textContainsAnemia(Object? value) {
+    if (value == null) return false;
+    if (value is String) {
+      return value.toLowerCase().contains('anemia') ||
+          value.toLowerCase().contains('anaemia');
+    }
+    if (value is List) {
+      return value.any(_textContainsAnemia);
+    }
+    if (value is Map) {
+      return value.values.any(_textContainsAnemia) ||
+          value.keys.any((k) => _textContainsAnemia(k.toString()));
+    }
+    return value.toString().toLowerCase().contains('anemia') ||
+        value.toString().toLowerCase().contains('anaemia');
+  }
+
   /// Stable PNC Mother history fields from the most recent prior PNC_MOTHER
   /// assessment: gravida, parity, livingChildren, comorbidity flags.
   Future<Map<String, dynamic>?> lastPncMotherChronicData(

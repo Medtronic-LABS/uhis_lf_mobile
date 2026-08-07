@@ -649,9 +649,15 @@ class PncReferralEvaluator {
     );
   }
 
-  /// Evaluates 4 PNC care-gap conditions from the form data.
+  /// Evaluates PNC care-gap conditions from the form data.
   ///
-  /// Mirrors Android `PNCAssessmentEvaluator.evaluateGapsInPNC()`.
+  /// Mirrors Android `PNCAssessmentEvaluator.getPncGaps()`:
+  /// - Vitamin A not `yes`
+  /// - IFA / Calcium consumed &lt; [daysSinceDelivery] (skipped when days unknown)
+  /// - Family planning method = `none`
+  ///
+  /// Wire strings use Android's `English::বাংলা` shape so offline-sync matches
+  /// Spice; briefing rules match on English substrings.
   static PncGapsResult evaluateGaps({
     bool? vitaminAConsumed,
     int? daysSinceDelivery,
@@ -660,32 +666,45 @@ class PncReferralEvaluator {
     String? familyPlanningMethod,
   }) {
     final gaps = <String>[];
+    final supplementationEn = <String>[];
+    final supplementationBn = <String>[];
 
-    // 1. Vitamin A not consumed within 56 days of delivery.
-    if (vitaminAConsumed == false &&
-        daysSinceDelivery != null &&
-        daysSinceDelivery <= 56) {
-      gaps.add('Vitamin A not consumed (within 8 weeks)');
+    // 1. Vitamin A — Android: !equals(yes). Treat explicit false/no as gap;
+    // null (unknown / briefing with no maternal block) must not invent a gap.
+    if (vitaminAConsumed == false) {
+      supplementationEn.add('Vitamin A');
+      supplementationBn.add('ভিটামিন এ');
     }
 
-    // 2. Inadequate IFA tablet consumption (< 30).
-    if (ifaTabletsConsumed != null &&
-        ifaTabletsConsumed < ancTabletConsumptionMin) {
-      gaps.add('Inadequate IFA consumption (<$ancTabletConsumptionMin tablets)');
-    }
-
-    // 3. Inadequate Calcium tablet consumption (< 30).
-    if (calciumTabletsConsumed != null &&
-        calciumTabletsConsumed < ancTabletConsumptionMin) {
-      gaps.add('Inadequate Calcium consumption (<$ancTabletConsumptionMin tablets)');
-    }
-
-    // 4. No contraception method ≥ 42 days after delivery.
-    if (daysSinceDelivery != null && daysSinceDelivery >= 42) {
-      final method = familyPlanningMethod?.toLowerCase() ?? '';
-      if (method.isEmpty || method == 'none' || method == 'notused') {
-        gaps.add('No contraception method (≥42 days postpartum)');
+    // 2–3. IFA / Calcium vs days since delivery (Android getInteger; null → 0
+    // so a missing day count never opens an IFA/Ca gap by itself).
+    if (daysSinceDelivery != null && daysSinceDelivery > 0) {
+      if (ifaTabletsConsumed != null &&
+          ifaTabletsConsumed < daysSinceDelivery) {
+        supplementationEn.add('IFA');
+        supplementationBn.add('আয়রন');
       }
+      if (calciumTabletsConsumed != null &&
+          calciumTabletsConsumed < daysSinceDelivery) {
+        supplementationEn.add('Calcium');
+        supplementationBn.add('ক্যালসিয়াম');
+      }
+    }
+
+    if (supplementationEn.isNotEmpty) {
+      gaps.add(
+        'Supplementation (${supplementationEn.join(', ')})'
+        '::পরিপূরক (${supplementationBn.join(', ')})',
+      );
+    }
+
+    // 4. Not using postpartum contraception (any day when method is none).
+    final method = familyPlanningMethod?.toLowerCase().trim() ?? '';
+    if (method == 'none' || method == 'notused') {
+      gaps.add(
+        'Not using postpartum contraception'
+        '::প্রসব-পরবর্তী পরিবার পরিকল্পনা নিচ্ছেন না',
+      );
     }
 
     return PncGapsResult(gaps: gaps);

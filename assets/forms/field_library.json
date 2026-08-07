@@ -802,6 +802,13 @@
           }
         ]
       }
+    ],
+    "condition": [
+      {
+        "eq": "yes",
+        "targetId": "onTreatmentHtnEclampsia",
+        "visibility": "visible"
+      }
     ]
   },
   "eclampsia": {
@@ -853,6 +860,13 @@
           }
         ]
       }
+    ],
+    "condition": [
+      {
+        "eq": "yes",
+        "targetId": "onTreatmentHtnEclampsia",
+        "visibility": "visible"
+      }
     ]
   },
   "onTreatmentHtnEclampsia": {
@@ -863,7 +877,7 @@
     "orderId": 5,
     "isMandatory": true,
     "isEnabled": true,
-    "visibility": "visible",
+    "visibility": "gone",
     "titleCulture": "উচ্চ রক্তচাপের /  প্রি-এক্ল্যাম্পসিয়া / এক্ল্যাম্পসিয়া চিকিৎসা নিচ্ছেন কি না?",
     "clinicalConcept": [
       {
@@ -1302,6 +1316,13 @@
           }
         ]
       }
+    ],
+    "condition": [
+      {
+        "eq": "yes",
+        "targetId": "onTreatmentDmGdm",
+        "visibility": "visible"
+      }
     ]
   },
   "gdmPatient": {
@@ -1353,6 +1374,13 @@
           }
         ]
       }
+    ],
+    "condition": [
+      {
+        "eq": "yes",
+        "targetId": "onTreatmentDmGdm",
+        "visibility": "visible"
+      }
     ]
   },
   "onTreatmentDmGdm": {
@@ -1363,7 +1391,7 @@
     "orderId": 15,
     "isMandatory": true,
     "isEnabled": true,
-    "visibility": "visible",
+    "visibility": "gone",
     "titleCulture": "ডায়াবেটিস / গর্ভকালীন ডায়াবেটিসের চিকিৎসা নিচ্ছেন কি না?",
     "clinicalConcept": [
       {
@@ -1729,7 +1757,7 @@
     "orderId": 21,
     "isEnabled": false,
     "visibility": "visible",
-    "titleCulture": "কতটি আয়রন বড়ি খেয়েছেন?",
+    "titleCulture": "আয়রন বড়ির তথ্য",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1761,7 +1789,7 @@
     "visibility": "visible",
     "hint": "Enter number",
     "hintCulture": "সংখ্যা লিখুন",
-    "titleCulture": "এ পর্যন্ত মোট সেবন",
+    "titleCulture": "এখন পর্যন্ত কতটি আয়রন বড়ি খেয়েছেন?",
     "minValue": 0,
     "inputType": "integer",
     "clinicalConcept": [
@@ -1792,7 +1820,7 @@
     "visibility": "visible",
     "hint": "Enter number",
     "hintCulture": "সংখ্যা লিখুন",
-    "titleCulture": "প্রদত্ত ঔষধ / সাপ্লিমেন্ট",
+    "titleCulture": "এই ভিজিটে ব্র্যাক হতে প্রদানকৃত আয়রণ বড়ির সংখ্যা",
     "minValue": 0,
     "inputType": "integer",
     "clinicalConcept": [
@@ -1820,7 +1848,7 @@
     "orderId": 24,
     "isEnabled": false,
     "visibility": "visible",
-    "titleCulture": "কতটি ক্যালসিয়াম বড়ি খেয়েছেন?",
+    "titleCulture": "ক্যালসিয়াম বড়ির তথ্য",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1852,7 +1880,7 @@
     "visibility": "visible",
     "hint": "Enter number",
     "hintCulture": "সংখ্যা লিখুন",
-    "titleCulture": "এ পর্যন্ত মোট সেবন",
+    "titleCulture": "এখন পর্যন্ত কতটি ক্যালসিয়াম বড়ি খেয়েছেন?",
     "minValue": 0,
     "inputType": "integer",
     "clinicalConcept": [
@@ -1883,7 +1911,7 @@
     "visibility": "visible",
     "hint": "Enter number",
     "hintCulture": "সংখ্যা লিখুন",
-    "titleCulture": "প্রদত্ত ঔষধ / সাপ্লিমেন্ট",
+    "titleCulture": "এই ভিজিটে ব্র্যাক হতে প্রদানকৃত ক্যালসিয়াম বড়ির সংখ্যা",
     "minValue": 0,
     "inputType": "integer",
     "clinicalConcept": [

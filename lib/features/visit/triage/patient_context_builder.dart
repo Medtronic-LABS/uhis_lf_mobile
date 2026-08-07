@@ -115,12 +115,15 @@ class PatientContext {
   /// Whether patient is female.
   bool get isFemale => sex == Sex.female;
 
-  /// Whether patient is in the postpartum window (< 6 weeks post-delivery).
+  /// Whether patient is in the postpartum window (≤ 42 days post-delivery).
+  /// Inclusive upper bound matches Android `PregnancyCohortRules.isPostnatal`
+  /// and offline-sync snapshot `withinDays(dod, 42)`.
   bool get isPostpartum {
     if (deliveryDateMillis == null) return false;
     final deliveryDate = DateTime.fromMillisecondsSinceEpoch(deliveryDateMillis!);
     final now = DateTime.now();
-    return now.difference(deliveryDate).inDays < 42; // 6 weeks
+    final days = now.difference(deliveryDate).inDays;
+    return days >= 0 && days <= 42;
   }
 
   /// Whether patient has known hypertension.

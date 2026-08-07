@@ -68,13 +68,17 @@ abstract final class UnifiedSectionRules {
     // shows its own Biometric card even when ANC/PNC also capture them.
     {'pulse'},
     // ── Folic acid supplements ───────────────────────────────────────────────
-    {'folicAcidTotalConsumed', 'folicAcidTablets'},
+    // TextLabel `folicAcidTablets` is intentionally excluded — claiming it with
+    // the numeric consumed field strips the input from the section.
     {'folicAcidProvided'},
     // ── IFA / iron supplements ──────────────────────────────────────────────
-    {'ifaTotalConsumed', 'ifaTabletsConsumed', 'ifaTablets'},
+    // TextLabels (`ifaTablets` / `calciumTablets`) are section headings only;
+    // do not group them with capture fields or PNC "Total Consumed" is dropped
+    // when the heading is claimed first in maternalHealthAssessment.
+    {'ifaTotalConsumed', 'ifaTabletsConsumed'},
     {'ifaProvided', 'ifaTabletsProvided'},
     // ── Calcium supplements ─────────────────────────────────────────────────
-    {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'},
+    {'calciumTotalConsumed', 'calciumTabletsConsumed'},
     {'calciumProvided', 'calciumTabletsProvided'},
   ];
 
@@ -115,10 +119,9 @@ abstract final class UnifiedSectionRules {
   /// present in [activeFieldIds].  Used by the debug log at form-open time.
   static List<String> mergedGroupDescriptions(Set<String> activeFieldIds) {
     const groupLabels = <Set<String>, String>{
-      {'folicAcidTotalConsumed', 'folicAcidTablets'}: 'Folic acid consumed',
-      {'ifaTotalConsumed', 'ifaTabletsConsumed', 'ifaTablets'}: 'IFA consumed',
+      {'ifaTotalConsumed', 'ifaTabletsConsumed'}: 'IFA consumed',
       {'ifaProvided', 'ifaTabletsProvided'}: 'IFA provided',
-      {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'}: 'Calcium consumed',
+      {'calciumTotalConsumed', 'calciumTabletsConsumed'}: 'Calcium consumed',
       {'calciumProvided', 'calciumTabletsProvided'}: 'Calcium provided',
     };
     final merged = <String>[];
@@ -567,12 +570,15 @@ abstract final class FieldVisibilityRules {
   /// [isNcdFollowUp] — Android BDNCD: `ncdSymptomsMedication` is shown only
   /// when a prior NCD assessment exists (SK follow-up visit).
   /// [formType] — owning programme layout key (e.g. `ncd`, `anc`).
+  /// [pncVisitNumber] — 1-based PNC mother visit count; on visit 2+ Android
+  /// hides HTN/eclampsia/DM/GDM (values stay prefilled in data).
   static bool isFieldVisible({
     required FieldDef field,
     required CanonicalVisitData data,
     required Map<String, List<FieldVisibilityRule>> rulesByTargetId,
     int? gestationalWeeks,
     int? ancVisitNumber,
+    int? pncVisitNumber,
     String? formType,
     int? ageInMonths,
     bool priorHeightLocked = false,
@@ -593,6 +599,14 @@ abstract final class FieldVisibilityRules {
     // Android SK BDNCD: medication adherence spinner is follow-up only.
     if (field.id == 'ncdSymptomsMedication') {
       return isNcdFollowUp;
+    }
+
+    // PNC mother visit 2+: Spice managePncFormBasedOnPregnancyDetail hides
+    // chronic illness radios after visit 1 (still prefilled into data / payload).
+    if (formType == 'pncMother' &&
+        (pncVisitNumber ?? 1) > 1 &&
+        _pncVisit2HiddenChronicIds.contains(field.id)) {
+      return false;
     }
 
     // Childhood visit: Spice exclusive age bands (showHideOptionsForChildHealth).
@@ -686,6 +700,15 @@ abstract final class FieldVisibilityRules {
     'ncd',
     'cataract',
     'anc',
+  };
+
+  /// Android `AssessmentRMNCHFragment.managePncFormBasedOnPregnancyDetail`
+  /// visit &gt; 1 — gone(), values autopopulated from prior `pncIllness`.
+  static const Set<String> _pncVisit2HiddenChronicIds = {
+    'htnPatient',
+    'eclampsia',
+    'dmPatient',
+    'gdmPatient',
   };
 
   /// Fields Spice reveals only when `ncdServiceProvided == yes` on cataract.

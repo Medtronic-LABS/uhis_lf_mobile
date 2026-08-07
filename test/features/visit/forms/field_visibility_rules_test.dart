@@ -970,4 +970,99 @@ void main() {
       expect(opts.map((o) => o.id).toList(), ['htn', 'none']);
     });
   });
+
+  group('PNC onTreatmentHtnEclampsia / onTreatmentDmGdm '
+      '(Android handleOnTreatmentVisibility)', () {
+    test('HTN/eclampsia on-treatment shown only when either parent is yes',
+        () async {
+      final config = await FormConfig.load(rootBundle);
+      final field = config.fields['onTreatmentHtnEclampsia']!;
+      final rules = config.visibilityRulesByTargetId;
+
+      expect(field.visibility, 'gone');
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: field,
+          data: const CanonicalVisitData(),
+          rulesByTargetId: rules,
+          formType: 'pncMother',
+        ),
+        isFalse,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: field,
+          data: const CanonicalVisitData({
+            'htnPatient': 'no',
+            'eclampsia': 'no',
+          }),
+          rulesByTargetId: rules,
+          formType: 'pncMother',
+        ),
+        isFalse,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: field,
+          data: const CanonicalVisitData({
+            'htnPatient': 'yes',
+            'eclampsia': 'no',
+          }),
+          rulesByTargetId: rules,
+          formType: 'pncMother',
+        ),
+        isTrue,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: field,
+          data: const CanonicalVisitData({
+            'htnPatient': 'no',
+            'eclampsia': 'yes',
+          }),
+          rulesByTargetId: rules,
+          formType: 'pncMother',
+        ),
+        isTrue,
+      );
+    });
+
+    test('DM/GDM on-treatment shown only when either parent is yes', () async {
+      final config = await FormConfig.load(rootBundle);
+      final field = config.fields['onTreatmentDmGdm']!;
+      final rules = config.visibilityRulesByTargetId;
+
+      expect(field.visibility, 'gone');
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: field,
+          data: const CanonicalVisitData({
+            'dmPatient': 'no',
+            'gdmPatient': 'no',
+          }),
+          rulesByTargetId: rules,
+          formType: 'pncMother',
+        ),
+        isFalse,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: field,
+          data: const CanonicalVisitData({'dmPatient': 'yes'}),
+          rulesByTargetId: rules,
+          formType: 'pncMother',
+        ),
+        isTrue,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: field,
+          data: const CanonicalVisitData({'gdmPatient': 'yes'}),
+          rulesByTargetId: rules,
+          formType: 'pncMother',
+        ),
+        isTrue,
+      );
+    });
+  });
 }
