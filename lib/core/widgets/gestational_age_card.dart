@@ -25,13 +25,8 @@ class GestationalAgeCard extends StatelessWidget {
   static const _navy = Color(0xFF1B2B5E);
   static const _unitGrey = Color(0xFF6B7280);
 
-  static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-
   static String _fmt(DateTime d) =>
-      '${d.day} ${_months[d.month - 1]} ${d.year}';
+      '${d.day} ${DateFormatStrings.monthAbbrev(d.month)} ${d.year}';
 
   @override
   Widget build(BuildContext context) {

@@ -197,16 +197,12 @@ class _FollowUpCard extends StatelessWidget {
   }
 
   String _formatDate(DateTime date) {
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${date.day} ${months[date.month - 1]}';
+    return '${date.day} ${DateFormatStrings.monthAbbrev(date.month)}';
   }
 
   String _formatDueDate(int daysUntil) {
-    if (daysUntil < -1) return '${-daysUntil} days ago';
-    if (daysUntil == -1) return 'Yesterday';
+    if (daysUntil < -1) return MissionDashboardStrings.daysAgo(-daysUntil);
+    if (daysUntil == -1) return MissionDashboardStrings.yesterday;
     if (daysUntil == 0) return MissionDashboardStrings.today;
     if (daysUntil == 1) return MissionDashboardStrings.tomorrow;
     return MissionDashboardStrings.daysAway(daysUntil);

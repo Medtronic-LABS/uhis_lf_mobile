@@ -99,7 +99,7 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
       setState(() => _starting = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(controller.error ?? 'Failed to start visit')),
+          SnackBar(content: Text(controller.error ?? PatientContextStrings.startVisitFailed)),
         );
       }
     }
@@ -125,7 +125,7 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.play_arrow),
-                label: Text(_starting ? 'Starting...' : PatientContextStrings.startVisit),
+                label: Text(_starting ? PatientContextStrings.startingEllipsis : PatientContextStrings.startVisit),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                   backgroundColor: eligible

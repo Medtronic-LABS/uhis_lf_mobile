@@ -379,21 +379,7 @@ class _PregnancyRegistrationSheetState
       '${d.day.toString().padLeft(2, '0')} '
       '${_monthName(d.month)} ${d.year}';
 
-  String _monthName(int m) => const [
-        '',
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec'
-      ][m];
+  String _monthName(int m) => DateFormatStrings.monthAbbrev(m);
 }
 
 // ---------------------------------------------------------------------------
