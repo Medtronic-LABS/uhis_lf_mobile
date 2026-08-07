@@ -122,15 +122,15 @@ class _RationaleSheet extends StatelessWidget {
           const SizedBox(height: 16),
           _BulletItem(
             icon: Icons.mic_none,
-            text: 'Records consultation audio',
+            text: ScribeStrings.bulletRecordsAudio,
           ),
           _BulletItem(
             icon: Icons.check_circle_outline,
-            text: 'You review and accept before it saves',
+            text: ScribeStrings.bulletReviewBeforeSave,
           ),
           _BulletItem(
             icon: Icons.delete_outline,
-            text: 'Audio deleted from server after processing',
+            text: ScribeStrings.bulletAudioDeletedAfterProcessing,
           ),
           const SizedBox(height: 20),
           Row(

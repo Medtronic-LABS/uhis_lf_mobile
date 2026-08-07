@@ -147,8 +147,8 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                       _TranscriptCard(text: transcript),
                     _SoapSection(
                       label: 'S',
-                      title: 'Subjective',
-                      subtitle: "Patient's reported symptoms",
+                      title: ScribeStrings.soapSubjectiveTitle,
+                      subtitle: ScribeStrings.soapSubjectiveSubtitle,
                       text: _editedSubjective ?? soap.subjective ?? '',
                       onSeen: () => _markSeen('S'),
                       onChanged: (v) =>
@@ -156,8 +156,8 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                     ),
                     _SoapSection(
                       label: 'O',
-                      title: 'Objective',
-                      subtitle: 'Clinical findings & vitals',
+                      title: ScribeStrings.soapObjectiveTitle,
+                      subtitle: ScribeStrings.soapObjectiveSubtitle,
                       text: _editedObjective ?? soap.objective ?? '',
                       onSeen: () => _markSeen('O'),
                       onChanged: (v) =>
@@ -165,8 +165,8 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                     ),
                     _SoapSection(
                       label: 'A',
-                      title: 'Assessment',
-                      subtitle: 'Diagnosis / impression',
+                      title: ScribeStrings.soapAssessmentTitle,
+                      subtitle: ScribeStrings.soapAssessmentSubtitle,
                       text: _editedAssessment ?? soap.assessment ?? '',
                       onSeen: () => _markSeen('A'),
                       onChanged: (v) =>
@@ -174,8 +174,8 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                     ),
                     _SoapSection(
                       label: 'P',
-                      title: 'Plan',
-                      subtitle: 'Treatment & follow-up',
+                      title: ScribeStrings.soapPlanTitle,
+                      subtitle: ScribeStrings.soapPlanSubtitle,
                       text: _editedPlan ?? soap.plan ?? '',
                       onSeen: () => _markSeen('P'),
                       onChanged: (v) => setState(() => _editedPlan = v),
@@ -288,7 +288,7 @@ class _SheetHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final confidencePct =
         ((rationale?.confidence ?? 0) * 100).toStringAsFixed(0);
-    final model = rationale?.asrProvider ?? 'AI';
+    final model = rationale?.asrProvider ?? ScribeStrings.aiModelFallback;
     final needsReview = rationale?.humanReviewRequired ?? true;
 
     return Row(
@@ -309,7 +309,7 @@ class _SheetHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$confidencePct% confidence · $model',
+                ScribeStrings.confidencePctModel(confidencePct, model),
                 style: TextStyle(
                   fontSize: 11,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,

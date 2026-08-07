@@ -79,11 +79,11 @@ class ConfidenceBadge extends StatelessWidget {
   String _labelForLevel(AIConfidenceLevel level) {
     switch (level) {
       case AIConfidenceLevel.high:
-        return 'High confidence';
+        return ScribeBannerStrings.confidenceHigh;
       case AIConfidenceLevel.medium:
-        return 'Medium';
+        return ScribeBannerStrings.confidenceMedium;
       case AIConfidenceLevel.low:
-        return 'Review needed';
+        return ScribeBannerStrings.confidenceReviewNeeded;
     }
   }
 }
@@ -149,7 +149,7 @@ class AIFieldControls extends StatelessWidget {
             minWidth: iconSize + spacing,
             minHeight: iconSize + spacing,
           ),
-          tooltip: 'Accept',
+          tooltip: ScribeBannerStrings.acceptTooltip,
           onPressed: onAccept,
         ),
         if (onEdit != null)
@@ -161,7 +161,7 @@ class AIFieldControls extends StatelessWidget {
               minWidth: iconSize + spacing,
               minHeight: iconSize + spacing,
             ),
-            tooltip: 'Edit',
+            tooltip: ScribeBannerStrings.editTooltip,
             onPressed: onEdit,
           ),
         IconButton(
@@ -172,7 +172,7 @@ class AIFieldControls extends StatelessWidget {
             minWidth: iconSize + spacing,
             minHeight: iconSize + spacing,
           ),
-          tooltip: 'Reject',
+          tooltip: ScribeBannerStrings.rejectTooltip,
           onPressed: onReject,
         ),
       ],
@@ -263,14 +263,14 @@ class AIFieldWrapper extends StatelessWidget {
                       compact: true,
                     )
                   else if (isAccepted)
-                    const _StatusChip(
-                      label: 'Accepted',
+                    _StatusChip(
+                      label: ScribeBannerStrings.statusAccepted,
                       icon: Icons.check,
                       color: AppColors.statusSuccessText,
                     )
                   else if (isModified)
-                    const _StatusChip(
-                      label: 'Modified',
+                    _StatusChip(
+                      label: ScribeBannerStrings.statusModified,
                       icon: Icons.edit,
                       color: AppColors.tagBlueText,
                     ),
@@ -377,10 +377,10 @@ class AIScribeFloatingButton extends StatelessWidget {
                 ),
           label: Text(
             isProcessing
-                ? 'Processing...'
+                ? ScribeBannerStrings.processingEllipsis
                 : isRecording
-                    ? 'Stop'
-                    : 'AI Scribe',
+                    ? ScribeBannerStrings.stopLabel
+                    : ScribeBannerStrings.aiScribeLabel,
             style: const TextStyle(color: Colors.white),
           ),
         ),
@@ -466,7 +466,7 @@ class AIPreFillBanner extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '$fieldCount fields extracted from recording',
+                      ScribeBannerStrings.fieldsExtractedCount(fieldCount),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textMuted,

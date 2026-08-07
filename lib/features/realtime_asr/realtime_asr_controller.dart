@@ -228,7 +228,7 @@ class RealtimeAsrController extends ChangeNotifier {
         onDone: _onSocketDone,
         onError: (Object e) {
           debugPrint('[RealtimeASR] websocket error: $e');
-          _setError('Connection error: $e');
+          _setError(RealtimeAsrStrings.connectionError('$e'));
           // A socket error leaves the mic stream and auto-extract timer
           // running against a dead channel unless torn down here too — same
           // leak as an unexpected close (see _onSocketDone).
@@ -287,7 +287,7 @@ class RealtimeAsrController extends ChangeNotifier {
       });
     } catch (e, st) {
       debugPrint('[RealtimeASR] start() failed: $e\n$st');
-      _setError('Could not start real-time ASR: $e');
+      _setError(RealtimeAsrStrings.couldNotStart('$e'));
       await _teardown();
     }
   }
@@ -426,10 +426,8 @@ class RealtimeAsrController extends ChangeNotifier {
         'device/emulator mic is not delivering real audio to the app.',
       );
       _micWarning = stuckValue == 0
-          ? 'No mic signal detected — check the device microphone.'
-          : 'Mic signal looks stuck/invalid — check the device microphone '
-              '(on an emulator, try a cold restart with host audio input enabled, '
-              'or test on a physical device).';
+          ? RealtimeAsrStrings.noMicSignal
+          : RealtimeAsrStrings.micSignalStuck;
       notifyListeners();
     }
   }
@@ -567,7 +565,7 @@ class RealtimeAsrController extends ChangeNotifier {
           ));
         }
       } else {
-        unmapped.add('BP: $bp');
+        unmapped.add(RealtimeAsrStrings.bloodPressurePrefix(bp));
       }
     }
 
@@ -586,7 +584,7 @@ class RealtimeAsrController extends ChangeNotifier {
           extractedAt: now,
         ));
       } else {
-        unmapped.add('Glucose: $glucose');
+        unmapped.add(RealtimeAsrStrings.glucosePrefix(glucose));
       }
     }
 
@@ -839,9 +837,9 @@ class RealtimeAsrController extends ChangeNotifier {
     }
 
     // Surface remaining fields as unmapped so the banner shows them.
-    if (f.diagnosis != null) unmapped.add('Diagnosis: ${f.diagnosis}');
+    if (f.diagnosis != null) unmapped.add(RealtimeAsrStrings.diagnosisPrefix(f.diagnosis!));
     if (f.comorbidities.isNotEmpty) {
-      unmapped.add('Comorbidities: ${f.comorbidities.join(', ')}');
+      unmapped.add(RealtimeAsrStrings.comorbiditiesPrefix(f.comorbidities.join(', ')));
     }
 
     debugPrint(
