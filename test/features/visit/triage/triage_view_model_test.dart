@@ -112,10 +112,10 @@ void main() {
       expect(vm.preExpandedClusters.contains(SymptomCluster.tbIndicators), isTrue);
     });
 
-    test('Under 5 child → expands child health clusters', () {
+    test('Young child (< 25mo) → expands child health clusters', () {
       final ctx = PatientContext(
         patientId: 'test-7',
-        ageMonths: 36, // 3 years
+        ageMonths: 18, // within the RMNCH childhoodVisit window (< 25mo)
         sex: Sex.male,
         isPregnant: false,
         knownConditions: {},
@@ -127,6 +127,21 @@ void main() {
       expect(vm.preExpandedClusters.contains(SymptomCluster.childHealth), isTrue);
       expect(vm.preExpandedClusters.contains(SymptomCluster.feverRespiratory), isTrue);
       expect(vm.preExpandedClusters.contains(SymptomCluster.giNutrition), isTrue);
+    });
+
+    test('3-year-old (outside the young-child window) → does NOT expand child health clusters', () {
+      final ctx = PatientContext(
+        patientId: 'test-7b',
+        ageMonths: 36, // 3 years — outside RMNCH childhoodVisit's 25mo ceiling
+        sex: Sex.male,
+        isPregnant: false,
+        knownConditions: {},
+        activeProgrammes: {},
+      );
+
+      final vm = TriageViewModel(patientContext: ctx);
+
+      expect(vm.preExpandedClusters.contains(SymptomCluster.childHealth), isFalse);
     });
 
     test('Postpartum → expands maternal cluster', () {
@@ -236,23 +251,6 @@ void main() {
       final programmes = vm.activatedPathways.map((p) => p.programme).toSet();
       expect(programmes.contains(Programme.anc), isTrue);
       expect(programmes.contains(Programme.ncd), isTrue);
-    });
-
-    test('TB symptoms → TB pathway', () {
-      final ctx = PatientContext(
-        patientId: 'test-path-2',
-        ageMonths: 408, // 34 years
-        sex: Sex.male,
-        isPregnant: false,
-        knownConditions: {},
-        activeProgrammes: {},
-      );
-
-      final vm = TriageViewModel(patientContext: ctx);
-      vm.selectSymptoms({'cough_over_2_weeks', 'weight_loss', 'fever'});
-
-      final programmes = vm.activatedPathways.map((p) => p.programme).toSet();
-      expect(programmes.contains(Programme.tb), isTrue);
     });
 
     test('Child with MUAC red → IMCI pathway', () {

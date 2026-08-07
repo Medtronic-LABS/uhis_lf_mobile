@@ -6,6 +6,7 @@ import '../debug/console_log.dart';
 import '../models/risk.dart';
 import '../models/provance_dto.dart';
 import 'app_database.dart';
+import 'pregnancy_episode_dao.dart';
 
 /// Sync status for local assessments, matching Android's OfflineSyncStatus.
 enum AssessmentSyncStatus {
@@ -269,15 +270,11 @@ class LocalAssessmentEntity {
     // is stored in Flutter but Android sends "PNC_NEONATE" on the wire (GAP 6 fix).
     final wireType = _wireType(assessmentType);
 
-    // Pregnancy types that carry a pregnancyEpisodeId in the encounter, matching
-    // Android OfflineSyncRepository.getPregnancyEpisodeId() which includes:
-    // pwProfile, pregnancyOutcome, anc, PNC_MOTHER, ChildHood_Visit.
-    const pregnancyTypes = {
-      'ANC', 'PWPROFILE', 'PW_PROFILE', 'PREGNANCY_OUTCOME', 'PREGNANCYOUTCOME',
-      'PNC_MOTHER', 'PNC', 'PNC_CHILD', 'PNC_NEONATE', 'PNC_NEONATAL',
-      'CHILDHOOD_VISIT', 'CHILD_MENU',
-    };
-    final isPregnancyType = pregnancyTypes.contains(assessmentType.toUpperCase());
+    // Pregnancy types that carry a pregnancyEpisodeId in the encounter —
+    // see kPregnancyEpisodeLinkedTypes, the single source of truth matching
+    // Android OfflineSyncRepository.getPregnancyEpisodeId().
+    final isPregnancyType =
+        kPregnancyEpisodeLinkedTypes.contains(assessmentType.toUpperCase());
 
     final request = <String, dynamic>{
       // Android sends the assessment row's own numeric PK. Ours is a UUID, so

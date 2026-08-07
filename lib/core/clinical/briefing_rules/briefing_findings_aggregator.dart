@@ -133,7 +133,7 @@ class BriefingFindingsAggregator {
       ));
     }
 
-    if (patientCtx.isUnder5 || selectedProgrammes.contains(Programme.imci)) {
+    if (patientCtx.isYoungChild || selectedProgrammes.contains(Programme.imci)) {
       findings.addAll(await _evaluateChildImmunization(
         patientId: patientId,
         allRows: allRows,

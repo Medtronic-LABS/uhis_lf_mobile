@@ -103,6 +103,7 @@ class MissionQueueItem {
     this.householdId,
     this.householdNumber,
     this.age,
+    this.ageMonths,
     this.gender,
     this.nid,
     this.village,
@@ -158,8 +159,13 @@ class MissionQueueItem {
   /// [householdDisplay] and never re-formats it.
   final String? householdNumber;
 
-  /// Patient age.
+  /// Patient age in whole years (floored).
   final int? age;
+
+  /// Calendar-aware age in whole months, when a DOB was available. Only
+  /// meaningful for display when [age] floors to 0 — lets the card show a
+  /// <1-year-old as "9m" instead of "0Y".
+  final int? ageMonths;
 
   /// Patient gender as stored in the sync payload ("Male", "Female", "Other",
   /// or a single letter). Card formats it to a single uppercase letter via
@@ -274,6 +280,7 @@ class MissionQueueItem {
     String? householdId,
     String? householdNumber,
     int? age,
+    int? ageMonths,
     String? gender,
     String? nid,
     String? village,
@@ -307,6 +314,7 @@ class MissionQueueItem {
       householdId: householdId ?? this.householdId,
       householdNumber: householdNumber ?? this.householdNumber,
       age: age ?? this.age,
+      ageMonths: ageMonths ?? this.ageMonths,
       gender: gender ?? this.gender,
       nid: nid ?? this.nid,
       village: village ?? this.village,

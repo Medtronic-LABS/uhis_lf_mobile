@@ -711,6 +711,8 @@ abstract final class PatientContextStrings {
       ? '$months মাস'
       : '$months month${months == 1 ? '' : 's'}';
   static String get ageUnderOneYear => getTranslatedString('ageUnderOneYear', '< 1 yr');
+  /// Compact "9m" form for space-constrained cards (dashboard patient card).
+  static String ageMonthsCompact(int months) => getTranslatedString('PatientContext.ageMonthsCompact', '{months}m', params: {'months': '$months'});
   static String householdFallback(String householdId) => getTranslatedString('householdFallback', 'HH {householdId}', params: {'householdId': '$householdId'});
   static String get pregnantChip => getTranslatedString('pregnantChip', 'Pregnant');
 
@@ -1943,9 +1945,16 @@ abstract final class TriageStrings {
   /// Chip label — Android "Pregnancy Outcome" menu (not mother PNC).
   static String get pregnancyOutcomeChip => getTranslatedString('pregnancyOutcomeChip', 'Pregnancy Outcome');
   static String get deliveryHint => getTranslatedString('deliveryHint', 'Pregnancy Outcome documents the birth this visit and clears ANC');
-  static String get ancDeliveryConflictHint => getTranslatedString('ancDeliveryConflictHint', '⚠ ANC is unavailable on a pregnancy-outcome visit — deselect Pregnancy Outcome first');
+  static String get ancDeliveryConflictHint => getTranslatedString('ancDeliveryConflictHint', '⚠ Unavailable on a pregnancy-outcome visit — deselect Pregnancy Outcome first');
   static String get pncOnlyPostpartumHint => getTranslatedString('pncOnlyPostpartumHint', '⚠ Mother PNC is available after delivery — use Pregnancy Outcome now');
+  static String get pwLockedPostpartumHint => getTranslatedString('pwLockedPostpartumHint', '⚠ This pregnancy has already ended — PW registration is only for a new pregnancy');
+  static String get pregnancyOutcomeLockedHint => getTranslatedString('pregnancyOutcomeLockedHint', '⚠ Pregnancy Outcome is not available for this patient right now');
+  static String get fpLockedPregnantHint => getTranslatedString('fpLockedPregnantHint', '⚠ Family Planning is unavailable during an active pregnancy');
   static String get vaccinationDefaultHint => getTranslatedString('vaccinationDefaultHint', 'Vaccination is always included for this visit — only Child Health is optional');
+  static String pwEpisodeSubtitle({required String lmp, required String edd}) => getTranslatedString('Triage.pwEpisodeSubtitle', 'LMP: {lmp} · EDD: {edd}', params: {'lmp': lmp, 'edd': edd});
+  static String get ancVisitedTodayMessage => getTranslatedString('Triage.ancVisitedTodayMessage', 'ANC already recorded today');
+  static String ancRevisitMessageNormal({required String lastVisit, required String nextDue}) => getTranslatedString('Triage.ancRevisitMessageNormal', 'Last visit: {lastVisit} · next due {nextDue}', params: {'lastVisit': lastVisit, 'nextDue': nextDue});
+  static String ancRevisitMessageHighRisk({required String lastVisit}) => getTranslatedString('Triage.ancRevisitMessageHighRisk', 'Last visit: {lastVisit} (high-risk — 1-day interval)', params: {'lastVisit': lastVisit});
 
   static String selectProgrammeA11y(String label) => getTranslatedString('selectProgrammeA11y', 'Select {label}', params: {'label': '$label'});
   static String deselectProgrammeA11y(String label) => getTranslatedString('deselectProgrammeA11y', 'Deselect {label}', params: {'label': '$label'});
@@ -2663,230 +2672,6 @@ abstract final class ComposerStrings {
   // ── Supply pair sub-labels ───────────────────────────────────────────────────
   static String get supplyConsumedShort => getTranslatedString('supplyConsumedShort', 'Consumed');
   static String get supplyProvidedShort => getTranslatedString('supplyProvidedShort', 'Provided today');
-}
-
-/// CDS (Clinical Decision Support) alert strings.
-/// Phase 3: Symptom-Driven Unified Assessment — CDS rules layer.
-///
-/// All keys used in [CdsAlert.messageKey] and [CdsAlert.rationaleKey]
-/// must resolve through this class.  No string literals in widgets.
-abstract final class CdsStrings {
-  CdsStrings._();
-
-  // ── Alert messages ──────────────────────────────────────────────────────────
-  static const String bpSevereMessage =
-      'Severe hypertension detected — refer immediately';
-  static const String bpStage1Message =
-      'High BP — add NCD hypertension assessment';
-  static const String dangerSignMessage =
-      'Danger sign present — refer immediately';
-  static const String severePneumoniaMessage =
-      'Severe pneumonia — refer immediately';
-  static const String pneumoniaMessage =
-      'Pneumonia — treat or refer if worsening';
-  static const String samMessage =
-      'Severe acute malnutrition — refer immediately';
-  static const String mamMessage = 'Moderate malnutrition — treat at community';
-  static const String severeAnemiaMessage = 'Severe anemia — refer immediately';
-  static const String anemiaMessage =
-      'Anemia detected — supplement and follow up';
-  static const String glucoseHighMessage =
-      'High blood glucose — diabetes screening indicated';
-  static const String tbScreenAddMessage =
-      'TB screening added — cough ≥ 2 weeks';
-  static const String conflictReferralOverridesKey =
-      'Referral recommended — treat-at-community overridden';
-
-  // ── Alert actions ───────────────────────────────────────────────────────────
-  static String get referNowButton => getTranslatedString('referNowButton', 'Refer now');
-  static String get addPathwayButton => getTranslatedString('addPathwayButton', 'Add to assessment');
-  static String get dismissButton => getTranslatedString('dismissButton', 'Dismiss');
-
-  // ── Rationale / explainability keys ────────────────────────────────────────
-  static const String rationaleWhoHeartsBpSevere =
-      'WHO HEARTS: systolic ≥ 160 or diastolic ≥ 100 = severe hypertension';
-  static const String rationaleWhoHeartsStage1 =
-      'WHO HEARTS: systolic ≥ 140 or diastolic ≥ 90 = stage 1 hypertension';
-  static const String rationaleWhoImciDangerSign =
-      'WHO IMCI: general danger sign = refer urgently';
-  static const String rationaleWhoImciSeverePneumonia =
-      'WHO IMCI: chest indrawing = severe pneumonia';
-  static const String rationaleWhoImciPneumonia =
-      'WHO IMCI: fast breathing without chest indrawing = pneumonia';
-  static const String rationaleWhoMuacSam =
-      'WHO: MUAC < 11.5 cm = severe acute malnutrition';
-  static const String rationaleWhoMuacMam =
-      'WHO: MUAC 11.5–12.5 cm = moderate acute malnutrition';
-  static const String rationaleWhoAncAnemia =
-      'WHO ANC: Hb < 7 g/dL = severe anemia requiring referral';
-  static const String rationaleWhoAncMildAnemia =
-      'WHO ANC: Hb < 11 g/dL = anemia in pregnancy';
-  static const String rationaleWhoPenDm =
-      'WHO PEN: glucose > 200 mg/dL random or > 126 mg/dL fasting = diabetes threshold';
-  static const String rationaleWhoTb4Symptom =
-      'WHO: cough ≥ 2 weeks is a TB indicator — screen urgently';
-
-  // ── CDSS algorithm rationales ────────────────────────────────────────────────
-  static const String rationaleFindriscModerate =
-      'FINDRISC score 12–14: moderate diabetes risk (1 in 6 chance over 10 years)';
-  static const String rationaleFindriscHigh =
-      'FINDRISC score 15–20: high diabetes risk (1 in 3 chance over 10 years)';
-  static const String rationaleFindriscVeryHigh =
-      'FINDRISC score ≥ 21: very high diabetes risk (1 in 2 chance over 10 years)';
-  static const String rationaleFraminghamTrigger =
-      'Framingham No-Lab: 10-year CVD risk ≥ 10% — NCD management indicated';
-  static const String rationaleFraminghamHigh =
-      'Framingham No-Lab: 10-year CVD risk ≥ 20% — high cardiovascular risk';
-  static const String rationaleBpTrendCusum =
-      'CUSUM: cumulative BP rise exceeds decision threshold (h = 40 mmHg)';
-  static const String rationaleBpTrendEwma =
-      'EWMA: smoothed BP trend has crossed the upper control limit';
-  static const String rationaleBpTrendSlope =
-      'Linear slope: BP increasing at > 4 mmHg per visit';
-  static const String rationaleMiniPiersHigh =
-      'miniPIERS: predicted adverse maternal outcome risk ≥ 25%';
-  static const String rationaleMiniPiersCritical =
-      'miniPIERS: predicted adverse maternal outcome risk ≥ 50% — refer now';
-  static const String rationaleCataractNcdCoenroll =
-      'NCD service provided during cataract visit — NCD enrolment recommended';
-  static const String rationaleEyeCareReferral =
-      'Eye test outcome requires specialist referral';
-
-  // ── CDSS algorithm alert messages ────────────────────────────────────────────
-  static const String findriscModerateMessage =
-      'Diabetes risk moderate (FINDRISC 12–14) — add NCD assessment';
-  static const String findriscHighMessage =
-      'Diabetes risk high (FINDRISC 15–20) — add NCD assessment';
-  static const String findriscVeryHighMessage =
-      'Diabetes risk very high (FINDRISC ≥ 21) — add NCD assessment';
-  static const String framinghamTriggerMessage =
-      'CVD risk ≥ 10% (Framingham) — NCD management indicated';
-  static const String framinghamHighMessage =
-      'CVD risk ≥ 20% (Framingham) — high cardiovascular risk';
-  static const String bpTrendCusumMessage =
-      'BP trend alert (CUSUM) — rising blood pressure pattern detected';
-  static const String bpTrendEwmaMessage =
-      'BP trend alert (EWMA) — blood pressure control worsening';
-  static const String bpTrendSlopeMessage =
-      'BP trend alert — increasing > 4 mmHg per visit';
-  static const String miniPiersHighMessage =
-      'High risk of adverse outcome (miniPIERS ≥ 25%) — close monitoring needed';
-  static const String miniPiersCriticalMessage =
-      'Critical risk of adverse outcome (miniPIERS ≥ 50%) — refer immediately';
-  static const String cataractNcdCoenrollMessage =
-      'NCD service provided — enrol patient in NCD programme';
-  static const String eyeCareReferralMessage =
-      'Patient requires eye care referral — document referral facility';
-
-  /// Resolve a message string by its key (as stored in [CdsAlert.messageKey]).
-  static String message(String key) {
-    switch (key) {
-      case 'bpSevereMessage':
-        return getTranslatedString('Cds.message.bpSevereMessage', 'Severe hypertension detected — refer immediately');
-      case 'bpStage1Message':
-        return getTranslatedString('Cds.message.bpStage1Message', 'High BP — add NCD hypertension assessment');
-      case 'dangerSignMessage':
-        return getTranslatedString('Cds.message.dangerSignMessage', 'Danger sign present — refer immediately');
-      case 'severePneumoniaMessage':
-        return getTranslatedString('Cds.message.severePneumoniaMessage', 'Severe pneumonia — refer immediately');
-      case 'pneumoniaMessage':
-        return getTranslatedString('Cds.message.pneumoniaMessage', 'Pneumonia — treat or refer if worsening');
-      case 'samMessage':
-        return getTranslatedString('Cds.message.samMessage', 'Severe acute malnutrition — refer immediately');
-      case 'mamMessage':
-        return getTranslatedString('Cds.message.mamMessage', 'Moderate malnutrition — treat at community');
-      case 'severeAnemiaMessage':
-        return getTranslatedString('Cds.message.severeAnemiaMessage', 'Severe anemia — refer immediately');
-      case 'anemiaMessage':
-        return getTranslatedString('Cds.message.anemiaMessage', 'Anemia detected — supplement and follow up');
-      case 'glucoseHighMessage':
-        return getTranslatedString('Cds.message.glucoseHighMessage', 'High blood glucose — diabetes screening indicated');
-      case 'tbScreenAddMessage':
-        return getTranslatedString('Cds.message.tbScreenAddMessage', 'TB screening added — cough ≥ 2 weeks');
-      case 'conflictReferralOverridesKey':
-        return getTranslatedString('Cds.message.conflictReferralOverridesKey', 'Referral recommended — treat-at-community overridden');
-      case 'findriscModerateMessage':
-        return getTranslatedString('Cds.message.findriscModerateMessage', 'Diabetes risk moderate (FINDRISC 12–14) — add NCD assessment');
-      case 'findriscHighMessage':
-        return getTranslatedString('Cds.message.findriscHighMessage', 'Diabetes risk high (FINDRISC 15–20) — add NCD assessment');
-      case 'findriscVeryHighMessage':
-        return getTranslatedString('Cds.message.findriscVeryHighMessage', 'Diabetes risk very high (FINDRISC ≥ 21) — add NCD assessment');
-      case 'framinghamTriggerMessage':
-        return getTranslatedString('Cds.message.framinghamTriggerMessage', 'CVD risk ≥ 10% (Framingham) — NCD management indicated');
-      case 'framinghamHighMessage':
-        return getTranslatedString('Cds.message.framinghamHighMessage', 'CVD risk ≥ 20% (Framingham) — high cardiovascular risk');
-      case 'bpTrendCusumMessage':
-        return getTranslatedString('Cds.message.bpTrendCusumMessage', 'BP trend alert (CUSUM) — rising blood pressure pattern detected');
-      case 'bpTrendEwmaMessage':
-        return getTranslatedString('Cds.message.bpTrendEwmaMessage', 'BP trend alert (EWMA) — blood pressure control worsening');
-      case 'bpTrendSlopeMessage':
-        return getTranslatedString('Cds.message.bpTrendSlopeMessage', 'BP trend alert — increasing > 4 mmHg per visit');
-      case 'miniPiersHighMessage':
-        return getTranslatedString('Cds.message.miniPiersHighMessage', 'High risk of adverse outcome (miniPIERS ≥ 25%) — close monitoring needed');
-      case 'miniPiersCriticalMessage':
-        return getTranslatedString('Cds.message.miniPiersCriticalMessage', 'Critical risk of adverse outcome (miniPIERS ≥ 50%) — refer immediately');
-      case 'cataractNcdCoenrollMessage':
-        return getTranslatedString('Cds.message.cataractNcdCoenrollMessage', 'NCD service provided — enrol patient in NCD programme');
-      case 'eyeCareReferralMessage':
-        return getTranslatedString('Cds.message.eyeCareReferralMessage', 'Patient requires eye care referral — document referral facility');
-      default:
-        return key;
-    }
-  }
-
-  /// Resolve a rationale string by its key (as stored in [CdsAlert.rationaleKey]).
-  static String rationale(String key) {
-    switch (key) {
-      case 'rationaleWhoHeartsBpSevere':
-        return getTranslatedString('Cds.rationale.rationaleWhoHeartsBpSevere', 'WHO HEARTS: systolic ≥ 160 or diastolic ≥ 100 = severe hypertension');
-      case 'rationaleWhoHeartsStage1':
-        return getTranslatedString('Cds.rationale.rationaleWhoHeartsStage1', 'WHO HEARTS: systolic ≥ 140 or diastolic ≥ 90 = stage 1 hypertension');
-      case 'rationaleWhoImciDangerSign':
-        return getTranslatedString('Cds.rationale.rationaleWhoImciDangerSign', 'WHO IMCI: general danger sign = refer urgently');
-      case 'rationaleWhoImciSeverePneumonia':
-        return getTranslatedString('Cds.rationale.rationaleWhoImciSeverePneumonia', 'WHO IMCI: chest indrawing = severe pneumonia');
-      case 'rationaleWhoImciPneumonia':
-        return getTranslatedString('Cds.rationale.rationaleWhoImciPneumonia', 'WHO IMCI: fast breathing without chest indrawing = pneumonia');
-      case 'rationaleWhoMuacSam':
-        return getTranslatedString('Cds.rationale.rationaleWhoMuacSam', 'WHO: MUAC < 11.5 cm = severe acute malnutrition');
-      case 'rationaleWhoMuacMam':
-        return getTranslatedString('Cds.rationale.rationaleWhoMuacMam', 'WHO: MUAC 11.5–12.5 cm = moderate acute malnutrition');
-      case 'rationaleWhoAncAnemia':
-        return getTranslatedString('Cds.rationale.rationaleWhoAncAnemia', 'WHO ANC: Hb < 7 g/dL = severe anemia requiring referral');
-      case 'rationaleWhoAncMildAnemia':
-        return getTranslatedString('Cds.rationale.rationaleWhoAncMildAnemia', 'WHO ANC: Hb < 11 g/dL = anemia in pregnancy');
-      case 'rationaleWhoPenDm':
-        return getTranslatedString('Cds.rationale.rationaleWhoPenDm', 'WHO PEN: glucose > 200 mg/dL random or > 126 mg/dL fasting = diabetes threshold');
-      case 'rationaleWhoTb4Symptom':
-        return getTranslatedString('Cds.rationale.rationaleWhoTb4Symptom', 'WHO: cough ≥ 2 weeks is a TB indicator — screen urgently');
-      case 'rationaleFindriscModerate':
-        return getTranslatedString('Cds.rationale.rationaleFindriscModerate', 'FINDRISC score 12–14: moderate diabetes risk (1 in 6 chance over 10 years)');
-      case 'rationaleFindriscHigh':
-        return getTranslatedString('Cds.rationale.rationaleFindriscHigh', 'FINDRISC score 15–20: high diabetes risk (1 in 3 chance over 10 years)');
-      case 'rationaleFindriscVeryHigh':
-        return getTranslatedString('Cds.rationale.rationaleFindriscVeryHigh', 'FINDRISC score ≥ 21: very high diabetes risk (1 in 2 chance over 10 years)');
-      case 'rationaleFraminghamTrigger':
-        return getTranslatedString('Cds.rationale.rationaleFraminghamTrigger', 'Framingham No-Lab: 10-year CVD risk ≥ 10% — NCD management indicated');
-      case 'rationaleFraminghamHigh':
-        return getTranslatedString('Cds.rationale.rationaleFraminghamHigh', 'Framingham No-Lab: 10-year CVD risk ≥ 20% — high cardiovascular risk');
-      case 'rationaleBpTrendCusum':
-        return getTranslatedString('Cds.rationale.rationaleBpTrendCusum', 'CUSUM: cumulative BP rise exceeds decision threshold (h = 40 mmHg)');
-      case 'rationaleBpTrendEwma':
-        return getTranslatedString('Cds.rationale.rationaleBpTrendEwma', 'EWMA: smoothed BP trend has crossed the upper control limit');
-      case 'rationaleBpTrendSlope':
-        return getTranslatedString('Cds.rationale.rationaleBpTrendSlope', 'Linear slope: BP increasing at > 4 mmHg per visit');
-      case 'rationaleMiniPiersHigh':
-        return getTranslatedString('Cds.rationale.rationaleMiniPiersHigh', 'miniPIERS: predicted adverse maternal outcome risk ≥ 25%');
-      case 'rationaleMiniPiersCritical':
-        return getTranslatedString('Cds.rationale.rationaleMiniPiersCritical', 'miniPIERS: predicted adverse maternal outcome risk ≥ 50% — refer now');
-      case 'rationaleCataractNcdCoenroll':
-        return getTranslatedString('Cds.rationale.rationaleCataractNcdCoenroll', 'NCD service provided during cataract visit — NCD enrolment recommended');
-      case 'rationaleEyeCareReferral':
-        return getTranslatedString('Cds.rationale.rationaleEyeCareReferral', 'Eye test outcome requires specialist referral');
-      default:
-        return key;
-    }
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

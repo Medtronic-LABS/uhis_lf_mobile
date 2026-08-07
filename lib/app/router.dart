@@ -453,18 +453,6 @@ GoRouter buildRouter(AuthState auth) {
               isPostpartum: extra?['isPostpartum'] as bool? ?? false,
               postpartumWeeks: extra?['postpartumWeeks'] as int?,
               origin: origin,
-              initialStep: extra?['initialStep'] as int? ?? 0,
-              seedProgrammes: () {
-                final raw = extra?['seedProgrammes'];
-                if (raw is List) {
-                  return raw
-                      .whereType<String>()
-                      .map(Programme.fromString)
-                      .where((p) => p != Programme.unknown)
-                      .toSet();
-                }
-                return const <Programme>{};
-              }(),
             ),
           );
         },

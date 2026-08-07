@@ -40,6 +40,7 @@ import 'core/db/local_dashboard_repository.dart';
 import 'core/db/member_dao.dart';
 import 'core/db/patient_dao.dart';
 import 'core/db/patient_programmes_dao.dart';
+import 'core/db/pregnancy_episode_dao.dart';
 import 'core/db/pregnancy_snapshot_dao.dart';
 import 'core/db/treatment_presence_dao.dart';
 import 'core/db/referral_dao.dart';
@@ -157,6 +158,8 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final MemberDao _memberDao = MemberDao(widget.appDb);
   late final PregnancySnapshotDao _pregnancySnapshotDao =
       PregnancySnapshotDao(widget.appDb);
+  late final PregnancyEpisodeDao _pregnancyEpisodeDao =
+      PregnancyEpisodeDao(widget.appDb, _pregnancySnapshotDao);
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
   late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
@@ -184,6 +187,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     households: _householdDao,
     members: _memberDao,
     pregnancySnapshot: _pregnancySnapshotDao,
+    pregnancyEpisode: _pregnancyEpisodeDao,
     treatmentPresence: _treatmentPresenceDao,
     encounterDao: _encounterDao,
     // CCE: project followUp / assessment-history referrals into `referrals`.
@@ -479,6 +483,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<LocalDashboardRepository>.value(value: _localDashboard),
         Provider<PatientProgrammesDao>.value(value: _progDao),
         Provider<PregnancySnapshotDao>.value(value: _pregnancySnapshotDao),
+        Provider<PregnancyEpisodeDao>.value(value: _pregnancyEpisodeDao),
         Provider<ObservationRepository>(
             create: (_) => ObservationRepository(widget.api)),
         Provider<MemberDetailRepository>(

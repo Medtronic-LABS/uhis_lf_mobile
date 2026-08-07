@@ -78,8 +78,6 @@ class VisitFlowScreen extends StatefulWidget {
     this.isPostpartum = false,
     this.postpartumWeeks,
     this.origin,
-    this.initialStep = 0,
-    this.seedProgrammes = const <Programme>{},
     this.debugInitialStep,
   });
 
@@ -96,15 +94,6 @@ class VisitFlowScreen extends StatefulWidget {
   final bool isPostpartum;
   final int? postpartumWeeks;
   final String? origin;
-
-  /// Step to start the flow at. Use 1 when the caller already captured
-  /// symptom selection so the SK goes straight to programme recommendation
-  /// + clinical form.
-  final int initialStep;
-
-  /// Programmes pre-confirmed by the caller — seeded into [_confirmedProgrammes]
-  /// so [_Step2ProgrammesThenForm] can pre-select without step 0.
-  final Set<Programme> seedProgrammes;
 
   /// Test-only hook: starts the wrapper at the given step so widget tests
   /// can exercise the progress header / Step 3 body without building Steps
@@ -133,9 +122,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       0;
 
   /// Current step index — 0..2.
-  late int _step =
-      widget.debugInitialStep?.clamp(0, _totalSteps - 1) ??
-      widget.initialStep.clamp(0, _totalSteps - 1);
+  late int _step = widget.debugInitialStep?.clamp(0, _totalSteps - 1) ?? 0;
 
   /// Patient name resolved from constructor or, as a fallback, looked up
   /// from the local DB via [PatientDao]. The constructor value wins —
@@ -144,10 +131,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   late int? _patientAge = widget.patientAge;
   String? _patientDob;
 
-  /// Postpartum status — seeded from constructor; DB lookup fills in the
-  /// weeks value from [PregnancySnapshotDao] when not supplied by caller.
+  /// Postpartum status — seeded from constructor; DB lookup can upgrade
+  /// false → true (see [_loadPostpartumFromDb]).
   late bool _isPostpartum = widget.isPostpartum;
-  late final int? _postpartumWeeks = widget.postpartumWeeks;
 
   /// Gestational weeks resolved from the pregnancy snapshot when the caller
   /// did not supply it via the constructor.  The snapshot lookup always runs
@@ -219,7 +205,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   }
 
   Future<void> _loadVisitNumber({Set<Programme>? programmes}) async {
-    final progs = programmes ?? widget.seedProgrammes;
+    final progs = programmes ?? const <Programme>{};
     final isAnc = progs.contains(Programme.anc);
     final isPnc = progs.contains(Programme.pnc);
     final isChildhood = progs.contains(Programme.imci);
@@ -354,8 +340,12 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   String? _otherSymptoms;
 
   /// Programmes the SK confirmed in Step 2 — drives Step 3 form composition.
-  late Set<Programme> _confirmedProgrammes =
-      widget.seedProgrammes.isNotEmpty ? {...widget.seedProgrammes} : const <Programme>{};
+  Set<Programme> _confirmedProgrammes = const <Programme>{};
+
+  /// Programmes the patient is already enrolled in, resolved once from Step
+  /// 1's `PatientContext` (see `SymptomPickerScreen.onEnrolledProgrammesResolved`)
+  /// instead of a second DB read in Step 2 — used only for section ordering.
+  Set<Programme> _enrolledProgrammes = const <Programme>{};
 
   /// True once Step 1's service grid reported an explicit selection (adult
   /// visits). Prevents the empty-set fallback from resurrecting pathway NCD
@@ -386,11 +376,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
 
   /// True once triage (Step 1) has been submitted. Blocks back-navigation to
   /// Step 1 from Step 2+ — re-entering triage would create a duplicate assessment.
-  ///
-  /// Initialised to true when [widget.initialStep] > 0 (caller already
-  /// captured symptoms elsewhere). Prevents back-navigation onto an empty
-  /// step 0.
-  late bool _triageSubmitted = widget.initialStep > 0;
+  bool _triageSubmitted = false;
 
   /// AI Scribe controller for step 0 (symptom picker). Owned here so the
   /// controller — and any in-progress or completed transcript — survives
@@ -438,17 +424,18 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     return null;
   }
 
-  /// True when the patient is under-5 or confirmed programmes contain EPI/IMCI.
-  /// Age-based detection handles the no-symptoms case (no pathways activated
-  /// → _confirmedProgrammes empty) so the vaccination path still fires for
-  /// children who have no complaints on this visit.
+  /// True when the patient is a young child (RMNCH `childhoodVisit`, < 25
+  /// months — see `PatientContext.isYoungChild`) or confirmed programmes
+  /// contain EPI/IMCI. Age-based detection handles the no-symptoms case (no
+  /// pathways activated → _confirmedProgrammes empty) so the vaccination
+  /// path still fires for children who have no complaints on this visit.
   bool get _isChildVisit =>
       _confirmedProgrammes.any(
         (p) => p == Programme.epi || p == Programme.imci,
       ) ||
-      // patientAge is in years; under-5 always routes to vaccination step
-      // even when no symptoms were selected (no pathways → empty _confirmedProgrammes).
-      (_patientAge != null && _patientAge! < 5);
+      // Calendar-aware months, not patientAge*12, so this stays precise at
+      // the 25-month boundary even when only years-of-age is on record.
+      (_ageInMonths != null && _ageInMonths! < 25);
 
   @override
   Widget build(BuildContext context) {
@@ -541,6 +528,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           onProgrammesSelected: (programmes) {
             _confirmedProgrammes = programmes;
             _programmesExplicitlyChosen = true;
+          },
+          onEnrolledProgrammesResolved: (enrolled) {
+            _enrolledProgrammes = enrolled;
           },
           onDeliverySelected: (isDelivery) {
             debugPrint('[DeliveryGate] onDeliverySelected: $isDelivery → _isDeliveryVisit=$isDelivery');
@@ -651,13 +641,12 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           gestationalWeeks: _effectiveGestationalWeeks,
           lmpMs: _resolvedLmpMs,
           eddMs: _resolvedEddMs,
-          isPostpartum: _isPostpartum,
-          postpartumWeeks: _postpartumWeeks,
           confirmedSymptoms: _confirmedSymptoms,
           aiPickedSymptoms: _aiPickedSymptoms,
           sicknessDuration: _sicknessDuration,
           otherSymptoms: _otherSymptoms,
           seedProgrammes: _confirmedProgrammes,
+          enrolledProgrammes: _enrolledProgrammes,
           isDeliveryVisit: _isDeliveryVisit,
           origin: widget.origin,
           onAdvance: (programme, referral, reasons, facility) {
@@ -841,6 +830,7 @@ class _Step1Symptoms extends StatelessWidget {
     this.patientGender,
     this.origin,
     this.onProgrammesSelected,
+    this.onEnrolledProgrammesResolved,
     this.onProgrammesLive,
     this.onDeliverySelected,
   });
@@ -869,6 +859,11 @@ class _Step1Symptoms extends StatelessWidget {
   /// the inline eligible-services grid. Absent for child visits (under-5).
   final ValueChanged<Set<Programme>>? onProgrammesSelected;
 
+  /// Fired alongside [onProgrammesSelected] with the patient's enrolled
+  /// programmes from Step 1's `PatientContext` — lets Step 2 order sections
+  /// enrolled-first without a second DB read.
+  final ValueChanged<Set<Programme>>? onEnrolledProgrammesResolved;
+
   /// Fired on every service card toggle — drives the Step 1 header badge live.
   final ValueChanged<Set<Programme>>? onProgrammesLive;
 
@@ -891,6 +886,7 @@ class _Step1Symptoms extends StatelessWidget {
         onAdvance: onAdvance,
         onSymptomsConfirmed: onSymptomsConfirmed,
         onProgrammesSelected: onProgrammesSelected,
+        onEnrolledProgrammesResolved: onEnrolledProgrammesResolved,
         onProgrammesLive: onProgrammesLive,
         onDeliverySelected: onDeliverySelected,
       ),
@@ -1070,12 +1066,14 @@ class _Step2VaccinationState extends State<_Step2Vaccination> {
   }
 }
 
-/// Step 2 — resolves the programme set (rule-based, from Step 1's
-/// PathwayEngine result — see [_Step2ProgrammesThenFormState.build]), runs
-/// the ANC/PW gating checks in [_Step2ProgrammesThenFormState._hydrate], then
-/// renders [VisitFormScreen]. `ProgrammeSelectionScreen` (an AI-confirmation
-/// step) exists but is not wired into this flow.
-class _Step2ProgrammesThenForm extends StatefulWidget {
+/// Step 2 — pure renderer for the programme set Step 1 already finalized
+/// via [ServiceSelectionResolver]. All business-rule gating (PW-once-only,
+/// ANC-blocked-postpartum/revisit, PW-auto-add) now runs in Step 1
+/// (`SymptomPickerScreen._doAdvance`) before the SK ever reaches this
+/// widget — it just resolves formTypes and renders [VisitFormScreen].
+/// `ProgrammeSelectionScreen` (an AI-confirmation step) exists but is not
+/// wired into this flow.
+class _Step2ProgrammesThenForm extends StatelessWidget {
   const _Step2ProgrammesThenForm({
     super.key,
     required this.visitId,
@@ -1085,6 +1083,7 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     required this.sicknessDuration,
     required this.otherSymptoms,
     required this.seedProgrammes,
+    required this.enrolledProgrammes,
     required this.onAdvance,
     this.memberId,
     this.householdId,
@@ -1097,8 +1096,6 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     this.gestationalWeeks,
     this.lmpMs,
     this.eddMs,
-    this.isPostpartum = false,
-    this.postpartumWeeks,
     this.isDeliveryVisit = false,
     this.origin,
   });
@@ -1116,15 +1113,23 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final int? gestationalWeeks;
   final int? lmpMs;
   final int? eddMs;
-  final bool isPostpartum;
-  final int? postpartumWeeks;
   final bool isDeliveryVisit;
   final Set<String> confirmedSymptoms;
   /// Subset of [confirmedSymptoms] pre-selected by the AI Scribe.
   final Set<String> aiPickedSymptoms;
   final String? sicknessDuration;
   final String? otherSymptoms;
+
+  /// Final, already-vetted programme set from
+  /// `SymptomPickerScreen._doAdvance` — Step 1's `ServiceSelectionResolver`
+  /// output. Rendered as-is; this widget does not re-derive or re-gate it.
   final Set<Programme> seedProgrammes;
+
+  /// Programmes the patient is already enrolled in, from Step 1's
+  /// `PatientContext` — used only for section ordering (enrolled vs
+  /// recommended), never to alter which programmes are active.
+  final Set<Programme> enrolledProgrammes;
+
   final String? origin;
   final void Function(
     Programme primaryProgramme,
@@ -1134,211 +1139,34 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   ) onAdvance;
 
   @override
-  State<_Step2ProgrammesThenForm> createState() =>
-      _Step2ProgrammesThenFormState();
-}
-
-class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
-  Set<Programme> _currentProgrammes = const <Programme>{};
-  Set<Programme> _selectedProgrammes = const <Programme>{};
-  bool _ready = false;
-
-  @override
-  void initState() {
-    super.initState();
-    debugPrint('[_Step2ProgrammesThenFormState] initState');
-    _selectedProgrammes = widget.seedProgrammes;
-    // Delivery visit always needs PNC in the seed so the form opens
-    // pregnancy-outcome even if Step 1 live-set was emptied by a rebuild.
-    if (widget.isDeliveryVisit) {
-      _selectedProgrammes = {..._selectedProgrammes, Programme.pnc};
-    }
-    debugPrint(
-      '[DeliveryGate] Step2 seed programmes='
-      '${_selectedProgrammes.map((p) => p.name).join(', ')} '
-      'isDeliveryVisit=${widget.isDeliveryVisit}',
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
-  }
-
-  Future<void> _hydrate() async {
-    final dao = context.read<PatientProgrammesDao>();
-    try {
-      // Route id may be members.patient_id; programmes are under patients.id.
-      final patient =
-          await context.read<PatientDao>().byAnyId(widget.patientId);
-      final localId = patient?.id ?? widget.patientId;
-      final progs = await dao.programmesFor(localId);
-      if (!mounted) return;
-
-      final hasAnc = _selectedProgrammes.contains(Programme.anc);
-      final isRegistered = await _isPregnancyRegistered(progs, localId);
-      if (!mounted) return;
-
-      // Task 3 — PW once-only: drop PW silently if already registered.
-      // Do not show a dialog — ANC/other programmes in the same visit should
-      // continue without interrupting the SK.
-      if (_selectedProgrammes.contains(Programme.pw) && isRegistered) {
-        debugPrint(
-          '[Step2][PayloadDebug] PW block: patient=${widget.patientId} '
-          'pregnancy already registered — re-enrollment skipped (no dialog).',
-        );
-        _selectedProgrammes =
-            _selectedProgrammes.difference({Programme.pw});
-        if (_selectedProgrammes.isEmpty) {
-          if (!mounted) return;
-          // This route is a top-level GoRoute pinned to the root Navigator
-          // and is always entered via context.go() (a stack replace), so it
-          // is routinely the only entry on the stack — Navigator.pop() here
-          // has nothing to pop into and crashes go_router's delegate.
-          context.go('/home');
-          return;
-        }
-      }
-
-      // Task 2 — Block ANC when patient is postpartum (PNC/Delivery Outcome
-      // completed). ANC must not be started after delivery.
-      if (hasAnc && widget.isPostpartum) {
-        await _showAncBlockedDialog(
-          context,
-          AppStrings.ancBlockedPostpartumTitle,
-          AppStrings.ancBlockedPostpartumMessage,
-        );
-        if (!mounted) return;
-        context.go('/home');
-        return;
-      }
-
-      // Task 1 — Block duplicate ANC on same calendar day.
-      if (hasAnc) {
-        final assessmentDao = context.read<LocalAssessmentDao>();
-        final hasTodayAnc = await assessmentDao
-            .hasAncAssessmentTodayForPatient(widget.patientId);
-        if (!mounted) return;
-        if (hasTodayAnc) {
-          await _showAncBlockedDialog(
-            context,
-            AppStrings.ancBlockedDuplicateTitle,
-            AppStrings.ancBlockedDuplicateMessage,
-          );
-          if (!mounted) return;
-          context.go('/home');
-          return;
-        }
-      }
-
-      // Task 5 — When ANC is selected for a first-time pregnancy and PW was
-      // not explicitly chosen, auto-include PW so the pregnancy profile form
-      // is submitted alongside the ANC visit. Registered women are skipped:
-      // adding PW here would submit a duplicate PWPROFILE even though the
-      // section itself is hidden.
-      if (hasAnc &&
-          !isRegistered &&
-          !_selectedProgrammes.contains(Programme.pw)) {
-        _selectedProgrammes = {..._selectedProgrammes, Programme.pw};
-      }
-
-      setState(() {
-        _currentProgrammes = progs;
-        _ready = true;
-      });
-    } catch (e) {
-      debugPrint('[Step2] currentProgrammes lookup failed: $e');
-      if (!mounted) return;
-      setState(() {
-        _currentProgrammes = const <Programme>{};
-        _ready = true;
-      });
-    }
-  }
-
-  /// True when this pregnancy is already on file, so PW registration must not
-  /// be offered or auto-added again.
-  ///
-  /// Checks three independent stores because none of them is reliable on its
-  /// own: enrolment is only written on a successful submit, sync records ANC
-  /// (never PW) for a synced pregnancy, and the snapshot can be keyed by
-  /// household-member id.
-  Future<bool> _isPregnancyRegistered(
-    Set<Programme> enrolled,
-    String localPatientId,
-  ) async {
-    if (enrolled.contains(Programme.pw) || enrolled.contains(Programme.anc)) {
-      return true;
-    }
-    try {
-      final snapshots = context.read<PregnancySnapshotDao>();
-      final assessments = context.read<AssessmentRepository>();
-      final snapshot = await snapshots.byPatientOrMember(
-        localPatientId,
-        memberId: widget.memberId,
-      );
-      if (snapshot?.lmpDate != null || snapshot?.ancVisitNo != null) {
-        return true;
-      }
-      // Assessments may still be stamped with the route id.
-      return await assessments.hasPregnancyRegistration(widget.patientId) ||
-          (localPatientId != widget.patientId &&
-              await assessments.hasPregnancyRegistration(localPatientId));
-    } catch (e) {
-      debugPrint('[Step2] pregnancy registration lookup failed: $e');
-      return false;
-    }
-  }
-
-  Future<void> _showAncBlockedDialog(
-    BuildContext ctx,
-    String title,
-    String message,
-  ) {
-    return showDialog<void>(
-      context: ctx,
-      barrierDismissible: false,
-      builder: (dialogCtx) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (!_ready) {
-      return const Center(child: CircularProgressIndicator());
-    }
     // AI programme-recommendation confirmation (ProgrammeSelectionScreen) is
     // disabled — the rule-based PathwayEngine result from Step 1 is applied
     // directly, without a separate SK confirmation screen.
     return _Step2VitalsForm(
-      visitId: widget.visitId,
-      patientId: widget.patientId,
-      memberId: widget.memberId,
-      householdId: widget.householdId,
-      villageId: widget.villageId,
-      householdMemberLocalId: widget.householdMemberLocalId,
-      patientAge: widget.patientAge,
-      ageInMonths: widget.ageInMonths ??
-          (widget.patientAge != null ? widget.patientAge! * 12 : null),
-      gestationalWeeks: widget.gestationalWeeks,
-      lmpMs: widget.lmpMs,
-      eddMs: widget.eddMs,
-      pathwayNames: _selectedProgrammes
+      visitId: visitId,
+      patientId: patientId,
+      memberId: memberId,
+      householdId: householdId,
+      villageId: villageId,
+      householdMemberLocalId: householdMemberLocalId,
+      patientAge: patientAge,
+      ageInMonths:
+          ageInMonths ?? (patientAge != null ? patientAge! * 12 : null),
+      gestationalWeeks: gestationalWeeks,
+      lmpMs: lmpMs,
+      eddMs: eddMs,
+      pathwayNames: seedProgrammes
           .where((p) => p != Programme.unknown)
           .map((p) => p.name)
           .toList(),
-      isDeliveryVisit: widget.isDeliveryVisit,
-      triageNotes: widget.otherSymptoms,
-      origin: widget.origin,
-      enrolledProgrammes: _currentProgrammes,
-      confirmedSymptoms: widget.confirmedSymptoms.toList(),
-      aiPickedSymptoms: widget.aiPickedSymptoms,
-      onAdvance: widget.onAdvance,
+      isDeliveryVisit: isDeliveryVisit,
+      triageNotes: otherSymptoms,
+      origin: origin,
+      enrolledProgrammes: enrolledProgrammes,
+      confirmedSymptoms: confirmedSymptoms.toList(),
+      aiPickedSymptoms: aiPickedSymptoms,
+      onAdvance: onAdvance,
     );
   }
 }

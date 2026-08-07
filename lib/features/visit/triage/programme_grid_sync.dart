@@ -43,30 +43,37 @@ abstract final class ProgrammeGridSync {
           return true;
         // Other non-maternal programmes are always applicable when enrolled.
         case Programme.ncd:
-        case Programme.tb:
         case Programme.cataract:
         case Programme.eyeCare:
         case Programme.epi:
         case Programme.imci:
-        case Programme.nutrition:
           return true;
+        // Excluded from selection regardless of enrolment — see
+        // ServiceSelectionResolver.excludedFromSelection, the belt-and-
+        // suspenders resolver-level filter this mirrors at the seed source.
+        // tb: formType/manifest exists but form content isn't aligned yet.
+        // nutrition: no formType exists yet (GAP 12).
+        case Programme.tb:
+        case Programme.nutrition:
+          return false;
       }
     }).toSet();
   }
 
   /// Programmes a selected symptom's catalogue tag set should contribute to
   /// auto-selection. Excludes [Programme.imci]/[Programme.epi] unless
-  /// [isUnder5] -- several everyday adult symptoms (fever, vomiting, edema,
-  /// convulsions, unconscious, difficulty breathing) are cross-tagged with
-  /// imci in `UnifiedSymptomCatalog` for clinical-rule relevance elsewhere,
-  /// and folding that tag into an adult's selection would falsely mark the
-  /// visit as a child visit (see `VisitFlowScreen._isChildVisit`), routing
-  /// Step 2 to the immunisation timeline instead of the real programme form.
+  /// [isChildVisitEligible] -- several everyday adult symptoms (fever,
+  /// vomiting, edema, convulsions, unconscious, difficulty breathing) are
+  /// cross-tagged with imci in `UnifiedSymptomCatalog` for clinical-rule
+  /// relevance elsewhere, and folding that tag into an adult's selection
+  /// would falsely mark the visit as a child visit (see
+  /// `VisitFlowScreen._isChildVisit`), routing Step 2 to the immunisation
+  /// timeline instead of the real programme form.
   static Set<Programme> catalogProgrammesFor(
     Set<Programme> symptomProgrammes, {
-    required bool isUnder5,
+    required bool isChildVisitEligible,
   }) =>
-      isUnder5
+      isChildVisitEligible
           ? symptomProgrammes
           : symptomProgrammes.difference({Programme.imci, Programme.epi});
 
@@ -88,5 +95,37 @@ abstract final class ProgrammeGridSync {
       ..add(Programme.pw)
       ..remove(Programme.pnc);
     return (selected: nextSelected, dismissedBySk: nextDismissed);
+  }
+
+  /// Whether the Pregnancy Outcome (delivery) card should be locked
+  /// (disabled) in the Step 1 service grid.
+  ///
+  /// When an open pregnancy episode exists, [isPregnant] alone isn't enough
+  /// to unlock this — it's derived from three legacy signals (synced
+  /// `pregnancyFacts`, `activeProgrammes.contains(Programme.pw)`, or a raw
+  /// JSON flag on the patient record, see `PatientContextBuilder`) that can
+  /// disagree with `PregnancyEpisodeDao`'s own open-episode row — e.g. a
+  /// patient flagged pregnant by a stale/legacy signal but never actually
+  /// registered (no open episode). This is the original bug this function
+  /// was written to fix: *"Patient P1 is not registered for PW, still
+  /// Pregnancy Outcome is showing."*
+  ///
+  /// When NO episode exists at all, though, Outcome is deliberately
+  /// unlocked regardless of `isPregnant` — this supports an SK reaching a
+  /// household *after* the child is already born, with no prior PW/ANC visit
+  /// and therefore no local episode to check `isPregnant` against.
+  /// Submitting in this state creates-and-closes a fresh episode in one
+  /// shot (see `PregnancyEpisodeDao.closeEpisode` and
+  /// `UnifiedFormNotifier._persistPregnancyEpisodeAfterSubmit`). Don't
+  /// re-lock this branch — it's an intentional allowance, not a regression
+  /// of the bug fix above.
+  static bool isPregnancyOutcomeLocked({
+    required bool isPregnant,
+    required bool isPostpartum,
+    required bool hasOpenPregnancyEpisode,
+  }) {
+    if (isPostpartum) return true;
+    if (hasOpenPregnancyEpisode) return !isPregnant;
+    return false;
   }
 }

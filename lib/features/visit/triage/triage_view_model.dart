@@ -339,7 +339,7 @@ class TriageViewModel extends ChangeNotifier {
     }
 
     // Expand child health for children
-    if (_patientContext.isUnder5) {
+    if (_patientContext.isYoungChild) {
       expanded.add(SymptomCluster.childHealth);
       expanded.add(SymptomCluster.feverRespiratory);
       expanded.add(SymptomCluster.giNutrition);
@@ -433,7 +433,7 @@ class TriageViewModel extends ChangeNotifier {
     final enrolled = _patientContext.activeProgrammes;
     // Under-5 patients get IMCI chips even without explicit enrolment;
     // bail early only when there is truly no programme context at all.
-    if (enrolled.isEmpty && !_patientContext.isUnder5) {
+    if (enrolled.isEmpty && !_patientContext.isYoungChild) {
       if (kDebugMode) {
         debugPrint(
           '[SymptomPicker] No enrolled programmes — '
@@ -461,7 +461,7 @@ class TriageViewModel extends ChangeNotifier {
         '[SymptomPicker] Patient: sex=${ctx.sex.name} '
         'ageMonths=${ctx.ageMonths} ageKnown=${ctx.ageKnown} '
         'isPregnant=${ctx.isPregnant} isPostpartum=${ctx.isPostpartum} '
-        'isUnder5=${ctx.isUnder5}',
+        'isYoungChild=${ctx.isYoungChild}',
       );
       debugPrint(
         '[SymptomPicker] Enrolled: '
@@ -516,7 +516,7 @@ class TriageViewModel extends ChangeNotifier {
     final ctx = _patientContext;
     final enrolled = ctx.activeProgrammes;
     // Let under-5 patients through so the IMCI bucket below is populated.
-    if (enrolled.isEmpty && !ctx.isUnder5) {
+    if (enrolled.isEmpty && !ctx.isYoungChild) {
       return _groupedSectionsCache = const [];
     }
 
@@ -528,7 +528,7 @@ class TriageViewModel extends ChangeNotifier {
     ];
     final byProgramme = <Programme, List<String>>{
       for (final p in sectionOrder)
-        if (enrolled.contains(p) || (p == Programme.imci && ctx.isUnder5))
+        if (enrolled.contains(p) || (p == Programme.imci && ctx.isYoungChild))
           p: <String>[],
     };
     final general = <String>[];
@@ -707,7 +707,7 @@ class TriageViewModel extends ChangeNotifier {
 
     // IMCI (Child Health): age-gated, no enrolment required — mirrors ANC/PNC
     // which show on pregnancy context rather than explicit enrolment alone.
-    if (ctx.isUnder5) {
+    if (ctx.isYoungChild) {
       final codes = codesFor(Programme.imci);
       if (codes.isNotEmpty) {
         sections.add(SymptomSection(programme: Programme.imci, codes: codes));
@@ -812,7 +812,7 @@ class TriageViewModel extends ChangeNotifier {
           (p) => p == Programme.ncd,
         );
 
-    final isPediatricContext = ctx.isUnder5;
+    final isPediatricContext = ctx.isYoungChild;
 
     // Sex gate: maternal symptoms are never appropriate for male patients
     // regardless of programme (data entry error guard).

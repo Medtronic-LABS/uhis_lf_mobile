@@ -73,17 +73,24 @@ abstract final class PathwayThresholds {
   /// Source: Bangladesh UHIS Phase 1 spec — 0–24 months (not WHO IMCI 5-year cap)
   static const int imciMaxAgeMonths = 24;
 
-  /// Minimum age for adult NCD screening (months).
-  /// Source: Bangladesh UHIS Phase 1 spec — NCD & Eye Care eligibility ≥ 30 years
-  static const int adultMinAgeMonths = 360; // 30 years
-
-  /// Minimum age for pediatric HTN screening if known HTN (months).
-  /// Source: WHO PEN / AAP Guidelines
-  static const int pediatricHtnMinAgeMonths = 60; // 5 years
+  /// Minimum age for adult NCD (hypertension/diabetes) screening (months).
+  /// Source: WHO PEN Protocol — general adult NCD screening age.
+  static const int adultMinAgeMonths = 216; // 18 years
 
   /// Minimum age for FP and maternal health programmes (months).
   /// Source: Bangladesh UHIS Phase 1 spec — FP & Maternal Health: female ≥ 14 years
   static const int reproductiveMinAgeMonths = 168; // 14 years
+
+  /// Maximum age for FP and maternal health programmes (months, exclusive).
+  /// Source: Spice `service_eligibility_logic.json` clinicalTools conditions
+  /// (PW Profile / Family Planning / Pregnancy Outcome: minAge 168, maxAge
+  /// 661) — matches the server's own gate exactly (age < maxAge).
+  static const int reproductiveMaxAgeMonths = 661; // 55 years, 1 month
+
+  /// Minimum age for Eye Care / Cataract screening (months).
+  /// Source: Spice `service_eligibility_logic.json` clinicalTools conditions
+  /// (Eye Care / Cataract: minAge 420, no upper bound).
+  static const int eyeCareCataractMinAgeMonths = 420; // 35 years
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PNC WINDOW
@@ -315,12 +322,14 @@ abstract final class PathwayRulesV1 {
         'weakness',
         'weight_loss',
       },
-      // Female-only, pregnant, minimum 10 years — prevents ANC firing on
-      // male patients or infants with corrupted isPregnant flags.
+      // Female-only, pregnant, 14-55 years — prevents ANC firing on male
+      // patients, infants with corrupted isPregnant flags, or beyond the
+      // reproductive-age window (service_eligibility_logic.json).
       gate: DemographicGate(
         sex: Sex.female,
         requiresPregnancy: true,
         minAgeMonths: PathwayThresholds.reproductiveMinAgeMonths,
+        maxAgeMonths: PathwayThresholds.reproductiveMaxAgeMonths,
       ),
       historyTriggers: {'PREGNANCY', 'ANC'},
       rationaleKey: 'pathwayAncRationale',
@@ -350,6 +359,7 @@ abstract final class PathwayRulesV1 {
         // requiresPregnancy intentionally false: symptoms themselves imply
         // pregnancy when the profile hasn't been updated yet.
         minAgeMonths: PathwayThresholds.reproductiveMinAgeMonths,
+        maxAgeMonths: PathwayThresholds.reproductiveMaxAgeMonths,
       ),
       rationaleKey: 'pathwayAncRationale',
     ),
@@ -375,11 +385,12 @@ abstract final class PathwayRulesV1 {
         'breast_swelling',          // mastitis / engorgement
         'foul_smelling_vaginal_discharge', // postpartum infection
       },
-      // Female-only, postpartum, minimum 10 years — same guard as ANC.
+      // Female-only, postpartum, 14-55 years — same guard as ANC.
       gate: DemographicGate(
         sex: Sex.female,
         requiresPostpartum: true,
         minAgeMonths: PathwayThresholds.reproductiveMinAgeMonths,
+        maxAgeMonths: PathwayThresholds.reproductiveMaxAgeMonths,
       ),
       historyTriggers: {'PNC', 'POSTNATAL'},
       rationaleKey: 'pathwayPncRationale',
@@ -403,39 +414,15 @@ abstract final class PathwayRulesV1 {
         // requiresPostpartum intentionally false: symptom itself implies
         // recent delivery when postpartum status isn't yet recorded.
         minAgeMonths: PathwayThresholds.reproductiveMinAgeMonths,
+        maxAgeMonths: PathwayThresholds.reproductiveMaxAgeMonths,
       ),
       rationaleKey: 'pathwayPncRationale',
     ),
 
     // ═════════════════════════════════════════════════════════════════════════
-    // TB SCREEN (Priority 30)
-    // Source: WHO 4-Symptom Screen
-    // ═════════════════════════════════════════════════════════════════════════
-    PathwayRule(
-      programme: Programme.tb,
-      priority: 30,
-      anyOf: {
-        'cough_over_2_weeks',
-        'cough',       // triage catalog alias (SK-facing label 'Cough')
-        'hemoptysis',
-        'tb_contact',
-      },
-      combinations: [
-        {'night_sweats', 'weight_loss'},
-        {'night_sweats', 'fever'},
-        {'weakness', 'weight_loss'}, // triage catalog: 'Feeling weak' + 'Losing weight'
-        {'weakness', 'fever'},
-      ],
-      gate: DemographicGate.any,
-      historyTriggers: {'TB_SCREEN_DUE', 'TUBERCULOSIS', 'PRESUMPTIVE_TB'},
-      rationaleKey: 'pathwayTbScreenRationale',
-    ),
-
-    // ═════════════════════════════════════════════════════════════════════════
     // NCD-HTN (Priority 40)
     // Source: WHO HEARTS Technical Package
-    // Gate: age ≥ 5 years (60 months) — starts where ICCM ends so that
-    // adolescents and adults with BP/neuro symptoms are not left without a form.
+    // Gate: age ≥ 18 years (216 months) — WHO PEN general adult NCD screening age.
     // ═════════════════════════════════════════════════════════════════════════
     PathwayRule(
       programme: Programme.ncd,
@@ -453,7 +440,7 @@ abstract final class PathwayRulesV1 {
         'numbness',
       },
       gate: DemographicGate(
-        minAgeMonths: PathwayThresholds.imciMaxAgeMonths, // 60 months / 5 yrs
+        minAgeMonths: PathwayThresholds.adultMinAgeMonths, // 216 months / 18 yrs
       ),
       historyTriggers: {'HYPERTENSION', 'HTN', 'I10'},
       rationaleKey: 'pathwayNcdHtnRationale',
@@ -462,7 +449,7 @@ abstract final class PathwayRulesV1 {
     // ═════════════════════════════════════════════════════════════════════════
     // NCD-DM (Priority 41)
     // Source: WHO PEN Protocol
-    // Gate: age ≥ 5 years (60 months) — same lower bound as NCD-HTN.
+    // Gate: age ≥ 18 years (216 months) — same lower bound as NCD-HTN.
     // ═════════════════════════════════════════════════════════════════════════
     PathwayRule(
       programme: Programme.ncd,
@@ -477,7 +464,7 @@ abstract final class PathwayRulesV1 {
         'weight_loss',
       },
       gate: DemographicGate(
-        minAgeMonths: PathwayThresholds.imciMaxAgeMonths, // 60 months / 5 yrs
+        minAgeMonths: PathwayThresholds.adultMinAgeMonths, // 216 months / 18 yrs
       ),
       historyTriggers: {'DIABETES', 'DM', 'E11'},
       rationaleKey: 'pathwayNcdDmRationale',
@@ -518,8 +505,8 @@ abstract final class PathwayRulesV1 {
       },
       gate: DemographicGate(
         sex: Sex.female,
-        minAgeMonths: 180,
-        maxAgeMonths: 588,
+        minAgeMonths: PathwayThresholds.reproductiveMinAgeMonths,
+        maxAgeMonths: PathwayThresholds.reproductiveMaxAgeMonths,
         excludesPregnancy: true,
       ),
       historyTriggers: {
@@ -542,7 +529,9 @@ abstract final class PathwayRulesV1 {
         'eye_pain',
         'gradual_vision_loss',
       },
-      gate: DemographicGate.any,
+      gate: DemographicGate(
+        minAgeMonths: PathwayThresholds.eyeCareCataractMinAgeMonths,
+      ),
       historyTriggers: {
         'CATARACT',
         'EYE_DISEASE',
@@ -564,7 +553,9 @@ abstract final class PathwayRulesV1 {
         'reduced_vision',
         'eye_pain',
       },
-      gate: DemographicGate.any,
+      gate: DemographicGate(
+        minAgeMonths: PathwayThresholds.eyeCareCataractMinAgeMonths,
+      ),
       historyTriggers: {
         'EYE_CARE',
         'GLAUCOMA',
@@ -586,61 +577,5 @@ abstract final class PathwayRulesV1 {
   /// Get rules for a specific programme.
   static List<PathwayRule> forProgramme(Programme programme) {
     return all.where((r) => r.programme == programme).toList();
-  }
-
-  /// Get the highest priority rule that matches the given symptoms and context.
-  static PathwayRule? firstMatch(
-    Set<String> symptoms,
-    PatientContext ctx,
-  ) {
-    for (final rule in all) {
-      if (_evaluateRule(rule, symptoms, ctx)) {
-        return rule;
-      }
-    }
-    return null;
-  }
-
-  static bool _evaluateRule(
-    PathwayRule rule,
-    Set<String> symptoms,
-    PatientContext ctx,
-  ) {
-    // Check demographic gate
-    if (!rule.gate.evaluate(ctx)) return false;
-
-    // Check anyOf symptoms (OR logic)
-    if (rule.anyOf.isNotEmpty) {
-      if (symptoms.any((s) => rule.anyOf.contains(s))) {
-        return true;
-      }
-    }
-
-    // Check combinations (all-of within set, OR across sets)
-    for (final combo in rule.combinations) {
-      if (combo.every((s) => symptoms.contains(s))) {
-        return true;
-      }
-    }
-
-    // Check history triggers
-    if (rule.historyTriggers.isNotEmpty) {
-      // Check known conditions
-      if (ctx.knownConditions.any((c) => rule.historyTriggers.contains(c))) {
-        return true;
-      }
-      // Check open flags
-      if (ctx.openFlags.any((f) => rule.historyTriggers.contains(f))) {
-        return true;
-      }
-      // Check active programmes
-      for (final prog in ctx.activeProgrammes) {
-        if (rule.historyTriggers.contains(prog.wireTag)) {
-          return true;
-        }
-      }
-    }
-
-    return false;
   }
 }

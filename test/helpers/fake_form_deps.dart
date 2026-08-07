@@ -4,6 +4,7 @@ library;
 
 import 'package:uhis_next/core/db/local_assessment_dao.dart';
 import 'package:uhis_next/core/db/patient_dao.dart';
+import 'package:uhis_next/core/db/pregnancy_episode_dao.dart';
 import 'package:uhis_next/core/db/pregnancy_snapshot_dao.dart';
 import 'package:uhis_next/features/visit/assessment_repository.dart';
 import 'package:uhis_next/features/visit/forms/unified_form_notifier.dart';
@@ -46,6 +47,12 @@ class _FakePregnancySnapshotDao implements PregnancySnapshotDao {
       throw UnimplementedError('${invocation.memberName} not faked');
 }
 
+class _FakePregnancyEpisodeDao implements PregnancyEpisodeDao {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName} not faked');
+}
+
 /// Builds a [UnifiedFormNotifier] wired to fakes — only the draft DAO does
 /// real (in-memory) work; the other dependencies throw if touched.
 UnifiedFormNotifier buildTestNotifier({
@@ -60,6 +67,7 @@ UnifiedFormNotifier buildTestNotifier({
       assessmentRepo: _FakeAssessmentRepository(),
       patientDao: _FakePatientDao(),
       pregnancySnapshotDao: _FakePregnancySnapshotDao(),
+      pregnancyEpisodeDao: _FakePregnancyEpisodeDao(),
     );
 
 /// Lets fire-and-forget `_saveDraft()` futures settle inside a test body.
