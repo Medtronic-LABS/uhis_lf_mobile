@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/clinical/assessment_thresholds.dart';
+import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/widgets/gestational_age_card.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
@@ -144,6 +145,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// Completed ANC count from pregnancy snapshot (Spice ancVisitNo).
   int? _ancVisitNoFromSnapshot;
 
+  /// Completed PNC mother count from pregnancy snapshot (Spice pncVisitNo).
+  int? _pncVisitNoFromSnapshot;
+
   /// Weight (kg) from the patient's most-recent prior visit across ALL
   /// programme types — used for the weight-delta badge.  `null` until loaded.
   double? _lastRecordedWeight;
@@ -218,6 +222,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         if (widget.activeFormTypes.contains('pncMother') ||
             widget.enrolledFormTypes.contains('pncMother')) {
           await notifier.preloadPncMotherChronic();
+          await notifier.loadPncMandatoryHistory();
+          await notifier.seedDaysSinceDeliveryIfNeeded();
         }
         if (widget.activeFormTypes.contains('familyPlanning') ||
             widget.enrolledFormTypes.contains('familyPlanning') ||
@@ -226,7 +232,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           await notifier.preloadFpChronic();
         }
         // Android RMNCH summary auto-fills next visit; seed after draft so
-        // a saved SK override is never clobbered.
+        // a saved SK override is never clobbered. PNC bands need
+        // daysSinceDelivery (seeded above).
         notifier.seedRmnchFollowUpIfNeeded();
       });
 
@@ -252,6 +259,16 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         // Load LMP/EDD for the gestational-age card (snapshot → seed → history).
         _reloadPregnancyIfSeeded();
       }
+
+      // PNC visit number drives visit-2+ chronic-field hide (Android
+      // managePncFormBasedOnPregnancyDetail).
+      if (widget.activeFormTypes.contains('pncMother') ||
+          widget.enrolledFormTypes.contains('pncMother')) {
+        notifier.pregnancySnapshot().then((snap) {
+          if (!mounted) return;
+          setState(() => _pncVisitNoFromSnapshot = snap?.pncVisitNo);
+        });
+      }
     });
   }
 
@@ -261,6 +278,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
   /// 1-based ANC visit number: Spice pregnancyDetail.ancVisitNo + 1.
   int _ancVisitNumber() => (_ancVisitNoFromSnapshot ?? 0) + 1;
+
+  /// 1-based PNC mother visit number: Spice pregnancyDetail.pncVisitNo + 1.
+  int _pncVisitNumber() => (_pncVisitNoFromSnapshot ?? 0) + 1;
 
   bool _isFieldVisible(
     FieldDef field,
@@ -273,6 +293,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       rulesByTargetId: _config!.visibilityRulesByTargetId,
       gestationalWeeks: _effectiveGestationalWeeks(notifier),
       ancVisitNumber: _ancVisitNumber(),
+      pncVisitNumber: _pncVisitNumber(),
       formType: formType,
       ageInMonths: widget.ageInMonths,
       priorHeightLocked: notifier.isHeightLockedFromPrior,
@@ -488,6 +509,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             heightReadOnly: notifier.isHeightLockedFromPrior,
             gestationalWeeks: effectiveGa,
             ancVisitNumber: _ancVisitNumber(),
+            pncVisitNumber: _pncVisitNumber(),
             ageInMonths: widget.ageInMonths,
             isNcdFollowUp: notifier.isNcdFollowUp,
             isNewEnrolment: isNew,
@@ -775,7 +797,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         if (!_isFieldVisible(def, notifier, formType: a.section.formType)) {
           continue;
         }
-        final mandatory = def.isMandatory || ref.isMandatory;
+        final mandatory = def.isMandatory ||
+            ref.isMandatory ||
+            _pncConditionallyRequired(ref.id, notifier, a.section.formType);
         if (!mandatory) continue;
         final v = notifier.data.getValue(ref.id);
         final empty = v == null ||
@@ -785,6 +809,84 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       }
     }
     return errors;
+  }
+
+  /// Android `managePncFormBasedOnPregnancyDetail` — Hb / blood sugar become
+  /// mandatory in specific clinical contexts while the field is visible.
+  bool _pncConditionallyRequired(
+    String fieldId,
+    UnifiedFormNotifier notifier,
+    String formType,
+  ) {
+    if (formType != 'pncMother') return false;
+    bool isYes(Object? v) {
+      final s = v?.toString().trim().toLowerCase() ?? '';
+      return s == 'yes' || s == 'true' || s == '1';
+    }
+
+    bool listIncludes(Object? raw, String code) {
+      if (raw is! List) {
+        final s = raw?.toString().trim().toLowerCase() ?? '';
+        return s.contains(code.toLowerCase());
+      }
+      for (final e in raw) {
+        final token = e is Map
+            ? (e['value'] ?? e['id'] ?? e['name'])?.toString()
+            : e?.toString();
+        if (token == null) continue;
+        if (token.trim().toLowerCase().contains(code.toLowerCase())) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Prefer notifier history (includes ANC anemia / prior pncIllness). Fall
+    // back to snapshot visit counters so first-PNC-no-ANC still works if the
+    // async history load has not finished.
+    final history = notifier.pncMandatoryHistory.isLoaded
+        ? notifier.pncMandatoryHistory
+        : PncMandatoryHistory(
+            pncVisitNumber: _pncVisitNumber(),
+            ancVisitCount: _ancVisitNoFromSnapshot ?? 0,
+          );
+
+    final form = PncMandatoryFormSignals(
+      heavyBleedingDangerSign:
+          listIncludes(notifier.data.getValue('postpartumDangerSigns'), 'heavyBleeding'),
+      excessiveBleedingAtDelivery: listIncludes(
+        notifier.data.getValue('complicationsDuringDelivery'),
+        'excessiveBleeding',
+      ),
+      knownDmOrGdmOnForm: isYes(notifier.data.getValue('dmPatient')) ||
+          isYes(notifier.data.getValue('gdmPatient')),
+    );
+
+    if (fieldId == 'hemoglobin') {
+      return PncMandatoryRules.hemoglobinRequired(
+        history: history,
+        form: form,
+      );
+    }
+    if (fieldId == 'bloodSugar' ||
+        fieldId == 'fastingBloodSugar' ||
+        fieldId == 'randomBloodSugar') {
+      final required = PncMandatoryRules.bloodSugarRequired(
+        history: history,
+        form: form,
+      );
+      if (!required) return false;
+      if (fieldId == 'bloodSugar') return true;
+      final type =
+          notifier.data.getValue('bloodSugar')?.toString().toLowerCase();
+      if (fieldId == 'fastingBloodSugar') {
+        return type == 'fasting' || type == 'fbs';
+      }
+      if (fieldId == 'randomBloodSugar') {
+        return type == 'random' || type == 'rbs';
+      }
+    }
+    return false;
   }
 
   /// Per-baby required fields: isBabyAlive + sex always; cause when dead.
@@ -916,11 +1018,19 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   ///
   /// [height] is never stripped: when ANC visit 2+ / NCD prior-height hide the
   /// field, the prefilled value must still reach the payload (BMI + wire).
+  /// PNC visit 2+ chronic illness radios are also preserved (Android hides
+  /// them after prefill from prior `pncIllness`).
   Set<String> _computeHiddenFieldIds(
     UnifiedFormNotifier notifier,
     List<AnnotatedFormSection> annotated,
   ) {
-    const preserveHidden = {'height'};
+    const preserveHidden = {
+      'height',
+      'htnPatient',
+      'eclampsia',
+      'dmPatient',
+      'gdmPatient',
+    };
     final hidden = <String>{};
     for (final a in annotated) {
       for (final ref in a.section.fieldRefs) {
@@ -1740,6 +1850,7 @@ class _SectionCard extends StatelessWidget {
     this.heightReadOnly = false,
     this.gestationalWeeks,
     this.ancVisitNumber = 1,
+    this.pncVisitNumber = 1,
     this.ageInMonths,
     this.isNcdFollowUp = false,
     this.isNewEnrolment = false,
@@ -1772,6 +1883,9 @@ class _SectionCard extends StatelessWidget {
 
   /// 1-based ANC visit count for Android visit-number field gates.
   final int ancVisitNumber;
+
+  /// 1-based PNC mother visit count — visit 2+ hides chronic illness radios.
+  final int pncVisitNumber;
 
   /// Child age in whole months — childhood visit age bands / weight range.
   final int? ageInMonths;
@@ -1848,6 +1962,7 @@ class _SectionCard extends StatelessWidget {
       rulesByTargetId: config.visibilityRulesByTargetId,
       gestationalWeeks: gestationalWeeks,
       ancVisitNumber: ancVisitNumber,
+      pncVisitNumber: pncVisitNumber,
       formType: section.formType,
       ageInMonths: ageInMonths,
       priorHeightLocked: heightReadOnly,
@@ -1969,6 +2084,7 @@ class _SectionCard extends StatelessWidget {
         rulesByTargetId: config.visibilityRulesByTargetId,
         gestationalWeeks: gestationalWeeks,
         ancVisitNumber: ancVisitNumber,
+        pncVisitNumber: pncVisitNumber,
         formType: section.formType,
         ageInMonths: ageInMonths,
         priorHeightLocked: heightReadOnly,
@@ -2492,9 +2608,20 @@ class _SectionCard extends StatelessWidget {
     );
   }
 
+  /// Android TextLabel id that owns the outer pair-card heading for a
+  /// consumed field (Spice `rmnch_*_visit.json` section titles).
+  static const _supplementHeadingForConsumed = {
+    'ifaTabletsConsumed': 'ifaTablets',
+    'ifaTotalConsumed': 'ifaTablets',
+    'calciumTabletsConsumed': 'calciumTablets',
+    'calciumTotalConsumed': 'calciumTablets',
+    'folicAcidTotalConsumed': 'folicAcidTablets',
+  };
+
   /// Renders a supplement pair card — outer [_FieldShell] with the supplement
   /// name and Bengali label, containing "consumed" and "provided" inputs
-  /// side-by-side.
+  /// side-by-side. Column / heading copy comes from field_library (Android
+  /// title / titleCulture), not the shared ANC-oriented string defaults.
   Widget _supplementPairCard(
     BuildContext context,
     FieldDef consumedDef,
@@ -2508,8 +2635,11 @@ class _SectionCard extends StatelessWidget {
     final isMandatory = consumedDef.isMandatory ||
         consumedRef.isMandatory ||
         providedDef.isMandatory;
+    final headingId = _supplementHeadingForConsumed[consumedRef.id];
+    final headingDef = headingId != null ? config.fields[headingId] : null;
+    final outerLabel = headingDef?.displayLabel ?? meta.label;
     return _FieldShell(
-      label: meta.label,
+      label: outerLabel,
       // Locale-pure primary label only — no second-language sub-line.
       subLabel: null,
       emoji: meta.emoji,
@@ -2524,7 +2654,7 @@ class _SectionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  UnifiedFormStrings.supplementConsumedLabel,
+                  consumedDef.displayLabel,
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -2554,7 +2684,7 @@ class _SectionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  UnifiedFormStrings.supplementProvidedLabel,
+                  providedDef.displayLabel,
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -2945,6 +3075,89 @@ class _SectionCard extends StatelessWidget {
         return null;
       };
     }
+    // PNC mother: Spice rmnch_pnc_visit.json ranges (form engine).
+    if (formType == 'pncMother') {
+      switch (fieldId) {
+        case 'temperature':
+          return (v) {
+            if (v == null || v.isEmpty) return null;
+            final n = double.tryParse(v);
+            // 0 = not measured (Android naValue); else 86–113 °F.
+            if (n == null || (n != 0 && (n < 86 || n > 113))) {
+              return ComposerStrings.temperatureValidationError;
+            }
+            return null;
+          };
+        case 'pulse':
+          return (v) {
+            if (v == null || v.isEmpty) return null;
+            final n = double.tryParse(v);
+            if (n == null || n < 20 || n > 150) {
+              return 'Enter a pulse between 20 and 150';
+            }
+            return null;
+          };
+        case 'weight':
+          return (v) {
+            if (v == null || v.isEmpty) return null;
+            final n = double.tryParse(v);
+            if (n == null || (n != 0 && (n < 10 || n > 250))) {
+              return 'Enter a weight between 10 and 250 kg';
+            }
+            return null;
+          };
+        case 'systolic':
+          return (v) {
+            if (v == null || v.isEmpty) return null;
+            final n = double.tryParse(v);
+            if (n == null || (n != 0 && (n < 50 || n > 260))) {
+              return ComposerStrings.bpValidationError;
+            }
+            return null;
+          };
+        case 'diastolic':
+          return (v) {
+            if (v == null || v.isEmpty) return null;
+            final n = double.tryParse(v);
+            if (n == null || (n != 0 && (n < 20 || n > 180))) {
+              return ComposerStrings.bpValidationError;
+            }
+            return null;
+          };
+        case 'hemoglobin':
+          return (v) {
+            if (v == null || v.isEmpty) return null;
+            final n = double.tryParse(v);
+            if (n == null || n < 0 || n > 25) {
+              return ComposerStrings.haemoglobinValidationError;
+            }
+            return null;
+          };
+        case 'fastingBloodSugar':
+        case 'randomBloodSugar':
+          return (v) {
+            if (v == null || v.isEmpty) return null;
+            final n = double.tryParse(v);
+            if (n == null || (n != 0 && (n < 0.6 || n > 33))) {
+              return ComposerStrings.glucoseValidationError;
+            }
+            return null;
+          };
+        case 'ifaTabletsConsumed':
+        case 'ifaTabletsProvided':
+        case 'calciumTabletsConsumed':
+        case 'calciumTabletsProvided':
+          return (v) {
+            if (v == null || v.isEmpty) return null;
+            final n = double.tryParse(v);
+            if (n == null || n < 0 || n > 90) {
+              return 'Enter a value between 0 and 90';
+            }
+            return null;
+          };
+      }
+    }
+
     switch (fieldId) {
       case 'fastingBloodSugar':
       case 'randomBloodSugar':

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/clinical/assessment_thresholds.dart';
+import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -18,6 +19,7 @@ import '../../../core/risk/anc_status.dart';
 import '../../../core/risk/cataract_status.dart';
 import '../../../core/risk/eye_care_status.dart';
 import '../../../core/risk/ncd_status.dart';
+import '../../../core/risk/pnc_status.dart';
 import '../../../core/risk/pregnancy_outcome_status.dart';
 import '../../../core/risk/pw_risk_factors.dart';
 import '../../../core/time/calendar_day.dart';
@@ -126,6 +128,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// assessment — drives follow-up-only fields (e.g. medication adherence).
   bool _isNcdFollowUp = false;
 
+  /// Snapshot/history inputs for PNC Hb / glucose mandatory gates.
+  PncMandatoryHistory _pncMandatoryHistory = PncMandatoryHistory.empty;
+
   /// Field library, supplied by the form screen once `field_library.json` is
   /// parsed. Used at submit time to translate stored option ids into the wire
   /// `value` codes Spice sends (see [_withWireOptionValues]), and to clear
@@ -173,6 +178,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   /// True when a prior NCD assessment exists (SK follow-up visit).
   bool get isNcdFollowUp => _isNcdFollowUp;
+
+  /// Loaded by [loadPncMandatoryHistory] for PNC Hb / glucose required rules.
+  PncMandatoryHistory get pncMandatoryHistory => _pncMandatoryHistory;
 
   /// Height is locked when prefilled from a prior visit, or on ANC visit 2+
   /// (field is hidden in the UI; value is still kept for payload / BMI).
@@ -438,8 +446,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   /// Pre-fills stable PNC Mother history fields: gravida, parity,
   /// livingChildren, and comorbidity/treatment flags.
+  ///
+  /// Always fills missing keys (do not early-return on gravida): visit 2+
+  /// hides HTN/DM radios but still needs their prefilled values in data for
+  /// payload / referral (Android `setPncIllnessValue` after hide).
   Future<void> preloadPncMotherChronic() async {
-    if (_data.getValue('gravida') != null) return;
     final prior = await _assessmentRepo.lastPncMotherChronicData(_patientId);
     if (prior == null) return;
     var changed = false;
@@ -450,6 +461,52 @@ class UnifiedFormNotifier extends ChangeNotifier {
       }
     }
     if (changed) notifyListeners();
+  }
+
+  /// Loads ANC/PNC history used by [PncMandatoryRules] (first-PNC-no-ANC,
+  /// prior anemia, prior high sugar). Call after chronic prefill.
+  Future<void> loadPncMandatoryHistory() async {
+    if (!_activeFormTypes.contains('pncMother')) return;
+    final snap = await _pregnancySnapshotForPatient();
+    final illness = await _assessmentRepo.lastPncIllnessFlags(_patientId);
+    final ancAnemia =
+        await _assessmentRepo.hadAnemiaDuringPregnancy(_patientId);
+
+    bool isYes(Object? v) {
+      if (v is bool) return v;
+      final s = v?.toString().trim().toLowerCase() ?? '';
+      return s == 'yes' || s == 'true' || s == '1';
+    }
+
+    final existing =
+        PregnancySnapshotRow.decodeJsonList(snap?.existingIllness) ?? const [];
+    final dmFromSnap = existing.any((e) {
+      final s = e.toLowerCase();
+      return s.contains('dm') ||
+          s.contains('gdm') ||
+          s.contains('diabetes');
+    });
+
+    final highSugar = illness?['bloodSugar'];
+    _pncMandatoryHistory = PncMandatoryHistory(
+      pncVisitNumber: (snap?.pncVisitNo ?? 0) + 1,
+      ancVisitCount: snap?.ancVisitNo ?? 0,
+      hadAnemiaDuringPregnancy: ancAnemia,
+      priorPncAnemiaLevel: illness?['anemia']?.toString(),
+      priorPncHighBloodSugar: highSugar == true ||
+          highSugar?.toString().toLowerCase() == 'true',
+      knownDmOrGdmFromHistory: dmFromSnap ||
+          isYes(illness?['dmPatient']) ||
+          isYes(illness?['gdmPatient']),
+    );
+    debugPrint(
+        '[PncMandatory] visit=${_pncMandatoryHistory.pncVisitNumber} '
+        'anc=${_pncMandatoryHistory.ancVisitCount} '
+        'ancAnemia=${_pncMandatoryHistory.hadAnemiaDuringPregnancy} '
+        'priorAnemia=${_pncMandatoryHistory.priorPncAnemiaLevel} '
+        'priorHighSugar=${_pncMandatoryHistory.priorPncHighBloodSugar} '
+        'knownDm=${_pncMandatoryHistory.knownDmOrGdmFromHistory}');
+    notifyListeners();
   }
 
   /// Pre-fills stable Family Planning fields: familyPlanningMethods,
@@ -512,6 +569,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
     } catch (e) {
       debugPrint('[UnifiedForm] draft parse error: $e');
     }
+  }
+
+  /// Stamps `daysSinceDelivery` from PO `dateOfDelivery` or the pregnancy
+  /// snapshot so follow-up banding and PNC gaps match Android.
+  Future<void> seedDaysSinceDeliveryIfNeeded() async {
+    if (!_activeFormTypes.contains('pncMother')) return;
+    if (_data.getValue('daysSinceDelivery') != null) return;
+    final snap = await _pregnancySnapshotForPatient();
+    final days = UnifiedPayloadMapper.computeDaysSinceDelivery(
+      _data,
+      snapshotDeliveryDateMillis: snap?.deliveryDateMillis,
+    );
+    if (days == null) return;
+    _data = _data.setValue('daysSinceDelivery', days);
+    debugPrint('[PncDays] seeded daysSinceDelivery=$days patient=$_patientId');
+    notifyListeners();
   }
 
   /// Android RMNCH summary auto-fills next follow-up; seed when empty so the
@@ -773,6 +846,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
     // Android resets on-treatment when existing illness changes.
     if (fieldId == 'pregnantWomanExistingIllness') {
       _data = _data.setValue('pregnantWomanOnTreatment', null);
+    }
+    // Combined PO+PNC: picking dateOfDelivery drives daysSinceDelivery + follow-up.
+    if (fieldId == 'dateOfDelivery' &&
+        _activeFormTypes.contains('pncMother')) {
+      final days = UnifiedPayloadMapper.computeDaysSinceDelivery(_data);
+      if (days != null) {
+        _data = _data.setValue('daysSinceDelivery', days);
+        final next = RmnchFollowUpCalculator.pncFromDaysSinceDelivery(days);
+        _data = _data.setValue(
+          'followUpVisit',
+          RmnchFollowUpCalculator.toFormDate(next),
+        );
+      }
     }
     // PNC summary recalculates follow-up when days-since-delivery changes.
     if (fieldId == 'daysSinceDelivery' &&
@@ -1429,6 +1515,20 @@ class UnifiedFormNotifier extends ChangeNotifier {
             'patient=$localId');
       }
 
+      // Spice evaluateAndAddPncSummaryData stamps daysSinceDelivery before save.
+      // Always recompute so a same-visit PO dateOfDelivery wins over a stale seed.
+      if (willEmitPnc) {
+        final snap = await _pregnancySnapshotForPatient();
+        final days = UnifiedPayloadMapper.computeDaysSinceDelivery(
+          _data,
+          snapshotDeliveryDateMillis: snap?.deliveryDateMillis,
+        );
+        if (days != null) {
+          _data = _data.setValue('daysSinceDelivery', days);
+          debugPrint('[PncDays] submit daysSinceDelivery=$days');
+        }
+      }
+
       // BD NCD: first visit uses threshold referral; follow-up uses color band.
       // Facility type is "Community Clinic" / "Upazila Health Complex" — never
       // the org FHIR id (that belongs in summary.referredSiteId for CC only).
@@ -1569,6 +1669,13 @@ class UnifiedFormNotifier extends ChangeNotifier {
               payloads.firstWhere((p) => p.assessmentType == 'ANC').details,
             )
           : null;
+      final pncStatus = payloads.any((p) => p.assessmentType == 'PNC_MOTHER')
+          ? PncStatus.status(
+              payloads
+                  .firstWhere((p) => p.assessmentType == 'PNC_MOTHER')
+                  .details,
+            )
+          : null;
 
       // One pregnancy episode across PO + PNC assessments in the same visit.
       final sharedPregnancyEpisodeId = _pregnancyEpisodeId ??
@@ -1612,16 +1719,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
                           : ncdStatus)
                       : payload.assessmentType == 'ANC'
                           ? ancStatus
-                          : payload.assessmentType == 'EYE_CARE'
-                              ? (eyeCareStatus == null || eyeCareStatus.isEmpty
-                                  ? null
-                                  : eyeCareStatus)
-                              : payload.assessmentType == 'CATARACT'
-                                  ? (cataractStatus == null ||
-                                          cataractStatus.isEmpty
+                          : payload.assessmentType == 'PNC_MOTHER'
+                              ? pncStatus
+                              : payload.assessmentType == 'EYE_CARE'
+                                  ? (eyeCareStatus == null ||
+                                          eyeCareStatus.isEmpty
                                       ? null
-                                      : cataractStatus)
-                                  : null,
+                                      : eyeCareStatus)
+                                  : payload.assessmentType == 'CATARACT'
+                                      ? (cataractStatus == null ||
+                                              cataractStatus.isEmpty
+                                          ? null
+                                          : cataractStatus)
+                                      : null,
           pregnancyEpisodeId: sharedPregnancyEpisodeId,
           otherDetails: switch (payload.assessmentType) {
             'NCD' => ncdOtherDetails,
@@ -2084,25 +2194,85 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
 
     if (_activeFormTypes.contains('pncMother')) {
-      final result = PncReferralEvaluator.evaluate(
-        systolic: sys,
-        diastolic: dia,
-        temperatureCelsius: temperatureCelsius(),
-        pulseBpm: asDouble('pulse')?.toInt(),
-        hemoglobinGdL: asDouble('hemoglobin'),
-        fastingGlucoseMmol: isFbs ? glVal : null,
-        randomGlucoseMmol: !isFbs ? glVal : null,
-        urinaryAlbumin: _data.getValue('urinaryAlbumin') as String?,
-        edema: (_data.getValue('oedema') ??
-            _data.getValue('edema')) as String?,
-      );
-      debugPrint('[Referral][PNC] required=${result.isReferralRequired}  urgent=${result.urgentConditions}  nonUrgent=${result.nonUrgentConditions}');
-      if (result.isReferralRequired) {
-        referred = true;
-        reasons.addAll([
-          ...result.urgentConditions,
-          ...result.nonUrgentConditions,
-        ]);
+      // Combined delivery visit: PNC referral only applies on live birth
+      // (same gate as payload emit). Abortion/maternal death skip PNC.
+      final willEmitPnc = !_activeFormTypes.contains('pregnancyOutcome') ||
+          _data.getValue('deliveryOutcomeType')?.toString() == 'liveBirth';
+      if (willEmitPnc) {
+        bool? isYes(Object? v) {
+          if (v == null) return null;
+          if (v is bool) return v;
+          final s = v.toString().trim().toLowerCase();
+          if (s == 'yes' || s == 'true' || s == '1') return true;
+          if (s == 'no' || s == 'false' || s == '0') return false;
+          return null;
+        }
+
+        bool hasDangerSigns() {
+          final raw = _data.getValue('postpartumDangerSigns');
+          if (raw is List) {
+            for (final e in raw) {
+              final token = e is Map
+                  ? (e['value'] ?? e['id'] ?? e['name'])?.toString()
+                  : e?.toString();
+              if (token == null) continue;
+              final s = token.trim().toLowerCase();
+              if (s.isEmpty || s == 'none' || s == '7') continue;
+              return true;
+            }
+          }
+          return false;
+        }
+
+        final htnYes = isYes(_data.getValue('htnPatient'));
+        final eclampsiaYes = isYes(_data.getValue('eclampsia'));
+        final dmYes = isYes(_data.getValue('dmPatient'));
+        final gdmYes = isYes(_data.getValue('gdmPatient'));
+        final result = PncReferralEvaluator.evaluate(
+          hasDangerSigns: hasDangerSigns(),
+          systolic: sys,
+          diastolic: dia,
+          temperatureCelsius: temperatureCelsius(),
+          pulseBpm: asDouble('pulse')?.toInt(),
+          hemoglobinGdL: asDouble('hemoglobin'),
+          fastingGlucoseMmol: isFbs ? glVal : null,
+          randomGlucoseMmol: !isFbs ? glVal : null,
+          urinaryBilirubin: _data.getValue('urinaryBilirubin') as String?,
+          urinaryAlbumin: _data.getValue('urinaryAlbumin') as String?,
+          edema: (_data.getValue('oedema') ??
+              _data.getValue('edema')) as String?,
+          hasKnownHtnEclampsia: htnYes == true || eclampsiaYes == true,
+          onHtnTreatment: isYes(_data.getValue('onTreatmentHtnEclampsia')),
+          hasKnownDmGdm: dmYes == true || gdmYes == true,
+          onDmTreatment: isYes(_data.getValue('onTreatmentDmGdm')),
+        );
+        final gaps = PncReferralEvaluator.evaluateGaps(
+          vitaminAConsumed: isYes(_data.getValue('vitaminAConsumed')),
+          daysSinceDelivery: _asInt(_data.getValue('daysSinceDelivery')),
+          ifaTabletsConsumed: _asInt(_data.getValue('ifaTabletsConsumed') ??
+              _data.getValue('ifaTotalConsumed')),
+          calciumTabletsConsumed: _asInt(
+              _data.getValue('calciumTabletsConsumed') ??
+                  _data.getValue('calciumTotalConsumed')),
+          familyPlanningMethod:
+              _data.getValue('familyPlanningMethods')?.toString(),
+        );
+        final hasHighRisk = result.isReferralRequired;
+        final hasGaps = gaps.hasGaps;
+        debugPrint(
+            '[Referral][PNC] highRisk=$hasHighRisk gaps=$hasGaps '
+            'urgent=${result.urgentConditions} '
+            'nonUrgent=${result.nonUrgentConditions} gapsList=${gaps.gaps}');
+        if (hasHighRisk || hasGaps) referred = true;
+        // Spice labels only — detailed risks travel in motherRisks / pncGaps.
+        reasons.addAll(
+          PncStatus.referredReasons(
+            hasHighRisk: hasHighRisk,
+            hasGaps: hasGaps,
+            visitNo: _data.getValue('pncVisitNumber') ??
+                _data.getValue('visitNo'),
+          ),
+        );
       }
     }
 

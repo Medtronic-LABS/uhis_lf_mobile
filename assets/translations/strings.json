@@ -2676,7 +2676,7 @@
   "en": "AI briefing unavailable — check patient record manually."
  },
  "calciumPairLabel": {
-  "bn": "ক্যালসিয়াম বড়ি",
+  "bn": "ক্যালসিয়াম বড়ির তথ্য",
   "en": "Calcium tablets"
  },
  "calciumPairSubLabel": {
@@ -4740,8 +4740,8 @@
   "en": "Tap a mode to start"
  },
  "ifaPairLabel": {
-  "bn": "আয়রন ফলিক অ্যাসিড ট্যাবলেট",
-  "en": "IFA tablets"
+  "bn": "আয়রন বড়ির তথ্য",
+  "en": "IFA tables"
  },
  "ifaPairSubLabel": {
   "bn": "আয়রন-ফলিক অ্যাসিড",

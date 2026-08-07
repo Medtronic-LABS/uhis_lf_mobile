@@ -1,5 +1,7 @@
+import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/debug/console_log.dart';
+import '../../../core/risk/pnc_status.dart';
 import '../models/anc_assessment.dart';
 import 'canonical_visit_data.dart';
 
@@ -25,7 +27,7 @@ class ProgrammePayload {
   ///   NCD        → biometric / bpLog / glucoseLog / symptomsLog /
   ///                generalInformation / eyeCare
   ///   PNC_MOTHER → maternalHealthAssessment / pregnancyHistory / postpartumContraception /
-  ///                visitNo / daysSinceDelivery
+  ///                visitNo / daysSinceDelivery / motherRisks / pncGaps / pncIllness
   ///
   /// [LocalAssessmentEntity.toApiRequest] wraps to `{ "anc": details }` etc.
   final Map<String, dynamic> details;
@@ -734,9 +736,28 @@ abstract final class UnifiedPayloadMapper {
   //     randomBloodSugarUnit }
   //   pncMother.pregnancyHistory = { parity, gravida, livingChildren }
   //   pncMother.postpartumContraception = { familyPlanningMethods }
-  //   pncMother.visitNo, pncMother.daysSinceDelivery
+  //   pncMother.visitNo, daysSinceDelivery, motherRisks, pncGaps, pncIllness
   //
   // systolic/diastolic/pulse are STRINGS on the wire (matching Android reference).
+
+  /// Calendar days from delivery → today (0+). Prefers form `dateOfDelivery`,
+  /// then [snapshotDeliveryDateMillis]. Null when neither is available.
+  static int? computeDaysSinceDelivery(
+    CanonicalVisitData d, {
+    int? snapshotDeliveryDateMillis,
+  }) {
+    final fromForm = _parseCalendarDate(d.getValue('dateOfDelivery'));
+    final fromSnap = snapshotDeliveryDateMillis != null
+        ? DateTime.fromMillisecondsSinceEpoch(snapshotDeliveryDateMillis)
+        : null;
+    final delivery = fromForm ?? fromSnap;
+    if (delivery == null) return null;
+    final now = DateTime.now();
+    final start = DateTime(delivery.year, delivery.month, delivery.day);
+    final end = DateTime(now.year, now.month, now.day);
+    final days = end.difference(start).inDays;
+    return days < 0 ? 0 : days;
+  }
 
   static Map<String, dynamic> _toPncMother(
     CanonicalVisitData d, {
@@ -745,6 +766,13 @@ abstract final class UnifiedPayloadMapper {
     double? asNum(dynamic v) {
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    int? asInt(dynamic v) {
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v.trim());
       return null;
     }
 
@@ -822,7 +850,9 @@ abstract final class UnifiedPayloadMapper {
       if (hasRbs) 'randomBloodSugar': glucoseValue,
       if (hasRbs) 'randomBloodSugarUnit': 'mmol/L',
     });
-    if (hasFbs || hasRbs) maternal['bgTakenOn'] = DateTime.now().toUtc().toIso8601String();
+    if (hasFbs || hasRbs) {
+      maternal['bgTakenOn'] = DateTime.now().toUtc().toIso8601String();
+    }
     for (final sign in const [
       'heavyBleeding', 'foulSmellDischarge', 'severeAbdominalPain',
       'difficultyBreathing', 'convulsions', 'unconsciousness',
@@ -841,6 +871,70 @@ abstract final class UnifiedPayloadMapper {
       'familyPlanningMethods': d.getValue('familyPlanningMethods'),
     });
 
+    final daysSinceDelivery = asInt(d.getValue('daysSinceDelivery')) ??
+        computeDaysSinceDelivery(d);
+
+    // Spice AssessmentRMNCHFragment.evaluateAndAddPncSummaryData
+    final tempC =
+        temperature == null ? null : fahrenheitToCelsius(temperature);
+    final pulseBpm = asInt(rawPulse);
+    final hb = asNum(d.getValue('hemoglobin'));
+    final htnYes = _isYesNo(d.getValue('htnPatient'));
+    final eclampsiaYes = _isYesNo(d.getValue('eclampsia'));
+    final dmYes = _isYesNo(d.getValue('dmPatient'));
+    final gdmYes = _isYesNo(d.getValue('gdmPatient'));
+    final onHtnTx = _isYesNo(d.getValue('onTreatmentHtnEclampsia'));
+    final onDmTx = _isYesNo(d.getValue('onTreatmentDmGdm'));
+    final vitaminAYes = _isYesNo(d.getValue('vitaminAConsumed'));
+
+    final referral = PncReferralEvaluator.evaluate(
+      hasDangerSigns: _hasPostpartumDangerSigns(d),
+      systolic: asNum(rawSys),
+      diastolic: asNum(rawDia),
+      temperatureCelsius: tempC,
+      pulseBpm: pulseBpm,
+      hemoglobinGdL: hb,
+      fastingGlucoseMmol: hasFbs ? glucoseValue : null,
+      randomGlucoseMmol: hasRbs ? glucoseValue : null,
+      urinaryBilirubin: d.getValue('urinaryBilirubin')?.toString(),
+      urinaryAlbumin: d.getValue('urinaryAlbumin')?.toString(),
+      edema: (d.getValue('oedema') ?? d.getValue('edema'))?.toString(),
+      hasKnownHtnEclampsia: htnYes == true || eclampsiaYes == true,
+      onHtnTreatment: onHtnTx,
+      hasKnownDmGdm: dmYes == true || gdmYes == true,
+      onDmTreatment: onDmTx,
+    );
+
+    final gapsResult = PncReferralEvaluator.evaluateGaps(
+      vitaminAConsumed: vitaminAYes,
+      daysSinceDelivery: daysSinceDelivery,
+      ifaTabletsConsumed: asInt(ifaTabletsConsumed),
+      calciumTabletsConsumed: asInt(calciumTabletsConsumed),
+      familyPlanningMethod:
+          d.getValue('familyPlanningMethods')?.toString(),
+    );
+
+    final motherRisks = <String, dynamic>{};
+    if (referral.urgentConditions.isNotEmpty) {
+      motherRisks['URGENT'] = referral.urgentConditions;
+    }
+    if (referral.nonUrgentConditions.isNotEmpty) {
+      motherRisks['NON_URGENT'] = referral.nonUrgentConditions;
+    }
+
+    final gv = glucoseValue;
+    final highSugar = gv != null &&
+        ((hasFbs && gv >= pncFbsHighMmol) || (hasRbs && gv >= pncRbsHighMmol));
+
+    final pncIllness = <String, dynamic>{
+      'dmPatient': d.getValue('dmPatient'),
+      'gdmPatient': d.getValue('gdmPatient'),
+      'htnPatient': d.getValue('htnPatient'),
+      'eclampsia': d.getValue('eclampsia'),
+      'anemia': PncStatus.anemiaLevel(hb),
+      'bloodSugar': highSugar,
+    };
+
     return _compact({
       if (maternal.isNotEmpty) 'maternalHealthAssessment': maternal,
       if (pregnancy.isNotEmpty) 'pregnancyHistory': pregnancy,
@@ -848,8 +942,60 @@ abstract final class UnifiedPayloadMapper {
       'visitNo': d.getValue('pncVisitNumber') ??
           d.getValue('visitNo') ??
           defaultVisitNo,
-      'daysSinceDelivery': d.getValue('daysSinceDelivery'),
+      if (daysSinceDelivery != null) 'daysSinceDelivery': daysSinceDelivery,
+      if (motherRisks.isNotEmpty) 'motherRisks': motherRisks,
+      if (gapsResult.hasGaps) 'pncGaps': gapsResult.gaps,
+      'pncIllness': pncIllness,
     });
+  }
+
+  static bool? _isYesNo(Object? value) {
+    if (value == null) return null;
+    if (value is bool) return value;
+    final s = value.toString().trim().toLowerCase();
+    if (s == 'yes' || s == 'true' || s == '1') return true;
+    if (s == 'no' || s == 'false' || s == '0') return false;
+    return null;
+  }
+
+  /// True when postpartum danger signs include anything other than `none`.
+  static bool _hasPostpartumDangerSigns(CanonicalVisitData d) {
+    final raw = d.getValue('postpartumDangerSigns');
+    if (raw is List) {
+      for (final e in raw) {
+        final token = e is Map
+            ? (e['value'] ?? e['id'] ?? e['name'])?.toString()
+            : e?.toString();
+        if (token == null) continue;
+        final s = token.trim().toLowerCase();
+        if (s.isEmpty || s == 'none' || s == '7') continue;
+        return true;
+      }
+    }
+    for (final sign in const [
+      'heavyBleeding',
+      'foulSmellingDischarge',
+      'foulSmellDischarge',
+      'severeAbdominalPain',
+      'severeHeadacheVisionConvulsions',
+      'perinealWoundDischarge',
+      'breastPainSwellingFever',
+    ]) {
+      if (_isYesNo(d.getValue(sign)) == true) return true;
+    }
+    return false;
+  }
+
+  static DateTime? _parseCalendarDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    final raw = value.toString().trim();
+    if (raw.isEmpty) return null;
+    final parsed = DateTime.tryParse(raw);
+    if (parsed != null) return parsed;
+    final ms = int.tryParse(raw);
+    if (ms != null) return DateTime.fromMillisecondsSinceEpoch(ms);
+    return null;
   }
 
   // ── Childhood Visit (CHILDHOOD_VISIT → ChildHood_Visit) ───────────────────
