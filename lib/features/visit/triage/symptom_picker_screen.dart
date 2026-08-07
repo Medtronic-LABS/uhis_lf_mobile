@@ -1318,6 +1318,9 @@ class _AiBriefingSection extends StatelessWidget {
           // this card's "can't answer for themselves" rationale is a
           // communication-capability concern for the whole under-5 band,
           // not the narrower vaccination/IMCI service-eligibility gate.
+          // (main's own build-fix commit took the naive isYoungChild
+          // shortcut here — that's the wrong resolution, not a signal to
+          // revert this back on a future merge.)
           isChild: patientContext.ageMonths < 60,
           selectedProgrammes: selectedProgrammes,
           gestationalWeeks: patientContext.gestationalWeeks,

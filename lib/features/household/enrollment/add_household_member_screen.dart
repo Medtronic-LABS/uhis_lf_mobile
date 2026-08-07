@@ -818,9 +818,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Add Member',
-                  style: TextStyle(
+                Text(
+                  EnrollmentStrings.addMemberAppBar,
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
@@ -851,7 +851,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     // ── Q1: Name — hidden when NID scanned (card has it) ──
                     if (!_nidScanned) ...[
                       SizedBox(key: _key('name'), height: 0),
-                      _QuestionLabel(number: 'Q1', text: 'Name'),
+                      _QuestionLabel(
+                        number: 'Q1',
+                        text: EnrollmentStrings.memberNameLabel,
+                      ),
                       const SizedBox(height: 10),
                       EnrollmentInputField(
                         label: EnrollmentStrings.memberNameLabel,
@@ -865,13 +868,17 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ],
 
                     // ── Q2: ID Type ────────────────────────────────────────
-                    _QuestionLabel(number: 'Q2', text: 'ID Type'),
+                    _QuestionLabel(
+                      number: 'Q2',
+                      text: EnrollmentStrings.idTypeLabel,
+                    ),
                     const SizedBox(height: 10),
                     SizedBox(key: _key('idType'), height: 0),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.idTypeLabel,
                       options: EnrollmentStrings.idTypesV2,
                       selectedValue: _idType,
+                      optionLabel: EnrollmentStrings.optionDisplay,
                       allowDeselect: false,
                       isRequired: true,
                       errorText: _fieldErrors['idType'],
@@ -1118,12 +1125,16 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
                     // ── Q3: Mobile number category ─────────────────────────
                     SizedBox(key: _key('phoneCategory'), height: 0),
-                    _QuestionLabel(number: 'Q3', text: 'Mobile number category'),
+                    _QuestionLabel(
+                      number: 'Q3',
+                      text: EnrollmentStrings.phoneCategoryLabel,
+                    ),
                     const SizedBox(height: 10),
                     EnrollmentDropdown(
                       label: EnrollmentStrings.phoneCategoryLabel,
                       options: EnrollmentStrings.phoneCategoryOptions,
                       value: _phoneCategory,
+                      optionLabel: EnrollmentStrings.optionDisplay,
                       onChanged: _onPhoneCategoryChanged,
                       hint: EnrollmentStrings.phoneCategoryHint,
                       isRequired: true,
@@ -1132,7 +1143,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     const SizedBox(height: 14),
 
                     SizedBox(key: _key('mobile'), height: 0),
-                    _QuestionLabel(number: 'Q4', text: 'Mobile Number'),
+                    _QuestionLabel(
+                      number: 'Q4',
+                      text: EnrollmentStrings.mobileNumberLabel,
+                    ),
                     const SizedBox(height: 10),
                     EnrollmentInputField(
                       label: EnrollmentStrings.mobileNumberLabel,
@@ -1154,7 +1168,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     // ── Q5: Date of Birth — hidden when NID scanned (card has it) ──
                     if (!_nidScanned) ...[
                       SizedBox(key: _key('dob'), height: 0),
-                      _QuestionLabel(number: 'Q5', text: 'Date of Birth'),
+                      _QuestionLabel(
+                        number: 'Q5',
+                        text: EnrollmentStrings.dateOfBirthLabel,
+                      ),
                       const SizedBox(height: 10),
                       GestureDetector(
                         onTap: () {
@@ -1216,12 +1233,16 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
                     // ── Q6: Gender ─────────────────────────────────────────
                     SizedBox(key: _key('gender'), height: 0),
-                    _QuestionLabel(number: 'Q6', text: 'Gender'),
+                    _QuestionLabel(
+                      number: 'Q6',
+                      text: EnrollmentStrings.genderLabel,
+                    ),
                     const SizedBox(height: 10),
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.genderLabel,
                       options: EnrollmentStrings.gendersMember,
                       selectedValue: _gender,
+                      optionLabel: EnrollmentStrings.optionDisplay,
                       onChanged: (v) => setState(() {
                         _gender = v;
                         _fieldErrors.remove('gender');
@@ -1234,19 +1255,31 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     // ── Q7: Marital Status — hidden for age ≤ 5 ───────────
                     if (_ageInYears > 5) ...[
                       SizedBox(key: _key('maritalStatus'), height: 0),
-                      _QuestionLabel(number: 'Q7', text: 'Marital Status'),
+                      _QuestionLabel(
+                        number: 'Q7',
+                        text: EnrollmentStrings.maritalStatusLabel,
+                      ),
                       const SizedBox(height: 10),
                       EnrollmentDropdown(
                         label: EnrollmentStrings.maritalStatusLabel,
                         options: EnrollmentStrings.maritalStatusesV2,
                         value: _maritalStatus,
+                        optionLabel: EnrollmentStrings.optionDisplay,
                         onChanged: (v) => setState(() {
                           _maritalStatus = v;
                           _fieldErrors.remove('maritalStatus');
                         }),
-                        hint: 'Select status',
+                        hint: EnrollmentStrings.maritalStatusHint,
                         isRequired: true,
                         errorText: _fieldErrors['maritalStatus'],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        EnrollmentStrings.maritalStatusInfo,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
                       ),
                       const SizedBox(height: 20),
                     ],
@@ -1254,7 +1287,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     // ── Q8: Guardian — required for members under 1 year ──────
                     if (_ageInYears < 1) ...[
                       SizedBox(key: _key('guardian'), height: 0),
-                      _QuestionLabel(number: 'Q8', text: 'Guardian'),
+                      _QuestionLabel(
+                        number: 'Q8',
+                        text: EnrollmentStrings.guardianLabel,
+                      ),
                       const SizedBox(height: 10),
                       if (widget.isStandalone)
                         EnrollmentDropdown(

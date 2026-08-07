@@ -40,6 +40,16 @@ void main() {
       expect(FieldOption.matchId('NO', yesNoOptions), 'No');
     });
 
+    test('matches Bangla cultureValue to English option id', () {
+      const banglaYesNo = [
+        FieldOption(id: 'Yes', name: 'Yes', cultureValue: 'হ্যাঁ'),
+        FieldOption(id: 'No', name: 'No', cultureValue: 'না'),
+      ];
+      expect(FieldOption.matchId('হ্যাঁ', banglaYesNo), 'Yes');
+      expect(FieldOption.matchId('না', banglaYesNo), 'No');
+      expect(FieldOption.matchId('Yes', banglaYesNo), 'Yes');
+    });
+
     test('find returns the option for a preloaded bool', () {
       expect(FieldOption.find(true, boolIdOptions)?.displayName, 'Yes');
       expect(FieldOption.find(true, yesNoOptions)?.id, 'Yes');

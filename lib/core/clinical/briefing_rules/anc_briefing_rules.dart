@@ -42,17 +42,20 @@ List<ClinicalFinding> evaluateAncFindings({
   final findings = <ClinicalFinding>[];
 
   // ── Danger signs — one finding per sign, human-readable label ──
-  final dangerSignCodes = <String>[
-    for (final fieldId in _ancDangerSignFieldIds)
-      ...?(dangerSigns?[fieldId] as List?)?.cast<String>(),
-  ];
-  for (final code in dangerSignCodes) {
-    final label = _resolveOptionLabel(_ancDangerSignFieldIds, code);
-    findings.add(ClinicalFinding(
-      code: 'anc.dangerSign',
-      message: 'Danger sign reported: $label.',
-      programme: 'anc',
-    ));
+  // Skip Spice "None" tokens (≤12 → id 6; 13–40 → id 7; legacy "none").
+  for (final fieldId in _ancDangerSignFieldIds) {
+    final noneId = fieldId == 'dangerSignsExperienced12' ? '6' : '7';
+    final codes = (dangerSigns?[fieldId] as List?)?.cast<String>() ?? const [];
+    for (final code in codes) {
+      final token = code.trim().toLowerCase();
+      if (token.isEmpty || token == 'none' || token == noneId) continue;
+      final label = _resolveOptionLabel(_ancDangerSignFieldIds, code);
+      findings.add(ClinicalFinding(
+        code: 'anc.dangerSign',
+        message: 'Danger sign reported: $label.',
+        programme: 'anc',
+      ));
+    }
   }
 
   // ── BP ≥140/90 or known HTN ──

@@ -740,7 +740,7 @@
   "en": "Save"
  },
  "Enrollment.villageLabel": {
-  "bn": "গ্রাম",
+  "bn": "ইউনিয়ন",
   "en": "Union"
  },
  "Enrollment.villageHint": {
@@ -1944,8 +1944,8 @@
   "en": "Adding to"
  },
  "addMemberTitle": {
-  "bn": "খানার সদস্য যুক্ত করুন",
-  "en": "Add Household Member"
+  "bn": "ব্যক্তিগত তথ্য",
+  "en": "Bio Data"
  },
  "addMoreMembers": {
   "bn": "সদস্য যুক্ত করুন",
@@ -3076,7 +3076,7 @@
   "en": "Step 1 of 2"
  },
  "createHouseholdTitle": {
-  "bn": "খানার তথ্য",
+  "bn": "পরিবারের তথ্য",
   "en": "Household Information"
  },
  "createNotesHint": {
@@ -3384,11 +3384,11 @@
   "en": "Please specify"
  },
  "disabilityPersonCountHint": {
-  "bn": "যেমন ১",
-  "en": "e.g. 1"
+  "bn": "সংখ্যা লিখুন",
+  "en": "Enter number"
  },
  "disabilityPersonCountLabel": {
-  "bn": "প্রতিবন্ধী ব্যক্তির সংখ্যা",
+  "bn": "খানায় বিশেষ চাহিদা সম্পন্ন ব্যক্তির সংখ্যা",
   "en": "Persons with disability in the HH"
  },
  "disabilityQuestionLabel": {
@@ -4440,12 +4440,12 @@
   "en": "Growth trend"
  },
  "guardianHint": {
-  "bn": "খানা থেকে অভিভাবক নির্বাচন করুন",
-  "en": "Select guardian from household"
+  "bn": "ঘরের সকল নিবন্ধিত সদস্যদের ড্রপডাউন তালিকা",
+  "en": "Drop down list of all registered members from the house"
  },
  "guardianLabel": {
-  "bn": "অভিভাবক",
-  "en": "Guardian"
+  "bn": "মাতা/ অভিভাবকের নাম",
+  "en": "Guardian Name"
  },
  "guideUnavailable": {
   "bn": "কথোপকথনের নির্দেশিকা পাওয়া যাচ্ছে না",
@@ -4476,12 +4476,12 @@
   "en": "Enter an HbA1c reading between 4.0% and 14.0%"
  },
  "headNameHint": {
-  "bn": "খানা প্রধানের পূর্ণ নাম",
-  "en": "Head's full name"
+  "bn": "নাম লিখুন",
+  "en": "Enter Name"
  },
  "headNameLabel": {
-  "bn": "পূর্ণ নাম",
-  "en": "Household Head Name"
+  "bn": "নাম",
+  "en": "Name"
  },
  "headPrefilledFromScan": {
   "bn": "কার্ড থেকে নাম, জন্ম তারিখ ও এনআইডি তথ্য নেওয়া হয়েছে— যাচাই করুন, তারপর পিতা ও মাতার নাম (বাংলা) নিজে যুক্ত করুন।",
@@ -4496,11 +4496,11 @@
   "en": "Visit"
  },
  "healthWorkerHint": {
-  "bn": "এসএস নির্বাচন করুন",
+  "bn": "স্বাস্থ্য সেবিকা নির্বাচন করুন",
   "en": "Select SS"
  },
  "healthWorkerLabel": {
-  "bn": "এসএস এর নাম",
+  "bn": "স্বাস্থ্য সেবিকার নামঃ",
   "en": "SS Name"
  },
  "heightLabel": {
@@ -4637,7 +4637,7 @@
  },
  "householdHeadOccupationLabel": {
   "bn": "খানা প্রধানের পেশা",
-  "en": "Household Head Occupation"
+  "en": "Household Head's Occupation"
  },
  "householdHeadSectionHeader": {
   "bn": "👤 খানা প্রধানের তথ্য",
@@ -4656,7 +4656,7 @@
   "en": "Household ID not available"
  },
  "householdInfoSectionHeader": {
-  "bn": "🏠 খানার তথ্য",
+  "bn": "🏠 পরিবারের তথ্য",
   "en": "🏠 Household Information"
  },
  "householdLabel": {
@@ -4692,11 +4692,11 @@
   "en": "Household Opportunities"
  },
  "householdTypeHint": {
-  "bn": "ধরন নির্বাচন করুন",
+  "bn": "খানার ধরণ নির্বাচন করুন",
   "en": "Select type"
  },
  "householdTypeLabel": {
-  "bn": "খানাের ধরন",
+  "bn": "খানার ধরণ",
   "en": "Household Type"
  },
  "householdsCount": {
@@ -5280,12 +5280,12 @@
   "en": "Member ID"
  },
  "memberNameHint": {
-  "bn": "সদস্যের পূর্ণ নাম",
-  "en": "Member's full name"
+  "bn": "নাম লিখুন",
+  "en": "Enter Name"
  },
  "memberNameLabel": {
-  "bn": "পূর্ণ নাম",
-  "en": "Full Name"
+  "bn": "নাম",
+  "en": "Name"
  },
  "memberVillageHint": {
   "bn": "বহিরাগত সদস্যদের জন্য",
@@ -5356,8 +5356,8 @@
   "en": "Not Available"
  },
  "mobileNumberHint": {
-  "bn": "+৮৮০ ১XXX XXXXXX",
-  "en": "+880 1XXX XXXXXX"
+  "bn": "মোবাইল নম্বর লিখুন",
+  "en": "Enter Mobile Number"
  },
  "mobileNumberLabel": {
   "bn": "মোবাইল নম্বর",
@@ -5640,12 +5640,12 @@
   "en": "✓ NID number captured: {number}"
  },
  "nidNumberHint": {
-  "bn": "এনআইডি নম্বর লিখুন",
-  "en": "Enter NID number"
+  "bn": "জাতীয় পরিচয়পত্র নম্বর লিখুন",
+  "en": "Enter National ID"
  },
  "nidNumberLabel": {
-  "bn": "এনআইডি নম্বর",
-  "en": "NID NUMBER"
+  "bn": "জাতীয় পরিচয়পত্র (NID) (≥১৮ বছর)",
+  "en": "National ID"
  },
  "nidScanButtonLabel": {
   "bn": "নম্বর পড়তে এনআইডি কার্ড স্ক্যান করুন",
@@ -8324,11 +8324,11 @@
   "en": "Total\nMembers"
  },
  "totalMembersHint": {
-  "bn": "যেমন ৫",
-  "en": "e.g. 5"
+  "bn": "মোট সদস্য সংখ্যা লিখুন",
+  "en": "Enter Total Members"
  },
  "totalMembersLabel": {
-  "bn": "মোট খানার সদস্য",
+  "bn": "খানার মোট সদস্য সংখ্যা",
   "en": "Total Household Members"
  },
  "trainingRequestsSection": {
@@ -8994,5 +8994,193 @@
  "disabilityMemberQuestion": {
   "bn": "এই সদস্যের কি কোনো প্রতিবন্ধকতা রয়েছে?",
   "en": "Disability"
+ },
+ "otherOccupationLabel": {
+  "bn": "অন্য পেশা হলে উল্লেখ করুন",
+  "en": "If Other Occupation"
+ },
+ "otherOccupationHint": {
+  "bn": "অন্য পেশা লিখুন",
+  "en": "Enter other occupation"
+ },
+ "monthlyIncomeRangeLabel": {
+  "bn": "মাসিক পারিবারিক আয়ের পরিসর",
+  "en": "Monthly Income Range"
+ },
+ "monthlyIncomeRangeHint": {
+  "bn": "আয়ের পরিসর নির্বাচন করুন",
+  "en": "Select income range"
+ },
+ "disabilityPersonCountInfo": {
+  "bn": "যার খুব অসুবিধা হয় অথবা দেখতে, শুনতে, হাটতে, উপরে উঠতে, কিছু করতে, মনে রাখতে, মনোযোগ দিতে, যোগাযোগ করতে বা অন্যদের বোঝাতে পারে না।",
+  "en": "Who has great difficulty or cannot see, hear, walk, climb, do things independently, remember, concentrate, communicate, or understand others"
+ },
+ "phoneCategoryLabel": {
+  "bn": "মোবাইল নম্বরের ধরন",
+  "en": "Mobile number category"
+ },
+ "phoneCategoryHint": {
+  "bn": "মোবাইল নম্বরের ধরন নির্বাচন করুন",
+  "en": "Select category"
+ },
+ "maritalStatusInfo": {
+  "bn": "একক (বিচ্ছিন্ন/বিবাহবিচ্ছেদ/সঙ্গী মৃত) হলে 'একক' নির্বাচন করুন",
+  "en": "Select single if (Separated/Divorced/Partner deceased)"
+ },
+ "Enrollment.opt.National ID": {
+  "bn": "জাতীয় পরিচয় পত্র (NID)",
+  "en": "National ID"
+ },
+ "Enrollment.opt.BRN": {
+  "bn": "জন্ম নিবন্ধন নম্বর (BRN)",
+  "en": "BRN"
+ },
+ "Enrollment.opt.Not Available": {
+  "bn": "সাথে নেই",
+  "en": "Not Available"
+ },
+ "Enrollment.opt.Personal (Self)": {
+  "bn": "ব্যাক্তিগত (নিজস্ব)",
+  "en": "Personal (Self)"
+ },
+ "Enrollment.opt.Head of Household": {
+  "bn": "খানা প্রধান",
+  "en": "Head of Household"
+ },
+ "Enrollment.opt.Family Member": {
+  "bn": "পরিবারের সদস্য",
+  "en": "Family Member"
+ },
+ "Enrollment.opt.Friend": {
+  "bn": "প্রতিবেশী/বন্ধু",
+  "en": "Friend"
+ },
+ "Enrollment.opt.Male": {
+  "bn": "পুরুষ",
+  "en": "Male"
+ },
+ "Enrollment.opt.Female": {
+  "bn": "মহিলা",
+  "en": "Female"
+ },
+ "Enrollment.opt.Other": {
+  "bn": "অন্যান্য",
+  "en": "Other"
+ },
+ "Enrollment.opt.Married": {
+  "bn": "বিবাহিত",
+  "en": "Married"
+ },
+ "Enrollment.opt.Single": {
+  "bn": "একক (বিচ্ছিন্ন/বিবাহবিচ্ছেদ/সঙ্গী মৃত)",
+  "en": "Single"
+ },
+ "Enrollment.opt.Unmarried": {
+  "bn": "অবিবাহিত",
+  "en": "Unmarried"
+ },
+ "Enrollment.opt.Agriculture": {
+  "bn": "কৃষি কাজ",
+  "en": "Agriculture"
+ },
+ "Enrollment.opt.Garments worker": {
+  "bn": "গার্মেন্টস কর্মী",
+  "en": "Garments worker"
+ },
+ "Enrollment.opt.Service/Job": {
+  "bn": "চাকুরি",
+  "en": "Service/Job"
+ },
+ "Enrollment.opt.Technical worker": {
+  "bn": "প্রযুক্তিগত কর্মী (যেমনঃ ড্রাইভার/ ইলেকট্রিশিয়ান/ ওয়েলডিং/ মেকানিক )",
+  "en": "Technical worker"
+ },
+ "Enrollment.opt.Day laborer": {
+  "bn": "দিনমজুর",
+  "en": "Day laborer"
+ },
+ "Enrollment.opt.Vendor/Shopkeeper/Vegetable": {
+  "bn": "বিক্রেতা/দোকানদার/সবজি বা মাছ বিক্রেতা",
+  "en": "Vendor/Shopkeeper/Vegetable"
+ },
+ "Enrollment.opt.Businessman": {
+  "bn": "ব্যবসায়ী",
+  "en": "Businessman"
+ },
+ "Enrollment.opt.Foreign worker": {
+  "bn": "বিদেশে কর্মরত",
+  "en": "Foreign worker"
+ },
+ "Enrollment.opt.Self-employed": {
+  "bn": "স্ব-কর্মসংস্থান",
+  "en": "Self-employed"
+ },
+ "Enrollment.opt.Unemployed": {
+  "bn": "বেকার",
+  "en": "Unemployed"
+ },
+ "Enrollment.opt.< ৳5000": {
+  "bn": "< ৳৫০০০",
+  "en": "< ৳5000"
+ },
+ "Enrollment.opt.৳5001 – ৳10000": {
+  "bn": "৳৫০০১ – ৳১০০০০",
+  "en": "৳5001 – ৳10000"
+ },
+ "Enrollment.opt.৳10001 – ৳15000": {
+  "bn": "৳১০০০১ – ৳১৫০০০",
+  "en": "৳10001 – ৳15000"
+ },
+ "Enrollment.opt.৳15001 – ৳20000": {
+  "bn": "৳১৫০০১ – ৳২০০০০",
+  "en": "৳15001 – ৳20000"
+ },
+ "Enrollment.opt.৳20001 – ৳30000": {
+  "bn": "৳২০০০১ – ৳৩০০০০",
+  "en": "৳20001 – ৳30000"
+ },
+ "Enrollment.opt.৳30001 – ৳40000": {
+  "bn": "৳৩০০০১ – ৳৪০০০০",
+  "en": "৳30001 – ৳40000"
+ },
+ "Enrollment.opt.৳40001 – ৳70000": {
+  "bn": "৳৪০০০১ – ৳৭০০০০",
+  "en": "৳40001 – ৳70000"
+ },
+ "Enrollment.opt.> ৳70000": {
+  "bn": "> ৳৭০০০০",
+  "en": "> ৳70000"
+ },
+ "Enrollment.opt.BRAC VO": {
+  "bn": "BRAC VO",
+  "en": "BRAC VO"
+ },
+ "Enrollment.opt.NVO": {
+  "bn": "NVO",
+  "en": "NVO"
+ },
+ "brnNumberLabel": {
+  "bn": "জন্ম নিবন্ধন নম্বর (BRN)",
+  "en": "BRN"
+ },
+ "brnNumberHint": {
+  "bn": "জন্ম নিবন্ধন নম্বর লিখুন",
+  "en": "Enter BRN"
+ },
+ "occupationHintSelect": {
+  "bn": "পেশা নির্বাচন করুন",
+  "en": "Select occupation"
+ },
+ "maritalStatusHint": {
+  "bn": "বৈবাহিক অবস্থা নির্বাচন করুন",
+  "en": "Select status"
+ },
+ "enrollHouseholdAppBar": {
+  "bn": "খানা নিবন্ধন",
+  "en": "Enroll Household"
+ },
+ "addMemberAppBar": {
+  "bn": "সদস্য নিবন্ধন",
+  "en": "Add Member"
  }
 }

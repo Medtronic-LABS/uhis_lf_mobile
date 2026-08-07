@@ -17,6 +17,7 @@ class EnrollmentDropdown extends StatelessWidget {
     this.hint = 'Select…',
     this.isRequired = false,
     this.errorText,
+    this.optionLabel,
   });
 
   final String label;
@@ -26,6 +27,10 @@ class EnrollmentDropdown extends StatelessWidget {
   final String hint;
   final bool isRequired;
   final String? errorText;
+
+  /// Optional display label for an option id (e.g. Bangla for occupation).
+  /// Wire / selected value stays the [options] entry.
+  final String Function(String option)? optionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -94,12 +99,29 @@ class EnrollmentDropdown extends StatelessWidget {
                   ),
                   dropdownColor: AppColors.cardSurface,
                   borderRadius: BorderRadius.circular(AppRadius.button),
+                  selectedItemBuilder: optionLabel == null
+                      ? null
+                      : (context) => options
+                          .map(
+                            (opt) => Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: Text(
+                                optionLabel!(opt),
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
                   items: options
                       .map(
                         (opt) => DropdownMenuItem<String>(
                           value: opt,
                           child: Text(
-                            opt,
+                            optionLabel?.call(opt) ?? opt,
                             style: const TextStyle(
                               fontSize: 14,
                               color: AppColors.textPrimary,

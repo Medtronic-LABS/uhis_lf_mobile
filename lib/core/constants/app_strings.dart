@@ -3656,6 +3656,12 @@ abstract final class EnrollmentStrings {
   // ── Create Household Screen (Step 1) ──────────────────────────────────────
   static String get createHouseholdTitle => getTranslatedString('createHouseholdTitle', 'Household Information');
   static String get createHouseholdSubtitle => getTranslatedString('createHouseholdSubtitle', 'Step 1 of 2');
+  /// Spice R.string.household_registration — create-household AppBar.
+  static String get enrollHouseholdAppBar =>
+      getTranslatedString('enrollHouseholdAppBar', 'Enroll Household');
+  /// Spice R.string.member_registration — add-member AppBar.
+  static String get addMemberAppBar =>
+      getTranslatedString('addMemberAppBar', 'Add Member');
 
   static String get householdNumberLabel => getTranslatedString('householdNumberLabel', 'Household Number');
   static String get householdNumberHint => getTranslatedString('householdNumberHint', 'Auto-generated');
@@ -3705,8 +3711,8 @@ abstract final class EnrollmentStrings {
   static String get householdHeadTitle => getTranslatedString('householdHeadTitle', 'Household Head Information');
   static String get householdHeadSubtitle => getTranslatedString('householdHeadSubtitle', 'Step 2 of 2');
 
-  static String get headNameLabel => getTranslatedString('headNameLabel', 'Household Head Name');
-  static String get headNameHint => getTranslatedString('headNameHint', 'Head\'s full name');
+  static String get headNameLabel => getTranslatedString('headNameLabel', 'Name');
+  static String get headNameHint => getTranslatedString('headNameHint', 'Enter Name');
 
   static String get fatherNameLabel => getTranslatedString('fatherNameLabel', 'Father\'s Name');
   static String get fatherNameHint => getTranslatedString('fatherNameHint', 'As printed on the NID (Bangla)');
@@ -3730,6 +3736,12 @@ abstract final class EnrollmentStrings {
   static String get genderLabel => getTranslatedString('genderLabel', 'Gender');
 
   static String get maritalStatusLabel => getTranslatedString('maritalStatusLabel', 'Marital Status');
+  static String get maritalStatusHint =>
+      getTranslatedString('maritalStatusHint', 'Select status');
+  static String get maritalStatusInfo => getTranslatedString(
+        'maritalStatusInfo',
+        'Select single if (Separated/Divorced/Partner deceased)',
+      );
 
   /// Member-level disability (Spice member_registration.json title / titleCulture).
   static String get disabilityStatusLabel =>
@@ -3750,9 +3762,9 @@ abstract final class EnrollmentStrings {
   ];
 
   // ── Add Member Screen ────────────────────────────────────────────────────
-  static String get addMemberTitle => getTranslatedString('addMemberTitle', 'Add Household Member');
+  static String get addMemberTitle => getTranslatedString('addMemberTitle', 'Bio Data');
   static String get memberNameLabel => getTranslatedString('memberNameLabel', 'Name');
-  static String get memberNameHint => getTranslatedString('memberNameHint', 'Member\'s full name');
+  static String get memberNameHint => getTranslatedString('memberNameHint', 'Enter Name');
 
   static String get relationshipToHeadLabel => getTranslatedString('relationshipToHeadLabel', 'Relationship to Head');
   static const List<String> relationships = [
@@ -3813,13 +3825,15 @@ abstract final class EnrollmentStrings {
   static String get monthlyIncomeRangeLabel => getTranslatedString('monthlyIncomeRangeLabel', 'Monthly Income Range');
   static String get monthlyIncomeRangeHint => getTranslatedString('monthlyIncomeRangeHint', 'Select income range');
   static String get disabilityPersonCountLabel => getTranslatedString('disabilityPersonCountLabel', 'Persons with disability in the HH');
-  static String get disabilityPersonCountHint => getTranslatedString('disabilityPersonCountHint', 'e.g. 1');
+  static String get disabilityPersonCountHint => getTranslatedString('disabilityPersonCountHint', 'Enter number');
   static String get disabilityPersonCountInfo => getTranslatedString('disabilityPersonCountInfo', 'Who has great difficulty or cannot see, hear, walk, climb, do things independently, remember, concentrate, communicate, or understand others');
   static String get phoneCategoryLabel => getTranslatedString('phoneCategoryLabel', 'Mobile number category');
   static String get phoneCategoryHint => getTranslatedString('phoneCategoryHint', 'Select category');
+  static String get occupationSelectHint =>
+      getTranslatedString('occupationHintSelect', 'Select occupation');
 
   static String get totalMembersLabel => getTranslatedString('totalMembersLabel', 'Total Household Members');
-  static String get totalMembersHint => getTranslatedString('totalMembersHint', 'e.g. 5');
+  static String get totalMembersHint => getTranslatedString('totalMembersHint', 'Enter Total Members');
 
   static const List<String> householdTypesV2 = ['BRAC VO', 'NVO'];
   static const List<String> gendersHead = ['Male', 'Female', 'Other'];
@@ -3848,6 +3862,15 @@ abstract final class EnrollmentStrings {
         return wire;
     }
   }
+
+  /// Bangla/English display for enrollment option ids (occupation, income,
+  /// gender, marital, phone category, ID type, household type). Wire value
+  /// stays the English/list entry — matches Spice cultureValue.
+  static String optionDisplay(String option) {
+    final key = 'Enrollment.opt.$option';
+    return getTranslatedString(key, option);
+  }
+
   static const List<String> gendersMember = ['Male', 'Female', 'Other'];
 
   /// Spice member_registration.json `phone_number_category` options, in order.
@@ -3924,8 +3947,14 @@ abstract final class EnrollmentStrings {
   static String get saveMemberCTA => getTranslatedString('saveMemberCTA', 'Save Member →');
 
   static String get nidScanButtonLabel => getTranslatedString('nidScanButtonLabel', 'Scan NID card to read number');
-  static String get nidNumberLabel => getTranslatedString('nidNumberLabel', 'NID NUMBER');
-  static String get nidNumberHint => getTranslatedString('nidNumberHint', 'Enter NID number');
+  static String get nidNumberLabel =>
+      getTranslatedString('nidNumberLabel', 'National ID');
+  static String get nidNumberHint =>
+      getTranslatedString('nidNumberHint', 'Enter National ID');
+  static String get brnNumberLabel =>
+      getTranslatedString('brnNumberLabel', 'BRN');
+  static String get brnNumberHint =>
+      getTranslatedString('brnNumberHint', 'Enter BRN');
   static String get nidScannedBadge => getTranslatedString('nidScannedBadge', '✓ Scanned');
   static String get nidClearScan => getTranslatedString('nidClearScan', 'Clear scan');
   static String get nidScanNoBrnHint => getTranslatedString('nidScanNoBrnHint', 'If member has no NID, enter Birth Registration ID instead.');

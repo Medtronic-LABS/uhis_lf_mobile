@@ -1,12 +1,17 @@
 /// CCE loader — lists open fetch **REFERRED** follow-ups and projects them
 /// into [CceAlert] cards. Patient identity / phone are resolved via
 /// follow-up `memberId` → `members.fhir_id` (not `patient_id`).
+///
+/// For NCD cards, Facility / Treatment are advanced from synced assessment
+/// history (`medicalreviewvisit` / `ncdmedicalreview`) dated on/after the
+/// community NCD visit (`encounterDate` / matching `encounterId`).
 library;
 
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/db/assessment_dao.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
@@ -19,16 +24,19 @@ class CceRepository {
   CceRepository({
     required FollowUpDao followUps,
     required MemberDao members,
+    AssessmentDao? assessments,
     HouseholdDao? households,
     DateTime Function()? clock,
     this.retryAttempts = FollowUpCallService.cceRetryAttempts,
   })  : _followUps = followUps,
         _members = members,
+        _assessments = assessments,
         _households = households,
         _clock = clock ?? DateTime.now;
 
   final FollowUpDao _followUps;
   final MemberDao _members;
+  final AssessmentDao? _assessments;
   final HouseholdDao? _households;
   final DateTime Function() _clock;
 
@@ -75,6 +83,16 @@ class CceRepository {
       }
     }
 
+    // Assessment history may be keyed by FHIR patient id, member fhir id, or
+    // member local id depending on sync remap — query all candidates.
+    final assessmentKeySet = <String>{};
+    for (final m in membersByFhirId.values) {
+      assessmentKeySet.addAll(_assessmentLookupKeys(m));
+    }
+    final assessmentsByKey = _assessments == null || assessmentKeySet.isEmpty
+        ? const <String, List<AssessmentRow>>{}
+        : await _assessments.forMany(assessmentKeySet.toList());
+
     final now = _clock();
     final alerts = <CceAlert>[];
     for (final fu in eligible) {
@@ -101,6 +119,7 @@ class CceRepository {
         landmark: h?.landmark,
         now: now,
         retryAttempts: retryAttempts,
+        assessments: _signalsForMember(member, assessmentsByKey),
       ));
     }
 
@@ -140,6 +159,41 @@ class CceRepository {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Keys under which synced assessment history may be stored for [m].
+  static List<String> _assessmentLookupKeys(HouseholdMemberEntity m) {
+    final keys = <String>{};
+    void add(String? v) {
+      final s = v?.trim();
+      if (s != null && s.isNotEmpty) keys.add(s);
+    }
+
+    add(m.fhirId);
+    add(m.id);
+    add(m.patientId);
+    return keys.toList();
+  }
+
+  static List<CceAssessmentSignal> _signalsForMember(
+    HouseholdMemberEntity member,
+    Map<String, List<AssessmentRow>> byKey,
+  ) {
+    final seen = <String>{};
+    final out = <CceAssessmentSignal>[];
+    for (final key in _assessmentLookupKeys(member)) {
+      final rows = byKey[key];
+      if (rows == null) continue;
+      for (final r in rows) {
+        if (!seen.add(r.id)) continue;
+        out.add(CceAssessmentSignal(
+          id: r.id,
+          kind: r.kind,
+          occurredAt: r.occurredAt,
+        ));
+      }
+    }
+    return out;
   }
 
   /// Project a member row into [Patient] so [CceAlert.fromFollowUp] can use

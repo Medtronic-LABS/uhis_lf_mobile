@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/assessment_dao.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
@@ -26,6 +27,7 @@ class CceAlertsDrawer extends StatefulWidget {
     final repository = CceRepository(
       followUps: context.read<FollowUpDao>(),
       members: context.read<MemberDao>(),
+      assessments: context.read<AssessmentDao>(),
       households: context.read<HouseholdDao>(),
     );
     return showModalBottomSheet<void>(

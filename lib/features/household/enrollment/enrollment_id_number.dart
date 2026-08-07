@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../../../core/constants/app_strings.dart';
+
 /// ID Type / National ID rules shared by the household-head form
 /// ([CreateHouseholdScreen]) and the member form
 /// ([AddHouseholdMemberScreen]).
@@ -51,11 +53,14 @@ abstract final class EnrollmentIdNumber {
   }
 
   /// Field label follows the selected type, like Android's
-  /// `FormGenerator.updateNationalIdLabelForIdType`.
-  static String label(String? idType) => isNid(idType) ? nationalId : brn;
+  /// `FormGenerator.updateNationalIdLabelForIdType` (uses cultureValue).
+  static String label(String? idType) => isNid(idType)
+      ? EnrollmentStrings.nidNumberLabel
+      : EnrollmentStrings.brnNumberLabel;
 
-  static String hint(String? idType) =>
-      isNid(idType) ? 'Enter National ID' : 'Enter BRN';
+  static String hint(String? idType) => isNid(idType)
+      ? EnrollmentStrings.nidNumberHint
+      : EnrollmentStrings.brnNumberHint;
 
   static TextInputType keyboard(String? idType) =>
       isNid(idType) ? TextInputType.number : TextInputType.text;
