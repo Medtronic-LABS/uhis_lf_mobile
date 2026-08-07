@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../core/constants/app_strings.dart';
+
 /// Parses referral-reason wire values into clean tokens.
 ///
 /// Accepts:
@@ -44,45 +46,45 @@ String shortReasonLabel(String reason) {
   final compact = k.replaceAll(' ', '');
   if (compact.contains('bloodglucose') ||
       (compact.contains('glucose') && !compact.contains('bloodpressure'))) {
-    return 'Blood glucose elevated';
+    return ReferralStrings.shortReasonBloodGlucoseElevated;
   }
-  if (compact.contains('pulse')) return 'Abnormal pulse';
+  if (compact.contains('pulse')) return ReferralStrings.shortReasonAbnormalPulse;
   if (compact.contains('bloodpressure') ||
       k == 'bp' ||
       compact.contains('hypertension')) {
-    return 'High BP';
+    return ReferralStrings.shortReasonHighBp;
   }
   if (compact.contains('hemoglobin') ||
       compact.contains('anaemia') ||
       compact.contains('anemia') ||
       (k.startsWith('hb') && k.length <= 4)) {
-    return 'Low Hb / Anemia';
+    return ReferralStrings.shortReasonLowHbAnemia;
   }
-  if (compact.contains('dangersign') || k == 'danger') return 'Danger sign';
+  if (compact.contains('dangersign') || k == 'danger') return ReferralStrings.shortReasonDangerSign;
   if (compact.contains('temperature') || compact.contains('fever')) {
-    return 'Elevated temperature';
+    return ReferralStrings.shortReasonElevatedTemp;
   }
   if (compact.contains('weight') && !compact.contains('birth')) {
-    return 'Low weight';
+    return ReferralStrings.shortReasonLowWeight;
   }
   if (compact.contains('medication') || compact.contains('adherence')) {
-    return 'Low medication adherence';
+    return ReferralStrings.shortReasonLowAdherence;
   }
   if (compact.contains('familyplanning') ||
       compact.contains('contraception') ||
       k == 'fp') {
-    return 'No FP method';
+    return ReferralStrings.shortReasonNoFpMethod;
   }
   if (compact.contains('supplement') ||
       compact.contains('vitamin') ||
       compact.contains('ifa') ||
       compact.contains('calcium')) {
-    return 'Supplement gap';
+    return ReferralStrings.shortReasonSupplementGap;
   }
   if (compact.contains('overdue') || compact.contains('missedvisit')) {
-    return 'Visit overdue';
+    return ReferralStrings.shortReasonVisitOverdue;
   }
-  if (compact.contains('symptom')) return 'Clinical symptoms';
+  if (compact.contains('symptom')) return ReferralStrings.shortReasonClinicalSymptoms;
   final t = reason.trim();
   if (t.isEmpty) return '';
   // camelCase / snake_case → spaced words for unknown codes
@@ -126,8 +128,8 @@ String buildReferralNarrative(Object? reasons, Map<String, dynamic> raw) {
       !const ['none', 'no', 'false', ''].contains(dSign.toLowerCase());
   if (hasReason(['danger']) || dSignPresent) {
     findings.add(dSignPresent
-        ? 'Danger sign reported: $dSign.'
-        : 'Danger sign reported — urgent attention required.');
+        ? ReferralStrings.dangerSignReported(dSign)
+        : ReferralStrings.dangerSignReportedGeneric);
     handled.addAll(['danger']);
   }
 
@@ -138,13 +140,12 @@ String buildReferralNarrative(Object? reasons, Map<String, dynamic> raw) {
   if (hasReason(['bp', 'bloodpressure', 'hypertension']) || bpHigh) {
     if (bp.isNotEmpty && sys > 0) {
       if (sys >= 160 || dia >= 110) {
-        findings.add('BP $bp is dangerously elevated — urgent referral needed.');
+        findings.add(ReferralStrings.bpDangerouslyElevated(bp));
       } else {
-        findings.add(
-            'BP $bp is above the normal — review and follow-up required.');
+        findings.add(ReferralStrings.bpAboveNormal(bp));
       }
     } else {
-      findings.add('BP is above the normal — review and follow-up required.');
+      findings.add(ReferralStrings.bpAboveNormalGeneric);
     }
     handled.addAll(['bp', 'bloodpressure', 'hypertension']);
   }
@@ -155,10 +156,9 @@ String buildReferralNarrative(Object? reasons, Map<String, dynamic> raw) {
   final bgHigh = bg > 0 && bg < 50 && bg >= bgThreshold;
   if (hasReason(['glucose', 'bloodsugar', 'bloodglucose']) || bgHigh) {
     if (bg > 0 && bg < 50) {
-      findings.add(
-          'Blood sugar $bg mmol/L ($bgType) is elevated — review and follow-up required.');
+      findings.add(ReferralStrings.bloodSugarElevated('$bg', bgType));
     } else {
-      findings.add('Blood sugar is elevated — review and follow-up required.');
+      findings.add(ReferralStrings.bloodSugarElevatedGeneric);
     }
     handled.addAll(['glucose', 'bloodsugar', 'bloodglucose']);
   }
@@ -169,10 +169,10 @@ String buildReferralNarrative(Object? reasons, Map<String, dynamic> raw) {
   if (hasReason(['hemoglobin', 'anemia', 'anaemia']) || hbLow) {
     if (hbPlausible) {
       findings.add(hb < 7
-          ? 'Severe anemia (Hb $hb g/dL) — urgent review needed.'
-          : 'Anemia (Hb $hb g/dL) — review iron supplementation.');
+          ? ReferralStrings.severeAnemiaWithValue('$hb')
+          : ReferralStrings.anemiaWithValue('$hb'));
     } else {
-      findings.add('Severe anemia — urgent review needed.');
+      findings.add(ReferralStrings.severeAnemiaGeneric);
     }
     handled.addAll(['hemoglobin', 'anemia', 'anaemia']);
   }
@@ -183,10 +183,11 @@ String buildReferralNarrative(Object? reasons, Map<String, dynamic> raw) {
   final pulseAbnormal = pulse > 0 && (pulse > 90 || pulse < 60);
   if (hasReason(['pulse']) || pulseAbnormal) {
     if (pulse > 0) {
-      final dir = pulse > 90 ? 'above' : 'below';
-      findings.add('Pulse $pulse bpm is $dir normal — needs urgent attention.');
+      findings.add(pulse > 90
+          ? ReferralStrings.pulseAboveNormal('$pulse')
+          : ReferralStrings.pulseBelowNormal('$pulse'));
     } else {
-      findings.add('Pulse is abnormal — needs urgent attention.');
+      findings.add(ReferralStrings.pulseAbnormalGeneric);
     }
     handled.add('pulse');
   }
@@ -196,10 +197,9 @@ String buildReferralNarrative(Object? reasons, Map<String, dynamic> raw) {
   final tempHigh = tempC > 0 && tempC >= 38.9;
   if (hasReason(['temperature', 'fever']) || tempHigh) {
     if (tempC > 0) {
-      findings.add(
-          'Temperature ${tempC.toStringAsFixed(1)}°C is elevated — needs urgent attention.');
+      findings.add(ReferralStrings.temperatureElevated(tempC.toStringAsFixed(1)));
     } else {
-      findings.add('Elevated temperature — needs urgent attention.');
+      findings.add(ReferralStrings.elevatedTemperatureGeneric);
     }
     handled.addAll(['temperature', 'fever']);
   }
@@ -209,36 +209,35 @@ String buildReferralNarrative(Object? reasons, Map<String, dynamic> raw) {
   final wtLow = wtPlausible && wt < 45;
   if (hasReason(['weight']) || wtLow) {
     if (wtPlausible) {
-      findings.add('Low weight ($wt kg) — monitor nutrition.');
+      findings.add(ReferralStrings.lowWeightWithValue('$wt'));
     } else {
-      findings.add('Low weight detected — monitor nutrition.');
+      findings.add(ReferralStrings.lowWeightGeneric);
     }
     handled.add('weight');
   }
 
   if (hasReason(['medication', 'adherence'])) {
-    findings.add('Medication adherence is low — confirm daily intake.');
+    findings.add(ReferralStrings.medicationAdherenceLow);
     handled.addAll(['medication', 'adherence']);
   }
 
   if (hasReason(['familyplanning', 'contraception', 'fp'])) {
-    findings.add('No contraception method in use — counsel on options.');
+    findings.add(ReferralStrings.noContraceptionMethod);
     handled.addAll(['familyplanning', 'contraception', 'fp']);
   }
 
   if (hasReason(['supplement', 'vitamin', 'ifa', 'calcium'])) {
-    findings.add('Supplement gap — ensure continued supplementation.');
+    findings.add(ReferralStrings.supplementGapNarrative);
     handled.addAll(['supplement', 'vitamin', 'ifa', 'calcium']);
   }
 
   if (hasReason(['overdue', 'missedvisit'])) {
-    findings.add('Visit overdue — schedule follow-up urgently.');
+    findings.add(ReferralStrings.visitOverdueNarrative);
     handled.addAll(['overdue', 'missedvisit']);
   }
 
   if (hasReason(['symptom'])) {
-    findings.add(
-        'Clinical symptoms present — review and follow-up required.');
+    findings.add(ReferralStrings.clinicalSymptomsPresent);
     handled.addAll(['symptom', 'symptoms']);
   }
 
@@ -246,10 +245,10 @@ String buildReferralNarrative(Object? reasons, Map<String, dynamic> raw) {
     if (token.length <= 2) continue;
     if (handled.any((h) => token.contains(h) || h.contains(token))) continue;
     final label = shortReasonLabel(token);
-    if (label.isNotEmpty) findings.add('$label.');
+    if (label.isNotEmpty) findings.add(ReferralStrings.labelWithPeriod(label));
   }
 
   return findings.isEmpty
-      ? 'Referred for clinical review — follow-up required.'
+      ? ReferralStrings.referredForClinicalReviewFallback
       : findings.join(' ');
 }
