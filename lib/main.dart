@@ -299,6 +299,12 @@ class _UhisNextAppState extends State<UhisNextApp>
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
     widget.authState.addListener(_onAuthStateChanged);
+    // Propagate locale changes to the SDK language without a full re-init.
+    // Deferred to post-frame so LocaleProvider is resolvable via context.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final localeProvider = context.read<LocaleProvider>();
+      localeProvider.addListener(_onLocaleChanged);
+    });
     // Reset sync progress so the next user's /sync screen does not see
     // isComplete=true from the previous session and skip their cold sync.
     widget.authState.registerLogoutHook(_sync.resetProgress);
@@ -333,8 +339,19 @@ class _UhisNextAppState extends State<UhisNextApp>
     _inactivityTimer?.cancel();
     _connectivitySync.dispose();
     widget.authState.removeListener(_onAuthStateChanged);
+    // Best-effort remove locale listener; context may be gone so guard it.
+    try {
+      context.read<LocaleProvider>().removeListener(_onLocaleChanged);
+    } catch (_) {}
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Called whenever the user switches app language. Updates SDK language
+  /// via setLanguage (no re-init needed — SDK supports live language swap).
+  void _onLocaleChanged() {
+    final lang = AppLocale.isBangla ? 'bn' : 'en';
+    MicroCoachingService.setLanguage(lang);
   }
 
   bool _sdkInitialized = false;
@@ -349,13 +366,18 @@ class _UhisNextAppState extends State<UhisNextApp>
       return;
     }
     try {
+      final lang = AppLocale.isBangla ? 'bn' : 'en';
       await MicroCoachingService.initialize(
         authToken: token,
         backendUrl: AppConfig.coachingServiceUrl,
-        language: AppLocale.isBangla ? 'bn' : 'en',
+        language: lang,
         hfToken: AppConfig.hfToken,
       );
-      debugPrint('[MicroCoaching] SDK initialized');
+      // Re-sync language immediately after init in case LocaleProvider's
+      // async _loadFromStorage() completed after AppLocale.current was read
+      // above (race window on cold start). setLanguage is a no-op if unchanged.
+      await MicroCoachingService.setLanguage(AppLocale.isBangla ? 'bn' : 'en');
+      debugPrint('[MicroCoaching] SDK initialized lang=$lang');
     } catch (e) {
       _sdkInitialized = false;
       debugPrint('[MicroCoaching] SDK init failed: $e');

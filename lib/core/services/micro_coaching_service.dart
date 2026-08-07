@@ -50,4 +50,10 @@ class MicroCoachingService {
     debugPrint('[MicroCoaching] isInitialized=$v');
     return v;
   }
+
+  /// Update SDK language without full re-init. No-op if SDK not initialized.
+  static Future<void> setLanguage(String language) async {
+    debugPrint('[MicroCoaching] setLanguage=$language');
+    await _channel.invokeMethod('setLanguage', {'language': language});
+  }
 }
