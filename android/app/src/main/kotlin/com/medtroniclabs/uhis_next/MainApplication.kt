@@ -7,6 +7,7 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.ModelDownloadStrategy
 import com.medtroniclabs.microcoaching.ai.model.ModelCatalog
 import com.medtroniclabs.microcoaching.ai.model.ModelProvider
+import com.medtroniclabs.microcoaching.domain.decision.CoachingMode
 
 class MainApplication : Application() {
 
@@ -107,6 +108,10 @@ class MainApplication : Application() {
                 .language(lang)
                 .enableChat(true)
                 .enableVoice(true)
+                .enableLearnModule(true)
+                .enableApplyModule(true)
+                .enableTelemetry(true)
+                .forceMode(CoachingMode.ONLINE)
                 .selectedModel(selectedModelId)
                 .modelDownloadStrategy(downloadStrategy)
                 .modelProviders(listOf(ModelProvider.HuggingFace))
