@@ -2,6 +2,7 @@
 // Channel: com.medtroniclabs.uhis_next/micro_coaching
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import '../config/app_config.dart';
 
 class MicroCoachingService {
   static const _channel = MethodChannel('com.medtroniclabs.uhis_next/micro_coaching');
@@ -17,11 +18,11 @@ class MicroCoachingService {
   /// Initialize SDK after login. Maps to MicroCoachingSDK.Builder(...).build().
   static Future<void> initialize({
     required String authToken,
-    String backendUrl = 'https://spice-dev-backend.uhis.labsplatform.com/micro-coaching/medtronics-api/',
+    String? backendUrl,
     String language = 'bn',
     String hfToken = '',
   }) async {
-    final sdkUrl = _sdkUrl(backendUrl);
+    final sdkUrl = _sdkUrl(backendUrl ?? AppConfig.coachingServiceUrl);
     debugPrint('[MicroCoaching] initialize url=$sdkUrl lang=$language');
     await _channel.invokeMethod('initialize', {
       'authToken': authToken,
