@@ -38,7 +38,9 @@ abstract final class TriageSymptomMapper {
   };
 
   // ── ANC danger signs ──────────────────────────────────────────────────────
-  // Option IDs for `ancDangerSigns` are camelCase (field_library.json).
+  // Prefills the legacy `ancDangerSigns` field (camelCase). Active ANC layout
+  // uses `dangerSignsExperienced*` with Spice numeric option ids (0–8); those
+  // are filled by the SK / GA-gated UI, not triage seed.
 
   static const Map<String, String> _ancDangerSignByCode = {
     'heavy_bleeding': 'vaginalBleeding',

@@ -56,7 +56,8 @@
           {
             "inputType": 2,
             "isMandatory": false,
-            "id": "livingChildren"
+            "id": "livingChildren",
+            "fieldNameCulture": "জীবিত সন্তান সংখ্যা"
           }
         ]
       },
@@ -67,17 +68,20 @@
           {
             "inputType": 8192,
             "isMandatory": false,
-            "id": "temperature"
+            "id": "temperature",
+            "fieldNameCulture": "তাপমাত্রা (ফারেনহাইট)"
           },
           {
             "inputType": 3,
             "isMandatory": false,
-            "id": "pulse"
+            "id": "pulse",
+            "fieldNameCulture": "নাড়ির গতি (প্রতি মিনিটে)"
           },
           {
             "inputType": 8192,
             "isMandatory": false,
-            "id": "weight"
+            "id": "weight",
+            "fieldNameCulture": "ওজন(কেজি)"
           },
           {
             "isMandatory": false,
@@ -111,16 +115,19 @@
           },
           {
             "isMandatory": false,
-            "id": "urinaryAlbumin"
+            "id": "urinaryAlbumin",
+            "fieldNameCulture": "প্রস্রাব পরীক্ষায় অ্যালবুমিন আছে কি না?"
           },
           {
             "isMandatory": false,
-            "id": "urinaryBilirubin"
+            "id": "urinaryBilirubin",
+            "fieldNameCulture": "প্রস্রাব পরীক্ষায় বিলিরুবিন আছে কি না?"
           },
           {
             "inputType": 8192,
             "isMandatory": false,
-            "id": "hemoglobin"
+            "id": "hemoglobin",
+            "fieldNameCulture": "হিমোগ্লোবিন (Hb)- রক্ত পরীক্ষা"
           },
           {
             "isMandatory": false,
@@ -806,7 +813,8 @@
           {
             "inputType": 2,
             "isMandatory": false,
-            "id": "weight"
+            "id": "weight",
+            "fieldNameCulture": "ওজন (কেজি)"
           },
           {
             "isMandatory": false,
@@ -891,7 +899,8 @@
           {
             "fieldName": "Current use of modern methods of Family Planning",
             "isMandatory": false,
-            "id": "familyPlanningMethods"
+            "id": "familyPlanningMethods",
+            "fieldNameCulture": "বর্তমানে আপনি পরিবার পরিকল্পনার কোন  আধুনিক পদ্ধতি ব্যাবহার করছেন?"
           }
         ]
       }

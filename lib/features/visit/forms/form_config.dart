@@ -134,8 +134,10 @@ class FieldOption {
 
   /// Resolve [value] to a canonical option [id], or null if unmatched.
   ///
-  /// Accepts option id, display name, and boolean / Yes-No aliases so a
-  /// preloaded `true` matches either id `"true"` or `"Yes"`.
+  /// Accepts option id, English [name], Bangla [cultureValue] / [displayName],
+  /// and boolean / Yes-No aliases so a preloaded `true` matches either id
+  /// `"true"` or `"Yes"`. Matches Android: labels are display-only; id is
+  /// the stored value.
   static String? matchId(dynamic value, List<FieldOption> options) {
     if (value == null) return null;
     if (options.isEmpty) return coerceId(value);
@@ -143,7 +145,16 @@ class FieldOption {
     for (final o in options) {
       if (o.id == raw) return o.id;
     }
-    final lower = raw.toLowerCase().trim();
+    final trimmed = raw.trim();
+    for (final o in options) {
+      // Bangla culture labels are compared case-sensitively (trim only).
+      final culture = o.cultureValue?.trim();
+      if (culture != null && culture.isNotEmpty && culture == trimmed) {
+        return o.id;
+      }
+      if (o.displayName.trim() == trimmed) return o.id;
+    }
+    final lower = trimmed.toLowerCase();
     for (final o in options) {
       if (o.id.toLowerCase() == lower || o.name.toLowerCase() == lower) {
         return o.id;
@@ -325,6 +336,7 @@ class FieldDef {
     required this.programmeIds,
     this.unitMeasurement,
     this.hintText,
+    this.hintCulture,
     this.labelCulture,
     this.family,
     this.visibility = 'visible',
@@ -332,6 +344,7 @@ class FieldDef {
     this.compositeGroup,
     this.compositeRole,
     this.infoTitle,
+    this.infoTitleCulture,
     this.isInfoVisible = false,
     this.isSummary = false,
     this.minDays,
@@ -353,6 +366,9 @@ class FieldDef {
   /// Optional placeholder text for text input fields.
   final String? hintText;
 
+  /// Bengali placeholder from `"hintCulture"`. Prefer [displayHint] in UI.
+  final String? hintCulture;
+
   /// Bengali field label from `"titleCulture"`. Prefer [displayLabel] in UI.
   final String? labelCulture;
 
@@ -364,6 +380,16 @@ class FieldDef {
       return labelCulture!;
     }
     return label;
+  }
+
+  /// Locale-pure placeholder: Bangla [hintCulture] when set, else English [hintText].
+  String? get displayHint {
+    if (AppLocale.isBangla &&
+        hintCulture != null &&
+        hintCulture!.trim().isNotEmpty) {
+      return hintCulture;
+    }
+    return hintText;
   }
 
   /// Field family/group from `"family"` (e.g. `"maternalHealthAssessment"`),
@@ -391,6 +417,20 @@ class FieldDef {
   /// Short clinical help/guidance text (e.g. "0 = if BP could not be
   /// measured") shown under the field when [isInfoVisible] is true.
   final String? infoTitle;
+
+  /// Bengali help text from `"infoTitleCulture"`. Prefer [displayInfoTitle].
+  final String? infoTitleCulture;
+
+  /// Locale-pure info text: Bangla when available in Bangla mode, else English.
+  String? get displayInfoTitle {
+    if (AppLocale.isBangla &&
+        infoTitleCulture != null &&
+        infoTitleCulture!.trim().isNotEmpty) {
+      return infoTitleCulture;
+    }
+    return infoTitle;
+  }
+
   final bool isInfoVisible;
 
   /// Android `isSummary`.
@@ -419,6 +459,7 @@ class FieldDef {
         programmeIds: programmeIds,
         unitMeasurement: unitMeasurement,
         hintText: hintText,
+        hintCulture: hintCulture,
         labelCulture: labelCulture,
         family: family,
         visibility: visibility,
@@ -426,6 +467,7 @@ class FieldDef {
         compositeGroup: compositeGroup,
         compositeRole: compositeRole,
         infoTitle: infoTitle,
+        infoTitleCulture: infoTitleCulture,
         isInfoVisible: isInfoVisible,
         isSummary: isSummary,
         minDays: minDays,
@@ -458,6 +500,7 @@ class FieldDef {
       programmeIds: programmeIds,
       unitMeasurement: json['unitMeasurement'] as String?,
       hintText: json['hint'] as String?,
+      hintCulture: json['hintCulture'] as String?,
       labelCulture: json['titleCulture'] as String?,
       family: json['family'] as String?,
       visibility: json['visibility'] as String? ?? 'visible',
@@ -465,7 +508,16 @@ class FieldDef {
       compositeGroup: json['compositeGroup'] as String?,
       compositeRole: json['compositeRole'] as String?,
       infoTitle: json['infoTitle'] as String?,
-      isInfoVisible: json['isInfo'] == 'visible',
+      infoTitleCulture: json['infoTitleCulture'] as String?,
+      // Spice shows info when title/culture is set unless explicitly `gone`.
+      isInfoVisible: () {
+        final flag = json['isInfo'] as String?;
+        if (flag == 'gone') return false;
+        if (flag == 'visible') return true;
+        final en = (json['infoTitle'] as String?)?.trim() ?? '';
+        final bn = (json['infoTitleCulture'] as String?)?.trim() ?? '';
+        return en.isNotEmpty || bn.isNotEmpty;
+      }(),
       isSummary: json['isSummary'] as bool? ?? false,
       minDays: (json['minDays'] as num?)?.toInt(),
       disableFutureDate: json['disableFutureDate'] as bool? ?? false,
@@ -479,6 +531,7 @@ class FieldRef {
     required this.isMandatory,
     required this.inputType,
     this.fieldName,
+    this.fieldNameCulture,
     this.options,
   });
 
@@ -493,6 +546,11 @@ class FieldRef {
   /// diabetes medication) wins over the shared field_library label.
   final String? fieldName;
 
+  /// Optional Bangla layout override (`fieldNameCulture`) — same role as
+  /// [fieldName] when [AppLocale.isBangla] (e.g. FP vs PNC wording for a
+  /// shared field id).
+  final String? fieldNameCulture;
+
   /// Optional layout override for the field's `optionsList`.
   ///
   /// `field_library.json` holds one entry per field id, but Spice ships one
@@ -505,6 +563,7 @@ class FieldRef {
 
   factory FieldRef.fromJson(Map<String, dynamic> json) {
     final rawName = (json['fieldName'] as String?)?.trim();
+    final rawNameCulture = (json['fieldNameCulture'] as String?)?.trim();
     final rawOptions = json['optionsList'] as List<dynamic>?;
     return FieldRef(
       id: json['id'] as String? ?? '',
@@ -512,6 +571,8 @@ class FieldRef {
       // inputType may be double (e.g. 8192.0) in some JSON tooling exports
       inputType: (json['inputType'] as num?)?.toInt() ?? 0,
       fieldName: (rawName == null || rawName.isEmpty) ? null : rawName,
+      fieldNameCulture:
+          (rawNameCulture == null || rawNameCulture.isEmpty) ? null : rawNameCulture,
       options: rawOptions
           ?.whereType<Map<String, dynamic>>()
           .map(FieldOption.fromJson)

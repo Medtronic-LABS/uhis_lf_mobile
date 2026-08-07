@@ -17,7 +17,8 @@ void main() {
       final findings = evaluateAncFindings(
         latest: {
           'dangerSignsRiskIdentification': {
-            'dangerSignsExperienced12': ['Vaginal bleeding'],
+            // Spice option id for Vaginal bleeding (weeks ≤12).
+            'dangerSignsExperienced12': ['0'],
           },
         },
         previous: null,
@@ -25,9 +26,10 @@ void main() {
         hasKnownHypertension: false,
       );
       expect(findings.map((f) => f.code), contains('anc.dangerSign'));
+      // Without FormConfig loaded, label falls back to the Spice option id.
       expect(
         findings.firstWhere((f) => f.code == 'anc.dangerSign').message,
-        'Danger sign reported: Vaginal bleeding.',
+        'Danger sign reported: 0.',
       );
     });
 

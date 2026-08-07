@@ -99,7 +99,7 @@ void main() {
           assessmentType: 'ANC',
           details: {
             'dangerSignsRiskIdentification': {
-              'dangerSignsExperienced12': ['Vaginal bleeding'],
+              'dangerSignsExperienced12': ['0'],
             },
           },
           createdAt: 1000);

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/core/db/follow_up_dao.dart';
 import 'package:uhis_next/core/models/patient.dart';
 import 'package:uhis_next/core/models/referral.dart';
 import 'package:uhis_next/features/cce/cce_alert.dart';
@@ -260,6 +261,157 @@ void main() {
       final a = build(referral(
           state: ReferralStatus.created, tier: SlaTier.urgent));
       expect(a.hasGeo, isFalse);
+    });
+  });
+
+  group('fromFollowUp NCD assessment journey', () {
+    FollowUpRow ncdFollowUp({
+      String encounterId = 'enc-ncd-1',
+      Duration encounterAge = const Duration(days: -10),
+      int attempts = 0,
+    }) {
+      final encounterMs = now.add(encounterAge).millisecondsSinceEpoch;
+      return FollowUpRow(
+        id: 'fu-1',
+        patientId: 'member-1',
+        kind: 'referred',
+        type: 'REFERRED',
+        attempts: attempts,
+        backendId: 99,
+        rawJson: jsonEncode({
+          'memberId': 'member-1',
+          'encounterId': encounterId,
+          'encounterDate': encounterMs,
+          'encounterName': 'NCD',
+          'encounterType': 'NCD',
+          'reason': 'High BP',
+          'referredSiteName': 'UHC Manikganj',
+        }),
+      );
+    }
+
+    test('no assessments → Facility and Treatment pending', () {
+      final a = CceAlert.fromFollowUp(ncdFollowUp(), now: now);
+      expect(a.journey[2].state, CceStepState.pending);
+      expect(a.journey[3].state, CceStepState.pending);
+    });
+
+    test('medicalreviewvisit after NCD visit → Facility done', () {
+      final ncdMs = now.add(const Duration(days: -10)).millisecondsSinceEpoch;
+      final a = CceAlert.fromFollowUp(
+        ncdFollowUp(),
+        now: now,
+        assessments: [
+          CceAssessmentSignal(
+            id: 'enc-ncd-1',
+            kind: 'NCD',
+            occurredAt: ncdMs,
+          ),
+          CceAssessmentSignal(
+            id: 'enc-visit-2',
+            kind: 'medicalreviewvisit',
+            occurredAt: ncdMs + const Duration(days: 2).inMilliseconds,
+          ),
+        ],
+      );
+      expect(a.journey[2].state, CceStepState.done);
+      expect(a.journey[2].sublabel, 'Arrived');
+      expect(a.journey[3].state, CceStepState.pending);
+      expect(a.intelTags, contains('At facility'));
+    });
+
+    test('ncdmedicalreview after NCD visit → Treatment + Facility done', () {
+      final ncdMs = now.add(const Duration(days: -10)).millisecondsSinceEpoch;
+      final a = CceAlert.fromFollowUp(
+        ncdFollowUp(),
+        now: now,
+        assessments: [
+          CceAssessmentSignal(
+            id: 'enc-ncd-1',
+            kind: 'NCD',
+            occurredAt: ncdMs,
+          ),
+          CceAssessmentSignal(
+            id: 'enc-mr-3',
+            kind: 'ncdmedicalreview',
+            occurredAt: ncdMs + const Duration(days: 3).inMilliseconds,
+          ),
+        ],
+      );
+      expect(a.journey[2].state, CceStepState.done);
+      expect(a.journey[3].state, CceStepState.done);
+      expect(a.journey[3].label, 'Treated');
+    });
+
+    test('facility/review before NCD visit date ignored', () {
+      final ncdMs = now.add(const Duration(days: -10)).millisecondsSinceEpoch;
+      final a = CceAlert.fromFollowUp(
+        ncdFollowUp(),
+        now: now,
+        assessments: [
+          CceAssessmentSignal(
+            id: 'enc-old-visit',
+            kind: 'medicalreviewvisit',
+            occurredAt: ncdMs - const Duration(days: 5).inMilliseconds,
+          ),
+          CceAssessmentSignal(
+            id: 'enc-old-mr',
+            kind: 'ncdmedicalreview',
+            occurredAt: ncdMs - const Duration(days: 1).inMilliseconds,
+          ),
+        ],
+      );
+      expect(a.journey[2].state, CceStepState.pending);
+      expect(a.journey[3].state, CceStepState.pending);
+    });
+
+    test('triggering NCD encounter itself does not mark Facility', () {
+      final ncdMs = now.add(const Duration(days: -10)).millisecondsSinceEpoch;
+      final a = CceAlert.fromFollowUp(
+        ncdFollowUp(),
+        now: now,
+        assessments: [
+          CceAssessmentSignal(
+            id: 'enc-ncd-1',
+            kind: 'NCD',
+            occurredAt: ncdMs,
+          ),
+        ],
+      );
+      expect(a.journey[2].state, CceStepState.pending);
+      expect(a.journey[3].state, CceStepState.pending);
+    });
+
+    test('non-NCD still uses call attempts for Facility', () {
+      final fu = FollowUpRow(
+        id: 'fu-anc',
+        patientId: 'member-2',
+        kind: 'referred',
+        type: 'REFERRED',
+        attempts: 1,
+        backendId: 1,
+        rawJson: jsonEncode({
+          'memberId': 'member-2',
+          'encounterId': 'enc-anc',
+          'encounterDate': now.add(const Duration(days: -5)).millisecondsSinceEpoch,
+          'encounterName': 'ANC',
+          'reason': 'High risk',
+        }),
+      );
+      final a = CceAlert.fromFollowUp(
+        fu,
+        now: now,
+        assessments: [
+          CceAssessmentSignal(
+            id: 'enc-mr',
+            kind: 'ncdmedicalreview',
+            occurredAt: now.millisecondsSinceEpoch,
+          ),
+        ],
+      );
+      expect(a.journey[2].state, CceStepState.done);
+      expect(a.journey[2].sublabel, 'Following up');
+      expect(a.journey[3].state, CceStepState.pending);
     });
   });
 }
