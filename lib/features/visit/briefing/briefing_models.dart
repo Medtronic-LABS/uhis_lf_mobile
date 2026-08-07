@@ -57,19 +57,33 @@ class SuggestedDiscussionPoints {
       );
 }
 
-/// AI-generated greeting card content. All three fields may be empty when
-/// the upstream API omits them — the screen falls back to the localized
-/// static greeting in that case.
+/// AI-generated greeting card content. Fields may be empty when the
+/// upstream API omits them — the screen falls back to the localized static
+/// greeting in that case.
 class GreetingContent {
   const GreetingContent({
     required this.bangla,
     required this.english,
     required this.hint,
+    this.hintBn = '',
+    this.hintBangla = '',
   });
 
   final String bangla;
   final String english;
+
+  /// Generic (English) coaching line. Used as-is when the app language is
+  /// English, and as the last AI-preferred fallback when the app language
+  /// is Bangla but neither [hintBn] nor [hintBangla] was sent.
   final String hint;
+
+  /// Bangla-translated coaching line, wire key `hint_bn`. Preferred over
+  /// [hint] when the SK's app language is Bangla.
+  final String hintBn;
+
+  /// Alternate wire key for the same Bangla-translated coaching line,
+  /// `hint_bangla`. Checked after [hintBn], before falling back to [hint].
+  final String hintBangla;
 
   static const GreetingContent empty =
       GreetingContent(bangla: '', english: '', hint: '');
@@ -77,13 +91,17 @@ class GreetingContent {
   bool get isEmpty =>
       bangla.trim().isEmpty &&
       english.trim().isEmpty &&
-      hint.trim().isEmpty;
+      hint.trim().isEmpty &&
+      hintBn.trim().isEmpty &&
+      hintBangla.trim().isEmpty;
 
   factory GreetingContent.fromJson(Map<String, dynamic> json) =>
       GreetingContent(
         bangla: (json['bangla'] as String?)?.trim() ?? '',
         english: (json['english'] as String?)?.trim() ?? '',
         hint: (json['hint'] as String?)?.trim() ?? '',
+        hintBn: (json['hint_bn'] as String?)?.trim() ?? '',
+        hintBangla: (json['hint_bangla'] as String?)?.trim() ?? '',
       );
 }
 

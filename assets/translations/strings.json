@@ -7451,6 +7451,38 @@
   "bn": "সাইন আউট",
   "en": "Sign out"
  },
+ "sitWithGreetHeaderFemale": {
+  "bn": "👋 তার পাশে বসুন — উষ্ণভাবে শুভেচ্ছা জানান",
+  "en": "👋 SIT WITH HER — GREET WARMLY"
+ },
+ "sitWithGreetHeaderGuardian": {
+  "bn": "👋 অভিভাবকের সাথে বসুন — উষ্ণভাবে শুভেচ্ছা জানান",
+  "en": "👋 SIT WITH THE GUARDIAN — GREET WARMLY"
+ },
+ "sitWithGreetHeaderMale": {
+  "bn": "👋 তার পাশে বসুন — উষ্ণভাবে শুভেচ্ছা জানান",
+  "en": "👋 SIT WITH HIM — GREET WARMLY"
+ },
+ "sitWithGreetHintFemale": {
+  "bn": "ক্লিনিকাল প্রশ্ন শুরু করার আগে বাড়ি, পরিবার ও ঘুম নিয়ে জিজ্ঞাসা করুন — গর্ভাবস্থার চেকআপের আগে",
+  "en": "Ask how she feels at home, with family, and about her sleep — before the pregnancy checkup"
+ },
+ "sitWithGreetHintFemaleGeneral": {
+  "bn": "ভিজিট শুরু করার আগে বাড়ি, পরিবার ও ঘুম নিয়ে জিজ্ঞাসা করুন",
+  "en": "Ask how she feels at home, with family, and about her sleep — before the visit"
+ },
+ "sitWithGreetHintGuardian": {
+  "bn": "চেকআপ শুরু করার আগে অভিভাবকের কাছে খাওয়ানো, ঘুম এবং কোনো বিপদচিহ্ন আছে কিনা জিজ্ঞাসা করুন",
+  "en": "Ask the guardian about feeding, sleep, and any danger signs — before starting the checkup"
+ },
+ "sitWithGreetHintMale": {
+  "bn": "ভিজিট শুরু করার আগে বাড়ি, পরিবার ও ঘুম নিয়ে জিজ্ঞাসা করুন",
+  "en": "Ask how he feels at home, with family, and about his sleep — before the visit"
+ },
+ "sitWithGreetHintPostpartum": {
+  "bn": "প্রসবোত্তর চেকআপের আগে বাড়ি, পরিবার ও ঘুম নিয়ে তাকে জিজ্ঞাসা করুন",
+  "en": "Ask how she feels at home, with family, and about her sleep — before the postnatal checkup"
+ },
  "skAsksFamily": {
   "bn": "এসকে খানাকে জিজ্ঞাসা করেন",
   "en": "SK ASKS THE FAMILY "
