@@ -24,6 +24,7 @@ import 'package:intl/intl.dart';
 import '../../features/visit/immunisation/epi_visit_summary.dart';
 import '../i18n/app_locale.dart';
 import '../models/dashboard_tier.dart';
+import '../models/programme.dart';
 
 Map<String, Map<String, String>>? _translations;
 
@@ -2919,6 +2920,16 @@ abstract final class TriageResultStrings {
 // SymptomPickerStrings
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Which service the Greet Warmly card's fallback content is written for —
+/// see [SymptomPickerStrings.sitWithGreetEnglishFor]. Only pregnancy and
+/// postpartum get a distinct question; every other service (TB, NCD, or
+/// nothing selected) shares one generic wellbeing question.
+enum _GreetWarmlyService { pregnancy, postpartum, general }
+
+/// Pregnancy stage bucket gating the fetal-movement question — see
+/// [SymptomPickerStrings.sitWithGreetEnglishFor].
+enum _PregnancyStage { early, mid, late }
+
 abstract final class SymptomPickerStrings {
   SymptomPickerStrings._();
 
@@ -2971,29 +2982,188 @@ abstract final class SymptomPickerStrings {
       'Sit with ${isFemale ? 'her' : 'him'} — greet them.';
 
   // ── "Sit with her / him — greet warmly" card (Step 1, between
-  // Before-You-Knock and the AI Scribe). All static — never AI-generated.
+  // Before-You-Knock and the AI Scribe). Header and hint are app UI/
+  // instructions *to the SK* — locale-aware via getTranslatedString, so they
+  // follow the app's language setting; the greeting line the SK reads aloud
+  // is also locale-aware (single language, never both at once — see
+  // GreetWarmlyCard). All four are AI-preferred (from the briefing
+  // response's `greeting` block) with these as the offline / AI-unavailable
+  // fallback.
+  //
+  // `isChild` (under-5 patient) redirects every line to the guardian —
+  // an under-5 patient cannot answer for themselves, so the SK greets and
+  // questions the guardian *about* the child rather than addressing the
+  // child directly. Gender-neutral: a guardian greeting doesn't depend on
+  // the child's sex.
+  //
+  // The greeting line and hint also key off `selectedProgrammes` (the SK's
+  // currently-ticked service cards) so an ANC visit asks pregnancy-relevant
+  // questions and a PNC visit asks about postpartum recovery, instead of
+  // one question assumed for every adult woman regardless of why she's
+  // being seen. Every other service (TB, NCD, or nothing selected) shares
+  // one generic wellbeing question — no distinct question was worth
+  // maintaining for those. Within the pregnancy branch, `gestationalWeeks`
+  // further gates the
+  // fetal-movement question to when it's actually meaningful — quickening
+  // isn't felt in early pregnancy, so a 1-week patient must never be asked
+  // "is the baby moving".
 
-  /// Header (uppercase, small). Gendered.
-  static String sitWithGreetHeaderFor({required bool isFemale}) =>
-      isFemale ? 'SIT WITH HER — GREET WARMLY' : 'SIT WITH HIM — GREET WARMLY';
+  /// Which service the greeting/hint content should be written for, derived
+  /// from the SK's currently-selected programme cards. Pregnancy takes
+  /// priority over any other simultaneously-selected service since it's the
+  /// most safety-relevant context to greet correctly. TB and NCD don't get
+  /// a distinct question — they fall through to the general bucket.
+  static _GreetWarmlyService _greetWarmlyServiceFor(
+    Set<Programme>? selectedProgrammes,
+  ) {
+    final p = selectedProgrammes ?? const <Programme>{};
+    if (p.contains(Programme.anc) || p.contains(Programme.pw)) {
+      return _GreetWarmlyService.pregnancy;
+    }
+    if (p.contains(Programme.pnc)) return _GreetWarmlyService.postpartum;
+    return _GreetWarmlyService.general;
+  }
 
-  /// Bangla greeting the SK opens with. ANC variant for women of reproductive
-  /// age; NCD/general variant otherwise. Includes the second-line ask so the
-  /// SK has a natural pause before the AI Scribe records.
-  static String sitWithGreetBanglaFor({required bool isFemale}) => isFemale
-      ? '"আপু, আপনি কেমন আছেন?\nবাচ্চা কেমন নড়াচড়া করছে?"'
-      : '"কাকা, আপনি কেমন আছেন?\nকোথাও কষ্ট আছে কি?"';
+  /// Pregnancy stage bucket for the greeting line. Quickening (the mother
+  /// first feeling fetal movement) isn't reliable before roughly 24 weeks,
+  /// so the movement question is reserved for [_PregnancyStage.late] —
+  /// unknown gestational age is treated as [_PregnancyStage.early] rather
+  /// than risk asking a too-early patient about movement.
+  static _PregnancyStage _pregnancyStageFor(int? gestationalWeeks) {
+    final weeks = gestationalWeeks;
+    if (weeks == null || weeks < 13) return _PregnancyStage.early;
+    if (weeks < 24) return _PregnancyStage.mid;
+    return _PregnancyStage.late;
+  }
 
-  /// English translation of [sitWithGreetBanglaFor].
-  static String sitWithGreetEnglishFor({required bool isFemale}) => isFemale
-      ? 'Sister, how are you? Is the baby moving well?'
-      : 'Brother, how are you? Are you feeling any discomfort?';
+  /// Header (uppercase, small). Gendered + locale-aware; guardian-directed
+  /// for a child patient. Not service-specific — the instruction to the SK
+  /// doesn't change with the visit type.
+  static String sitWithGreetHeaderFor({
+    required bool isFemale,
+    bool isChild = false,
+  }) {
+    if (isChild) {
+      return getTranslatedString(
+        'sitWithGreetHeaderGuardian',
+        '👋 SIT WITH THE GUARDIAN — GREET WARMLY',
+      );
+    }
+    return getTranslatedString(
+      isFemale ? 'sitWithGreetHeaderFemale' : 'sitWithGreetHeaderMale',
+      isFemale
+          ? '👋 SIT WITH HER — GREET WARMLY'
+          : '👋 SIT WITH HIM — GREET WARMLY',
+    );
+  }
+
+  /// Bangla greeting the SK opens with — branches on the currently-selected
+  /// service (and, for pregnancy, gestational stage) so the question
+  /// actually fits the visit. For a child patient, addresses the guardian
+  /// about the child instead.
+  static String sitWithGreetBanglaFor({
+    required bool isFemale,
+    bool isChild = false,
+    Set<Programme>? selectedProgrammes,
+    int? gestationalWeeks,
+  }) {
+    if (isChild) {
+      return '"বাবুটি কেমন আছে? ঠিকমতো খাচ্ছে ও ঘুমাচ্ছে তো?"';
+    }
+    switch (_greetWarmlyServiceFor(selectedProgrammes)) {
+      case _GreetWarmlyService.pregnancy:
+        switch (_pregnancyStageFor(gestationalWeeks)) {
+          case _PregnancyStage.early:
+            return '"আপু, আপনি কেমন বোধ করছেন?\nবমি ভাব বা খেতে অসুবিধা হচ্ছে কি?"';
+          case _PregnancyStage.mid:
+            return '"আপু, আপনি কেমন আছেন?\nসম্প্রতি ফোলা বা মাথাব্যথা হয়েছে কি?"';
+          case _PregnancyStage.late:
+            return '"আপু, আপনি কেমন আছেন?\nবাচ্চা আজ ভালোভাবে নড়াচড়া করছে তো?"';
+        }
+      case _GreetWarmlyService.postpartum:
+        return '"আপু, প্রসবের পর আপনি কেমন বোধ করছেন?\nবাচ্চা কেমন খাচ্ছে?"';
+      case _GreetWarmlyService.general:
+        return isFemale
+            ? '"আপু, আপনি কেমন বোধ করছেন?\nকোনো সমস্যা আছে কি?"'
+            : '"কাকা, আপনি কেমন বোধ করছেন?\nকোনো সমস্যা আছে কি?"';
+    }
+  }
+
+  /// English translation of [sitWithGreetBanglaFor] — same service +
+  /// gestational-stage branching.
+  static String sitWithGreetEnglishFor({
+    required bool isFemale,
+    bool isChild = false,
+    Set<Programme>? selectedProgrammes,
+    int? gestationalWeeks,
+  }) {
+    if (isChild) {
+      return isFemale
+          ? 'How is the little one? Is she eating and sleeping well?'
+          : 'How is the little one? Is he eating and sleeping well?';
+    }
+    switch (_greetWarmlyServiceFor(selectedProgrammes)) {
+      case _GreetWarmlyService.pregnancy:
+        switch (_pregnancyStageFor(gestationalWeeks)) {
+          case _PregnancyStage.early:
+            return 'Sister, how are you feeling? Any nausea or difficulty eating?';
+          case _PregnancyStage.mid:
+            return 'Sister, how are you? Any swelling or headaches lately?';
+          case _PregnancyStage.late:
+            return 'Sister, how are you? Is the baby moving well today?';
+        }
+      case _GreetWarmlyService.postpartum:
+        return 'Sister, how are you feeling since delivery? How is the baby feeding?';
+      case _GreetWarmlyService.general:
+        return isFemale
+            ? 'Sister, how are you feeling? Do you have any concern?'
+            : 'Brother, how are you feeling? Do you have any concern?';
+    }
+  }
 
   /// Helper hint below the greeting — primes the SK to talk about home life
-  /// before launching the clinical conversation.
-  static String sitWithGreetHintFor({required bool isFemale}) => isFemale
-      ? 'Ask how she feels at home, with family, and about her sleep — before the pregnancy checkup'
-      : 'Ask how he feels at home, with family, and about his sleep — before the visit';
+  /// before launching the clinical conversation. Gendered + locale-aware;
+  /// guardian-directed for a child patient; names the actual visit type
+  /// instead of always assuming a pregnancy checkup.
+  static String sitWithGreetHintFor({
+    required bool isFemale,
+    bool isChild = false,
+    Set<Programme>? selectedProgrammes,
+  }) {
+    if (isChild) {
+      return getTranslatedString(
+        'sitWithGreetHintGuardian',
+        'Ask the guardian about feeding, sleep, and any danger signs — before starting the checkup',
+      );
+    }
+    if (!isFemale) {
+      // No non-pregnancy male branch needed — sitWithGreetHintMale was
+      // already visit-type-neutral ("before the visit").
+      return _sitWithGreetHintAdultFor(isFemale: false);
+    }
+    switch (_greetWarmlyServiceFor(selectedProgrammes)) {
+      case _GreetWarmlyService.pregnancy:
+        return _sitWithGreetHintAdultFor(isFemale: true);
+      case _GreetWarmlyService.postpartum:
+        return getTranslatedString(
+          'sitWithGreetHintPostpartum',
+          'Ask how she feels at home, with family, and about her sleep — before the postnatal checkup',
+        );
+      case _GreetWarmlyService.general:
+        return getTranslatedString(
+          'sitWithGreetHintFemaleGeneral',
+          'Ask how she feels at home, with family, and about her sleep — before the visit',
+        );
+    }
+  }
+
+  static String _sitWithGreetHintAdultFor({required bool isFemale}) =>
+      getTranslatedString(
+        isFemale ? 'sitWithGreetHintFemale' : 'sitWithGreetHintMale',
+        isFemale
+            ? 'Ask how she feels at home, with family, and about her sleep — before the pregnancy checkup'
+            : 'Ask how he feels at home, with family, and about his sleep — before the visit',
+      );
 
   // ── "How is she feeling today?" heading shown just above the AI Scribe.
   static String howFeelingTodayHeadingFor({required bool isFemale}) =>
