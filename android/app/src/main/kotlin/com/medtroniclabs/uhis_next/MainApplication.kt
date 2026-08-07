@@ -2,11 +2,13 @@ package com.medtroniclabs.uhis_next
 
 import android.app.Application
 import android.content.Context
+import com.medtroniclabs.uhis_next.BuildConfig
 import com.medtroniclabs.microcoaching.Language
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.ModelDownloadStrategy
 import com.medtroniclabs.microcoaching.ai.model.ModelCatalog
 import com.medtroniclabs.microcoaching.ai.model.ModelProvider
+import com.medtroniclabs.microcoaching.domain.decision.CoachingMode
 
 class MainApplication : Application() {
 
@@ -30,12 +32,16 @@ class MainApplication : Application() {
         private const val K_LANG = "language"
         private const val K_HF = "hfToken"
 
+        /** Coaching backend URL derived from the app's API base URL. */
+        private val DEFAULT_COACHING_URL: String
+            get() = BuildConfig.API_BASE_URL.trimEnd('/') + "/micro-coaching/medtronics-api/"
+
         private fun _restoreSdkIfConfigured() {
             val p = instance.getSharedPreferences(PREFS_SDK, Context.MODE_PRIVATE)
             val token = p.getString(K_TOKEN, null) ?: return
             _initSdkInternal(
                 authToken = token,
-                backendUrl = p.getString(K_URL, "https://agent-qa.beehyv.com/medtronics-api/") ?: "https://agent-qa.beehyv.com/medtronics-api/",
+                backendUrl = p.getString(K_URL, DEFAULT_COACHING_URL) ?: DEFAULT_COACHING_URL,
                 language = p.getString(K_LANG, "bn") ?: "bn",
                 hfToken = p.getString(K_HF, "") ?: "",
             )
@@ -49,6 +55,8 @@ class MainApplication : Application() {
         ) {
             val prefs = instance.getSharedPreferences(PREFS_SDK, Context.MODE_PRIVATE)
             val previousHfToken = prefs.getString(K_HF, "") ?: ""
+            val previousLang = prefs.getString(K_LANG, "bn") ?: "bn"
+            val previousUrl = prefs.getString(K_URL, "") ?: ""
 
             // Persist config so Application.onCreate() can restore SDK on next process start.
             prefs.edit()
@@ -59,12 +67,16 @@ class MainApplication : Application() {
                 .apply()
 
             if (MicroCoachingSDK.isInitialized()) {
-                // SDK already running. Re-init only if HF token upgraded (e.g. process was
-                // restored with an empty token; this call brings the real one). Builder.build()
-                // calls shutdown() internally — safe because _initSdkInternal() re-writes
-                // mc_onboarded_v1=true immediately after.
-                if (hfToken.isNotEmpty() && hfToken != previousHfToken) {
+                // SDK already running. Re-init if backend URL, HF token, or auth token changed.
+                // Builder.build() calls shutdown() internally — safe because _initSdkInternal()
+                // re-writes mc_onboarded_v1=true immediately after.
+                if (backendUrl != previousUrl || (hfToken.isNotEmpty() && hfToken != previousHfToken)) {
                     _initSdkInternal(authToken, backendUrl, language, hfToken)
+                } else if (language != previousLang) {
+                    // Language switched without other config change — update running SDK via
+                    // setLanguage so CoachingFlowActivity reflects the user's current app language.
+                    val lang = if (language == "bn") Language.BANGLA else Language.ENGLISH
+                    MicroCoachingSDK.getInstance().setLanguage(lang)
                 }
                 return
             }
@@ -100,6 +112,11 @@ class MainApplication : Application() {
                 .backendUrl(backendUrl)
                 .language(lang)
                 .enableChat(true)
+                .enableVoice(true)
+                .enableLearnModule(true)
+                .enableApplyModule(true)
+                .enableTelemetry(false)
+                .forceMode(CoachingMode.ONLINE)
                 .selectedModel(selectedModelId)
                 .modelDownloadStrategy(downloadStrategy)
                 .modelProviders(listOf(ModelProvider.HuggingFace))
