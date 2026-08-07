@@ -71,7 +71,7 @@ void main() {
 
       expect(activated, isEmpty,
           reason: 'RMNCH childhoodVisit narrowing (25mo) intentionally leaves 26-59mo without a '
-              'child-assessment pathway — see docs/service_eligibility_verification.md');
+              'child-assessment pathway — see lib/features/visit/README.md');
     });
 
     // =========================================================================

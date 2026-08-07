@@ -103,6 +103,117 @@ public entry point on the rule table.
 | ANC | pregnant + dizziness | — | requiresPregnant: true |
 | PNC | postpartum | — | requiresPostpartum: true |
 
+### Eligibility & Service Selection (`triage/patient_context_builder.dart`, `triage/symptom_picker_screen.dart`, `triage/programme_grid_sync.dart`, `triage/service_selection_resolver.dart`)
+
+What decides which service cards show on Step 1, which are locked, and how programmes get
+auto-selected without the SK tapping anything.
+
+**Source of truth**: `design/service_eligibility_logic.json`, a real API response
+(`POST /spice-service/static-data/form-data`) from the Android reference app's `clinicalTools`
+payload. Each clinical service (NCD, Eye Care, Cataract, PW Profile, Family Planning, Pregnancy
+Outcome, RMNCH, Confirm Diagnosis) carries a `conditions` array (`gender`, `minAge`/`maxAge` in
+months, `subModule`) gating eligibility. The real gate on the Android side is a Room SQL query
+(`MetaDataDAO.kt:126-131`), not Kotlin branching, with rules this Flutter implementation mirrors:
+- `minAge` is **inclusive** (`minAge <= age`), `maxAge` is **exclusive** (`maxAge > age`) — asymmetric.
+- Age is computed in **whole months from DOB**, calendar-aware (not naive years×12).
+- Multiple `conditions` on one tool are **OR'd** — any single condition matching shows the tool
+  (this is how RMNCH's 3 heterogeneous conditions work as one Android tile).
+- A condition with no `gender`/age fields (Confirm Diagnosis) doesn't match this gate at all —
+  Android routes it around the gate entirely as a static, role-based menu item. **No Flutter
+  counterpart exists** — likely out of scope for the SK/community-worker app.
+- On Android, RMNCH stays a single tile whose label/target form swaps between ANC/PNC/"Child
+  Health" via `subModule`; this Flutter app instead has separate ANC/PNC/Child Health cards, each
+  with its own gate below.
+
+**Patient-context age/gender thresholds** (`PatientContext` getters):
+
+| Getter | Condition | Age in months |
+|---|---|---|
+| `isNeonate` | age < 2 months | 0–1 |
+| `isInfant` | age < 12 months | 0–11 |
+| `isYoungChild` | age < 25 months (RMNCH `childhoodVisit`) | 0–24 |
+| `isReproductiveAge` | 14y ≤ age < 55y | 168–660 |
+| `isAdult` | age ≥ 18y | ≥216 |
+| `isEyeCareCataractEligible` | age ≥ 35y, any sex | ≥420 |
+| `isPostpartum` | delivery within last 42 days | — |
+| `isPregnant` | (pregnancyFacts ∨ activeProgrammes⊇{anc,pw} ∨ raw-JSON flag) ∧ ¬hasDelivered | — |
+
+`isYoungChild` is deliberately **not** the same constant as `PathwayThresholds.imciMaxAgeMonths`
+(24, in `pathway_rules_v1.dart`, see the pathway age-gates table above) — one gates whether the
+Child Health/Vaccination *cards and Step-2 routing* apply (RMNCH `childhoodVisit`), the other
+gates whether IMCI/ICCM is *suggested* as a pathway from symptoms ("Bangladesh UHIS Phase 1
+spec"). They're one month apart by coincidence, not by a shared source — don't unify them.
+
+**Step 1 card — visibility gate** (`_InlineServiceSelector._visibleCards`,
+`symptom_picker_screen.dart` ~line 2267):
+
+| Card | Programme | Shown when |
+|---|---|---|
+| PW / Pregnancy | — | female ∧ reproductive age |
+| Pregnancy Outcome | — | female ∧ reproductive age |
+| ANC | anc | female ∧ reproductive age ∧ not young-child |
+| PNC | pnc | female ∧ reproductive age ∧ not young-child |
+| Family Planning | familyPlanning | female ∧ reproductive age ∧ not young-child |
+| NCD | ncd | `isAdult` (≥18y) |
+| Eye Care | eyeCare | `isEyeCareCataractEligible` (≥35y) |
+| Cataract | cataract | `isEyeCareCataractEligible` (≥35y) |
+| Child Health (IMCI) | imci | `isYoungChild` |
+| Vaccination | — | `isYoungChild` |
+| **TB** | tb | **no card exists — by design, unreachable** |
+| EPI | epi | no dedicated card; added silently at Continue if due |
+
+Any adult-only card is blanket-hidden for a young-child patient before its specific rule runs.
+The reproductive-age lower bound (14y/168mo) is far above `isYoungChild`'s 25-month ceiling, so
+there's no overlap band needing a separate check. Ages roughly 3–14 are a known eligibility gap —
+no card is shown at all (`hasAnyEligibleProgramme` in `core/clinical/service_eligibility.dart`
+detects this to show a "no programmes available" toast instead of an empty grid).
+
+**Step 1 card — lock gate** (`_isLocked`, `symptom_picker_screen.dart` ~line 2311):
+
+| Card | Locked when | Never locked? |
+|---|---|---|
+| PW | delivery-visit mode ∨ postpartum ∨ open pregnancy episode exists | |
+| ANC | PW not toggled on ∨ delivery mode ∨ within revisit interval (15d, or 1d if last visit high-risk) | |
+| Pregnancy Outcome | not (pregnant ∧ not postpartum) ∨ no open pregnancy episode | |
+| PNC | not postpartum | |
+| Family Planning | currently pregnant (not postpartum) | |
+| NCD | | ✅ never locked |
+| Eye Care | | ✅ never locked |
+| Cataract | | ✅ never locked |
+| IMCI / Child Health | | ✅ hard-coded never locked |
+| Vaccination | separate `vaccinationLocked` flag | |
+
+**Auto-selection — three independent mechanisms**:
+
+| # | Mechanism | Fires when | Adds | Can be suppressed by |
+|---|---|---|---|---|
+| a | `ProgrammeGridSync.additionsFromPathways` | every symptom-selection change | any pathway-engine-activated or symptom-catalog-tagged programme not yet selected | SK dismissal this visit (`dismissedBySk`); ANC never resurrected if revisit-too-soon; PW never resurrected if an episode is already open |
+| b | `ProgrammeGridSync.applicableEnrolledSeed` | once, at patient load | historical/enrolled programmes filtered by current pregnant/postpartum state (ANC/PW only if pregnant; PNC only if postpartum; FP hidden while pregnant) | tb/nutrition never seeded (pilot-scope); ANC stripped again if revisit-too-soon; PW stripped again if episode open |
+| c | `ServiceSelectionResolver.finalize` | once, at "Continue" tap | forces PNC on a delivery visit; auto-adds PW alongside a surviving ANC selection | pilot-scope exclusion (tb/nutrition, silent); PW-registration-blocked; postpartum/revisit blocks stop ANC (and therefore its PW auto-add) first |
+
+**`ServiceSelectionResolver.finalize()` — rule order**:
+
+| Step | Rule | Outcome if triggered |
+|---|---|---|
+| 1 | Delivery visit | force-add PNC |
+| 2 | Pilot-scope exclusion | silently drop `tb`, `nutrition` (epi is exempt) |
+| 3 | PW already registered | drop PW; if selection now empty → `silentlyEmptied`, stop |
+| 4 | ANC + postpartum | drop ANC → `ancBlockedPostpartum`, stop |
+| 5 | ANC + revisit too soon | drop ANC → `ancBlockedRevisit`, stop |
+| 6 | ANC survives, PW not already registered | auto-add PW |
+| 7 | — | sort survivors: imci(10) → pw(15) → anc(20) → pnc(25) → tb(30) → nutrition(35) → ncd(40) → familyPlanning(45) → cataract(46) → eyeCare(47) → epi(100) |
+
+**Pathway vs. selectable service — the two layers**:
+
+| Layer | What it is | Where it lives | User-visible effect |
+|---|---|---|---|
+| **Pathway** | A rule-engine *suggestion* — programme + priority + rationale, derived from symptoms/history via `PathwayRulesV1` | `pathway_engine.dart` / `pathway_rules_v1.dart` | Drives the ✦ sparkle badge and rationale text; not itself submittable |
+| **Selected service** | Membership in `_selectedProgrammes` | `symptom_picker_screen.dart` | What's actually tappable, toggleable, and submitted |
+
+The bridge is mechanism **a** above: every activated pathway gets pushed into the selected set
+(unless dismissed or blocked), so a pathway suggestion auto-ticks a card — but the SK can always
+untick it, and a locked card is never resurrected even if a pathway would otherwise re-add it.
+
 ### PregnancyCohortRules (`../../core/risk/pregnancy_cohort_rules.dart`)
 
 Pure, live-derived pregnancy-episode state (`isActivePregnancy`, `isPostnatal`,
@@ -156,7 +267,8 @@ test/features/visit/
 ├── forms/                           # FormTypeResolver, UnifiedSectionRules, payload mapper
 ├── pathway/                         # PathwayEngine rule activation, AI pathway client
 └── triage/                          # TriageViewModel, ServiceSelectionResolver,
-                                        ProgrammeGridSync, symptom catalogue
+                                        ProgrammeGridSync, symptom catalogue,
+                                        patient_context_eligibility_test.dart (age-gate boundaries)
 ```
 
 Run all: `flutter test test/features/visit/`
@@ -172,3 +284,4 @@ Run all: `flutter test test/features/visit/`
 | New formType renders blank | Check it has an entry in `assets/forms/layout_manifests.json`, and isn't in `ServiceSelectionResolver.excludedFromSelection`. |
 | New field not showing label | Add a case in the relevant `AppStrings` class. |
 | `patientvisit/create` / offline-sync errors | App queues offline and retries; check `OfflineSyncService`, not this feature, first. |
+| Changed `isYoungChild` and a pathway-suggestion test broke | Check `pathway_rules_v1.dart`'s `imciMaxAgeMonths` — it's a separate, differently-sourced constant, not the same gate. |
