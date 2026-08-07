@@ -2,6 +2,7 @@ package com.medtroniclabs.uhis_next
 
 import android.app.Activity
 import android.content.Context
+import com.medtroniclabs.uhis_next.BuildConfig
 import android.util.Log
 import com.medtroniclabs.microcoaching.Language
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
@@ -56,7 +57,7 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
                 val token = call.argument<String>("authToken")
                     ?: return result.error("MISSING_ARG", "authToken required", null)
                 val url = call.argument<String>("backendUrl")
-                    ?: "https://spice-dev-backend.uhis.labsplatform.com/micro-coaching/medtronics-api/"
+                    ?: (BuildConfig.API_BASE_URL.trimEnd('/') + "/micro-coaching/medtronics-api/")
                 val lang = call.argument<String>("language") ?: "bn"
                 val hfToken = call.argument<String>("hfToken") ?: ""
                 Log.d(TAG, "initialize: url=$url lang=$lang hfToken=${hfToken.isNotEmpty()} token=${token.take(10)}...")

@@ -1,5 +1,20 @@
 import java.util.Properties
 
+// Parse --dart-define values forwarded by the Flutter Gradle plugin.
+// Each entry is base64-encoded "KEY=VALUE"; joined as a comma-separated string.
+fun parseDartDefines(project: Project): Map<String, String> {
+    val raw = project.findProperty("dart-defines") as? String ?: return emptyMap()
+    return raw.split(",").mapNotNull { encoded ->
+        runCatching {
+            val decoded = String(java.util.Base64.getDecoder().decode(encoded.trim()))
+            val idx = decoded.indexOf('=')
+            if (idx < 0) null else decoded.substring(0, idx) to decoded.substring(idx + 1)
+        }.getOrNull()
+    }.toMap()
+}
+
+val dartDefines = parseDartDefines(project)
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -18,6 +33,10 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -26,6 +45,12 @@ android {
 
     defaultConfig {
         multiDexEnabled = true
+        // Expose API_BASE_URL from --dart-define so native Kotlin can build
+        // service-specific URLs (e.g. coaching backend) without hardcoding a host.
+        buildConfigField(
+            "String", "API_BASE_URL",
+            "\"${dartDefines["API_BASE_URL"] ?: "https://spice-dev-backend.uhis.labsplatform.com/"}\""
+        )
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.medtroniclabs.uhis_next"
         // You can update the following values to match your application needs.

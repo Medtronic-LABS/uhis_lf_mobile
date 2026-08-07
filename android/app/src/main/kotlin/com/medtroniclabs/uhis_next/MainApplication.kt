@@ -2,6 +2,7 @@ package com.medtroniclabs.uhis_next
 
 import android.app.Application
 import android.content.Context
+import com.medtroniclabs.uhis_next.BuildConfig
 import com.medtroniclabs.microcoaching.Language
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.ModelDownloadStrategy
@@ -31,12 +32,16 @@ class MainApplication : Application() {
         private const val K_LANG = "language"
         private const val K_HF = "hfToken"
 
+        /** Coaching backend URL derived from the app's API base URL. */
+        private val DEFAULT_COACHING_URL: String
+            get() = BuildConfig.API_BASE_URL.trimEnd('/') + "/micro-coaching/medtronics-api/"
+
         private fun _restoreSdkIfConfigured() {
             val p = instance.getSharedPreferences(PREFS_SDK, Context.MODE_PRIVATE)
             val token = p.getString(K_TOKEN, null) ?: return
             _initSdkInternal(
                 authToken = token,
-                backendUrl = p.getString(K_URL, "https://spice-dev-backend.uhis.labsplatform.com/micro-coaching/medtronics-api/") ?: "https://spice-dev-backend.uhis.labsplatform.com/micro-coaching/medtronics-api/",
+                backendUrl = p.getString(K_URL, DEFAULT_COACHING_URL) ?: DEFAULT_COACHING_URL,
                 language = p.getString(K_LANG, "bn") ?: "bn",
                 hfToken = p.getString(K_HF, "") ?: "",
             )
