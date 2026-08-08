@@ -9,12 +9,19 @@ import 'package:uhis_next/core/db/assessment_dao.dart';
 import 'package:uhis_next/core/db/immunisation_dao.dart';
 import 'package:uhis_next/core/db/local_assessment_dao.dart';
 import 'package:uhis_next/core/db/patient_dao.dart';
+import 'package:uhis_next/core/models/patient.dart';
 import 'package:uhis_next/core/models/programme.dart';
 import 'package:uhis_next/features/patient/followup_repository.dart';
 import 'package:uhis_next/features/patient/member_detail_repository.dart';
 import 'package:uhis_next/features/visit/triage/patient_context_builder.dart';
 
 void main() {
+  // Needed by the new child-immunization test below: EpiScheduleEngine.build
+  // reads assets/forms/epi_schedule.json via rootBundle, which requires a
+  // bound ServicesBinding even in a plain `test()` (see
+  // epi_schedule_engine_test.dart for the same pattern).
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUpAll(() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -71,13 +78,14 @@ void main() {
   }
 
   PatientContext patientCtx({
+    String patientId = 'p1',
     bool isPregnant = false,
     int ageMonths = 300,
     int? deliveryDateMillis,
     Set<Programme> activeProgrammes = const {},
   }) =>
       PatientContext(
-        patientId: 'p1',
+        patientId: patientId,
         ageMonths: ageMonths,
         sex: Sex.female,
         isPregnant: isPregnant,
@@ -481,6 +489,63 @@ void main() {
       );
 
       expect(findings.map((f) => f.code), contains('pnc.severeAnaemia'));
+    });
+  });
+
+  group('BriefingFindingsAggregator.build — child immunization uses the remapped local id', () {
+    test('raw patientId (FHIR id) differs from patientCtx.patientId (local id) → '
+        'EPI rows are still read from the local id, not silently dropped', () async {
+      final db = await openTestDb();
+      addTearDown(db.close);
+      final assessmentDao = LocalAssessmentDao(db);
+      final patientDao = PatientDao(db);
+      final immunisationDao = ImmunisationDao(db);
+      final followUpRepo = FollowUpRepository(await ApiClient.create());
+
+      const localId = 'local-1';
+      const fhirId = 'Patient/fhir-999';
+
+      // Patient row keyed by the local id, as patients/immunisations always
+      // are — a young child (dob makes isYoungChild-driven age irrelevant
+      // here since PatientContext.ageMonths is passed directly, but a real
+      // dob is still required for _evaluateChildImmunization to proceed).
+      await patientDao.upsertMany([
+        const Patient(
+          id: localId,
+          dob: '2024-01-01',
+          rawJson: '{}',
+        ),
+      ]);
+
+      // EPI assessment rows persisted under the LOCAL id (the realistic case
+      // once a member has synced), while the caller still passes the raw
+      // FHIR id as `patientId` (e.g. navigated to straight from a FHIR
+      // Patient reference before the household member list resolves the
+      // local id). Two equal weights guarantee weightGainSlowed fires
+      // regardless of row read order.
+      await insertAssessment(db,
+          patientId: localId,
+          assessmentType: 'EPI',
+          details: {'weightKg': 8.0},
+          createdAt: 1000);
+      await insertAssessment(db,
+          patientId: localId,
+          assessmentType: 'EPI',
+          details: {'weightKg': 8.0},
+          createdAt: 2000);
+
+      final findings = await BriefingFindingsAggregator.build(
+        patientId: fhirId,
+        patientCtx: patientCtx(patientId: localId, ageMonths: 12),
+        selectedProgrammes: const {},
+        assessmentDao: assessmentDao,
+        historyAssessmentDao: AssessmentDao(db),
+        followUpRepo: followUpRepo,
+        patientDao: patientDao,
+        immunisationDao: immunisationDao,
+      );
+
+      expect(findings.map((f) => f.code), contains('childImmunization.weightGainSlowed'));
     });
   });
 }
