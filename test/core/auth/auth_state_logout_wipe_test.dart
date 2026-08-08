@@ -1,5 +1,10 @@
-/// Unit tests for the local-data wipe hook in [AuthState.logout] —
-/// GitHub issue #37.
+/// Unit tests for [AuthState.logout] orchestration.
+///
+/// Originally covered the truncate-on-logout hook (GitHub issue #37). Sign-out
+/// is now soft — local data is retained so an SK's unsynced work survives, and
+/// clearing is Android Settings → Clear Data — so these assert that the wipe
+/// callback is supplied but never invoked, and that the flush runs while the
+/// session is still valid.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -10,15 +15,17 @@ import 'package:uhis_next/core/auth/auth_state.dart';
 import 'package:uhis_next/core/auth/biometric_service.dart';
 
 /// Bypasses the real network/secure-storage logout implementation so this
-/// test can isolate AuthState's wipe-callback orchestration.
+/// test can isolate AuthState's orchestration.
 class _FakeAuthRepository extends AuthRepository {
-  _FakeAuthRepository(super.api);
+  _FakeAuthRepository(super.api, {this.onLogout});
 
   bool logoutCalled = false;
+  final void Function()? onLogout;
 
   @override
   Future<void> logout() async {
     logoutCalled = true;
+    onLogout?.call();
   }
 }
 
@@ -33,7 +40,7 @@ void main() {
     biometric = BiometricService();
   });
 
-  test('logout() calls the local-data wipe callback', () async {
+  test('logout() does NOT call the local-data wipe callback', () async {
     var wipeCalled = false;
     final authState = AuthState(
       repo,
@@ -46,7 +53,9 @@ void main() {
     await authState.logout();
 
     expect(repo.logoutCalled, isTrue);
-    expect(wipeCalled, isTrue);
+    expect(wipeCalled, isFalse,
+        reason: 'sign-out is soft — an SK who logs out offline must still find '
+            'their unsynced work on the device afterwards');
     expect(authState.status, AuthStatus.signedOut);
   });
 
@@ -101,25 +110,24 @@ void main() {
         reason: 'sign-out must not be blocked by a hook failure');
   });
 
-  test('logout() runs pre-wipe hooks before the local-data wipe callback',
+  test('logout() flushes pending work BEFORE ending the server session',
       () async {
     final order = <String>[];
-    final authState = AuthState(
-      repo,
-      biometric,
-      onWipeLocalData: () async {
-        order.add('wipe');
-      },
+    final orderedRepo = _FakeAuthRepository(
+      await ApiClient.create(),
+      onLogout: () => order.add('endSession'),
     );
+    final authState = AuthState(orderedRepo, biometric);
     authState.registerPreWipeHook(() async {
-      order.add('preWipe');
+      order.add('flush');
     });
 
     await authState.logout();
 
-    expect(order, ['preWipe', 'wipe'],
-        reason: 'a pending assessment write must get a chance to flush to '
-            'the backend before its local row is truncated');
+    expect(order, ['flush', 'endSession'],
+        reason: 'the flush needs the Bearer token that ending the session '
+            'clears — reversed, every pending assessment 401s and is marked '
+            'failed, a state AutomaticSync never retries');
   });
 
   test('logout() still completes and signs out if a pre-wipe hook throws',

@@ -166,7 +166,13 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       // so ordering here is unaffected by the fullSync→delta switch below.
       report = await sync.reloginSync();
     } else {
-      report = await sync.coldSync(wipeBeforeSync: true);
+      // Full-scope pull, but never a wipe: local data is not destroyed in-app
+      // any more (see AuthState.logout) — clearing is Android Settings → Clear
+      // Data. On a genuinely new device there is nothing to truncate, so this
+      // is unchanged there; elsewhere it stops an SK's unsynced work being lost
+      // to a login-time truncation. Ingest merges by identity rather than
+      // inserting twins, so pulling over existing rows is safe.
+      report = await sync.coldSync();
     }
 
     if (!mounted) return;

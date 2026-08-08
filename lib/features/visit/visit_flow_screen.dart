@@ -493,9 +493,37 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// to the home tab. Single home for context-after-await guards so the
   /// lint rule for `use_build_context_synchronously` lives in one place.
   Future<void> _exitFlow() async {
+    // Captured before the await — context is not safe to read afterwards.
+    final assessmentRepo = context.read<AssessmentRepository>();
+    final leavingStep3 = _step == 2;
     final ok = await _confirmExit();
     if (!mounted) return;
-    if (ok == true) context.go('/home');
+    if (ok != true) return;
+    if (leavingStep3) {
+      // Step 2 already wrote a complete, server-acceptable assessment; leaving
+      // Step 3 without saving is still a final submission, it just carries no
+      // Step 3 edits. Release the push hold so it syncs, and push now rather
+      // than waiting for the next connectivity event.
+      unawaited(_releaseAndPush(assessmentRepo));
+    }
+    context.go('/home');
+  }
+
+  /// Releases this visit's Step 3 summary hold and pushes it.
+  ///
+  /// Failures are non-fatal and deliberately silent: the SK has already left,
+  /// and the app-start sweep releases any hold this could not.
+  Future<void> _releaseAndPush(AssessmentRepository assessmentRepo) async {
+    try {
+      final released = await assessmentRepo.releaseSummaryHold(widget.visitId);
+      if (released == 0) return;
+      final n = await assessmentRepo.syncPendingAssessments(
+        syncMode: 'AutomaticSync',
+      );
+      debugPrint('[VisitFlow] exit-from-step3 released $released, pushed $n');
+    } catch (e) {
+      debugPrint('[VisitFlow] exit-from-step3 release/push failed: $e');
+    }
   }
 
   Widget _buildStepBody() {

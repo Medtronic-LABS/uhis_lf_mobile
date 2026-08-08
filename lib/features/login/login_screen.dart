@@ -162,8 +162,17 @@ class _LoginScreenState extends State<LoginScreen> {
   /// by callers — `SyncProgressScreen` attaches to this in-flight/completed
   /// sync instead of restarting it (see sync_progress_screen.dart). Logs the
   /// outcome since the caller can't observe it directly.
+  /// Full-scope fetch as a head start while the SK completes onboarding.
+  ///
+  /// Deliberately does NOT wipe first. Local data is never destroyed in-app any
+  /// more (see [AuthState.logout]); clearing is Android Settings → Clear Data.
+  /// On a genuinely new device there is nothing to wipe, so this is unchanged
+  /// there — it only stops the case where an SK with unsynced work on disk lost
+  /// it to a login-time truncation. Ingest is upsert-by-identity
+  /// (`insertOrUpdateFromBE` merges on fhirId then referenceId), so re-fetching
+  /// over existing rows merges rather than duplicating.
   void _startBackgroundColdSync(BuildContext context) {
-    context.read<OfflineSyncService>().coldSync(wipeBeforeSync: true).then((
+    context.read<OfflineSyncService>().coldSync().then((
       report,
     ) {
       debugPrint(

@@ -308,18 +308,39 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Reset sync progress so the next user's /sync screen does not see
     // isComplete=true from the previous session and skip their cold sync.
     widget.authState.registerLogoutHook(_sync.resetProgress);
-    // Best-effort flush of any still-pending assessment writes before the
-    // DB wipe below destroys their local row — without this, an outcome
-    // recorded shortly before logout (or while offline) that hasn't reached
-    // the backend yet is lost permanently: gone locally, never pushed.
-    // Bounded so a slow/offline network can't hang logout.
+    // Best-effort flush of any still-pending assessment writes while the
+    // session is still valid — AuthState runs this BEFORE ending the server
+    // session, so the push is authenticated. Local rows survive logout now, so
+    // anything unflushed is retried after the next login rather than lost;
+    // flushing here just gets it to the backend sooner. Bounded so a
+    // slow/offline network can't hang logout.
     widget.authState.registerPreWipeHook(
       () => _assessmentRepo
-          .syncPendingAssessments()
+          // An assessment held for its Step 3 summary would otherwise sit out
+          // this flush; the SK is leaving, so release first and let it go.
+          .releaseStaleSummaryHolds(Duration.zero)
+          .then((_) => _assessmentRepo.syncPendingAssessments())
           .timeout(const Duration(seconds: 10))
           .then((_) {}, onError: (_) {}),
     );
+    // Recover summary holds orphaned by process death: an app killed while the
+    // SK was on Step 3 would otherwise strand that assessment out of the push
+    // queue permanently — worse than the race the hold exists to close.
+    unawaited(
+      _assessmentRepo
+          .releaseStaleSummaryHolds(_staleSummaryHoldAge)
+          .catchError((Object e) {
+        debugPrint('[main] stale summary-hold sweep failed: $e');
+        return 0;
+      }),
+    );
   }
+
+  /// How long a Step 3 summary hold may survive before the app-start sweep
+  /// releases it. Long enough that a legitimately slow Step 3 (reading the AI
+  /// recommendation, picking a follow-up date) is never cut short; short enough
+  /// that an abandoned visit still syncs the same working day.
+  static const Duration _staleSummaryHoldAge = Duration(minutes: 30);
 
   Future<void> _bootstrapNotifications() async {
     try {

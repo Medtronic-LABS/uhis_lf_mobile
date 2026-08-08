@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -16,19 +18,23 @@ enum AuthStatus { unknown, signedOut, signedIn }
 class AuthState extends ChangeNotifier {
   AuthState(this._repo, this._biometric, {Future<void> Function()? onWipeLocalData})
       : _onWipeLocalData = onWipeLocalData {
-    // Server-side session invalidation (401/403 from any authenticated call)
-    // routes through the exact same path as today's locally-detected expiry.
+    // Server-side session invalidation (401/403 from any authenticated call).
+    // Try to recover it silently from stored credentials before disturbing the
+    // SK — see [_recoverSessionSilently].
     _repo.onUnauthorized = () {
-      debugPrint('[AuthState] onUnauthorized fired (server 401/403) — calling handleSessionExpired()');
-      handleSessionExpired();
+      debugPrint('[AuthState] onUnauthorized fired (server 401/403) — attempting silent recovery');
+      unawaited(_recoverSessionSilently());
     };
   }
 
   final AuthRepository _repo;
   final BiometricService _biometric;
-  // Truncates the local SQLCipher DB on logout — set from main.dart to
-  // AppDatabase.wipeAllData(). Optional (and non-fatal if it throws) so
-  // AuthState keeps no direct data-layer dependency.
+  // Truncates the local SQLCipher DB — set from main.dart to
+  // AppDatabase.wipeAllData(). Intentionally NOT called any more: sign-out is
+  // soft (see [logout] Step 3 for the full rationale and the safety condition).
+  // Kept wired so restoring the wipe is a one-line change rather than
+  // re-threading a dependency through main.dart.
+  // ignore: unused_field
   final Future<void> Function()? _onWipeLocalData;
   // Additional in-memory caches to clear on logout (e.g.
   // MissionDashboardRepository.clearCache) — registered post-construction via
@@ -418,6 +424,72 @@ class AuthState extends ChangeNotifier {
     _scheduleNotify();
   }
 
+  /// Max consecutive silent re-login attempts before falling back to the
+  /// password prompt. Stops a permanently-rejected credential from hammering
+  /// the server once per request, forever.
+  static const _maxSilentReloginAttempts = 3;
+
+  /// In-flight silent re-login, so N concurrent 401s produce ONE login call.
+  Future<void>? _silentRelogin;
+  int _silentReloginFailures = 0;
+
+  /// Recovers a server-expired session without disturbing the SK.
+  ///
+  /// The credential the login endpoint accepts is already on the device (see
+  /// [AuthRepository.loginWithStoredCredentials]), so an expired session can be
+  /// re-established in the background. Outcomes:
+  ///
+  /// - success        → token restored, the SK sees nothing
+  /// - server refusal → real credential failure; fall through to the password
+  ///                    prompt via [handleSessionExpired]
+  /// - network error  → stay signed in and offline-capable; retry on the next
+  ///                    authenticated request
+  ///
+  /// An explicit logout is never undone here — that is what the stored
+  /// explicit-logout flag guards.
+  Future<void> _recoverSessionSilently() {
+    // Single-flight: a burst of parallel requests all 401 at once.
+    return _silentRelogin ??= _runSilentRecovery().whenComplete(() {
+      _silentRelogin = null;
+    });
+  }
+
+  Future<void> _runSilentRecovery() async {
+    if (_status == AuthStatus.signedOut) return;
+
+    if (await _repo.wasExplicitLogout()) {
+      debugPrint('[AuthState] silent recovery skipped — last sign-out was explicit');
+      await handleSessionExpired();
+      return;
+    }
+
+    if (_silentReloginFailures >= _maxSilentReloginAttempts) {
+      debugPrint(
+          '[AuthState] silent recovery exhausted ($_silentReloginFailures attempts) — prompting');
+      await handleSessionExpired();
+      return;
+    }
+
+    try {
+      await _repo.loginWithStoredCredentials();
+      _silentReloginFailures = 0;
+      debugPrint('[AuthState] silent recovery succeeded — session restored');
+    } on AuthException catch (e) {
+      // Server refused the stored credential: password changed server-side or
+      // the account was disabled. Only a real password entry can fix this.
+      _silentReloginFailures++;
+      debugPrint('[AuthState] silent recovery refused by server ($e) — prompting');
+      await handleSessionExpired();
+    } on DioException catch (e) {
+      // Offline or transport failure — NOT a credential problem. Signing out
+      // here would strand an SK mid-visit with no way back in until they have
+      // signal, so stay signed in and retry on the next request.
+      debugPrint('[AuthState] silent recovery deferred (network: ${e.type}) — staying signed in');
+    } on SocketException catch (e) {
+      debugPrint('[AuthState] silent recovery deferred (socket: $e) — staying signed in');
+    }
+  }
+
   Future<void> handleSessionExpired() async {
     if (_status == AuthStatus.signedOut) {
       debugPrint('[AuthState] handleSessionExpired() called but already signedOut — no-op');
@@ -438,54 +510,65 @@ class AuthState extends ChangeNotifier {
     _error = null;
   }
 
+  /// Soft sign-out: flush, end the server session, clear in-memory caches.
+  ///
+  /// The local database is deliberately **not** wiped and the username is
+  /// deliberately **kept** — see the wipe block below and
+  /// [AuthRepository.logout] for why, and for what has to stay true elsewhere
+  /// in the app for that to remain safe.
   Future<void> logout() async {
-    ConsoleLog.step('🔐 [AuthState] logout() Step 1/5 — ending server session...');
-    await _repo.logout();
+    // Flush BEFORE ending the session. The push needs the Bearer token that
+    // _repo.logout() is about to clear; run in the other order and every
+    // pending assessment 401s and is marked `failed`, a state AutomaticSync
+    // never retries.
     ConsoleLog.step(
-        '🔐 [AuthState] logout() Step 2/5 — flushing ${_preWipeHooks.length} pending sync(s)...');
+        '🔐 [AuthState] logout() Step 1/4 — flushing ${_preWipeHooks.length} pending sync(s)...');
     for (final hook in _preWipeHooks) {
       try {
         await hook();
       } catch (e) {
-        ConsoleLog.warn('[AuthState] pre-wipe flush hook failed: $e');
-        // Non-fatal — same reasoning as the DB wipe below: sign-out must
-        // complete regardless of whether a flush succeeded.
+        ConsoleLog.warn('[AuthState] pre-logout flush hook failed: $e');
+        // Non-fatal — sign-out must complete regardless of whether a flush
+        // succeeded. Anything unflushed stays on disk (see Step 3) and will
+        // push on the next login.
       }
     }
-    ConsoleLog.step('🔐 [AuthState] logout() Step 3/5 — truncating local database...');
-    if (_onWipeLocalData != null) {
-      try {
-        await _onWipeLocalData();
-      } catch (e) {
-        ConsoleLog.warn('[AuthState] local data wipe failed during logout: $e');
-        // Non-fatal — sign-out must complete regardless; next login re-wipes.
-      }
-    } else {
-      ConsoleLog.warn(
-          '[AuthState] logout() Step 3/5 — no wipe callback configured, skipped.');
-    }
+    ConsoleLog.step('🔐 [AuthState] logout() Step 2/4 — ending server session...');
+    await _repo.logout();
+    // Step 3 — local data is intentionally retained.
+    //
+    // Sign-out no longer truncates the database. Anything not flushed above
+    // (offline, slow network) survives and syncs after the next login instead
+    // of being destroyed. Clearing local data is Android Settings → Clear Data.
+    //
+    // SAFETY: this is only sound while a device stays bound to one SK. That
+    // binding is the locked username field in LoginScreen
+    // (`enabled: cachedUsername == null`), fed by the username
+    // AuthRepository.logout() now preserves. Do NOT add a "switch user" or
+    // "change username" affordance, and do not re-enable that field — a second
+    // SK signing in here would inherit the first SK's households, patients and
+    // clinical records. _onWipeLocalData stays wired so restoring the wipe is a
+    // one-line change if that binding is ever broken.
     ConsoleLog.step(
-        '🔐 [AuthState] logout() Step 4/5 — clearing ${_logoutHooks.length} in-memory cache(s)...');
+        '🔐 [AuthState] logout() Step 3/4 — retaining local database (soft logout).');
+    ConsoleLog.step(
+        '🔐 [AuthState] logout() Step 4/4 — clearing ${_logoutHooks.length} in-memory cache(s)...');
     for (final hook in _logoutHooks) {
       try {
         hook();
       } catch (e) {
         ConsoleLog.warn('[AuthState] logout cache-clear hook failed: $e');
-        // Non-fatal — same reasoning as the DB wipe above.
+        // Non-fatal — sign-out must complete regardless.
       }
     }
     _status = AuthStatus.signedOut;
     _locked = false;
     _biometricEnabled = false;
     _pinEnabled = false;
-    // AuthRepository.logout() already deleted the stored username (Step 1)
-    // so a genuinely different user can sign in next — but that's on disk;
-    // this in-memory field is what LoginScreen actually reads, and nothing
-    // else in this method resets it. Without this, the same process would
-    // keep showing the old username prefilled (and locked) until a full
-    // app restart re-bootstrapped _username from the now-empty storage.
-    _username = null;
-    ConsoleLog.success('✅ [AuthState] logout() Step 5/5 — signed out.');
+    // _username is deliberately NOT cleared — LoginScreen reads this field to
+    // prefill and lock the username, which is what keeps the device bound to
+    // this SK across a soft logout.
+    ConsoleLog.success('✅ [AuthState] logout() — signed out, local data retained.');
     // Defer to avoid build scope conflicts
     _scheduleNotify();
   }

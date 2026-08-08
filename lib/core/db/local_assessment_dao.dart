@@ -612,12 +612,45 @@ class LocalAssessmentEntity {
 }
 
 /// DAO for local assessment storage with offline-first sync support.
+/// `otherDetails` key marking an assessment as awaiting its Step 3 summary.
+///
+/// Step 2 produces a complete, server-acceptable payload, so leaving the flow
+/// after it IS the final submission. Step 3 only adds optional edits — the
+/// follow-up date and referred facility — that update that submission. But
+/// `offline-sync/create` has no per-record idempotency key, so an assessment
+/// already pushed cannot be updated afterwards without creating a duplicate.
+///
+/// This flag keeps a row out of the **push queue only** while the SK is on
+/// Step 3, so those edits can still land. It is released on Step 3 save, on
+/// leaving the flow, and by an age-gated sweep at app start (process death) —
+/// it must never be able to strand an assessment permanently.
+///
+/// Deliberately a JSON key inside the existing `other_details` blob rather than
+/// a column, so it needs no schema migration. It is honoured by
+/// [LocalAssessmentDao.getUnsyncedForPush] (the single point both push callers
+/// funnel through) and deliberately NOT by [LocalAssessmentDao.getUnsynced],
+/// so [LocalAssessmentDao.forEncounter] can still find held rows to stamp.
+const String kAwaitingSummaryKey = 'awaitingSummary';
+
 class LocalAssessmentDao {
   LocalAssessmentDao(this._db);
 
   final AppDatabase _db;
 
   static const String tableName = 'local_assessments';
+
+  /// True when [otherDetailsJson] carries an unreleased Step 3 summary hold.
+  static bool isAwaitingSummary(String? otherDetailsJson) {
+    if (otherDetailsJson == null || otherDetailsJson.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(otherDetailsJson);
+      return decoded is Map && decoded[kAwaitingSummaryKey] == true;
+    } on FormatException {
+      // Unparseable blob — treat as not held so a corrupt row still syncs
+      // rather than being stranded out of the push queue.
+      return false;
+    }
+  }
 
   /// Save a new local assessment, assigning the numeric [
   /// LocalAssessmentEntity.referenceId] the server correlates sync status by.
@@ -695,8 +728,9 @@ class LocalAssessmentDao {
       existing.addAll(patchFor(row));
       // Preserve encounterId even if patch omitted it.
       existing['encounterId'] = existing['encounterId'] ?? encounterId;
-      // Drop any leftover hold flag from earlier builds.
-      existing.remove('awaitingSummary');
+      // Summary is now stamped, so release the push hold — this is the normal
+      // Step 3 "Done" path. See [kAwaitingSummaryKey].
+      existing.remove(kAwaitingSummaryKey);
       await update(row.copyWith(
         otherDetails: jsonEncode(existing),
         updatedAt: now,
@@ -782,9 +816,19 @@ class LocalAssessmentDao {
     // The member join is an OR over three keys, so one assessment can match
     // more than one member row. Keep a single row per assessment, preferring
     // the one that actually resolved a member.
+    //
+    // Rows still awaiting their Step 3 summary are filtered out here — this is
+    // the one place both push callers (OfflinePushService.pushAll and
+    // AssessmentRepository.syncPendingAssessments) funnel through, so holding
+    // them here holds them everywhere. See [kAwaitingSummaryKey].
     final rowByAssessmentId = <String, Map<String, Object?>>{};
+    var heldForSummary = 0;
     for (final row in rows) {
       final id = row['id'] as String;
+      if (isAwaitingSummary(row['other_details'] as String?)) {
+        if (!rowByAssessmentId.containsKey(id)) heldForSummary++;
+        continue;
+      }
       final kept = rowByAssessmentId[id];
       if (kept == null ||
           (_nonEmpty(kept['j_member_fhir']) == null &&
@@ -871,7 +915,51 @@ class LocalAssessmentDao {
         ),
       );
     }
+    if (heldForSummary > 0) {
+      ConsoleLog.step(
+        '[AssessmentPush] holding $heldForSummary assessment(s) awaiting their '
+        'Step 3 summary — released on save, on leaving the flow, or by the '
+        'app-start sweep',
+      );
+    }
     return PushableAssessments(ready: ready, blocked: blocked);
+  }
+
+  /// Releases the Step 3 summary hold.
+  ///
+  /// Scope it with [encounterId] (one visit — a visit can write several
+  /// assessment rows, one per programme payload, and they release together) or
+  /// with [olderThan] for the app-start sweep that recovers holds orphaned by
+  /// process death. Returns how many rows were released.
+  Future<int> releaseSummaryHolds({
+    String? encounterId,
+    Duration? olderThan,
+  }) async {
+    assert(encounterId != null || olderThan != null,
+        'releaseSummaryHolds needs a scope — refusing to release every hold');
+    final rows = await getUnsynced(includeFailed: true);
+    final cutoff = olderThan == null ? null : DateTime.now().subtract(olderThan);
+    final now = DateTime.now();
+    var released = 0;
+    for (final row in rows) {
+      if (!isAwaitingSummary(row.otherDetails)) continue;
+      final decoded =
+          Map<String, dynamic>.from(jsonDecode(row.otherDetails!) as Map);
+      if (encounterId != null && decoded['encounterId'] != encounterId) {
+        continue;
+      }
+      // A row with no updatedAt has an unknowable age — release it. Stranding
+      // an assessment out of the push queue is worse than releasing one early,
+      // which at most costs this visit its Step 3 edits.
+      if (cutoff != null && (row.updatedAt?.isAfter(cutoff) ?? false)) continue;
+      decoded.remove(kAwaitingSummaryKey);
+      await update(row.copyWith(
+        otherDetails: jsonEncode(decoded),
+        updatedAt: now,
+      ));
+      released++;
+    }
+    return released;
   }
 
   /// Find the live member/household FHIR row when the primary SQL join misses.

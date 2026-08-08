@@ -1,13 +1,14 @@
-/// Integration test for the truncate-on-logout wiring — GitHub issue #37.
+/// Integration test for the soft-logout contract.
 ///
-/// [auth_state_logout_wipe_test.dart] proves `AuthState.logout()` invokes
-/// whatever `onWipeLocalData` callback it's given, using a fake callback.
-/// [app_database_wipe_test.dart] proves `AppDatabase.wipeAllData()` truncates
-/// every table, calling it directly. Neither exercises the two together the
-/// way `main.dart` actually wires them
-/// (`onWipeLocalData: appDb.wipeAllData`) — this test closes that gap by
-/// driving a real in-memory [AppDatabase] through the real
-/// [AuthState.logout] path.
+/// Sign-out used to truncate every local table (GitHub issue #37). It no longer
+/// does: an SK who logs out — especially offline, with work that has not
+/// reached the backend — must still find that work on the device when they log
+/// back in. Clearing local data is Android Settings → Clear Data.
+///
+/// This drives a real in-memory [AppDatabase] through the real
+/// [AuthState.logout] path, wired exactly as `main.dart` wires it
+/// (`onWipeLocalData: appDb.wipeAllData`), and asserts the callback is NOT
+/// invoked even though it is still supplied.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +21,7 @@ import 'package:uhis_next/core/auth/biometric_service.dart';
 import 'package:uhis_next/core/db/app_database.dart';
 
 /// Bypasses the real network/secure-storage logout implementation so this
-/// test can isolate the DB-wipe wiring, mirroring the fake used in
+/// test can isolate the DB wiring, mirroring the fake used in
 /// auth_state_logout_wipe_test.dart.
 class _FakeAuthRepository extends AuthRepository {
   _FakeAuthRepository(super.api);
@@ -50,15 +51,26 @@ void main() {
 
   late AppDatabase db;
   late AuthState authState;
+  late bool wipeInvoked;
+
+  const seededTables = [
+    AppDatabase.tableHouseholds,
+    AppDatabase.tablePatients,
+    AppDatabase.tableSyncMeta,
+    AppDatabase.tableEncounters,
+  ];
 
   setUp(() async {
     db = await _openInMemoryDb();
+    wipeInvoked = false;
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    // Seed rows across a representative spread of tables — household/member
-    // data, sync bookkeeping, and a visit-capture table — so the assertion
-    // below proves a real cross-table wipe, not a single-table coincidence.
-    await db.db.insert(AppDatabase.tableHouseholds, {'id': 'hh-1'});
+    // Seed a representative spread — household/member data, sync bookkeeping,
+    // and a visit-capture table — so the assertion below proves data survives
+    // across table kinds, not by single-table coincidence.
+    // households.id is INTEGER PRIMARY KEY AUTOINCREMENT — seeding it with a
+    // string is a datatype mismatch, not a valid row.
+    await db.db.insert(AppDatabase.tableHouseholds, {'id': 1});
     await db.db.insert(AppDatabase.tablePatients, {'id': 'pt-1'});
     await db.db.insert(AppDatabase.tableSyncMeta, {
       'entity': 'worklist',
@@ -76,7 +88,13 @@ void main() {
     authState = AuthState(
       repo,
       BiometricService(),
-      onWipeLocalData: db.wipeAllData,
+      // Still supplied, exactly as main.dart supplies it. logout() must not
+      // call it — restoring the wipe should be a deliberate one-line change,
+      // not an accident of wiring.
+      onWipeLocalData: () async {
+        wipeInvoked = true;
+        await db.wipeAllData();
+      },
     );
   });
 
@@ -84,25 +102,23 @@ void main() {
     await db.close();
   });
 
-  test(
-      'AuthState.logout() drives a real AppDatabase.wipeAllData() and '
-      'truncates every table', () async {
-    for (final table in [
-      AppDatabase.tableHouseholds,
-      AppDatabase.tablePatients,
-      AppDatabase.tableSyncMeta,
-      AppDatabase.tableEncounters,
-    ]) {
-      final rows = await db.db.query(table);
-      expect(rows, isNotEmpty, reason: '$table should be seeded before logout');
+  test('logout() signs out without truncating local data', () async {
+    for (final table in seededTables) {
+      expect(await db.db.query(table), isNotEmpty,
+          reason: '$table should be seeded before logout');
     }
 
     await authState.logout();
 
-    for (final table in AppDatabase.allTablesForTesting) {
-      final rows = await db.db.query(table);
-      expect(rows, isEmpty, reason: '$table must be empty after logout()');
-    }
     expect(authState.status, AuthStatus.signedOut);
+    expect(wipeInvoked, isFalse,
+        reason: 'soft logout must not invoke the local-data wipe');
+    for (final table in seededTables) {
+      expect(await db.db.query(table), isNotEmpty,
+          reason: '$table must survive logout so unsynced work is not lost');
+    }
   });
+
 }
+// Username/credential preservation across logout is asserted at the layer that
+// owns it — see auth_repository_soft_logout_test.dart.

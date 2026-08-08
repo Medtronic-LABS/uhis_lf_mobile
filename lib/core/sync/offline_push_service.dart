@@ -419,15 +419,27 @@ class OfflinePushService extends ChangeNotifier {
       if (pendingAssessments.isNotEmpty && poll != _PushPollResult.inProgress) {
         final succeeded = <String>[];
         final failed = <String>[];
+        var unresolved = 0;
         for (final entity in pendingAssessments) {
           final reported = entity.referenceId == null
               ? null
               : outcome.assessmentStatus[entity.referenceId];
-          // Anything the server did not name inherits the batch verdict.
-          final ok = reported == null
-              ? poll == _PushPollResult.success
-              : reported == 'Success';
-          (ok ? succeeded : failed).add(entity.id);
+          // An assessment the server did not name is unresolved, NOT
+          // successful. Inheriting an overall `success` here stamped it synced
+          // and dropped it from the retry queue for good — the SK saw 0 pending
+          // while the visit did not exist on the server. Leave it in its
+          // current unsynced state so the next sync retries it.
+          if (reported == null) {
+            unresolved++;
+            continue;
+          }
+          (reported == 'Success' ? succeeded : failed).add(entity.id);
+        }
+        if (unresolved > 0) {
+          debugPrint(
+              '[OfflinePush] ⚠ status poll did not name $unresolved of '
+              '${pendingAssessments.length} assessment(s) — left unsynced for '
+              'retry (requestId=$requestId)');
         }
         if (failed.isNotEmpty) {
           await _assessments.updateSyncStatus(

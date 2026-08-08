@@ -89,6 +89,7 @@ class AssessmentRepository extends ChangeNotifier {
     double latitude = 0.0,
     double longitude = 0.0,
     Map<String, dynamic>? otherDetails,
+    bool awaitingSummary = false,
   }) async {
     final id = const Uuid().v4();
     final now = DateTime.now();
@@ -105,6 +106,9 @@ class AssessmentRepository extends ChangeNotifier {
     final enrichedOtherDetails = <String, dynamic>{
       ...?otherDetails,
       'encounterId': ?encounterId,
+      // Hold out of the push queue until Step 3 has had its chance to stamp
+      // the follow-up date / referred facility. See [kAwaitingSummaryKey].
+      if (awaitingSummary) kAwaitingSummaryKey: true,
     };
 
     // Screens hand us whatever id they had on hand, which since the local-PK
@@ -179,8 +183,51 @@ class AssessmentRepository extends ChangeNotifier {
         'encounter=$encounterId nextVisit=$nextVisitDate referred=$isReferred',
       );
       await _refreshPendingCount();
+    } else {
+      // With the summary hold in place this should be unreachable: the row is
+      // kept out of the push queue until Step 3 finishes, so it is still
+      // unsynced and forEncounter should match it. A 0 here means the hold
+      // leaked (released early, or never set) and the SK's follow-up date and
+      // referred facility have just been dropped on the floor.
+      ConsoleLog.warn(
+        '[AssessmentRepo] Step 3 summary matched NO assessment for '
+        'encounter=$encounterId — the row was already pushed, so nextVisitDate '
+        '/ referralFacilityType are lost for this visit',
+      );
     }
     return updated;
+  }
+
+  /// Releases the Step 3 summary hold for one visit so it can push.
+  ///
+  /// Called when the SK saves on Step 3 (after the summary is stamped) and when
+  /// they leave the flow from Step 3 without saving — leaving after Step 2 is
+  /// still a final submission, it just carries no Step 3 edits.
+  Future<int> releaseSummaryHold(String encounterId) async {
+    final released = await _dao.releaseSummaryHolds(encounterId: encounterId);
+    if (released > 0) {
+      debugPrint(
+          '[AssessmentRepo] released summary hold on $released assessment(s) '
+          'for encounter=$encounterId');
+      await _refreshPendingCount();
+    }
+    return released;
+  }
+
+  /// Releases summary holds orphaned by process death.
+  ///
+  /// Without this an app killed on Step 3 would strand its assessment out of
+  /// the push queue forever — strictly worse than the race it exists to close.
+  /// Run at app start.
+  Future<int> releaseStaleSummaryHolds(Duration olderThan) async {
+    final released = await _dao.releaseSummaryHolds(olderThan: olderThan);
+    if (released > 0) {
+      ConsoleLog.warn(
+          '[AssessmentRepo] released $released stale summary hold(s) older than '
+          '${olderThan.inMinutes}m — these visits were abandoned on Step 3');
+      await _refreshPendingCount();
+    }
+    return released;
   }
 
   /// Resolve the encounter identity from the member row, mirroring the join
@@ -324,6 +371,37 @@ class AssessmentRepository extends ChangeNotifier {
       _isSyncing = false;
       SyncActivity.assessmentPushInFlight = false;
       notifyListeners();
+    }
+  }
+
+  /// Holds the members and follow-ups that rode a push whose status poll has
+  /// not resolved yet, so the next sync cannot re-POST them.
+  ///
+  /// `offline-sync/create` carries no per-record idempotency key — the server
+  /// creates a new record for every entry it receives — so a re-send is a
+  /// duplicate, not a retry. Both stores use `InProgress`, which their
+  /// respective unsynced queries exclude, and both have an age-gated reclaim
+  /// (`MemberDao.resetStuckInProgress`, run from `OfflinePushService.pushAll`)
+  /// for the case where the server never resolves the request.
+  Future<void> _markPushedCompanionsInFlight({
+    required List<String> pushedMemberIds,
+    required List<String> pushedFollowUpIds,
+  }) async {
+    if (pushedMemberIds.isNotEmpty && _memberDao != null) {
+      try {
+        await _memberDao.updateSyncStatus(pushedMemberIds, 'InProgress');
+      } catch (e) {
+        debugPrint('[AssessmentSync] member in-flight mark skipped: $e');
+      }
+    }
+    if (pushedFollowUpIds.isNotEmpty && _followUpCalls != null) {
+      try {
+        // markPushed already flips follow-ups to InProgress for exactly this
+        // reason — reuse it rather than duplicating the status transition.
+        await _followUpCalls.markPushed(pushedFollowUpIds);
+      } catch (e) {
+        debugPrint('[AssessmentSync] follow-up in-flight mark skipped: $e');
+      }
     }
   }
 
@@ -518,23 +596,49 @@ class AssessmentRepository extends ChangeNotifier {
           // Leave rows inProgress (not pending) so the next sync does not
           // re-POST duplicates. Stuck reclaim is age-gated in
           // LocalAssessmentDao.resetStuckInProgress.
+          //
+          // Members and follow-up calls rode the SAME request, so they need the
+          // same protection. Left `pending` they are re-serialized into the very
+          // next push under a fresh requestId, and the server creates a second
+          // record for each — the household ends up with a duplicate member
+          // (and a duplicate call log) that the SK can then assess against the
+          // wrong row. There is no per-record idempotency key on the wire, so
+          // not re-sending is the only defence. MemberDao.resetStuckInProgress
+          // (run from OfflinePushService.pushAll) reclaims these if the server
+          // never resolves.
+          await _markPushedCompanionsInFlight(
+            pushedMemberIds: pushedMemberIds,
+            pushedFollowUpIds: pushedFollowUpIds,
+          );
           debugPrint(
               '[AssessmentSync] Status still InProgress after polls — leaving '
-              '${ids.length} as inProgress (requestId=$requestId)');
+              '${ids.length} assessment(s), ${pushedMemberIds.length} member(s) '
+              'and ${pushedFollowUpIds.length} follow-up(s) as inProgress '
+              '(requestId=$requestId)');
           return 0;
         }
 
-        // Attribute each verdict to the assessment the server named. Anything
-        // it did not name inherits the batch outcome.
+        // Attribute each verdict to the assessment the server named.
+        //
+        // An assessment the poll did NOT name is unresolved, not successful.
+        // Inheriting an overall `success` here silently stamped it synced and
+        // dropped it from the retry queue forever: the SK's pending count went
+        // to zero and the visit simply did not exist on the server, with no way
+        // to notice or recover. Leave those rows in their current (unsynced)
+        // state so the next sync retries them; the age-gated stuck reclaim
+        // handles one that never resolves.
         final succeededIds = <String>[];
         final failedIds = <String>[];
+        final unresolvedIds = <String>[];
         for (final entity in assessments) {
           final reported = entity.referenceId == null
               ? null
               : poll.assessmentStatusByReference[entity.referenceId];
-          final ok = reported == null
-              ? poll.overall == _OfflineSyncPollResult.success
-              : reported == 'Success';
+          if (reported == null) {
+            unresolvedIds.add(entity.id);
+            continue;
+          }
+          final ok = reported == 'Success';
           (ok ? succeededIds : failedIds).add(entity.id);
           final fhirId = entity.referenceId == null
               ? null
@@ -552,7 +656,14 @@ class AssessmentRepository extends ChangeNotifier {
               succeededIds, AssessmentSyncStatus.success);
         }
 
-        if (failedIds.isEmpty) {
+        if (unresolvedIds.isNotEmpty) {
+          debugPrint(
+              '[AssessmentSync] ⚠ Status poll did not name '
+              '${unresolvedIds.length} of ${ids.length} assessment(s) — left '
+              'unsynced for retry (requestId=$requestId)');
+        }
+
+        if (failedIds.isEmpty && unresolvedIds.isEmpty) {
           debugPrint('[AssessmentSync] Marked ${ids.length} as success');
           if (pushedFollowUpIds.isNotEmpty && _followUpCalls != null) {
             try {
@@ -573,6 +684,19 @@ class AssessmentRepository extends ChangeNotifier {
             }
           }
           return ids.length;
+        }
+
+        // Anything short of a clean sweep leaves the companions in flight
+        // rather than pending — they were already sent, so re-sending them
+        // duplicates rather than retries.
+        await _markPushedCompanionsInFlight(
+          pushedMemberIds: pushedMemberIds,
+          pushedFollowUpIds: pushedFollowUpIds,
+        );
+
+        if (failedIds.isEmpty) {
+          // Nothing rejected, just not all confirmed — not an error state.
+          return succeededIds.length;
         }
 
         debugPrint(
