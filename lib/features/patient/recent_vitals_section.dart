@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_strings.dart';
 import 'vitals_repository.dart';
 
 enum _Trend { up, down, stable }
@@ -96,7 +97,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Recent Vitals',
+          RecentVitalsStrings.sectionTitle,
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -124,7 +125,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
               return Card(
                 child: ListTile(
                   leading: const Icon(Icons.error_outline),
-                  title: const Text('Failed to load vitals'),
+                  title: Text(RecentVitalsStrings.loadError),
                   trailing: IconButton(
                     tooltip: 'Retry loading vitals',
                     icon: const Icon(Icons.refresh),
@@ -138,13 +139,13 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
             if (visits == null || visits.isEmpty) {
               return Card(
                 color: theme.colorScheme.surfaceContainerHighest,
-                child: const Padding(
-                  padding: EdgeInsets.all(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline),
-                      SizedBox(width: 12),
-                      Text('No vitals recorded yet'),
+                      const Icon(Icons.info_outline),
+                      const SizedBox(width: 12),
+                      Text(RecentVitalsStrings.emptyState),
                     ],
                   ),
                 ),
@@ -190,9 +191,9 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
                                   color: Colors.green.shade600,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Text(
-                                  'Latest',
-                                  style: TextStyle(
+                                child: Text(
+                                  RecentVitalsStrings.latestBadge,
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,

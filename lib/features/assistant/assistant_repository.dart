@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/config/app_config.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
 import 'assistant_models.dart';
@@ -47,7 +48,7 @@ class AssistantRepository {
     final coachingUrl = AppConfig.coachingServiceUrl;
     if (coachingUrl.isNotEmpty && patientContext == null) {
       if (question.trim().length < 3) {
-        return AssistantAnswer(text: 'Please enter at least 3 characters.');
+        return AssistantAnswer(text: AssistantStrings.enterAtLeast3Chars);
       }
       return _askCoachingRag(question, coachingUrl);
     }
@@ -73,7 +74,7 @@ class AssistantRepository {
       final statusCode = response.statusCode ?? 0;
       if (statusCode == 404) {
         throw AssistantException(
-          'Coaching assistant is being set up. Please try again later.',
+          AssistantStrings.settingUpRetryLater,
           statusCode: 404,
         );
       }
@@ -90,10 +91,10 @@ class AssistantRepository {
         );
       }
       final data = response.data;
-      if (data == null) throw const AssistantException('Empty response');
+      if (data == null) throw AssistantException(AssistantStrings.emptyResponse);
       final answer = data['answer'] as String?;
       if (answer == null || answer.isEmpty) {
-        throw const AssistantException('No answer in response');
+        throw AssistantException(AssistantStrings.noAnswerInResponse);
       }
       final suggestedQuestions =
           (data['suggested_questions'] as List<dynamic>? ?? [])
@@ -157,10 +158,10 @@ class AssistantRepository {
       final response = await dio.post<Map<String, dynamic>>(path, data: body);
       ConsoleLog.step('[PayloadDebug] assistant-ask → ${response.statusCode}');
       final data = response.data;
-      if (data == null) throw const AssistantException('Empty response');
+      if (data == null) throw AssistantException(AssistantStrings.emptyResponse);
       final answer = data['answer'] as String?;
       if (answer == null || answer.isEmpty) {
-        throw const AssistantException('No answer in response');
+        throw AssistantException(AssistantStrings.noAnswerInResponse);
       }
       final rawActions = data['actions'];
       final actions = <AssistantAction>[];

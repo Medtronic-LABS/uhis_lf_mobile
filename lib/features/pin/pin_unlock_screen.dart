@@ -63,7 +63,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: 'Back',
+          tooltip: PinStrings.backTooltip,
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/lock'),
         ),

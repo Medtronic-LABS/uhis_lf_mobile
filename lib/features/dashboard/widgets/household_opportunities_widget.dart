@@ -80,7 +80,7 @@ class HouseholdOpportunitiesWidget extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'AI-identified multi-service visits',
+                            MissionDashboardStrings.aiIdentifiedMultiServiceVisits,
                             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                   color: scheme.primary,
                                 ),

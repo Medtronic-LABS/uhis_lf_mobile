@@ -5,15 +5,17 @@
 /// `PriorityScorer`). It re-frames the same `referrals` rows as an
 /// action-first "who is slipping between SK and facility" alert list.
 ///
-/// This file is pure Dart — no Flutter, no sqflite — so the derivation stays
-/// unit-testable. The mapping from the 14-state [ReferralStatus] lifecycle +
-/// SLA bookkeeping onto the 4-step care journey lives here and nowhere else.
+/// The mapping from the 14-state [ReferralStatus] lifecycle + SLA bookkeeping
+/// onto the 4-step care journey lives here and nowhere else. All user-facing
+/// copy the derivation interpolates comes from [CceStrings]
+/// (`core/constants/app_strings.dart`) — this file holds no string literals.
 ///
 /// Wireframe: `apon_sushashthya_v13.html` → CCE NOTIFICATION DRAWER.
 library;
 
 import 'dart:convert';
 
+import '../../core/constants/app_strings.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/referral.dart';
@@ -169,6 +171,9 @@ class CceAlert {
   bool get canCall =>
       followUpId != null && backendId != null && hasPhone && !isWrongNumber;
 
+  // NOTE: this parses [slaBadge], which is now localized. The `SLA:` / `left` /
+  // `+` tokens must survive translation or this falls back to '!' / '+?'.
+  // TODO(cce): derive the ring label from structured fields, not display text.
   /// Short label rendered inside the donut ring: "+4d" (breached), "4h"
   /// (warning with countdown), "!" (warning with no countdown), empty for
   /// on-track/completed (those use an icon instead of text).
@@ -215,7 +220,7 @@ class CceAlert {
           'referralReason',
         ]) ??
         programme ??
-        _CceCopy.referralReasonFallback;
+        CceStrings.referralReasonFallback;
     final facility = _firstString(raw, const [
       'referredSiteName',
       'facilityName',
@@ -274,7 +279,7 @@ class CceAlert {
       patientId: resolvedPatientId,
       patientName: patient?.name?.trim().isNotEmpty == true
           ? patient!.name!.trim()
-          : _CceCopy.unknownPatient,
+          : CceStrings.unknownPatient,
       patientAge: patient?.age,
       patientGender: patient?.gender,
       patientPhone: validPhone ? phone : patient?.phone,
@@ -286,51 +291,51 @@ class CceAlert {
       landmark: landmark,
       severity: severity,
       slaBadge: severity == CceSeverity.breached
-          ? _CceCopy.breachBadge('${ageDays}d')
+          ? CceStrings.breachBadge('${ageDays}d')
           : (severity == CceSeverity.warning
-              ? _CceCopy.attentionBadge
+              ? CceStrings.attentionBadge
               : (severity == CceSeverity.completed
-                  ? _CceCopy.completedBadge
-                  : _CceCopy.onTrackBadge)),
-      referredMeta: _CceCopy.referredMeta(date, facility, reason),
+                  ? CceStrings.completedBadge
+                  : CceStrings.onTrackBadge)),
+      referredMeta: CceStrings.referredMeta(date, facility, reason),
       statusLine: fu.isLost
-          ? 'Wrong number · closed'
-          : '$attempts of $retryAttempts calls · $remaining left',
+          ? CceStrings.wrongNumberClosed
+          : CceStrings.callAttemptsStatus(attempts, retryAttempts, remaining),
       intelTags: [
         if (programme != null) programme,
-        if (progress.atFacility && !progress.treated) _CceCopy.tagAtFacility,
-        if (remaining <= 1) 'Last attempt',
+        if (progress.atFacility && !progress.treated) CceStrings.tagAtFacility,
+        if (remaining <= 1) CceStrings.lastAttempt,
       ],
       journey: [
         CceJourneyStep(
-          label: _CceCopy.stepSkVisit,
+          label: CceStrings.stepSkVisit,
           sublabel: date,
           state: CceStepState.done,
         ),
         CceJourneyStep(
-          label: _CceCopy.stepReferred,
+          label: CceStrings.stepReferred,
           sublabel: programme ?? date,
           state: CceStepState.done,
         ),
         CceJourneyStep(
-          label: _CceCopy.stepFacility,
+          label: CceStrings.stepFacility,
           sublabel: progress.atFacility
               ? (progress.treated
-                  ? _CceCopy.stepArrived
+                  ? CceStrings.stepArrived
                   : (programme == 'NCD'
-                      ? _CceCopy.stepArrived
-                      : 'Following up'))
-              : _CceCopy.stepPending,
+                      ? CceStrings.stepArrived
+                      : CceStrings.followingUp))
+              : CceStrings.stepPending,
           state:
               progress.atFacility ? CceStepState.done : CceStepState.pending,
         ),
         CceJourneyStep(
           label: progress.treated
-              ? _CceCopy.stepTreated
-              : _CceCopy.stepTreatment,
+              ? CceStrings.stepTreated
+              : CceStrings.stepTreatment,
           sublabel: progress.treated
-              ? _CceCopy.stepInProgress
-              : _CceCopy.stepPending,
+              ? CceStrings.stepInProgress
+              : CceStrings.stepPending,
           state: progress.treated ? CceStepState.done : CceStepState.pending,
         ),
       ],
@@ -428,7 +433,7 @@ class CceAlert {
       patientId: r.patientId,
       patientName: patient?.name?.trim().isNotEmpty == true
           ? patient!.name!.trim()
-          : _CceCopy.unknownPatient,
+          : CceStrings.unknownPatient,
       patientAge: patient?.age,
       patientGender: patient?.gender,
       patientPhone: patient?.phone,
@@ -517,18 +522,18 @@ class CceAlert {
             : (r.breachedSince != null
                 ? now.millisecondsSinceEpoch - r.breachedSince!
                 : 0);
-        return _CceCopy.breachBadge(_humanizeShort(over));
+        return CceStrings.breachBadge(_humanizeShort(over));
       case CceSeverity.warning:
         final due = _arrived(r.state) ? r.dueTreatmentAt : r.dueArrivalAt;
         if (due != null) {
           final left = due - now.millisecondsSinceEpoch;
-          if (left > 0) return _CceCopy.leftBadge(_humanizeShort(left));
+          if (left > 0) return CceStrings.leftBadge(_humanizeShort(left));
         }
-        return _CceCopy.attentionBadge;
+        return CceStrings.attentionBadge;
       case CceSeverity.onTrack:
-        return _CceCopy.onTrackBadge;
+        return CceStrings.onTrackBadge;
       case CceSeverity.completed:
-        return _CceCopy.completedBadge;
+        return CceStrings.completedBadge;
     }
   }
 
@@ -536,8 +541,8 @@ class CceAlert {
     final date = _dateShort(r.createdAt);
     final reason = (r.diagnosisLabel != null && r.diagnosisLabel!.isNotEmpty)
         ? r.diagnosisLabel!
-        : _CceCopy.referralReasonFallback;
-    return _CceCopy.referredMeta(date, facility, reason);
+        : CceStrings.referralReasonFallback;
+    return CceStrings.referredMeta(date, facility, reason);
   }
 
   static String _statusLine(
@@ -553,34 +558,34 @@ class CceAlert {
           final over = r.dueArrivalAt != null
               ? now.millisecondsSinceEpoch - r.dueArrivalAt!
               : now.millisecondsSinceEpoch - (r.breachedSince ?? r.createdAt);
-          return _CceCopy.notArrivedOverdue(
+          return CceStrings.notArrivedOverdue(
             _humanizeLong(over),
             _slaWindowText(r),
           );
         }
         // Arrived but treatment window breached.
-        return _CceCopy.treatmentOverdue(_slaWindowText(r));
+        return CceStrings.treatmentOverdue(_slaWindowText(r));
       case CceSeverity.warning:
         if (arrived && !treated) {
           final waiting = now.millisecondsSinceEpoch -
               (r.updatedAt);
-          return _CceCopy.awaitingReview(_humanizeLong(waiting));
+          return CceStrings.awaitingReview(_humanizeLong(waiting));
         }
         final due = arrived ? r.dueTreatmentAt : r.dueArrivalAt;
         if (due != null) {
           final left = due - now.millisecondsSinceEpoch;
-          if (left > 0) return _CceCopy.dueSoon(_humanizeLong(left));
+          if (left > 0) return CceStrings.dueSoon(_humanizeLong(left));
         }
-        return _CceCopy.actionRecommended;
+        return CceStrings.actionRecommended;
       case CceSeverity.onTrack:
-        if (arrived && !treated) return _CceCopy.atFacilityOnTrack;
-        return _CceCopy.onTrackLine;
+        if (arrived && !treated) return CceStrings.atFacilityOnTrack;
+        return CceStrings.onTrackLine;
       case CceSeverity.completed:
         final closed = r.closedAt ?? r.updatedAt;
         if (r.state == ReferralStatus.closedDeceased) {
-          return _CceCopy.closedDeceased(_dateShort(closed));
+          return CceStrings.closedDeceased(_dateShort(closed));
         }
-        return _CceCopy.dischargedLine(_dateShort(closed));
+        return CceStrings.dischargedLine(_dateShort(closed));
     }
   }
 
@@ -592,11 +597,11 @@ class CceAlert {
   ) {
     final tags = <String>[];
     if (severity == CceSeverity.completed) {
-      tags.add(_CceCopy.tagCareComplete);
+      tags.add(CceStrings.tagCareComplete);
     } else if (arrived && !treated) {
-      tags.add(_CceCopy.tagAtFacility);
+      tags.add(CceStrings.tagAtFacility);
     } else if (severity == CceSeverity.breached && !arrived) {
-      tags.add(_CceCopy.tagNotCheckedIn);
+      tags.add(CceStrings.tagNotCheckedIn);
     }
 
     // Transport friction is the single most common "not arrived" cause in
@@ -604,10 +609,10 @@ class CceAlert {
     if (r.state == ReferralStatus.transportDeclined ||
         (severity == CceSeverity.breached &&
             r.state == ReferralStatus.inTransit)) {
-      tags.add(_CceCopy.tagTransportBarrier);
+      tags.add(CceStrings.tagTransportBarrier);
     }
     if (r.escalationLevel > 0) {
-      tags.add(_CceCopy.tagEscalated(r.escalationLevel));
+      tags.add(CceStrings.tagEscalated(r.escalationLevel));
     }
     return tags;
   }
@@ -622,32 +627,32 @@ class CceAlert {
 
     return <CceJourneyStep>[
       CceJourneyStep(
-        label: _CceCopy.stepSkVisit,
+        label: CceStrings.stepSkVisit,
         sublabel: createdDate,
         state: CceStepState.done,
       ),
       CceJourneyStep(
-        label: _CceCopy.stepReferred,
+        label: CceStrings.stepReferred,
         sublabel: createdDate,
         state: CceStepState.done,
       ),
       CceJourneyStep(
-        label: _CceCopy.stepFacility,
+        label: CceStrings.stepFacility,
         sublabel: arrived
-            ? _CceCopy.stepArrived
+            ? CceStrings.stepArrived
             : (notArrivedBreach
-                ? _CceCopy.stepNotArrived
-                : _CceCopy.stepPending),
+                ? CceStrings.stepNotArrived
+                : CceStrings.stepPending),
         state: arrived
             ? CceStepState.done
             : (notArrivedBreach ? CceStepState.missed : CceStepState.pending),
       ),
       CceJourneyStep(
         label:
-            treated ? _CceCopy.stepTreated : _CceCopy.stepTreatment,
+            treated ? CceStrings.stepTreated : CceStrings.stepTreatment,
         sublabel: r.state == ReferralStatus.closedRecovered
-            ? _CceCopy.stepDischarged
-            : (treated ? _CceCopy.stepInProgress : _CceCopy.stepPending),
+            ? CceStrings.stepDischarged
+            : (treated ? CceStrings.stepInProgress : CceStrings.stepPending),
         state: treated ? CceStepState.done : CceStepState.pending,
       ),
     ];
@@ -663,11 +668,11 @@ class CceAlert {
     }
     switch (r.slaTier) {
       case SlaTier.emergency:
-        return _CceCopy.slaEmergencyWindow;
+        return CceStrings.slaEmergencyWindow;
       case SlaTier.urgent:
-        return _CceCopy.slaUrgentWindow;
+        return CceStrings.slaUrgentWindow;
       case SlaTier.routine:
-        return _CceCopy.slaRoutineWindow;
+        return CceStrings.slaRoutineWindow;
     }
   }
 
@@ -745,58 +750,4 @@ class CceAlert {
     if (name == 'ncd' || name.contains('ncd')) return 'NCD';
     return null;
   }
-}
-
-/// Centralised CCE copy. Kept private to this file's derivation; the
-/// widget-facing strings live in `CceStrings` (app_strings.dart). This holds
-/// only the strings the pure-Dart derivation interpolates, so the model has
-/// no dependency on the Flutter strings layer.
-abstract final class _CceCopy {
-  static const String unknownPatient = 'Patient';
-  static const String referralReasonFallback = 'Referral';
-  static const String attentionBadge = 'Needs attention';
-  static const String onTrackBadge = 'On track';
-  static const String completedBadge = 'Completed';
-
-  static const String slaEmergencyWindow = '6 hours';
-  static const String slaUrgentWindow = '24 hours';
-  static const String slaRoutineWindow = '72 hours';
-
-  static const String stepSkVisit = 'SK Visit';
-  static const String stepReferred = 'Referred';
-  static const String stepFacility = 'Facility';
-  static const String stepArrived = 'Arrived';
-  static const String stepNotArrived = 'Not arrived';
-  static const String stepPending = 'Pending';
-  static const String stepTreatment = 'Treatment';
-  static const String stepTreated = 'Treated';
-  static const String stepInProgress = 'In progress';
-  static const String stepDischarged = 'Discharged';
-
-  static const String tagCareComplete = 'Care completed';
-  static const String tagAtFacility = 'At facility';
-  static const String tagNotCheckedIn = 'Not checked in';
-  static const String tagTransportBarrier = 'Transport barrier?';
-
-  static const String actionRecommended = 'Action recommended';
-  static const String atFacilityOnTrack = 'At facility — care in progress';
-  static const String onTrackLine = 'On track — no action needed';
-
-  static String breachBadge(String over) => 'SLA BREACHED +$over';
-  static String leftBadge(String left) => 'SLA: $left left';
-  static String referredMeta(String date, String? facility, String reason) =>
-      (facility != null && facility.isNotEmpty)
-          ? 'Referred: $date · $facility · $reason'
-          : 'Referred: $date · $reason';
-  static String notArrivedOverdue(String overdue, String slaWindow) =>
-      'Not arrived · $overdue overdue · SLA was $slaWindow';
-  static String treatmentOverdue(String slaWindow) =>
-      'Treatment overdue · SLA was $slaWindow';
-  static String awaitingReview(String waiting) =>
-      'Checked in — awaiting review · $waiting waiting';
-  static String dueSoon(String left) => 'Due in $left · act soon';
-  static String dischargedLine(String date) =>
-      'Discharged $date · care complete';
-  static String closedDeceased(String date) => 'Closed $date · deceased';
-  static String tagEscalated(int level) => 'Escalated L$level';
 }

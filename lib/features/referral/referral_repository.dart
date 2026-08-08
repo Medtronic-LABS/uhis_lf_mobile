@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/constants/app_strings.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -425,21 +426,19 @@ class ReferralRepository {
   String _titleFor(String channel) {
     switch (channel) {
       case NotificationChannels.critical:
-        return '🔴 SLA breach';
+        return ReferralStrings.notifSlaBreachTitle;
       case NotificationChannels.warning:
-        return '🟠 Referral warning';
+        return ReferralStrings.notifWarningTitle;
       case NotificationChannels.completion:
-        return '🟢 Referral completed';
+        return ReferralStrings.notifReferralCompletedTitle;
       default:
-        return 'Referral update';
+        return ReferralStrings.notifGenericTitle;
     }
   }
 
   String _bodyFor(Referral r) {
     final drivers = r.priorityDrivers.take(3).join(' · ');
-    return drivers.isEmpty
-        ? 'Open referral needs your attention.'
-        : drivers;
+    return drivers.isEmpty ? ReferralStrings.notifDefaultBody : drivers;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -474,7 +473,7 @@ class ReferralRepository {
       toState: current.state, // State doesn't change, only level
       occurredAt: now.millisecondsSinceEpoch,
       actor: actor,
-      reason: reason ?? 'Escalated to level $newLevel',
+      reason: reason ?? ReferralStrings.escalatedToLevel(newLevel),
     ));
 
     _changes.value++;
@@ -511,7 +510,7 @@ class ReferralRepository {
       await transition(
         referralId: id,
         to: toState,
-        reason: reason ?? 'Bulk closed by $actor',
+        reason: reason ?? ReferralStrings.bulkClosedBy(actor),
         actor: actor,
       );
       count++;

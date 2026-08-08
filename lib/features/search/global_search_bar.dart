@@ -336,7 +336,7 @@ class _SearchViewState extends State<_SearchView> {
     widget.onClose();
     if (hit.id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Member ID not available')),
+        SnackBar(content: Text(SearchStrings.memberIdNotAvailable)),
       );
       return;
     }
@@ -358,7 +358,7 @@ class _SearchViewState extends State<_SearchView> {
     widget.onClose();
     if (hit.id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Household ID not available')),
+        SnackBar(content: Text(SearchStrings.householdIdNotAvailable)),
       );
       return;
     }

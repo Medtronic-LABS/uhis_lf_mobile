@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Wraps runtime RECORD_AUDIO permission request with rationale dialog.
@@ -44,22 +45,19 @@ class ScribePermissionService {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Microphone access needed'),
-        content: const Text(
-          'AI Scribe needs microphone access to record consultations. '
-          'Enable it in Settings → App permissions.',
-        ),
+        title: Text(ScribeStrings.settingsTitle),
+        content: Text(ScribeStrings.settingsBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(ScribeStrings.settingsCancel),
           ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
               openAppSettings();
             },
-            child: const Text('Open Settings'),
+            child: Text(ScribeStrings.settingsOpen),
           ),
         ],
       ),
@@ -106,13 +104,13 @@ class _RationaleSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'AI Scribe',
+                    ScribeStrings.rationaleTitle,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
-                    'Voice → clinical note',
+                    ScribeStrings.rationaleSubtitle,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -124,15 +122,15 @@ class _RationaleSheet extends StatelessWidget {
           const SizedBox(height: 16),
           _BulletItem(
             icon: Icons.mic_none,
-            text: 'Records consultation audio',
+            text: ScribeStrings.bulletRecordsAudio,
           ),
           _BulletItem(
             icon: Icons.check_circle_outline,
-            text: 'You review and accept before it saves',
+            text: ScribeStrings.bulletReviewBeforeSave,
           ),
           _BulletItem(
             icon: Icons.delete_outline,
-            text: 'Audio deleted from server after processing',
+            text: ScribeStrings.bulletAudioDeletedAfterProcessing,
           ),
           const SizedBox(height: 20),
           Row(
@@ -140,14 +138,14 @@ class _RationaleSheet extends StatelessWidget {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Not now'),
+                  child: Text(ScribeStrings.rationaleNotNow),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Allow'),
+                  child: Text(ScribeStrings.rationaleAllow),
                 ),
               ),
             ],

@@ -1,3 +1,5 @@
+import '../../core/constants/app_strings.dart';
+
 /// Classification result for a vital sign reading.
 enum VitalClassification {
   normal,
@@ -8,13 +10,13 @@ enum VitalClassification {
   String get label {
     switch (this) {
       case VitalClassification.normal:
-        return 'Normal';
+        return VitalClassifierStrings.normal;
       case VitalClassification.low:
-        return 'Low';
+        return VitalClassifierStrings.low;
       case VitalClassification.high:
-        return 'High';
+        return VitalClassifierStrings.high;
       case VitalClassification.critical:
-        return 'Critical';
+        return VitalClassifierStrings.critical;
     }
   }
 }

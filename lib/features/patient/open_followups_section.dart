@@ -87,7 +87,7 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
         Row(
           children: [
             Text(
-              'Open Follow-ups',
+              FollowUpCallStrings.openFollowUpsTitle,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -129,7 +129,7 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
               return Card(
                 child: ListTile(
                   leading: const Icon(Icons.error_outline),
-                  title: const Text('Failed to load follow-ups'),
+                  title: Text(FollowUpCallStrings.openFollowUpsLoadError),
                   trailing: IconButton(
                     tooltip: 'Retry loading follow-ups',
                     icon: const Icon(Icons.refresh),
@@ -143,13 +143,13 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
             if (followUps.isEmpty) {
               return Card(
                 color: theme.colorScheme.surfaceContainerHighest,
-                child: const Padding(
-                  padding: EdgeInsets.all(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Icon(Icons.check_circle_outline, color: Colors.green),
-                      SizedBox(width: 12),
-                      Text('No open follow-ups'),
+                      const Icon(Icons.check_circle_outline, color: Colors.green),
+                      const SizedBox(width: 12),
+                      Text(FollowUpCallStrings.openFollowUpsEmpty),
                     ],
                   ),
                 ),
@@ -350,7 +350,7 @@ class _FollowUpTile extends StatelessWidget {
                           color: theme.colorScheme.onSurfaceVariant),
                       const SizedBox(width: 4),
                       Text(
-                        'Facility: ${fu.referredSiteId}',
+                        FollowUpCallStrings.facilityLabel(fu.referredSiteId!),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),

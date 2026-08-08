@@ -1197,7 +1197,7 @@ class _MilestoneContent extends StatelessWidget {
             monthsUntil > 0) ...[
           const SizedBox(height: 4),
           Text(
-            'Due in ~$monthsUntil ${monthsUntil == 1 ? 'month' : 'months'}',
+            EpiStrings.dueInMonths(monthsUntil),
             style: const TextStyle(fontSize: 12, color: _kAmber),
           ),
         ] else if (!milestone.allCompleted &&
@@ -1207,7 +1207,7 @@ class _MilestoneContent extends StatelessWidget {
             monthsUntil > 0) ...[
           const SizedBox(height: 4),
           Text(
-            'Due in ~$monthsUntil ${monthsUntil == 1 ? 'month' : 'months'}',
+            EpiStrings.dueInMonths(monthsUntil),
             style: const TextStyle(fontSize: 12, color: _kGrey),
           ),
         ],

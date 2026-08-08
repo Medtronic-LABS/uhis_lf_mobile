@@ -232,8 +232,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
 
           if (session == null || session.id != widget.visitId) {
             return Scaffold(
-              appBar: embedded ? null : AppBar(title: const Text('Visit')),
-              body: const Center(child: Text('Visit session not found.')),
+              appBar: embedded
+                  ? null
+                  : AppBar(title: Text(VisitFormStrings.appBarTitle)),
+              body: Center(child: Text(VisitFormStrings.sessionNotFound)),
             );
           }
 
@@ -257,10 +259,11 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           }
 
           return Scaffold(
-            appBar:
-                embedded ? null : AppBar(title: const Text('Routine Visit')),
-            body: const Center(
-              child: Text('No assessment pathways activated.'),
+            appBar: embedded
+                ? null
+                : AppBar(title: Text(VisitFormStrings.routineVisitTitle)),
+            body: Center(
+              child: Text(VisitFormStrings.noPathwaysActivated),
             ),
           );
         },

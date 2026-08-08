@@ -6,6 +6,7 @@ import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../config/app_config.dart';
+import '../constants/app_strings.dart';
 import '../db/follow_up_dao.dart';
 import '../db/household_dao.dart';
 import '../db/local_assessment_dao.dart';
@@ -144,18 +145,18 @@ class OfflinePushService extends ChangeNotifier {
   }) async {
     if (!_auth.hasSessionCredentials) {
       debugPrint('[OfflinePush] blocked — no auth token/session credentials');
-      return const OfflinePushResult(
+      return OfflinePushResult(
         success: false,
-        message: 'Not authenticated — sign in again before syncing',
+        message: OfflineSyncStrings.notAuthenticated,
       );
     }
     if (_running ||
         isPushInFlight ||
         SyncActivity.assessmentPushInFlight ||
         SyncActivity.pullInFlight) {
-      return const OfflinePushResult(
+      return OfflinePushResult(
         success: false,
-        message: 'Sync already in progress',
+        message: OfflineSyncStrings.syncAlreadyInProgress,
       );
     }
 
@@ -302,10 +303,10 @@ class OfflinePushService extends ChangeNotifier {
           followUpPayloads.isEmpty) {
         _progress = 1;
         notifyListeners();
-        return const OfflinePushResult(
+        return OfflinePushResult(
           success: true,
           hadWork: false,
-          message: 'Nothing pending to sync',
+          message: OfflineSyncStrings.nothingPendingToSync,
         );
       }
 
@@ -359,7 +360,7 @@ class OfflinePushService extends ChangeNotifier {
             success: false,
             hadWork: true,
             requestId: requestId,
-            message: 'Sync failed (HTTP $status)',
+            message: OfflineSyncStrings.syncFailedHttp('$status'),
           );
         }
       } on DioException catch (e) {
@@ -380,8 +381,8 @@ class OfflinePushService extends ChangeNotifier {
           hadWork: true,
           requestId: requestId,
           message: isNetwork
-              ? 'No network — changes kept for retry'
-              : 'Sync failed (HTTP ${e.response?.statusCode})',
+              ? OfflineSyncStrings.noNetworkChangesKept
+              : OfflineSyncStrings.syncFailedHttp('${e.response?.statusCode}'),
         );
       }
 
@@ -459,8 +460,8 @@ class OfflinePushService extends ChangeNotifier {
           hadWork: true,
           requestId: requestId,
           message: outcome.followUpFailed
-              ? 'Follow-up sync failed — retry Offline Sync'
-              : 'Sync reported Failed for some records',
+              ? OfflineSyncStrings.followUpSyncFailedRetry
+              : OfflineSyncStrings.reportedFailedForSomeRecords,
         );
       }
       if (poll == _PushPollResult.inProgress) {
@@ -468,15 +469,14 @@ class OfflinePushService extends ChangeNotifier {
           success: true,
           hadWork: true,
           requestId: requestId,
-          message:
-              'Sync accepted — server still processing. Open Offline Sync again to refresh.',
+          message: OfflineSyncStrings.acceptedStillProcessing,
         );
       }
       return OfflinePushResult(
         success: true,
         hadWork: true,
         requestId: requestId,
-        message: 'Offline sync completed',
+        message: OfflineSyncStrings.offlineSyncCompleted,
       );
     } catch (e, st) {
       debugPrint('[OfflinePush] ✗ $e\n$st');

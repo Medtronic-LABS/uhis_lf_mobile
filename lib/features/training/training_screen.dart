@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth/auth_repository.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/services/micro_coaching_service.dart';
 
 class TrainingScreen extends StatefulWidget {
@@ -13,7 +14,9 @@ class TrainingScreen extends StatefulWidget {
 
 class _TrainingScreenState extends State<TrainingScreen> {
   bool _busy = false;
-  String? _error;
+  /// Only whether the launch failed is rendered — the exception text itself
+  /// is diagnostic and goes to [debugPrint], never to the SK.
+  bool _failed = false;
 
   @override
   void initState() {
@@ -22,7 +25,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
   }
 
   Future<void> _launch() async {
-    setState(() { _busy = true; _error = null; });
+    setState(() { _busy = true; _failed = false; });
     try {
       final repo = context.read<AuthRepository>();
       final userId = await repo.userId();
@@ -34,7 +37,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
       debugPrint('[MicroCoaching] TrainingScreen: launch returned (user came back from SDK)');
     } catch (e) {
       debugPrint('[MicroCoaching] TrainingScreen: launch error=$e');
-      if (mounted) setState(() { _error = e.toString(); });
+      if (mounted) setState(() { _failed = true; });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -44,13 +47,13 @@ class _TrainingScreenState extends State<TrainingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: _error != null
+        child: _failed
             ? Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(_error!, textAlign: TextAlign.center),
+                  Text(TrainingStrings.loadFailedGeneric, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
-                  ElevatedButton(onPressed: _launch, child: const Text('Retry')),
+                  ElevatedButton(onPressed: _launch, child: Text(CommonStrings.retry)),
                 ],
               )
             : _busy ? const CircularProgressIndicator() : const SizedBox.shrink(),

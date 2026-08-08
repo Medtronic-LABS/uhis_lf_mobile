@@ -118,7 +118,7 @@ class _AgeOrDobFieldState extends State<AgeOrDobField> {
     // Member when years >= 1; under 1 year show months/days like enrollment.
     if (age.years >= 1) {
       _ageCtrl.text = age.years.toString();
-      _ageUnit = age.years == 1 ? 'year' : 'years';
+      _ageUnit = age.years == 1 ? EnrollmentStrings.ageUnitYear : EnrollmentStrings.ageUnitYears;
     } else {
       _ageCtrl.text = age.value.toString();
       _ageUnit = age.unit;
@@ -136,7 +136,7 @@ class _AgeOrDobFieldState extends State<AgeOrDobField> {
     _dob = EnrollmentDob.fromAgeYears(clamped);
     _dobCtrl.text = EnrollmentDob.display(_dob!);
     _ageCtrl.text = clamped.toString();
-    _ageUnit = clamped == 1 ? 'year' : 'years';
+    _ageUnit = clamped == 1 ? EnrollmentStrings.ageUnitYear : EnrollmentStrings.ageUnitYears;
     _syncing = false;
     if (mounted) setState(() {});
     if (emit) widget.onChanged(EnrollmentDob.wire(_dob!));

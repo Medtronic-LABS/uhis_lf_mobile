@@ -472,22 +472,22 @@ class _ScannerBody extends StatelessWidget {
                 children: [
                   const Icon(Icons.home_outlined, color: Colors.white, size: 18),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Create Household',
-                          style: TextStyle(
+                          EnrollmentStrings.createHousehold,
+                          style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          'Register a new household manually',
-                          style: TextStyle(fontSize: 10, color: AppColors.onDarkLow),
+                          EnrollmentStrings.entrySheetCreateHouseholdSubtitle,
+                          style: const TextStyle(fontSize: 10, color: AppColors.onDarkLow),
                         ),
                       ],
                     ),
@@ -513,31 +513,31 @@ class _ScannerBody extends StatelessWidget {
                   ),
                   borderRadius: BorderRadius.circular(AppRadius.patRow),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.link, color: Colors.white, size: 18),
-                    SizedBox(width: 10),
+                    const Icon(Icons.link, color: Colors.white, size: 18),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Add to Existing Household',
-                            style: TextStyle(
+                            EnrollmentStrings.entrySheetLinkExistingTitle,
+                            style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                             ),
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 2),
                           Text(
-                            'Link a new member to an existing household',
-                            style: TextStyle(fontSize: 10, color: AppColors.onDarkLow),
+                            EnrollmentStrings.entrySheetLinkExistingSubtitle,
+                            style: const TextStyle(fontSize: 10, color: AppColors.onDarkLow),
                           ),
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
+                    const Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
                   ],
                 ),
               ),
@@ -547,9 +547,9 @@ class _ScannerBody extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text('or', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.onDarkFaint)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(CommonStrings.or, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.onDarkFaint)),
               ),
               Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
             ],
@@ -568,27 +568,27 @@ class _ScannerBody extends StatelessWidget {
                   border: Border.all(color: Colors.white.withValues(alpha: 0.20), width: 1.5),
                   borderRadius: BorderRadius.circular(AppRadius.patRow),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.person_add_outlined, color: Colors.white, size: 18),
-                    SizedBox(width: 10),
+                    const Icon(Icons.person_add_outlined, color: Colors.white, size: 18),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'No NID? Register manually',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white),
+                            EnrollmentStrings.entrySheetRegisterManuallyTitle,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white),
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 2),
                           Text(
-                            'Fill in member details by hand',
-                            style: TextStyle(fontSize: 10, color: AppColors.onDarkLow),
+                            EnrollmentStrings.entrySheetRegisterManuallySubtitle,
+                            style: const TextStyle(fontSize: 10, color: AppColors.onDarkLow),
                           ),
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
+                    const Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
                   ],
                 ),
               ),
@@ -597,9 +597,9 @@ class _ScannerBody extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('or scan NID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.onDarkFaint)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(EnrollmentStrings.orScanNid, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.onDarkFaint)),
                 ),
                 Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
               ],
@@ -609,22 +609,22 @@ class _ScannerBody extends StatelessWidget {
           // ── Camera scanner (secondary) ─────────────────────────────────
           Text(
             readingCard
-                ? '🔍 Reading card details…'
+                ? EnrollmentStrings.nidReadingCardDetailsHeadline
                 : autoScanActive
-                ? '✦ Auto-scanning'
-                : 'Take a Photo of NID Card',
+                ? EnrollmentStrings.nidAutoScanningHeadline
+                : EnrollmentStrings.nidTakePhotoHeadline,
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
           Text(
             readingCard
-                ? 'Reading the NID number…'
+                ? EnrollmentStrings.nidReadingNumberSubtitle
                 : cameraUnavailable
-                ? 'Camera unavailable'
+                ? EnrollmentStrings.cameraUnavailableLabel
                 : autoScanActive
                 ? EnrollmentStrings.autoScanActive
-                : 'Position the card within the frame',
+                : EnrollmentStrings.positionCardSubtitle,
             style: const TextStyle(fontSize: 12, color: AppColors.onDarkLow),
             textAlign: TextAlign.center,
           ),
@@ -638,9 +638,9 @@ class _ScannerBody extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          const Text(
-            'Bangladesh National ID Card · Smart NID · Birth Registration',
-            style: TextStyle(fontSize: 11, color: AppColors.onDarkFaint),
+          Text(
+            EnrollmentStrings.nidScanCardTypesCaption,
+            style: const TextStyle(fontSize: 11, color: AppColors.onDarkFaint),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 18),
@@ -678,7 +678,7 @@ class _ScannerBody extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text('Tap to capture', style: TextStyle(fontSize: 11, color: AppColors.onDarkFaint)),
+          Text(EnrollmentStrings.tapToCapture, style: const TextStyle(fontSize: 11, color: AppColors.onDarkFaint)),
           const SizedBox(height: 20),
           // Cancel
           GestureDetector(
@@ -693,9 +693,9 @@ class _ScannerBody extends StatelessWidget {
                 border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
                 borderRadius: BorderRadius.circular(AppRadius.field),
               ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
+              child: Text(
+                EnrollmentStrings.cancel,
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
@@ -834,18 +834,18 @@ class _Viewfinder extends StatelessWidget {
                 ),
               // Scanning spinner
               if (isScanning)
-                const Center(
+                Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(
+                      const CircularProgressIndicator(
                         color: AppColors.tbBorder,
                         strokeWidth: 2.5,
                       ),
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
                       Text(
-                        'Scanning...',
-                        style: TextStyle(
+                        EnrollmentStrings.nidScanningLabel,
+                        style: const TextStyle(
                           color: AppColors.onDarkMid,
                           fontSize: 13,
                         ),
@@ -971,22 +971,22 @@ class _PostScanSheet extends StatelessWidget {
             const SizedBox(height: 14),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'NID card scanned',
-                        style: TextStyle(
+                        EnrollmentStrings.postScanSheetTitle,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
                           color: AppColors.navy,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        '✦ Details read on-device',
-                        style: TextStyle(
+                        EnrollmentStrings.detailsReadOnDeviceLabel,
+                        style: const TextStyle(
                           fontSize: 11,
                           color: AppColors.textMuted,
                         ),
@@ -1017,19 +1017,19 @@ class _PostScanSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _NidField(
-                    label: 'NAME',
-                    value: name ?? 'Not read — enter manually',
+                    label: EnrollmentStrings.nidFieldNameLabel,
+                    value: name ?? EnrollmentStrings.nidFieldNotReadValue,
                     dim: name == null,
                   ),
                   const _NidDivider(),
                   _NidField(
-                    label: 'DATE OF BIRTH',
-                    value: dob ?? 'Not read — enter manually',
+                    label: EnrollmentStrings.nidFieldDobLabel,
+                    value: dob ?? EnrollmentStrings.nidFieldNotReadValue,
                     dim: dob == null,
                   ),
                   const _NidDivider(),
                   _NidField(
-                    label: 'NID NUMBER',
+                    label: EnrollmentStrings.nidFieldNidLabel,
                     value: nid ?? '—',
                     emphasise: true,
                   ),
@@ -1101,20 +1101,19 @@ class _PostScanSheet extends StatelessWidget {
                 border: Border.all(color: AppColors.warningBorderAlt),
                 borderRadius: BorderRadius.circular(AppRadius.field),
               ),
-              child: const Row(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.info_outline,
                     size: 15,
                     color: AppColors.warningTextAlt,
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      "Father's & mother's names are printed in Bangla — "
-                      'please type them in.',
-                      style: TextStyle(
+                      EnrollmentStrings.banglaNamesHint,
+                      style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.warningTextAlt,
                       ),
@@ -1124,11 +1123,11 @@ class _PostScanSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-            const Align(
+            Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Link to household',
-                style: TextStyle(
+                EnrollmentStrings.linkToHouseholdLabel,
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
@@ -1138,8 +1137,8 @@ class _PostScanSheet extends StatelessWidget {
             const SizedBox(height: 10),
             _SheetOptionButton(
               icon: Icons.link_rounded,
-              title: 'Link to existing household',
-              subtitle: 'Search and select from your households',
+              title: EnrollmentStrings.postScanLinkOptionTitle,
+              subtitle: EnrollmentStrings.postScanLinkOptionSubtitle,
               bgColor: AppColors.cardSurfaceMuted,
               onTap: onLinkExisting,
             ),
@@ -1147,11 +1146,11 @@ class _PostScanSheet extends StatelessWidget {
             Row(
               children: [
                 const Expanded(child: Divider(color: AppColors.border)),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Text(
-                    'or',
-                    style: TextStyle(
+                    CommonStrings.or,
+                    style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textDisabled,
@@ -1164,8 +1163,8 @@ class _PostScanSheet extends StatelessWidget {
             const SizedBox(height: 10),
             _SheetOptionButton(
               icon: Icons.home_outlined,
-              title: 'Create new household',
-              subtitle: 'Register this member under a new household',
+              title: EnrollmentStrings.postScanCreateOptionTitle,
+              subtitle: EnrollmentStrings.postScanCreateOptionSubtitle,
               bgColor: Colors.white,
               bordered: true,
               onTap: onCreateNew,

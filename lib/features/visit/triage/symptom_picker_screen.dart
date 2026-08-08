@@ -1341,7 +1341,14 @@ class _AiBriefingSection extends StatelessWidget {
         GreetWarmlyCard(
           isFemale: isFemale,
           loading: briefingLoading,
-          isChild: patientContext.isUnder5,
+          // Deliberately not isYoungChild (RMNCH childhoodVisit, <25mo) —
+          // this card's "can't answer for themselves" rationale is a
+          // communication-capability concern for the whole under-5 band,
+          // not the narrower vaccination/IMCI service-eligibility gate.
+          // (main's own build-fix commit took the naive isYoungChild
+          // shortcut here — that's the wrong resolution, not a signal to
+          // revert this back on a future merge.)
+          isChild: patientContext.ageMonths < 60,
           selectedProgrammes: selectedProgrammes,
           gestationalWeeks: patientContext.gestationalWeeks,
           greeting: briefingData?.greeting,
@@ -1760,13 +1767,13 @@ class _BriefingFallbackContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
-            Icon(Icons.wifi_off, size: 12, color: AppColors.textMuted),
-            SizedBox(width: 4),
+            const Icon(Icons.wifi_off, size: 12, color: AppColors.textMuted),
+            const SizedBox(width: 4),
             Text(
-              'AI offline · local context',
-              style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+              SymptomPickerStrings.aiOfflineLocalContext,
+              style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
             ),
           ],
         ),
@@ -2763,7 +2770,10 @@ class _ServiceTile extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Text(def.emoji, style: const TextStyle(fontSize: 28)),
+                              Text(
+                                def.emoji,
+                                style: const TextStyle(fontSize: 28, height: 1.0),
+                              ),
                               const SizedBox(height: 6),
                               Text(
                                 label,
@@ -2773,11 +2783,12 @@ class _ServiceTile extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
+                                  height: 1.0,
                                   color: labelColor,
                                 ),
                               ),
                               if (subtitle != null) ...[
-                                const SizedBox(height: 2),
+                                const SizedBox(height: 1),
                                 Text(
                                   subtitle!,
                                   textAlign: TextAlign.center,
@@ -2786,6 +2797,7 @@ class _ServiceTile extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 8.5,
                                     fontWeight: FontWeight.w600,
+                                    height: 1.0,
                                     color: labelColor,
                                   ),
                                 ),

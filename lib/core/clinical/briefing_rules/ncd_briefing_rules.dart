@@ -11,6 +11,7 @@
 library;
 
 import '../assessment_thresholds.dart';
+import '../../constants/app_strings.dart';
 import 'clinical_finding.dart';
 
 List<ClinicalFinding> evaluateNcdFindings({
@@ -43,21 +44,21 @@ List<ClinicalFinding> evaluateNcdFindings({
   final findings = <ClinicalFinding>[];
 
   if (bpHigh && glucoseHigh) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'ncd.bpAndGlucoseCombined',
-      message: 'Both BP and blood sugar are above target — needs review today and planned follow-up.',
+      message: ClinicalFindingStrings.ncdBpAndGlucoseCombined,
       programme: 'ncd',
     ));
   } else if (bpHigh) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'ncd.bpAlone',
-      message: 'BP is above normal. Requires review and follow-up.',
+      message: ClinicalFindingStrings.ncdBpAboveNormal,
       programme: 'ncd',
     ));
   } else if (glucoseHigh) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'ncd.glucoseAlone',
-      message: 'Blood sugar is elevated. Requires review and follow-up.',
+      message: ClinicalFindingStrings.ncdBloodSugarElevated,
       programme: 'ncd',
     ));
   } else {
@@ -76,15 +77,15 @@ List<ClinicalFinding> evaluateNcdFindings({
         glucoseValue < prevGlucoseValue;
 
     if (bpTrendingDown || glucoseTrendingDown) {
-      findings.add(const ClinicalFinding(
+      findings.add(ClinicalFinding(
         code: 'ncd.trendingDown',
-        message: 'BP/sugar trending down — continue current plan.',
+        message: ClinicalFindingStrings.ncdTrendingDown,
         programme: 'ncd',
       ));
     } else {
-      findings.add(const ClinicalFinding(
+      findings.add(ClinicalFinding(
         code: 'ncd.withinTarget',
-        message: 'Vitals within target — continue current management.',
+        message: ClinicalFindingStrings.ncdWithinTarget,
         programme: 'ncd',
       ));
     }
@@ -95,9 +96,9 @@ List<ClinicalFinding> evaluateNcdFindings({
   // of the BP/glucose branch above, since poor adherence can co-occur with
   // any vitals state. ──
   if (symptomsLog?['compliance'] == 'No') {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'ncd.lowAdherence',
-      message: 'Medication adherence is low — confirm daily intake.',
+      message: ClinicalFindingStrings.ncdLowAdherence,
       programme: 'ncd',
     ));
   }

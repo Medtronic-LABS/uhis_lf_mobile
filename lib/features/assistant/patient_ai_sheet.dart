@@ -269,7 +269,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
         'memberId': c.memberId,
       });
     } else {
-      _snack(controller.error ?? 'Failed to start visit');
+      _snack(controller.error ?? PatientContextStrings.startVisitFailed);
     }
   }
 
@@ -330,12 +330,12 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
                     itemCount: _messages.length + (_loading ? 1 : 0),
                     itemBuilder: (context, i) {
                       if (i == _messages.length) {
-                        return const Padding(
-                          padding: EdgeInsets.all(12),
+                        return Padding(
+                          padding: const EdgeInsets.all(12),
                           child: Align(
                             alignment: Alignment.centerLeft,
-                            child: Text('✦ thinking…',
-                                style: TextStyle(fontStyle: FontStyle.italic)),
+                            child: Text(AssistantStrings.thinkingIndicator,
+                                style: const TextStyle(fontStyle: FontStyle.italic)),
                           ),
                         );
                       }

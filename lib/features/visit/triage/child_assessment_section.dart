@@ -629,15 +629,15 @@ class _ComplicationPicker extends StatelessWidget {
         Wrap(
           spacing: 7,
           runSpacing: 7,
-          children: ChildAssessmentStrings.complicationOptions.map((option) {
-            final active = selected.contains(option);
+          children: ChildAssessmentStrings.complicationOptionIds.map((id) {
+            final active = selected.contains(id);
             return GestureDetector(
               onTap: () {
                 final next = List<String>.from(selected);
                 if (active) {
-                  next.remove(option);
+                  next.remove(id);
                 } else {
-                  next.add(option);
+                  next.add(id);
                 }
                 onChanged(next);
               },
@@ -655,7 +655,7 @@ class _ComplicationPicker extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  option,
+                  ChildAssessmentStrings.complicationOptionLabel(id),
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
@@ -707,9 +707,9 @@ class _ReferralPlacePicker extends StatelessWidget {
         DropdownButtonFormField<String>(
           isExpanded: true,
           initialValue: value,
-          hint: const Text(
-            'Select…',
-            style: TextStyle(fontSize: 13, color: Color(0xFF9CA3AF)),
+          hint: Text(
+            ChildAssessmentStrings.q15Hint,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF9CA3AF)),
           ),
           onChanged: onChanged,
           decoration: InputDecoration(

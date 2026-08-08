@@ -8,6 +8,7 @@ library;
 import '../../../features/visit/forms/form_config.dart';
 import '../assessment_thresholds.dart';
 import '../referral_evaluator.dart';
+import '../../constants/app_strings.dart';
 import 'clinical_finding.dart';
 
 const _postpartumDangerSignsFieldId = 'postpartumDangerSigns';
@@ -41,7 +42,7 @@ List<ClinicalFinding> evaluatePncFindings({
   for (final code in codedSigns) {
     findings.add(ClinicalFinding(
       code: 'pnc.dangerSign',
-      message: 'Danger sign reported: ${_resolveOptionLabel(code)}.',
+      message: ClinicalFindingStrings.dangerSignReported(_resolveOptionLabel(code)),
       programme: 'pnc',
     ));
   }
@@ -50,7 +51,7 @@ List<ClinicalFinding> evaluatePncFindings({
       if (maternal?[fieldId] == true || maternal?[fieldId] == 'Yes') {
         findings.add(ClinicalFinding(
           code: 'pnc.dangerSign',
-          message: 'Danger sign reported: ${_titleCase(fieldId)}.',
+          message: ClinicalFindingStrings.dangerSignReported(_titleCase(fieldId)),
           programme: 'pnc',
         ));
       }
@@ -64,24 +65,24 @@ List<ClinicalFinding> evaluatePncFindings({
   final temperatureF = _num(maternal?['temperature']);
 
   if (temperatureF != null && temperatureF >= tempHighFeverF) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'pnc.urgentTemperature',
-      message: 'Temperature is above normal (≥102°F). Needs urgent attention.',
+      message: ClinicalFindingStrings.pncUrgentTemperature,
       programme: 'pnc',
     ));
   }
   if (pulse != null && (pulse > pulseHigh || pulse < pulseLow)) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'pnc.urgentPulse',
-      message: 'Pulse is abnormal (outside 60–90 bpm). Needs urgent attention.',
+      message: ClinicalFindingStrings.pncUrgentPulse,
       programme: 'pnc',
     ));
   }
   if ((systolic != null && systolic >= bpHighSystolic) ||
       (diastolic != null && diastolic >= bpHighDiastolic)) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'pnc.urgentBp',
-      message: 'BP is above normal (≥140/90). Needs urgent attention.',
+      message: ClinicalFindingStrings.pncUrgentBp,
       programme: 'pnc',
     ));
   }
@@ -89,9 +90,9 @@ List<ClinicalFinding> evaluatePncFindings({
   // ── Hb < 8 ──
   final hb = _num(maternal?['hemoglobin']);
   if (hb != null && hb < hbSevereAnaemia) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'pnc.severeAnaemia',
-      message: 'Severe anemia.',
+      message: ClinicalFindingStrings.pncSevereAnemia,
       programme: 'pnc',
     ));
   }
@@ -107,27 +108,27 @@ List<ClinicalFinding> evaluatePncFindings({
   for (final gap in gaps.gaps) {
     if (gap.contains('No contraception') ||
         gap.contains('postpartum contraception')) {
-      findings.add(const ClinicalFinding(
+      findings.add(ClinicalFinding(
         code: 'pnc.noContraception',
-        message: 'No contraception method in use — counsel on options.',
+        message: ClinicalFindingStrings.pncNoContraception,
         programme: 'pnc',
       ));
     } else if (gap.contains('Vitamin A')) {
-      findings.add(const ClinicalFinding(
+      findings.add(ClinicalFinding(
         code: 'pnc.supplementGapVitaminA',
-        message: 'Supplement gap — Vitamin A not on track.',
+        message: ClinicalFindingStrings.pncSupplementGapVitaminA,
         programme: 'pnc',
       ));
     } else if (gap.contains('IFA')) {
-      findings.add(const ClinicalFinding(
+      findings.add(ClinicalFinding(
         code: 'pnc.supplementGapIfa',
-        message: 'Supplement gap — Iron-folic acid not on track.',
+        message: ClinicalFindingStrings.pncSupplementGapIfa,
         programme: 'pnc',
       ));
     } else if (gap.contains('Calcium')) {
-      findings.add(const ClinicalFinding(
+      findings.add(ClinicalFinding(
         code: 'pnc.supplementGapCalcium',
-        message: 'Supplement gap — Calcium not on track.',
+        message: ClinicalFindingStrings.pncSupplementGapCalcium,
         programme: 'pnc',
       ));
     }
@@ -137,16 +138,16 @@ List<ClinicalFinding> evaluatePncFindings({
   if (overdueDaysOverdue != null) {
     findings.add(ClinicalFinding(
       code: 'pnc.overdueVisit',
-      message: 'PNC Visit ${pncVisitCount + 1} is overdue by $overdueDaysOverdue days.',
+      message: ClinicalFindingStrings.pncOverdueVisit(pncVisitCount + 1, overdueDaysOverdue),
       programme: 'pnc',
     ));
   }
 
   // ── Routine fallback ──
   if (findings.isEmpty) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'pnc.routine',
-      message: 'Recovering well — no concerns at this PNC visit.',
+      message: ClinicalFindingStrings.pncRoutine,
       programme: 'pnc',
     ));
   }

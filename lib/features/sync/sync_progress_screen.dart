@@ -512,7 +512,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
   Widget _buildCompletionSummaryWidget(ColorScheme scheme, TextTheme textTheme) {
     if (_report == null) {
       return Text(
-        'Your data is ready',
+        SyncStrings.dataReady,
         style: textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
         textAlign: TextAlign.center,
       );
@@ -552,7 +552,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
 
     if (items.isEmpty) {
       return Text(
-        'Your data is ready',
+        SyncStrings.dataReady,
         style: textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
         textAlign: TextAlign.center,
       );

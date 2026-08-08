@@ -1,3 +1,5 @@
+import '../constants/app_strings.dart';
+
 /// Progress state for the initial data sync screen.
 ///
 /// Used by [SyncProgressScreen] to render step-by-step progress with
@@ -77,17 +79,17 @@ extension SyncStepX on SyncStep {
   String get label {
     switch (this) {
       case SyncStep.connecting:
-        return 'Connecting to server';
+        return SyncStrings.connectingToServer;
       case SyncStep.fetchingPatients:
-        return 'Downloading patients';
+        return SyncStrings.downloadingPatients;
       case SyncStep.fetchingFollowUps:
-        return 'Downloading follow-ups';
+        return SyncStrings.downloadingFollowUps;
       case SyncStep.fetchingReferrals:
-        return 'Downloading referrals';
+        return SyncStrings.downloadingReferrals;
       case SyncStep.processingData:
-        return 'Processing data';
+        return SyncStrings.processingData;
       case SyncStep.done:
-        return 'Ready';
+        return SyncStrings.readyStatus;
     }
   }
 

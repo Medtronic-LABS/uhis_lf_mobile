@@ -786,7 +786,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       child: Scaffold(
         backgroundColor: AppColors.canvas,
         bottomNavigationBar: EnrollmentStickyBar(
-          label: 'Add Member',
+          label: HouseholdDetailStrings.addMember,
           onPressed: _addMember,
         ),
         body: SafeArea(

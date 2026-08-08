@@ -526,7 +526,7 @@ class _VisitedBadge extends StatelessWidget {
           Icon(Icons.check_circle, size: 11, color: tokens.statusSuccess),
           const SizedBox(width: 3),
           Text(
-            'Visited',
+            MissionDashboardStrings.visitedBadge,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
