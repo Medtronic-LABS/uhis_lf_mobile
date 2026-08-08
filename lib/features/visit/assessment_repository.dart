@@ -706,6 +706,95 @@ class AssessmentRepository extends ChangeNotifier {
     return out;
   }
 
+  /// Latest ANC visit date + scheduled next-visit date for Eligible Services /
+  /// revisit lock. Prefers the chronologically newest ANC row across local
+  /// assessments and synced history. [nextDueAt] comes from summary /
+  /// `nextVisitDate` / `nextFollowUpDate` when present (null if not stamped).
+  Future<({DateTime lastVisitAt, DateTime? nextDueAt})?> latestAncVisitSchedule(
+    String patientId, {
+    String? alsoId,
+  }) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return null;
+
+    DateTime? bestVisit;
+    DateTime? bestNextDue;
+
+    void consider(DateTime visitAt, DateTime? nextDue) {
+      if (bestVisit == null || visitAt.isAfter(bestVisit!)) {
+        bestVisit = visitAt;
+        bestNextDue = nextDue;
+        return;
+      }
+      // Same visit moment: keep a stamped next-due if the earlier pick lacked one.
+      if (bestVisit != null &&
+          !visitAt.isBefore(bestVisit!) &&
+          !visitAt.isAfter(bestVisit!) &&
+          bestNextDue == null &&
+          nextDue != null) {
+        bestNextDue = nextDue;
+      }
+    }
+
+    for (final row in await _localRows(ids)) {
+      if (!_isAncVisitKind(row.assessmentType.toUpperCase())) continue;
+      final visitAt = row.createdAt;
+      if (visitAt == null) continue;
+      consider(visitAt, _nextVisitFromOtherDetails(row.otherDetails));
+    }
+
+    for (final row in await _historyRows(ids)) {
+      final kind = row.kind?.toUpperCase() ?? '';
+      if (!_isAncVisitKind(kind)) continue;
+      final occurred = row.occurredAt;
+      if (occurred == null) continue;
+      consider(
+        DateTime.fromMillisecondsSinceEpoch(occurred),
+        _nextVisitFromHistoryRaw(row.rawJson),
+      );
+    }
+
+    final visit = bestVisit;
+    if (visit == null) return null;
+    return (lastVisitAt: visit, nextDueAt: bestNextDue);
+  }
+
+  static DateTime? _nextVisitFromOtherDetails(String? otherDetails) {
+    if (otherDetails == null || otherDetails.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(otherDetails);
+      if (decoded is! Map) return null;
+      return _nextVisitFromMap(Map<String, dynamic>.from(decoded));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static DateTime? _nextVisitFromHistoryRaw(String rawJson) {
+    if (rawJson.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(rawJson);
+      if (decoded is! Map) return null;
+      final map = Map<String, dynamic>.from(decoded);
+      final top = _nextVisitFromMap(map);
+      if (top != null) return top;
+      final summary = map['summary'];
+      if (summary is Map) {
+        return _nextVisitFromMap(Map<String, dynamic>.from(summary));
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static DateTime? _nextVisitFromMap(Map<String, dynamic> map) =>
+      JsonRead.firstDateTime(map, const [
+        'nextVisitDate',
+        'nextFollowUpDate',
+        'dueDate',
+      ]);
+
   /// Number of ANC visits already recorded for [patientId], across this
   /// device's rows and synced history.
   ///

@@ -1310,6 +1310,8 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
       priorVisits: widget.priorVisits,
       today: today,
     );
+    // Hide until ≥1 metric qualifies (3 readings + rising ≥5 / urine Present).
+    if (!result.show) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),

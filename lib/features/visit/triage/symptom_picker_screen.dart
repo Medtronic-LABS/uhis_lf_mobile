@@ -24,10 +24,12 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import '../../../core/time/calendar_day.dart';
 import '../../patient/followup_repository.dart';
 import '../../patient/vitals_repository.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/widgets/ai_scribe_banner.dart';
+import '../assessment_repository.dart';
 import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
@@ -123,6 +125,7 @@ class _AncRevisitStatus {
   const _AncRevisitStatus({
     required this.tooSoon,
     this.lastVisitMs,
+    this.nextDueMs,
     this.highRisk = false,
     this.revisitDays,
   });
@@ -134,6 +137,10 @@ class _AncRevisitStatus {
 
   /// Epoch ms of the last ANC visit, when known.
   final int? lastVisitMs;
+
+  /// Epoch ms of next ANC due — from latest assessment `nextVisitDate` when
+  /// stamped, otherwise computed as last visit + [revisitDays].
+  final int? nextDueMs;
 
   /// Whether that last visit was flagged high-risk.
   final bool highRisk;
@@ -874,34 +881,54 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     required bool fallbackTooSoon,
   }) async {
     try {
+      // Prefer latest ANC assessment (local + synced history) for last visit
+      // and stamped nextVisitDate — same source as Care History / summary.
+      final schedule = await context
+          .read<AssessmentRepository>()
+          .latestAncVisitSchedule(patientId, alsoId: widget.memberId);
+
       final snapshots = context.read<PregnancySnapshotDao>();
       final snapshot = await snapshots.byPatientOrMember(
         patientId,
         memberId: widget.memberId,
       );
-      final lastVisitMs = snapshot?.lastAncVisitDateMs;
+      final lastVisitMs = schedule?.lastVisitAt.millisecondsSinceEpoch ??
+          snapshot?.lastAncVisitDateMs;
       if (lastVisitMs == null) {
         debugPrint(
           '[AncRevisitDebug] READ patientId=$patientId memberId=${widget.memberId} '
-          'snapshotFound=${snapshot != null} lastAncVisitDateMs=null '
-          '→ fallbackTooSoon=$fallbackTooSoon',
+          'scheduleFound=${schedule != null} snapshotFound=${snapshot != null} '
+          'lastAncVisitDateMs=null → fallbackTooSoon=$fallbackTooSoon',
         );
         return _AncRevisitStatus(tooSoon: fallbackTooSoon);
       }
-      final daysSince = DateTime.now()
-          .difference(DateTime.fromMillisecondsSinceEpoch(lastVisitMs))
-          .inDays;
       final highRisk = snapshot?.facts.highRiskPregnantWoman ?? false;
       final revisitDays = highRisk ? 1 : 15;
-      final tooSoon = daysSince < revisitDays;
+      final stampedNext = schedule?.nextDueAt;
+      final int nextDueMs;
+      final bool tooSoon;
+      if (stampedNext != null) {
+        nextDueMs = CalendarDay.startOf(stampedNext).millisecondsSinceEpoch;
+        // Locked until the calendar due day arrives (daysToDue > 0).
+        tooSoon = CalendarDay.daysBetween(DateTime.now(), stampedNext) > 0;
+      } else {
+        nextDueMs =
+            lastVisitMs + Duration(days: revisitDays).inMilliseconds;
+        final daysSince = DateTime.now()
+            .difference(DateTime.fromMillisecondsSinceEpoch(lastVisitMs))
+            .inDays;
+        tooSoon = daysSince < revisitDays;
+      }
       debugPrint(
         '[AncRevisitDebug] READ patientId=$patientId memberId=${widget.memberId} '
-        'lastAncVisitDateMs=$lastVisitMs daysSince=$daysSince highRisk=$highRisk '
+        'lastVisitMs=$lastVisitMs nextDueMs=$nextDueMs '
+        'stampedNext=${stampedNext != null} highRisk=$highRisk '
         'revisitDays=$revisitDays → tooSoon=$tooSoon',
       );
       return _AncRevisitStatus(
         tooSoon: tooSoon,
         lastVisitMs: lastVisitMs,
+        nextDueMs: nextDueMs,
         highRisk: highRisk,
         revisitDays: revisitDays,
       );
@@ -2630,7 +2657,8 @@ class _InlineServiceSelector extends StatelessWidget {
       return TriageStrings.ancRevisitMessageHighRisk(lastVisit: lastVisitStr);
     }
     final revisitDays = status.revisitDays ?? 15;
-    final nextDueMs = lastVisitMs + Duration(days: revisitDays).inMilliseconds;
+    final nextDueMs = status.nextDueMs ??
+        lastVisitMs + Duration(days: revisitDays).inMilliseconds;
     return TriageStrings.ancRevisitMessageNormal(
       lastVisit: lastVisitStr,
       nextDue: fmt.format(DateTime.fromMillisecondsSinceEpoch(nextDueMs)),
