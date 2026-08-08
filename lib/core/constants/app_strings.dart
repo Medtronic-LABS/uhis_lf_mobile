@@ -1615,12 +1615,12 @@ abstract final class MissionDashboardStrings {
   static String get statusPillThisWeek => getTranslatedString('statusPillThisWeek', 'This week');
   static String get statusPillRoutine => getTranslatedString('statusPillRoutine', 'Routine');
 
+  /// Status pill copy for a **schedule** tier ([DashboardTier.fromDueAt]).
+  /// Home cards pass the date tier only — clinical risk must not change this.
   static String statusPillForTier(DashboardTier tier) {
     switch (tier) {
       case DashboardTier.critical:
-        // Folds into "Overdue" (red) rather than "Today" — only 3 status
-        // labels (Today/This week/Overdue) are meant to reach the SK, and
-        // critical is more urgent than a plain date-driven "Today".
+        // Defensive: schedule mapping never yields critical; keep Overdue.
         return statusPillOverdue;
       case DashboardTier.overdue:
         return statusPillOverdue;

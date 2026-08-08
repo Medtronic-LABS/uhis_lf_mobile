@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/core/constants/app_strings.dart';
 import 'package:uhis_next/core/models/dashboard_tier.dart';
 
 void main() {
@@ -10,6 +11,53 @@ void main() {
       expect(DashboardTier.fromDueAt(due, now: now), DashboardTier.thisWeek);
       // Wall-clock trap still exists — helper must not use it.
       expect(due.difference(now).inDays, 0);
+    });
+
+    test('schedule bands for status pill (date only)', () {
+      // < -2 → overdue
+      expect(
+        DashboardTier.fromDueAt(DateTime(2026, 7, 11), now: now),
+        DashboardTier.overdue,
+      );
+      // -2..0 → dueToday
+      expect(
+        DashboardTier.fromDueAt(DateTime(2026, 7, 12), now: now),
+        DashboardTier.dueToday,
+      );
+      expect(
+        DashboardTier.fromDueAt(DateTime(2026, 7, 14), now: now),
+        DashboardTier.dueToday,
+      );
+      // 1..7 → thisWeek
+      expect(
+        DashboardTier.fromDueAt(DateTime(2026, 7, 15), now: now),
+        DashboardTier.thisWeek,
+      );
+      // > 7 → upcoming / Routine
+      expect(
+        DashboardTier.fromDueAt(DateTime(2026, 7, 22), now: now),
+        DashboardTier.upcoming,
+      );
+      expect(DashboardTier.fromDueAt(null, now: now), DashboardTier.upcoming);
+    });
+
+    test('pill labels follow schedule tier (not clinical critical)', () {
+      expect(
+        MissionDashboardStrings.statusPillForTier(DashboardTier.overdue),
+        MissionDashboardStrings.statusPillOverdue,
+      );
+      expect(
+        MissionDashboardStrings.statusPillForTier(DashboardTier.dueToday),
+        MissionDashboardStrings.statusPillToday,
+      );
+      expect(
+        MissionDashboardStrings.statusPillForTier(DashboardTier.thisWeek),
+        MissionDashboardStrings.statusPillThisWeek,
+      );
+      expect(
+        MissionDashboardStrings.statusPillForTier(DashboardTier.upcoming),
+        MissionDashboardStrings.statusPillRoutine,
+      );
     });
 
     test('due in 1..7 maps to thisWeek', () {

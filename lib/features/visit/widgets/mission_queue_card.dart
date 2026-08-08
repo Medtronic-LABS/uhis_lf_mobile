@@ -56,9 +56,16 @@ class MissionQueueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final urgency = Theme.of(context).extension<UrgencyTheme>()!;
+    // Pill is calendar-only (dueAt → Overdue / Today / This week / Routine).
+    // Clinical risk drivers still live on [item.tier] for sort / filters /
+    // AI insight — they must not change the status pill.
     final (dotLabel, dotColor) = isCompleted
         ? ('Done', tokens.statusSuccess)
-        : _statusDotStyle(item.tier, tokens, urgency);
+        : _statusDotStyle(
+            DashboardTier.fromDueAt(item.dueAt),
+            tokens,
+            urgency,
+          );
 
     return Opacity(
       opacity: isCompleted ? 0.6 : 1.0,
@@ -241,25 +248,19 @@ class MissionQueueCard extends StatelessWidget {
     UrgencyTheme urgency,
   ) {
     final label = MissionDashboardStrings.statusPillForTier(tier);
-    // Only 3 colors are meant to ever reach the SK: green "Today", amber
-    // "This week", red "Overdue". `critical` folds into "Overdue" (most
-    // urgent tier gets the strongest label+color, see statusPillForTier);
-    // `upcoming` is filtered out before reaching this widget on the Home
-    // dashboard and household screens (see mission_dashboard_screen.dart /
-    // household_list_screen.dart / household_detail_screen.dart) — the
-    // grey "Routine" case below only remains reachable on the Tasks screen,
-    // which still shows upcoming items unfiltered.
+    // Date-driven colors: red Overdue / green Today / amber This week /
+    // grey Routine. [tier] here is from [DashboardTier.fromDueAt], not the
+    // clinical-promoted [MissionQueueItem.tier].
     switch (tier) {
       case DashboardTier.critical:
-        return (label, tokens.statusCritical);   // red   — "Overdue"
       case DashboardTier.overdue:
-        return (label, tokens.statusCritical);   // red   — "Overdue"
+        return (label, tokens.statusCritical); // red — "Overdue"
       case DashboardTier.dueToday:
-        return (label, tokens.statusSuccess);    // green — "Today"
+        return (label, tokens.statusSuccess); // green — "Today"
       case DashboardTier.thisWeek:
-        return (label, tokens.statusWarning);    // amber — "This week"
+        return (label, tokens.statusWarning); // amber — "This week"
       case DashboardTier.upcoming:
-        return (label, urgency.routine);         // grey  — "Routine" (Tasks screen only)
+        return (label, urgency.routine); // grey — "Routine"
     }
   }
 }

@@ -1249,11 +1249,11 @@
   },
   "Epi.screenTitle": {
     "bn": "টিকাদান",
-    "en": "Vaccination"
+    "en": "Vaccination visit"
   },
   "Epi.vaccinationCta": {
     "bn": "টিকাদান",
-    "en": "Vaccination"
+    "en": "Vaccination visit"
   },
   "EpiVisitReco.allVaccinesUpToDate": {
     "bn": "এই ভিজিটের জন্য নির্ধারিত সকল টিকা হালনাগাদ রয়েছে।",

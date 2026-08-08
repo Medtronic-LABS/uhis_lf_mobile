@@ -1306,19 +1306,7 @@ class _PatientContextScreenState
                     const SizedBox(height: 10),
 
                     // ── Active care threads ───────────────────────────────
-                    _CareThreadChipRow(
-                      threads: threads,
-                      onEdit: () => context.push(
-                        '/patients/${widget.patientId}/enroll',
-                        extra: <String, dynamic>{
-                          'patientName': data.name,
-                          'patientAge': data.age,
-                          'patientGender': data.gender,
-                          'villageName': data.villageName,
-                          'existingProgrammes': data.programmes,
-                        },
-                      ),
-                    ),
+                    _CareThreadChipRow(threads: threads),
                     const SizedBox(height: 12),
 
                     // ── Pregnancy LMP/EDD card (active pregnancy only) ────
@@ -1411,6 +1399,7 @@ class _TimelineEntry {
     this.isPending = false,
     this.programme,
     this.source,
+    this.sources,
   });
 
   final String emoji;
@@ -1428,6 +1417,16 @@ class _TimelineEntry {
   /// Original assessment for tap-to-detail; null for synthetic entries.
   final MemberAssessment? source;
 
+  /// All assessments folded into this visit-day row (same calendar day).
+  /// When null/empty, [source] alone is used.
+  final List<MemberAssessment>? sources;
+
+  List<MemberAssessment> get tapSources {
+    if (sources != null && sources!.isNotEmpty) return sources!;
+    if (source != null) return [source!];
+    return const [];
+  }
+
   _TimelineEntry copyWith({String? title}) => _TimelineEntry(
         emoji: emoji,
         title: title ?? this.title,
@@ -1442,6 +1441,7 @@ class _TimelineEntry {
         isPending: isPending,
         programme: programme,
         source: source,
+        sources: sources,
       );
 }
 
@@ -2124,6 +2124,10 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
         Programme.fromString(a.type) == Programme.pnc &&
         !_isPregnancyOutcomeType(a.type),
   );
+  // CHILD_IMMUNIZATION / EPI rows — visit N by visitDate (oldest = 1).
+  final epiOrdinal = ordinalsFor(
+    (a) => Programme.fromString(a.type) == Programme.epi,
+  );
 
   // data.assessments is newest-first. Find the most recent assessment with
   // a referral status so only that entry shows the referral badge + narrative.
@@ -2152,10 +2156,22 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       entries.add(entry.copyWith(title: 'ANC Visit ${ancOrdinal[a.id]}'));
     } else if (entry.title == 'PNC Visit' && pncOrdinal[a.id] != null) {
       entries.add(entry.copyWith(title: 'PNC Visit ${pncOrdinal[a.id]}'));
+    } else if (entry.title == 'Vaccination visit' &&
+        epiOrdinal[a.id] != null) {
+      entries.add(
+        entry.copyWith(title: 'Vaccination visit ${epiOrdinal[a.id]}'),
+      );
     } else {
       entries.add(entry);
     }
   }
+
+  // One Care History row per calendar visit day — ANC+NCD(+…) same day
+  // collapse into a single visit card (titles joined).
+  final grouped = _groupTimelineEntriesByVisitDay(entries);
+  entries
+    ..clear()
+    ..addAll(grouped);
 
   // Registration milestone — pinned at bottom (oldest event in the patient's history).
   if (data.enrolledAt != null) {
@@ -2182,6 +2198,75 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
 int _timelineDayKey(DateTime d) {
   final l = d.toLocal();
   return l.year * 10000 + l.month * 100 + l.day;
+}
+
+/// Collapse assessment rows that share a calendar day into one visit card.
+/// Synthetic rows (pending / no [source]) are left untouched.
+List<_TimelineEntry> _groupTimelineEntriesByVisitDay(
+  List<_TimelineEntry> entries,
+) {
+  final passthrough = <_TimelineEntry>[];
+  final byDay = <int, List<_TimelineEntry>>{};
+  for (final e in entries) {
+    if (e.source == null || e.isPending) {
+      passthrough.add(e);
+      continue;
+    }
+    byDay.putIfAbsent(_timelineDayKey(e.date), () => []).add(e);
+  }
+
+  final grouped = <_TimelineEntry>[
+    for (final dayEntries in byDay.values)
+      if (dayEntries.length == 1)
+        dayEntries.first
+      else
+        _mergeVisitDayEntries(dayEntries),
+  ];
+  return [...passthrough, ...grouped];
+}
+
+/// Merge same-day assessment cards into one row (title = "A · B · C").
+_TimelineEntry _mergeVisitDayEntries(List<_TimelineEntry> dayEntries) {
+  final ordered = _sortTimelineDay(List<_TimelineEntry>.from(dayEntries));
+  // Prefer a referred / on-treatment row as the tap primary when present.
+  final primary = ordered.firstWhere(
+    (e) =>
+        (e.badge ?? '').toLowerCase() == 'referred' ||
+        (e.badge ?? '').toLowerCase() == 'on treatment',
+    orElse: () => ordered.first,
+  );
+  final titles = <String>[];
+  for (final e in ordered) {
+    if (e.title.isNotEmpty && !titles.contains(e.title)) titles.add(e.title);
+  }
+  final descriptions = ordered
+      .map((e) => e.description?.trim())
+      .whereType<String>()
+      .where((d) => d.isNotEmpty)
+      .toList();
+  final sources = ordered
+      .map((e) => e.source)
+      .whereType<MemberAssessment>()
+      .toList();
+  final newest = ordered
+      .map((e) => e.date)
+      .reduce((a, b) => a.isAfter(b) ? a : b);
+
+  return _TimelineEntry(
+    emoji: primary.emoji,
+    title: titles.join(' · '),
+    relativeDate: _relativeDate(newest),
+    category: titles.length > 1 ? 'Visit' : primary.category,
+    date: newest,
+    dotColor: primary.dotColor,
+    description: descriptions.isEmpty ? null : descriptions.join(' · '),
+    badge: primary.badge,
+    badgeColor: primary.badgeColor,
+    badgeFgColor: primary.badgeFgColor,
+    programme: primary.programme,
+    source: primary.source,
+    sources: sources,
+  );
 }
 
 /// Care-flow buckets for same-day ordering (not a global programme ranking).
@@ -2628,13 +2713,11 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
 // ─── Care Thread Chip Row ──────────────────────────────────────────────────
 
 /// Wrapping row of thread chips — one pill per active clinical pathway.
-/// The chips themselves are display-only; an optional [onEdit] renders a
-/// trailing "+ Edit" action that opens ProgrammeEnrollScreen.
+/// Display-only; programme edits are not offered from this row.
 class _CareThreadChipRow extends StatelessWidget {
-  const _CareThreadChipRow({required this.threads, this.onEdit});
+  const _CareThreadChipRow({required this.threads});
 
   final List<_CareThread> threads;
-  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -2644,33 +2727,14 @@ class _CareThreadChipRow extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  PatientProfileStrings.activeCareThreads,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMid,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-              if (onEdit != null)
-                GestureDetector(
-                  key: const Key('patient_context_edit_programmes'),
-                  onTap: onEdit,
-                  child: Text(
-                    PatientProfileStrings.editProgrammesCta,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                ),
-            ],
+          child: Text(
+            PatientProfileStrings.activeCareThreads,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textMid,
+              letterSpacing: 0.2,
+            ),
           ),
         ),
         Wrap(
@@ -4141,15 +4205,16 @@ class _TimelineEntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPending = entry.isPending;
+    final tapSources = entry.tapSources;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: entry.source != null
-          ? () => _TimelineEventSheet.show(
+      onTap: tapSources.isEmpty
+          ? null
+          : () => _openVisitDayDetail(
                 context,
-                entry.source!,
+                entry: entry,
                 pregnancySnapshot: pregnancySnapshot,
-              )
-          : null,
+              ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -4191,7 +4256,7 @@ class _TimelineEntryCard extends StatelessWidget {
                   color: AppColors.textMuted,
                 ),
               ),
-              if (entry.source != null) ...[
+              if (tapSources.isNotEmpty) ...[
                 const SizedBox(width: 2),
                 Icon(
                   Icons.chevron_right_rounded,
@@ -4327,6 +4392,72 @@ class _TimelineShimmer extends StatelessWidget {
       )),
     );
   }
+}
+
+/// Opens assessment detail for a Care History row. Same-day multi-programme
+/// visits prompt which assessment to open; a single source opens directly.
+Future<void> _openVisitDayDetail(
+  BuildContext context, {
+  required _TimelineEntry entry,
+  PregnancySnapshotRow? pregnancySnapshot,
+}) async {
+  final sources = entry.tapSources;
+  if (sources.isEmpty) return;
+  if (sources.length == 1) {
+    _TimelineEventSheet.show(
+      context,
+      sources.first,
+      pregnancySnapshot: pregnancySnapshot,
+    );
+    return;
+  }
+
+  // Pair each assessment with the matching segment of the joined title.
+  final titleParts = entry.title.split(' · ');
+  final chosen = await showModalBottomSheet<MemberAssessment>(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Text(
+              'Assessments this visit',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          for (var i = 0; i < sources.length; i++)
+            ListTile(
+              title: Text(
+                i < titleParts.length ? titleParts[i] : sources[i].type,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+              onTap: () => Navigator.of(ctx).pop(sources[i]),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+  if (chosen == null || !context.mounted) return;
+  _TimelineEventSheet.show(
+    context,
+    chosen,
+    pregnancySnapshot: pregnancySnapshot,
+  );
 }
 
 // ─── Timeline Event Sheet ──────────────────────────────────────────────────

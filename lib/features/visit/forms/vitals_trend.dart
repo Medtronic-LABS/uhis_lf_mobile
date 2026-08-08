@@ -1,18 +1,22 @@
-
 /// Pure-Dart rule-based trend detection across a patient's ANC visits.
 ///
 /// No Flutter dependencies and no user-facing strings — this is the business
-/// logic behind the "AI sees a trend across her N visits" card.  The rule is
-/// intentionally simple and explainable (no ML): a metric is *rising* when its
-/// values are non-decreasing across the visit sequence and strictly higher at
-/// the latest reading than at the earliest.  The card surfaces whenever blood
-/// pressure (systolic OR diastolic) is rising, so the SK sees a multi-visit
-/// climb even when no single reading has yet crossed an alert threshold.
+/// logic behind the "AI sees a trend across her N visits" card. Rules (no ML):
+///
+/// - Window = last **2** prior ANC visits + **today** (3 columns max).
+/// - Systolic / diastolic / weight: show only with **3** readings and a rise
+///   of **≥ 5** on **each** consecutive step (weight uses the same 5 kg rule).
+/// - Urine protein (form field Urinary Albumin): show only with **3** captured
+///   grades and **≥ 1 Present** (Trace / Absent alone do not open the row).
+/// - Card shows only when at least one metric row qualifies.
 ///
 /// All display formatting (column titles, urine-grade labels, footer copy)
 /// lives in the widget layer via `UnifiedFormStrings`; this file only compares
 /// numbers and returns booleans + raw values.
 library;
+
+/// Minimum step size (mmHg or kg) required between consecutive numeric readings.
+const double kVitalsTrendMinStep = 5;
 
 /// One visit's snapshot of the four tracked ANC vitals.
 ///
@@ -34,6 +38,7 @@ class VisitVitals {
 
   /// Raw urine-protein grade as captured (e.g. `Absent` / `Trace` / `Present`);
   /// normalised for comparison by the analyzer.  `null` when not captured.
+  /// Maps from form field Urinary Albumin.
   final String? urineProtein;
 
   bool get isEmpty =>
@@ -61,7 +66,7 @@ class VitalMetricTrend {
   /// means the reading was not captured that visit.  The widget formats them.
   final List<num?> values;
 
-  /// True when this metric is climbing across the sequence.
+  /// True when this metric qualified as a trend signal for the card.
   final bool rising;
 }
 
@@ -78,7 +83,7 @@ class VitalsTrendColumn {
   final int? daysAgo;
 }
 
-/// The full analysed trend: columns + one row per metric that has data.
+/// The full analysed trend: columns + one row per **qualifying** metric.
 class VitalsTrendResult {
   const VitalsTrendResult({
     required this.columns,
@@ -87,15 +92,17 @@ class VitalsTrendResult {
   });
 
   final List<VitalsTrendColumn> columns;
+
+  /// Only metrics that meet the show rules (never placeholder / flat rows).
   final List<VitalMetricTrend> metrics;
 
-  /// True when the card should be shown (BP rising across ≥2 data points).
+  /// True when the card should be shown (at least one qualifying metric).
   final bool show;
 
   static const empty = VitalsTrendResult(columns: [], metrics: [], show: false);
 }
 
-/// Ordinal ranking for urine-protein grades so they can be compared.
+/// Ordinal ranking for urine-protein grades so they can be displayed.
 /// Returns `null` for unrecognised / missing grades.
 int? urineProteinRank(String? grade) {
   switch (grade?.toLowerCase().trim()) {
@@ -118,29 +125,43 @@ int? urineProteinRank(String? grade) {
   }
 }
 
+/// True when [grade] is Urinary Albumin / urine protein **Present**
+/// (Trace and Absent do not count).
+bool isUrineProteinPresent(String? grade) {
+  switch (grade?.toLowerCase().trim()) {
+    case 'present':
+    case 'positive':
+    case 'pos':
+    case '+':
+    case '++':
+    case '+++':
+      return true;
+    default:
+      return false;
+  }
+}
+
 /// Stateless rule engine that turns a visit sequence into a [VitalsTrendResult].
 abstract final class VitalsTrendAnalyzer {
   VitalsTrendAnalyzer._();
 
   /// Analyse [priorVisits] (oldest-first) plus the in-progress [today] snapshot.
   ///
-  /// The card is shown only when at least two BP data points exist and either
-  /// systolic or diastolic is rising.  Weight and urine-protein rows are
-  /// included for context whenever they have data, but they never — on their
-  /// own — trigger the card.
+  /// Requires **two** prior visits in the window. Each metric is included only
+  /// when its own show rule passes; [VitalsTrendResult.show] is true when the
+  /// metrics list is non-empty.
   static VitalsTrendResult analyze({
     required List<VisitVitals> priorVisits,
     required VisitVitals today,
     DateTime? todayDate,
   }) {
     final priors = priorVisits.where((v) => !v.isEmpty).toList();
-    // Keep at most the two most recent prior visits so the table stays to
-    // three columns like the reference design.
+    // Keep at most the two most recent prior visits (past 2 + today).
     final trimmedPriors =
         priors.length > 2 ? priors.sublist(priors.length - 2) : priors;
 
-    // Need at least one prior + today to describe any movement.
-    if (trimmedPriors.isEmpty) return VitalsTrendResult.empty;
+    // Need exactly two priors so every parameter can have three readings.
+    if (trimmedPriors.length < 2) return VitalsTrendResult.empty;
 
     final sequence = <VisitVitals>[...trimmedPriors, today];
     final now = todayDate ?? DateTime.now();
@@ -157,62 +178,69 @@ abstract final class VitalsTrendAnalyzer {
       const VitalsTrendColumn(isToday: true),
     ];
 
-    final systolic = _numericTrend(
-      VitalMetric.systolic,
-      sequence.map((v) => v.systolic?.toDouble()).toList(),
-    );
-    final diastolic = _numericTrend(
-      VitalMetric.diastolic,
-      sequence.map((v) => v.diastolic?.toDouble()).toList(),
-    );
-    final weight = _numericTrend(
-      VitalMetric.weight,
-      sequence.map((v) => v.weight).toList(),
-    );
-    final urine = _numericTrend(
-      VitalMetric.urineProtein,
-      sequence.map((v) => urineProteinRank(v.urineProtein)?.toDouble()).toList(),
-    );
-
     final metrics = <VitalMetricTrend>[
-      ?systolic,
-      ?diastolic,
-      ?weight,
-      ?urine,
+      ?_numericTrend(
+        VitalMetric.systolic,
+        sequence.map((v) => v.systolic?.toDouble()).toList(),
+      ),
+      ?_numericTrend(
+        VitalMetric.diastolic,
+        sequence.map((v) => v.diastolic?.toDouble()).toList(),
+      ),
+      ?_numericTrend(
+        VitalMetric.weight,
+        sequence.map((v) => v.weight).toList(),
+      ),
+      ?_urineTrend(sequence.map((v) => v.urineProtein).toList()),
     ];
-
-    final bpRising =
-        (systolic?.rising ?? false) || (diastolic?.rising ?? false);
 
     return VitalsTrendResult(
       columns: columns,
       metrics: metrics,
-      show: bpRising && metrics.isNotEmpty,
+      show: metrics.isNotEmpty,
     );
   }
 
-  /// Builds a metric trend, or `null` when NO readings exist at all.
-  ///
-  /// A row is shown with a single value (e.g. today only, no prior history) so
-  /// the SK always sees the current reading — rising is only computed when ≥2
-  /// non-null values are available.
+  /// Numeric row (sys / dia / weight): 3 readings + rising ≥ [kVitalsTrendMinStep]
+  /// on each consecutive step. Otherwise omitted.
   static VitalMetricTrend? _numericTrend(VitalMetric metric, List<double?> raw) {
-    final present = raw.whereType<double>().toList();
-    if (present.isEmpty) return null;
+    if (raw.length < 3) return null;
+    if (raw.any((v) => v == null)) return null;
+    final values = raw.cast<double>();
+    if (!_isRisingByMinStep(values)) return null;
     return VitalMetricTrend(
       metric: metric,
-      values: raw,
-      rising: present.length >= 2 && _isRising(present),
+      values: values,
+      rising: true,
     );
   }
 
-  /// A series is "rising" when it never decreases step-to-step and ends
-  /// strictly higher than it started.
-  static bool _isRising(List<double> values) {
-    if (values.length < 2) return false;
-    for (var i = 1; i < values.length; i++) {
-      if (values[i] < values[i - 1]) return false;
+  /// Urine protein row: 3 captured grades + at least one Present.
+  static VitalMetricTrend? _urineTrend(List<String?> grades) {
+    if (grades.length < 3) return null;
+    final ranks = <num?>[];
+    for (final g in grades) {
+      final rank = urineProteinRank(g);
+      if (rank == null) return null; // missing / unrecognised → not 3 captured
+      ranks.add(rank);
     }
-    return values.last > values.first;
+    if (!grades.any(isUrineProteinPresent)) return null;
+    return VitalMetricTrend(
+      metric: VitalMetric.urineProtein,
+      values: ranks,
+      rising: true,
+    );
+  }
+
+  /// Each consecutive step must rise by at least [kVitalsTrendMinStep].
+  static bool _isRisingByMinStep(
+    List<double> values, {
+    double minStep = kVitalsTrendMinStep,
+  }) {
+    if (values.length < 3) return false;
+    for (var i = 1; i < values.length; i++) {
+      if (values[i] - values[i - 1] < minStep) return false;
+    }
+    return true;
   }
 }

@@ -114,6 +114,11 @@ enum Programme {
       case 'EPI':
       case 'IMMUNIZATION':
       case 'IMMUNISATION':
+      // Offline-sync / assessment-history type for EPI vaccination visits.
+      case 'CHILD_IMMUNIZATION':
+      case 'CHILDIMMUNIZATION':
+      case 'CHILD_IMMUNISATION':
+      case 'CHILDIMMUNISATION':
         return Programme.epi;
       case 'NUTRITION':
       case 'SAM':
