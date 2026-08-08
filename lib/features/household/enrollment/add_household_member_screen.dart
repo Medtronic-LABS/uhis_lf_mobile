@@ -387,7 +387,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       return;
     }
     _ageInYears = years;
-    _ageUnit = years == 1 ? 'year' : 'years';
+    _ageUnit = years == 1 ? EnrollmentStrings.ageUnitYear : EnrollmentStrings.ageUnitYears;
     _ageSummary = null;
     _dob = EnrollmentDob.fromAgeYears(years);
     _dobCtrl.text = EnrollmentDob.display(_dob!);
@@ -467,25 +467,29 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
     final maritalRequired = _ageInYears > 5;
     // Skipped for "Not Available", digits-and-length checked for National ID.
-    final idError = EnrollmentIdNumber.validate(_idType, _brnCtrl.text);
+    final idError = EnrollmentIdNumber.validate(
+      _idType,
+      _brnCtrl.text,
+      requiredMessage: CommonStrings.required,
+    );
 
     // Android member_registration.json: phone_number_category, phone_number,
     // and disability are all isMandatory: true — do not soft-default them.
     final errors = <String, String?>{
-      if (_idType == null) 'idType': 'Required',
+      if (_idType == null) 'idType': CommonStrings.required,
       'idNumber': ?idError,
-      if (_nameCtrl.text.trim().isEmpty) 'name': 'Required',
-      if (_dobCtrl.text.trim().isEmpty) 'dob': 'Required',
-      if (_gender == null) 'gender': 'Required',
-      if (maritalRequired && _maritalStatus == null) 'maritalStatus': 'Required',
-      if (_ageInYears < 1 && _guardianName == null) 'guardian': 'Required',
-      if (_phoneCategory == null) 'phoneCategory': 'Required',
+      if (_nameCtrl.text.trim().isEmpty) 'name': CommonStrings.required,
+      if (_dobCtrl.text.trim().isEmpty) 'dob': CommonStrings.required,
+      if (_gender == null) 'gender': CommonStrings.required,
+      if (maritalRequired && _maritalStatus == null) 'maritalStatus': CommonStrings.required,
+      if (_ageInYears < 1 && _guardianName == null) 'guardian': CommonStrings.required,
+      if (_phoneCategory == null) 'phoneCategory': CommonStrings.required,
       'mobile': ?EnrollmentMobileNumber.validate(
         _mobileCtrl.text,
         required: true,
-        requiredMessage: 'Required',
+        requiredMessage: CommonStrings.required,
       ),
-      if (_disabilityStatus == null) 'disability': 'Required',
+      if (_disabilityStatus == null) 'disability': CommonStrings.required,
     };
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -541,9 +545,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       controller.addMember(member);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Member added successfully'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(EnrollmentStrings.memberAddedSuccess),
+          duration: const Duration(seconds: 2),
         ),
       );
       context.pop();
@@ -738,7 +742,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Member added successfully')),
+        SnackBar(content: Text(EnrollmentStrings.memberAddedSuccess)),
       );
       // Pop back to the caller (household detail / select-household) so it can
       // re-read the roster it is showing. `go` would rebuild the whole branch
@@ -753,7 +757,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to add member: $e'),
+            content: Text(EnrollmentStrings.memberAddFailed(e)),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -982,10 +986,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                               children: [
                                 const Icon(Icons.auto_awesome, size: 14, color: AppColors.statusSuccessAction),
                                 const SizedBox(width: 6),
-                                const Expanded(
+                                Expanded(
                                   child: Text(
-                                    'Scanned from NID — edit if needed',
-                                    style: TextStyle(
+                                    EnrollmentStrings.nidScannedHint,
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                       color: AppColors.statusSuccessActionDark,
@@ -998,9 +1002,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                                     _brnCtrl.clear();
                                     _existingPatient = null;
                                   }),
-                                  child: const Text(
-                                    'Clear',
-                                    style: TextStyle(
+                                  child: Text(
+                                    EnrollmentStrings.clearNidScan,
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                       color: AppColors.statusCritical,
@@ -1112,8 +1116,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     if (_idType == EnrollmentIdNumber.brn) ...[
                       SizedBox(key: _key('idNumber'), height: 0),
                       EnrollmentInputField(
-                        label: 'Birth Registration Number (BRN)',
-                        hint: 'Enter BRN',
+                        label: EnrollmentStrings.brnFieldLabel,
+                        hint: EnrollmentStrings.brnNumberHint,
                         controller: _brnCtrl,
                         isRequired: true,
                         onChanged: (_) => _clearError('idNumber'),
@@ -1157,7 +1161,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       validator: (v) => EnrollmentMobileNumber.validate(
                         v,
                         required: true,
-                        requiredMessage: 'Required',
+                        requiredMessage: CommonStrings.required,
                       ),
                       onChanged: (_) => _clearError('mobile'),
                       errorText: _fieldErrors['mobile'],

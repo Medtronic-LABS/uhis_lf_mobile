@@ -299,7 +299,7 @@ GoRouter buildRouter(AuthState auth) {
               GoRoute(
                 path: '/gallery',
                 name: 'gallery',
-                builder: (_, _) => const Scaffold(body: Center(child: Text('Coming soon'))),
+                builder: (_, _) => Scaffold(body: Center(child: Text(CommonStrings.comingSoon))),
               ),
             ],
           ),
@@ -504,7 +504,7 @@ GoRouter buildRouter(AuthState auth) {
         GoRoute(
           path: '/dev/form-gallery',
           name: 'form-gallery',
-          builder: (_, _) => const Scaffold(body: Center(child: Text('Coming soon'))),
+          builder: (_, _) => Scaffold(body: Center(child: Text(CommonStrings.comingSoon))),
         ),
     ],
   );

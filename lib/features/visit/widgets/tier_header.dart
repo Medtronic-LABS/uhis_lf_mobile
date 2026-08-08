@@ -144,7 +144,7 @@ class CompletedTierHeader extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            'COMPLETED TODAY',
+            MissionDashboardStrings.completedTodayHeader,
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,

@@ -1583,36 +1583,36 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   String _ancVitalsSummary() {
     final v = _loadedVitals;
     if (v == null) {
-      return 'BP, weight, urine protein, and fetal movement assessed. Continuing routine ANC care per WHO guidelines.';
+      return VisitFlowStrings.ancVitalsNoData;
     }
     final bpPart = (v.bloodPressureSystolic != null && v.bloodPressureDiastolic != null)
-        ? 'BP ${v.bloodPressureSystolic}/${v.bloodPressureDiastolic} mmHg'
-        : 'BP assessed';
-    final wtPart = v.weight != null ? ', weight ${v.weight!.toStringAsFixed(1)} kg' : '';
+        ? VisitFlowStrings.bpPartFor(v.bloodPressureSystolic!, v.bloodPressureDiastolic!)
+        : VisitFlowStrings.bpAssessedFallback;
+    final wtPart = v.weight != null ? VisitFlowStrings.weightPartFor(v.weight!.toStringAsFixed(1)) : '';
     final hb = _loadedLabs.firstWhere(
       (l) => l.name == 'Hemoglobin',
       orElse: () => const NabaLabResult(name: '', value: '', unit: ''),
     );
     final hbPart = hb.name.isNotEmpty
-        ? ', Hb ${hb.value} g/dL${hb.abnormal ? " — low" : ""}'
+        ? VisitFlowStrings.hbPartFor(hb.value, hb.abnormal)
         : '';
     final bpHigh = v.bloodPressureSystolic != null && v.bloodPressureSystolic! >= 140;
-    final status = bpHigh ? 'BP elevated — monitor for pre-eclampsia.' : 'Vitals within expected range.';
+    final status = bpHigh ? VisitFlowStrings.ancStatusHigh : VisitFlowStrings.ancStatusNormal;
     return '$bpPart$wtPart$hbPart. $status';
   }
 
   String _ncdVitalsSummary() {
     final v = _loadedVitals;
     if (v == null) {
-      return 'Blood pressure and blood glucose reviewed. Continuing NCD management per Bangladesh guidelines.';
+      return VisitFlowStrings.ncdVitalsNoData;
     }
     final bpPart = (v.bloodPressureSystolic != null && v.bloodPressureDiastolic != null)
-        ? 'BP avg ${v.bloodPressureSystolic}/${v.bloodPressureDiastolic} mmHg'
-        : 'BP assessed';
+        ? VisitFlowStrings.bpAvgPartFor(v.bloodPressureSystolic!, v.bloodPressureDiastolic!)
+        : VisitFlowStrings.bpAssessedFallback;
     final gl = _loadedLabs.isNotEmpty ? _loadedLabs.first : null;
-    final glPart = gl != null ? ', glucose ${gl.value} ${gl.unit}${gl.abnormal ? " — elevated" : ""}' : '';
+    final glPart = gl != null ? VisitFlowStrings.glucosePartFor(gl.value, gl.unit, gl.abnormal) : '';
     final bpHigh = v.bloodPressureSystolic != null && v.bloodPressureSystolic! >= 140;
-    final status = bpHigh ? 'BP above target — review medication and refer if persistent.' : 'BP within controlled range.';
+    final status = bpHigh ? VisitFlowStrings.ncdStatusHigh : VisitFlowStrings.ncdStatusNormal;
     return '$bpPart$glPart. $status';
   }
 
@@ -1641,106 +1641,106 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (hasAnc) {
       final gw = widget.gestationalWeeks;
       if (gw != null && gw >= 36) {
-        actions.add(const NabaNextAction(
+        actions.add(NabaNextAction(
           priority: 0,
-          action: 'Patient is at or near term (≥36 weeks). Advise to go to facility immediately if labour starts.',
+          action: VisitFlowStrings.ancActionNearTerm,
           urgency: 'Now',
           programme: 'ANC',
         ));
       }
-      actions.addAll(const [
-        NabaNextAction(priority: 1, action: 'Measure blood pressure, weight, and fundal height', urgency: 'Today', programme: 'ANC'),
-        NabaNextAction(priority: 2, action: 'Check for danger signs: heavy bleeding, severe headache, blurred vision, convulsions, no fetal movement', urgency: 'Today', programme: 'ANC'),
-        NabaNextAction(priority: 3, action: 'Confirm iron-folic acid supply for next 4 weeks', urgency: 'Today', programme: 'ANC'),
-        NabaNextAction(priority: 4, action: 'Schedule next ANC visit in 4 weeks', urgency: 'This week', programme: 'ANC'),
+      actions.addAll([
+        NabaNextAction(priority: 1, action: VisitFlowStrings.ancAction1, urgency: 'Today', programme: 'ANC'),
+        NabaNextAction(priority: 2, action: VisitFlowStrings.ancAction2, urgency: 'Today', programme: 'ANC'),
+        NabaNextAction(priority: 3, action: VisitFlowStrings.ancAction3, urgency: 'Today', programme: 'ANC'),
+        NabaNextAction(priority: 4, action: VisitFlowStrings.ancAction4, urgency: 'This week', programme: 'ANC'),
       ]);
-      counselling.addAll(const [
-        'Take iron-folic acid tablet every day, even when feeling well',
-        'Eat nutritious food: green vegetables, lentils, fish, eggs',
-        'Sleep under a bednet every night',
-        'Plan delivery with a skilled attendant at a health facility',
-        'Go to facility immediately if any danger sign occurs',
+      counselling.addAll([
+        VisitFlowStrings.ancCounselling1,
+        VisitFlowStrings.ancCounselling2,
+        VisitFlowStrings.ancCounselling3,
+        VisitFlowStrings.ancCounselling4,
+        VisitFlowStrings.ancCounselling5,
       ]);
-      followUp.add(const NabaFollowUpItem(
-        activity: 'ANC visit — BP, weight, fundal height, fetal position',
-        timeline: 'In 4 weeks',
+      followUp.add(NabaFollowUpItem(
+        activity: VisitFlowStrings.ancFollowUpActivity,
+        timeline: VisitFlowStrings.followUpTimelineFourWeeks,
         programme: 'ANC',
       ));
     }
 
     if (hasNcd) {
-      actions.addAll(const [
-        NabaNextAction(priority: 1, action: 'Measure blood pressure in both arms', urgency: 'Today', programme: 'NCD'),
-        NabaNextAction(priority: 2, action: 'Check fasting blood glucose if patient has diabetes', urgency: 'Today', programme: 'NCD'),
-        NabaNextAction(priority: 3, action: 'Verify medication supply — patient must not run out', urgency: 'Today', programme: 'NCD'),
-        NabaNextAction(priority: 4, action: 'Counsel on lifestyle: salt reduction, daily walking, no tobacco', urgency: 'This week', programme: 'NCD'),
+      actions.addAll([
+        NabaNextAction(priority: 1, action: VisitFlowStrings.ncdAction1, urgency: 'Today', programme: 'NCD'),
+        NabaNextAction(priority: 2, action: VisitFlowStrings.ncdAction2, urgency: 'Today', programme: 'NCD'),
+        NabaNextAction(priority: 3, action: VisitFlowStrings.ncdAction3, urgency: 'Today', programme: 'NCD'),
+        NabaNextAction(priority: 4, action: VisitFlowStrings.ncdAction4, urgency: 'This week', programme: 'NCD'),
       ]);
-      counselling.addAll(const [
-        'Take all prescribed medications every day without skipping',
-        'Reduce salt in cooking — avoid processed and salty foods',
-        'Walk at least 30 minutes every day',
-        'Avoid tobacco and alcohol',
-        'Return immediately for one-sided weakness, sudden severe headache, or chest pain',
+      counselling.addAll([
+        VisitFlowStrings.ncdCounselling1,
+        VisitFlowStrings.ncdCounselling2,
+        VisitFlowStrings.ncdCounselling3,
+        VisitFlowStrings.ncdCounselling4,
+        VisitFlowStrings.ncdCounselling5,
       ]);
-      followUp.add(const NabaFollowUpItem(
-        activity: 'BP and glucose re-check',
-        timeline: 'In 2 weeks',
+      followUp.add(NabaFollowUpItem(
+        activity: VisitFlowStrings.ncdFollowUpActivity,
+        timeline: VisitFlowStrings.followUpTimelineTwoWeeks,
         programme: 'NCD',
       ));
     }
 
     if (hasPnc) {
-      actions.addAll(const [
-        NabaNextAction(priority: 1, action: "Check mother's BP and temperature; assess lochia and wound healing", urgency: 'Today', programme: 'PNC'),
-        NabaNextAction(priority: 2, action: 'Weigh neonate; check cord stump; observe breastfeeding latch', urgency: 'Today', programme: 'PNC'),
-        NabaNextAction(priority: 3, action: 'Confirm vitamin A given to mother within 8 weeks of delivery', urgency: 'Today', programme: 'PNC'),
-        NabaNextAction(priority: 4, action: 'Counsel on family planning options', urgency: 'This week', programme: 'PNC'),
+      actions.addAll([
+        NabaNextAction(priority: 1, action: VisitFlowStrings.pncAction1, urgency: 'Today', programme: 'PNC'),
+        NabaNextAction(priority: 2, action: VisitFlowStrings.pncAction2, urgency: 'Today', programme: 'PNC'),
+        NabaNextAction(priority: 3, action: VisitFlowStrings.pncAction3, urgency: 'Today', programme: 'PNC'),
+        NabaNextAction(priority: 4, action: VisitFlowStrings.pncAction4, urgency: 'This week', programme: 'PNC'),
       ]);
-      counselling.addAll(const [
-        'Breastfeed exclusively for 6 months — no water, no other food',
-        'Keep baby warm and cord stump clean and dry',
-        'Eat nutritious food to support breast milk production',
-        'Seek care immediately for heavy bleeding, fever, foul-smelling discharge, or baby not feeding',
+      counselling.addAll([
+        VisitFlowStrings.pncCounselling1,
+        VisitFlowStrings.pncCounselling2,
+        VisitFlowStrings.pncCounselling3,
+        VisitFlowStrings.pncCounselling4,
       ]);
-      followUp.add(const NabaFollowUpItem(
-        activity: 'PNC follow-up — mother and neonate',
-        timeline: 'In 7 days',
+      followUp.add(NabaFollowUpItem(
+        activity: VisitFlowStrings.pncFollowUpActivity,
+        timeline: VisitFlowStrings.followUpTimelineSevenDays,
         programme: 'PNC',
       ));
     }
 
     if (hasImci) {
-      actions.addAll(const [
-        NabaNextAction(priority: 1, action: 'Measure temperature and respiratory rate; assess hydration status', urgency: 'Today', programme: 'IMCI'),
-        NabaNextAction(priority: 2, action: 'Classify illness per IMCI chart; prescribe ORS and zinc if diarrhoea', urgency: 'Today', programme: 'IMCI'),
-        NabaNextAction(priority: 3, action: 'Check for danger signs: not able to drink, persistent vomiting, convulsions, very sleepy', urgency: 'Today', programme: 'IMCI'),
+      actions.addAll([
+        NabaNextAction(priority: 1, action: VisitFlowStrings.imciAction1, urgency: 'Today', programme: 'IMCI'),
+        NabaNextAction(priority: 2, action: VisitFlowStrings.imciAction2, urgency: 'Today', programme: 'IMCI'),
+        NabaNextAction(priority: 3, action: VisitFlowStrings.imciAction3, urgency: 'Today', programme: 'IMCI'),
       ]);
-      counselling.addAll(const [
-        'Continue breastfeeding or usual feeding during illness',
-        'Give ORS frequently if child has diarrhoea',
-        'Complete full zinc course (10 days) for diarrhoea',
-        'Return immediately if child is not improving or has a danger sign',
+      counselling.addAll([
+        VisitFlowStrings.imciCounselling1,
+        VisitFlowStrings.imciCounselling2,
+        VisitFlowStrings.imciCounselling3,
+        VisitFlowStrings.imciCounselling4,
       ]);
-      followUp.add(const NabaFollowUpItem(
-        activity: 'Follow-up sick child visit',
-        timeline: 'In 2 days',
+      followUp.add(NabaFollowUpItem(
+        activity: VisitFlowStrings.imciFollowUpActivity,
+        timeline: VisitFlowStrings.followUpTimelineTwoDays,
         programme: 'IMCI',
       ));
     }
 
     if (hasTb) {
-      actions.addAll(const [
-        NabaNextAction(priority: 1, action: 'Confirm TB treatment adherence — check pill count and any side effects', urgency: 'Today', programme: 'TB'),
-        NabaNextAction(priority: 2, action: 'Counsel on infection control: cough hygiene, ventilation, mask use', urgency: 'Today', programme: 'TB'),
+      actions.addAll([
+        NabaNextAction(priority: 1, action: VisitFlowStrings.tbAction1, urgency: 'Today', programme: 'TB'),
+        NabaNextAction(priority: 2, action: VisitFlowStrings.tbAction2, urgency: 'Today', programme: 'TB'),
       ]);
-      counselling.addAll(const [
-        'Take TB medicines every day without stopping — stopping leads to drug resistance',
-        'Cover mouth when coughing; keep rooms well-ventilated',
-        'All household contacts should be screened for TB symptoms',
+      counselling.addAll([
+        VisitFlowStrings.tbCounselling1,
+        VisitFlowStrings.tbCounselling2,
+        VisitFlowStrings.tbCounselling3,
       ]);
-      followUp.add(const NabaFollowUpItem(
-        activity: 'TB treatment adherence check',
-        timeline: 'In 2 weeks',
+      followUp.add(NabaFollowUpItem(
+        activity: VisitFlowStrings.tbFollowUpActivity,
+        timeline: VisitFlowStrings.followUpTimelineTwoWeeks,
         programme: 'TB',
       ));
     }
@@ -1756,36 +1756,36 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       followUp.add(NabaFollowUpItem(
         activity: EpiVisitRecoStrings.followUpActivity(
             epi.nextMilestoneLabel, epi.nextMilestoneVaccineNames),
-        timeline: epi.nextMilestoneLabel ?? 'Routine',
+        timeline: epi.nextMilestoneLabel ?? VisitFlowStrings.followUpTimelineRoutine,
         programme: 'EPI',
         resolvedDate: epi.nextMilestoneDate,
       ));
     } else if (hasEpi) {
-      actions.add(const NabaNextAction(
+      actions.add(NabaNextAction(
         priority: 1,
-        action: 'All scheduled vaccines are up to date for this visit.',
+        action: EpiVisitRecoStrings.allVaccinesUpToDate,
         urgency: 'Routine',
         programme: 'EPI',
       ));
       followUp.add(NabaFollowUpItem(
         activity: EpiVisitRecoStrings.followUpActivity(
             epi?.nextMilestoneLabel, epi?.nextMilestoneVaccineNames ?? const []),
-        timeline: epi?.nextMilestoneLabel ?? 'Routine',
+        timeline: epi?.nextMilestoneLabel ?? VisitFlowStrings.followUpTimelineRoutine,
         programme: 'EPI',
         resolvedDate: epi?.nextMilestoneDate,
       ));
     }
 
     if (actions.isEmpty) {
-      actions.add(const NabaNextAction(
+      actions.add(NabaNextAction(
         priority: 1,
-        action: 'Record vital signs and complete routine clinical assessment',
+        action: VisitFlowStrings.noActionsFallback,
         urgency: 'Today',
       ));
-      counselling.add('Follow up as scheduled and contact the health worker if symptoms worsen');
-      followUp.add(const NabaFollowUpItem(
-        activity: 'Routine follow-up visit',
-        timeline: 'In 4 weeks',
+      counselling.add(VisitFlowStrings.noActionsCounselling);
+      followUp.add(NabaFollowUpItem(
+        activity: VisitFlowStrings.noActionsFollowUpActivity,
+        timeline: VisitFlowStrings.followUpTimelineFourWeeks,
       ));
     }
 
@@ -1807,14 +1807,14 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             : hasNcd
                 ? _ncdVitalsSummary()
                 : hasPnc
-                    ? 'Mother and neonate assessed — lochia, cord, and breastfeeding. Continuing post-natal care.'
+                    ? VisitFlowStrings.summaryBodyPnc
                     : hasImci
-                        ? 'Child assessed for fever, respiratory rate, and hydration. IMCI classification applied.'
+                        ? VisitFlowStrings.summaryBodyImci
                         : hasTb
-                            ? 'TB treatment adherence reviewed. Continuing directly observed therapy (DOT).'
+                            ? VisitFlowStrings.summaryBodyTb
                             : hasEpi && epi != null
                                 ? EpiVisitRecoStrings.visitSummary(epi)
-                                : 'Vital signs assessed. Routine care plan generated per clinical guidelines.',
+                                : VisitFlowStrings.summaryBodyDefault,
       ),
       nextActions: actions,
       counselling: counselling,
@@ -1823,12 +1823,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       referralRecommendation: widget.referralRecommended
           ? NabaReferralRecommendation(
               required_: true,
-              destination: 'Upazila Health Complex',
+              destination: VisitFlowStrings.referralDestinationUpazilaHealthComplex,
               urgency: 'Today',
               reason: (hasEpi && epi != null && epi.overdueCount > 0)
                   ? EpiVisitRecoStrings.referralReason(
                       epi.currentMilestoneLabel, epi.overdueVaccineNames)
-                  : 'Referral recommended based on clinical assessment',
+                  : VisitFlowStrings.referralReasonClinicalAssessment,
             )
           : null,
     );
@@ -1848,73 +1848,73 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final epi = widget.epiVisitSummary;
 
     final buf = StringBuffer();
-    buf.writeln('Hello! Your health worker visited you today.');
+    buf.writeln(VisitFlowStrings.whatsappGreeting);
 
     if (hasAnc) {
       final gw = widget.gestationalWeeks;
       buf.writeln();
-      buf.writeln('*Pregnancy (ANC) visit completed.*');
-      if (gw != null) buf.writeln('Gestational age: $gw weeks.');
+      buf.writeln(VisitFlowStrings.whatsappAncHeader);
+      if (gw != null) buf.writeln(VisitFlowStrings.whatsappAncGestationalAge(gw));
       buf.writeln();
-      buf.writeln('Reminders:');
-      buf.writeln('• Take iron-folic acid every day');
-      buf.writeln('• Eat well: vegetables, fish, eggs, lentils');
-      buf.writeln('• Sleep under a bednet every night');
-      buf.writeln('• Plan delivery at a health facility');
-      buf.writeln('• Go to facility immediately for: heavy bleeding, severe headache, blurred vision, no fetal movement, swollen hands/feet');
+      buf.writeln(VisitFlowStrings.whatsappRemindersHeader);
+      buf.writeln(VisitFlowStrings.whatsappAncBullet1);
+      buf.writeln(VisitFlowStrings.whatsappAncBullet2);
+      buf.writeln(VisitFlowStrings.whatsappAncBullet3);
+      buf.writeln(VisitFlowStrings.whatsappAncBullet4);
+      buf.writeln(VisitFlowStrings.whatsappAncBullet5);
       buf.writeln();
-      buf.writeln('*Next ANC visit: in 4 weeks.*');
+      buf.writeln(VisitFlowStrings.whatsappAncNextVisit);
     }
 
     if (hasNcd) {
       buf.writeln();
-      buf.writeln('*BP/Diabetes (NCD) visit completed.*');
+      buf.writeln(VisitFlowStrings.whatsappNcdHeader);
       buf.writeln();
-      buf.writeln('Reminders:');
-      buf.writeln('• Take all medicines every day — never skip');
-      buf.writeln('• Reduce salt; avoid processed food');
-      buf.writeln('• Walk 30 minutes daily');
-      buf.writeln('• Avoid tobacco and alcohol');
-      buf.writeln('• Go to facility immediately for: one-sided weakness, sudden severe headache, or chest pain');
+      buf.writeln(VisitFlowStrings.whatsappRemindersHeader);
+      buf.writeln(VisitFlowStrings.whatsappNcdBullet1);
+      buf.writeln(VisitFlowStrings.whatsappNcdBullet2);
+      buf.writeln(VisitFlowStrings.whatsappNcdBullet3);
+      buf.writeln(VisitFlowStrings.whatsappNcdBullet4);
+      buf.writeln(VisitFlowStrings.whatsappNcdBullet5);
       buf.writeln();
-      buf.writeln('*Next visit: in 2 weeks.*');
+      buf.writeln(VisitFlowStrings.whatsappNcdNextVisit);
     }
 
     if (hasPnc) {
       buf.writeln();
-      buf.writeln('*Post-natal care (PNC) visit completed.*');
+      buf.writeln(VisitFlowStrings.whatsappPncHeader);
       buf.writeln();
-      buf.writeln('Reminders:');
-      buf.writeln('• Breastfeed exclusively for 6 months — no water or other food');
-      buf.writeln('• Keep baby warm; keep cord stump clean and dry');
-      buf.writeln('• Eat well to support breast milk');
-      buf.writeln('• Seek care immediately for: heavy bleeding, fever, foul discharge, or baby not feeding');
+      buf.writeln(VisitFlowStrings.whatsappRemindersHeader);
+      buf.writeln(VisitFlowStrings.whatsappPncBullet1);
+      buf.writeln(VisitFlowStrings.whatsappPncBullet2);
+      buf.writeln(VisitFlowStrings.whatsappPncBullet3);
+      buf.writeln(VisitFlowStrings.whatsappPncBullet4);
       buf.writeln();
-      buf.writeln('*Next PNC visit: in 7 days.*');
+      buf.writeln(VisitFlowStrings.whatsappPncNextVisit);
     }
 
     if (hasImci) {
       buf.writeln();
-      buf.writeln('*Child health (IMCI) visit completed.*');
+      buf.writeln(VisitFlowStrings.whatsappImciHeader);
       buf.writeln();
-      buf.writeln('Reminders:');
-      buf.writeln('• Continue feeding normally during illness');
-      buf.writeln('• Give ORS often if child has diarrhoea');
-      buf.writeln('• Return immediately if child cannot drink, has convulsions, or is very sleepy');
+      buf.writeln(VisitFlowStrings.whatsappRemindersHeader);
+      buf.writeln(VisitFlowStrings.whatsappImciBullet1);
+      buf.writeln(VisitFlowStrings.whatsappImciBullet2);
+      buf.writeln(VisitFlowStrings.whatsappImciBullet3);
       buf.writeln();
-      buf.writeln('*Follow-up visit: in 2 days.*');
+      buf.writeln(VisitFlowStrings.whatsappImciNextVisit);
     }
 
     if (hasTb) {
       buf.writeln();
-      buf.writeln('*TB treatment follow-up visit completed.*');
+      buf.writeln(VisitFlowStrings.whatsappTbHeader);
       buf.writeln();
-      buf.writeln('Reminders:');
-      buf.writeln('• Take TB medicines every day — stopping causes drug resistance');
-      buf.writeln('• Cover mouth when coughing; keep rooms ventilated');
-      buf.writeln('• All household members should be screened for TB');
+      buf.writeln(VisitFlowStrings.whatsappRemindersHeader);
+      buf.writeln(VisitFlowStrings.whatsappTbBullet1);
+      buf.writeln(VisitFlowStrings.whatsappTbBullet2);
+      buf.writeln(VisitFlowStrings.whatsappTbBullet3);
       buf.writeln();
-      buf.writeln('*Next TB check: in 2 weeks.*');
+      buf.writeln(VisitFlowStrings.whatsappTbNextCheck);
     }
 
     if (hasEpi && epi != null) {
@@ -1924,30 +1924,30 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
     if (!hasAnc && !hasNcd && !hasPnc && !hasImci && !hasTb && !hasEpi) {
       buf.writeln();
-      buf.writeln('*Routine health visit completed.*');
-      buf.writeln('Continue your medications and attend your next scheduled visit.');
+      buf.writeln(VisitFlowStrings.whatsappRoutineHeader);
+      buf.writeln(VisitFlowStrings.whatsappRoutineBody);
       buf.writeln();
-      buf.writeln('*Next visit: in 4 weeks.*');
+      buf.writeln(VisitFlowStrings.whatsappRoutineNextVisit);
     }
 
     if (widget.referralRecommended) {
       buf.writeln();
-      buf.writeln('⚠️ *Please go to the Upazila Health Complex today for further care.*');
+      buf.writeln(VisitFlowStrings.whatsappReferralWarning);
     }
 
     buf.writeln();
-    buf.write('Contact your health worker if your condition worsens.');
+    buf.write(VisitFlowStrings.whatsappClosing);
     return buf.toString().trim();
   }
 
   static String _programmeSummaryTitle(Programme p) => switch (p) {
-        Programme.anc => 'ANC Visit — Guideline Care Plan',
-        Programme.pnc => 'PNC Visit — Guideline Care Plan',
-        Programme.ncd => 'NCD Visit — Guideline Care Plan',
-        Programme.imci => 'Child Health Visit — Guideline Care Plan',
-        Programme.tb => 'TB Follow-up — Guideline Care Plan',
+        Programme.anc => VisitFlowStrings.summaryTitleAnc,
+        Programme.pnc => VisitFlowStrings.summaryTitlePnc,
+        Programme.ncd => VisitFlowStrings.summaryTitleNcd,
+        Programme.imci => VisitFlowStrings.summaryTitleImci,
+        Programme.tb => VisitFlowStrings.summaryTitleTb,
         Programme.epi => EpiVisitRecoStrings.visitSummaryTitle,
-        _ => 'Visit — Guideline Care Plan',
+        _ => VisitFlowStrings.summaryTitleDefault,
       };
 
   /// Previously shown as a separate "HIGH RISK — Refer today" card.
@@ -2549,7 +2549,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                       ? widget.referredReasons.join('\n')
                       : (naba.dangerSigns.isNotEmpty
                           ? naba.dangerSigns.take(2).join(', ')
-                          : 'Referral recommended')),
+                          : VisitFlowStrings.referralRecommendedFallback)),
               urgency: naba.referralRecommendation?.urgency ?? 'Today',
             ),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
@@ -2835,21 +2835,23 @@ class _ReferralAlertCard extends StatelessWidget {
 
   // Maps raw API referral keys → human-readable labels (fallback path).
   // Includes Spice ReferredReason / ANC LABEL_* strings and legacy camelCase keys.
-  static const _reasonLabels = <String, String>{
-    'High risk pregnant woman': 'High-risk pregnant woman',
-    'Gaps in ANC':            'Gaps in antenatal care',
-    'High BP':                'High blood pressure',
-    'High BG':                'High blood glucose',
-    'Symptoms':               'Reported symptoms',
-    'bloodPressure':          'High blood pressure',
-    'bloodGlucose':           'High blood glucose',
-    'symptoms':               'Reported symptoms',
-    'hbLevel':                'Low haemoglobin',
-    'weight':                 'Abnormal weight',
-    'urineProtein':           'Urine protein detected',
-    'dangerSigns':            'Danger signs present',
-    'bmi':                    'Abnormal BMI',
-    'gestationalAge':         'Gestational age concern',
+  // Map keys are wire codes, never translated; only the mapped value is
+  // user-facing, so it is resolved through VisitFlowStrings.
+  static Map<String, String> get _reasonLabels => <String, String>{
+    'High risk pregnant woman': VisitFlowStrings.reasonHighRiskPregnantWoman,
+    'Gaps in ANC':            VisitFlowStrings.reasonGapsInAntenatalCare,
+    'High BP':                VisitFlowStrings.reasonHighBloodPressure,
+    'High BG':                VisitFlowStrings.reasonHighBloodGlucose,
+    'Symptoms':               VisitFlowStrings.reasonReportedSymptoms,
+    'bloodPressure':          VisitFlowStrings.reasonHighBloodPressure,
+    'bloodGlucose':           VisitFlowStrings.reasonHighBloodGlucose,
+    'symptoms':               VisitFlowStrings.reasonReportedSymptoms,
+    'hbLevel':                VisitFlowStrings.reasonLowHaemoglobin,
+    'weight':                 VisitFlowStrings.reasonAbnormalWeight,
+    'urineProtein':           VisitFlowStrings.reasonUrineProteinDetected,
+    'dangerSigns':            VisitFlowStrings.reasonDangerSignsPresent,
+    'bmi':                    VisitFlowStrings.reasonAbnormalBmi,
+    'gestationalAge':         VisitFlowStrings.reasonGestationalAgeConcern,
   };
 
   @override
@@ -2861,7 +2863,7 @@ class _ReferralAlertCard extends StatelessWidget {
     // Single-line / bullet fallback: raw API keys mapped to labels.
     final hasSplit = reason.contains(' — ');
     final parts    = hasSplit ? reason.split(' — ') : <String>[];
-    final title    = hasSplit ? 'Referred — ${parts.first.trim()}' : 'Referred';
+    final title    = hasSplit ? VisitFlowStrings.referredTitleFor(parts.first.trim()) : VisitFlowStrings.referralBadge;
     final subtitle = hasSplit ? parts.skip(1).join(' — ').trim() : null;
     final bullets  = hasSplit
         ? const <String>[]
@@ -2956,9 +2958,9 @@ class _ReferralAlertCard extends StatelessWidget {
               color: accent,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Text(
-              'Referred',
-              style: TextStyle(
+            child: Text(
+              VisitFlowStrings.referralBadge,
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
@@ -3016,7 +3018,7 @@ class _AiCounsellingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final recipientLine = patientLabel != null
-        ? 'To: $patientLabel${patientPhone != null ? ' · $patientPhone' : ''}'
+        ? VisitFlowStrings.recipientLineFor(patientLabel!, patientPhone)
         : null;
 
     return Container(
@@ -3445,9 +3447,9 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                 ),
                 const SizedBox(width: 10),
                 // Label
-                const Text(
-                  'Follow-up',
-                  style: TextStyle(
+                Text(
+                  VisitFlowStrings.followUpLabel,
+                  style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                     color: _cardText,
@@ -3485,9 +3487,9 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
               ],
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Auto-scheduled · already saved',
-              style: TextStyle(
+            Text(
+              VisitFlowStrings.followUpAutoScheduledNote,
+              style: const TextStyle(
                 fontSize: 11.5,
                 color: AppColors.textMuted,
                 height: 1.4,
@@ -3723,21 +3725,21 @@ class _HouseholdMemberStrip extends StatelessWidget {
   static (Color ring, Color labelColor, String visitLabel) _style(Programme p) {
     switch (p) {
       case Programme.anc:
-        return (const Color(0xFFFBCFE8), const Color(0xFFEC4899), 'ANC visit');
+        return (const Color(0xFFFBCFE8), const Color(0xFFEC4899), VisitFlowStrings.visitLabelAnc);
       case Programme.pnc:
-        return (const Color(0xFFA7F3D0), const Color(0xFF10B981), 'PNC due');
+        return (const Color(0xFFA7F3D0), const Color(0xFF10B981), VisitFlowStrings.visitLabelPncDue);
       case Programme.imci:
-        return (const Color(0xFFFDE68A), const Color(0xFFF59E0B), 'Child visit');
+        return (const Color(0xFFFDE68A), const Color(0xFFF59E0B), VisitFlowStrings.visitLabelChildVisit);
       case Programme.ncd:
-        return (const Color(0xFFFDE68A), const Color(0xFF92400E), 'BP check');
+        return (const Color(0xFFFDE68A), const Color(0xFF92400E), VisitFlowStrings.visitLabelBpCheck);
       case Programme.tb:
-        return (const Color(0xFFA5B4FC), const Color(0xFF4F46E5), 'TB check');
+        return (const Color(0xFFA5B4FC), const Color(0xFF4F46E5), VisitFlowStrings.visitLabelTbCheck);
       case Programme.epi:
-        return (const Color(0xFF93C5FD), const Color(0xFF1D4ED8), 'Vaccines');
+        return (const Color(0xFF93C5FD), const Color(0xFF1D4ED8), VisitFlowStrings.visitLabelVaccines);
       case Programme.nutrition:
-        return (const Color(0xFF6EE7B7), const Color(0xFF15803D), 'Nutrition');
+        return (const Color(0xFF6EE7B7), const Color(0xFF15803D), VisitFlowStrings.visitLabelNutrition);
       default:
-        return (const Color(0xFFE5E7EB), AppColors.textMuted, 'Scheduled');
+        return (const Color(0xFFE5E7EB), AppColors.textMuted, VisitFlowStrings.visitLabelScheduled);
     }
   }
 
@@ -3787,7 +3789,7 @@ class _HouseholdMemberStrip extends StatelessWidget {
                       member: members[i],
                       ringColor: AppColors.navy,
                       ringWidth: 3.0,
-                      labelText: 'Viewing',
+                      labelText: VisitFlowStrings.viewingLabel,
                       labelColor: AppColors.navy,
                       labelBold: true,
                       onTap: null,

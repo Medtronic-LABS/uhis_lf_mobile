@@ -150,3 +150,4 @@ demo_jul_1/
 
 # Claude Code local settings (per-developer permission grants, machine-specific paths)
 .claude/settings.local.json
+.superpowers/

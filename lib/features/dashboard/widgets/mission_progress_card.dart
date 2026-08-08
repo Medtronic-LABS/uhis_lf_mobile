@@ -51,7 +51,9 @@ class MissionProgressCard extends StatelessWidget {
           children: [
             // Header
             Text(
-              "Today's Progress · ${DateFormat('d MMM').format(DateTime.now())}",
+              MissionDashboardStrings.todaysProgressHeader(
+                DateFormat('d MMM').format(DateTime.now()),
+              ),
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: scheme.onSurface,
@@ -188,7 +190,7 @@ class MissionProgressCard extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('🎉', style: TextStyle(fontSize: 24)),
+                    Text(MissionDashboardStrings.celebrationEmoji, style: const TextStyle(fontSize: 24)),
                     const SizedBox(width: 12),
                     Text(
                       MissionDashboardStrings.allCaughtUp,

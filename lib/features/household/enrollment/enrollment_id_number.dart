@@ -26,11 +26,10 @@ abstract final class EnrollmentIdNumber {
   static const int nidMaxLength = 17;
 
   /// R.string.national_id_validation
-  static const String nidFormatError = 'National ID must be 10, 13, or 17 digits';
+  static String get nidFormatError => EnrollmentStrings.nidFormatError;
 
   /// R.string.national_id_already_exists
-  static const String duplicateError =
-      'National ID is already assigned to another member';
+  static String get duplicateError => EnrollmentStrings.nidDuplicateAssignedError;
 
   static final RegExp _digitsOnly = RegExp(r'^\d+$');
 

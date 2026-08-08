@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../constants/app_strings.dart';
 import '../db/referral_dao.dart';
 import '../models/referral.dart';
 import '../sla/sla_evaluator.dart';
@@ -81,9 +82,10 @@ class RepeatScheduler {
       final payload = (row.payloadJson == null || row.payloadJson!.isEmpty)
           ? const <String, Object?>{}
           : jsonDecode(row.payloadJson!) as Map<String, Object?>;
-      final title = payload['title']?.toString() ?? 'Referral reminder';
+      final title =
+          payload['title']?.toString() ?? ReferralStrings.notifReminderTitle;
       final body =
-          payload['body']?.toString() ?? 'You have a pending referral alert.';
+          payload['body']?.toString() ?? ReferralStrings.notifReminderBody;
       final fired = await maybeFire(
         referralId: row.referralId,
         channelId: row.channel,

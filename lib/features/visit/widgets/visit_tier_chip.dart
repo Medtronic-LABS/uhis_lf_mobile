@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/models/dashboard_tier.dart';
 
 /// Chip for filtering visits by tier.
@@ -26,7 +27,9 @@ class VisitTierChip extends StatelessWidget {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final color = _tierColor(tier, tokens);
     return Semantics(
-      label: isSelected ? 'Remove filter: $label' : 'Filter by $label',
+      label: isSelected
+          ? MissionDashboardStrings.removeFilter(label)
+          : MissionDashboardStrings.filterBy(label),
       button: true,
       selected: isSelected,
       child: GestureDetector(

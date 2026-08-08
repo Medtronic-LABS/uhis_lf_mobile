@@ -587,10 +587,10 @@ class NeedCategoryBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       label: isDisabled
-          ? '$label filter, unavailable'
+          ? MissionDashboardStrings.filterUnavailable(label)
           : isActive
-              ? '$label filter, selected'
-              : 'Filter by $label',
+              ? MissionDashboardStrings.filterSelected(label)
+              : MissionDashboardStrings.filterBy(label),
       button: true,
       child: Opacity(
         opacity: isDisabled ? 0.45 : 1.0,

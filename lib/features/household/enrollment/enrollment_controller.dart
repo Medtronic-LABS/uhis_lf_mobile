@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/db/household_dao.dart';
 import '../../../core/db/member_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -192,7 +193,7 @@ class EnrollmentController extends ChangeNotifier {
     if (_household == null) {
       debugPrint('[EnrollmentController] validateHouseholdForm — household is '
           'null; initializeHousehold() must run before the form is submitted');
-      errors.add('Household not initialized');
+      errors.add(EnrollmentStrings.householdNotInitializedError);
       return errors;
     }
 
@@ -206,14 +207,14 @@ class EnrollmentController extends ChangeNotifier {
         'subVillage=${_household!.subVillageId}');
 
     if (_household!.numberOfMembers <= 0) {
-      errors.add('Number of members must be greater than 0');
+      errors.add(EnrollmentStrings.membersCountRequiredError);
     }
     if (_household!.monthlyIncomeRange.isEmpty) {
-      errors.add('Monthly income range is required');
+      errors.add(EnrollmentStrings.incomeRangeRequiredError);
     }
     if (_household!.occupation == 'Other' &&
         _household!.otherOccupation.trim().isEmpty) {
-      errors.add('Please specify the occupation');
+      errors.add(EnrollmentStrings.occupationSpecifyRequiredError);
     }
 
     return errors;
@@ -224,41 +225,41 @@ class EnrollmentController extends ChangeNotifier {
     final errors = <String>[];
 
     if (_householdHead == null) {
-      errors.add('Head information not provided');
+      errors.add(EnrollmentStrings.headInfoRequiredError);
       return errors;
     }
 
     if (_householdHead!.name.trim().isEmpty) {
-      errors.add('Head name is required');
+      errors.add(EnrollmentStrings.headNameRequiredError);
     }
     if (_householdHead!.idType.trim().isEmpty) {
-      errors.add('ID type is required');
+      errors.add(EnrollmentStrings.idTypeRequiredError);
     }
     // "Not Available" hides the number field in Spice, so it must not be
     // demanded here either.
     final headIdError = EnrollmentIdNumber.validate(
       _householdHead!.idType,
       _householdHead!.idNumber,
-      requiredMessage: 'ID number is required',
+      requiredMessage: EnrollmentStrings.idNumberRequiredError,
     );
     if (headIdError != null) {
       errors.add(headIdError);
     }
     if (_householdHead!.maritalStatus.isEmpty) {
-      errors.add('Marital status is required');
+      errors.add(EnrollmentStrings.maritalStatusRequiredError);
     }
     // Android member_registration.json: disability mandatory for head too.
     final headDisability = _householdHead!.disabilityStatus.trim();
     if (headDisability.isEmpty ||
         headDisability.toLowerCase() == 'none' ||
         headDisability.toLowerCase() == 'absent') {
-      errors.add('Disability status is required');
+      errors.add(EnrollmentStrings.disabilityStatusRequiredError);
     }
     if (_householdHead!.mobileAvailable) {
       final mobileError = EnrollmentMobileNumber.validate(
         _householdHead!.mobileNumber,
         required: true,
-        requiredMessage: 'Mobile number is required',
+        requiredMessage: EnrollmentStrings.mobileNumberRequiredError,
       );
       if (mobileError != null) errors.add(mobileError);
     }
@@ -271,18 +272,18 @@ class EnrollmentController extends ChangeNotifier {
     final errors = <String>[];
 
     if (member.name.trim().isEmpty) {
-      errors.add('Member name is required');
+      errors.add(EnrollmentStrings.memberNameRequiredError);
     }
     if (member.age < 0) {
-      errors.add('Age must be valid');
+      errors.add(EnrollmentStrings.ageInvalidError);
     }
     if (member.dateOfBirth.isEmpty) {
-      errors.add('Date of birth is required');
+      errors.add(EnrollmentStrings.memberDobRequiredError);
     }
     final memberIdError = EnrollmentIdNumber.validate(
       member.idType,
       member.idNumber,
-      requiredMessage: 'ID number is required',
+      requiredMessage: EnrollmentStrings.idNumberRequiredError,
     );
     if (memberIdError != null) {
       errors.add(memberIdError);
@@ -290,22 +291,22 @@ class EnrollmentController extends ChangeNotifier {
     // Android member_registration.json: phone + category + disability mandatory.
     if (member.phoneNumberCategory == null ||
         member.phoneNumberCategory!.trim().isEmpty) {
-      errors.add('Mobile number category is required');
+      errors.add(EnrollmentStrings.phoneCategoryRequiredError);
     }
     final mobileError = EnrollmentMobileNumber.validate(
       member.mobileNumber,
       required: true,
-      requiredMessage: 'Mobile number is required',
+      requiredMessage: EnrollmentStrings.mobileNumberRequiredError,
     );
     if (mobileError != null) errors.add(mobileError);
     if (member.maritalStatus.isEmpty) {
-      errors.add('Marital status is required');
+      errors.add(EnrollmentStrings.maritalStatusRequiredError);
     }
     final disability = member.disabilityStatus.trim().toLowerCase();
     if (disability.isEmpty ||
         disability == 'none' ||
         disability == 'absent') {
-      errors.add('Disability status is required');
+      errors.add(EnrollmentStrings.disabilityStatusRequiredError);
     }
 
     return errors;
@@ -320,7 +321,7 @@ class EnrollmentController extends ChangeNotifier {
     final headErrors = validateHeadForm();
 
     if (householdErrors.isNotEmpty || headErrors.isNotEmpty) {
-      _error = 'Please fill all required fields';
+      _error = EnrollmentStrings.requiredFieldsMissingError;
       notifyListeners();
       return false;
     }
@@ -343,7 +344,7 @@ class EnrollmentController extends ChangeNotifier {
           location: (latitude: location.latitude, longitude: location.longitude),
         );
         if (result == null) {
-          _error = 'Failed to save household locally';
+          _error = EnrollmentStrings.saveLocallyFailedError;
           _setLoading(false);
           return false;
         }
@@ -385,7 +386,24 @@ class EnrollmentController extends ChangeNotifier {
 
       _setLoading(false);
       return true;
+    } on DioException catch (e) {
+      // Anticipated failure: the request never reached the server (or was
+      // rejected outright). Show the generic translated fallback rather than
+      // the raw exception — a stack trace / status code means nothing to an SK.
+      debugPrint('[EnrollmentController] submitHousehold network error: $e');
+      _error = EnrollmentStrings.enrollmentFailed;
+      _setLoading(false);
+      return false;
+    } on SocketException catch (e) {
+      // Anticipated failure: device is offline.
+      debugPrint('[EnrollmentController] submitHousehold offline: $e');
+      _error = EnrollmentStrings.enrollmentFailed;
+      _setLoading(false);
+      return false;
     } catch (e) {
+      // Truly unclassified — no getter can localize an arbitrary exception
+      // message, so this is the only path that still surfaces raw text.
+      debugPrint('[EnrollmentController] submitHousehold unexpected error: $e');
       _error = 'Enrollment failed: $e';
       _setLoading(false);
       return false;

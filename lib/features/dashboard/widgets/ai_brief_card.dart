@@ -73,7 +73,7 @@ class _AIBriefCardState extends State<AIBriefCard> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Today · ${DateFormat('d MMM').format(DateTime.now())}',
+                  MissionDashboardStrings.aiBriefTodayHeader(DateFormat('d MMM').format(DateTime.now())),
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: scheme.onSurface,
@@ -103,7 +103,7 @@ class _AIBriefCardState extends State<AIBriefCard> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'visits',
+                        MissionDashboardStrings.visitsUnitLabel,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               color: accentColor.withValues(alpha: 0.8),
                             ),
@@ -236,7 +236,9 @@ class _AIBriefCardState extends State<AIBriefCard> {
                 if (brief.riskFactors.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Semantics(
-                    label: _expanded ? 'Collapse risk factors' : 'Expand risk factors',
+                    label: _expanded
+                        ? MissionDashboardStrings.collapseRiskFactors
+                        : MissionDashboardStrings.expandRiskFactors,
                     button: true,
                     child: InkWell(
                     onTap: () => setState(() => _expanded = !_expanded),

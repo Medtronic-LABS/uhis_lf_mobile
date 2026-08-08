@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/ai_extracted_field.dart';
 
@@ -78,11 +79,11 @@ class ConfidenceBadge extends StatelessWidget {
   String _labelForLevel(AIConfidenceLevel level) {
     switch (level) {
       case AIConfidenceLevel.high:
-        return 'High confidence';
+        return ScribeBannerStrings.confidenceHigh;
       case AIConfidenceLevel.medium:
-        return 'Medium';
+        return ScribeBannerStrings.confidenceMedium;
       case AIConfidenceLevel.low:
-        return 'Review needed';
+        return ScribeBannerStrings.confidenceReviewNeeded;
     }
   }
 }
@@ -148,7 +149,7 @@ class AIFieldControls extends StatelessWidget {
             minWidth: iconSize + spacing,
             minHeight: iconSize + spacing,
           ),
-          tooltip: 'Accept',
+          tooltip: ScribeBannerStrings.acceptTooltip,
           onPressed: onAccept,
         ),
         if (onEdit != null)
@@ -160,7 +161,7 @@ class AIFieldControls extends StatelessWidget {
               minWidth: iconSize + spacing,
               minHeight: iconSize + spacing,
             ),
-            tooltip: 'Edit',
+            tooltip: ScribeBannerStrings.editTooltip,
             onPressed: onEdit,
           ),
         IconButton(
@@ -171,7 +172,7 @@ class AIFieldControls extends StatelessWidget {
             minWidth: iconSize + spacing,
             minHeight: iconSize + spacing,
           ),
-          tooltip: 'Reject',
+          tooltip: ScribeBannerStrings.rejectTooltip,
           onPressed: onReject,
         ),
       ],
@@ -262,14 +263,14 @@ class AIFieldWrapper extends StatelessWidget {
                       compact: true,
                     )
                   else if (isAccepted)
-                    const _StatusChip(
-                      label: 'Accepted',
+                    _StatusChip(
+                      label: ScribeBannerStrings.statusAccepted,
                       icon: Icons.check,
                       color: AppColors.statusSuccessText,
                     )
                   else if (isModified)
-                    const _StatusChip(
-                      label: 'Modified',
+                    _StatusChip(
+                      label: ScribeBannerStrings.statusModified,
                       icon: Icons.edit,
                       color: AppColors.tagBlueText,
                     ),
@@ -376,10 +377,10 @@ class AIScribeFloatingButton extends StatelessWidget {
                 ),
           label: Text(
             isProcessing
-                ? 'Processing...'
+                ? ScribeBannerStrings.processingEllipsis
                 : isRecording
-                    ? 'Stop'
-                    : 'AI Scribe',
+                    ? ScribeBannerStrings.stopLabel
+                    : ScribeBannerStrings.aiScribeLabel,
             style: const TextStyle(color: Colors.white),
           ),
         ),
@@ -457,15 +458,15 @@ class AIPreFillBanner extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'AI Scribe',
-                      style: TextStyle(
+                    Text(
+                      ScribeBannerStrings.preFillTitle,
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),
                     ),
                     Text(
-                      '$fieldCount fields extracted from recording',
+                      ScribeBannerStrings.fieldsExtractedCount(fieldCount),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textMuted,
@@ -489,7 +490,7 @@ class AIPreFillBanner extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: onReviewAll,
                   icon: const Icon(Icons.visibility, size: 18),
-                  label: const Text('Review All'),
+                  label: Text(ScribeBannerStrings.reviewAllCta),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.tagBlueText,
                     side: const BorderSide(color: AppColors.aiBorder),
@@ -501,7 +502,7 @@ class AIPreFillBanner extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: onAcceptAll,
                   icon: const Icon(Icons.check_circle, size: 18),
-                  label: const Text('Accept All'),
+                  label: Text(ScribeBannerStrings.acceptAllCta),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.statusSuccessAction,
                     foregroundColor: Colors.white,

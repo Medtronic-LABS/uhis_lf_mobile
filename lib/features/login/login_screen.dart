@@ -347,8 +347,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             suffixIcon: IconButton(
                               tooltip: _obscurePassword
-                                  ? 'Show password'
-                                  : 'Hide password',
+                                  ? LoginStrings.showPasswordTooltip
+                                  : LoginStrings.hidePasswordTooltip,
                               icon: Icon(
                                 _obscurePassword
                                     ? Icons.visibility_outlined

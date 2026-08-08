@@ -4,6 +4,8 @@
 /// "What needs action today?" without showing raw statistics.
 library;
 
+import '../constants/app_strings.dart';
+
 /// Priority level for the overall day.
 enum DayPriorityLevel {
   critical,
@@ -14,13 +16,13 @@ enum DayPriorityLevel {
   String get label {
     switch (this) {
       case DayPriorityLevel.critical:
-        return 'Critical';
+        return MissionDashboardStrings.priorityCritical;
       case DayPriorityLevel.high:
-        return 'High';
+        return MissionDashboardStrings.priorityHigh;
       case DayPriorityLevel.medium:
-        return 'Medium';
+        return MissionDashboardStrings.priorityMedium;
       case DayPriorityLevel.low:
-        return 'Low';
+        return MissionDashboardStrings.priorityLow;
     }
   }
 }

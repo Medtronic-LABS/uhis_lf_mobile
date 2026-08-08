@@ -5,6 +5,7 @@
 library;
 
 import '../../../features/visit/immunisation/epi_schedule_engine.dart';
+import '../../constants/app_strings.dart';
 import 'clinical_finding.dart';
 
 /// The "due within 7 days" window is tighter than `EpiScheduleEngine`'s own
@@ -32,7 +33,7 @@ List<ClinicalFinding> evaluateChildImmunizationFindings({
     final names = overdue.map((v) => v.display).join(', ');
     findings.add(ClinicalFinding(
       code: 'childImmunization.overdue',
-      message: '${overdue.length} dose(s) overdue: $names.',
+      message: ClinicalFindingStrings.childImmunizationOverdueDoses(overdue.length, names),
       programme: 'childImmunization',
     ));
   }
@@ -46,9 +47,9 @@ List<ClinicalFinding> evaluateChildImmunizationFindings({
       previousWeightKg != null &&
       latestWeightKg <= previousWeightKg;
   if (weightGainSlowed) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'childImmunization.weightGainSlowed',
-      message: 'Weight gain has slowed since the last check — monitor nutrition.',
+      message: ClinicalFindingStrings.childImmunizationWeightGainSlowed,
       programme: 'childImmunization',
     ));
   }
@@ -62,16 +63,16 @@ List<ClinicalFinding> evaluateChildImmunizationFindings({
   for (final v in dueSoon) {
     findings.add(ClinicalFinding(
       code: 'childImmunization.dueSoon',
-      message: '${v.display} due soon — plan for next visit.',
+      message: ClinicalFindingStrings.childImmunizationDueSoon(v.display),
       programme: 'childImmunization',
     ));
   }
 
   // ── Fallback ──
   if (findings.isEmpty) {
-    findings.add(const ClinicalFinding(
+    findings.add(ClinicalFinding(
       code: 'childImmunization.onSchedule',
-      message: 'Immunization on schedule, growth on track.',
+      message: ClinicalFindingStrings.childImmunizationOnSchedule,
       programme: 'childImmunization',
     ));
   }

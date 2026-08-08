@@ -97,9 +97,13 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   }
 
   Map<String, String?> _runValidation() {
-    const req = 'Required';
+    final req = CommonStrings.required;
     // Skipped for "Not Available", digits-and-length checked for National ID.
-    final idError = EnrollmentIdNumber.validate(_idType, _idNumberCtrl.text);
+    final idError = EnrollmentIdNumber.validate(
+      _idType,
+      _idNumberCtrl.text,
+      requiredMessage: req,
+    );
     return {
       if (_selectedSsWorker == null) 'ssWorker': req,
       if (_selectedVillage == null) 'village': req,
@@ -120,7 +124,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
         requiredMessage: req,
       ),
       if (_phoneCategory == null) 'phoneCategory': req,
-      if (_dobCtrl.text.trim().isEmpty) 'dob': 'Date of birth required',
+      if (_dobCtrl.text.trim().isEmpty) 'dob': EnrollmentStrings.dobRequired,
       if (_gender == null) 'gender': req,
       if (_ageInYears > 5 && _maritalStatus == null) 'maritalStatus': req,
       // Same as add-member: Spice member_registration.json disability mandatory.
@@ -313,7 +317,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       return;
     }
     _ageInYears = years;
-    _ageUnit = years == 1 ? 'year' : 'years';
+    _ageUnit = years == 1 ? EnrollmentStrings.ageUnitYear : EnrollmentStrings.ageUnitYears;
     _ageSummary = null;
     _dob = EnrollmentDob.fromAgeYears(years);
     _dobCtrl.text = EnrollmentDob.display(_dob!);
@@ -767,10 +771,10 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                               children: [
                                 const Icon(Icons.auto_awesome, size: 14, color: AppColors.statusSuccessAction),
                                 const SizedBox(width: 6),
-                                const Expanded(
+                                Expanded(
                                   child: Text(
-                                    'Scanned from NID — edit if needed',
-                                    style: TextStyle(
+                                    EnrollmentStrings.nidScannedHint,
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                       color: AppColors.statusSuccessActionDark,
@@ -779,9 +783,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                                 ),
                                 GestureDetector(
                                   onTap: () => setState(() => _prefilledFromScan = false),
-                                  child: const Text(
-                                    'Clear',
-                                    style: TextStyle(
+                                  child: Text(
+                                    EnrollmentStrings.clearNidScan,
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                       color: AppColors.statusCritical,
@@ -912,7 +916,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                       validator: (v) => EnrollmentMobileNumber.validate(
                         v,
                         required: true,
-                        requiredMessage: 'Required',
+                        requiredMessage: CommonStrings.required,
                       ),
                       onChanged: (_) => _clearError('mobile'),
                       errorText: _fieldErrors['mobile'],

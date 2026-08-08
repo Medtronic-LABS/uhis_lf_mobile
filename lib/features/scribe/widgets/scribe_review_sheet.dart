@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../app/theme.dart';
 import '../scribe_controller.dart';
 import '../../../core/api/scribe_api_service.dart';
+import '../../../core/constants/app_strings.dart';
 
 /// Full-height bottom sheet for reviewing and accepting/rejecting an AI note.
 ///
@@ -66,9 +67,9 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
         final transcript = session.transcriptText;
 
         if (soap == null) {
-          return const Padding(
-            padding: EdgeInsets.all(32),
-            child: Center(child: Text('Note not available.')),
+          return Padding(
+            padding: const EdgeInsets.all(32),
+            child: Center(child: Text(ScribeStrings.noteNotAvailable)),
           );
         }
 
@@ -116,14 +117,14 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                     ),
                   ),
                   child: Row(
-                    children: const [
-                      Icon(Icons.info_outline,
+                    children: [
+                      const Icon(Icons.info_outline,
                           size: 14, color: AppColors.statusWarningText),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Please review all sections before accepting.',
-                          style: TextStyle(
+                          ScribeStrings.reviewWarning,
+                          style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.statusWarningText,
                             fontWeight: FontWeight.w600,
@@ -146,8 +147,8 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                       _TranscriptCard(text: transcript),
                     _SoapSection(
                       label: 'S',
-                      title: 'Subjective',
-                      subtitle: "Patient's reported symptoms",
+                      title: ScribeStrings.soapSubjectiveTitle,
+                      subtitle: ScribeStrings.soapSubjectiveSubtitle,
                       text: _editedSubjective ?? soap.subjective ?? '',
                       onSeen: () => _markSeen('S'),
                       onChanged: (v) =>
@@ -155,8 +156,8 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                     ),
                     _SoapSection(
                       label: 'O',
-                      title: 'Objective',
-                      subtitle: 'Clinical findings & vitals',
+                      title: ScribeStrings.soapObjectiveTitle,
+                      subtitle: ScribeStrings.soapObjectiveSubtitle,
                       text: _editedObjective ?? soap.objective ?? '',
                       onSeen: () => _markSeen('O'),
                       onChanged: (v) =>
@@ -164,8 +165,8 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                     ),
                     _SoapSection(
                       label: 'A',
-                      title: 'Assessment',
-                      subtitle: 'Diagnosis / impression',
+                      title: ScribeStrings.soapAssessmentTitle,
+                      subtitle: ScribeStrings.soapAssessmentSubtitle,
                       text: _editedAssessment ?? soap.assessment ?? '',
                       onSeen: () => _markSeen('A'),
                       onChanged: (v) =>
@@ -173,8 +174,8 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                     ),
                     _SoapSection(
                       label: 'P',
-                      title: 'Plan',
-                      subtitle: 'Treatment & follow-up',
+                      title: ScribeStrings.soapPlanTitle,
+                      subtitle: ScribeStrings.soapPlanSubtitle,
                       text: _editedPlan ?? soap.plan ?? '',
                       onSeen: () => _markSeen('P'),
                       onChanged: (v) => setState(() => _editedPlan = v),
@@ -199,7 +200,7 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                             side: const BorderSide(color: AppColors.textMuted),
                             foregroundColor: AppColors.textMuted,
                           ),
-                          child: const Text('Reject'),
+                          child: Text(ScribeStrings.reviewReject),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -221,7 +222,7 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Text('Accept Note'),
+                              : Text(ScribeStrings.reviewAccept),
                         ),
                       ),
                     ],
@@ -261,7 +262,7 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
     if (context.mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note accepted ✓')),
+        SnackBar(content: Text(ScribeStrings.acceptedSnackbar)),
       );
     }
   }
@@ -272,7 +273,7 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
     if (context.mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note discarded')),
+        SnackBar(content: Text(ScribeStrings.rejectedSnackbar)),
       );
     }
   }
@@ -287,7 +288,7 @@ class _SheetHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final confidencePct =
         ((rationale?.confidence ?? 0) * 100).toStringAsFixed(0);
-    final model = rationale?.asrProvider ?? 'AI';
+    final model = rationale?.asrProvider ?? ScribeStrings.aiModelFallback;
     final needsReview = rationale?.humanReviewRequired ?? true;
 
     return Row(
@@ -308,7 +309,7 @@ class _SheetHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$confidencePct% confidence · $model',
+                ScribeStrings.confidencePctModel(confidencePct, model),
                 style: TextStyle(
                   fontSize: 11,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -328,9 +329,9 @@ class _SheetHeader extends StatelessWidget {
                 color: AppColors.statusWarning.withValues(alpha: 0.35),
               ),
             ),
-            child: const Text(
-              'Review required',
-              style: TextStyle(
+            child: Text(
+              ScribeStrings.reviewRequired,
+              style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
                 color: AppColors.statusWarningText,
@@ -376,7 +377,7 @@ class _TranscriptCardState extends State<_TranscriptCard> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Transcript',
+                      ScribeStrings.transcriptLabel,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,

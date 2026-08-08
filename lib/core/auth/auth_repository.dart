@@ -12,6 +12,7 @@ import '../api/api_client.dart';
 import '../debug/console_log.dart';
 import '../api/endpoints.dart';
 import '../config/app_config.dart';
+import '../constants/app_strings.dart';
 
 /// Hash password using HmacSHA512 keyed by [AppConfig.passwordHashKey],
 /// matching the Spice Android EncryptionUtil.getSecurePassword() implementation.
@@ -233,7 +234,7 @@ class AuthRepository {
     // ignore: avoid_print
     print('[Auth] Login response: ${resp.statusCode}');
     if (resp.statusCode != 200 && resp.statusCode != 302) {
-      throw AuthException(extractLoginErrorMessage(resp.data) ?? 'Invalid credentials');
+      throw AuthException(extractLoginErrorMessage(resp.data) ?? AuthStrings.invalidCredentials);
     }
     await _storage.write(key: _kUsername, value: username);
     // Persist hash for offline password verification (Spice Android parity).
@@ -272,7 +273,7 @@ class AuthRepository {
   Future<void> _loadFromLoginResponse(Map data) async {
     final tenant = data['tenantId'];
     if (tenant == null) {
-      throw AuthException('Login response missing tenantId');
+      throw AuthException(AuthStrings.tenantIdMissing);
     }
     final tenantStr = tenant.toString();
     _api.setTenantId(tenantStr);
@@ -600,7 +601,7 @@ class AuthRepository {
     final hasToken = authToken != null && authToken.isNotEmpty;
 
     if (!hasCookies && !hasToken) {
-      throw AuthException('No active session to enrol');
+      throw AuthException(AuthStrings.noActiveSessionToEnrol);
     }
 
     final expiry = _api.authCookieExpiry ??

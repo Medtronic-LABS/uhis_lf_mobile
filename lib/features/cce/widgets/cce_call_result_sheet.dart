@@ -49,17 +49,6 @@ class _CceCallResultSheetState extends State<CceCallResultSheet> {
   final _otherCtrl = TextEditingController();
   bool _saving = false;
 
-  static const _rejectReasons = <String>[
-    'Treatment from other facility',
-    'No Medicine',
-    'Long Distance',
-    'Transportation and unsupplied medicine cost',
-    'Long waiting queue',
-    'Migrated to other places',
-    'Died',
-    'Other',
-  ];
-
   @override
   void dispose() {
     _otherCtrl.dispose();
@@ -72,7 +61,8 @@ class _CceCallResultSheetState extends State<CceCallResultSheet> {
       if (_willingToVisit == null) return false;
       if (_willingToVisit == false) {
         if (_rejectReason == null) return false;
-        if (_rejectReason == 'Other' && _otherCtrl.text.trim().isEmpty) {
+        if (_rejectReason == CceStrings.rejectReasonOtherKey &&
+            _otherCtrl.text.trim().isEmpty) {
           return false;
         }
       }
@@ -152,8 +142,8 @@ class _CceCallResultSheetState extends State<CceCallResultSheet> {
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                ..._rejectReasons.map(_reasonChip),
-                if (_rejectReason == 'Other') ...[
+                ...CceStrings.rejectReasonKeys.map(_reasonChip),
+                if (_rejectReason == CceStrings.rejectReasonOtherKey) ...[
                   const SizedBox(height: 8),
                   TextField(
                     controller: _otherCtrl,
@@ -273,12 +263,15 @@ class _CceCallResultSheetState extends State<CceCallResultSheet> {
     );
   }
 
-  Widget _reasonChip(String reason) {
-    final selected = _rejectReason == reason;
+  /// [reasonKey] is the stable key that gets stored and synced; only
+  /// [CceStrings.rejectReasonLabel] output is ever rendered.
+  Widget _reasonChip(String reasonKey) {
+    final selected = _rejectReason == reasonKey;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: InkWell(
-        onTap: _saving ? null : () => setState(() => _rejectReason = reason),
+        onTap:
+            _saving ? null : () => setState(() => _rejectReason = reasonKey),
         borderRadius: BorderRadius.circular(8),
         child: Container(
           width: double.infinity,
@@ -292,7 +285,7 @@ class _CceCallResultSheetState extends State<CceCallResultSheet> {
                 ? AppColors.aiPurple.withValues(alpha: 0.08)
                 : Colors.white,
           ),
-          child: Text(reason),
+          child: Text(CceStrings.rejectReasonLabel(reasonKey)),
         ),
       ),
     );
@@ -315,11 +308,12 @@ class _CceCallResultSheetState extends State<CceCallResultSheet> {
                 ? _willingToVisit
                 : null,
             visitRejectReason: _willingToVisit == false ? _rejectReason : null,
-            otherVisitRejectReason: _rejectReason == 'Other'
-                ? _otherCtrl.text.trim()
-                : null,
+            otherVisitRejectReason:
+                _rejectReason == CceStrings.rejectReasonOtherKey
+                    ? _otherCtrl.text.trim()
+                    : null,
             reason: _willingToVisit == false ? _rejectReason : null,
-            otherReason: _rejectReason == 'Other'
+            otherReason: _rejectReason == CceStrings.rejectReasonOtherKey
                 ? _otherCtrl.text.trim()
                 : null,
           );

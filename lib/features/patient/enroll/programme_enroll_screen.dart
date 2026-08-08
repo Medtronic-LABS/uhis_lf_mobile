@@ -68,7 +68,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
 
   String get _subtitle {
     final parts = <String>[];
-    if (_age > 0) parts.add('Age $_age');
+    if (_age > 0) parts.add(PatientContextStrings.ageLabel(_age));
     if (widget.patientGender != null) parts.add(widget.patientGender!);
     if (widget.villageName != null) parts.add(widget.villageName!);
     return parts.join(' · ');
@@ -563,7 +563,7 @@ class _ConfirmBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                '$selectedCount selected',
+                ComposerStrings.nSelected(selectedCount),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,

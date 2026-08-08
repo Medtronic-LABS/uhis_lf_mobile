@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/constants/app_strings.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/immunisation_dao.dart';
@@ -103,7 +104,7 @@ class WorklistRepository {
     final age = p.age ?? CalendarDay.ageFromDob(p.dob);
     return WorklistEntry(
       patientId: p.id,
-      displayName: p.name ?? '(Unnamed patient)',
+      displayName: p.name ?? WorklistStrings.unnamedPatient,
       age: age,
       dob: p.dob,
       gender: p.gender,

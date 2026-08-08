@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 
 /// A styled dropdown matching the enrollment form aesthetic.
@@ -14,7 +15,7 @@ class EnrollmentDropdown extends StatelessWidget {
     required this.options,
     required this.value,
     required this.onChanged,
-    this.hint = 'Select…',
+    this.hint,
     this.isRequired = false,
     this.errorText,
     this.optionLabel,
@@ -24,7 +25,11 @@ class EnrollmentDropdown extends StatelessWidget {
   final List<String> options;
   final String? value;
   final ValueChanged<String?> onChanged;
-  final String hint;
+
+  /// Placeholder shown when nothing is selected. Falls back to
+  /// [EnrollmentStrings.dropdownDefaultHint] when omitted — kept nullable
+  /// because a default parameter value cannot call a translation lookup.
+  final String? hint;
   final bool isRequired;
   final String? errorText;
 
@@ -34,6 +39,7 @@ class EnrollmentDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resolvedHint = hint ?? EnrollmentStrings.dropdownDefaultHint;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -80,7 +86,7 @@ class EnrollmentDropdown extends StatelessWidget {
                   isExpanded: true,
                   underline: const SizedBox.shrink(),
                   hint: Text(
-                    hint,
+                    resolvedHint,
                     style: const TextStyle(
                       fontSize: 14,
                       color: AppColors.textMuted,

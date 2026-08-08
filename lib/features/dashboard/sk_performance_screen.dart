@@ -137,9 +137,9 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
           labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-          tabs: const [
-            Tab(text: 'Performance'),
-            Tab(text: 'My Patients'),
+          tabs: [
+            Tab(text: PerformanceStrings.performanceTab),
+            Tab(text: PerformanceStrings.myPatientsTab),
           ],
         ),
       ),
@@ -194,7 +194,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
               if (items.isEmpty) {
                 return Center(
                   child: Text(
-                    'No patients',
+                    PerformanceStrings.noPatients,
                     style: TextStyle(color: AppColors.textMuted),
                   ),
                 );
@@ -290,11 +290,11 @@ class _MyPatientCard extends StatelessWidget {
                 ),
               const SizedBox(height: 8),
               // Service
-              _SpiceRow(label: 'Service', value: item.primaryService),
+              _SpiceRow(label: PerformanceStrings.serviceLabel, value: item.primaryService),
               // Next Visit
-              _SpiceRow(label: 'Next Visit', value: nextDue),
+              _SpiceRow(label: PerformanceStrings.nextVisitLabel, value: nextDue),
               // Last Visit
-              _SpiceRow(label: 'Last Visit', value: lastVisit),
+              _SpiceRow(label: PerformanceStrings.lastVisitLabel, value: lastVisit),
               const SizedBox(height: 6),
               // Due info text
               _SpiceDueText(delta: item.daysDelta),
@@ -362,14 +362,14 @@ class _SpiceDueText extends StatelessWidget {
 
   (String, Color) _resolve() {
     final d = delta;
-    if (d == null) return ('Routine', _kColorRoutine);
+    if (d == null) return (PerformanceStrings.dueRoutine, _kColorRoutine);
     if (d < 0) {
       final days = d.abs();
-      if (days == 1) return ('Tomorrow', _kColorUpcoming);
-      return ('Upcoming in $days days', _kColorUpcoming);
+      if (days == 1) return (PerformanceStrings.dueTomorrow, _kColorUpcoming);
+      return (PerformanceStrings.dueUpcomingInDays(days), _kColorUpcoming);
     }
-    if (d == 0) return ('Today', _kColorToday);
-    return ('$d day(s) Overdue', _kColorOverdue);
+    if (d == 0) return (PerformanceStrings.today, _kColorToday);
+    return (PerformanceStrings.overdueByDays(d), _kColorOverdue);
   }
 }
 
@@ -508,9 +508,9 @@ class _HeroCard extends StatelessWidget {
                             height: 1.1,
                           ),
                         ),
-                        const Text(
-                          '/ 100',
-                          style: TextStyle(
+                        Text(
+                          PerformanceStrings.outOf100,
+                          style: const TextStyle(
                             color: Colors.white60,
                             fontSize: 10,
                           ),

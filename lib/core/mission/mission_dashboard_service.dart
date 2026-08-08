@@ -13,6 +13,7 @@
 library;
 
 import '../api/cql_api_service.dart';
+import '../constants/app_strings.dart';
 import '../models/dashboard_tier.dart';
 import '../models/mission_brief.dart';
 import '../models/mission_queue_item.dart';
@@ -368,10 +369,10 @@ class MissionDashboardService {
         // Multiple services available in one household visit
         final memberServices = <String, String>{};
         for (final member in membersWithServices) {
-          final role = member.role ?? 'Member';
+          final role = member.role ?? MissionDashboardStrings.memberFallback;
           final service = member.dueServices.isNotEmpty
               ? member.dueServices.first
-              : 'Check-up';
+              : MissionDashboardStrings.checkUpFallback;
           memberServices[role] = service;
         }
 
@@ -471,7 +472,7 @@ class MissionDashboardService {
             ? _extractDaysFromDrivers(assessment.drivers)
             : null;
         if (daysOverdue != null && daysOverdue > 0) {
-          factors.add('Referral overdue by $daysOverdue days');
+          factors.add(MissionDashboardStrings.riskReferralOverdue(daysOverdue));
         }
       }
     }
@@ -481,7 +482,7 @@ class MissionDashboardService {
         .where((r) => r.state == ReferralStatus.arrived)
         .length;
     if (waitingCount > 0) {
-      factors.add('$waitingCount patient(s) waiting for facility review');
+      factors.add(MissionDashboardStrings.riskPatientsWaiting(waitingCount));
     }
 
     // Check for missed follow-ups
@@ -489,7 +490,7 @@ class MissionDashboardService {
         .where((e) => e.reasons.any((r) => r.contains('missed')))
         .length;
     if (missedFollowUps > 0) {
-      factors.add('$missedFollowUps patient(s) missed follow-up');
+      factors.add(MissionDashboardStrings.riskMissedFollowUps(missedFollowUps));
     }
 
     return factors;
@@ -617,9 +618,11 @@ class MissionDashboardService {
       type: MissionItemType.referral,
       priority: priority,
       priorityScore: 0,
-      patientName: referral.patientId.length > 8
-          ? 'Patient ${referral.patientId.substring(0, 8)}'
-          : 'Patient ${referral.patientId}', // Handle short IDs
+      patientName: MissionDashboardStrings.patientLabel(
+        referral.patientId.length > 8
+            ? referral.patientId.substring(0, 8)
+            : referral.patientId, // Handle short IDs
+      ),
       patientId: referral.patientId,
       referralId: referral.id,
       householdId: hhId,
@@ -628,7 +631,7 @@ class MissionDashboardService {
           ? (data.villageNamesById[referral.villageId!] ?? referral.villageId)
           : null,
       programmes: const {}, // Referrals don't have programme context here
-      reason: referral.diagnosisLabel ?? 'Referral',
+      reason: referral.diagnosisLabel ?? MissionDashboardStrings.referralFallback,
       daysOverdue: daysOverdue > 0 ? daysOverdue : null,
       dueAt: createdDateTime,
       aiInsight: aiInsight,
@@ -666,7 +669,7 @@ class MissionDashboardService {
       patientId: followUp.patientId,
       householdId: hhId,
       householdNumber: hhId != null ? data.householdNumbersById[hhId] : null,
-      reason: followUp.reason ?? 'Follow-up due',
+      reason: followUp.reason ?? MissionDashboardStrings.followUpDueFallback,
       daysOverdue: daysUntil < 0 ? -daysUntil : null,
       dueAt: followUp.dueAt,
       aiInsight: aiInsight,
@@ -702,7 +705,7 @@ class MissionDashboardService {
   }
 
   String _buildAiInsight(List<String> drivers) {
-    if (drivers.isEmpty) return 'Scheduled for regular check-up.';
+    if (drivers.isEmpty) return MissionDashboardStrings.insightScheduledCheckUp;
 
     final insights = <String>[];
     for (final driver in drivers) {
@@ -712,41 +715,20 @@ class MissionDashboardService {
       }
     }
 
-    if (insights.isEmpty) return 'Requires attention.';
+    if (insights.isEmpty) {
+      return MissionDashboardStrings.insightRequiresAttention;
+    }
     return insights.take(3).join(' ');
   }
 
+  /// `null` when the tag has no insight sentence (e.g. the band / danger-sign
+  /// tags) — the caller skips those, so the nullable variant is required here.
   String? _driverToInsight(String driver) {
     final parts = driver.split(':');
-    final key = parts[0];
-
-    switch (key) {
-      case 'sla-breached':
-        return 'SLA breached — immediate action required.';
-      case 'child-under-5':
-        return 'Child under 5 — higher priority.';
-      case 'pregnancy':
-        return 'High-risk pregnancy.';
-      case 'urgent-risk':
-        return 'Urgent clinical risk identified.';
-      case 'high-risk':
-        return 'High clinical risk.';
-      case 'overdue':
-        final days = parts.length > 1 ? parts[1] : '';
-        return days.isNotEmpty ? 'Overdue by $days days.' : 'Visit overdue.';
-      case 'no-arrival':
-        return 'Patient never arrived at facility.';
-      case 'emergency-dx':
-        return 'Emergency diagnosis.';
-      case 'missed-follow-up':
-        return 'Missed scheduled follow-up.';
-      case 'referral':
-        return 'Active referral requires tracking.';
-      case 'follow-up':
-        return 'Post-discharge follow-up due.';
-      default:
-        return null;
-    }
+    return MissionDashboardStrings.driverInsightOrNull(
+      parts[0],
+      days: parts.length > 1 ? parts[1] : null,
+    );
   }
 
   String _formatTime(DateTime time) {

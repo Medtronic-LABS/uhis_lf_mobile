@@ -1,6 +1,8 @@
 /// Data models for the conversational AI assistant feature.
 library;
 
+import '../../core/constants/app_strings.dart';
+
 enum MessageRole { user, assistant }
 
 /// Safe, fixed allowlist of actions the assistant may suggest. The LLM only
@@ -54,13 +56,13 @@ class AssistantAction {
   static String defaultLabel(AssistantActionType t) {
     switch (t) {
       case AssistantActionType.startVisit:
-        return 'Start visit';
+        return AssistantStrings.actionStartVisit;
       case AssistantActionType.openReferral:
-        return 'Open referral';
+        return AssistantStrings.actionOpenReferral;
       case AssistantActionType.scheduleFollowUp:
-        return 'Schedule follow-up';
+        return AssistantStrings.actionScheduleFollowUp;
       case AssistantActionType.callPatient:
-        return 'Call patient';
+        return AssistantStrings.actionCallPatient;
       case AssistantActionType.none:
         return '';
     }
