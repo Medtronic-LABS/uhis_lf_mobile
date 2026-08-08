@@ -1713,6 +1713,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
           patientId: _patientId,
           villageId: _villageId,
           encounterId: _encounterId,
+          // This payload is complete and server-acceptable, but Step 3 still
+          // gets to stamp the follow-up date and referred facility onto it.
+          // Hold it out of the push queue until then — once pushed it cannot be
+          // amended without creating a duplicate. Released on Step 3 save, on
+          // leaving the flow, or by the app-start sweep.
+          awaitingSummary: true,
           isReferred: isReferred,
           referredReasons: referredReasons.isEmpty ? null : referredReasons,
           customStatus: payload.assessmentType == 'PWPROFILE'

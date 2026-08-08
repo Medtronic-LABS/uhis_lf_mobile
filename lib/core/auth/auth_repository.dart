@@ -114,8 +114,16 @@ class AuthRepository {
   // HmacSHA512 of the last successful online login password. Survives session
   // expiry and clear (matches Spice Android SecuredPreference.clear() behavior)
   // so offline password verification works for days/weeks without network.
-  // Cleared only on explicit logout.
+  // Deliberately survives explicit logout too: with the local DB no longer
+  // wiped on sign-out, an SK who logs out while offline must still be able to
+  // log back in and reach their unsynced work. Cleared only by Android's
+  // "clear data".
   static const _kOfflinePasswordHash = 'offline_pwd_hash';
+  // Set on explicit logout, cleared on any successful login. Gates the silent
+  // re-login in [AuthState] so a deliberate sign-out is never undone by a
+  // background 401 replaying the still-stored credentials — session expiry
+  // recovers silently, an explicit logout does not.
+  static const _kExplicitLogout = 'explicit_logout';
   // ISO8601 timestamp of the last successful /auth-service/authenticate
   // validation (or login) — gates _validateTokenIfStale so the token is only
   // re-verified once per hour, not on every single request.
@@ -212,33 +220,60 @@ class AuthRepository {
   Future<void> cacheHouseholdCount(int count) =>
       _storage.write(key: _kHouseholdCountCache, value: '$count');
 
-  Future<void> login(String username, String password) async {
+  Future<void> login(String username, String password) async =>
+      _postSession(username, hashPassword(password));
+
+  /// Re-authenticates from the credentials already on the device, without a
+  /// password prompt. Used to recover a server-expired session in the
+  /// background.
+  ///
+  /// [_kOfflinePasswordHash] holds the *same* value [login] puts on the wire —
+  /// the endpoint takes the HmacSHA512 hash, not the plaintext — so this
+  /// replays it directly rather than re-hashing an already-hashed value.
+  ///
+  /// Throws [AuthException] when no credentials are stored, or when the server
+  /// rejects them (password changed, account disabled).
+  Future<void> loginWithStoredCredentials() async {
+    final username = await _storage.read(key: _kUsername);
+    final storedHash = await _storage.read(key: _kOfflinePasswordHash);
+    if (username == null ||
+        username.isEmpty ||
+        storedHash == null ||
+        storedHash.isEmpty) {
+      throw AuthException(AuthStrings.sessionExpired);
+    }
+    await _postSession(username, storedHash);
+  }
+
+  /// Shared body of [login] and [loginWithStoredCredentials]. Takes the
+  /// already-hashed password so neither path can double-hash.
+  Future<void> _postSession(String username, String hashedPwd) async {
     // Clear any stale tenant/auth state before fresh login
     _api.setTenantId(null);
     await _api.clearSession();
-
-    final hashedPwd = hashPassword(password);
-    // ignore: avoid_print
-    print('[Auth] Login attempt: user=$username, hash=${hashedPwd.substring(0, 16)}...');
 
     // Android sends multipart/form-data (MultipartBody.FORM) — match exactly.
     final loginBody = FormData.fromMap({
       'username': username,
       'password': hashedPwd,
     });
+    // Payload log per the Debug Design contract. The hash is the credential the
+    // server accepts, so it is redacted rather than printed.
     ConsoleLog.banner('[PayloadDebug] login\nusername=$username password=<hashed>');
     final resp = await _api.dio.post(
       Endpoints.login,
       data: loginBody,
     );
-    // ignore: avoid_print
-    print('[Auth] Login response: ${resp.statusCode}');
+    ConsoleLog.step('[PayloadDebug] login → ${resp.statusCode}');
     if (resp.statusCode != 200 && resp.statusCode != 302) {
       throw AuthException(extractLoginErrorMessage(resp.data) ?? AuthStrings.invalidCredentials);
     }
     await _storage.write(key: _kUsername, value: username);
     // Persist hash for offline password verification (Spice Android parity).
     await _storage.write(key: _kOfflinePasswordHash, value: hashedPwd);
+    // A successful sign-in supersedes any earlier explicit logout, so silent
+    // 401 recovery is armed again.
+    await _storage.delete(key: _kExplicitLogout);
     // The token this login just returned is definitionally fresh — skip the
     // first _validateTokenIfStale check for a full hour.
     await _storage.write(
@@ -446,15 +481,26 @@ class AuthRepository {
     await _clearReentrySession();
     await _storage.delete(key: _kBioEnabled);
     await _storage.delete(key: _kBioUsername);
-    await _storage.delete(key: _kOfflinePasswordHash);
-    // Only an explicit logout clears this — session expiry deliberately
-    // keeps it so the login screen can lock the field to the same user on
-    // relogin (see LoginScreen). Clearing it here is what lets a genuinely
-    // different SK sign into a shared device: the next login screen shows
-    // an empty, editable username field.
-    await _storage.delete(key: _kUsername);
+    // _kUsername and _kOfflinePasswordHash deliberately survive.
+    //
+    // Sign-out is soft: the local DB is no longer wiped, so this device stays
+    // bound to one SK. Keeping the username is what locks the login field to
+    // them (LoginScreen `enabled: cachedUsername == null`), and that lock is
+    // the only thing preventing a second SK from signing in and inheriting the
+    // first SK's households and clinical records. Keeping the password hash
+    // lets them log back in offline and reach their unsynced work.
+    //
+    // Handing the device to a different SK therefore means Android Settings →
+    // Clear Data, which drops both keys along with the database.
+    await _storage.write(key: _kExplicitLogout, value: 'true');
     await clearPin();
   }
+
+  /// True when the last sign-out was an explicit logout rather than a session
+  /// expiry. Read by [AuthState] to decide whether a 401 may be recovered
+  /// silently from stored credentials.
+  Future<bool> wasExplicitLogout() async =>
+      (await _storage.read(key: _kExplicitLogout)) == 'true';
 
   /// Clears the shared persisted re-entry session (cookies + token + tenant)
   /// used by BOTH biometric and PIN unlock, but KEEPS the enabled flags + PIN
