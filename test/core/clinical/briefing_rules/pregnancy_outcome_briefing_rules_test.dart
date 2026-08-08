@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leapwell/core/clinical/briefing_rules/pregnancy_outcome_briefing_rules.dart';
+import 'package:uhis_next/core/clinical/briefing_rules/pregnancy_outcome_briefing_rules.dart';
 
 void main() {
   group('evaluatePregnancyOutcomeFindings', () {

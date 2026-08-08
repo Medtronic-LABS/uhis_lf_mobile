@@ -2,17 +2,17 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:leapwell/core/api/api_client.dart';
-import 'package:leapwell/core/clinical/briefing_rules/briefing_findings_aggregator.dart';
-import 'package:leapwell/core/db/app_database.dart';
-import 'package:leapwell/core/db/assessment_dao.dart';
-import 'package:leapwell/core/db/immunisation_dao.dart';
-import 'package:leapwell/core/db/local_assessment_dao.dart';
-import 'package:leapwell/core/db/patient_dao.dart';
-import 'package:leapwell/core/models/programme.dart';
-import 'package:leapwell/features/patient/followup_repository.dart';
-import 'package:leapwell/features/patient/member_detail_repository.dart';
-import 'package:leapwell/features/visit/triage/patient_context_builder.dart';
+import 'package:uhis_next/core/api/api_client.dart';
+import 'package:uhis_next/core/clinical/briefing_rules/briefing_findings_aggregator.dart';
+import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/db/assessment_dao.dart';
+import 'package:uhis_next/core/db/immunisation_dao.dart';
+import 'package:uhis_next/core/db/local_assessment_dao.dart';
+import 'package:uhis_next/core/db/patient_dao.dart';
+import 'package:uhis_next/core/models/programme.dart';
+import 'package:uhis_next/features/patient/followup_repository.dart';
+import 'package:uhis_next/features/patient/member_detail_repository.dart';
+import 'package:uhis_next/features/visit/triage/patient_context_builder.dart';
 
 void main() {
   setUpAll(() {
