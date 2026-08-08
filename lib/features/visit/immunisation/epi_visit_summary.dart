@@ -11,10 +11,14 @@ class EpiVisitSummary {
   const EpiVisitSummary({
     required this.overdueCount,
     required this.overdueVaccineNames,
+    required this.overdueVaccineCodes,
     required this.currentMilestoneLabel,
+    required this.currentMilestoneKey,
     this.nextMilestoneLabel,
+    this.nextMilestoneKey,
     this.nextMilestoneDate,
     this.nextMilestoneVaccineNames = const [],
+    this.nextMilestoneVaccineCodes = const [],
   });
 
   /// Count of vaccines currently due (status [VaccineStatus.dueNow]) across
@@ -28,10 +32,19 @@ class EpiVisitSummary {
   /// can have two milestones simultaneously due).
   final List<String> overdueVaccineNames;
 
+  /// Stable schedule codes parallel to [overdueVaccineNames], so the
+  /// localisation seam can resolve a translated label. Kept as a separate list
+  /// rather than resolving here: this file must stay free of Flutter and of
+  /// `app_strings.dart`, which imports it.
+  final List<String> overdueVaccineCodes;
+
   /// Label of the milestone driving [overdueCount] (e.g. "14 Weeks") — the
   /// chronologically-latest milestone with a due vaccine, when more than one
   /// qualifies. Empty string when [overdueCount] is zero.
   final String currentMilestoneLabel;
+
+  /// Stable key for [currentMilestoneLabel]'s milestone.
+  final String currentMilestoneKey;
 
   /// Label of the next not-yet-completed milestone after the current one
   /// (e.g. "9 Months"), or null if none remain.
@@ -43,6 +56,12 @@ class EpiVisitSummary {
   /// Vaccine display names due at [nextMilestoneLabel].
   final List<String> nextMilestoneVaccineNames;
 
+  /// Stable schedule codes parallel to [nextMilestoneVaccineNames].
+  final List<String> nextMilestoneVaccineCodes;
+
+  /// Stable key for [nextMilestoneLabel]'s milestone.
+  final String? nextMilestoneKey;
+
   bool get referralWarranted => overdueCount > 0;
 }
 
@@ -51,11 +70,11 @@ class EpiVisitSummary {
 EpiVisitSummary buildEpiVisitSummary(List<VaccineMilestone> milestones) {
   final dueMilestones = milestones.where((m) => m.hasDueNow).toList();
 
-  final overdueVaccineNames = dueMilestones
+  final overdueVaccines = dueMilestones
       .expand((m) => m.vaccines)
       .where((v) => v.status == VaccineStatus.dueNow)
-      .map((v) => v.display)
       .toList();
+  final overdueVaccineNames = overdueVaccines.map((v) => v.display).toList();
 
   final currentMilestone = dueMilestones.isNotEmpty ? dueMilestones.last : null;
 
@@ -72,10 +91,15 @@ EpiVisitSummary buildEpiVisitSummary(List<VaccineMilestone> milestones) {
   return EpiVisitSummary(
     overdueCount: overdueVaccineNames.length,
     overdueVaccineNames: overdueVaccineNames,
+    overdueVaccineCodes: overdueVaccines.map((v) => v.code).toList(),
     currentMilestoneLabel: currentMilestone?.label ?? '',
+    currentMilestoneKey: currentMilestone?.milestoneKey ?? '',
     nextMilestoneLabel: next?.label,
+    nextMilestoneKey: next?.milestoneKey,
     nextMilestoneDate: next?.scheduledDate,
     nextMilestoneVaccineNames:
         next?.vaccines.map((v) => v.display).toList() ?? const [],
+    nextMilestoneVaccineCodes:
+        next?.vaccines.map((v) => v.code).toList() ?? const [],
   );
 }

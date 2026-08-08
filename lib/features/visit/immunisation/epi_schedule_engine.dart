@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 import '../../../core/db/immunisation_dao.dart';
+import '../../../core/debug/console_log.dart';
 
 /// Mirrors assets/forms/field_library.json's "childReferralFacilityType"
 /// optionsList (id + English label only — the immunisation screen has no
@@ -58,6 +59,7 @@ enum VaccineStatus {
 class VaccineEntry {
   const VaccineEntry({
     required this.code,
+    required this.wireName,
     required this.display,
     required this.category,
     required this.description,
@@ -70,7 +72,19 @@ class VaccineEntry {
     this.referralFacility,
   });
 
+  /// Stable internal id and local DB key. Row ids embed it
+  /// (`'<patientId>_<code>'`) and recorded history is matched on it, so a
+  /// change here orphans every dose already recorded — it must never change.
   final String code;
+
+  /// Frozen string sent to the backend as `vaccineName`. Seeded with the value
+  /// that used to be sent (the old [display]) so payloads stay byte-identical
+  /// and already-synced records keep their meaning. Never derived from
+  /// [display], which is localised.
+  final String wireName;
+
+  /// UI-only label. Localised via `Epi.vaccine.<code>`; never persisted and
+  /// never transmitted.
   final String display;
   final String category;
   final String description;
@@ -95,6 +109,7 @@ class VaccineEntry {
 class VaccineMilestone {
   const VaccineMilestone({
     required this.label,
+    this.milestoneKey = '',
     required this.scheduledDate,
     required this.vaccines,
     required this.offsetType,
@@ -103,6 +118,10 @@ class VaccineMilestone {
   });
 
   final String label;
+
+  /// Stable key for this milestone, used for the `Epi.milestone.<key>`
+  /// translation lookup. Separate from [label], which is localisable copy.
+  final String milestoneKey;
   final DateTime scheduledDate;
   final List<VaccineEntry> vaccines;
 
@@ -121,6 +140,7 @@ class VaccineMilestone {
 
   VaccineMilestone copyWith({bool? actionEnabled}) => VaccineMilestone(
         label: label,
+        milestoneKey: milestoneKey,
         scheduledDate: scheduledDate,
         vaccines: vaccines,
         offsetType: offsetType,
@@ -166,31 +186,40 @@ class EpiScheduleEngine {
     DateTime? today,
   }) async {
     final now = today ?? DateTime.now();
+
+    final scheduleJson = await rootBundle
+        .loadString('assets/forms/epi_schedule.json');
+    final schedule =
+        (jsonDecode(scheduleJson) as List).cast<Map<String, dynamic>>();
+
+    // Resolve every recorded row onto a schedule `code` before matching. Rows
+    // reach us in three vocabularies: the local code (offline writes), the
+    // frozen wireName (what we send), and the server's own spelling
+    // (e.g. 'Polio-(OPV 2)' for OPV2) — historically these silently failed to
+    // match, so previously-given doses reappeared as due.
+    final codeByAlias = buildAliasIndex(schedule);
+
     final givenByCode = <String, DateTime>{};
     final statusByCode = <String, String>{};
     final missedReasonByCode = <String, String>{};
     final referralFacilityByCode = <String, String>{};
     for (final r in rows) {
       if (r.vaccineCode == null) continue;
+      final code = resolveCode(r.vaccineCode!, codeByAlias);
+      if (code == null) continue;
       if (r.givenAt != null) {
-        givenByCode[r.vaccineCode!] =
-            DateTime.fromMillisecondsSinceEpoch(r.givenAt!);
+        givenByCode[code] = DateTime.fromMillisecondsSinceEpoch(r.givenAt!);
       }
       if (r.status != null && r.status!.isNotEmpty) {
-        statusByCode[r.vaccineCode!] = r.status!;
+        statusByCode[code] = r.status!;
       }
       if (r.missedReason != null && r.missedReason!.isNotEmpty) {
-        missedReasonByCode[r.vaccineCode!] = r.missedReason!;
+        missedReasonByCode[code] = r.missedReason!;
       }
       if (r.referralFacility != null && r.referralFacility!.isNotEmpty) {
-        referralFacilityByCode[r.vaccineCode!] = r.referralFacility!;
+        referralFacilityByCode[code] = r.referralFacility!;
       }
     }
-
-    final scheduleJson = await rootBundle
-        .loadString('assets/forms/epi_schedule.json');
-    final schedule =
-        (jsonDecode(scheduleJson) as List).cast<Map<String, dynamic>>();
 
     final milestones = <VaccineMilestone>[];
 
@@ -202,6 +231,10 @@ class EpiScheduleEngine {
     // independently actionable, instead of only the earliest one.
     for (final group in schedule) {
       final scheduledDate = _scheduledDate(dob, group);
+      // Per-milestone dose-closure window, in weeks. Previously a hardcoded
+      // literal 28 days duplicated here and in the timeline screen.
+      final upcomingWindowDays =
+          ((group['doseClosureWeeks'] as num?)?.toInt() ?? 4) * 7;
 
       final vaccines = (group['vaccines'] as List)
           .cast<Map<String, dynamic>>()
@@ -216,18 +249,16 @@ class EpiScheduleEngine {
         } else if (recordedStatus == 'Missed') {
           status = VaccineStatus.missed;
         } else {
-          final daysDiff = scheduledDate.difference(now).inDays;
-          if (daysDiff <= 0) {
-            status = VaccineStatus.dueNow;
-          } else if (daysDiff <= 28) {
-            status = VaccineStatus.upcoming;
-          } else {
-            status = VaccineStatus.notYetDue;
-          }
+          status = statusFor(
+            scheduledDate: scheduledDate,
+            now: now,
+            upcomingWindowDays: upcomingWindowDays,
+          );
         }
 
         return VaccineEntry(
           code: code,
+          wireName: v['wireName'] as String? ?? v['display'] as String,
           display: v['display'] as String,
           category: v['category'] as String,
           description: v['description'] as String? ?? '',
@@ -243,6 +274,7 @@ class EpiScheduleEngine {
 
       milestones.add(VaccineMilestone(
         label: group['milestone'] as String,
+        milestoneKey: group['milestoneKey'] as String? ?? '',
         scheduledDate: scheduledDate,
         vaccines: vaccines,
         offsetType: group['offsetType'] as String,
@@ -251,6 +283,64 @@ class EpiScheduleEngine {
     }
 
     return milestones;
+  }
+
+  /// Builds `alias → code` from a decoded schedule. Every vaccine contributes
+  /// its `code`, its `wireName`, and each entry of `wireAliases`. Keys are
+  /// lower-cased and whitespace-collapsed so trivial server formatting
+  /// differences still match.
+  ///
+  /// Deliberately additive: an alias maps to exactly one code, and an unknown
+  /// spelling resolves to null rather than to a wrong vaccine.
+  static Map<String, String> buildAliasIndex(
+      List<Map<String, dynamic>> schedule) {
+    final index = <String, String>{};
+    for (final group in schedule) {
+      for (final v in (group['vaccines'] as List).cast<Map<String, dynamic>>()) {
+        final code = v['code'] as String;
+        void add(String? alias) {
+          if (alias == null || alias.trim().isEmpty) return;
+          index[_normalizeAlias(alias)] = code;
+        }
+
+        add(code);
+        add(v['wireName'] as String?);
+        for (final a in (v['wireAliases'] as List?) ?? const []) {
+          add(a as String?);
+        }
+      }
+    }
+    return index;
+  }
+
+  /// Maps a recorded vaccine identifier — local code, frozen wire name, or a
+  /// server spelling — onto a schedule `code`. Returns null when nothing
+  /// matches, and logs it so unseen server vocabulary surfaces from real
+  /// traffic instead of being guessed at up front.
+  static String? resolveCode(String raw, Map<String, String> codeByAlias) {
+    final hit = codeByAlias[_normalizeAlias(raw)];
+    if (hit == null) {
+      ConsoleLog.warn(
+          '[EpiSchedule] unmatched vaccine identifier "$raw" — no schedule '
+          'entry claims it; add it to that vaccine\'s wireAliases');
+    }
+    return hit;
+  }
+
+  static String _normalizeAlias(String s) =>
+      s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// Single home for the due/upcoming/not-yet-due decision. Previously
+  /// duplicated between this engine and the timeline screen's backend path.
+  static VaccineStatus statusFor({
+    required DateTime scheduledDate,
+    required DateTime now,
+    required int upcomingWindowDays,
+  }) {
+    final daysDiff = scheduledDate.difference(now).inDays;
+    if (daysDiff <= 0) return VaccineStatus.dueNow;
+    if (daysDiff <= upcomingWindowDays) return VaccineStatus.upcoming;
+    return VaccineStatus.notYetDue;
   }
 
   /// Gates each milestone's "Update Status" action to sequential order,

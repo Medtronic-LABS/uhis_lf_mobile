@@ -1,44 +1,35 @@
 [
   {
+    "_comment": "Childhood immunisation schedule, authoritative per BRAC's supplied VACCINATION SCHEDULE. Three identity fields per vaccine, deliberately separate: `code` is the stable internal id and local DB key and must NEVER change (row ids embed it, and EpiScheduleEngine matches recorded history on it); `wireName` is frozen at the value that was previously sent as the CHILD_IMMUNIZATION `vaccineName`, so payload bytes are unchanged and already-synced records keep their meaning; `display` is UI-only, is localised via the Epi.vaccine.<code> translation codes, and must never be persisted or transmitted. `wireAliases` maps the server's own vocabulary onto `code` when reading back administered history.",
     "milestone": "At Birth",
+    "milestoneKey": "atBirth",
     "offsetType": "day",
     "offsetValue": 0,
     "doseClosureWeeks": 4,
     "vaccines": [
       {
         "code": "BCG",
+        "wireName": "BCG",
+        "wireAliases": ["BCG"],
         "display": "BCG",
         "category": "birth",
         "description": "Bacille Calmette-Guérin (Tuberculosis)",
         "route": "ID · Left upper arm",
         "cardGroup": 1
-      },
-      {
-        "code": "OPV0",
-        "display": "OPV-0",
-        "category": "opv",
-        "description": "Polio (Oral, Birth Dose)",
-        "route": "Oral (2 drops)",
-        "cardGroup": 2
-      },
-      {
-        "code": "HepB0",
-        "display": "Hepatitis B",
-        "category": "birth",
-        "description": "Hepatitis B (Birth Dose)",
-        "route": "IM · Right thigh",
-        "cardGroup": 2
       }
     ]
   },
   {
     "milestone": "6 Weeks",
+    "milestoneKey": "week6",
     "offsetType": "week",
     "offsetValue": 6,
     "doseClosureWeeks": 4,
     "vaccines": [
       {
         "code": "PENTA1",
+        "wireName": "Pentavalent-1",
+        "wireAliases": ["PENTA1", "Pentavalent-1", "Penta-1"],
         "display": "Pentavalent-1",
         "category": "penta",
         "description": "Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib",
@@ -46,15 +37,9 @@
         "cardGroup": 1
       },
       {
-        "code": "OPV1",
-        "display": "OPV-1",
-        "category": "opv",
-        "description": "Polio (Oral)",
-        "route": "Oral (2 drops)",
-        "cardGroup": 2
-      },
-      {
         "code": "PCV1",
+        "wireName": "PCV-1",
+        "wireAliases": ["PCV1", "PCV-1"],
         "display": "PCV-1",
         "category": "pcv",
         "description": "Pneumococcal (Pneumonia)",
@@ -62,23 +47,29 @@
         "cardGroup": 2
       },
       {
-        "code": "ROTA1",
-        "display": "Rota-1",
-        "category": "rota",
-        "description": "Rotavirus (Diarrhoea)",
-        "route": "Oral (1.5 ml)",
-        "cardGroup": 3
+        "code": "OPV1",
+        "wireName": "OPV-1",
+        "wireAliases": ["OPV1", "OPV-1", "Polio-(OPV 1)"],
+        "display": "OPV-1",
+        "category": "opv",
+        "description": "Polio (Oral)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
       }
     ]
   },
   {
     "milestone": "10 Weeks",
+    "milestoneKey": "week10",
     "offsetType": "week",
     "offsetValue": 10,
     "doseClosureWeeks": 4,
     "vaccines": [
       {
+        "_aliasNote": "`Penta-2` is an EVIDENCED server spelling, captured live from spice-dev-backend (see epi_schedule_engine_test.dart). `Penta-1`/`Penta-3` above and below are inferred from the same naming pattern, not yet observed.",
         "code": "PENTA2",
+        "wireName": "Pentavalent-2",
+        "wireAliases": ["PENTA2", "Pentavalent-2", "Penta-2"],
         "display": "Pentavalent-2",
         "category": "penta",
         "description": "Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib",
@@ -86,15 +77,9 @@
         "cardGroup": 1
       },
       {
-        "code": "OPV2",
-        "display": "OPV-2",
-        "category": "opv",
-        "description": "Polio (Oral)",
-        "route": "Oral (2 drops)",
-        "cardGroup": 2
-      },
-      {
         "code": "PCV2",
+        "wireName": "PCV-2",
+        "wireAliases": ["PCV2", "PCV-2"],
         "display": "PCV-2",
         "category": "pcv",
         "description": "Pneumococcal (Pneumonia)",
@@ -102,23 +87,29 @@
         "cardGroup": 2
       },
       {
-        "code": "ROTA2",
-        "display": "Rota-2",
-        "category": "rota",
-        "description": "Rotavirus (Diarrhoea)",
-        "route": "Oral (1.5 ml)",
-        "cardGroup": 3
+        "_aliasNote": "`Polio-(OPV 2)` is an EVIDENCED server spelling, captured live. The `Polio-(OPV 1)`/`Polio-(OPV 3)` siblings are inferred from the same pattern.",
+        "code": "OPV2",
+        "wireName": "OPV-2",
+        "wireAliases": ["OPV2", "OPV-2", "Polio-(OPV 2)"],
+        "display": "OPV-2",
+        "category": "opv",
+        "description": "Polio (Oral)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
       }
     ]
   },
   {
     "milestone": "14 Weeks",
+    "milestoneKey": "week14",
     "offsetType": "week",
     "offsetValue": 14,
     "doseClosureWeeks": 4,
     "vaccines": [
       {
         "code": "PENTA3",
+        "wireName": "Pentavalent-3",
+        "wireAliases": ["PENTA3", "Pentavalent-3", "Penta-3"],
         "display": "Pentavalent-3",
         "category": "penta",
         "description": "Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib",
@@ -126,15 +117,9 @@
         "cardGroup": 1
       },
       {
-        "code": "OPV3",
-        "display": "OPV-3",
-        "category": "opv",
-        "description": "Polio (Oral)",
-        "route": "Oral (2 drops)",
-        "cardGroup": 2
-      },
-      {
         "code": "PCV3",
+        "wireName": "PCV-3",
+        "wireAliases": ["PCV3", "PCV-3"],
         "display": "PCV-3",
         "category": "pcv",
         "description": "Pneumococcal (Pneumonia)",
@@ -142,10 +127,23 @@
         "cardGroup": 2
       },
       {
+        "code": "OPV3",
+        "wireName": "OPV-3",
+        "wireAliases": ["OPV3", "OPV-3", "Polio-(OPV 3)"],
+        "display": "OPV-3",
+        "category": "opv",
+        "description": "Polio (Oral)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
+      },
+      {
+        "_wireNote": "`code` stays FIPV1 and `wireName` stays the previous display text, so existing rows keyed '<patientId>_FIPV1' still match and the payload is byte-identical. Only `display` is relabelled to IPV, per the BRAC sheet.",
         "code": "FIPV1",
-        "display": "fIPV — Dose 1",
+        "wireName": "fIPV — Dose 1",
+        "wireAliases": ["FIPV1", "fIPV — Dose 1", "IPV-1"],
+        "display": "IPV — Dose 1",
         "category": "ipv",
-        "description": "Fractional Inactivated Polio Vaccine",
+        "description": "Inactivated Polio Vaccine (fractional dose)",
         "route": "ID · Right Deltoid",
         "cardGroup": 3
       }
@@ -153,12 +151,15 @@
   },
   {
     "milestone": "9 Months",
+    "milestoneKey": "month9",
     "offsetType": "month",
     "offsetValue": 9,
     "doseClosureWeeks": 4,
     "vaccines": [
       {
         "code": "MR1",
+        "wireName": "MR Vaccine — Dose 1",
+        "wireAliases": ["MR1", "MR Vaccine — Dose 1", "MR-1"],
         "display": "MR Vaccine — Dose 1",
         "category": "mr",
         "description": "Measles-Rubella",
@@ -166,44 +167,44 @@
         "cardGroup": 1
       },
       {
-        "code": "TCV",
-        "display": "TCV",
-        "category": "tcv",
-        "description": "Typhoid Conjugate Vaccine",
-        "route": "IM · Left/Right Thigh",
-        "cardGroup": 2
-      },
-      {
         "code": "FIPV2",
-        "display": "fIPV — Dose 2",
+        "wireName": "fIPV — Dose 2",
+        "wireAliases": ["FIPV2", "fIPV — Dose 2", "IPV-2"],
+        "display": "IPV — Dose 2",
         "category": "ipv",
-        "description": "Fractional Inactivated Polio Vaccine",
+        "description": "Inactivated Polio Vaccine (fractional dose)",
         "route": "ID · Right Deltoid",
         "cardGroup": 2
-      },
-      {
-        "code": "VITA1",
-        "display": "Vitamin A",
-        "category": "vita",
-        "description": "Vitamin A Supplementation (1st dose)",
-        "route": "Oral (100,000 IU)",
-        "cardGroup": 3
       }
     ]
   },
   {
     "milestone": "15 Months",
+    "milestoneKey": "month15",
     "offsetType": "month",
     "offsetValue": 15,
     "doseClosureWeeks": 4,
     "vaccines": [
       {
         "code": "MR2",
+        "wireName": "MR Vaccine — Dose 2",
+        "wireAliases": ["MR2", "MR Vaccine — Dose 2", "MR-2"],
         "display": "MR Vaccine — Dose 2",
         "category": "mr",
         "description": "Measles-Rubella Booster",
         "route": "SC · Left upper arm",
         "cardGroup": 1
+      },
+      {
+        "_scheduleNote": "TCV was previously at 9 Months, paired with MR1. The BRAC sheet places it at 15 Months with MR2 — this move is the one outright clinical correction in this change.",
+        "code": "TCV",
+        "wireName": "TCV",
+        "wireAliases": ["TCV"],
+        "display": "TCV",
+        "category": "tcv",
+        "description": "Typhoid Conjugate Vaccine",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 2
       }
     ]
   }

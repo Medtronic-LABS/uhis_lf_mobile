@@ -1243,6 +1243,34 @@
     "bn": "প্রায় {n} মাসে বাকি",
     "en": "Due in ~{n} {unit}"
   },
+  "Epi.milestone.atBirth": {
+    "bn": "জন্মের পরপরই",
+    "en": "At Birth"
+  },
+  "Epi.milestone.month15": {
+    "bn": "১৫ মাসে",
+    "en": "15 Months"
+  },
+  "Epi.milestone.month9": {
+    "bn": "৯ মাসে",
+    "en": "9 Months"
+  },
+  "Epi.milestone.week10": {
+    "bn": "১০ সপ্তাহে",
+    "en": "10 Weeks"
+  },
+  "Epi.milestone.week14": {
+    "bn": "১৪ সপ্তাহে",
+    "en": "14 Weeks"
+  },
+  "Epi.milestone.week6": {
+    "bn": "৬ সপ্তাহে",
+    "en": "6 Weeks"
+  },
+  "Epi.milestoneVaccinesTitle": {
+    "bn": "{milestone} টিকা",
+    "en": "{milestone} Vaccines"
+  },
   "Epi.overdueBanner": {
     "bn": "{count}টি টিকা বকেয়া · আজই ব্যবস্থা নিন।",
     "en": "{count} {unit} overdue · Action needed today."
@@ -1254,6 +1282,66 @@
   "Epi.vaccinationCta": {
     "bn": "টিকাদান",
     "en": "Vaccination visit"
+  },
+  "Epi.vaccine.BCG": {
+    "bn": "বিসিজি (BCG)",
+    "en": "BCG"
+  },
+  "Epi.vaccine.FIPV1": {
+    "bn": "আইপিভি (IPV) – প্রথম ডোজ",
+    "en": "IPV — Dose 1"
+  },
+  "Epi.vaccine.FIPV2": {
+    "bn": "আইপিভি (IPV) – দ্বিতীয় ডোজ",
+    "en": "IPV — Dose 2"
+  },
+  "Epi.vaccine.MR1": {
+    "bn": "এমআর (MR) – প্রথম ডোজ",
+    "en": "MR Vaccine — Dose 1"
+  },
+  "Epi.vaccine.MR2": {
+    "bn": "এমআর (MR) – দ্বিতীয় ডোজ",
+    "en": "MR Vaccine — Dose 2"
+  },
+  "Epi.vaccine.OPV1": {
+    "bn": "ওপিভি (OPV) – প্রথম ডোজ",
+    "en": "OPV-1"
+  },
+  "Epi.vaccine.OPV2": {
+    "bn": "ওপিভি (OPV) – দ্বিতীয় ডোজ",
+    "en": "OPV-2"
+  },
+  "Epi.vaccine.OPV3": {
+    "bn": "ওপিভি (OPV) – তৃতীয় ডোজ",
+    "en": "OPV-3"
+  },
+  "Epi.vaccine.PCV1": {
+    "bn": "পিসিভি (PCV) – প্রথম ডোজ",
+    "en": "PCV-1"
+  },
+  "Epi.vaccine.PCV2": {
+    "bn": "পিসিভি (PCV) – দ্বিতীয় ডোজ",
+    "en": "PCV-2"
+  },
+  "Epi.vaccine.PCV3": {
+    "bn": "পিসিভি (PCV) – তৃতীয় ডোজ",
+    "en": "PCV-3"
+  },
+  "Epi.vaccine.PENTA1": {
+    "bn": "পেন্টাভ্যালেন্ট টিকা – প্রথম ডোজ",
+    "en": "Pentavalent-1"
+  },
+  "Epi.vaccine.PENTA2": {
+    "bn": "পেন্টাভ্যালেন্ট টিকা – দ্বিতীয় ডোজ",
+    "en": "Pentavalent-2"
+  },
+  "Epi.vaccine.PENTA3": {
+    "bn": "পেন্টাভ্যালেন্ট টিকা – তৃতীয় ডোজ",
+    "en": "Pentavalent-3"
+  },
+  "Epi.vaccine.TCV": {
+    "bn": "টিসিভি (TCV)",
+    "en": "TCV"
   },
   "EpiVisitReco.allVaccinesUpToDate": {
     "bn": "এই ভিজিটের জন্য নির্ধারিত সকল টিকা হালনাগাদ রয়েছে।",
@@ -10115,6 +10203,10 @@
     "bn": "ট্রেনিং",
     "en": "Training"
   },
+  "tabletCountValidationError": {
+    "bn": "০ থেকে ৬০-এর মধ্যে মান লিখুন",
+    "en": "Enter a value between 0 and 60"
+  },
   "tapForDetails": {
     "bn": "বিস্তারিত জানতে ট্যাপ করুন",
     "en": "Tap for details"
@@ -10186,10 +10278,6 @@
   "temperatureLabel": {
     "bn": "তাপমাত্রা",
     "en": "Temperature"
-  },
-  "tabletCountValidationError": {
-    "bn": "০ থেকে ৬০-এর মধ্যে মান লিখুন",
-    "en": "Enter a value between 0 and 60"
   },
   "temperatureValidationError": {
     "bn": "৯০ থেকে ১১০°F-এর মধ্যে তাপমাত্রা লিখুন, অথবা মাপা না গেলে ০ লিখুন",

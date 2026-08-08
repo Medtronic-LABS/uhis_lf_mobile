@@ -23,11 +23,11 @@ class Endpoints {
   static const String patientSearch = '/spice-service/patient/search';
 
   // ── Spice: immunisation / EPI ─────────────────────────────────────────────
-  /// Fetch immunisation schedule for a patient. Matches Android POST immunisation/list.
+  /// This patient's immunisation **record** — per-vaccine status,
+  /// vaccinatedDate and reason. Despite the Android name it is not a schedule
+  /// template: the schedule itself comes from `assets/forms/epi_schedule.json`,
+  /// and only this response's outcome fields are consumed.
   static const String immunisationList = '/spice-service/immunisation/list';
-
-  /// Push updated vaccine statuses for a visit encounter. Matches Android POST immunisation/create.
-  static const String immunisationCreate = '/spice-service/immunisation/create';
 
   /// Post immunisation visit summary (vaccinated count, next visit date). Matches Android POST immunisation/summary-create.
   static const String immunisationSummaryCreate =

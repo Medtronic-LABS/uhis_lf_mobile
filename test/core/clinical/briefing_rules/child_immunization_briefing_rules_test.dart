@@ -10,6 +10,7 @@ VaccineEntry _entry({
     VaccineEntry(
       code: code,
       display: code,
+      wireName: code,
       category: 'test',
       description: '',
       route: '',

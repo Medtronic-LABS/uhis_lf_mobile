@@ -11,6 +11,7 @@ VaccineEntry _vaccine({
     VaccineEntry(
       code: code,
       display: display,
+      wireName: display,
       category: 'Routine',
       description: display,
       route: 'IM',

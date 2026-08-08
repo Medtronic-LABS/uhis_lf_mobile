@@ -51,10 +51,11 @@ void main() {
     expect(bcg.status, VaccineStatus.missed);
     expect(bcg.missedReason, 'Child was sick on scheduled date');
     expect(atBirth.hasMissed, isTrue);
-    // The other two "At Birth" vaccines (OPV0, HepB0) are still unrecorded
-    // and independently overdue, so the milestone-level hasDueNow stays true
-    // — only BCG itself should read as missed, not the whole milestone.
-    expect(atBirth.hasDueNow, isTrue);
+    // Per the BRAC schedule, "At Birth" is BCG alone — with BCG recorded
+    // Missed nothing at that milestone is still due. The independent-overdue
+    // behaviour this test used to cover (via the removed OPV0/HepB0) is
+    // asserted by the 'two simultaneously-overdue milestones' test above.
+    expect(atBirth.hasDueNow, isFalse);
   });
 
   test('a given vaccine always resolves completed regardless of status',
@@ -96,7 +97,9 @@ void main() {
     );
 
     expect(codes, isNot(contains('BCG')));
-    expect(codes, contains('OPV0')); // still dueNow, unrecorded
+    // 6-Weeks doses are still dueNow and unrecorded. (Previously asserted via
+    // OPV0, which the BRAC schedule removes from the birth milestone.)
+    expect(codes, contains('PENTA1'));
   });
 
   test('referralFacility threads through from ImmunisationRow', () async {
