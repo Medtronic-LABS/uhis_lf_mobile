@@ -18,11 +18,11 @@ enum DashboardTier {
   /// complications, PNC illness).
   critical,
 
-  /// Due date ≥ 3 days past today, OR an OVERDUE-min driver fired
+  /// Due date past today, OR an OVERDUE-min driver fired
   /// (LTFU streak, TB default risk, NCD drift, child-with-disability).
   overdue,
 
-  /// Due today or 1–2 days past.
+  /// Due exactly today (calendar day).
   dueToday,
 
   /// Due in 1–7 days.
@@ -38,14 +38,14 @@ enum DashboardTier {
   /// negative when past due. Null means no scheduled due date.
   ///
   ///   `null`   → [upcoming]
-  ///   `< -2`   → [overdue]   (3+ days past due)
-  ///   `-2..0`  → [dueToday]  (today or 1–2 days past)
+  ///   `< 0`    → [overdue]   (any day past due)
+  ///   `0`      → [dueToday]  (exactly today)
   ///   `1..7`   → [thisWeek]
   ///   `> 7`    → [upcoming]
   static DashboardTier fromDaysToDue(int? daysToDue) {
     if (daysToDue == null) return DashboardTier.upcoming;
-    if (daysToDue < -2) return DashboardTier.overdue;
-    if (daysToDue <= 0) return DashboardTier.dueToday;
+    if (daysToDue < 0) return DashboardTier.overdue;
+    if (daysToDue == 0) return DashboardTier.dueToday;
     if (daysToDue <= 7) return DashboardTier.thisWeek;
     return DashboardTier.upcoming;
   }

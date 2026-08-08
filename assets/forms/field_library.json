@@ -1285,9 +1285,10 @@
     "hintCulture": "[সংখ্যা লিখুন]",
     "titleCulture": "হিমোগ্লোবিন(gm/dl) - রক্ত পরীক্ষা",
     "unitMeasurement": "g/dL",
-    "minValue": 0,
+    "minValue": 1,
+    "maxValue": 20,
     "isInfo": "visible",
-    "infoTitle": "0 – If Hb could not be measured",
+    "infoTitle": "Enter a value between 1 and 20 g/dL",
     "applyDecimalFilter": true,
     "inputType": "decimal",
     "clinicalConcept": [
@@ -1309,7 +1310,7 @@
         "workflowName": "RMNCH"
       }
     ],
-    "infoTitleCulture": "0 - যদি হিমোগ্লোবিন (Hb) পরিমাপ করা না যায়"
+    "infoTitleCulture": "১ থেকে ২০ g/dL-এর মধ্যে মান লিখুন"
   },
   "dmPatient": {
     "id": "dmPatient",
@@ -1561,6 +1562,7 @@
     "titleCulture": "ফাস্টিং",
     "unitMeasurement": "mmol/L",
     "minValue": 0,
+    "maxValue": 33,
     "isInfo": "visible",
     "infoTitle": "0 – If blood sugar could not be measured",
     "applyDecimalFilter": true,
@@ -1595,6 +1597,7 @@
     "titleCulture": "র‍্যান্ডম ",
     "unitMeasurement": "mmol/L",
     "minValue": 0,
+    "maxValue": 33,
     "isInfo": "visible",
     "infoTitle": "0 – If blood sugar could not be measured",
     "applyDecimalFilter": true,
@@ -1842,6 +1845,7 @@
     "hintCulture": "[সংখ্যা লিখুন]",
     "titleCulture": "এখন পর্যন্ত কতটি আয়রন বড়ি খেয়েছেন?",
     "minValue": 0,
+    "maxValue": 60,
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -1873,6 +1877,7 @@
     "hintCulture": "[সংখ্যা লিখুন]",
     "titleCulture": "এই ভিজিটে ব্র্যাক হতে প্রদানকৃত আয়রণ বড়ির সংখ্যা",
     "minValue": 0,
+    "maxValue": 60,
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -1933,6 +1938,7 @@
     "hintCulture": "[সংখ্যা লিখুন]",
     "titleCulture": "এখন পর্যন্ত কতটি ক্যালসিয়াম বড়ি খেয়েছেন?",
     "minValue": 0,
+    "maxValue": 60,
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -1964,6 +1970,7 @@
     "hintCulture": "[সংখ্যা লিখুন]",
     "titleCulture": "এই ভিজিটে ব্র্যাক হতে প্রদানকৃত ক্যালসিয়াম বড়ির সংখ্যা",
     "minValue": 0,
+    "maxValue": 60,
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -4938,6 +4945,8 @@
     "titleCulture": "ফাস্টিং",
     "errorMessage": "Please enter a valid fasting blood sugar value",
     "unitMeasurement": "mmol/L",
+    "minValue": 0,
+    "maxValue": 33,
     "isSummary": false,
     "inputType": "decimal",
     "clinicalConcept": [
@@ -4975,6 +4984,8 @@
     "titleCulture": "র‍্যান্ডম",
     "errorMessage": "Please enter a valid random blood sugar value",
     "unitMeasurement": "mmol/L",
+    "minValue": 0,
+    "maxValue": 33,
     "isSummary": false,
     "inputType": "decimal",
     "clinicalConcept": [
@@ -5242,6 +5253,8 @@
     "titleCulture": "গতমাসে কয়টি আয়রন বড়ি খেয়েছেন?",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
+    "minValue": 0,
+    "maxValue": 60,
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -5273,6 +5286,8 @@
     "titleCulture": "এই ভিজিটে ব্র্যাক হতে প্রদানকৃত আয়রন বড়ির সংখ্যা",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
+    "minValue": 0,
+    "maxValue": 60,
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -5304,6 +5319,8 @@
     "titleCulture": "গত মাসে কয়টি ক্যালসিয়াম বড়ি খেয়েছেন?",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
+    "minValue": 0,
+    "maxValue": 60,
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -5335,6 +5352,8 @@
     "titleCulture": "এই ভিজিটে ব্র্যাক হতে প্রদানকৃত ক্যালসিয়াম বড়ির সংখ্যা",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
+    "minValue": 0,
+    "maxValue": 60,
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -8645,7 +8664,7 @@
     "titleCulture": "ব্লাড গ্লুকোজ",
     "errorMessage": "",
     "unitMeasurement": "mmol/L",
-    "minValue": 0.6,
+    "minValue": 0.0,
     "maxValue": 33.0,
     "isSummary": true,
     "isNotDefault": false,

@@ -6104,8 +6104,8 @@
     "en": "Random"
   },
   "glucoseValidationError": {
-    "bn": "১.০ থেকে ১৫.০ mmol/L-এর মধ্যে গ্লুকোজের মান লিখুন",
-    "en": "Enter a glucose reading between 1.0 and 15.0 mmol/L"
+    "bn": "০ থেকে ৩৩ mmol/L-এর মধ্যে গ্লুকোজের মান লিখুন",
+    "en": "Enter a glucose reading between 0 and 33 mmol/L"
   },
   "goodAfternoon": {
     "bn": "শুভ অপরাহ্ন",
@@ -10186,6 +10186,10 @@
   "temperatureLabel": {
     "bn": "তাপমাত্রা",
     "en": "Temperature"
+  },
+  "tabletCountValidationError": {
+    "bn": "০ থেকে ৬০-এর মধ্যে মান লিখুন",
+    "en": "Enter a value between 0 and 60"
   },
   "temperatureValidationError": {
     "bn": "৯০ থেকে ১১০°F-এর মধ্যে তাপমাত্রা লিখুন, অথবা মাপা না গেলে ০ লিখুন",

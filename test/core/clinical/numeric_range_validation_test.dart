@@ -59,4 +59,47 @@ void main() {
       expect(isPlausibleFundalHeightCm(90), isFalse);
     });
   });
+
+  group('isPlausibleHemoglobin', () {
+    test('accepts 1–20 g/dL inclusive', () {
+      expect(isPlausibleHemoglobin(1.0), isTrue);
+      expect(isPlausibleHemoglobin(20.0), isTrue);
+      expect(isPlausibleHemoglobin(11.2), isTrue);
+    });
+
+    test('rejects 0 and values outside 1–20', () {
+      expect(isPlausibleHemoglobin(0), isFalse);
+      expect(isPlausibleHemoglobin(0.9), isFalse);
+      expect(isPlausibleHemoglobin(20.1), isFalse);
+      expect(isPlausibleHemoglobin(25), isFalse);
+    });
+  });
+
+  group('isPlausibleGlucoseMmol', () {
+    test('accepts 0–33 mmol/L inclusive', () {
+      expect(isPlausibleGlucoseMmol(0), isTrue);
+      expect(isPlausibleGlucoseMmol(0.6), isTrue);
+      expect(isPlausibleGlucoseMmol(15), isTrue);
+      expect(isPlausibleGlucoseMmol(33), isTrue);
+    });
+
+    test('rejects values outside 0–33', () {
+      expect(isPlausibleGlucoseMmol(-0.1), isFalse);
+      expect(isPlausibleGlucoseMmol(33.1), isFalse);
+    });
+  });
+
+  group('isPlausibleSupplementTablets', () {
+    test('accepts 0–60 inclusive', () {
+      expect(isPlausibleSupplementTablets(0), isTrue);
+      expect(isPlausibleSupplementTablets(30), isTrue);
+      expect(isPlausibleSupplementTablets(60), isTrue);
+    });
+
+    test('rejects values outside 0–60', () {
+      expect(isPlausibleSupplementTablets(-1), isFalse);
+      expect(isPlausibleSupplementTablets(61), isFalse);
+      expect(isPlausibleSupplementTablets(90), isFalse);
+    });
+  });
 }

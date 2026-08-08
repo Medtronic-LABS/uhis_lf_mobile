@@ -27,7 +27,7 @@ Builder: `MissionDashboardService` — `lib/core/mission/mission_dashboard_servi
 |------|-------------|---------|
 | `critical` | `statusCritical` (red) | Red-flag, neonate, high-risk pregnancy, etc. |
 | `overdue` | `statusWarning` (orange) | 3+ days past due, LTFU, NCD drift, TB risk |
-| `dueToday` | `statusInfo` (blue) | Due today or 1–2 days overdue |
+| `dueToday` | `statusInfo` (blue) | Due exactly today |
 | `thisWeek` | `brandNavy` (navy) | Due within 7 days |
 | `upcoming` | `textMuted` (grey) | Due > 7 days out or no due date |
 

@@ -105,22 +105,27 @@ void main() {
       expect(queue.first.drivers, isEmpty);
     });
 
-    test('3+ days past due → OVERDUE; 1–2 days past → DUE TODAY', () {
+    test('any day past due → OVERDUE; exactly today → DUE TODAY', () {
       final overdue = _entry(
         patientId: 'late',
         nextDueAt: today.subtract(const Duration(days: 4)),
       );
-      final dueToday = _entry(
+      final oneDayPast = _entry(
         patientId: 'near',
         nextDueAt: today.subtract(const Duration(days: 1)),
       );
+      final dueToday = _entry(
+        patientId: 'today',
+        nextDueAt: today,
+      );
       final input = MissionInputData(
-        worklistEntries: [overdue, dueToday],
+        worklistEntries: [overdue, oneDayPast, dueToday],
       );
       final queue = service.computeTieredQueue(input);
       final byId = {for (final q in queue) q.patientId: q};
       expect(byId['late']!.tier, DashboardTier.overdue);
-      expect(byId['near']!.tier, DashboardTier.dueToday);
+      expect(byId['near']!.tier, DashboardTier.overdue);
+      expect(byId['today']!.tier, DashboardTier.dueToday);
     });
 
     test('hidden patient (inactive/deceased) → dropped from queue', () {
@@ -213,10 +218,11 @@ void main() {
     );
 
     test(
-      'critical-driver patient (0d overdue) sorts before regular overdue patient',
+      '1 day past due is OVERDUE; neonate driver is CRITICAL',
       () {
-        // Real-device bug: Baby 1 of Raani (critical, 0d) was after sdsdsdf
-        // (dueToday, 1d overdue) because overdueCmp fired before tierCmp.
+        // Schedule pill/tier is date-exact: 1 day past → overdue (not dueToday).
+        // Clinical neonate driver still promotes to critical. Within the same
+        // band, §2.8 sorts by daysOverdue (not tier label).
         final criticalDriver = _entry(
           patientId: 'neonate',
           nextDueAt: DateTime.now().add(const Duration(days: 3)),
@@ -230,9 +236,10 @@ void main() {
           neonatePatientIds: const {'neonate'},
         );
         final queue = service.computeTieredQueue(input);
-        expect(queue.first.patientId, 'neonate');
-        expect(queue.first.tier, DashboardTier.critical);
-        expect(queue[1].patientId, 'overdue');
+        final byId = {for (final q in queue) q.patientId: q};
+        expect(byId['neonate']!.tier, DashboardTier.critical);
+        expect(byId['overdue']!.tier, DashboardTier.overdue);
+        expect(byId['overdue']!.daysOverdue, 1);
       },
     );
 
@@ -308,7 +315,8 @@ void main() {
     test('boundary cases', () {
       expect(DashboardTier.fromDaysToDue(null), DashboardTier.upcoming);
       expect(DashboardTier.fromDaysToDue(-3), DashboardTier.overdue);
-      expect(DashboardTier.fromDaysToDue(-2), DashboardTier.dueToday);
+      expect(DashboardTier.fromDaysToDue(-2), DashboardTier.overdue);
+      expect(DashboardTier.fromDaysToDue(-1), DashboardTier.overdue);
       expect(DashboardTier.fromDaysToDue(0), DashboardTier.dueToday);
       expect(DashboardTier.fromDaysToDue(1), DashboardTier.thisWeek);
       expect(DashboardTier.fromDaysToDue(7), DashboardTier.thisWeek);

@@ -759,13 +759,30 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           formType: a.section.formType,
           ageInMonths: widget.ageInMonths,
         );
-        if (validator == null) continue;
-        final raw = notifier.data.getValue(ref.id);
-        final message = validator(raw?.toString());
-        if (message == null) continue;
-        lines.add(
-          'OUT OF RANGE  ${ref.id}  value=${raw ?? "null"}  → $message',
-        );
+        if (validator != null) {
+          final raw = notifier.data.getValue(ref.id);
+          final message = validator(raw?.toString());
+          if (message != null) {
+            lines.add(
+              'OUT OF RANGE  ${ref.id}  value=${raw ?? "null"}  → $message',
+            );
+          }
+        }
+        if (ref.id == 'glucoseType') {
+          final glucoseValidator = _SectionCard._numericRangeValidator(
+            'glucose',
+            formType: a.section.formType,
+          );
+          if (glucoseValidator != null) {
+            final raw = notifier.data.getValue('glucose');
+            final message = glucoseValidator(raw?.toString());
+            if (message != null) {
+              lines.add(
+                'OUT OF RANGE  glucose  value=${raw ?? "null"}  → $message',
+              );
+            }
+          }
+        }
       }
     }
     if (lines.isEmpty) {
@@ -944,9 +961,26 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           formType: a.section.formType,
           ageInMonths: widget.ageInMonths,
         );
-        if (validator == null) continue;
-        final raw = notifier.data.getValue(ref.id);
-        if (validator(raw?.toString()) != null) errors.add(ref.id);
+        if (validator != null) {
+          final raw = notifier.data.getValue(ref.id);
+          if (validator(raw?.toString()) != null) errors.add(ref.id);
+        }
+        // BloodGlucoseEntry stores the numeric value under `glucose` while
+        // the rendered field id is `glucoseType` — check both so submit
+        // scrolls to / highlights the combined card.
+        if (ref.id == 'glucoseType') {
+          final glucoseValidator = _SectionCard._numericRangeValidator(
+            'glucose',
+            formType: a.section.formType,
+          );
+          if (glucoseValidator != null) {
+            final raw = notifier.data.getValue('glucose');
+            if (glucoseValidator(raw?.toString()) != null) {
+              errors.add('glucoseType');
+              errors.add('glucose');
+            }
+          }
+        }
       }
     }
     return errors;
@@ -2665,6 +2699,10 @@ class _SectionCard extends StatelessWidget {
                       onFieldChanged(consumedRef.id, int.tryParse(v) ?? v);
                     }
                   },
+                  validator: _numericRangeValidator(
+                    consumedRef.id,
+                    formType: section.formType,
+                  ),
                 ),
               ],
             ),
@@ -2695,6 +2733,10 @@ class _SectionCard extends StatelessWidget {
                       onFieldChanged(providedId, int.tryParse(v) ?? v);
                     }
                   },
+                  validator: _numericRangeValidator(
+                    providedId,
+                    formType: section.formType,
+                  ),
                 ),
               ],
             ),
@@ -2760,6 +2802,10 @@ class _SectionCard extends StatelessWidget {
                       onFieldChanged(fastingRef.id, double.tryParse(v) ?? v);
                     }
                   },
+                  validator: _numericRangeValidator(
+                    fastingRef.id,
+                    formType: section.formType,
+                  ),
                 ),
               ],
             ),
@@ -2790,6 +2836,10 @@ class _SectionCard extends StatelessWidget {
                       onFieldChanged(randomRef.id, double.tryParse(v) ?? v);
                     }
                   },
+                  validator: _numericRangeValidator(
+                    randomRef.id,
+                    formType: section.formType,
+                  ),
                 ),
               ],
             ),
@@ -3123,47 +3173,21 @@ class _SectionCard extends StatelessWidget {
             }
             return null;
           };
-        case 'hemoglobin':
-          return (v) {
-            if (v == null || v.isEmpty) return null;
-            final n = double.tryParse(v);
-            if (n == null || n < 0 || n > 25) {
-              return ComposerStrings.haemoglobinValidationError;
-            }
-            return null;
-          };
-        case 'fastingBloodSugar':
-        case 'randomBloodSugar':
-          return (v) {
-            if (v == null || v.isEmpty) return null;
-            final n = double.tryParse(v);
-            if (n == null || (n != 0 && (n < 0.6 || n > 33))) {
-              return ComposerStrings.glucoseValidationError;
-            }
-            return null;
-          };
-        case 'ifaTabletsConsumed':
-        case 'ifaTabletsProvided':
-        case 'calciumTabletsConsumed':
-        case 'calciumTabletsProvided':
-          return (v) {
-            if (v == null || v.isEmpty) return null;
-            final n = double.tryParse(v);
-            if (n == null || n < 0 || n > 90) {
-              return 'Enter a value between 0 and 90';
-            }
-            return null;
-          };
+        // Hemoglobin / glucose / IFA+Calcium fall through to the shared
+        // LeapWell ranges below (1–20, 0–33, max 60).
       }
     }
 
     switch (fieldId) {
       case 'fastingBloodSugar':
       case 'randomBloodSugar':
+      case 'bloodSugarFasting':
+      case 'bloodSugarRandom':
+      case 'glucose':
         return (v) {
           if (v == null || v.isEmpty) return null;
           final n = double.tryParse(v);
-          if (n == null || n < 1.0 || n > fbsScreeningMax) {
+          if (n == null || !isPlausibleGlucoseMmol(n)) {
             return ComposerStrings.glucoseValidationError;
           }
           return null;
@@ -3172,8 +3196,24 @@ class _SectionCard extends StatelessWidget {
         return (v) {
           if (v == null || v.isEmpty) return null;
           final n = double.tryParse(v);
-          if (n == null || n < 1.0 || n > 20.0) {
+          if (n == null || !isPlausibleHemoglobin(n)) {
             return ComposerStrings.haemoglobinValidationError;
+          }
+          return null;
+        };
+      case 'ifaTabletsConsumed':
+      case 'ifaTabletsProvided':
+      case 'ifaTotalConsumed':
+      case 'ifaProvided':
+      case 'calciumTabletsConsumed':
+      case 'calciumTabletsProvided':
+      case 'calciumTotalConsumed':
+      case 'calciumProvided':
+        return (v) {
+          if (v == null || v.isEmpty) return null;
+          final n = double.tryParse(v);
+          if (n == null || !isPlausibleSupplementTablets(n)) {
+            return ComposerStrings.tabletCountValidationError;
           }
           return null;
         };
@@ -3347,9 +3387,14 @@ class _SectionCard extends StatelessWidget {
           glucoseType: currentValue as String?,
           glucoseValue: data.getValue('glucose'),
           isMandatory: def.isMandatory || ref.isMandatory,
-          hasError: validationErrors.contains(ref.id),
+          hasError: validationErrors.contains(ref.id) ||
+              validationErrors.contains('glucose'),
           onTypeChanged: (type) => onFieldChanged(def.id, type),
           onValueChanged: (val) => onFieldChanged('glucose', val),
+          valueValidator: _numericRangeValidator(
+            'glucose',
+            formType: section.formType,
+          ),
         );
 
       case WidgetHint.numeric:
@@ -4044,6 +4089,7 @@ class _BloodGlucoseEntryField extends StatefulWidget {
     this.glucoseValue,
     this.isMandatory = false,
     this.hasError = false,
+    this.valueValidator,
   });
 
   /// Options from the `glucoseType` field definition (FBS, RBS).
@@ -4059,6 +4105,7 @@ class _BloodGlucoseEntryField extends StatefulWidget {
   final void Function(dynamic value) onValueChanged;
   final bool isMandatory;
   final bool hasError;
+  final FormFieldValidator<String>? valueValidator;
 
   @override
   State<_BloodGlucoseEntryField> createState() =>
@@ -4187,6 +4234,8 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
               hintText: UnifiedFormStrings.bloodGlucoseEntryHint,
               suffixText: UnifiedFormStrings.bloodGlucoseEntryUnit,
             ),
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            validator: widget.valueValidator,
             onChanged: (v) {
               if (v.isEmpty) {
                 widget.onValueChanged(null);
@@ -4301,6 +4350,7 @@ class _NumericFieldState extends State<_NumericField> {
             : null,
       ),
       onChanged: readOnly ? null : widget.onChanged,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       validator: widget.validator,
     );
   }
