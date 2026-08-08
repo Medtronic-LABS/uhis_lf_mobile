@@ -1751,6 +1751,46 @@ class UnifiedFormNotifier extends ChangeNotifier {
         savedIds.add(id);
       }
 
+      // Childhood: stamp/clear patients.next_due_at from the age-band
+      // nextVisitDate on this submit so Home does not keep an older visit's
+      // due date when this visit has none (or a newer stamp).
+      if (_activeFormTypes.contains('pncChild') && _patientId.isNotEmpty) {
+        try {
+          final localId = await _localPatientId();
+          final nextStr =
+              childhoodOtherDetails?['nextVisitDate']?.toString();
+          final next = nextStr == null || nextStr.isEmpty
+              ? null
+              : DateTime.tryParse(nextStr);
+          final now = DateTime.now();
+          final nowMs = now.millisecondsSinceEpoch;
+          // Age-band stamp can still be on/before today after a late visit —
+          // don't leave Home stuck on that past milestone.
+          final dueMs = next == null
+              ? null
+              : DateTime(next.year, next.month, next.day).millisecondsSinceEpoch;
+          final dueIsFuture = dueMs != null &&
+              dueMs >
+                  DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+          if (dueIsFuture) {
+            await _patientDao.patchVisitTiming(
+              patientId: localId,
+              lastVisitAt: nowMs,
+              nextDueAt: dueMs,
+            );
+          } else {
+            await _patientDao.patchVisitTiming(
+              patientId: localId,
+              lastVisitAt: nowMs,
+              clearNextDueAt: true,
+            );
+          }
+        } catch (e) {
+          debugPrint(
+              '[ChildhoodNextDue] next_due_at update failed (non-blocking): $e');
+        }
+      }
+
       // CCE: bridge referred assessments into the local referrals table so
       // the dashboard bell / drawer see the case without waiting for sync.
       if (isReferred && savedIds.isNotEmpty) {

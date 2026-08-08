@@ -315,6 +315,19 @@ class FollowUpDao {
 
   final AppDatabase _db;
 
+  /// Deletes assessment-history–synthesised follow-ups (`hist-fu-…` ids) for
+  /// [patientIds]. Used when the patient's latest visit has no follow-up date
+  /// so a stale seeded row cannot keep them overdue.
+  Future<int> deleteHistorySeededForPatients(List<String> patientIds) async {
+    if (patientIds.isEmpty) return 0;
+    final placeholders = List.filled(patientIds.length, '?').join(',');
+    return _db.db.delete(
+      AppDatabase.tableFollowUps,
+      where: 'patient_id IN ($placeholders) AND id LIKE ?',
+      whereArgs: [...patientIds, 'hist-fu-%'],
+    );
+  }
+
   Future<void> upsertMany(List<FollowUpRow> rows) async {
     if (rows.isEmpty) return;
     // Protect locally-edited rows: a server pull must never clobber a

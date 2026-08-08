@@ -34,6 +34,7 @@ import '../models/patient.dart';
 import '../models/programme.dart';
 import '../models/referral.dart';
 import '../referral/referral_ingest_mapper.dart';
+import 'latest_visit_follow_up.dart';
 import 'sync_activity.dart';
 import 'sync_progress.dart';
 import 'sync_report.dart';
@@ -1418,8 +1419,8 @@ class OfflineSyncService extends ChangeNotifier {
       // Group programmes, latest visitDate, and nextFollowUpDate per patientId.
       final newProgrammes = <String, Set<Programme>>{};
       final latestVisitMs = <String, int>{};   // patientId → ms of last visit
-      final nextFollowUpMs = <String, int>{};  // patientId → ms of next appt
       final lastAncVisitMs = <String, int>{};  // patientId → ms of last ANC visit
+      final followUpRows = <LatestVisitFollowUpRow>[];
 
       for (final item in items) {
         final patientId = memberToPatient[item.householdMemberId];
@@ -1460,16 +1461,24 @@ class OfflineSyncService extends ChangeNotifier {
           }
         }
 
-        // nextFollowUpDate: use the date from the MOST RECENT assessment.
-        // Items are sorted newest-first so the first non-null nfd seen per
-        // patient is the one that belongs to the latest visit. Taking the max
-        // across all history rows is wrong — an older visit may have a farther
-        // future date that has since been superseded by a closer appointment.
-        final nfd = item.nextFollowUpDate;
-        if (nfd != null && !nextFollowUpMs.containsKey(patientId)) {
-          nextFollowUpMs[patientId] = nfd.millisecondsSinceEpoch;
-        }
+        followUpRows.add(LatestVisitFollowUpRow(
+          patientId: patientId,
+          visitDate: item.visitDate,
+          nextFollowUpDate: item.nextFollowUpDate,
+        ));
       }
+
+      // Latest visit only — null follow-up on that visit clears the due date
+      // (never fall back to an older assessment's nextFollowUpDate).
+      final resolvedFollowUps = LatestVisitFollowUp.resolve(rows: followUpRows);
+      final nextFollowUpMs = <String, int>{
+        for (final e in resolvedFollowUps.entries)
+          if (e.value != null) e.key: e.value!,
+      };
+      final clearNextDueIds = <String>{
+        for (final e in resolvedFollowUps.entries)
+          if (e.value == null) e.key,
+      };
 
       // Merge programmes into patient_programmes — add, never remove.
       int progUpdated = 0;
@@ -1482,19 +1491,30 @@ class OfflineSyncService extends ChangeNotifier {
         }
       }
 
-      // Seed last_visit_at (and next_due_at when available) from assessment
-      // history so _inferDueAt can compute overdue/dueToday tiers for patients
-      // whose bundle follow-up records have no nextVisitDate. Uses patchVisitTiming
-      // so only non-null values are written — the subsequent recomputeAllAfterSync
-      // pass will not erase these because updateRisk also guards with null-checks.
+      // Seed last_visit_at / next_due_at from assessment history. When the
+      // latest visit has no follow-up date, explicitly clear next_due_at —
+      // patchVisitTiming otherwise leaves the prior value unchanged.
       int schedUpdated = 0;
       for (final pid in latestVisitMs.keys) {
+        final clearDue = clearNextDueIds.contains(pid);
         await _patients.patchVisitTiming(
           patientId: pid,
           lastVisitAt: latestVisitMs[pid],
-          nextDueAt: nextFollowUpMs[pid], // null for most NCD patients
+          nextDueAt: clearDue ? null : nextFollowUpMs[pid],
+          clearNextDueAt: clearDue,
         );
         schedUpdated++;
+      }
+
+      if (clearNextDueIds.isNotEmpty) {
+        final removed = await _followUps
+            .deleteHistorySeededForPatients(clearNextDueIds.toList());
+        if (removed > 0) {
+          debugPrint(
+            '[OfflineSyncService] cleared $removed hist-fu follow-up(s) '
+            'for ${clearNextDueIds.length} patient(s) with null latest follow-up',
+          );
+        }
       }
 
       // Seed lastAncVisitDateMs onto the patient's open pregnancy episode so

@@ -46,6 +46,7 @@ class PatientDao {
     int? lastVisitAt,
     int? missedVisitCount,
     bool? redFlag,
+    bool clearNextDueAt = false,
   }) async {
     await _db.db.update(
       AppDatabase.tablePatients,
@@ -54,7 +55,8 @@ class PatientDao {
         'risk_band': bandWireTag,
         'risk_modifier': modifierWireTag,
         'risk_reasons': reasonsJson,
-        'next_due_at': ?nextDueAt,
+        if (clearNextDueAt) 'next_due_at': null,
+        if (!clearNextDueAt) 'next_due_at': ?nextDueAt,
         'last_visit_at': ?lastVisitAt,
         'missed_visit_count': ?missedVisitCount,
         if (redFlag != null) 'red_flag': redFlag ? 1 : 0,
@@ -311,17 +313,22 @@ class PatientDao {
   }
 
   /// Update visit timing columns without touching risk or demographic columns.
-  /// Only non-null arguments are written; null arguments leave the column
-  /// unchanged. Used after assessment-history sync to seed last_visit_at /
-  /// next_due_at before the worklist recompute pass.
+  ///
+  /// By default only non-null [lastVisitAt] / [nextDueAt] are written; null
+  /// arguments leave the column unchanged. Pass [clearNextDueAt] to force
+  /// `next_due_at` to NULL (e.g. latest assessment-history visit has no
+  /// follow-up date). Used after assessment-history sync to seed
+  /// last_visit_at / next_due_at before the worklist recompute pass.
   Future<void> patchVisitTiming({
     required String patientId,
     int? lastVisitAt,
     int? nextDueAt,
+    bool clearNextDueAt = false,
   }) async {
     final values = <String, dynamic>{
       'last_visit_at': ?lastVisitAt,
-      'next_due_at': ?nextDueAt,
+      if (clearNextDueAt) 'next_due_at': null,
+      if (!clearNextDueAt) 'next_due_at': ?nextDueAt,
     };
     if (values.isEmpty) return;
     await _db.db.update(
