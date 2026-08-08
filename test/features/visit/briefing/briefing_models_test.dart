@@ -62,4 +62,48 @@ void main() {
       expect(greeting.isEmpty, isTrue);
     });
   });
+
+  group('BriefingCardContent.isEmpty', () {
+    test('true when headline and points are both empty', () {
+      final card = BriefingCardContent.fromJson(const {
+        'headline': '',
+        'points': [],
+      });
+
+      expect(card.isEmpty, isTrue);
+    });
+
+    test('true when the API omits headline/points entirely', () {
+      final card = BriefingCardContent.fromJson(const {});
+
+      expect(card.isEmpty, isTrue);
+    });
+
+    test('false when only headline is populated', () {
+      final card = BriefingCardContent.fromJson(const {
+        'headline': '💉 EPI Visit 1 · 15 doses overdue',
+        'points': [],
+      });
+
+      expect(card.isEmpty, isFalse);
+    });
+
+    test('false when only points are populated', () {
+      final card = BriefingCardContent.fromJson(const {
+        'headline': '',
+        'points': ['BCG dose overdue'],
+      });
+
+      expect(card.isEmpty, isFalse);
+    });
+
+    test('true when headline is whitespace-only', () {
+      final card = BriefingCardContent.fromJson(const {
+        'headline': '   ',
+        'points': [],
+      });
+
+      expect(card.isEmpty, isTrue);
+    });
+  });
 }

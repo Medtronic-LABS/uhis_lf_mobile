@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/endpoints.dart';
@@ -66,6 +67,7 @@ class VisitBriefingRepository {
     if (cache != null) {
       final cached = await cache.get(cacheKey, contentHash: hash);
       if (cached != null) {
+        debugPrint('[VisitBriefingRepository] cache hit for $cacheKey — skipping network call');
         final decoded = jsonDecode(cached.payload) as Map<String, dynamic>;
         return VisitBriefingResponse.fromJson(decoded);
       }
@@ -86,15 +88,22 @@ class VisitBriefingRepository {
       );
     }
 
-    if (cache != null) {
+    final parsed = VisitBriefingResponse.fromJson(raw);
+    // Deliberately NOT cached when the AI returned nothing usable — caching
+    // a thin/empty briefingCard would lock that empty result in for the full
+    // 24h TTL, silently replaying it on every subsequent visit open for this
+    // patient regardless of whether a retry might succeed.
+    if (cache != null && !parsed.briefingCard.isEmpty) {
       await cache.put(
         cacheKey: cacheKey,
         kind: _kindBriefing,
         contentHash: hash,
         payload: jsonEncode(raw),
       );
+    } else if (cache != null) {
+      debugPrint('[VisitBriefingRepository] empty briefingCard for $cacheKey — not caching');
     }
-    return VisitBriefingResponse.fromJson(raw);
+    return parsed;
   }
 
   /// Short 2-3 sentence summary for the patient context screen header.
@@ -106,6 +115,7 @@ class VisitBriefingRepository {
     if (cache != null) {
       final cached = await cache.get(cacheKey, contentHash: hash);
       if (cached != null) {
+        debugPrint('[VisitBriefingRepository] cache hit for $cacheKey — skipping network call');
         final decoded = jsonDecode(cached.payload) as Map<String, dynamic>;
         return (decoded['summary'] as String?) ?? '';
       }
@@ -126,14 +136,19 @@ class VisitBriefingRepository {
       );
     }
 
-    if (cache != null) {
+    final summary = (raw['summary'] as String?) ?? '';
+    // Same rationale as generate(): an empty summary shouldn't be locked
+    // into the cache for 24h — let the next open retry instead.
+    if (cache != null && summary.trim().isNotEmpty) {
       await cache.put(
         cacheKey: cacheKey,
         kind: _kindSummary,
         contentHash: hash,
         payload: jsonEncode(raw),
       );
+    } else if (cache != null) {
+      debugPrint('[VisitBriefingRepository] empty summary for $cacheKey — not caching');
     }
-    return (raw['summary'] as String?) ?? '';
+    return summary;
   }
 }

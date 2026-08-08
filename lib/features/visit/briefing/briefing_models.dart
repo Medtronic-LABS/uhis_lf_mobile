@@ -5,6 +5,12 @@ class BriefingCardContent {
   final String headline;
   final List<String> points;
 
+  /// True when the AI service returned nothing usable (no headline, no
+  /// bullet points) — used to keep a thin/degenerate response out of the
+  /// response cache so the next visit open retries instead of replaying the
+  /// same empty card for the cache's full TTL.
+  bool get isEmpty => headline.trim().isEmpty && points.isEmpty;
+
   factory BriefingCardContent.fromJson(Map<String, dynamic> json) =>
       BriefingCardContent(
         headline: json['headline'] as String? ?? '',
