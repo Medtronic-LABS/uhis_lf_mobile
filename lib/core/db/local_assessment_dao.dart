@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 
 import '../debug/console_log.dart';
+import '../models/json_read.dart';
 import '../models/risk.dart';
 import '../models/provance_dto.dart';
+import '../sync/latest_visit_follow_up.dart';
 import 'app_database.dart';
 import 'pregnancy_episode_dao.dart';
 
@@ -1162,6 +1164,56 @@ class LocalAssessmentDao {
       }
     }
     return out;
+  }
+
+  /// Latest local assessment visit per patient → follow-up stamp from
+  /// `other_details` (`nextVisitDate` / `nextFollowUpDate` / `dueDate`).
+  ///
+  /// Patients with local rows are always present; [LatestVisitFollowUpDecision.nextFollowUpMs]
+  /// is null when the latest local visit did not stamp a follow-up.
+  Future<Map<String, LatestVisitFollowUpDecision>>
+      latestVisitFollowUpForMany(List<String> patientIds) async {
+    if (patientIds.isEmpty) {
+      return const <String, LatestVisitFollowUpDecision>{};
+    }
+    final placeholders = List.filled(patientIds.length, '?').join(',');
+    final rows = await _db.db.query(
+      tableName,
+      columns: ['patient_id', 'created_at', 'other_details'],
+      where: 'patient_id IN ($placeholders) AND patient_id IS NOT NULL '
+          'AND created_at IS NOT NULL',
+      whereArgs: patientIds,
+    );
+    final followRows = <LatestVisitFollowUpRow>[];
+    for (final r in rows) {
+      final pid = r['patient_id'] as String?;
+      final at = r['created_at'];
+      if (pid == null || at == null) continue;
+      final visitMs = (at is int) ? at : int.tryParse(at.toString());
+      if (visitMs == null) continue;
+      followRows.add(LatestVisitFollowUpRow(
+        patientId: pid,
+        visitDate: DateTime.fromMillisecondsSinceEpoch(visitMs),
+        nextFollowUpDate: _nextFollowUpFromOtherDetails(
+          r['other_details'] as String?,
+        ),
+      ));
+    }
+    return LatestVisitFollowUp.resolveDecisions(rows: followRows);
+  }
+
+  static DateTime? _nextFollowUpFromOtherDetails(String? otherDetails) {
+    if (otherDetails == null || otherDetails.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(otherDetails);
+      if (decoded is! Map) return null;
+      return JsonRead.firstDateTime(
+        Map<String, dynamic>.from(decoded),
+        const ['nextVisitDate', 'nextFollowUpDate', 'dueDate'],
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Queries the most recent NCD or ANC assessment per patient and parses the
