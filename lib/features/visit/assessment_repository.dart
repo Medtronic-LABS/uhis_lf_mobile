@@ -1054,61 +1054,98 @@ class AssessmentRepository extends ChangeNotifier {
     return v;
   }
 
-  /// Prior locally-saved ANC visits for [patientId] as trend snapshots,
-  /// oldest-first.
+  /// Prior ANC visit snapshots for the Step 2 AI vitals-trend card.
   ///
-  /// Used by the Step 2 vitals-trend card to plot systolic/diastolic/weight/
-  /// urine-protein movement across visits.  Reads only committed rows — the
-  /// current visit's live values come from the form notifier and are not yet
-  /// persisted here, so no explicit exclusion is required.
-  /// Returns ANC vital snapshots oldest-first from BOTH local submissions and
-  /// server-synced history.  The trend card needs ≥2 data points.
+  /// Source of truth for synced history is the `assessments` table
+  /// (`observations` + visit date). Local `local_assessments` rows are
+  /// merged in by calendar day (local wins on the same day). Oldest-first.
+  /// Today's in-progress form values are NOT included here.
   Future<List<VisitVitals>> ancVitalsHistory(
     String patientId, {
     String? alsoId,
   }) async {
     final ids = _idsFor(patientId, alsoId);
     if (ids.isEmpty) return const [];
-    final snapshots = <VisitVitals>[];
 
-    // 1. Locally-submitted assessments (pending or synced by this app).
-    final localRows = await _localRows(ids);
-    for (final row in localRows) {
+    // 1. Synced history — assessments table (observations + visitDate).
+    final fromAssessments = <VisitVitals>[];
+    for (final row in await _historyRows(ids)) {
+      final kind = row.kind?.toUpperCase() ?? '';
+      if (!_isAncKind(kind)) continue;
+      final visitAt = _visitDateFromAssessmentRaw(row.rawJson) ??
+          (row.occurredAt != null
+              ? DateTime.fromMillisecondsSinceEpoch(row.occurredAt!)
+              : null);
+      final snap = _snapshotFromServerRaw(
+        row.rawJson,
+        visitAt?.millisecondsSinceEpoch ?? row.occurredAt,
+      );
+      if (!snap.isEmpty) fromAssessments.add(snap);
+    }
+
+    // 2. Local submissions — merge by calendar day (local wins).
+    final fromLocal = <VisitVitals>[];
+    for (final row in await _localRows(ids)) {
       if (row.assessmentType.toUpperCase() != 'ANC') continue;
       final snap = _snapshotFromAnc(row.assessmentDetails, row.createdAt);
-      if (!snap.isEmpty) snapshots.add(snap);
+      if (!snap.isEmpty) fromLocal.add(snap);
     }
 
-    // 2. Server-synced assessment history stored during offline sync.
-    {
-      final historyRows = await _historyRows(ids);
-      debugPrint('[AssessmentRepo] ANC history lookup: ${historyRows.length} rows '
-          'for ids=$ids');
-      for (final row in historyRows) {
-        final kind = row.kind?.toUpperCase() ?? '';
-        debugPrint('[AssessmentRepo] history row kind="$kind" id=${row.id}');
-        if (!_isAncKind(kind)) continue;
-        final _previewRaw = row.rawJson.length > 500
-            ? '${row.rawJson.substring(0, 500)}…'
-            : row.rawJson;
-        debugPrint('[AssessmentRepo] history raw id=${row.id}: $_previewRaw');
-        final snap = _snapshotFromServerRaw(row.rawJson, row.occurredAt);
-        debugPrint('[AssessmentRepo] history snap: sys=${snap.systolic} dia=${snap.diastolic} '
-            'wt=${snap.weight} urine=${snap.urineProtein}');
-        if (!snap.isEmpty) snapshots.add(snap);
-      }
+    return _mergeAncVitalsByVisitDay(
+      fromAssessments: fromAssessments,
+      fromLocal: fromLocal,
+    );
+  }
+
+  /// Merge synced `assessments` + `local_assessments` by calendar day.
+  /// Same-day collision: local wins (fresher device write).
+  static List<VisitVitals> _mergeAncVitalsByVisitDay({
+    required List<VisitVitals> fromAssessments,
+    required List<VisitVitals> fromLocal,
+  }) {
+    final byDay = <String, VisitVitals>{};
+
+    String? dayKey(DateTime? d) {
+      if (d == null) return null;
+      final local = d.toLocal();
+      return '${local.year.toString().padLeft(4, '0')}-'
+          '${local.month.toString().padLeft(2, '0')}-'
+          '${local.day.toString().padLeft(2, '0')}';
     }
 
-    // Sort oldest-first so VitalsTrendAnalyzer sees the correct sequence.
-    snapshots.sort((a, b) {
-      if (a.date == null && b.date == null) return 0;
-      if (a.date == null) return 1;
-      if (b.date == null) return -1;
-      return a.date!.compareTo(b.date!);
-    });
-    debugPrint('[AssessmentRepo] ancVitalsHistory: ${snapshots.length} snapshots '
-        'for patient $patientId');
-    return snapshots;
+    var undated = 0;
+    for (final snap in fromAssessments) {
+      final key = dayKey(snap.date) ?? 'assessments-undated-${undated++}';
+      byDay[key] = snap;
+    }
+    undated = 0;
+    for (final snap in fromLocal) {
+      final key = dayKey(snap.date) ?? 'local-undated-${undated++}';
+      byDay[key] = snap; // local overwrites assessments on same day
+    }
+
+    final merged = byDay.values.toList()
+      ..sort((a, b) {
+        if (a.date == null && b.date == null) return 0;
+        if (a.date == null) return 1;
+        if (b.date == null) return -1;
+        return a.date!.compareTo(b.date!);
+      });
+    return merged;
+  }
+
+  /// Prefer `visitDate` / `assessmentDate` from assessments.raw_json, then
+  /// `occurredAt` column.
+  static DateTime? _visitDateFromAssessmentRaw(String rawJson) {
+    try {
+      final raw = jsonDecode(rawJson) as Map<String, dynamic>;
+      final ms = JsonRead.epochMillis(
+        raw,
+        const ['visitDate', 'assessmentDate', 'completedAt', 'completedDate', 'date'],
+      );
+      if (ms != null) return DateTime.fromMillisecondsSinceEpoch(ms);
+    } catch (_) {}
+    return null;
   }
 
   /// Returns `pregnantWomanExistingIllness` and `pregnantWomanOnTreatment`

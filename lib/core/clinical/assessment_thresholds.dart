@@ -50,6 +50,18 @@ bool isPlausibleBpReading(double v) => v == 0 || (v >= bpFormMin && v <= bpFormM
 bool isPlausibleFundalHeightCm(double cm) =>
     cm >= fundalHeightFormMinCm && cm <= fundalHeightFormMaxCm;
 
+/// Haemoglobin form input (g/dL) — LeapWell accepts 1–20 only.
+bool isPlausibleHemoglobin(double v) =>
+    v >= hbFormMin && v <= hbFormMax;
+
+/// Blood glucose form input (mmol/L) — LeapWell accepts 0–33 inclusive.
+bool isPlausibleGlucoseMmol(double v) =>
+    v >= glucoseFormMin && v <= glucoseFormMax;
+
+/// IFA / Calcium tablet count form input — LeapWell max 60.
+bool isPlausibleSupplementTablets(num v) =>
+    v >= 0 && v <= supplementTabletsFormMax;
+
 // ── Temperature conversion utilities ──
 double fahrenheitToCelsius(double f) => (f - 32) * 5 / 9;
 double celsiusToFahrenheit(double c) => c * 9 / 5 + 32;
@@ -63,6 +75,17 @@ const double hbSevereAnaemia = 8.0;
 const double hbModerateAnaemia = 10.0;
 const double hbMildAnaemia = 11.0;
 const double hbNormal = 11.0;
+/// Form input bounds for Hb entry in LeapWell (g/dL).
+const double hbFormMin = 1.0;
+const double hbFormMax = 20.0;
+
+// ── Blood glucose form input bounds (mmol/L) ──
+// Accepts 0 (not measured) through 33 inclusive.
+const double glucoseFormMin = 0.0;
+const double glucoseFormMax = 33.0;
+
+// ── IFA / Calcium tablet form input bounds ──
+const int supplementTabletsFormMax = 60;
 
 // ── Blood glucose (mmol/L — NCDReferralColorEvaluator + AssessmentDefinedParams) ──
 const double bgHypoglycaemiaMmol = 3.9;

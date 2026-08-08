@@ -2748,8 +2748,9 @@ abstract final class ComposerStrings {
   static String get bpValidationError => getTranslatedString('bpValidationError', 'Enter a valid reading');
   static String get bpDiastolicExceedsSystolicError => getTranslatedString('bpDiastolicExceedsSystolicError', 'Diastolic must be less than systolic');
   static String get pulseValidationError => getTranslatedString('pulseValidationError', 'Enter a pulse between 50 and 300 bpm');
-  static String get glucoseValidationError => getTranslatedString('glucoseValidationError', 'Enter a glucose reading between 1.0 and 15.0 mmol/L');
+  static String get glucoseValidationError => getTranslatedString('glucoseValidationError', 'Enter a glucose reading between 0 and 33 mmol/L');
   static String get haemoglobinValidationError => getTranslatedString('haemoglobinValidationError', 'Enter a Hb reading between 1.0 and 20.0 g/dL');
+  static String get tabletCountValidationError => getTranslatedString('tabletCountValidationError', 'Enter a value between 0 and 60');
   static String get temperatureValidationError => getTranslatedString('temperatureValidationError', 'Enter a temperature between 90 and 110°F, or 0 if it could not be measured');
   static String get fundalHeightValidationError => getTranslatedString('fundalHeightValidationError', 'Enter a fundal height between 8 and 45 cm');
   static String get hba1cValidationError => getTranslatedString('hba1cValidationError', 'Enter an HbA1c reading between 4.0% and 14.0%');

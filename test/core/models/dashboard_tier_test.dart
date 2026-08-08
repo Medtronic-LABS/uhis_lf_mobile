@@ -14,16 +14,20 @@ void main() {
     });
 
     test('schedule bands for status pill (date only)', () {
-      // < -2 → overdue
+      // < 0 → overdue (any day past due)
       expect(
         DashboardTier.fromDueAt(DateTime(2026, 7, 11), now: now),
         DashboardTier.overdue,
       );
-      // -2..0 → dueToday
       expect(
         DashboardTier.fromDueAt(DateTime(2026, 7, 12), now: now),
-        DashboardTier.dueToday,
+        DashboardTier.overdue,
       );
+      expect(
+        DashboardTier.fromDueAt(DateTime(2026, 7, 13), now: now),
+        DashboardTier.overdue,
+      );
+      // 0 → dueToday (exactly today)
       expect(
         DashboardTier.fromDueAt(DateTime(2026, 7, 14), now: now),
         DashboardTier.dueToday,
