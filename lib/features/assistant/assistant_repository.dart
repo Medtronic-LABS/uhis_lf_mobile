@@ -156,6 +156,7 @@ class AssistantRepository {
     try {
       final response = await dio.post<Map<String, dynamic>>(path, data: body);
       ConsoleLog.step('[PayloadDebug] assistant-ask → ${response.statusCode}');
+      ConsoleLog.json('[PayloadDebug] assistant-ask response', response.data);
       final data = response.data;
       if (data == null) throw const AssistantException('Empty response');
       final answer = data['answer'] as String?;
