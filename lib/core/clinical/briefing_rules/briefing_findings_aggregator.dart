@@ -134,9 +134,27 @@ class BriefingFindingsAggregator {
     }
 
     if (patientCtx.isYoungChild || selectedProgrammes.contains(Programme.imci)) {
+      // Deliberately uses patientCtx.patientId (the already-remapped local
+      // `patients.id`) rather than the raw `patientId` parameter above: the
+      // `patients` and `immunisations` tables this branch reads are keyed
+      // strictly by the local id, unlike local_assessments/assessments/
+      // follow_ups (which tolerate the FHIR-shaped id once synced). Passing
+      // an un-remapped FHIR id here silently zeroes out every child
+      // immunization finding — see PatientDao.byId's lack of a byAnyId-style
+      // fallback.
+      //
+      // `allRows` (fetched above with the raw `patientId`) has the same
+      // problem for the EPI rows this branch reads to compute
+      // weightGainSlowed: if a patient's EPI assessments were persisted
+      // under the local id while `patientId` is still the FHIR id, `allRows`
+      // won't contain them. Re-fetch under patientCtx.patientId whenever the
+      // two ids differ instead of reusing allRows as-is.
+      final childRows = patientCtx.patientId == patientId
+          ? allRows
+          : await assessmentDao.getByPatientId(patientCtx.patientId);
       findings.addAll(await _evaluateChildImmunization(
-        patientId: patientId,
-        allRows: allRows,
+        patientId: patientCtx.patientId,
+        allRows: childRows,
         patientDao: patientDao,
         immunisationDao: immunisationDao,
       ));
