@@ -381,7 +381,12 @@ class _PatientContextScreenState
   void _prefetchAiContext(Future<PatientOrMemberData> dataFuture) {
     dataFuture.then((data) {
       if (!mounted || !data.hasData) return;
-      setState(() => _aiContextFuture = _aiContext(data));
+      // Braces, not an arrow: an arrow closure returns the assigned value —
+      // here a Future — and setState() asserts against that, which skipped the
+      // markNeedsBuild() that follows the assert.
+      setState(() {
+        _aiContextFuture = _aiContext(data);
+      });
     });
   }
 
