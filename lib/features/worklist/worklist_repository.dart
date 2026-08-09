@@ -20,6 +20,7 @@ import '../../core/models/worklist_entry.dart';
 import '../../core/mission/programme_reason.dart' as programme_reason;
 import '../../core/risk/clinical_vitals_from_history.dart';
 import '../../core/risk/risk_scoring_service.dart';
+import '../../core/sync/latest_visit_follow_up.dart';
 import '../../core/time/calendar_day.dart';
 
 /// View-model layer above the worklist DAOs. UI consumes [load] /
@@ -221,6 +222,8 @@ class WorklistRepository {
     final followMap = await _followUps.forMany(ids);
     final immMap = await _immunisations.forMany(ids);
     final draftDates = await _localAssessments.latestDraftCreatedAtForMany(ids);
+    final localVisitFollowUps =
+        await _localAssessments.latestVisitFollowUpForMany(ids);
     final localVitals = await _localAssessments.latestClinicalVitalsForMany(ids);
     final historyVitals = await _vitalsFromAssessmentHistory(ids);
     final now = DateTime.now();
@@ -235,11 +238,28 @@ class WorklistRepository {
 
     // Collect debug rows for a ranked summary after scoring.
     final debugRows = <_ScoreDebugRow>[];
+    final clearHistFuPatientIds = <String>[];
 
     for (final p in patients) {
       final follows = followMap[p.id] ?? const <FollowUpRow>[];
       final imms = immMap[p.id] ?? const <ImmunisationRow>[];
-      final nextDueMs = _earliestDueMillis(follows, imms, now) ?? p.nextDueAt;
+      final localVisit = localVisitFollowUps[p.id];
+      final localIsLatest = localVisit != null &&
+          (p.lastVisitAt == null || localVisit.visitMs >= p.lastVisitAt!);
+      final followsForSchedule = localIsLatest
+          ? [
+              for (final f in follows)
+                if (_followUpStillOpenAfterLocalVisit(f, localVisit.visitMs)) f,
+            ]
+          : follows;
+      final nextDueMs = _resolveNextDueMs(
+        follows: follows,
+        imms: imms,
+        now: now,
+        patientNextDueAt: p.nextDueAt,
+        patientLastVisitAt: p.lastVisitAt,
+        localVisit: localVisit,
+      );
       final nextDue = nextDueMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(nextDueMs);
@@ -252,7 +272,7 @@ class WorklistRepository {
       final facts = _factsFor(
         p,
         progMap[p.id] ?? const <Programme>{},
-        follows,
+        followsForSchedule,
         imms,
         vitals,
         now,
@@ -261,9 +281,15 @@ class WorklistRepository {
       );
       final assessment = _risk.score(facts);
       final draftMs = draftDates[p.id];
-      final lastVisit = [_lastCompletedMillis(follows), p.lastVisitAt, draftMs]
+      final lastVisit = [
+        _lastCompletedMillis(followsForSchedule),
+        p.lastVisitAt,
+        draftMs,
+      ]
           .whereType<int>()
           .fold<int?>(null, (best, v) => best == null || v > best ? v : best);
+      final clearNextDue = localIsLatest && nextDueMs == null;
+      if (localIsLatest) clearHistFuPatientIds.add(p.id);
       await _patients.updateRisk(
         patientId: p.id,
         sortRank: assessment.sortRank,
@@ -274,6 +300,7 @@ class WorklistRepository {
         lastVisitAt: lastVisit,
         missedVisitCount: facts.missedVisitsLast90d,
         redFlag: facts.redFlag,
+        clearNextDueAt: clearNextDue,
       );
 
       assert(() {
@@ -333,6 +360,10 @@ class WorklistRepository {
       }
       return true;
     }());
+
+    if (clearHistFuPatientIds.isNotEmpty) {
+      await _followUps.deleteHistorySeededForPatients(clearHistFuPatientIds);
+    }
 
     await _syncMeta.stampWarm('worklist', DateTime.now());
     _changes.value++;
@@ -457,6 +488,68 @@ class WorklistRepository {
     );
   }
 
+  /// Combines open follow-ups / immunisations with the latest **local**
+  /// assessment visit when that local visit is at least as new as
+  /// [patientLastVisitAt] (synced history). Then history-seeded `hist-fu-…`
+  /// rows and follow-ups due at/before the local visit are ignored, and a
+  /// null stamp on the local visit clears due instead of falling back.
+  @visibleForTesting
+  static int? resolveNextDueMs({
+    required List<FollowUpRow> follows,
+    required List<ImmunisationRow> imms,
+    required DateTime now,
+    int? patientNextDueAt,
+    int? patientLastVisitAt,
+    LatestVisitFollowUpDecision? localVisit,
+  }) =>
+      _resolveNextDueMs(
+        follows: follows,
+        imms: imms,
+        now: now,
+        patientNextDueAt: patientNextDueAt,
+        patientLastVisitAt: patientLastVisitAt,
+        localVisit: localVisit,
+      );
+
+  static int? _resolveNextDueMs({
+    required List<FollowUpRow> follows,
+    required List<ImmunisationRow> imms,
+    required DateTime now,
+    int? patientNextDueAt,
+    int? patientLastVisitAt,
+    LatestVisitFollowUpDecision? localVisit,
+  }) {
+    final localIsLatest = localVisit != null &&
+        (patientLastVisitAt == null ||
+            localVisit.visitMs >= patientLastVisitAt);
+    if (!localIsLatest) {
+      return _earliestDueMillis(follows, imms, now) ?? patientNextDueAt;
+    }
+
+    final openFollows = <FollowUpRow>[
+      for (final f in follows)
+        if (_followUpStillOpenAfterLocalVisit(f, localVisit.visitMs)) f,
+    ];
+    // Age-band childhood stamps can still be ≤ the visit day after a late
+    // visit — that milestone is fulfilled; only a *future* stamp counts.
+    final localStamp = localVisit.nextFollowUpMs;
+    final usableLocalStamp =
+        (localStamp != null && localStamp > localVisit.visitMs)
+            ? localStamp
+            : null;
+    return _earliestDueMillis(openFollows, imms, now) ?? usableLocalStamp;
+  }
+
+  static bool _followUpStillOpenAfterLocalVisit(FollowUpRow f, int localVisitMs) {
+    if (f.completedAt != null) return false;
+    // Assessment-history synthesised rows are superseded by a newer local visit.
+    if (f.id.startsWith('hist-fu-')) return false;
+    final due = f.dueAt;
+    if (due == null) return true;
+    // Visit on/after the due date fulfils that open follow-up.
+    return due > localVisitMs;
+  }
+
   /// Find the next due date, prioritizing:
   /// 1. The earliest FUTURE due date if any exists
   /// 2. Otherwise, the most recent (least overdue) PAST due date
@@ -471,6 +564,7 @@ class WorklistRepository {
     int? mostRecentPast;
     
     for (final f in follows) {
+      if (f.completedAt != null) continue;
       final due = f.dueAt;
       if (due == null) continue;
       if (due >= nowMs) {
@@ -486,6 +580,8 @@ class WorklistRepository {
       }
     }
     for (final im in imms) {
+      // Already administered — must not keep the patient overdue.
+      if (im.givenAt != null) continue;
       final due = im.dueAt;
       if (due == null) continue;
       if (due >= nowMs) {

@@ -1189,18 +1189,6 @@
             "display": "Absent"
           }
         ]
-      },
-      {
-        "cultureValue": "প্রযোজ্য নয়",
-        "id": "NA",
-        "name": "N/A",
-        "clinicalConcept": [
-          {
-            "system": "SNOMED_CT",
-            "code": "385432009",
-            "display": "Not applicable"
-          }
-        ]
       }
     ]
   },
@@ -1255,18 +1243,6 @@
             "system": "SNOMED_CT",
             "code": "2667000",
             "display": "Absent"
-          }
-        ]
-      },
-      {
-        "cultureValue": "প্রযোজ্য নয়",
-        "id": "na",
-        "name": "N/A",
-        "clinicalConcept": [
-          {
-            "system": "SNOMED_CT",
-            "code": "385432009",
-            "display": "Not applicable"
           }
         ]
       }
