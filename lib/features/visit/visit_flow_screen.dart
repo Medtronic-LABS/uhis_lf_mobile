@@ -1748,15 +1748,18 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (hasEpi && epi != null && epi.overdueCount > 0) {
       actions.add(NabaNextAction(
         priority: 1,
-        action: EpiVisitRecoStrings.catchUpAction(epi.overdueVaccineNames),
+        action: EpiVisitRecoStrings.catchUpAction(
+            EpiVisitRecoStrings.overdueNames(epi)),
         urgency: 'Now',
         programme: 'EPI',
       ));
       counselling.addAll(EpiVisitRecoStrings.counsellingLines(epi));
       followUp.add(NabaFollowUpItem(
         activity: EpiVisitRecoStrings.followUpActivity(
-            epi.nextMilestoneLabel, epi.nextMilestoneVaccineNames),
-        timeline: epi.nextMilestoneLabel ?? VisitFlowStrings.followUpTimelineRoutine,
+            EpiVisitRecoStrings.nextMilestone(epi),
+            EpiVisitRecoStrings.nextMilestoneNames(epi)),
+        timeline: EpiVisitRecoStrings.nextMilestone(epi) ??
+            VisitFlowStrings.followUpTimelineRoutine,
         programme: 'EPI',
         resolvedDate: epi.nextMilestoneDate,
       ));
@@ -1769,8 +1772,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       ));
       followUp.add(NabaFollowUpItem(
         activity: EpiVisitRecoStrings.followUpActivity(
-            epi?.nextMilestoneLabel, epi?.nextMilestoneVaccineNames ?? const []),
-        timeline: epi?.nextMilestoneLabel ?? VisitFlowStrings.followUpTimelineRoutine,
+            epi == null ? null : EpiVisitRecoStrings.nextMilestone(epi),
+            epi == null
+                ? const []
+                : EpiVisitRecoStrings.nextMilestoneNames(epi)),
+        timeline: (epi == null ? null : EpiVisitRecoStrings.nextMilestone(epi)) ??
+            VisitFlowStrings.followUpTimelineRoutine,
         programme: 'EPI',
         resolvedDate: epi?.nextMilestoneDate,
       ));
@@ -1827,7 +1834,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               urgency: 'Today',
               reason: (hasEpi && epi != null && epi.overdueCount > 0)
                   ? EpiVisitRecoStrings.referralReason(
-                      epi.currentMilestoneLabel, epi.overdueVaccineNames)
+                      EpiVisitRecoStrings.currentMilestone(epi),
+                      EpiVisitRecoStrings.overdueNames(epi))
                   : VisitFlowStrings.referralReasonClinicalAssessment,
             )
           : null,

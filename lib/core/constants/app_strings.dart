@@ -4620,6 +4620,37 @@ abstract final class SelectHouseholdStrings {
 // ─────────────────────────────────────────────────────────────────────────────
 // EPI / Immunisation timeline
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Localised EPI vaccine / milestone labels for UI display only.
+///
+/// Never use the result as a persisted or transmitted value; that is
+/// `VaccineEntry.display` (wire spelling stays English).
+abstract final class EpiVaccineStrings {
+  EpiVaccineStrings._();
+
+  /// Update-status sheet title, e.g. "6 Weeks Vaccines". Takes the already
+  /// localised milestone label.
+  static String sheetTitle(String milestoneLabel) => getTranslatedString(
+      'Epi.milestoneVaccinesTitle', '{milestone} Vaccines',
+      params: {'milestone': milestoneLabel});
+
+  static String display(String code, String fallback) =>
+      getTranslatedString('Epi.vaccine.$code', fallback);
+
+  /// Update-status card title (no dose number), e.g. "Pentavalent Vaccine".
+  static String sheetDisplay(String code, String fallback) =>
+      getTranslatedString('Epi.vaccineSheet.$code', fallback);
+
+  static String description(String code, String fallback) =>
+      getTranslatedString('Epi.vaccineDesc.$code', fallback);
+
+  static String diseaseName(String code, String fallback) =>
+      getTranslatedString('Epi.vaccineDisease.$code', fallback);
+
+  static String milestone(String key, String fallback) =>
+      key.isEmpty ? fallback : getTranslatedString('Epi.milestone.$key', fallback);
+}
+
 abstract final class EpiStrings {
   EpiStrings._();
 
@@ -4687,6 +4718,37 @@ abstract final class EpiStrings {
 abstract final class EpiVisitRecoStrings {
   EpiVisitRecoStrings._();
 
+  /// Localised vaccine labels for the due doses, resolved from the summary's
+  /// stable codes. [EpiVisitSummary] cannot do this itself — it must stay free
+  /// of Flutter and of this file, which imports it.
+  static List<String> overdueNames(EpiVisitSummary epi) => [
+        for (var i = 0; i < epi.overdueVaccineNames.length; i++)
+          EpiVaccineStrings.display(
+            i < epi.overdueVaccineCodes.length ? epi.overdueVaccineCodes[i] : '',
+            epi.overdueVaccineNames[i],
+          ),
+      ];
+
+  /// Localised vaccine labels for the next milestone's doses.
+  static List<String> nextMilestoneNames(EpiVisitSummary epi) => [
+        for (var i = 0; i < epi.nextMilestoneVaccineNames.length; i++)
+          EpiVaccineStrings.display(
+            i < epi.nextMilestoneVaccineCodes.length
+                ? epi.nextMilestoneVaccineCodes[i]
+                : '',
+            epi.nextMilestoneVaccineNames[i],
+          ),
+      ];
+
+  static String currentMilestone(EpiVisitSummary epi) => EpiVaccineStrings
+      .milestone(epi.currentMilestoneKey, epi.currentMilestoneLabel);
+
+  static String? nextMilestone(EpiVisitSummary epi) =>
+      epi.nextMilestoneLabel == null
+          ? null
+          : EpiVaccineStrings.milestone(
+              epi.nextMilestoneKey ?? '', epi.nextMilestoneLabel!);
+
   static String get visitSummaryTitle => getTranslatedString(
       'EpiVisitReco.visitSummaryTitle', 'Vaccination Visit — Guideline Care Plan');
 
@@ -4704,7 +4766,7 @@ abstract final class EpiVisitRecoStrings {
           params: {
             'count': '${epi.overdueCount}',
             'unit': epi.overdueCount == 1 ? 'vaccine' : 'vaccines',
-            'milestone': epi.currentMilestoneLabel,
+            'milestone': currentMilestone(epi),
           },
         )
       : allVaccinesUpToDate;
@@ -4730,7 +4792,7 @@ abstract final class EpiVisitRecoStrings {
           params: {
             'count': '${epi.overdueCount}',
             'unit': epi.overdueCount == 1 ? 'vaccine' : 'vaccines',
-            'milestone': epi.currentMilestoneLabel,
+            'milestone': currentMilestone(epi),
           },
         ),
         getTranslatedString(
@@ -4739,7 +4801,7 @@ abstract final class EpiVisitRecoStrings {
               '${_andJoin(epi.overdueVaccineNames)}.',
           params: {
             'count': '${epi.overdueVaccineNames.length}',
-            'names': _andJoin(epi.overdueVaccineNames),
+            'names': _andJoin(overdueNames(epi)),
           },
         ),
         if (epi.nextMilestoneLabel != null)
@@ -4748,8 +4810,8 @@ abstract final class EpiVisitRecoStrings {
             'Next milestone: ${epi.nextMilestoneLabel} — '
                 '${_andJoin(epi.nextMilestoneVaccineNames)}.',
             params: {
-              'milestone': epi.nextMilestoneLabel!,
-              'names': _andJoin(epi.nextMilestoneVaccineNames),
+              'milestone': nextMilestone(epi)!,
+              'names': _andJoin(nextMilestoneNames(epi)),
             },
           ),
         getTranslatedString('EpiVisitReco.counsellingReturnIfDanger',
@@ -4766,14 +4828,15 @@ abstract final class EpiVisitRecoStrings {
         );
 
   static String whatsappMessage(EpiVisitSummary epi) {
-    final next = epi.nextMilestoneLabel != null
+    final nextLabel = nextMilestone(epi);
+    final nextNames = nextMilestoneNames(epi);
+    final next = nextLabel != null
         ? getTranslatedString(
             'EpiVisitReco.whatsappNextMilestone',
-            ' Next milestone: ${epi.nextMilestoneLabel} — '
-                '${_andJoin(epi.nextMilestoneVaccineNames)}.',
+            ' Next milestone: $nextLabel — ${_andJoin(nextNames)}.',
             params: {
-              'milestone': epi.nextMilestoneLabel!,
-              'names': _andJoin(epi.nextMilestoneVaccineNames),
+              'milestone': nextLabel,
+              'names': _andJoin(nextNames),
             },
           )
         : '';
@@ -4784,17 +4847,19 @@ abstract final class EpiVisitRecoStrings {
         params: {'next': next},
       );
     }
+    final overdue = overdueNames(epi);
+    final milestone = currentMilestone(epi);
     return getTranslatedString(
       'EpiVisitReco.whatsappOverdue',
       '${epi.overdueCount} ${epi.overdueCount == 1 ? 'vaccine' : 'vaccines'} '
-          'overdue — ${epi.currentMilestoneLabel} doses are due now. '
-          'All can be given in ONE visit — ${_andJoin(epi.overdueVaccineNames)}.$next '
+          'overdue — $milestone doses are due now. '
+          'All can be given in ONE visit — ${_andJoin(overdue)}.$next '
           'Return at once if: high fever, rash, or breathing difficulty of any kind.',
       params: {
         'count': '${epi.overdueCount}',
         'unit': epi.overdueCount == 1 ? 'vaccine' : 'vaccines',
-        'milestone': epi.currentMilestoneLabel,
-        'names': _andJoin(epi.overdueVaccineNames),
+        'milestone': milestone,
+        'names': _andJoin(overdue),
         'next': next,
       },
     );
