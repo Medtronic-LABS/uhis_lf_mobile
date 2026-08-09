@@ -51,10 +51,9 @@ void main() {
     expect(bcg.status, VaccineStatus.missed);
     expect(bcg.missedReason, 'Child was sick on scheduled date');
     expect(atBirth.hasMissed, isTrue);
-    // The other two "At Birth" vaccines (OPV0, HepB0) are still unrecorded
-    // and independently overdue, so the milestone-level hasDueNow stays true
-    // — only BCG itself should read as missed, not the whole milestone.
-    expect(atBirth.hasDueNow, isTrue);
+    // At Birth is BCG-only on the national schedule — once BCG is Missed
+    // there is no remaining dueNow vaccine in that milestone.
+    expect(atBirth.hasDueNow, isFalse);
   });
 
   test('a given vaccine always resolves completed regardless of status',
@@ -96,7 +95,9 @@ void main() {
     );
 
     expect(codes, isNot(contains('BCG')));
-    expect(codes, contains('OPV0')); // still dueNow, unrecorded
+    // Next due doses are the 6-week set (OPV0/HepB0 are not on the national table).
+    expect(codes, contains('OPV1'));
+    expect(codes, isNot(contains('OPV0')));
   });
 
   test('referralFacility threads through from ImmunisationRow', () async {

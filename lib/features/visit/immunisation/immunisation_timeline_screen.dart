@@ -17,7 +17,6 @@ import '../triage/child_assessment_section.dart';
 import 'child_immunization_dto.dart';
 import 'epi_schedule_engine.dart';
 import 'epi_visit_summary.dart';
-import 'immunisation_dto.dart';
 import 'immunisation_repository.dart';
 
 // ── Color tokens ─────────────────────────────────────────────────────────────
@@ -166,43 +165,31 @@ class _ImmunisationTimelineScreenState
         .toList();
     final mergedRows = [...historyRows, ...localRows];
 
-    // Same priority, as name-keyed maps for the backend-dto path below
-    // (VaccinationDetailDto has no facility field, so that path needs a
-    // post-build overlay rather than a per-row merge).
-    final historyGivenByName = <String, String>{};
-    final historyMissedByName = <String, String>{};
+    // Facility labels for referred doses — overlay after build (row merge
+    // already carries status/givenAt; facility is display-only enrichment).
     final historyFacilityByName = <String, String>{};
     for (final h in history) {
-      if (h.status == 'Vaccinated' && h.givenAtMs != null) {
-        historyGivenByName[h.vaccineName] =
-            DateTime.fromMillisecondsSinceEpoch(h.givenAtMs!)
-                .toIso8601String()
-                .substring(0, 10);
-      } else if (h.status == 'Missed') {
-        historyMissedByName[h.vaccineName] = h.reason ?? '';
-        if (h.facility != null && h.facility!.isNotEmpty) {
-          historyFacilityByName[h.vaccineName] = h.facility!;
-        }
+      if (h.status == 'Missed' &&
+          h.facility != null &&
+          h.facility!.isNotEmpty) {
+        historyFacilityByName[h.vaccineName] = h.facility!;
       }
     }
     for (final r in localRows) {
       if (r.vaccineCode == null) continue;
-      if (r.givenAt != null) {
-        historyGivenByName[r.vaccineCode!] =
-            DateTime.fromMillisecondsSinceEpoch(r.givenAt!)
-                .toIso8601String()
-                .substring(0, 10);
-      } else if (r.status == 'Missed') {
-        historyMissedByName[r.vaccineCode!] = r.missedReason ?? '';
-        if (r.referralFacility != null && r.referralFacility!.isNotEmpty) {
-          historyFacilityByName[r.vaccineCode!] = r.referralFacility!;
-        }
+      if (r.status == 'Missed' &&
+          r.referralFacility != null &&
+          r.referralFacility!.isNotEmpty) {
+        historyFacilityByName[r.vaccineCode!] = r.referralFacility!;
       }
     }
 
+    // Pull server *outcomes* when online, but always build the milestone
+    // list from the local national schedule asset. The list endpoint is the
+    // patient's record (status / vaccinatedDate), not the schedule template —
+    // using it as the template overrode epi_schedule.json in production.
+    var outcomeRows = List<ImmunisationRow>.from(mergedRows);
     try {
-      // Try backend first — matches Android SPICE app behaviour.
-      // On success the response is the authoritative schedule + statuses.
       final dtos = await immunisationRepo
           .fetchSchedule(
             patientId: serverId,
@@ -210,71 +197,35 @@ class _ImmunisationTimelineScreenState
             birthDate: dobStr!.substring(0, 10),
           )
           .timeout(const Duration(seconds: 5));
-
       if (dtos.isNotEmpty) {
-        // Merge local + history outcomes to handle backend eventual
-        // consistency — a vaccine recorded elsewhere (given, or explicitly
-        // Missed) but not yet reflected in the backend response must still
-        // show that outcome so it doesn't look reverted, and so subsequent
-        // milestones unlock.
-        final effectiveDtos = dtos.map((dto) {
-          final knownDate = historyGivenByName[dto.vaccineName];
-          if (knownDate != null && dto.status != 'Vaccinated') {
-            return VaccinationDetailDto(
-              id: dto.id,
-              type: dto.type,
-              value: dto.value,
-              status: 'Vaccinated',
-              vaccineName: dto.vaccineName,
-              scheduledDate: dto.scheduledDate,
-              vaccinatedDate: knownDate,
-              doseClosureWeeks: dto.doseClosureWeeks,
-              reason: dto.reason,
-              displayOrder: dto.displayOrder,
-              category: dto.category,
-              vaccineOrder: dto.vaccineOrder,
-            );
-          }
-          final knownReason = historyMissedByName[dto.vaccineName];
-          if (knownReason != null &&
-              dto.status != 'Vaccinated' &&
-              dto.status != 'Missed') {
-            return VaccinationDetailDto(
-              id: dto.id,
-              type: dto.type,
-              value: dto.value,
-              status: 'Missed',
-              vaccineName: dto.vaccineName,
-              scheduledDate: dto.scheduledDate,
-              doseClosureWeeks: dto.doseClosureWeeks,
-              reason: knownReason,
-              displayOrder: dto.displayOrder,
-              category: dto.category,
-              vaccineOrder: dto.vaccineOrder,
-            );
-          }
-          return dto;
+        final apiRows = dtos.map((dto) {
+          final givenMs = dto.vaccinatedDate != null
+              ? DateTime.tryParse(dto.vaccinatedDate!)?.millisecondsSinceEpoch
+              : null;
+          return ImmunisationRow(
+            id: 'api_${localId}_${dto.vaccineName}_${dto.scheduledDate}',
+            patientId: localId,
+            vaccineCode: dto.vaccineName,
+            givenAt: givenMs,
+            status: dto.status == 'Missed'
+                ? 'Missed'
+                : (dto.status == 'Vaccinated' ? 'Vaccinated' : null),
+            missedReason: dto.reason,
+            rawJson: '{}',
+          );
         }).toList();
-        var milestones = _dtosToMilestones(effectiveDtos);
-        milestones =
-            _overlayReferralFacility(milestones, historyFacilityByName);
-        milestones = EpiScheduleEngine.applySequencing(milestones);
-        if (mounted) {
-          setState(() {
-            _patient = patient;
-            _milestones = milestones;
-            _loading = false;
-          });
-        }
-        return;
+        // History → API → local session (local wins on conflict).
+        outcomeRows = [...historyRows, ...apiRows, ...localRows];
       }
     } on Object {
-      // Offline or timeout — fall through to local DB.
+      // Offline or timeout — keep history + local only.
     }
 
-    // Offline fallback: static EPI schedule + locally recorded/historical outcomes.
     try {
-      var milestones = await EpiScheduleEngine.build(dob: dob, rows: mergedRows);
+      var milestones =
+          await EpiScheduleEngine.build(dob: dob, rows: outcomeRows);
+      milestones =
+          _overlayReferralFacility(milestones, historyFacilityByName);
       milestones = EpiScheduleEngine.applySequencing(milestones);
       if (mounted) {
         setState(() {
@@ -348,15 +299,15 @@ class _ImmunisationTimelineScreenState
   }
 
   /// Overlays a name-keyed referral facility map onto already-built
-  /// milestones — used for the backend-dto path, whose [VaccinationDetailDto]
-  /// has no facility field to carry it through [_dtosToMilestones].
+  /// milestones (API/history names may be display or code).
   List<VaccineMilestone> _overlayReferralFacility(
       List<VaccineMilestone> milestones, Map<String, String> facilityByName) {
     if (facilityByName.isEmpty) return milestones;
     return milestones.map((m) {
       final vaccines = m.vaccines.map((v) {
         if (v.referralFacility != null) return v;
-        final facility = facilityByName[v.display];
+        final facility =
+            facilityByName[v.display] ?? facilityByName[v.code];
         if (facility == null) return v;
         return VaccineEntry(
           code: v.code,
@@ -374,6 +325,7 @@ class _ImmunisationTimelineScreenState
       }).toList();
       return VaccineMilestone(
         label: m.label,
+        milestoneKey: m.milestoneKey,
         scheduledDate: m.scheduledDate,
         vaccines: vaccines,
         offsetType: m.offsetType,
@@ -381,94 +333,6 @@ class _ImmunisationTimelineScreenState
         actionEnabled: m.actionEnabled,
       );
     }).toList();
-  }
-
-  /// Converts backend [VaccinationDetailDto] list → [VaccineMilestone] list.
-  /// Mirrors how the Android SPICE ImmunisationViewModel builds its timeline.
-  List<VaccineMilestone> _dtosToMilestones(List<VaccinationDetailDto> dtos) {
-    final now = DateTime.now();
-
-    // Group by (type, value) — same milestone bucket.
-    final groups = <String, List<VaccinationDetailDto>>{};
-    for (final dto in dtos) {
-      (groups['${dto.type}_${dto.value}'] ??= []).add(dto);
-    }
-
-    // Sort groups by scheduled date ascending.
-    final sortedKeys = groups.keys.toList()
-      ..sort((a, b) {
-        final aDate = DateTime.tryParse(groups[a]!.first.scheduledDate);
-        final bDate = DateTime.tryParse(groups[b]!.first.scheduledDate);
-        if (aDate == null || bDate == null) return 0;
-        return aDate.compareTo(bDate);
-      });
-
-    final milestones = <VaccineMilestone>[];
-
-    // Each vaccine's status is computed strictly from its own scheduled
-    // date / recorded outcome, independent of every other milestone -- no
-    // cross-milestone "prior must be complete first" gate. See the matching
-    // comment in EpiScheduleEngine.build() for the bug this fixes.
-    for (final key in sortedKeys) {
-      final groupDtos = groups[key]!;
-      final first = groupDtos.first;
-      final scheduledDate = DateTime.tryParse(first.scheduledDate) ?? now;
-
-      final vaccines = groupDtos.asMap().entries.map((e) {
-        final dto = e.value;
-        final VaccineStatus status;
-        if (dto.status == 'Vaccinated') {
-          status = VaccineStatus.completed;
-        } else if (dto.status == 'Missed') {
-          status = VaccineStatus.missed;
-        } else {
-          final days = scheduledDate.difference(now).inDays;
-          if (days <= 0) {
-            status = VaccineStatus.dueNow;
-          } else if (days <= 28) {
-            status = VaccineStatus.upcoming;
-          } else {
-            status = VaccineStatus.notYetDue;
-          }
-        }
-        return VaccineEntry(
-          code: dto.vaccineName,
-          display: dto.vaccineName,
-          category: dto.category,
-          description: '',
-          route: '',
-          cardGroup: dto.vaccineOrder,
-          scheduledDate: scheduledDate,
-          givenDate: dto.vaccinatedDate != null
-              ? DateTime.tryParse(dto.vaccinatedDate!)
-              : null,
-          status: status,
-          missedReason: dto.reason,
-        );
-      }).toList();
-
-      milestones.add(VaccineMilestone(
-        label: _milestoneLabel(first.type, first.value),
-        scheduledDate: scheduledDate,
-        vaccines: vaccines,
-        offsetType: first.type.toLowerCase(),
-        offsetValue: first.value,
-      ));
-    }
-
-    return milestones;
-  }
-
-  static String _milestoneLabel(String type, int value) {
-    if (value == 0) return 'At Birth';
-    switch (type.toUpperCase()) {
-      case 'WEEK':
-        return '$value ${value == 1 ? 'Week' : 'Weeks'}';
-      case 'MONTH':
-        return '$value ${value == 1 ? 'Month' : 'Months'}';
-      default:
-        return '$value ${value == 1 ? 'Day' : 'Days'}';
-    }
   }
 
   String _ageLabel(Patient? p) {
@@ -1065,7 +929,8 @@ class _MilestoneContent extends StatelessWidget {
         Row(
           children: [
             Text(
-              milestone.label,
+              EpiVaccineStrings.milestone(
+                  milestone.milestoneKey, milestone.label),
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 12,
@@ -1158,7 +1023,7 @@ class _MilestoneContent extends StatelessWidget {
                           ),
                         ),
                         TextSpan(
-                          text: v.display,
+                          text: EpiVaccineStrings.display(v.code, v.display),
                           style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF374151),
@@ -1169,7 +1034,7 @@ class _MilestoneContent extends StatelessWidget {
                     ),
                   )
                 : Text(
-                    '• ${v.display}',
+                    '• ${EpiVaccineStrings.display(v.code, v.display)}',
                     style: TextStyle(
                       fontSize: 12,
                       color: _vaccineColor(v),
@@ -1737,7 +1602,9 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${widget.milestone.label} Vaccines',
+                        EpiVaccineStrings.sheetTitle(EpiVaccineStrings.milestone(
+                            widget.milestone.milestoneKey,
+                            widget.milestone.label)),
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
@@ -2038,7 +1905,8 @@ class _VaccineCard extends StatelessWidget {
           for (int i = 0; i < vaccines.length; i++) ...[
             if (i > 0) const SizedBox(height: 10),
             Text(
-              vaccines[i].display,
+              EpiVaccineStrings.sheetDisplay(
+                  vaccines[i].code, vaccines[i].display),
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
@@ -2048,14 +1916,16 @@ class _VaccineCard extends StatelessWidget {
             if (vaccines[i].description.isNotEmpty) ...[
               const SizedBox(height: 2),
               Text(
-                vaccines[i].description,
+                EpiVaccineStrings.description(
+                    vaccines[i].code, vaccines[i].description),
                 style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
               ),
             ],
             if (vaccines[i].route.isNotEmpty) ...[
               const SizedBox(height: 2),
               Text(
-                vaccines[i].route,
+                EpiVaccineStrings.diseaseName(
+                    vaccines[i].code, vaccines[i].route),
                 style: const TextStyle(
                   fontSize: 11,
                   color: Color(0xFF6B7280),

@@ -30,7 +30,8 @@ List<ClinicalFinding> evaluateChildImmunizationFindings({
       .where((v) => v.isOverdue || v.status == VaccineStatus.dueNow)
       .toList();
   if (overdue.isNotEmpty) {
-    final names = overdue.map((v) => v.display).join(', ');
+    final names =
+        overdue.map((v) => EpiVaccineStrings.display(v.code, v.display)).join(', ');
     findings.add(ClinicalFinding(
       code: 'childImmunization.overdue',
       message: ClinicalFindingStrings.childImmunizationOverdueDoses(overdue.length, names),
@@ -63,7 +64,8 @@ List<ClinicalFinding> evaluateChildImmunizationFindings({
   for (final v in dueSoon) {
     findings.add(ClinicalFinding(
       code: 'childImmunization.dueSoon',
-      message: ClinicalFindingStrings.childImmunizationDueSoon(v.display),
+      message: ClinicalFindingStrings.childImmunizationDueSoon(
+          EpiVaccineStrings.display(v.code, v.display)),
       programme: 'childImmunization',
     ));
   }

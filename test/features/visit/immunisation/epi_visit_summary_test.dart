@@ -21,11 +21,13 @@ VaccineEntry _vaccine({
 
 VaccineMilestone _milestone({
   required String label,
+  String milestoneKey = '',
   required DateTime scheduledDate,
   required List<VaccineEntry> vaccines,
 }) =>
     VaccineMilestone(
       label: label,
+      milestoneKey: milestoneKey,
       scheduledDate: scheduledDate,
       vaccines: vaccines,
       offsetType: 'week',
@@ -65,6 +67,7 @@ void main() {
     final milestones = [
       _milestone(
         label: '14 Weeks',
+        milestoneKey: 'week14',
         scheduledDate: DateTime(2020, 1, 1),
         vaccines: [
           _vaccine(
@@ -83,6 +86,7 @@ void main() {
       ),
       _milestone(
         label: '9 Months',
+        milestoneKey: 'month9',
         scheduledDate: nextDate,
         vaccines: [
           _vaccine(
@@ -99,10 +103,14 @@ void main() {
 
     expect(summary.overdueCount, 2);
     expect(summary.overdueVaccineNames, ['Pentavalent-3', 'OPV-3']);
+    expect(summary.overdueVaccineCodes, ['PENTA3', 'OPV3']);
     expect(summary.currentMilestoneLabel, '14 Weeks');
+    expect(summary.currentMilestoneKey, 'week14');
     expect(summary.nextMilestoneLabel, '9 Months');
+    expect(summary.nextMilestoneKey, 'month9');
     expect(summary.nextMilestoneDate, nextDate);
     expect(summary.nextMilestoneVaccineNames, ['MR Vaccine']);
+    expect(summary.nextMilestoneVaccineCodes, ['MR1']);
     expect(summary.referralWarranted, isTrue);
   });
 

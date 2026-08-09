@@ -1243,6 +1243,34 @@
     "bn": "প্রায় {n} মাসে বাকি",
     "en": "Due in ~{n} {unit}"
   },
+  "Epi.milestone.atBirth": {
+    "bn": "জন্মের পরপরই",
+    "en": "At Birth"
+  },
+  "Epi.milestone.month15": {
+    "bn": "১৫ মাসে",
+    "en": "15 Months"
+  },
+  "Epi.milestone.month9": {
+    "bn": "৯ মাসে",
+    "en": "9 Months"
+  },
+  "Epi.milestone.week10": {
+    "bn": "১০ সপ্তাহে",
+    "en": "10 Weeks"
+  },
+  "Epi.milestone.week14": {
+    "bn": "১৪ সপ্তাহে",
+    "en": "14 Weeks"
+  },
+  "Epi.milestone.week6": {
+    "bn": "৬ সপ্তাহে",
+    "en": "6 Weeks"
+  },
+  "Epi.milestoneVaccinesTitle": {
+    "bn": "{milestone} টিকা",
+    "en": "{milestone} Vaccines"
+  },
   "Epi.overdueBanner": {
     "bn": "{count}টি টিকা বকেয়া · আজই ব্যবস্থা নিন।",
     "en": "{count} {unit} overdue · Action needed today."
@@ -1254,6 +1282,246 @@
   "Epi.vaccinationCta": {
     "bn": "টিকাদান",
     "en": "Vaccination visit"
+  },
+  "Epi.vaccine.BCG": {
+    "bn": "বিসিজি (BCG)",
+    "en": "BCG"
+  },
+  "Epi.vaccine.FIPV1": {
+    "bn": "আইপিভি (IPV) - প্রথম ডোজ",
+    "en": "IPV (1st dose)"
+  },
+  "Epi.vaccine.FIPV2": {
+    "bn": "আইপিভি (IPV) - দ্বিতীয় ডোজ",
+    "en": "IPV (2nd dose)"
+  },
+  "Epi.vaccine.MR1": {
+    "bn": "এমআর (MR) টিকা - প্রথম ডোজ",
+    "en": "MR Vaccination (1st dose)"
+  },
+  "Epi.vaccine.MR2": {
+    "bn": "এমআর (MR) টিকা - দ্বিতীয় ডোজ",
+    "en": "MR Vaccination (2nd dose)"
+  },
+  "Epi.vaccine.OPV1": {
+    "bn": "ওপিভি (OPV) – প্রথম ডোজ",
+    "en": "OPV (1st dose)"
+  },
+  "Epi.vaccine.OPV2": {
+    "bn": "ওপিভি (OPV) – দ্বিতীয় ডোজ",
+    "en": "OPV (2nd dose)"
+  },
+  "Epi.vaccine.OPV3": {
+    "bn": "ওপিভি (OPV) – তৃতীয় ডোজ",
+    "en": "OPV (3rd dose)"
+  },
+  "Epi.vaccine.PCV1": {
+    "bn": "পিসিভি (PCV) – প্রথম ডোজ",
+    "en": "PCV (1st dose)"
+  },
+  "Epi.vaccine.PCV2": {
+    "bn": "পিসিভি (PCV) – দ্বিতীয় ডোজ",
+    "en": "PCV (2nd dose)"
+  },
+  "Epi.vaccine.PCV3": {
+    "bn": "পিসিভি (PCV) – তৃতীয় ডোজ",
+    "en": "PCV (3rd dose)"
+  },
+  "Epi.vaccine.PENTA1": {
+    "bn": "পেন্টাভ্যালেন্ট টিকা – প্রথম ডোজ",
+    "en": "Pentavalent (1st dose)"
+  },
+  "Epi.vaccine.PENTA2": {
+    "bn": "পেন্টাভ্যালেন্ট টিকা – দ্বিতীয় ডোজ",
+    "en": "Pentavalent (2nd dose)"
+  },
+  "Epi.vaccine.PENTA3": {
+    "bn": "পেন্টাভ্যালেন্ট টিকা – তৃতীয় ডোজ",
+    "en": "Pentavalent (3rd dose)"
+  },
+  "Epi.vaccine.TCV": {
+    "bn": "টিসিভি (TCV)",
+    "en": "TCV"
+  },
+  "Epi.vaccineSheet.BCG": {
+    "bn": "বিসিজি",
+    "en": "BCG"
+  },
+  "Epi.vaccineSheet.FIPV1": {
+    "bn": "আইপিভি",
+    "en": "IPV"
+  },
+  "Epi.vaccineSheet.FIPV2": {
+    "bn": "আইপিভি",
+    "en": "IPV"
+  },
+  "Epi.vaccineSheet.MR1": {
+    "bn": "এমআর টিকা",
+    "en": "MR Vaccination"
+  },
+  "Epi.vaccineSheet.MR2": {
+    "bn": "এমআর টিকা",
+    "en": "MR Vaccination"
+  },
+  "Epi.vaccineSheet.OPV1": {
+    "bn": "ওপিভি",
+    "en": "OPV"
+  },
+  "Epi.vaccineSheet.OPV2": {
+    "bn": "ওপিভি",
+    "en": "OPV"
+  },
+  "Epi.vaccineSheet.OPV3": {
+    "bn": "ওপিভি",
+    "en": "OPV"
+  },
+  "Epi.vaccineSheet.PCV1": {
+    "bn": "পিসিভি",
+    "en": "PCV"
+  },
+  "Epi.vaccineSheet.PCV2": {
+    "bn": "পিসিভি",
+    "en": "PCV"
+  },
+  "Epi.vaccineSheet.PCV3": {
+    "bn": "পিসিভি",
+    "en": "PCV"
+  },
+  "Epi.vaccineSheet.PENTA1": {
+    "bn": "পেন্টাভ্যালেন্ট টিকা",
+    "en": "Pentavalent Vaccine"
+  },
+  "Epi.vaccineSheet.PENTA2": {
+    "bn": "পেন্টাভ্যালেন্ট টিকা",
+    "en": "Pentavalent Vaccine"
+  },
+  "Epi.vaccineSheet.PENTA3": {
+    "bn": "পেন্টাভ্যালেন্ট টিকা",
+    "en": "Pentavalent Vaccine"
+  },
+  "Epi.vaccineSheet.TCV": {
+    "bn": "টিসিভি",
+    "en": "TCV"
+  },
+  "Epi.vaccineDesc.BCG": {
+    "bn": "ব্যাসিলাস ক্যালমেট–গুয়েরিন",
+    "en": "Bacillus Calmette–Guérin"
+  },
+  "Epi.vaccineDesc.FIPV1": {
+    "bn": "Inactivated Poliovirus Vaccine (IPV)",
+    "en": "Inactivated Poliovirus Vaccine (IPV)"
+  },
+  "Epi.vaccineDesc.FIPV2": {
+    "bn": "Inactivated Poliovirus Vaccine (IPV)",
+    "en": "Inactivated Poliovirus Vaccine (IPV)"
+  },
+  "Epi.vaccineDesc.MR1": {
+    "bn": "হাম ও রুবেলা (এমআর) টিকা",
+    "en": "Measles-Rubella (MR) Vaccination"
+  },
+  "Epi.vaccineDesc.MR2": {
+    "bn": "হাম ও রুবেলা (এমআর) টিকা",
+    "en": "Measles-Rubella (MR) Vaccination"
+  },
+  "Epi.vaccineDesc.OPV1": {
+    "bn": "Oral Polio Vaccine (OPV)",
+    "en": "Oral Polio Vaccine (OPV)"
+  },
+  "Epi.vaccineDesc.OPV2": {
+    "bn": "Oral Polio Vaccine (OPV)",
+    "en": "Oral Polio Vaccine (OPV)"
+  },
+  "Epi.vaccineDesc.OPV3": {
+    "bn": "Oral Polio Vaccine (OPV)",
+    "en": "Oral Polio Vaccine (OPV)"
+  },
+  "Epi.vaccineDesc.PCV1": {
+    "bn": "Pneumococcal Conjugate Vaccine (PCV)",
+    "en": "Pneumococcal Conjugate Vaccine (PCV)"
+  },
+  "Epi.vaccineDesc.PCV2": {
+    "bn": "Pneumococcal Conjugate Vaccine (PCV)",
+    "en": "Pneumococcal Conjugate Vaccine (PCV)"
+  },
+  "Epi.vaccineDesc.PCV3": {
+    "bn": "Pneumococcal Conjugate Vaccine (PCV)",
+    "en": "Pneumococcal Conjugate Vaccine (PCV)"
+  },
+  "Epi.vaccineDesc.PENTA1": {
+    "bn": "ডিপিটি, হেপাটাইটিস-বি, হিব",
+    "en": "Diphtheria, Pertussis, and Tetanus, Hepatitis B, Hib"
+  },
+  "Epi.vaccineDesc.PENTA2": {
+    "bn": "ডিপিটি, হেপাটাইটিস-বি, হিব",
+    "en": "Diphtheria, Pertussis, and Tetanus, Hepatitis B, Hib"
+  },
+  "Epi.vaccineDesc.PENTA3": {
+    "bn": "ডিপিটি, হেপাটাইটিস-বি, হিব",
+    "en": "Diphtheria, Pertussis, and Tetanus, Hepatitis B, Hib"
+  },
+  "Epi.vaccineDesc.TCV": {
+    "bn": "Typhoid Conjugate Vaccine (TCV)",
+    "en": "Typhoid Conjugate Vaccine (TCV)"
+  },
+  "Epi.vaccineDisease.BCG": {
+    "bn": "রোগের নাম: শিশুদের যক্ষ্মা",
+    "en": "Disease Name: Children's Tuberculosis"
+  },
+  "Epi.vaccineDisease.FIPV1": {
+    "bn": "রোগের নাম: পোলিও মাইলাইটিস",
+    "en": "Disease Name: Poliomyelitis (Polio)"
+  },
+  "Epi.vaccineDisease.FIPV2": {
+    "bn": "রোগের নাম: পোলিও মাইলাইটিস",
+    "en": "Disease Name: Poliomyelitis (Polio)"
+  },
+  "Epi.vaccineDisease.MR1": {
+    "bn": "রোগের নাম: হাম ও রুবেলা",
+    "en": "Disease Name: Measles and rubella"
+  },
+  "Epi.vaccineDisease.MR2": {
+    "bn": "রোগের নাম: হাম ও রুবেলা",
+    "en": "Disease Name: Measles and rubella"
+  },
+  "Epi.vaccineDisease.OPV1": {
+    "bn": "রোগের নাম: পোলিও মাইলাইটিস",
+    "en": "Disease Name: Poliomyelitis (Polio)"
+  },
+  "Epi.vaccineDisease.OPV2": {
+    "bn": "রোগের নাম: পোলিও মাইলাইটিস",
+    "en": "Disease Name: Poliomyelitis (Polio)"
+  },
+  "Epi.vaccineDisease.OPV3": {
+    "bn": "রোগের নাম: পোলিও মাইলাইটিস",
+    "en": "Disease Name: Poliomyelitis (Polio)"
+  },
+  "Epi.vaccineDisease.PCV1": {
+    "bn": "রোগের নাম: নিউমোকোকাল জনিত নিউমোনিয়া",
+    "en": "Disease Name: Pneumococcal pneumonia"
+  },
+  "Epi.vaccineDisease.PCV2": {
+    "bn": "রোগের নাম: নিউমোকোকাল জনিত নিউমোনিয়া",
+    "en": "Disease Name: Pneumococcal pneumonia"
+  },
+  "Epi.vaccineDisease.PCV3": {
+    "bn": "রোগের নাম: নিউমোকোকাল জনিত নিউমোনিয়া",
+    "en": "Disease Name: Pneumococcal pneumonia"
+  },
+  "Epi.vaccineDisease.PENTA1": {
+    "bn": "রোগের নাম: ডিফথেরিয়া, হুপিংকাশি, ধনুষ্টংকার, হেপাটাইটিস-বি ও হেমোফাইলাস ইনফ্লুয়েঞ্জা-বি জনিত রোগসমূহ",
+    "en": "Disease Name: Diphtheria, whooping cough, tetanus, hepatitis B and diseases caused by Haemophilus influenzae type B"
+  },
+  "Epi.vaccineDisease.PENTA2": {
+    "bn": "রোগের নাম: ডিফথেরিয়া, হুপিংকাশি, ধনুষ্টংকার, হেপাটাইটিস-বি ও হেমোফাইলাস ইনফ্লুয়েঞ্জা-বি জনিত রোগসমূহ",
+    "en": "Disease Name: Diphtheria, whooping cough, tetanus, hepatitis B and diseases caused by Haemophilus influenzae type B"
+  },
+  "Epi.vaccineDisease.PENTA3": {
+    "bn": "রোগের নাম: ডিফথেরিয়া, হুপিংকাশি, ধনুষ্টংকার, হেপাটাইটিস-বি ও হেমোফাইলাস ইনফ্লুয়েঞ্জা-বি জনিত রোগসমূহ",
+    "en": "Disease Name: Diphtheria, whooping cough, tetanus, hepatitis B and diseases caused by Haemophilus influenzae type B"
+  },
+  "Epi.vaccineDisease.TCV": {
+    "bn": "রোগের নাম: টাইফয়েড জ্বর",
+    "en": "Disease Name: Typhoid fever"
   },
   "EpiVisitReco.allVaccinesUpToDate": {
     "bn": "এই ভিজিটের জন্য নির্ধারিত সকল টিকা হালনাগাদ রয়েছে।",
