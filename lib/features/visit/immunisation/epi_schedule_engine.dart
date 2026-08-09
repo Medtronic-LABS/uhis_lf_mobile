@@ -95,6 +95,7 @@ class VaccineEntry {
 class VaccineMilestone {
   const VaccineMilestone({
     required this.label,
+    this.milestoneKey = '',
     required this.scheduledDate,
     required this.vaccines,
     required this.offsetType,
@@ -103,6 +104,10 @@ class VaccineMilestone {
   });
 
   final String label;
+
+  /// Stable key for this milestone, used for the `Epi.milestone.<key>`
+  /// translation lookup. Separate from [label], which is localisable copy.
+  final String milestoneKey;
   final DateTime scheduledDate;
   final List<VaccineEntry> vaccines;
 
@@ -121,6 +126,7 @@ class VaccineMilestone {
 
   VaccineMilestone copyWith({bool? actionEnabled}) => VaccineMilestone(
         label: label,
+        milestoneKey: milestoneKey,
         scheduledDate: scheduledDate,
         vaccines: vaccines,
         offsetType: offsetType,
@@ -160,37 +166,91 @@ class VaccineMilestone {
 class EpiScheduleEngine {
   const EpiScheduleEngine._();
 
+  /// Server / history spellings that differ from local `code` / `display`.
+  /// Without these, previously-given doses reappear as due.
+  static const Map<String, String> _wireAliases = {
+    'Polio-(OPV 1)': 'OPV1',
+    'Polio-(OPV 2)': 'OPV2',
+    'Polio-(OPV 3)': 'OPV3',
+    'Penta-1': 'PENTA1',
+    'Penta-2': 'PENTA2',
+    'Penta-3': 'PENTA3',
+    'IPV-1': 'FIPV1',
+    'IPV-2': 'FIPV2',
+    'MR-1': 'MR1',
+    'MR-2': 'MR2',
+  };
+
+  /// Maps a recorded vaccine name (code, display, or server spelling) onto
+  /// the schedule `code`. Returns null when nothing in the schedule claims it.
+  static String? resolveCode(
+    String raw,
+    Map<String, String> aliasIndex,
+  ) {
+    final key = raw.trim();
+    if (key.isEmpty) return null;
+    return aliasIndex[key] ?? aliasIndex[key.toUpperCase()];
+  }
+
+  /// Builds `recordedName → code` from the schedule asset + [_wireAliases].
+  static Map<String, String> buildAliasIndex(
+      List<Map<String, dynamic>> schedule) {
+    final index = <String, String>{
+      for (final e in _wireAliases.entries) e.key: e.value,
+    };
+    for (final group in schedule) {
+      final vaccines = group['vaccines'];
+      if (vaccines is! List) continue;
+      for (final v in vaccines) {
+        if (v is! Map) continue;
+        final code = v['code']?.toString();
+        if (code == null || code.isEmpty) continue;
+        index[code] = code;
+        index[code.toUpperCase()] = code;
+        final display = v['display']?.toString();
+        if (display != null && display.isNotEmpty) {
+          index[display] = code;
+        }
+      }
+    }
+    return index;
+  }
+
   static Future<List<VaccineMilestone>> build({
     required DateTime dob,
     required List<ImmunisationRow> rows,
     DateTime? today,
   }) async {
     final now = today ?? DateTime.now();
-    final givenByCode = <String, DateTime>{};
-    final statusByCode = <String, String>{};
-    final missedReasonByCode = <String, String>{};
-    final referralFacilityByCode = <String, String>{};
-    for (final r in rows) {
-      if (r.vaccineCode == null) continue;
-      if (r.givenAt != null) {
-        givenByCode[r.vaccineCode!] =
-            DateTime.fromMillisecondsSinceEpoch(r.givenAt!);
-      }
-      if (r.status != null && r.status!.isNotEmpty) {
-        statusByCode[r.vaccineCode!] = r.status!;
-      }
-      if (r.missedReason != null && r.missedReason!.isNotEmpty) {
-        missedReasonByCode[r.vaccineCode!] = r.missedReason!;
-      }
-      if (r.referralFacility != null && r.referralFacility!.isNotEmpty) {
-        referralFacilityByCode[r.vaccineCode!] = r.referralFacility!;
-      }
-    }
 
     final scheduleJson = await rootBundle
         .loadString('assets/forms/epi_schedule.json');
     final schedule =
         (jsonDecode(scheduleJson) as List).cast<Map<String, dynamic>>();
+    final aliasIndex = buildAliasIndex(schedule);
+
+    final givenByCode = <String, DateTime>{};
+    final statusByCode = <String, String>{};
+    final missedReasonByCode = <String, String>{};
+    final referralFacilityByCode = <String, String>{};
+    for (final r in rows) {
+      final raw = r.vaccineCode;
+      if (raw == null || raw.isEmpty) continue;
+      final code = resolveCode(raw, aliasIndex);
+      if (code == null) continue;
+      if (r.givenAt != null) {
+        givenByCode[code] = DateTime.fromMillisecondsSinceEpoch(r.givenAt!);
+      }
+      if (r.status != null && r.status!.isNotEmpty) {
+        statusByCode[code] = r.status!;
+      }
+      if (r.missedReason != null && r.missedReason!.isNotEmpty) {
+        missedReasonByCode[code] = r.missedReason!;
+      }
+      if (r.referralFacility != null && r.referralFacility!.isNotEmpty) {
+        referralFacilityByCode[code] = r.referralFacility!;
+      }
+    }
 
     final milestones = <VaccineMilestone>[];
 
@@ -243,6 +303,7 @@ class EpiScheduleEngine {
 
       milestones.add(VaccineMilestone(
         label: group['milestone'] as String,
+        milestoneKey: group['milestoneKey'] as String? ?? '',
         scheduledDate: scheduledDate,
         vaccines: vaccines,
         offsetType: group['offsetType'] as String,
