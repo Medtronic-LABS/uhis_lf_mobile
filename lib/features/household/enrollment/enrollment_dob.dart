@@ -27,6 +27,70 @@ abstract final class EnrollmentDob {
 
   static String wire(DateTime date) => _wire.format(date);
 
+  /// Spice `MemberRegistration.MAX_AGE_GUARDIAN` — guardian required when
+  /// DOB is on/after today − 2 years (age ≤ 2).
+  static const int maxAgeNeedingGuardian = 2;
+
+  /// Spice `MemberRegistration.MIN_AGE_MARITAL_STATUS` — marital status
+  /// captured when DOB is on/before today − 14 years (age ≥ 14).
+  static const int minAgeMaritalStatus = 14;
+
+  /// Spice `MemberDAO.getOtherHouseholdExcludeTBPatient` filter:
+  /// `date_of_birth < date('now','-10 years')` → age > 10.
+  static const int minGuardianAgeYears = 10;
+
+  /// Android `handleDob`: show guardian when
+  /// `dateOfBirth >= LocalDate.now().minusYears(2)`.
+  static bool needsGuardian(DateTime? dob, {int ageYears = 0, DateTime? asOf}) {
+    final now = asOf ?? DateTime.now();
+    if (dob != null) {
+      final cutoff = DateTime(
+        now.year - maxAgeNeedingGuardian,
+        now.month,
+        now.day,
+      );
+      return !dob.isBefore(cutoff);
+    }
+    return ageYears <= maxAgeNeedingGuardian;
+  }
+
+  /// Android `handleDob`: show marital status when
+  /// `LocalDate.now().minusYears(14) >= dateOfBirth`.
+  static bool needsMaritalStatus(
+    DateTime? dob, {
+    int ageYears = 0,
+    DateTime? asOf,
+  }) {
+    final now = asOf ?? DateTime.now();
+    if (dob != null) {
+      final cutoff = DateTime(
+        now.year - minAgeMaritalStatus,
+        now.month,
+        now.day,
+      );
+      return !dob.isAfter(cutoff);
+    }
+    return ageYears >= minAgeMaritalStatus;
+  }
+
+  /// Android guardian spinner eligibility: DOB strictly before today − 10 years.
+  static bool isEligibleGuardian(
+    DateTime? dob, {
+    int ageYears = 0,
+    DateTime? asOf,
+  }) {
+    final now = asOf ?? DateTime.now();
+    if (dob != null) {
+      final cutoff = DateTime(
+        now.year - minGuardianAgeYears,
+        now.month,
+        now.day,
+      );
+      return dob.isBefore(cutoff);
+    }
+    return ageYears > minGuardianAgeYears;
+  }
+
   /// Approximate date of birth for a manually typed age in whole years:
   /// 1 January of (current year − [years]). Matches the Android AgeOrDob
   /// fallback when the SK enters age instead of a full date.

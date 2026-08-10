@@ -487,6 +487,10 @@ class EnrollmentRepository extends ApiRepository {
       'rxBuddies': <dynamic>[],
       'createdAt': nowMs,
       'updatedAt': nowMs,
+      if (member.guardianId != null && member.guardianId!.isNotEmpty)
+        'guardianId': member.guardianId,
+      if (member.guardianFhirId != null && member.guardianFhirId!.isNotEmpty)
+        'guardianFhirId': member.guardianFhirId,
     };
 
     final requestId = _uuid.v4();
@@ -575,6 +579,11 @@ class EnrollmentRepository extends ApiRepository {
       'rxBuddies': <dynamic>[],
       'createdAt': nowMs,
       'updatedAt': nowMs,
+      // Spice HouseHoldMember.guardianId / guardianFhirId
+      if (member.guardianId != null && member.guardianId!.isNotEmpty)
+        'guardianId': member.guardianId,
+      if (member.guardianFhirId != null && member.guardianFhirId!.isNotEmpty)
+        'guardianFhirId': member.guardianFhirId,
     };
   }
 

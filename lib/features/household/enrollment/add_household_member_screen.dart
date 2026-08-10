@@ -37,6 +37,21 @@ import 'widgets/enrollment_sticky_bar.dart';
 ///
 enum _DuplicateAction { viewRecord, continueAnyway, cancel }
 
+/// Spice `MemberRegistration.ADD_GUARDIAN_ID` (-2).
+const _addGuardianOptionId = '-2';
+
+class _GuardianOption {
+  const _GuardianOption({
+    required this.id,
+    required this.name,
+    this.fhirId,
+  });
+
+  final String id;
+  final String name;
+  final String? fhirId;
+}
+
 /// Redesigned with numbered questions (Q1–Q9), sticky bottom CTA.
 /// NID scan is a purple gradient CTA button; after mock scan a green
 /// confirmation chip appears and name/DOB/gender fields are auto-filled.
@@ -180,16 +195,24 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   bool _nidScanned = false;
   String? _idType;
   String? _ageSummary;
-  String? _guardianName;
 
-  /// Names of existing household members — loaded from local DB in standalone
-  /// mode (existingHouseholdId != null) so the guardian picker is populated.
-  List<String> _householdMemberNames = [];
+  /// Selected guardian member id (local PK in standalone, client UUID in batch).
+  /// Spice stores Long `guardianId` — never a display name.
+  String? _guardianId;
+
+  /// Eligible guardians (age > 10) for the Spice guardian spinner.
+  List<_GuardianOption> _guardianOptions = [];
 
   /// Age in whole years — used for validation and the `age` field sent to the
   /// server. Distinct from [_ageCtrl] which shows the most human-meaningful
   /// unit (months for babies < 1 year, days for newborns).
   int _ageInYears = 0;
+
+  bool get _needsGuardian =>
+      EnrollmentDob.needsGuardian(_dob, ageYears: _ageInYears);
+
+  bool get _needsMaritalStatus =>
+      EnrollmentDob.needsMaritalStatus(_dob, ageYears: _ageInYears);
 
   /// Unit label shown next to the age field after DOB auto-fill.
   /// Empty for manual entry (user implies years).
@@ -255,23 +278,44 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       _applyDateOfBirth(EnrollmentDob.parse(widget.scannedDateOfBirth));
     }
 
-    // Seed guardian names + resolve the household head's mobile so the
+    // Seed guardian candidates + resolve the household head's mobile so the
     // "Head of Household" phone-category option can autofill it.
     if (widget.isStandalone) {
-      if (widget.initialMemberNames.isNotEmpty) {
-        _householdMemberNames = List<String>.from(widget.initialMemberNames);
-      }
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadHouseholdMembers());
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final head = context.read<EnrollmentController>().householdHead;
+        final ctrl = context.read<EnrollmentController>();
+        final head = ctrl.householdHead;
         final mobile = head?.mobileNumber?.trim();
-        if (mobile != null && mobile.isNotEmpty) {
-          setState(() => _headMobileNumber = mobile);
-        }
+        setState(() {
+          if (mobile != null && mobile.isNotEmpty) {
+            _headMobileNumber = mobile;
+          }
+          _guardianOptions = _batchGuardianOptions(ctrl);
+        });
       });
     }
+  }
+
+  /// Spice `getOtherHouseholdExcludeTBPatient`: active HH members with age > 10.
+  List<_GuardianOption> _batchGuardianOptions(EnrollmentController ctrl) {
+    final options = <_GuardianOption>[];
+    void consider(HouseholdMember? m) {
+      if (m == null) return;
+      final name = m.name.trim();
+      final id = m.id?.trim() ?? '';
+      if (name.isEmpty || id.isEmpty) return;
+      final dob = EnrollmentDob.parse(m.dateOfBirth);
+      if (!EnrollmentDob.isEligibleGuardian(dob, ageYears: m.age)) return;
+      options.add(_GuardianOption(id: id, name: name));
+    }
+
+    consider(ctrl.householdHead);
+    for (final m in ctrl.members) {
+      consider(m);
+    }
+    return options;
   }
 
   Future<void> _loadHouseholdMembers() async {
@@ -286,28 +330,106 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     }
     if (!mounted) return;
 
-    final names = entities
-        .map((e) => e.name)
-        .whereType<String>()
-        .where((n) => n.isNotEmpty)
-        .toList();
-
+    final options = <_GuardianOption>[];
     String? headMobile;
     for (final e in entities) {
-      if (!e.isHouseholdHead) continue;
-      final phone = e.phone?.trim();
-      if (phone != null && phone.isNotEmpty) {
-        headMobile = phone;
-        break;
+      if (!e.isActive) continue;
+      final name = e.name?.trim() ?? '';
+      if (name.isEmpty) continue;
+      final dob = EnrollmentDob.parse(e.dob);
+      // Age unknown from DOB alone falls through as ineligible (matches SQL
+      // requiring a DOB older than 10 years).
+      if (!EnrollmentDob.isEligibleGuardian(dob)) continue;
+      options.add(_GuardianOption(
+        id: e.id,
+        name: name,
+        fhirId: e.fhirId,
+      ));
+      if (e.isHouseholdHead) {
+        final phone = e.phone?.trim();
+        if (phone != null && phone.isNotEmpty) headMobile = phone;
       }
     }
 
     setState(() {
-      if (_householdMemberNames.isEmpty && names.isNotEmpty) {
-        _householdMemberNames = names;
-      }
+      _guardianOptions = options;
       if (headMobile != null) _headMobileNumber = headMobile;
     });
+  }
+
+  List<String> get _guardianDropdownIds => [
+        ..._guardianOptions.map((o) => o.id),
+        _addGuardianOptionId,
+      ];
+
+  String _guardianOptionLabel(String id) {
+    if (id == _addGuardianOptionId) return EnrollmentStrings.addGuardian;
+    for (final o in _guardianOptions) {
+      if (o.id == id) return o.name;
+    }
+    return id;
+  }
+
+  String? _guardianFhirIdFor(String? id) {
+    if (id == null) return null;
+    for (final o in _guardianOptions) {
+      if (o.id == id) return o.fhirId;
+    }
+    return null;
+  }
+
+  Future<void> _onGuardianChanged(String? value) async {
+    if (value == _addGuardianOptionId) {
+      // Do not keep ADD_GUARDIAN_ID selected — Spice rejects id < 0 on submit.
+      setState(() {
+        _guardianId = null;
+        _fieldErrors.remove('guardian');
+      });
+      await _handleAddGuardian();
+      return;
+    }
+    setState(() {
+      _guardianId = value;
+      _fieldErrors.remove('guardian');
+    });
+  }
+
+  /// Spice `handleAddGuardian`: confirm leave (unsaved data lost) → open
+  /// member registration for the same household.
+  Future<void> _handleAddGuardian() async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        title: Text(EnrollmentStrings.alertTitle),
+        content: Text(EnrollmentStrings.exitReason),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dlgCtx).pop(false),
+            child: Text(EnrollmentStrings.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dlgCtx).pop(true),
+            child: Text(OfflineSyncStrings.okay),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true || !mounted) return;
+
+    if (widget.isStandalone) {
+      final extra = <String, dynamic>{
+        'householdId': widget.existingHouseholdId,
+        'householdReferenceId':
+            widget.existingHouseholdReferenceId ?? widget.existingHouseholdId,
+        'villageId': widget.existingVillageId,
+        'villageName': widget.existingVillageName,
+        'subVillageId': widget.existingSubVillageId,
+        'subVillageName': widget.existingSubVillageName,
+      };
+      context.pushReplacement('/household/enrollment/link-member', extra: extra);
+    } else {
+      context.pushReplacement('/household/enrollment/add-member');
+    }
   }
 
   /// Spice: picking "Head of Household" copies the head's number; any other
@@ -360,8 +482,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   }
 
   /// Single entry point for every source of a date of birth (picker, NID scan,
-  /// server lookup) so the field, the age and the marital-status gate can never
-  /// drift apart. Call inside setState.
+  /// server lookup) so the field, the age and the marital-status gate (age ≥ 14)
+  /// can never drift apart. Call inside setState.
   void _applyDateOfBirth(DateTime? dob) {
     if (dob == null) return;
     _dob = dob;
@@ -373,7 +495,14 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     _ageUnit = age.unit;
     _ageSummary = age.summary;
 
-    if (age.years <= 5) _maritalStatus = null;
+    // Spice handleDob: hide + reset marital status when age < 14.
+    if (!EnrollmentDob.needsMaritalStatus(dob, ageYears: age.years)) {
+      _maritalStatus = null;
+    }
+    // Spice handleDob: hide + reset guardian when age > 2.
+    if (!EnrollmentDob.needsGuardian(dob, ageYears: age.years)) {
+      _guardianId = null;
+    }
   }
 
   /// Manual age entry is always whole years. Sets DOB to 01-01 of the
@@ -391,8 +520,12 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     _ageSummary = null;
     _dob = EnrollmentDob.fromAgeYears(years);
     _dobCtrl.text = EnrollmentDob.display(_dob!);
-    if (years <= 5) _maritalStatus = null;
-    if (years >= 1) _guardianName = null;
+    if (!EnrollmentDob.needsMaritalStatus(_dob, ageYears: years)) {
+      _maritalStatus = null;
+    }
+    if (!EnrollmentDob.needsGuardian(_dob, ageYears: years)) {
+      _guardianId = null;
+    }
   }
 
   Future<void> _scanNid() async {
@@ -465,7 +598,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   Future<void> _handleSaveMember(EnrollmentController controller) async {
     debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
-    final maritalRequired = _ageInYears > 5;
+    final maritalRequired = _needsMaritalStatus;
     // Skipped for "Not Available", digits-and-length checked for National ID.
     final idError = EnrollmentIdNumber.validate(
       _idType,
@@ -482,7 +615,12 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       if (_dobCtrl.text.trim().isEmpty) 'dob': CommonStrings.required,
       if (_gender == null) 'gender': CommonStrings.required,
       if (maritalRequired && _maritalStatus == null) 'maritalStatus': CommonStrings.required,
-      if (_ageInYears < 1 && _guardianName == null) 'guardian': CommonStrings.required,
+      // Spice: guardian mandatory when age ≤ 2; ADD_GUARDIAN_ID is not valid.
+      if (_needsGuardian &&
+          (_guardianId == null ||
+              _guardianId == _addGuardianOptionId ||
+              _guardianId!.isEmpty))
+        'guardian': CommonStrings.required,
       if (_phoneCategory == null) 'phoneCategory': CommonStrings.required,
       'mobile': ?EnrollmentMobileNumber.validate(
         _mobileCtrl.text,
@@ -536,7 +674,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           ? controller.household!.subVillageId
           : controller.household?.villageId,
       nidScanned: _nidScanned,
-      guardianName: _guardianName,
+      guardianId: _needsGuardian ? _guardianId : null,
+      guardianFhirId: _needsGuardian ? _guardianFhirIdFor(_guardianId) : null,
     );
 
     if (widget.isStandalone) {
@@ -661,6 +800,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           subVillageName: subVillageName.isEmpty ? null : subVillageName,
           maritalStatus: member.maritalStatus,
           disability: member.disabilityStatus.toLowerCase(),
+          guardianId: member.guardianId,
+          guardianFhirId: member.guardianFhirId,
           isHouseholdHead: false,
           isActive: true,
           isPregnant: false,
@@ -1256,8 +1397,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // ── Q7: Marital Status — hidden for age ≤ 5 ───────────
-                    if (_ageInYears > 5) ...[
+                    // ── Q7: Marital Status — hidden for age < 14 (Spice) ──
+                    if (_needsMaritalStatus) ...[
                       SizedBox(key: _key('maritalStatus'), height: 0),
                       _QuestionLabel(
                         number: 'Q7',
@@ -1288,8 +1429,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    // ── Q8: Guardian — required for members under 1 year ──────
-                    if (_ageInYears < 1) ...[
+                    // ── Q8: Guardian — Spice: required when age ≤ 2 years ─────
+                    if (_needsGuardian) ...[
                       SizedBox(key: _key('guardian'), height: 0),
                       _QuestionLabel(
                         number: 'Q8',
@@ -1299,12 +1440,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       if (widget.isStandalone)
                         EnrollmentDropdown(
                           label: EnrollmentStrings.guardianLabel,
-                          options: _householdMemberNames,
-                          value: _guardianName,
-                          onChanged: (v) => setState(() {
-                            _guardianName = v;
-                            _fieldErrors.remove('guardian');
-                          }),
+                          options: _guardianDropdownIds,
+                          value: _guardianId,
+                          optionLabel: _guardianOptionLabel,
+                          onChanged: _onGuardianChanged,
                           hint: EnrollmentStrings.guardianHint,
                           isRequired: true,
                           errorText: _fieldErrors['guardian'],
@@ -1312,19 +1451,36 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       else
                         Consumer<EnrollmentController>(
                           builder: (context, ctrl, _) {
-                            final guardianOptions = [
-                              if (ctrl.householdHead?.name != null)
-                                ctrl.householdHead!.name,
-                              ...ctrl.members.map((m) => m.name),
+                            // Refresh candidates as pending members are added.
+                            final options = _batchGuardianOptions(ctrl);
+                            final ids = [
+                              ...options.map((o) => o.id),
+                              _addGuardianOptionId,
                             ];
+                            String labelFor(String id) {
+                              if (id == _addGuardianOptionId) {
+                                return EnrollmentStrings.addGuardian;
+                              }
+                              for (final o in options) {
+                                if (o.id == id) return o.name;
+                              }
+                              return id;
+                            }
+
                             return EnrollmentDropdown(
                               label: EnrollmentStrings.guardianLabel,
-                              options: guardianOptions,
-                              value: _guardianName,
-                              onChanged: (v) => setState(() {
-                                _guardianName = v;
-                                _fieldErrors.remove('guardian');
-                              }),
+                              options: ids,
+                              value: ids.contains(_guardianId)
+                                  ? _guardianId
+                                  : null,
+                              optionLabel: labelFor,
+                              onChanged: (v) async {
+                                if (v != _addGuardianOptionId) {
+                                  // Keep batch option cache in sync for fhir lookup.
+                                  _guardianOptions = options;
+                                }
+                                await _onGuardianChanged(v);
+                              },
                               hint: EnrollmentStrings.guardianHint,
                               isRequired: true,
                               errorText: _fieldErrors['guardian'],
