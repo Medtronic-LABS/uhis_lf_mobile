@@ -9,7 +9,15 @@ import 'package:uhis_next/core/sync/sync_foreground_notifier.dart';
 import 'package:uhis_next/core/sync/sync_progress.dart';
 
 class _FakeNotifier implements SyncForegroundNotifier {
-  _FakeNotifier({this.startSucceeds = true, this.throwOnEverything = false});
+  _FakeNotifier({
+    this.startSucceeds = true,
+    this.throwOnEverything = false,
+    this.startLatency = Duration.zero,
+  });
+
+  /// Time the platform channel takes to answer `start`. The production bug —
+  /// stopSelf overtaking startForeground — only exists when this is non-zero.
+  final Duration startLatency;
 
   /// Simulates Android refusing a background foreground-service start.
   final bool startSucceeds;
@@ -18,6 +26,7 @@ class _FakeNotifier implements SyncForegroundNotifier {
   int startCalls = 0;
   int stopCalls = 0;
   final List<String> updates = <String>[];
+  final List<DateTime> startedAt = <DateTime>[];
   final List<String> failures = <String>[];
 
   void _maybeThrow() {
@@ -34,6 +43,8 @@ class _FakeNotifier implements SyncForegroundNotifier {
   }) async {
     startCalls++;
     _maybeThrow();
+    if (startLatency > Duration.zero) await Future<void>.delayed(startLatency);
+    startedAt.add(DateTime.fromMillisecondsSinceEpoch(startCalls));
     return startSucceeds;
   }
 
@@ -80,6 +91,7 @@ void main() {
     final controller = SyncForegroundController(
       progress: progress.stream,
       notifier: notifier,
+      startDelay: Duration.zero,
     );
     controller.attach();
     return controller;
@@ -184,5 +196,89 @@ void main() {
 
     // Reaching here without an unhandled exception is the assertion.
     expect(notifier.startCalls, 1);
+  });
+
+  group('short syncs (regression: observed on device 2026-08-10)', () {
+    // logcat showed SYNC_START at .438 and SYNC_STOP at .614 — a 176 ms
+    // "Nothing pending to sync" pass — and Android answering
+    // "Bringing down service while still waiting for start foreground".
+    SyncForegroundController attachDebounced(
+      _FakeNotifier notifier, {
+      Duration startDelay = const Duration(milliseconds: 50),
+    }) {
+      final controller = SyncForegroundController(
+        progress: progress.stream,
+        notifier: notifier,
+        startDelay: startDelay,
+      );
+      controller.attach();
+      return controller;
+    }
+
+    test('a sync shorter than the debounce never starts the service', () async {
+      final notifier = _FakeNotifier();
+      attachDebounced(notifier);
+
+      SyncActivity.pullInFlight = true;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      SyncActivity.pullInFlight = false; // done well inside the debounce
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(notifier.startCalls, 0,
+          reason: 'no notification flicker, and no stopSelf/startForeground race');
+      expect(notifier.stopCalls, 0);
+    });
+
+    test('a sync outlasting the debounce does start the service', () async {
+      final notifier = _FakeNotifier();
+      attachDebounced(notifier);
+
+      SyncActivity.pullInFlight = true;
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(notifier.startCalls, 1);
+
+      SyncActivity.pullInFlight = false;
+      await pumpEventQueue();
+      expect(notifier.stopCalls, 1);
+    });
+
+    test('stop waits for an in-flight start instead of overtaking it', () async {
+      // The actual defect: stopSelf reaching Android before startForeground.
+      final notifier = _FakeNotifier(
+        startLatency: const Duration(milliseconds: 80),
+      );
+      attachDebounced(notifier, startDelay: Duration.zero);
+
+      SyncActivity.pullInFlight = true;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      // Sync ends while the start round-trip is still in flight.
+      SyncActivity.pullInFlight = false;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      expect(notifier.startCalls, 1);
+      expect(notifier.stopCalls, 1,
+          reason: 'the stop must still happen — just only after the start lands');
+    });
+
+    test('progress arriving during the start round-trip is replayed', () async {
+      // Device log showed 0 SYNC_UPDATE: every event during the start window
+      // was dropped as "not running", so the notification never showed counts.
+      final notifier = _FakeNotifier(
+        startLatency: const Duration(milliseconds: 60),
+      );
+      attachDebounced(notifier, startDelay: Duration.zero);
+
+      SyncActivity.pullInFlight = true;
+      progress.add(const SyncProgress(
+        entityName: 'households',
+        itemsDone: 240,
+        itemsTotal: 1200,
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      expect(notifier.updates, isNotEmpty,
+          reason: 'buffered progress must reach the notification once it is up');
+      expect(notifier.updates.last, contains('240'));
+    });
   });
 }
