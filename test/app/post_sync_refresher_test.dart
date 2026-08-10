@@ -152,18 +152,53 @@ void main() {
     expect(worklist.calls, 0);
   });
 
-  test('overlapping passes are skipped, not queued', () async {
-    // A recompute walks every patient; two in flight would duplicate the work
-    // and interleave their writes.
+  test('an overlapping request re-runs once after the pass finishes', () async {
+    // Observed on device: a pass ran 17:33:30-17:33:53 while another sync
+    // completed at 17:33:38. Without the re-run those rows keep their pre-sync
+    // scores until some later sync happens to land while nothing is running.
     final slow = _FakeWorklist(log, delay: const Duration(milliseconds: 80));
     final refresher = attach(worklistOverride: slow);
 
     unawaited(refresher.refreshNow());
     await Future<void>.delayed(const Duration(milliseconds: 10));
     await refresher.refreshNow(); // lands while the first is still running
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await Future<void>.delayed(const Duration(milliseconds: 300));
 
-    expect(slow.calls, 1, reason: 'the second call must be dropped');
+    expect(slow.calls, 2,
+        reason: 'the dropped request must be honoured once the pass ends');
+  });
+
+  test('many overlapping requests coalesce into a single re-run', () async {
+    // A flag, not a queue: the recompute is a full walk, so one re-run per
+    // dropped request would be pure waste.
+    final slow = _FakeWorklist(log, delay: const Duration(milliseconds: 80));
+    final refresher = attach(worklistOverride: slow);
+
+    unawaited(refresher.refreshNow());
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await Future.wait([
+      refresher.refreshNow(),
+      refresher.refreshNow(),
+      refresher.refreshNow(),
+      refresher.refreshNow(),
+    ]);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    expect(slow.calls, 2, reason: 'four dropped requests → exactly one re-run');
+  });
+
+  test('a sync that wrote nothing cannot mark the pass dirty', () async {
+    // The gate returns before reaching the guard, so an empty sync landing
+    // mid-refresh must not schedule a pointless re-run.
+    final slow = _FakeWorklist(log, delay: const Duration(milliseconds: 80));
+    final refresher = attach(worklistOverride: slow);
+
+    unawaited(refresher.refreshNow());
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    progress.add(SyncProgress.completed(hasChanges: false));
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    expect(slow.calls, 1, reason: 'nothing was written, so nothing to re-run');
   });
 
   test('a throwing repository never escapes — a stale dashboard beats a crash',

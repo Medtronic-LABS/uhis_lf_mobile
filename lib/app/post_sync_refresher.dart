@@ -40,6 +40,20 @@ class PostSyncRefresher {
   /// two in flight would duplicate the work and interleave their writes.
   bool _running = false;
 
+  /// Set when a sync completes while a pass is already running.
+  ///
+  /// Without it the request is simply dropped, and the rows that sync wrote
+  /// keep their pre-sync risk scores, next-due dates and SLA until some later
+  /// sync happens to complete at a moment when nothing is running. Observed on
+  /// device: a pass ran 17:33:30–17:33:53 while another sync completed at
+  /// 17:33:38, squarely inside it. With a ~20 s recompute and syncs seconds
+  /// apart, that overlap is likely rather than theoretical.
+  ///
+  /// A flag, not a queue: five syncs landing during one pass coalesce into a
+  /// single re-run. The recompute is a full walk, so running it once per
+  /// dropped request would be pure waste.
+  bool _dirty = false;
+
   void attach() {
     debugPrint('[PostSync] attached — listening for sync completion');
     _sub = _progress.listen((p) {
@@ -69,7 +83,9 @@ class PostSyncRefresher {
   /// drift, and running both would recompute twice per login.
   Future<void> refreshNow({String trigger = 'manual'}) async {
     if (_running) {
-      debugPrint('[PostSync] refresh already running — skipped ($trigger)');
+      _dirty = true;
+      debugPrint(
+          '[PostSync] refresh already running — will re-run after ($trigger)');
       return;
     }
     _running = true;
@@ -96,6 +112,15 @@ class PostSyncRefresher {
       debugPrint('[PostSync] refresh failed: $e');
     } finally {
       _running = false;
+    }
+
+    // A sync landed while the pass above was running. Re-run once to pick it
+    // up. Clearing the flag before recursing means a sync arriving during the
+    // re-run sets it again and is honoured too, rather than being lost.
+    if (_dirty) {
+      _dirty = false;
+      debugPrint('[PostSync] re-running for a sync that landed mid-refresh');
+      await refreshNow(trigger: 'coalesced');
     }
   }
 }
