@@ -148,7 +148,7 @@ abstract final class LockStrings {
   LockStrings._();
 
   static String get welcomeBack => getTranslatedString('welcomeBack', 'Welcome back');
-  static String get verifyToAccess => getTranslatedString('verifyToAccess', 'Verify your identity to access your ward dashboard.');
+  static String get verifyToAccess => getTranslatedString('verifyToAccess', 'Verify your identity to access your dashboard.');
   static String get biometricCancelled => getTranslatedString('biometricCancelled', 'Biometric cancelled');
   static String get unlockWithBiometrics => getTranslatedString('unlockWithBiometrics', 'Unlock with device');
 

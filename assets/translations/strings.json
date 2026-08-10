@@ -11120,8 +11120,8 @@
     "en": "Verify fingerprint"
   },
   "verifyToAccess": {
-    "bn": "আপনার ওয়ার্ড ড্যাশবোর্ড দেখতে আপনার পরিচয় যাচাই করুন।",
-    "en": "Verify your identity to access your ward dashboard."
+    "bn": "আপনার ড্যাশবোর্ড দেখতে আপনার পরিচয় যাচাই করুন।",
+    "en": "Verify your identity to access your dashboard."
   },
   "versionLabel": {
     "bn": "সংস্করণ {version}",
