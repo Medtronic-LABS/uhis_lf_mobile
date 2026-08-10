@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -57,14 +56,11 @@ class AuthRepository {
         }
       }
     };
-    _api.onAuthenticatedActivity = () {
-      unawaited(touchReentryExpiry());
-    };
     // Forwarded up to AuthState, which knows what "session expired" means at
     // the app-state level — this layer just relays the signal.
+    // UHIS parity: 401 → logout immediately (no proactive /authenticate, no
+    // client-side token refresh).
     _api.onUnauthorized = () => onUnauthorized?.call();
-    _api.onBeforeRequest = _validateTokenIfStale;
-    _api.onTokenRefresh = tryRefreshToken;
   }
 
   final ApiClient _api;
@@ -73,10 +69,6 @@ class AuthRepository {
   /// Set by [AuthState] to [AuthState.handleSessionExpired] — see
   /// [ApiClient.onUnauthorized] for why this layer only relays it.
   void Function()? onUnauthorized;
-
-  // Sliding-window renewal of the reentry-session TTL — see [touchReentryExpiry].
-  DateTime? _lastReentryTouch;
-  static const _reentryTouchThrottle = Duration(minutes: 5);
 
   static const _kTenantId = 'tenantId';
   static const _kUsername = 'lastUsername';
@@ -117,10 +109,6 @@ class AuthRepository {
   // so offline password verification works for days/weeks without network.
   // Cleared only on explicit logout.
   static const _kOfflinePasswordHash = 'offline_pwd_hash';
-  // ISO8601 timestamp of the last successful /auth-service/authenticate
-  // validation (or login) — gates _validateTokenIfStale so the token is only
-  // re-verified once per hour, not on every single request.
-  static const _kTokenVerifiedAt = 'token_verified_at';
 
   Future<String?> currentTenantId() async {
     final cached = _api.tenantId;
@@ -240,12 +228,6 @@ class AuthRepository {
     await _storage.write(key: _kUsername, value: username);
     // Persist hash for offline password verification (Spice Android parity).
     await _storage.write(key: _kOfflinePasswordHash, value: hashedPwd);
-    // The token this login just returned is definitionally fresh — skip the
-    // first _validateTokenIfStale check for a full hour.
-    await _storage.write(
-      key: _kTokenVerifiedAt,
-      value: DateTime.now().toIso8601String(),
-    );
     // Extract profile directly from login response — no separate profile call.
     // On web, Dio's BrowserHttpClientAdapter returns raw JSON text (String)
     // rather than a decoded Map; decode manually when needed.
@@ -485,83 +467,6 @@ class AuthRepository {
     await _storage.delete(key: _kBioAuthCookieExpiry);
     await _storage.delete(key: _kBioJSession);
     await _storage.delete(key: _kBioAuthToken);
-    await _storage.delete(key: _kTokenVerifiedAt);
-  }
-
-  /// Proactively verifies/refreshes the Bearer token via
-  /// `POST /auth-service/authenticate` when the last check is older than
-  /// [AppConfig.authTokenRefreshIntervalSeconds] (default 45 min) — ahead of
-  /// a typical 60-minute server TTL. Wired to [ApiClient.onBeforeRequest].
-  Future<void> _validateTokenIfStale() async {
-    final lastStr = await _storage.read(key: _kTokenVerifiedAt);
-    final last = lastStr == null ? null : DateTime.tryParse(lastStr);
-    final interval = AppConfig.authTokenRefreshIntervalSeconds;
-    if (last != null &&
-        DateTime.now().difference(last).inSeconds < interval) {
-      return; // no log here — this is the common case, would fire on every request
-    }
-    final token = _api.exportAuthToken();
-    if (token == null || token.isEmpty) return; // nothing to verify pre-login
-    debugPrint(
-        '[auth] token stale (last verified: ${last?.toIso8601String() ?? 'never'}) — calling /auth-service/authenticate');
-    final ok = await tryRefreshToken();
-    if (!ok) {
-      debugPrint(
-          '[auth] proactive refresh failed — leaving token; next 401 will sign out');
-    }
-  }
-
-  /// Refreshes the Bearer token via `POST /auth-service/authenticate`.
-  /// Returns true when the session is still valid (200), false on 401 or
-  /// network/parse failure. Used by the 401 interceptor before sign-out.
-  Future<bool> tryRefreshToken() async {
-    final token = _api.exportAuthToken();
-    if (token == null || token.isEmpty) return false;
-    try {
-      final resp = await _api.dio.post('/auth-service/authenticate');
-      if (resp.statusCode == 401) {
-        debugPrint('[auth] token refresh returned 401 — session is dead');
-        return false;
-      }
-      if (resp.statusCode != 200) {
-        debugPrint(
-            '[auth] token refresh returned ${resp.statusCode} — not treating as renewed');
-        return false;
-      }
-      String? newToken;
-      final data = resp.data;
-      var source = 'none';
-      if (data is Map) {
-        final userDetail = data['userDetail'];
-        if (userDetail is Map) {
-          newToken = userDetail['authorization'] as String?;
-          if (newToken != null) source = 'body.userDetail.authorization';
-        }
-      }
-      if (newToken == null) {
-        newToken = resp.headers.value('authorization');
-        if (newToken != null) source = 'Authorization response header';
-      }
-      if (newToken != null && newToken.isNotEmpty) {
-        _api.importAuthToken(newToken);
-        if (await isReentryEnabled()) {
-          await _storage.write(key: _kBioAuthToken, value: newToken);
-        }
-        debugPrint('[auth] token refreshed from $source');
-      } else {
-        debugPrint(
-            '[auth] refresh 200 but no new token in body/header — keeping existing');
-      }
-      await _storage.write(
-        key: _kTokenVerifiedAt,
-        value: DateTime.now().toIso8601String(),
-      );
-      await touchReentryExpiry();
-      return true;
-    } catch (e) {
-      debugPrint('[auth] token refresh failed: $e');
-      return false;
-    }
   }
 
   /// Verifies [plaintext] password offline by re-hashing and comparing to the
@@ -575,28 +480,8 @@ class AuthRepository {
   }
 
   /// Exposes session clearing for callers that defer the decision to
-  /// [AuthState] (e.g. when checking connectivity before evicting tokens).
+  /// [AuthState] (e.g. when no persisted credentials remain to restore).
   Future<void> clearExpiredReentrySession() => _clearReentrySession();
-
-  /// Restores stored Bearer token and tenant to the API client without
-  /// checking the locally-tracked expiry timestamp. Used for offline grace
-  /// unlock: biometric/PIN identity was verified, device is offline, so we
-  /// cannot reach the server to refresh — the existing token is restored and
-  /// the server will reject it with 401 on the next online call, at which
-  /// point [handleSessionExpired] fires and forces a fresh login.
-  Future<bool> restoreTokensIgnoringExpiry() async {
-    final enabled = await isReentryEnabled();
-    if (!enabled) return false;
-    final authToken = await _storage.read(key: _kBioAuthToken);
-    final tenant = await _storage.read(key: _kBioTenant);
-    if (authToken == null || authToken.isEmpty || tenant == null) return false;
-    _api.importAuthToken(authToken);
-    _api.setTenantId(tenant);
-    await _storage.write(key: _kTenantId, value: tenant);
-    final orgFhirId = await _storage.read(key: _kOrganizationFhirId);
-    _api.setOrganizationFhirId(orgFhirId);
-    return true;
-  }
 
   Future<bool> wasBiometricOffered() async =>
       (await _storage.read(key: _kBioOfferedOnce)) == 'true';
@@ -625,7 +510,8 @@ class AuthRepository {
   /// so either method can later restore the same session.
   ///
   /// Mobile uses Bearer tokens; web uses cookies. We persist whichever is
-  /// available.
+  /// available. No local TTL — UHIS parity: credentials stay until logout or
+  /// server 401.
   Future<void> _persistReentrySession() async {
     final cookies = await _api.exportAuthCookies();
     final authToken = _api.exportAuthToken();
@@ -639,8 +525,6 @@ class AuthRepository {
       throw AuthException(AuthStrings.noActiveSessionToEnrol);
     }
 
-    final expiry = _api.authCookieExpiry ??
-        DateTime.now().add(Duration(seconds: AppConfig.authCookieTtlSeconds));
     final tenant = _api.tenantId;
     final username = await lastUsername();
 
@@ -655,8 +539,13 @@ class AuthRepository {
       await _storage.write(key: _kBioAuthToken, value: authToken);
     }
 
-    await _storage.write(
-        key: _kBioAuthCookieExpiry, value: expiry.toIso8601String());
+    // Optional: keep server-issued cookie expiry for web restore metadata only.
+    // Not used as a local unlock gate.
+    final cookieExpiry = _api.authCookieExpiry;
+    if (cookieExpiry != null) {
+      await _storage.write(
+          key: _kBioAuthCookieExpiry, value: cookieExpiry.toIso8601String());
+    }
     if (tenant != null) {
       await _storage.write(key: _kBioTenant, value: tenant);
     }
@@ -754,48 +643,13 @@ class AuthRepository {
     }
   }
 
-  /// Extends the persisted reentry-session expiry on genuine backend
-  /// activity (called from [ApiClient.onAuthenticatedActivity]).
+  /// Restores the persisted re-entry session (Bearer and/or cookies).
   ///
-  /// Mobile Bearer sessions always slide (even if an AuthCookie max-age was
-  /// also observed). Web cookie-only sessions keep the server-issued expiry
-  /// untouched. Throttled so an active session doesn't write secure storage
-  /// on every API call.
-  Future<void> touchReentryExpiry() async {
-    final webCookieOnly =
-        _api.authCookieExpiry != null && !_api.hasAuthToken;
-    if (webCookieOnly) return;
-    final now = DateTime.now();
-    if (_lastReentryTouch != null &&
-        now.difference(_lastReentryTouch!) < _reentryTouchThrottle) {
-      return;
-    }
-    if (!await isReentryEnabled()) return;
-    final expiryStr = await _storage.read(key: _kBioAuthCookieExpiry);
-    if (expiryStr == null) return;
-    _lastReentryTouch = now;
-    await _storage.write(
-      key: _kBioAuthCookieExpiry,
-      value:
-          now.add(Duration(seconds: AppConfig.authCookieTtlSeconds)).toIso8601String(),
-    );
-  }
-
+  /// UHIS parity: no local TTL gate — credentials remain usable until the
+  /// server rejects them with 401 (or the user logs out).
   Future<bool> restorePersistedSession() async {
     final enabled = await isReentryEnabled();
     if (!enabled) return false;
-    final expiryStr = await _storage.read(key: _kBioAuthCookieExpiry);
-    if (expiryStr == null) {
-      await _clearReentrySession();
-      return false;
-    }
-    final expiry = DateTime.tryParse(expiryStr);
-    if (expiry == null || DateTime.now().isAfter(expiry)) {
-      // Do NOT clear here — caller checks connectivity first.
-      // Online: caller calls clearExpiredReentrySession() then fails.
-      // Offline: caller calls restoreTokensIgnoringExpiry() for grace unlock.
-      return false;
-    }
 
     final js = await _storage.read(key: _kBioJSession);
     final ac = await _storage.read(key: _kBioAuthCookie);
@@ -817,10 +671,12 @@ class AuthRepository {
 
     // Restore cookies if available (web flow)
     if (hasCookies) {
+      final expiryStr = await _storage.read(key: _kBioAuthCookieExpiry);
       await _api.importAuthCookies(
         jsession: js,
         authCookie: ac,
-        authCookieExpiry: expiry,
+        authCookieExpiry:
+            expiryStr != null ? DateTime.tryParse(expiryStr) : null,
       );
     }
 

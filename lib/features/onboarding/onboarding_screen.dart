@@ -5,7 +5,9 @@ import 'package:provider/provider.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/device/permission_gate.dart';
 import '../../core/theme/app_theme.dart';
+import 'permission_rationale_screen.dart';
 
 /// First-login onboarding screen that asks the user whether they want to
 /// enable biometric authentication and set up a fallback PIN.
@@ -49,6 +51,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await auth.markOnboardingComplete();
     if (!mounted) return;
 
+    // Ask for every permission here, in one sitting, rather than ambushing the
+    // SK mid-visit — see docs/consolidated_permissions_design.md. Never blocks:
+    // whatever they answer, onboarding continues.
+    await runPermissionStep(context, PermissionGate());
+    if (!mounted) return;
+
     // Navigate to PIN setup (mandatory step)
     context.go('/pin-setup');
   }
@@ -82,6 +90,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await auth.markOnboardingComplete();
     await auth.markBiometricOffered();
 
+    if (!mounted) return;
+
+    // Skipping security must not skip permissions — this path bypasses
+    // /pin-setup entirely, so without this an SK who skips is never asked and
+    // meets all four dialogs mid-visit instead.
+    await runPermissionStep(context, PermissionGate());
     if (!mounted) return;
 
     // Go to sync screen — handles background sync still in progress or done.

@@ -149,7 +149,7 @@ abstract final class LockStrings {
   LockStrings._();
 
   static String get welcomeBack => getTranslatedString('welcomeBack', 'Welcome back');
-  static String get verifyToAccess => getTranslatedString('verifyToAccess', 'Verify your identity to access your ward dashboard.');
+  static String get verifyToAccess => getTranslatedString('verifyToAccess', 'Verify your identity to access your dashboard.');
   static String get biometricCancelled => getTranslatedString('biometricCancelled', 'Biometric cancelled');
   static String get unlockWithBiometrics => getTranslatedString('unlockWithBiometrics', 'Unlock with device');
 
@@ -306,6 +306,97 @@ abstract final class DashboardStrings {
 }
 
 /// Settings menu strings.
+/// Copy for the one-time prompt asking the SK to exempt the app from battery
+/// optimisation, so a multi-minute sync is not killed by the OEM.
+/// Copy for the consolidated permission step shown once during onboarding.
+///
+/// Explains each permission before Android asks, so the SK sees a reason in
+/// Bangla rather than four bare system dialogs mid-visit.
+abstract final class PermissionStrings {
+  PermissionStrings._();
+
+  static String get title =>
+      getTranslatedString('Permissions.title', 'A few permissions to get started');
+  /// Framed as a heads-up, not a request. The sheet cannot grant anything —
+  /// only Android's own dialogs can — so wording it like an ask makes the
+  /// system prompts that follow read as being asked twice.
+  static String get subtitle => getTranslatedString(
+        'Permissions.subtitle',
+        'Next, your phone will ask a few questions. Tap "Allow" on each one, '
+        'so you are not interrupted during a visit.',
+      );
+
+  static String get cameraTitle =>
+      getTranslatedString('Permissions.cameraTitle', 'Camera');
+  static String get cameraBody => getTranslatedString(
+      'Permissions.cameraBody', 'To scan a National ID card during enrolment.');
+
+  static String get microphoneTitle =>
+      getTranslatedString('Permissions.microphoneTitle', 'Microphone');
+  static String get microphoneBody => getTranslatedString(
+      'Permissions.microphoneBody',
+      'To record what the patient says so the app can fill the form for you.');
+
+  static String get locationTitle =>
+      getTranslatedString('Permissions.locationTitle', 'Location');
+  static String get locationBody => getTranslatedString(
+      'Permissions.locationBody', 'To record where a household is, so you can find it again.');
+
+  static String get notificationTitle =>
+      getTranslatedString('Permissions.notificationTitle', 'Notifications');
+  static String get notificationBody => getTranslatedString(
+      'Permissions.notificationBody',
+      'To remind you about referrals and follow-ups that are due.');
+
+  static String get allow =>
+      getTranslatedString('Permissions.allow', 'OK, got it');
+  static String get skip =>
+      getTranslatedString('Permissions.skip', 'Not now');
+
+  /// Shown when one or more permissions were permanently denied — requesting
+  /// again would show no dialog at all, so the SK must be sent to Settings.
+  static String get blockedMessage => getTranslatedString(
+        'Permissions.blockedMessage',
+        'Some permissions were turned off. You can allow them in Android '
+        'Settings whenever you need those features.',
+      );
+  static String get openSettings =>
+      getTranslatedString('Permissions.openSettings', 'Open settings');
+}
+
+abstract final class BatteryOptimizationStrings {
+  BatteryOptimizationStrings._();
+
+  static String get title =>
+      getTranslatedString('BatteryOptimization.title', 'Keep sync running');
+  static String get body => getTranslatedString(
+        'BatteryOptimization.body',
+        'Your phone may stop this app from finishing a sync in the background. '
+        'Allowing it to run in the background keeps your households and visits '
+        'up to date.',
+      );
+  static String get openSettings => getTranslatedString(
+      'BatteryOptimization.openSettings', 'Open settings');
+
+  /// Settings-screen entry. Deliberately not shown to every SK during setup:
+  /// the destination is a vendor battery screen that a frontline user cannot
+  /// realistically navigate, and the sync foreground service already survives
+  /// Doze without it (verified on device). Kept as an escape hatch for a
+  /// supervisor troubleshooting a handset that kills background work.
+  static String get settingsRowTitle => getTranslatedString(
+      'BatteryOptimization.settingsRowTitle', 'Background sync');
+  static String get settingsRowSubtitle => getTranslatedString(
+      'BatteryOptimization.settingsRowSubtitle',
+      'Allow syncing when the app is closed');
+  static String get notNow =>
+      getTranslatedString('BatteryOptimization.notNow', 'Not now');
+  static String get couldNotOpen => getTranslatedString(
+        'BatteryOptimization.couldNotOpen',
+        'Could not open your phone\'s settings. You can allow background '
+        'activity for this app from Android Settings.',
+      );
+}
+
 abstract final class SettingsStrings {
   SettingsStrings._();
 
@@ -618,18 +709,72 @@ abstract final class PinStrings {
   static String get backTooltip => getTranslatedString('Pin.backTooltip', 'Back');
 }
 
-/// First-login data sync: the guided "downloading your ward" gate and the
+/// First-login data sync: the guided "downloading your data" gate and the
 /// dashboard data-freshness badge.
 abstract final class SyncStrings {
   SyncStrings._();
 
-  static String get title => getTranslatedString('Sync.title', 'Setting up your ward');
+  static String get title => getTranslatedString('Sync.title', 'Setting up your data');
   static String get subtitle => getTranslatedString('Sync.subtitle', 'Downloading your households and patients so you can work offline.');
 
   // Per-entity labels used in progress lines and the data-as-of badge.
   static String get households => getTranslatedString('Sync.households', 'households');
   static String get members => getTranslatedString('members', 'members');
   static String get patients => getTranslatedString('Sync.patients', 'patients');
+
+  /// Shown while a slow bulk pull is being replayed, so the sync screen reports
+  /// activity instead of sitting still for the whole retry budget.
+  static String retryingAttempt(int n, int of) => getTranslatedString(
+        'Sync.retryingAttempt',
+        'Retrying… ({n} of {of})',
+        params: {'n': '$n', 'of': '$of'},
+      );
+
+  // Foreground-service notification shown while sync runs with the app
+  // minimized or the screen off, plus the in-app strip on every tab.
+  static String get notificationChannelName =>
+      getTranslatedString('Sync.notificationChannelName', 'Data sync');
+  static String get notificationTitle =>
+      getTranslatedString('Sync.notificationTitle', 'Apon Sushashthya');
+  static String get notificationStarting =>
+      getTranslatedString('Sync.notificationStarting', 'Syncing your data…');
+  static String get notificationFailedTitle =>
+      getTranslatedString('Sync.notificationFailedTitle', 'Sync failed');
+  static String notificationProgress(String entity, int done, int total) =>
+      getTranslatedString(
+        'Sync.notificationProgress',
+        'Syncing {entity} {done}/{total}',
+        params: {'entity': entity, 'done': '$done', 'total': '$total'},
+      );
+
+  /// Label on the in-app sync strip shown across every tab while syncing.
+  static String get inProgressStrip =>
+      getTranslatedString('Sync.inProgressStrip', 'Syncing your data…');
+
+  // Persist sub-phases — what the app is writing locally after the download.
+  static String get savingHouseholds =>
+      getTranslatedString('Sync.savingHouseholds', 'Saving households');
+  static String get savingMembers =>
+      getTranslatedString('Sync.savingMembers', 'Saving members');
+  static String get savingPatients =>
+      getTranslatedString('Sync.savingPatients', 'Saving patient records');
+  static String get savingProgrammes =>
+      getTranslatedString('Sync.savingProgrammes', 'Saving programmes');
+  static String get savingFollowUps =>
+      getTranslatedString('Sync.savingFollowUps', 'Saving follow-ups');
+  static String get finalising =>
+      getTranslatedString('Sync.finalising', 'Finishing up');
+
+  /// Strip text combining the step description with its counts, e.g.
+  /// "Downloading patients · 240/1200". Kept separate from
+  /// [notificationProgress] because that one takes a bare entity noun; this
+  /// one takes a full step label and must not read "Syncing Downloading …".
+  static String stripProgress(String label, int done, int total) =>
+      getTranslatedString(
+        'Sync.stripProgress',
+        '{label} · {done}/{total}',
+        params: {'label': label, 'done': '$done', 'total': '$total'},
+      );
 
   static String get done => getTranslatedString('Sync.done', 'Ready to go');
   static String get syncFailed => getTranslatedString('Sync.syncFailed', 'We couldn\'t finish downloading your data.');

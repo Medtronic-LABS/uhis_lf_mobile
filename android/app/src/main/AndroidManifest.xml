@@ -18,6 +18,14 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- Offline sync runs as a dataSync foreground service: a full pull measures
+         ~113 s time-to-first-byte while the device screen timeout is 30 s, so the
+         work must survive the screen going off. See
+         docs/background_sync_foreground_service_design.md. Declared explicitly
+         here rather than inherited from micro-coaching-sdk.aar, which no longer
+         reflects who uses these. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     
     <!-- Required for url_launcher on Android 11+ (API 30) to query external apps -->
     <queries>
@@ -100,6 +108,11 @@
         </receiver>
         <receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
                   android:exported="false"/>
+        <!-- Holds the process in the foreground-service state while an offline
+             sync runs. No sync logic lives here; see SyncForegroundService.kt. -->
+        <service android:name=".SyncForegroundService"
+                 android:exported="false"
+                 android:foregroundServiceType="dataSync"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -9,6 +9,7 @@ import '../core/constants/app_strings.dart';
 import '../core/i18n/app_locale.dart';
 import '../core/services/micro_coaching_service.dart';
 import '../core/widgets/mockup_svg_icons.dart';
+import '../features/sync/sync_progress_strip.dart';
 import 'theme.dart';
 
 /// Shell widget for the persistent 3-tab bottom navigation.
@@ -123,35 +124,45 @@ class _BottomNavShellState extends State<BottomNavShell>
 
     return Scaffold(
         body: widget.navigationShell,
-        bottomNavigationBar: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: tokens.divider)),
-          ),
-          child: NavigationBar(
-            // Falls back to 0 when currentIndex is the hidden Tasks branch
-            // (reached via a direct call site, not this bar) — nothing in
-            // the visible bar corresponds to it.
-            selectedIndex: visiblePosition == -1 ? 0 : visiblePosition,
-            onDestinationSelected: (index) => _onTap(context, index),
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: [
-              NavigationDestination(
-                icon: _NavIcon(builder: MockupIcons.navHome, isSelected: false),
-                selectedIcon: _NavIcon(builder: MockupIcons.navHome, isSelected: true),
-                label: BottomNavStrings.home,
+        // Sync progress was previously visible only on /sync, so a
+        // connectivity-triggered sync ran invisibly while the SK worked. The
+        // strip sits with the nav — same ambient-status treatment as the
+        // referral alert banner — and collapses to zero height when idle.
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SyncProgressStrip(),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: tokens.divider)),
               ),
-              NavigationDestination(
-                icon: _NavIcon(builder: MockupIcons.navPatients, isSelected: false),
-                selectedIcon: _NavIcon(builder: MockupIcons.navPatients, isSelected: true),
-                label: BottomNavStrings.patients,
+              child: NavigationBar(
+                // Falls back to 0 when currentIndex is the hidden Tasks branch
+                // (reached via a direct call site, not this bar) — nothing in
+                // the visible bar corresponds to it.
+                selectedIndex: visiblePosition == -1 ? 0 : visiblePosition,
+                onDestinationSelected: (index) => _onTap(context, index),
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                destinations: [
+                  NavigationDestination(
+                    icon: _NavIcon(builder: MockupIcons.navHome, isSelected: false),
+                    selectedIcon: _NavIcon(builder: MockupIcons.navHome, isSelected: true),
+                    label: BottomNavStrings.home,
+                  ),
+                  NavigationDestination(
+                    icon: _NavIcon(builder: MockupIcons.navPatients, isSelected: false),
+                    selectedIcon: _NavIcon(builder: MockupIcons.navPatients, isSelected: true),
+                    label: BottomNavStrings.patients,
+                  ),
+                  NavigationDestination(
+                    icon: _NavIcon(builder: MockupIcons.navAssistant, isSelected: false),
+                    selectedIcon: _NavIcon(builder: MockupIcons.navAssistant, isSelected: true),
+                    label: BottomNavStrings.assistant,
+                  ),
+                ],
               ),
-              NavigationDestination(
-                icon: _NavIcon(builder: MockupIcons.navAssistant, isSelected: false),
-                selectedIcon: _NavIcon(builder: MockupIcons.navAssistant, isSelected: true),
-                label: BottomNavStrings.assistant,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
     );
   }

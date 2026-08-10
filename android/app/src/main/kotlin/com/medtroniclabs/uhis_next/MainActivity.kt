@@ -34,6 +34,8 @@ class MainActivity : FlutterFragmentActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(MicroCoachingPlugin())
+        flutterEngine.plugins.add(SyncForegroundPlugin())
+        flutterEngine.plugins.add(DeviceBatteryPlugin())
         flutterEngine.renderer.addIsDisplayingFlutterUiListener(object : FlutterUiDisplayListener {
             override fun onFlutterUiDisplayed() {
                 flutterUiDisplayed = true

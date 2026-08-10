@@ -434,11 +434,17 @@ class HouseholdDao {
 
   /// Bulk merge from sync pull — each row goes through [insertOrUpdateFromBE].
   /// Returns map of fhirId → localId for member FK resolution.
+  /// [onProgress] receives the number written so far. Optional so existing
+  /// callers are unaffected; the sync passes it to drive the progress bar.
   Future<Map<String, String>> upsertManyFromBE(
-      List<HouseholdEntity> households) async {
+    List<HouseholdEntity> households, {
+    void Function(int done)? onProgress,
+  }) async {
     final fhirToLocal = <String, String>{};
+    var done = 0;
     for (final h in households) {
       final localId = await insertOrUpdateFromBE(h);
+      onProgress?.call(++done);
       final fhir = h.fhirId;
       if (fhir != null && fhir.isNotEmpty) {
         fhirToLocal[fhir] = localId;

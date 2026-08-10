@@ -54,23 +54,12 @@ class AppConfig {
     defaultValue: '',
   );
 
-  /// Rolling reentry-session TTL (seconds). Each biometric/PIN unlock and
-  /// authenticated API success extends the local expiry by this amount from
-  /// now. Defaults to 14400 s (4 h) as a max idle window for reentry; the
-  /// Bearer token itself is refreshed more often via
-  /// [authTokenRefreshIntervalSeconds].
+  /// Fallback AuthCookie Max-Age (seconds) when a Set-Cookie response omits
+  /// Max-Age. Used only for web cookie metadata — not a local unlock TTL.
+  /// Session lifetime is server Redis (`AUTH_TOKEN_TIME_LIMIT_IN_MINUTES`).
   static const int authCookieTtlSeconds = int.fromEnvironment(
     'AUTH_COOKIE_TTL_SECONDS',
     defaultValue: 14400,
-  );
-
-  /// How often to proactively call `/auth-service/authenticate` before an
-  /// API request. Defaults to 2700 s (45 min) so a typical 60-minute server
-  /// token (`AUTH_TOKEN_TIME_LIMIT_IN_MINUTES=60`) is refreshed before it
-  /// dies, instead of waiting for a 401.
-  static const int authTokenRefreshIntervalSeconds = int.fromEnvironment(
-    'AUTH_TOKEN_REFRESH_INTERVAL_SECONDS',
-    defaultValue: 2700,
   );
 
   /// Localized reason shown by Android `BiometricPrompt`.
@@ -199,6 +188,41 @@ class AppConfig {
   static const int syncMaxPages = int.fromEnvironment(
     'SYNC_MAX_PAGES',
     defaultValue: 200,
+  );
+
+  /// Receive timeout (seconds) for every call on the shared UHIS client.
+  ///
+  /// This governs how long the app waits for the server's *first byte*, not
+  /// the transfer duration — the bulk `offline-sync/fetch-synced-data` pull
+  /// builds and gzips its entire bundle before writing anything, and a full
+  /// initial sync measures ~6 minutes. 60 s (the previous hardcoded value)
+  /// could never complete one.
+  static const int apiReceiveTimeoutSeconds = int.fromEnvironment(
+    'API_RECEIVE_TIMEOUT_SECONDS',
+    defaultValue: 900,
+  );
+
+  /// Connect timeout (seconds) for the shared UHIS client. Deliberately short
+  /// and kept separate from [apiReceiveTimeoutSeconds]: a failure to connect
+  /// is how the app detects "no network", so stretching it would make every
+  /// offline action hang instead of degrading immediately.
+  static const int apiConnectTimeoutSeconds = int.fromEnvironment(
+    'API_CONNECT_TIMEOUT_SECONDS',
+    defaultValue: 30,
+  );
+
+  /// Total attempts for retry-safe (read-only) calls; 1 disables retrying.
+  /// Worst-case wall time is this × [apiReceiveTimeoutSeconds], so raise the
+  /// two together deliberately.
+  static const int apiMaxAttempts = int.fromEnvironment(
+    'API_MAX_ATTEMPTS',
+    defaultValue: 3,
+  );
+
+  /// Backoff (seconds) between retry attempts.
+  static const int apiRetryDelaySeconds = int.fromEnvironment(
+    'API_RETRY_DELAY_SECONDS',
+    defaultValue: 5,
   );
 
   /// Timeout in milliseconds for the AI pathway suggestion call.

@@ -11,6 +11,7 @@ import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../auth/user_hierarchy_service.dart';
 import '../config/app_config.dart';
+import '../errors/domain_exceptions.dart';
 import '../models/assessment_history_item.dart';
 import '../db/app_database.dart';
 import '../db/assessment_dao.dart';
@@ -128,8 +129,48 @@ class OfflineSyncService extends ChangeNotifier {
   SyncProgress _progress = SyncProgress.initial;
   SyncProgress get progress => _progress;
 
+  /// Last persist emission, used to throttle. Unthrottled, the members loop
+  /// alone would emit 3566 events — each a setState on the sync screen, a strip
+  /// rebuild and a MethodChannel hop to the notification, which Android
+  /// rate-limits to roughly one update per second anyway.
+  DateTime? _lastPersistEmit;
+  static const _persistEmitInterval = Duration(milliseconds: 250);
+
+  /// Reports progress inside the local write. [done] == [total] always emits,
+  /// so a phase never appears to stall just short of finishing.
+  void _emitPersistProgress(
+    SyncPersistPhase phase,
+    int done,
+    int total, {
+    bool force = false,
+  }) {
+    final now = DateTime.now();
+    final due = force ||
+        done >= total ||
+        _lastPersistEmit == null ||
+        now.difference(_lastPersistEmit!) >= _persistEmitInterval;
+    if (!due) return;
+    _lastPersistEmit = now;
+    _emitProgress(SyncProgress(
+      currentStep: SyncStep.processingData,
+      persistPhase: phase,
+      itemsDone: done,
+      itemsTotal: total,
+    ));
+  }
+
   void _emitProgress(SyncProgress p) {
     _progress = p;
+    // Every state transition is logged. Without this a missing downstream
+    // reaction (e.g. PostSyncRefresher not firing) is undiagnosable: the
+    // absence of a completion event and the absence of a *reaction* to one
+    // look identical in logcat.
+    debugPrint(
+      '[SyncProgress] step=${p.currentStep.name} '
+      'complete=${p.isComplete} error=${p.hasError} '
+      'items=${p.itemsDone}/${p.itemsTotal}'
+      '${p.isRetrying ? ' retry=${p.retryAttempt}/${p.retryMaxAttempts}' : ''}',
+    );
     _progressController.add(p);
     notifyListeners();
   }
@@ -266,22 +307,40 @@ class OfflineSyncService extends ChangeNotifier {
       }
 
       // Step 1: Fetch patients bundle
+      // Emits data only — never localized copy. This object outlives the
+      // language-keyed MaterialApp remount (this service is an app-level
+      // singleton above it), so text localized here would stay frozen in the
+      // old language after the SK switches. The UI localizes at build.
       _emitProgress(const SyncProgress(
         currentStep: SyncStep.fetchingPatients,
-        entityName: 'patients',
       ));
 
+      // A full bundle can take minutes to build server-side and is replayed up
+      // to AppConfig.apiMaxAttempts times by ApiClient's retry interceptor.
+      // Surface each attempt so the sync screen shows activity instead of
+      // appearing frozen for the whole retry budget.
       Map<String, dynamic>? bundle;
+      _api.onRetryAttempt = (path, attempt, maxAttempts) {
+        if (path != Endpoints.offlineSyncFetch) return;
+        _emitProgress(SyncProgress(
+          currentStep: SyncStep.fetchingPatients,
+          retryAttempt: attempt,
+          retryMaxAttempts: maxAttempts,
+        ));
+      };
       try {
         bundle = await _fetchBundle(villageIds: villageIds, since: since);
       } catch (e) {
-        throw StateError('fetch-synced-data failed: $e');
+        // Keep the failure kind: a StateError erased DioExceptionType, leaving
+        // the UI unable to tell "too slow" from "server broke".
+        throw NetworkException(cause: e, message: NetworkErrorMapper.friendly(e));
+      } finally {
+        _api.onRetryAttempt = null;
       }
 
       // Step 2: Process and persist bundle (includes households/members if in bundle - Android pattern)
       _emitProgress(const SyncProgress(
         currentStep: SyncStep.processingData,
-        entityName: 'patients',
       ));
       debugPrint(
         '[OfflineSyncService] Bundle top-level keys: ${bundle.keys.toList()}',
@@ -327,16 +386,34 @@ class OfflineSyncService extends ChangeNotifier {
         villageIds,
         since: historySince,
       );
+
+      // UHIS parity: persist the server's response `lastSyncTime` (echo of
+      // server `currentSyncTime` at fetch start), not the device clock.
+      // Android: SecuredPreference.SERVER_LAST_SYNCED = response.lastSyncTime.
+      final serverLastSync = _parseServerLastSyncTime(bundle);
+      final cursorAt = serverLastSync ?? DateTime.now().toUtc();
+      if (serverLastSync == null) {
+        debugPrint(
+          '[OfflineSyncService] WARNING: sync response missing lastSyncTime '
+          '— falling back to device UTC clock',
+        );
+      } else {
+        debugPrint(
+          '[OfflineSyncService] using server lastSyncTime='
+          '${_toOffsetDateTime(cursorAt)}',
+        );
+      }
+
       // Only stamp the cursor forward once the fetch+persist above actually
       // succeeded — _syncAssessmentHistoryProgrammes returns null on failure,
       // so a failed pass must not silently advance `since` and skip
-      // re-fetching those rows next time.
+      // re-fetching those rows next time. Use the same server cursor as the
+      // main bundle (UHIS shares SERVER_LAST_SYNCED for both filters).
       if (historyReferrals != null) {
-        final now = DateTime.now();
         if (fullSync) {
-          await _syncMeta.stampFull(_assessmentHistoryEntityKey, now);
+          await _syncMeta.stampFull(_assessmentHistoryEntityKey, cursorAt);
         } else {
-          await _syncMeta.stampWarm(_assessmentHistoryEntityKey, now);
+          await _syncMeta.stampWarm(_assessmentHistoryEntityKey, cursorAt);
         }
       }
 
@@ -352,20 +429,32 @@ class OfflineSyncService extends ChangeNotifier {
       );
 
       if (fullSync) {
-        await _syncMeta.stampFull(_entityKey, report.finishedAt);
+        await _syncMeta.stampFull(_entityKey, cursorAt);
       } else {
-        await _syncMeta.stampWarm(_entityKey, report.finishedAt);
+        await _syncMeta.stampWarm(_entityKey, cursorAt);
       }
 
       // Server rows just landed — nudge any mounted roster screen to re-query.
       // One bump per sync (not per row), so a large bundle can't turn into a
       // reload storm.
-      if (totalHouseholds > 0 || totalMembers > 0 || out.patients > 0) {
+      final rosterChanged =
+          totalHouseholds > 0 || totalMembers > 0 || out.patients > 0;
+      if (rosterChanged) {
         bumpRosterRevision();
       }
 
+      // Broader than [rosterChanged]: the derived-data recompute downstream
+      // also depends on follow-ups, assessments, immunisations and referrals,
+      // any of which can change without a household or member doing so.
+      final anythingChanged = rosterChanged ||
+          out.followUps > 0 ||
+          out.assessments > 0 ||
+          out.immunisations > 0 ||
+          out.referrals > 0 ||
+          (historyReferrals ?? 0) > 0;
+
       // Done!
-      _emitProgress(SyncProgress.completed());
+      _emitProgress(SyncProgress.completed(hasChanges: anythingChanged));
       return report;
     } catch (e) {
       _emitProgress(SyncProgress.failed('Sync failed: $e'));
@@ -390,6 +479,33 @@ class OfflineSyncService extends ChangeNotifier {
   static String _toOffsetDateTime(DateTime dt) {
     final s = dt.toUtc().toIso8601String().replaceFirst(RegExp(r'\.\d+'), '');
     return s.endsWith('Z') ? '${s.substring(0, s.length - 1)}+00:00' : s;
+  }
+
+  /// Parses `lastSyncTime` from the offline-sync response.
+  ///
+  /// Backend (`OfflineSyncServiceImpl.fetchSyncedData`) sets this to server
+  /// `currentSyncTime` at request start. Jackson may emit ISO-8601 or epoch
+  /// millis depending on config — accept both (UHIS Android stores the string
+  /// as returned).
+  static DateTime? _parseServerLastSyncTime(Map<String, dynamic> bundle) {
+    final raw = bundle['lastSyncTime'];
+    if (raw == null) return null;
+    if (raw is int) {
+      return DateTime.fromMillisecondsSinceEpoch(raw, isUtc: true);
+    }
+    if (raw is num) {
+      return DateTime.fromMillisecondsSinceEpoch(raw.toInt(), isUtc: true);
+    }
+    if (raw is String) {
+      final s = raw.trim();
+      if (s.isEmpty) return null;
+      final asInt = int.tryParse(s);
+      if (asInt != null) {
+        return DateTime.fromMillisecondsSinceEpoch(asInt, isUtc: true);
+      }
+      return DateTime.tryParse(s)?.toUtc();
+    }
+    return null;
   }
 
   Future<Map<String, dynamic>> _fetchBundle({
@@ -450,6 +566,21 @@ class OfflineSyncService extends ChangeNotifier {
     required bool fullSync,
   }) async {
     if (bundle.isEmpty) return const _PersistTotals();
+
+    // ── Phase timing (diagnostic) ────────────────────────────────────────────
+    // The persist phase measured ~46 s on a Pixel 10a for 1398 households /
+    // 3566 members. Before optimising or building a determinate progress bar,
+    // measure where the time actually goes rather than inferring it from log
+    // timestamps. Emits one line per phase plus a total.
+    final persistWatch = Stopwatch()..start();
+    var lastMark = 0;
+    void mark(String phase, [int rows = -1]) {
+      final now = persistWatch.elapsedMilliseconds;
+      final took = now - lastMark;
+      lastMark = now;
+      final count = rows >= 0 ? ' rows=$rows' : '';
+      debugPrint('[PersistTiming] $phase ${took}ms$count (cumulative ${now}ms)');
+    }
 
     // Log bundle keys for debugging
     debugPrint('[OfflineSyncService] Bundle keys: ${bundle.keys.toList()}');
@@ -633,7 +764,15 @@ class OfflineSyncService extends ChangeNotifier {
     Map<String, String> hhFhirToLocal = {};
     final memberFhirToLocal = <String, String>{};
     if (households.isNotEmpty && _households != null) {
-      hhFhirToLocal = await _households.upsertManyFromBE(households);
+      mark('parse', households.length + members.length);
+      _emitPersistProgress(SyncPersistPhase.households, 0, households.length,
+          force: true);
+      hhFhirToLocal = await _households.upsertManyFromBE(
+        households,
+        onProgress: (done) => _emitPersistProgress(
+            SyncPersistPhase.households, done, households.length),
+      );
+      mark('households', households.length);
     }
     var persistedMembers = 0;
     var orphanMembers = 0;
@@ -657,6 +796,8 @@ class OfflineSyncService extends ChangeNotifier {
           continue;
         }
         final linked = m.copyWith(householdId: localHhId);
+        _emitPersistProgress(
+            SyncPersistPhase.members, persistedMembers, members.length);
         final localId = await _members.insertOrUpdateFromBE(linked);
         memberFhirToLocal[m.fhirId!] = localId;
         persistedMembers++;
@@ -666,7 +807,9 @@ class OfflineSyncService extends ChangeNotifier {
       // members.patient_id must equal the local key the patients row uses, or
       // the household screens (which look programmes/assessments up by it) and
       // getByPatientId() find nothing.
+      mark('members+patientBridge', members.length);
       await _members.backfillPatientIds();
+      mark('backfillPatientIds');
       debugPrint(
         '[OfflineSyncService] Members persisted: $persistedMembers '
         '($orphanMembers dropped — household FHIR id not resolvable)',
@@ -848,10 +991,19 @@ class OfflineSyncService extends ChangeNotifier {
 
     // Upsert patients instead of clear+insert to preserve any existing rows.
     // The upsert handles both new inserts and updates to existing rows.
+    mark('programmeInference');
+    _emitPersistProgress(SyncPersistPhase.patients, 0, patients.length,
+        force: true);
     await _patients.upsertMany(patients);
+    mark('patients', patients.length);
+    var programmesDone = 0;
     for (final entry in programmes.entries) {
+      _emitPersistProgress(
+          SyncPersistPhase.programmes, programmesDone, programmes.length);
       await _programmes.replaceFor(entry.key, entry.value);
+      programmesDone++;
     }
+    mark('programmes', programmes.length);
     // Remap follow-up patientIds through the member→BRN translation built above
     // so they match the IDs stored in the patients table.
     final remappedFollowUps = followUps.map((row) {
@@ -860,9 +1012,18 @@ class OfflineSyncService extends ChangeNotifier {
           ? row.copyWith(patientId: mapped)
           : row;
     }).toList();
+    _emitPersistProgress(
+        SyncPersistPhase.followUps, 0, remappedFollowUps.length, force: true);
     await _followUps.upsertMany(remappedFollowUps);
+    mark('followUps', remappedFollowUps.length);
     await _immunisations.upsertMany(immunisations);
+    mark('immunisations', immunisations.length);
     await _assessments.upsertMany(assessments);
+    mark('assessments', assessments.length);
+    // Referrals, pregnancy episodes, snapshots and treatment presence — several
+    // small loops measured together at 10-16 s. Reported as one indeterminate
+    // phase rather than faking a count across four unrelated things.
+    _emitPersistProgress(SyncPersistPhase.finalising, 0, 0, force: true);
 
     // CCE: project open follow-up referrals into the `referrals` table.
     final patientById = <String, Patient>{
@@ -980,6 +1141,9 @@ class OfflineSyncService extends ChangeNotifier {
         }
       }
     }
+
+    mark('tail(referrals/pregnancy/treatment)');
+    debugPrint('[PersistTiming] TOTAL ${persistWatch.elapsedMilliseconds}ms');
 
     return _PersistTotals(
       patients: patients.length,
