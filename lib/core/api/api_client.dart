@@ -6,11 +6,49 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, kIsWeb;
 
 import '../config/app_config.dart';
+import 'endpoints.dart';
 import 'browser_adapter_stub.dart'
     if (dart.library.html) 'browser_adapter_web.dart';
 
 const String _authCookieName = 'AuthCookie';
 const String _sessionCookieName = 'JSESSIONID';
+
+/// `RequestOptions.extra` key holding the 1-based attempt number, so a replayed
+/// request knows how many attempts have already been spent.
+const String _kAttemptKey = 'uhisAttempt';
+
+/// Read-only POST endpoints that are safe to replay.
+///
+/// Writes are excluded deliberately: `offline-sync/create` has no server-side
+/// uniqueness on `requestId` (`OfflineSync.requestId` is unconstrained and
+/// `constructOfflineSync` → `saveAll` inserts without an existence check), so
+/// replaying one can duplicate households, members and assessments. Most reads
+/// in this API are POSTs, so method alone is not a safe test.
+const Set<String> _retryableReadPaths = <String>{
+  Endpoints.offlineSyncFetch,
+  Endpoints.offlineSyncMemberAssessmentHistory,
+  Endpoints.staticUserData,
+  Endpoints.patientSearch,
+};
+
+/// True when [e] is a transient transport failure (or a 5xx) on a request that
+/// is safe to replay. A 4xx never reaches here — `validateStatus` admits
+/// anything below 500 as a normal response — and would not be worth retrying
+/// anyway.
+bool _isRetryable(DioException e) {
+  final safeToReplay = e.requestOptions.method.toUpperCase() == 'GET' ||
+      _retryableReadPaths.contains(e.requestOptions.path);
+  if (!safeToReplay) return false;
+  return switch (e.type) {
+    DioExceptionType.connectionTimeout ||
+    DioExceptionType.sendTimeout ||
+    DioExceptionType.receiveTimeout ||
+    DioExceptionType.connectionError =>
+      true,
+    DioExceptionType.badResponse => (e.response?.statusCode ?? 0) >= 500,
+    _ => false,
+  };
+}
 
 class ApiClient {
   ApiClient._(this.dio, this._cookieJar);
@@ -33,14 +71,26 @@ class ApiClient {
   // 403 — that means "authenticated but not permitted" and must not sign the
   // user out. UHIS parity: no client-side token refresh before this fires.
   void Function()? onUnauthorized;
+  // Fired just before a retry-safe request is replayed, with the request path,
+  // the 1-based attempt about to start, and the configured maximum. Retrying is
+  // otherwise invisible; the sync screen uses this to show progress rather than
+  // appearing frozen for the whole retry budget.
+  //
+  // onBeforeRequest / onTokenRefresh were dropped here rather than kept: #600
+  // removed client-side token refresh for UHIS parity, and both existed only
+  // to serve it. This callback is unrelated — it reports transport-level
+  // retries, not auth.
+  void Function(String path, int attempt, int maxAttempts)? onRetryAttempt;
 
   static Future<ApiClient> create() async {
     final cookieJar = CookieJar();
     final dio = Dio(
       BaseOptions(
         baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 60),
+        connectTimeout:
+            const Duration(seconds: AppConfig.apiConnectTimeoutSeconds),
+        receiveTimeout:
+            const Duration(seconds: AppConfig.apiReceiveTimeoutSeconds),
         headers: {'client': AppConfig.apiClient},
         validateStatus: (s) => s != null && s < 500,
       ),
@@ -159,6 +209,35 @@ class ApiClient {
                 AppConfig.appVersionCode.toString();
           }
           handler.next(options);
+        },
+      ),
+    );
+    // Retry must sit before LogInterceptor so a retried attempt is logged as
+    // its own request/response pair rather than folded into the first.
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (e, handler) async {
+          final attempt = (e.requestOptions.extra[_kAttemptKey] as int?) ?? 1;
+          if (!_isRetryable(e) || attempt >= AppConfig.apiMaxAttempts) {
+            handler.next(e);
+            return;
+          }
+          final next = attempt + 1;
+          debugPrint('[ApiClient] retry $next/${AppConfig.apiMaxAttempts} '
+              '${e.requestOptions.path} after ${e.type.name}');
+          client.onRetryAttempt
+              ?.call(e.requestOptions.path, next, AppConfig.apiMaxAttempts);
+          await Future<void>.delayed(
+              const Duration(seconds: AppConfig.apiRetryDelaySeconds));
+          // Carry the attempt counter on the replayed request so the nested
+          // onError for that attempt stops at apiMaxAttempts overall.
+          final options = e.requestOptions
+            ..extra[_kAttemptKey] = next;
+          try {
+            handler.resolve(await dio.fetch<dynamic>(options));
+          } on DioException catch (retryError) {
+            handler.next(retryError);
+          }
         },
       ),
     );

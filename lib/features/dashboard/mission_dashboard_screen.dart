@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,9 @@ import 'package:provider/provider.dart';
 
 import '../../app/locale_provider.dart';
 import '../../app/theme.dart';
+import '../../core/device/battery_optimization_gate.dart';
+import '../../core/device/battery_optimization_prompt.dart';
+import '../../core/device/battery_optimization_service.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
@@ -126,6 +130,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _loadVillagesLine();
       // Load mission data (may already be cached from sync screen)
       _loadMissionData();
+      // One-time, after the dashboard has settled: OEM power managers kill
+      // background work regardless of the sync foreground service, so offer to
+      // send the SK to the right settings screen. Self-suppressing — see
+      // BatteryOptimizationGate.
+      if (!mounted) return;
+      await maybeShowBatteryOptimizationPrompt(
+        context,
+        BatteryOptimizationGate(
+          service: kIsWeb
+              ? const NoopBatteryOptimizationService()
+              : const MethodChannelBatteryOptimizationService(),
+        ),
+      );
     });
   }
 

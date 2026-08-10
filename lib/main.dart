@@ -52,6 +52,9 @@ import 'core/sla/priority_scorer.dart';
 import 'core/sla/sla_evaluator.dart';
 import 'core/auth/user_hierarchy_service.dart';
 import 'core/sync/offline_sync_service.dart';
+import 'app/post_sync_refresher.dart';
+import 'core/sync/sync_foreground_controller.dart';
+import 'core/sync/sync_foreground_notifier.dart';
 import 'core/sync/offline_push_service.dart';
 import 'features/dashboard/dashboard_filter_state.dart';
 import 'features/dashboard/dashboard_repository.dart';
@@ -265,6 +268,23 @@ class _UhisNextAppState extends State<UhisNextApp>
     assessments: _localAssessmentDao,
     followUpCalls: _followUpCallService,
   );
+  /// Runs the Android dataSync foreground service for as long as any sync is
+  /// in flight, so a pull that outlives the 30 s screen timeout is not frozen
+  /// mid-request. No-op on platforms without the plugin.
+  /// Recomputes risk/SLA and refreshes the dashboard whenever a sync finishes,
+  /// including connectivity-triggered ones the SK never sees a sync screen for.
+  late final PostSyncRefresher _postSync = PostSyncRefresher(
+    progress: _sync.progressStream,
+    worklist: _worklist,
+    referrals: _referrals,
+    mission: _missionDashboard,
+  );
+  late final SyncForegroundController _syncForeground = SyncForegroundController(
+    progress: _sync.progressStream,
+    notifier: kIsWeb
+        ? const NoopSyncForegroundNotifier()
+        : const MethodChannelSyncForegroundNotifier(),
+  );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
   late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);
   late final UserHierarchyService _userHierarchy = UserHierarchyService(
@@ -292,6 +312,10 @@ class _UhisNextAppState extends State<UhisNextApp>
     unawaited(_bootstrapNotifications());
     // Start connectivity monitoring for automatic offline sync retry.
     _connectivitySync.start();
+    // Keep the process alive across screen-off for the duration of any sync.
+    _syncForeground.attach();
+    // Recompute + refresh the dashboard when any sync completes.
+    _postSync.attach();
     // These repositories/services are single long-lived instances for the
     // app's whole process (see the `late final` fields above — none are
     // recreated per login), so each caches session data in memory that
@@ -335,6 +359,8 @@ class _UhisNextAppState extends State<UhisNextApp>
   @override
   void dispose() {
     _connectivitySync.dispose();
+    unawaited(_syncForeground.dispose());
+    unawaited(_postSync.dispose());
     widget.authState.removeListener(_onAuthStateChanged);
     _localeProvider.removeListener(_onLocaleChanged);
     WidgetsBinding.instance.removeObserver(this);
@@ -424,6 +450,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         ChangeNotifierProvider<OfflinePushService>.value(value: _offlinePush),
         Provider<SyncConnectivityService>.value(value: _connectivitySync),
         Provider<WorklistRepository>.value(value: _worklist),
+        Provider<PostSyncRefresher>.value(value: _postSync),
         Provider<PatientRepository>.value(value: _patientRepo),
         Provider<ReferralDao>.value(value: _referralDao),
         Provider<SlaEvaluator>.value(value: _slaEvaluator),

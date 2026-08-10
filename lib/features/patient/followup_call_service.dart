@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/db/follow_up_dao.dart';
@@ -165,6 +166,7 @@ class FollowUpCallService {
     final pending = await _dao.pendingPush();
     final wire = <Map<String, dynamic>>[];
     final ids = <String>[];
+    var skippedNoServerId = 0;
 
     for (final row in pending) {
       // Server requires a numeric follow-up id ("Call register id"). Skip rows
@@ -175,9 +177,17 @@ class FollowUpCallService {
       try {
         raw = Map<String, dynamic>.from(
             jsonDecode(row.rawJson) as Map<String, dynamic>);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[FollowUpPush] rawJson decode failed row=${row.id}: $e');
+      }
       serverId ??= (raw['id'] as num?)?.toInt();
-      if (serverId == null) continue;
+      if (serverId == null) {
+        skippedNoServerId++;
+        debugPrint('[FollowUpPush] SKIP row=${row.id} — no backendId and no '
+            'raw id; status=${row.syncStatus} patientId=${row.patientId} '
+            'rawKeys=${raw.keys.toList()}');
+        continue;
+      }
 
       final calls = await _dao.callsFor(row.id, onlyUnsynced: true);
       final attempts = row.attempts ?? 0;
@@ -231,6 +241,8 @@ class FollowUpCallService {
       wire.add(parent);
       ids.add(row.id);
     }
+    debugPrint('[FollowUpPush] pending=${pending.length} '
+        'serialized=${wire.length} skippedNoServerId=$skippedNoServerId');
     return (wire: wire, ids: ids);
   }
 

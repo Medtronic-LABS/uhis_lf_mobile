@@ -27,6 +27,26 @@
     "bn": "এআই এসিস্ট্যান্ট",
     "en": "AI Assistant"
   },
+  "BatteryOptimization.body": {
+    "bn": "আপনার ফোন ব্যাকগ্রাউন্ডে এই অ্যাপের সিঙ্ক বন্ধ করে দিতে পারে। ব্যাকগ্রাউন্ডে চলার অনুমতি দিলে আপনার খানা ও ভিজিটের তথ্য হালনাগাদ থাকবে।",
+    "en": "Your phone may stop this app from finishing a sync in the background. Allowing it to run in the background keeps your households and visits up to date."
+  },
+  "BatteryOptimization.couldNotOpen": {
+    "bn": "আপনার ফোনের সেটিংস খোলা যায়নি। আপনি অ্যান্ড্রয়েড সেটিংস থেকে এই অ্যাপের ব্যাকগ্রাউন্ড কার্যকলাপের অনুমতি দিতে পারেন।",
+    "en": "Could not open your phone's settings. You can allow background activity for this app from Android Settings."
+  },
+  "BatteryOptimization.notNow": {
+    "bn": "এখন নয়",
+    "en": "Not now"
+  },
+  "BatteryOptimization.openSettings": {
+    "bn": "সেটিংস খুলুন",
+    "en": "Open settings"
+  },
+  "BatteryOptimization.title": {
+    "bn": "সিঙ্ক চালু রাখুন",
+    "en": "Keep sync running"
+  },
   "BottomNav.patients": {
     "bn": "রোগী",
     "en": "Patients"
@@ -2591,6 +2611,10 @@
     "bn": "🎙 AI স্ক্রাইব — ট্যাপ করুন এবং তাকে কথা বলতে দিন",
     "en": "🎙 AI Scribe — tap and let him speak"
   },
+  "Sync.connectingToServer": {
+    "bn": "সার্ভারে সংযোগ করা হচ্ছে",
+    "en": "Connecting to server"
+  },
   "Sync.dataReady": {
     "bn": "আপনার তথ্য প্রস্তুত",
     "en": "Your data is ready"
@@ -2599,21 +2623,73 @@
     "bn": "যেতে প্রস্তুত",
     "en": "Ready to go"
   },
+  "Sync.downloadingFollowUps": {
+    "bn": "ফলো-আপ ডাউনলোড হচ্ছে",
+    "en": "Downloading follow-ups"
+  },
+  "Sync.downloadingPatients": {
+    "bn": "রোগীদের তথ্য ডাউনলোড হচ্ছে",
+    "en": "Downloading patients"
+  },
+  "Sync.downloadingReferrals": {
+    "bn": "রেফারেল ডাউনলোড হচ্ছে",
+    "en": "Downloading referrals"
+  },
   "Sync.households": {
     "bn": "খানা",
     "en": "households"
+  },
+  "Sync.inProgressStrip": {
+    "bn": "আপনার ডেটা সিঙ্ক হচ্ছে…",
+    "en": "Syncing your data…"
+  },
+  "Sync.notificationChannelName": {
+    "bn": "ডেটা সিঙ্ক",
+    "en": "Data sync"
+  },
+  "Sync.notificationFailedTitle": {
+    "bn": "সিঙ্ক ব্যর্থ হয়েছে",
+    "en": "Sync failed"
+  },
+  "Sync.notificationProgress": {
+    "bn": "{entity} সিঙ্ক হচ্ছে {done}/{total}",
+    "en": "Syncing {entity} {done}/{total}"
+  },
+  "Sync.notificationStarting": {
+    "bn": "আপনার ডেটা সিঙ্ক হচ্ছে…",
+    "en": "Syncing your data…"
+  },
+  "Sync.notificationTitle": {
+    "bn": "আপন সুস্বাস্থ্য",
+    "en": "Apon Sushashthya"
   },
   "Sync.patients": {
     "bn": "রোগী",
     "en": "patients"
   },
+  "Sync.processingData": {
+    "bn": "তথ্য প্রক্রিয়া করা হচ্ছে",
+    "en": "Processing data"
+  },
+  "Sync.readyStatus": {
+    "bn": "প্রস্তুত",
+    "en": "Ready"
+  },
   "Sync.refreshing": {
     "bn": "আপনার ডেটা আপডেট হচ্ছে…",
     "en": "Updating your data…"
   },
+  "Sync.retryingAttempt": {
+    "bn": "আবার চেষ্টা করা হচ্ছে… ({n}/{of})",
+    "en": "Retrying… ({n} of {of})"
+  },
   "Sync.signInAgain": {
     "bn": "আবার সাইন ইন করুন",
     "en": "Sign in again"
+  },
+  "Sync.stripProgress": {
+    "bn": "{label} · {done}/{total}",
+    "en": "{label} · {done}/{total}"
   },
   "Sync.subtitle": {
     "bn": "অফলাইনে কাজ করার জন্য আপনার খানা ও রোগীদের তথ্য ডাউনলোড হচ্ছে।",

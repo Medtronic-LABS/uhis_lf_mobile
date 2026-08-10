@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../app/post_sync_refresher.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
@@ -13,9 +14,6 @@ import '../../core/sync/offline_push_service.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
-import '../dashboard/mission_dashboard_repository.dart';
-import '../referral/referral_repository.dart';
-import '../worklist/worklist_repository.dart';
 
 /// Full-screen loading indicator shown during initial data sync after login.
 ///
@@ -40,7 +38,16 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
   SyncReport? _report;
   bool _syncStarted = false;
   bool _preparingDashboard = false;
-  String _preparingMessage = '';
+  /// Which prepare step is running. An enum, not a localized string: a string
+  /// stored here is frozen in the language it was built in, and the SK can
+  /// switch language mid-sync.
+  _PreparePhase? _preparePhase;
+
+  String get _preparingMessage => switch (_preparePhase) {
+        _PreparePhase.visits => SyncStrings.preparingVisits,
+        _PreparePhase.dashboard => SyncStrings.preparingDashboard,
+        null => '',
+      };
   /// True when sync stopped because the session has no auth credentials —
   /// user must re-login; do not offer "continue offline".
   bool _blockedNoAuth = false;
@@ -190,20 +197,18 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     
     setState(() {
       _preparingDashboard = true;
-      _preparingMessage = SyncStrings.preparingVisits;
+      _preparePhase = _PreparePhase.visits;
     });
     
     try {
-      // Recompute risk scores and next-due-at for proper worklist sorting
-      final worklist = context.read<WorklistRepository>();
-      await worklist.recomputeAllAfterSync();
+      // Delegates to PostSyncRefresher rather than repeating the recompute
+      // sequence: it also runs on connectivity-triggered syncs that never show
+      // this screen, and its guard means the two paths cannot recompute twice
+      // for the same login.
+      await context.read<PostSyncRefresher>().refreshNow();
 
-      // CCE: score SLA / priority on referrals just ingested from sync.
       if (!mounted) return;
-      await context.read<ReferralRepository>().recomputeAllAfterSync();
-      
-      if (!mounted) return;
-      setState(() => _preparingMessage = SyncStrings.preparingDashboard);
+      setState(() => _preparePhase = _PreparePhase.dashboard);
       
       // Pre-load mission queue and referral summary. DashboardScreen lives
       // inside a StatefulShellRoute.indexedStack, so its State (and the
@@ -213,13 +218,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       // pre-warm) is what actually notifies that listener, so the dashboard
       // re-renders with this session's data instead of whatever it last
       // showed before this login.
-      final missionRepo = context.read<MissionDashboardRepository>();
-      final encounterDao = context.read<EncounterDao>();
-
-      await Future.wait([
-        missionRepo.refresh(),
-        encounterDao.completedTodayPatientIds(),
-      ]);
+      // refreshNow() above already refreshed the mission repo; only the
+      // encounter pre-warm is left to do here.
+      await context.read<EncounterDao>().completedTodayPatientIds();
       
       debugPrint('[Sync] Dashboard data prepared');
     } catch (e) {
@@ -385,8 +386,8 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               if (!hasError && !_progress.isComplete && _progress.itemsTotal > 0) ...[
                 const SizedBox(height: 8),
                 Text(
-                  SyncStrings.progressNamed(
-                    _progress.entityName,
+                  SyncStrings.stripProgress(
+                    _progress.currentStep.label,
                     _progress.itemsDone,
                     _progress.itemsTotal,
                   ),
@@ -600,3 +601,7 @@ class _SyncStatChip extends StatelessWidget {
     );
   }
 }
+
+/// Post-sync preparation steps. Kept as an enum so the visible message is
+/// localized at build time and follows a mid-sync language switch.
+enum _PreparePhase { visits, dashboard }

@@ -349,6 +349,14 @@ class OfflinePushService extends ChangeNotifier {
         );
         final status = response.statusCode ?? 0;
         if (status < 200 || status >= 300) {
+          // The server's validation detail lives in the body; without this the
+          // failure surfaces as a bare status code and the cause is invisible.
+          // Chunked via ConsoleLog.json because logcat drops very long lines.
+          ConsoleLog.json(
+            '[OfflinePush] create REJECTED status=$status '
+            '(requestId=$requestId) body',
+            response.data,
+          );
           await _markNetworkOrFailed(
             householdIds: unsyncedHouseholds.map((e) => e.id).toList(),
             memberIds: [...nestedMemberIds, ...standaloneMemberIds],
@@ -364,6 +372,11 @@ class OfflinePushService extends ChangeNotifier {
           );
         }
       } on DioException catch (e) {
+        ConsoleLog.json(
+          '[OfflinePush] create DioException type=${e.type} '
+          'status=${e.response?.statusCode} (requestId=$requestId) body',
+          e.response?.data ?? e.message,
+        );
         final isNetwork = e.response == null ||
             e.type == DioExceptionType.connectionTimeout ||
             e.type == DioExceptionType.sendTimeout ||

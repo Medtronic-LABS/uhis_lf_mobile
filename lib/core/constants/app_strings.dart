@@ -305,6 +305,30 @@ abstract final class DashboardStrings {
 }
 
 /// Settings menu strings.
+/// Copy for the one-time prompt asking the SK to exempt the app from battery
+/// optimisation, so a multi-minute sync is not killed by the OEM.
+abstract final class BatteryOptimizationStrings {
+  BatteryOptimizationStrings._();
+
+  static String get title =>
+      getTranslatedString('BatteryOptimization.title', 'Keep sync running');
+  static String get body => getTranslatedString(
+        'BatteryOptimization.body',
+        'Your phone may stop this app from finishing a sync in the background. '
+        'Allowing it to run in the background keeps your households and visits '
+        'up to date.',
+      );
+  static String get openSettings => getTranslatedString(
+      'BatteryOptimization.openSettings', 'Open settings');
+  static String get notNow =>
+      getTranslatedString('BatteryOptimization.notNow', 'Not now');
+  static String get couldNotOpen => getTranslatedString(
+        'BatteryOptimization.couldNotOpen',
+        'Could not open your phone\'s settings. You can allow background '
+        'activity for this app from Android Settings.',
+      );
+}
+
 abstract final class SettingsStrings {
   SettingsStrings._();
 
@@ -629,6 +653,46 @@ abstract final class SyncStrings {
   static String get households => getTranslatedString('Sync.households', 'households');
   static String get members => getTranslatedString('members', 'members');
   static String get patients => getTranslatedString('Sync.patients', 'patients');
+
+  /// Shown while a slow bulk pull is being replayed, so the sync screen reports
+  /// activity instead of sitting still for the whole retry budget.
+  static String retryingAttempt(int n, int of) => getTranslatedString(
+        'Sync.retryingAttempt',
+        'Retrying… ({n} of {of})',
+        params: {'n': '$n', 'of': '$of'},
+      );
+
+  // Foreground-service notification shown while sync runs with the app
+  // minimized or the screen off, plus the in-app strip on every tab.
+  static String get notificationChannelName =>
+      getTranslatedString('Sync.notificationChannelName', 'Data sync');
+  static String get notificationTitle =>
+      getTranslatedString('Sync.notificationTitle', 'Apon Sushashthya');
+  static String get notificationStarting =>
+      getTranslatedString('Sync.notificationStarting', 'Syncing your data…');
+  static String get notificationFailedTitle =>
+      getTranslatedString('Sync.notificationFailedTitle', 'Sync failed');
+  static String notificationProgress(String entity, int done, int total) =>
+      getTranslatedString(
+        'Sync.notificationProgress',
+        'Syncing {entity} {done}/{total}',
+        params: {'entity': entity, 'done': '$done', 'total': '$total'},
+      );
+
+  /// Label on the in-app sync strip shown across every tab while syncing.
+  static String get inProgressStrip =>
+      getTranslatedString('Sync.inProgressStrip', 'Syncing your data…');
+
+  /// Strip text combining the step description with its counts, e.g.
+  /// "Downloading patients · 240/1200". Kept separate from
+  /// [notificationProgress] because that one takes a bare entity noun; this
+  /// one takes a full step label and must not read "Syncing Downloading …".
+  static String stripProgress(String label, int done, int total) =>
+      getTranslatedString(
+        'Sync.stripProgress',
+        '{label} · {done}/{total}',
+        params: {'label': label, 'done': '$done', 'total': '$total'},
+      );
 
   static String get done => getTranslatedString('Sync.done', 'Ready to go');
   static String get syncFailed => getTranslatedString('Sync.syncFailed', 'We couldn\'t finish downloading your data.');
