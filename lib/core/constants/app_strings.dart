@@ -683,6 +683,20 @@ abstract final class SyncStrings {
   static String get inProgressStrip =>
       getTranslatedString('Sync.inProgressStrip', 'Syncing your data…');
 
+  // Persist sub-phases — what the app is writing locally after the download.
+  static String get savingHouseholds =>
+      getTranslatedString('Sync.savingHouseholds', 'Saving households');
+  static String get savingMembers =>
+      getTranslatedString('Sync.savingMembers', 'Saving members');
+  static String get savingPatients =>
+      getTranslatedString('Sync.savingPatients', 'Saving patient records');
+  static String get savingProgrammes =>
+      getTranslatedString('Sync.savingProgrammes', 'Saving programmes');
+  static String get savingFollowUps =>
+      getTranslatedString('Sync.savingFollowUps', 'Saving follow-ups');
+  static String get finalising =>
+      getTranslatedString('Sync.finalising', 'Finishing up');
+
   /// Strip text combining the step description with its counts, e.g.
   /// "Downloading patients · 240/1200". Kept separate from
   /// [notificationProgress] because that one takes a bare entity noun; this

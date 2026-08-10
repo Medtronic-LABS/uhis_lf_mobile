@@ -2635,6 +2635,10 @@
     "bn": "রেফারেল ডাউনলোড হচ্ছে",
     "en": "Downloading referrals"
   },
+  "Sync.finalising": {
+    "bn": "শেষ করা হচ্ছে",
+    "en": "Finishing up"
+  },
   "Sync.households": {
     "bn": "খানা",
     "en": "households"
@@ -2682,6 +2686,26 @@
   "Sync.retryingAttempt": {
     "bn": "আবার চেষ্টা করা হচ্ছে… ({n}/{of})",
     "en": "Retrying… ({n} of {of})"
+  },
+  "Sync.savingFollowUps": {
+    "bn": "ফলো-আপ সংরক্ষণ হচ্ছে",
+    "en": "Saving follow-ups"
+  },
+  "Sync.savingHouseholds": {
+    "bn": "খানার তথ্য সংরক্ষণ হচ্ছে",
+    "en": "Saving households"
+  },
+  "Sync.savingMembers": {
+    "bn": "সদস্যদের তথ্য সংরক্ষণ হচ্ছে",
+    "en": "Saving members"
+  },
+  "Sync.savingPatients": {
+    "bn": "রোগীর তথ্য সংরক্ষণ হচ্ছে",
+    "en": "Saving patient records"
+  },
+  "Sync.savingProgrammes": {
+    "bn": "কর্মসূচির তথ্য সংরক্ষণ হচ্ছে",
+    "en": "Saving programmes"
   },
   "Sync.signInAgain": {
     "bn": "আবার সাইন ইন করুন",

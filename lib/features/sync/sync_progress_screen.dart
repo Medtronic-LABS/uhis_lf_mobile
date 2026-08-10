@@ -375,7 +375,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                 _buildCompletionSummaryWidget(scheme, textTheme)
               else
                 Text(
-                  _progress.currentStep.label,
+                  _progress.persistPhase?.label ?? _progress.currentStep.label,
                   style: textTheme.bodyLarge?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -387,7 +387,8 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                 const SizedBox(height: 8),
                 Text(
                   SyncStrings.stripProgress(
-                    _progress.currentStep.label,
+                    _progress.persistPhase?.label ??
+                        _progress.currentStep.label,
                     _progress.itemsDone,
                     _progress.itemsTotal,
                   ),
