@@ -200,7 +200,7 @@ class SyncForegroundController {
     }
     final label = progress.entityName.isNotEmpty
         ? progress.entityName
-        : progress.currentStep.label;
+        : (progress.persistPhase?.label ?? progress.currentStep.label);
     if (progress.itemsTotal > 0) {
       return SyncStrings.notificationProgress(
         label,

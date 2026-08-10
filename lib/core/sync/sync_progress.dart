@@ -16,6 +16,7 @@ class SyncProgress {
     this.retryAttempt,
     this.retryMaxAttempts,
     this.hasChanges = true,
+    this.persistPhase,
   });
 
   final SyncStep currentStep;
@@ -37,6 +38,14 @@ class SyncProgress {
   final int? retryMaxAttempts;
 
   bool get isRetrying => retryAttempt != null && retryMaxAttempts != null;
+
+  /// Which part of the local write is running, when [currentStep] is
+  /// [SyncStep.processingData].
+  ///
+  /// An enum, not a label: this object outlives the language-keyed MaterialApp
+  /// remount, so text stored here would freeze in the emitting language. The
+  /// UI resolves it at build (see SyncPersistPhaseX.label).
+  final SyncPersistPhase? persistPhase;
 
   /// Whether this sync actually wrote anything.
   ///
@@ -70,6 +79,7 @@ class SyncProgress {
     int? retryAttempt,
     int? retryMaxAttempts,
     bool? hasChanges,
+    SyncPersistPhase? persistPhase,
   }) =>
       SyncProgress(
         currentStep: currentStep ?? this.currentStep,
@@ -82,6 +92,7 @@ class SyncProgress {
         retryAttempt: retryAttempt ?? this.retryAttempt,
         retryMaxAttempts: retryMaxAttempts ?? this.retryMaxAttempts,
         hasChanges: hasChanges ?? this.hasChanges,
+        persistPhase: persistPhase ?? this.persistPhase,
       );
 
   static const SyncProgress initial = SyncProgress();
@@ -95,6 +106,23 @@ class SyncProgress {
   static SyncProgress failed(String message) => SyncProgress(
         error: message,
       );
+}
+
+/// Sub-phases of the local write, reported while [SyncStep.processingData] is
+/// current.
+///
+/// The persist runs 45-66 s on a Pixel 10a for 1398 households / 3566 members
+/// — long enough that a bare spinner tells the SK nothing about whether the app
+/// is working or wedged. Each phase has a row count known before it starts, so
+/// progress here is honest rather than decorative (unlike the server fetch,
+/// whose duration nobody can predict).
+enum SyncPersistPhase {
+  households,
+  members,
+  patients,
+  programmes,
+  followUps,
+  finalising,
 }
 
 /// Discrete steps in the sync process.
@@ -141,4 +169,17 @@ extension SyncStepX on SyncStep {
         return '✅';
     }
   }
+}
+
+/// Localized label for each persist phase. Resolved at build time so a
+/// mid-sync language switch is followed, matching SyncStepX.label.
+extension SyncPersistPhaseX on SyncPersistPhase {
+  String get label => switch (this) {
+        SyncPersistPhase.households => SyncStrings.savingHouseholds,
+        SyncPersistPhase.members => SyncStrings.savingMembers,
+        SyncPersistPhase.patients => SyncStrings.savingPatients,
+        SyncPersistPhase.programmes => SyncStrings.savingProgrammes,
+        SyncPersistPhase.followUps => SyncStrings.savingFollowUps,
+        SyncPersistPhase.finalising => SyncStrings.finalising,
+      };
 }

@@ -64,7 +64,9 @@ class _StripBody extends StatelessWidget {
         progress.retryMaxAttempts!,
       );
     }
-    final label = progress.currentStep.label;
+    // The persist phase is the more specific answer to "what is it doing" —
+    // "Saving members 2400/3566" rather than "Processing data".
+    final label = progress.persistPhase?.label ?? progress.currentStep.label;
     if (label.isEmpty) return SyncStrings.inProgressStrip;
     if (progress.itemsTotal > 0) {
       return SyncStrings.stripProgress(
