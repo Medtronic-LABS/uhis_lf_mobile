@@ -64,6 +64,7 @@ class AuthRepository {
     // the app-state level — this layer just relays the signal.
     _api.onUnauthorized = () => onUnauthorized?.call();
     _api.onBeforeRequest = _validateTokenIfStale;
+    _api.onTokenRefresh = tryRefreshToken;
   }
 
   final ApiClient _api;
@@ -474,28 +475,58 @@ class AuthRepository {
     await _clearReentrySession();
   }
 
+  /// Clears only the live API credentials so the user can enter a password
+  /// from the lock screen. Keeps biometric/PIN enrolment and the offline
+  /// password hash — unlike [handleSessionExpired], this is a voluntary
+  /// unlock path, not a dead session.
+  Future<void> preparePasswordFallback() async {
+    await _api.clearSession();
+    await _storage.delete(key: _kBioAuthCookie);
+    await _storage.delete(key: _kBioAuthCookieExpiry);
+    await _storage.delete(key: _kBioJSession);
+    await _storage.delete(key: _kBioAuthToken);
+    await _storage.delete(key: _kTokenVerifiedAt);
+  }
+
   /// Proactively verifies/refreshes the Bearer token via
-  /// `POST /auth-service/authenticate` if it hasn't been checked in the last
-  /// hour — the token is only valid ~1hr, so this keeps a session alive
-  /// across normal app use instead of waiting for the server to start
-  /// rejecting requests (that reactive path is [ApiClient.onUnauthorized]).
-  /// Wired to [ApiClient.onBeforeRequest], so this runs ahead of most
-  /// authenticated calls; failures are swallowed here on purpose — a request
-  /// that goes on to actually 401/403 is still caught there.
+  /// `POST /auth-service/authenticate` when the last check is older than
+  /// [AppConfig.authTokenRefreshIntervalSeconds] (default 45 min) — ahead of
+  /// a typical 60-minute server TTL. Wired to [ApiClient.onBeforeRequest].
   Future<void> _validateTokenIfStale() async {
     final lastStr = await _storage.read(key: _kTokenVerifiedAt);
     final last = lastStr == null ? null : DateTime.tryParse(lastStr);
-    if (last != null && DateTime.now().difference(last).inSeconds < 3600) {
+    final interval = AppConfig.authTokenRefreshIntervalSeconds;
+    if (last != null &&
+        DateTime.now().difference(last).inSeconds < interval) {
       return; // no log here — this is the common case, would fire on every request
     }
     final token = _api.exportAuthToken();
     if (token == null || token.isEmpty) return; // nothing to verify pre-login
-    debugPrint('[auth] token stale (last verified: ${last?.toIso8601String() ?? 'never'}) — calling /auth-service/authenticate');
+    debugPrint(
+        '[auth] token stale (last verified: ${last?.toIso8601String() ?? 'never'}) — calling /auth-service/authenticate');
+    final ok = await tryRefreshToken();
+    if (!ok) {
+      debugPrint(
+          '[auth] proactive refresh failed — leaving token; next 401 will sign out');
+    }
+  }
+
+  /// Refreshes the Bearer token via `POST /auth-service/authenticate`.
+  /// Returns true when the session is still valid (200), false on 401 or
+  /// network/parse failure. Used by the 401 interceptor before sign-out.
+  Future<bool> tryRefreshToken() async {
+    final token = _api.exportAuthToken();
+    if (token == null || token.isEmpty) return false;
     try {
       final resp = await _api.dio.post('/auth-service/authenticate');
+      if (resp.statusCode == 401) {
+        debugPrint('[auth] token refresh returned 401 — session is dead');
+        return false;
+      }
       if (resp.statusCode != 200) {
-        debugPrint('[auth] token validation returned ${resp.statusCode} — leaving token as-is (a real rejection surfaces via onUnauthorized)');
-        return;
+        debugPrint(
+            '[auth] token refresh returned ${resp.statusCode} — not treating as renewed');
+        return false;
       }
       String? newToken;
       final data = resp.data;
@@ -507,25 +538,29 @@ class AuthRepository {
           if (newToken != null) source = 'body.userDetail.authorization';
         }
       }
-      // Fallback: the login endpoint delivers its token via this response
-      // header rather than the body — this endpoint's exact shape wasn't
-      // verified against a live response, so check both.
       if (newToken == null) {
         newToken = resp.headers.value('authorization');
         if (newToken != null) source = 'Authorization response header';
       }
       if (newToken != null && newToken.isNotEmpty) {
         _api.importAuthToken(newToken);
+        if (await isReentryEnabled()) {
+          await _storage.write(key: _kBioAuthToken, value: newToken);
+        }
         debugPrint('[auth] token refreshed from $source');
       } else {
-        debugPrint('[auth] validate call succeeded (200) but no new token found in body or header');
+        debugPrint(
+            '[auth] refresh 200 but no new token in body/header — keeping existing');
       }
       await _storage.write(
         key: _kTokenVerifiedAt,
         value: DateTime.now().toIso8601String(),
       );
+      await touchReentryExpiry();
+      return true;
     } catch (e) {
-      debugPrint('[auth] token validation failed (will retry next request): $e');
+      debugPrint('[auth] token refresh failed: $e');
+      return false;
     }
   }
 
@@ -720,13 +755,16 @@ class AuthRepository {
   }
 
   /// Extends the persisted reentry-session expiry on genuine backend
-  /// activity (called from [ApiClient.onAuthenticatedActivity]). Only
-  /// applies to the synthetic mobile-Bearer-token TTL — a real cookie-issued
-  /// expiry (web flow) already reflects the backend's actual session
-  /// lifetime and is left alone. Throttled so an active session doesn't
-  /// incur a secure-storage write on every single API call.
+  /// activity (called from [ApiClient.onAuthenticatedActivity]).
+  ///
+  /// Mobile Bearer sessions always slide (even if an AuthCookie max-age was
+  /// also observed). Web cookie-only sessions keep the server-issued expiry
+  /// untouched. Throttled so an active session doesn't write secure storage
+  /// on every API call.
   Future<void> touchReentryExpiry() async {
-    if (_api.authCookieExpiry != null) return;
+    final webCookieOnly =
+        _api.authCookieExpiry != null && !_api.hasAuthToken;
+    if (webCookieOnly) return;
     final now = DateTime.now();
     if (_lastReentryTouch != null &&
         now.difference(_lastReentryTouch!) < _reentryTouchThrottle) {

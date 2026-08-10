@@ -21,7 +21,8 @@ class HouseholdMember {
     required this.relationshipToHead,
     this.villageId,
     this.nidScanned = false,
-    this.guardianName,
+    this.guardianId,
+    this.guardianFhirId,
   });
 
   final String? id;
@@ -42,7 +43,12 @@ class HouseholdMember {
   final String relationshipToHead; // 'Head', 'Spouse', 'Child', 'Parent', 'Sibling', 'Other'
   final String? villageId; // Only for external members
   final bool nidScanned;
-  final String? guardianName;
+
+  /// Spice `HouseholdMemberEntity.guardianId` — local member id of guardian.
+  final String? guardianId;
+
+  /// Spice `HouseholdMemberEntity.guardianFhirId` — FHIR id of guardian.
+  final String? guardianFhirId;
 
   HouseholdMember copyWith({
     String? id,
@@ -60,7 +66,8 @@ class HouseholdMember {
     String? relationshipToHead,
     String? villageId,
     bool? nidScanned,
-    String? guardianName,
+    String? guardianId,
+    String? guardianFhirId,
   }) {
     return HouseholdMember(
       id: id ?? this.id,
@@ -78,7 +85,8 @@ class HouseholdMember {
       relationshipToHead: relationshipToHead ?? this.relationshipToHead,
       villageId: villageId ?? this.villageId,
       nidScanned: nidScanned ?? this.nidScanned,
-      guardianName: guardianName ?? this.guardianName,
+      guardianId: guardianId ?? this.guardianId,
+      guardianFhirId: guardianFhirId ?? this.guardianFhirId,
     );
   }
 
@@ -99,7 +107,8 @@ class HouseholdMember {
       'relationshipToHead': relationshipToHead,
       'villageId': villageId,
       'nidScanned': nidScanned,
-      'guardianName': guardianName,
+      'guardianId': guardianId,
+      'guardianFhirId': guardianFhirId,
     };
   }
 
@@ -120,7 +129,8 @@ class HouseholdMember {
       relationshipToHead: json['relationshipToHead'] as String? ?? 'Other',
       villageId: json['villageId'] as String?,
       nidScanned: json['nidScanned'] as bool? ?? false,
-      guardianName: json['guardianName'] as String?,
+      guardianId: json['guardianId'] as String?,
+      guardianFhirId: json['guardianFhirId'] as String?,
     );
   }
 }
@@ -160,7 +170,8 @@ class HouseholdHeadInfo extends HouseholdMember {
     String? relationshipToHead,
     String? villageId,
     bool? nidScanned,
-    String? guardianName,
+    String? guardianId,
+    String? guardianFhirId,
   }) {
     return HouseholdHeadInfo(
       id: id ?? this.id,

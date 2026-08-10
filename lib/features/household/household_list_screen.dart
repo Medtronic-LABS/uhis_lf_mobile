@@ -676,13 +676,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     );
   }
 
-  /// Matches the mockup's search predicate: name, house/household number,
-  /// or village name.
+  /// Search predicate: household/member name or village name.
+  /// Household number is intentionally excluded (product decision).
   bool _matchesSearch(_HouseholdItem h, String query) {
     final villageName = _villageDisplayName(h.village) ?? '';
     final haystack = [
       h.name ?? '',
-      h.householdNo ?? '',
       villageName,
       ...h.members.map((m) => m.name ?? ''),
     ].join(' ').toLowerCase();
@@ -804,11 +803,10 @@ String? _displayRelation(String? relation) {
 
 /// Card for a household — used in the Households tab.
 ///
-/// Self-sufficient, matching the v13 mockup exactly: the household header
-/// (🏠 emoji, head name, house+village, member-count pill), the one flagged/
-/// actionable member inline ([primaryMemberRow]), and — if there are more
-/// members — an expandable "+N other household members" panel. No extra
-/// navigation is needed to see who's in the household.
+/// Self-sufficient household card: the household header (🏠 emoji, head name,
+/// village), the one flagged/actionable member inline ([primaryMemberRow]),
+/// and — if there are more members — an expandable "+N other household
+/// members" panel. No extra navigation is needed to see who's in the household.
 class _HouseholdCard extends StatelessWidget {
   const _HouseholdCard({
     required this.item,
@@ -847,7 +845,6 @@ class _HouseholdCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lc = Theme.of(context).extension<LeapfrogColors>()!;
-    final count = item.memberCount ?? 0;
     // Bare head name (mockup shows just the name, e.g. "Nasrin Begum") — the
     // "'s Household" suffix on `item.name` is this screen's own construction
     // for when no bare head name is available.
@@ -925,25 +922,6 @@ class _HouseholdCard extends StatelessWidget {
                             ),
                           ],
                         ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: lc.aiSurfaceStart,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        HouseholdListStrings.membersCount(count),
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: lc.aiPurple,
-                        ),
                       ),
                     ),
                   ],
@@ -1043,11 +1021,11 @@ class _HouseholdCard extends StatelessWidget {
 }
 
 /// One row in a household card's expanded "other members" panel — initials
-/// avatar, name, relation + age/gender, and a "Registered" tag, matching the
-/// v13 mockup's `otherMembers` treatment. The mockup's static prototype has
-/// no tap action here; this app has a real Patient Details page, so tapping
-/// opens it — real capability shouldn't regress just because the mockup
-/// couldn't demonstrate it.
+/// avatar, name, relation + age/gender, phone, and a "Registered" tag,
+/// matching the v13 mockup's `otherMembers` treatment. The mockup's static
+/// prototype has no tap action here; this app has a real Patient Details
+/// page, so tapping opens it — real capability shouldn't regress just
+/// because the mockup couldn't demonstrate it.
 class _OtherMemberRow extends StatelessWidget {
   const _OtherMemberRow({
     required this.member,
@@ -1075,6 +1053,8 @@ class _OtherMemberRow extends StatelessWidget {
         member.relation,
       if (ageGender.isNotEmpty) ageGender,
     ].whereType<String>().join(' · ');
+    final phone = member.phoneNumber?.trim();
+    final hasPhone = phone != null && phone.isNotEmpty;
 
     final row = InkWell(
       onTap: onTap,
@@ -1121,6 +1101,14 @@ class _OtherMemberRow extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 10.5,
+                        color: lc.textMuted,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (hasPhone)
+                    Text(
+                      phone,
+                      style: AppTextStyles.worklistPhone.copyWith(
                         color: lc.textMuted,
                       ),
                       overflow: TextOverflow.ellipsis,

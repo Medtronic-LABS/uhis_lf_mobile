@@ -54,13 +54,23 @@ class AppConfig {
     defaultValue: '',
   );
 
-  /// Rolling reentry-session TTL (seconds). Each biometric/PIN unlock extends
-  /// the local expiry by this amount from now. Defaults to 14400 s (4 h) to
-  /// match the server's AUTH_TOKEN_TIME_LIMIT_IN_MINUTES=240 setting so the
-  /// local clock does not evict the session before the server does.
+  /// Rolling reentry-session TTL (seconds). Each biometric/PIN unlock and
+  /// authenticated API success extends the local expiry by this amount from
+  /// now. Defaults to 14400 s (4 h) as a max idle window for reentry; the
+  /// Bearer token itself is refreshed more often via
+  /// [authTokenRefreshIntervalSeconds].
   static const int authCookieTtlSeconds = int.fromEnvironment(
     'AUTH_COOKIE_TTL_SECONDS',
     defaultValue: 14400,
+  );
+
+  /// How often to proactively call `/auth-service/authenticate` before an
+  /// API request. Defaults to 2700 s (45 min) so a typical 60-minute server
+  /// token (`AUTH_TOKEN_TIME_LIMIT_IN_MINUTES=60`) is refreshed before it
+  /// dies, instead of waiting for a 401.
+  static const int authTokenRefreshIntervalSeconds = int.fromEnvironment(
+    'AUTH_TOKEN_REFRESH_INTERVAL_SECONDS',
+    defaultValue: 2700,
   );
 
   /// Localized reason shown by Android `BiometricPrompt`.

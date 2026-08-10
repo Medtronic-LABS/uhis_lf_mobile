@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/auth/auth_repository.dart';
@@ -14,6 +15,7 @@ import '../../../core/db/patient_dao.dart';
 import '../../../core/db/roster_revision.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/services/location_service.dart';
+import 'enrollment_dob.dart';
 import 'enrollment_id_number.dart';
 import 'enrollment_mobile_number.dart';
 import 'enrollment_repository.dart';
@@ -45,6 +47,8 @@ class EnrollmentController extends ChangeNotifier {
         _householdDao = householdDao,
         _memberDao = memberDao,
         _patientDao = patientDao;
+
+  static const _uuid = Uuid();
 
   final AuthRepository? _auth;
   final EnrollmentRepository? _repo;
@@ -147,6 +151,9 @@ class EnrollmentController extends ChangeNotifier {
     bool? nidScanned,
   }) {
     _householdHead = HouseholdHeadInfo(
+      // Stable client key so a later infant can select this head as guardian
+      // before local DB ids exist (Spice uses Long member ids).
+      id: _householdHead?.id ?? _uuid.v4(),
       name: name,
       age: age,
       gender: gender,
@@ -166,7 +173,10 @@ class EnrollmentController extends ChangeNotifier {
   /// Add a member to the household.
   void addMember(HouseholdMember member) {
     if (_household == null) return;
-    _members.add(member);
+    final withId = (member.id == null || member.id!.isEmpty)
+        ? member.copyWith(id: _uuid.v4())
+        : member;
+    _members.add(withId);
     notifyListeners();
   }
 
@@ -245,7 +255,12 @@ class EnrollmentController extends ChangeNotifier {
     if (headIdError != null) {
       errors.add(headIdError);
     }
-    if (_householdHead!.maritalStatus.isEmpty) {
+    // Spice: marital status mandatory when age ≥ 14.
+    if (EnrollmentDob.needsMaritalStatus(
+          EnrollmentDob.parse(_householdHead!.dateOfBirth),
+          ageYears: _householdHead!.age,
+        ) &&
+        _householdHead!.maritalStatus.isEmpty) {
       errors.add(EnrollmentStrings.maritalStatusRequiredError);
     }
     // Android member_registration.json: disability mandatory for head too.
@@ -299,7 +314,10 @@ class EnrollmentController extends ChangeNotifier {
       requiredMessage: EnrollmentStrings.mobileNumberRequiredError,
     );
     if (mobileError != null) errors.add(mobileError);
-    if (member.maritalStatus.isEmpty) {
+    // Spice: marital status mandatory when age ≥ 14.
+    final dob = EnrollmentDob.parse(member.dateOfBirth);
+    if (EnrollmentDob.needsMaritalStatus(dob, ageYears: member.age) &&
+        member.maritalStatus.isEmpty) {
       errors.add(EnrollmentStrings.maritalStatusRequiredError);
     }
     final disability = member.disabilityStatus.trim().toLowerCase();
@@ -307,6 +325,11 @@ class EnrollmentController extends ChangeNotifier {
         disability == 'none' ||
         disability == 'absent') {
       errors.add(EnrollmentStrings.disabilityStatusRequiredError);
+    }
+    // Spice: guardian mandatory when age ≤ 2.
+    if (EnrollmentDob.needsGuardian(dob, ageYears: member.age) &&
+        (member.guardianId == null || member.guardianId!.isEmpty)) {
+      errors.add(CommonStrings.required);
     }
 
     return errors;
@@ -501,9 +524,16 @@ class EnrollmentController extends ChangeNotifier {
 
     final membersToSave = <HouseholdMember>[head, ..._members];
     final memberLocalIds = <String>[];
+    // Client enrollment ids → local PKs so guardian pointers resolve like
+    // Android's Long guardianId after sequential member inserts.
+    final clientToLocal = <String, String>{};
 
     for (var i = 0; i < membersToSave.length; i++) {
       final m = membersToSave[i];
+      final clientKey = (m.id != null && m.id!.isNotEmpty) ? m.id! : 'idx-$i';
+      final resolvedGuardianId = m.guardianId == null || m.guardianId!.isEmpty
+          ? null
+          : clientToLocal[m.guardianId!];
       final memberLocalId = await memberDao.insertLocal(
         HouseholdMemberEntity(
           id: '0',
@@ -523,6 +553,8 @@ class EnrollmentController extends ChangeNotifier {
           subVillageName: subVillageName,
           maritalStatus: m.maritalStatus,
           disability: m.disabilityStatus.toLowerCase(),
+          guardianId: resolvedGuardianId,
+          guardianFhirId: m.guardianFhirId,
           isHouseholdHead: i == 0,
           isActive: true,
           isPregnant: false,
@@ -535,6 +567,7 @@ class EnrollmentController extends ChangeNotifier {
       );
       await memberDao.setReferenceId(memberLocalId);
       memberLocalIds.add(memberLocalId);
+      clientToLocal[clientKey] = memberLocalId;
 
       // Patient keyed by stable local member id (never swapped for FHIR).
       final patientRaw = jsonEncode({
@@ -564,6 +597,35 @@ class EnrollmentController extends ChangeNotifier {
           rawJson: patientRaw,
         ),
       ]);
+    }
+
+    // Rewrite in-memory guardian ids to local PKs for the create payload.
+    for (var i = 0; i < _members.length; i++) {
+      final m = _members[i];
+      final resolvedGuardian = m.guardianId == null || m.guardianId!.isEmpty
+          ? null
+          : clientToLocal[m.guardianId!];
+      // Reconstruct so a failed resolve clears the client-uuid guardian pointer
+      // (copyWith cannot assign null over a non-null field).
+      _members[i] = HouseholdMember(
+        id: memberLocalIds[i + 1],
+        name: m.name,
+        age: m.age,
+        gender: m.gender,
+        dateOfBirth: m.dateOfBirth,
+        idType: m.idType,
+        idNumber: m.idNumber,
+        mobileNumber: m.mobileNumber,
+        phoneNumberCategory: m.phoneNumberCategory,
+        mobileAvailable: m.mobileAvailable,
+        maritalStatus: m.maritalStatus,
+        disabilityStatus: m.disabilityStatus,
+        relationshipToHead: m.relationshipToHead,
+        villageId: m.villageId,
+        nidScanned: m.nidScanned,
+        guardianId: resolvedGuardian,
+        guardianFhirId: m.guardianFhirId,
+      );
     }
 
     debugPrint('[EnrollmentController] locally saved: '
