@@ -27,6 +27,26 @@
     "bn": "এআই এসিস্ট্যান্ট",
     "en": "AI Assistant"
   },
+  "BatteryOptimization.body": {
+    "bn": "আপনার ফোন ব্যাকগ্রাউন্ডে এই অ্যাপের সিঙ্ক বন্ধ করে দিতে পারে। ব্যাকগ্রাউন্ডে চলার অনুমতি দিলে আপনার খানা ও ভিজিটের তথ্য হালনাগাদ থাকবে।",
+    "en": "Your phone may stop this app from finishing a sync in the background. Allowing it to run in the background keeps your households and visits up to date."
+  },
+  "BatteryOptimization.couldNotOpen": {
+    "bn": "আপনার ফোনের সেটিংস খোলা যায়নি। আপনি অ্যান্ড্রয়েড সেটিংস থেকে এই অ্যাপের ব্যাকগ্রাউন্ড কার্যকলাপের অনুমতি দিতে পারেন।",
+    "en": "Could not open your phone's settings. You can allow background activity for this app from Android Settings."
+  },
+  "BatteryOptimization.notNow": {
+    "bn": "এখন নয়",
+    "en": "Not now"
+  },
+  "BatteryOptimization.openSettings": {
+    "bn": "সেটিংস খুলুন",
+    "en": "Open settings"
+  },
+  "BatteryOptimization.title": {
+    "bn": "সিঙ্ক চালু রাখুন",
+    "en": "Keep sync running"
+  },
   "BottomNav.patients": {
     "bn": "রোগী",
     "en": "Patients"

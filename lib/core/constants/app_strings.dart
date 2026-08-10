@@ -305,6 +305,30 @@ abstract final class DashboardStrings {
 }
 
 /// Settings menu strings.
+/// Copy for the one-time prompt asking the SK to exempt the app from battery
+/// optimisation, so a multi-minute sync is not killed by the OEM.
+abstract final class BatteryOptimizationStrings {
+  BatteryOptimizationStrings._();
+
+  static String get title =>
+      getTranslatedString('BatteryOptimization.title', 'Keep sync running');
+  static String get body => getTranslatedString(
+        'BatteryOptimization.body',
+        'Your phone may stop this app from finishing a sync in the background. '
+        'Allowing it to run in the background keeps your households and visits '
+        'up to date.',
+      );
+  static String get openSettings => getTranslatedString(
+      'BatteryOptimization.openSettings', 'Open settings');
+  static String get notNow =>
+      getTranslatedString('BatteryOptimization.notNow', 'Not now');
+  static String get couldNotOpen => getTranslatedString(
+        'BatteryOptimization.couldNotOpen',
+        'Could not open your phone\'s settings. You can allow background '
+        'activity for this app from Android Settings.',
+      );
+}
+
 abstract final class SettingsStrings {
   SettingsStrings._();
 
