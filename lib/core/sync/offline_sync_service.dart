@@ -268,9 +268,12 @@ class OfflineSyncService extends ChangeNotifier {
       }
 
       // Step 1: Fetch patients bundle
-      _emitProgress(const SyncProgress(
+      // entityName is interpolated into localized copy by the sync screen and
+      // the foreground-service notification, so it must come from SyncStrings —
+      // a literal here renders English regardless of the selected language.
+      _emitProgress(SyncProgress(
         currentStep: SyncStep.fetchingPatients,
-        entityName: 'patients',
+        entityName: SyncStrings.patients,
       ));
 
       // A full bundle can take minutes to build server-side and is replayed up
@@ -296,9 +299,9 @@ class OfflineSyncService extends ChangeNotifier {
       }
 
       // Step 2: Process and persist bundle (includes households/members if in bundle - Android pattern)
-      _emitProgress(const SyncProgress(
+      _emitProgress(SyncProgress(
         currentStep: SyncStep.processingData,
-        entityName: 'patients',
+        entityName: SyncStrings.patients,
       ));
       debugPrint(
         '[OfflineSyncService] Bundle top-level keys: ${bundle.keys.toList()}',

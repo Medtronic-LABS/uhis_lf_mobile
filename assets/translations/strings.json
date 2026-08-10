@@ -2591,6 +2591,10 @@
     "bn": "🎙 AI স্ক্রাইব — ট্যাপ করুন এবং তাকে কথা বলতে দিন",
     "en": "🎙 AI Scribe — tap and let him speak"
   },
+  "Sync.connectingToServer": {
+    "bn": "সার্ভারে সংযোগ করা হচ্ছে",
+    "en": "Connecting to server"
+  },
   "Sync.dataReady": {
     "bn": "আপনার তথ্য প্রস্তুত",
     "en": "Your data is ready"
@@ -2599,17 +2603,65 @@
     "bn": "যেতে প্রস্তুত",
     "en": "Ready to go"
   },
+  "Sync.downloadingFollowUps": {
+    "bn": "ফলো-আপ ডাউনলোড হচ্ছে",
+    "en": "Downloading follow-ups"
+  },
+  "Sync.downloadingPatients": {
+    "bn": "রোগীদের তথ্য ডাউনলোড হচ্ছে",
+    "en": "Downloading patients"
+  },
+  "Sync.downloadingReferrals": {
+    "bn": "রেফারেল ডাউনলোড হচ্ছে",
+    "en": "Downloading referrals"
+  },
   "Sync.households": {
     "bn": "খানা",
     "en": "households"
+  },
+  "Sync.inProgressStrip": {
+    "bn": "আপনার ডেটা সিঙ্ক হচ্ছে…",
+    "en": "Syncing your data…"
+  },
+  "Sync.notificationChannelName": {
+    "bn": "ডেটা সিঙ্ক",
+    "en": "Data sync"
+  },
+  "Sync.notificationFailedTitle": {
+    "bn": "সিঙ্ক ব্যর্থ হয়েছে",
+    "en": "Sync failed"
+  },
+  "Sync.notificationProgress": {
+    "bn": "{entity} সিঙ্ক হচ্ছে {done}/{total}",
+    "en": "Syncing {entity} {done}/{total}"
+  },
+  "Sync.notificationStarting": {
+    "bn": "আপনার ডেটা সিঙ্ক হচ্ছে…",
+    "en": "Syncing your data…"
+  },
+  "Sync.notificationTitle": {
+    "bn": "আপন সুস্বাস্থ্য",
+    "en": "Apon Sushashthya"
   },
   "Sync.patients": {
     "bn": "রোগী",
     "en": "patients"
   },
+  "Sync.processingData": {
+    "bn": "তথ্য প্রক্রিয়া করা হচ্ছে",
+    "en": "Processing data"
+  },
+  "Sync.readyStatus": {
+    "bn": "প্রস্তুত",
+    "en": "Ready"
+  },
   "Sync.refreshing": {
     "bn": "আপনার ডেটা আপডেট হচ্ছে…",
     "en": "Updating your data…"
+  },
+  "Sync.retryingAttempt": {
+    "bn": "আবার চেষ্টা করা হচ্ছে… ({n}/{of})",
+    "en": "Retrying… ({n} of {of})"
   },
   "Sync.signInAgain": {
     "bn": "আবার সাইন ইন করুন",
