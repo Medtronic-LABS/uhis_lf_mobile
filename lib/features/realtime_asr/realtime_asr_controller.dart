@@ -1,14 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../core/api/realtime_asr_service.dart';
+import '../../core/api/scribe_api_service.dart';
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/audio_sample_dao.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
+import '../scribe/audio_sample_sync_service.dart';
 import '../scribe/form_field_schema_builder.dart';
 import '../scribe/models/ai_extracted_field.dart';
 import '../scribe/scribe_permission_service.dart';
@@ -19,6 +26,33 @@ import 'realtime_asr_channel_io.dart'
 import 'vad_gate.dart';
 
 enum RealtimeAsrState { idle, connecting, listening, stopping, error }
+
+/// One LLM extract call within a RealtimeASR session — used for traceability.
+class _ExtractRecord {
+  _ExtractRecord({
+    required this.sequence,
+    required this.transcriptLen,
+    required this.triggeredBy,
+    required this.startedAt,
+  });
+
+  final int sequence;
+  final int transcriptLen;
+  final String triggeredBy; // "auto" | "stop"
+  final DateTime startedAt;
+  int fieldsExtracted = 0;
+  int? latencyMs;
+  bool isFinal = false;
+
+  Map<String, dynamic> toJson() => {
+        'sequence': sequence,
+        'transcript_len': transcriptLen,
+        'triggered_by': triggeredBy,
+        'fields_extracted': fieldsExtracted,
+        if (latencyMs != null) 'latency_ms': latencyMs,
+        'is_final': isFinal,
+      };
+}
 
 /// Drives one live-listening session against `/scribe/realtime/transcribe`:
 /// mic -> WAV chunks -> WebSocket -> live transcript, plus on-demand
@@ -69,6 +103,32 @@ class RealtimeAsrController extends ChangeNotifier {
   // periodic auto-extract silently no-op for the rest of the session.
   static const Duration _extractionSafetyTimeout = Duration(seconds: 20);
 
+  AudioSampleDao? _sampleDao;
+  UserHierarchyService? _hierarchy;
+  ScribeApiService? _scribeApiService;
+  String? _encounterId;
+  final BytesBuilder _pcmBuffer = BytesBuilder(copy: false);
+
+  void setSampleDao(AudioSampleDao dao) => _sampleDao = dao;
+  void setHierarchyService(UserHierarchyService h) => _hierarchy = h;
+  void setScribeApiService(ScribeApiService api) => _scribeApiService = api;
+
+  // Traceability counters — reset on each start(), posted to backend on stop().
+  String? _sessionId;
+  String? _currentLanguage;
+  String? _currentAssessmentType;
+  int _chunksRaw = 0;
+  int _chunksVadGated = 0;
+  int _chunksSent = 0;
+  int _extractSequence = 0;
+  final List<_ExtractRecord> _extractCalls = [];
+  DateTime? _currentExtractStart;
+
+  // Sarvam chunk correlation: each entry records which client chunk index was
+  // current when Sarvam responded, plus the request_id and transcript text.
+  // Written as a sidecar JSON next to the training WAV file.
+  final List<Map<String, dynamic>> _sarvamEvents = [];
+
   int _chunkCount = 0;
   int _chunkBytes = 0;
   // Rolling window used to detect a "stuck" mic signal — real audio (even
@@ -92,6 +152,8 @@ class RealtimeAsrController extends ChangeNotifier {
   // {"type":"ping"} keepalive, since a long silence now means genuinely no
   // audio traffic flows, which previously never happened on this connection.
   bool _silentSinceLastTick = false;
+
+  bool _isDisposed = false;
 
   WebSocketChannel? _channel;
   StreamSubscription<Uint8List>? _audioSub;
@@ -178,8 +240,23 @@ class RealtimeAsrController extends ChangeNotifier {
     String language = 'bn-IN',
     String? assessmentType,
     List<String>? symptomVocab,
+    String? encounterId,
   }) async {
     if (isActive) return;
+    _encounterId = encounterId;
+    _pcmBuffer.clear();
+    // Reset traceability state for this session.
+    _sessionId = const Uuid().v4();
+    _currentLanguage = language;
+    _currentAssessmentType = assessmentType;
+    _chunksRaw = 0;
+    _chunksVadGated = 0;
+    _chunksSent = 0;
+    _extractSequence = 0;
+    _extractCalls.clear();
+    _sarvamEvents.clear();
+    _currentExtractStart = null;
+    debugPrint('[RealtimeTrace] session start session_id=$_sessionId encounter=$encounterId');
 
     if (!realtimeAsrSupported) {
       _setError(RealtimeAsrStrings.notSupportedOnWeb);
@@ -207,7 +284,7 @@ class RealtimeAsrController extends ChangeNotifier {
     _vadGate = _buildVadGate();
     _silentSinceLastTick = false;
     _state = RealtimeAsrState.connecting;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     final granted = await _perm.ensureMicPermission(ctx);
     if (!granted) {
@@ -235,6 +312,14 @@ class RealtimeAsrController extends ChangeNotifier {
           unawaited(_teardown());
         },
       );
+
+      // Traceability: send session_id + encounter_id so the bridge can create
+      // the session row and link server-side counters to the Flutter session.
+      _send({
+        'type': 'init',
+        'session_id': _sessionId,
+        if (encounterId != null) 'encounter_id': encounterId,
+      });
 
       // Register the schema once, right after connecting and before any
       // audio is captured — a backend with dynamic_form_schema_enabled on
@@ -272,7 +357,7 @@ class RealtimeAsrController extends ChangeNotifier {
       debugPrint('[RealtimeASR] mic stream started');
 
       _state = RealtimeAsrState.listening;
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
 
       _autoExtractTimer = Timer.periodic(_autoExtractInterval, (_) {
         // A gap in "audio" frames is new behaviour now that VadGate withholds
@@ -306,7 +391,7 @@ class RealtimeAsrController extends ChangeNotifier {
     // can take several seconds, during which the banner would otherwise look
     // unchanged and the Stop tap would appear to do nothing.
     _state = RealtimeAsrState.stopping;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     _autoExtractTimer?.cancel();
     _autoExtractTimer = null;
@@ -314,7 +399,8 @@ class RealtimeAsrController extends ChangeNotifier {
     _send({'type': 'flush'});
     await Future.delayed(const Duration(milliseconds: 500));
 
-    extractNow();
+    extractNow(triggeredBy: 'stop');
+    if (_extractCalls.isNotEmpty) _extractCalls.last.isFinal = true;
     final completer = _extractionCompleter;
     if (completer != null) {
       await completer.future.timeout(
@@ -325,11 +411,129 @@ class RealtimeAsrController extends ChangeNotifier {
 
     _send({'type': 'stop'});
     await _teardown();
+
+    // Stage training audio after teardown — mic is fully stopped, buffer is complete.
+    if ((_hierarchy?.featureFlags.voiceSampleCollectionEnabled ?? false) &&
+        _sampleDao != null &&
+        _pcmBuffer.length > 0) {
+      debugPrint('[AudioSample][Live] session ended, buffered ${_pcmBuffer.length}B — staging WAV');
+      unawaited(_stageWavForTraining(
+        _pcmBuffer.takeBytes(),
+        _encounterId,
+        sessionId: _sessionId,
+        chunksRaw: _chunksRaw,
+        sarvamEvents: List<Map<String, dynamic>>.from(_sarvamEvents),
+      ));
+    }
+
+    // Post session traceability summary — fire-and-forget, non-fatal.
+    final sid = _sessionId;
+    final api = _scribeApiService;
+    if (sid != null && api != null) {
+      debugPrint(
+        '[RealtimeTrace] posting session summary session_id=$sid '
+        'chunksRaw=$_chunksRaw vadGated=$_chunksVadGated sent=$_chunksSent '
+        'extracts=${_extractCalls.length}',
+      );
+      unawaited(api.postRealtimeSessionSummary(
+        sessionId: sid,
+        encounterId: _encounterId,
+        language: _currentLanguage ?? 'bn-IN',
+        assessmentType: _currentAssessmentType,
+        clientChunksRaw: _chunksRaw,
+        clientChunksVadGated: _chunksVadGated,
+        clientChunksSent: _chunksSent,
+        extractCalls: _extractCalls.map((r) => r.toJson()).toList(),
+      ));
+    }
+
     _state = RealtimeAsrState.idle;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
   }
 
-  void extractNow() {
+  Future<void> _stageWavForTraining(
+    Uint8List pcmBytes,
+    String? encounterId, {
+    String? sessionId,
+    int chunksRaw = 0,
+    List<Map<String, dynamic>> sarvamEvents = const [],
+  }) async {
+    final dao = _sampleDao;
+    if (dao == null) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final trainingDir = Directory('${dir.path}/training_audio');
+      if (!trainingDir.existsSync()) trainingDir.createSync(recursive: true);
+
+      final sampleId = const Uuid().v4();
+      final wavPath = '${trainingDir.path}/$sampleId.wav';
+
+      // Write WAV file: 44-byte header + raw PCM16LE.
+      final wav = _buildWav(pcmBytes);
+      await File(wavPath).writeAsBytes(wav, flush: true);
+      debugPrint('[AudioSample][Live] WAV written → $wavPath (${wav.length}B)');
+
+      // Sidecar JSON: chunk-index → Sarvam request_id → transcript correlation.
+      final jsonPath = '${trainingDir.path}/$sampleId.json';
+      await File(jsonPath).writeAsString(
+        jsonEncode({
+          'session_id': sessionId,
+          'sample_id': sampleId,
+          'encounter_id': encounterId ?? sampleId,
+          'chunks_raw': chunksRaw,
+          'sarvam_events': sarvamEvents,
+        }),
+        flush: true,
+      );
+      debugPrint(
+        '[AudioSample][Live] sidecar JSON written → $jsonPath '
+        '(${sarvamEvents.length} sarvam events)',
+      );
+
+      final sample = AudioSampleModel(
+        id: sampleId,
+        encounterId: encounterId ?? sampleId,
+        localFilePath: wavPath,
+        scribeMode: 'liveAsr',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      await dao.insertSample(sample);
+      debugPrint('[AudioSample][Live] DB row inserted id=$sampleId encounterId=$encounterId');
+      AudioSampleSyncService.instance.nudge();
+      debugPrint('[AudioSample][Live] sync nudged');
+    } catch (e) {
+      debugPrint('[AudioSample][Live] _stageWavForTraining FAILED (non-fatal): $e');
+    }
+  }
+
+  static Uint8List _buildWav(Uint8List pcm, {int sampleRate = 16000}) {
+    const channels = 1;
+    const bitsPerSample = 16;
+    final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
+    final blockAlign = channels * bitsPerSample ~/ 8;
+
+    final header = ByteData(44)
+      ..setUint8(0, 0x52)..setUint8(1, 0x49)..setUint8(2, 0x46)..setUint8(3, 0x46) // RIFF
+      ..setUint32(4, 36 + pcm.length, Endian.little)
+      ..setUint8(8, 0x57)..setUint8(9, 0x41)..setUint8(10, 0x56)..setUint8(11, 0x45) // WAVE
+      ..setUint8(12, 0x66)..setUint8(13, 0x6d)..setUint8(14, 0x74)..setUint8(15, 0x20) // fmt
+      ..setUint32(16, 16, Endian.little)
+      ..setUint16(20, 1, Endian.little) // PCM
+      ..setUint16(22, channels, Endian.little)
+      ..setUint32(24, sampleRate, Endian.little)
+      ..setUint32(28, byteRate, Endian.little)
+      ..setUint16(32, blockAlign, Endian.little)
+      ..setUint16(34, bitsPerSample, Endian.little)
+      ..setUint8(36, 0x64)..setUint8(37, 0x61)..setUint8(38, 0x74)..setUint8(39, 0x61) // data
+      ..setUint32(40, pcm.length, Endian.little);
+
+    final out = BytesBuilder();
+    out.add(header.buffer.asUint8List());
+    out.add(pcm);
+    return out.toBytes();
+  }
+
+  void extractNow({String triggeredBy = 'auto'}) {
     final transcript = fullTranscript;
     if (transcript.isEmpty) {
       debugPrint('[RealtimeASR] extractNow(): skipped, transcript empty (no segments received yet)');
@@ -348,8 +552,18 @@ class RealtimeAsrController extends ChangeNotifier {
     _lastExtractedTranscript = transcript;
     final completer = Completer<void>();
     _extractionCompleter = completer;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
     debugPrint('[RealtimeASR] extract requested (${transcript.length} chars): "$transcript"');
+
+    // Record this extract call for traceability.
+    final seq = ++_extractSequence;
+    _currentExtractStart = DateTime.now();
+    _extractCalls.add(_ExtractRecord(
+      sequence: seq,
+      transcriptLen: transcript.length,
+      triggeredBy: triggeredBy,
+      startedAt: _currentExtractStart!,
+    ));
 
     final schema = _formSchema;
     if (schema != null && schema.isNotEmpty) {
@@ -368,7 +582,7 @@ class RealtimeAsrController extends ChangeNotifier {
         debugPrint('[RealtimeASR] extractNow(): no reply within ${_extractionSafetyTimeout.inSeconds}s — resetting so future attempts are not blocked');
         _extracting = false;
         _extractionCompleter = null;
-        notifyListeners();
+        if (!_isDisposed) notifyListeners();
       }
     });
   }
@@ -376,6 +590,7 @@ class RealtimeAsrController extends ChangeNotifier {
   void _onAudioChunk(Uint8List pcm) {
     _chunkCount++;
     _chunkBytes += pcm.length;
+    _chunksRaw++;
 
     final amp = _peakAmplitude(pcm);
     if (_chunkCount == 1 || _chunkCount % 20 == 0) {
@@ -396,10 +611,19 @@ class RealtimeAsrController extends ChangeNotifier {
     // samples it needs to ever fire.
     _trackStuckAmplitude(amp);
 
+    // Buffer raw PCM for training audio (before VAD gating — we want full audio).
+    if (_hierarchy?.featureFlags.voiceSampleCollectionEnabled ?? false) {
+      _pcmBuffer.add(pcm);
+    }
+
     final toSend = _vadGate.process(pcm);
-    if (toSend.isEmpty) return;
+    if (toSend.isEmpty) {
+      _chunksVadGated++;
+      return;
+    }
     _silentSinceLastTick = false;
     for (final chunk in toSend) {
+      _chunksSent++;
       final wav = _wrapPcm16Wav(chunk, sampleRate: 16000);
       _send({
         'type': 'audio',
@@ -428,7 +652,7 @@ class RealtimeAsrController extends ChangeNotifier {
       _micWarning = stuckValue == 0
           ? RealtimeAsrStrings.noMicSignal
           : RealtimeAsrStrings.micSignalStuck;
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
     }
   }
 
@@ -465,6 +689,7 @@ class RealtimeAsrController extends ChangeNotifier {
           // shape) instead of free-text chiefComplaints — see
           // ai-scribe-service's app/services/realtime_bridge.py.
           _symptomCodes = RealtimeSymptomCodes.fromJson(symptomsData);
+          _fillLastExtractRecord(fieldsExtracted: _symptomCodes!.hits.length);
         } else {
           _fields = RealtimeClinicalFields.fromJson(symptomsData);
           // Confirmed live: a deployed ai-service with an assessmentType set
@@ -476,25 +701,27 @@ class RealtimeAsrController extends ChangeNotifier {
           if (_formSchema != null && _formSchema!.isNotEmpty) {
             _formFill = _symptomsToFormFill(_fields!);
           }
+          _fillLastExtractRecord(fieldsExtracted: _countClinicalFields(_fields!));
         }
         _extractionCompleter?.complete();
         _extractionCompleter = null;
-        notifyListeners();
+        if (!_isDisposed) notifyListeners();
       case 'form_fill':
         debugPrint('[RealtimeASR] recv form_fill: ${msg['data']}');
         _extracting = false;
         final data = (msg['data'] as Map<String, dynamic>?) ?? const {};
         _formFill = FormPrefillResult.fromJson(data);
+        _fillLastExtractRecord(fieldsExtracted: _formFill!.fields.length);
         _extractionCompleter?.complete();
         _extractionCompleter = null;
-        notifyListeners();
+        if (!_isDisposed) notifyListeners();
       case 'error':
         debugPrint('[RealtimeASR] recv error: ${msg['message']}');
         _extracting = false;
         _errorMessage = msg['message'] as String?;
         _extractionCompleter?.complete();
         _extractionCompleter = null;
-        notifyListeners();
+        if (!_isDisposed) notifyListeners();
       case 'schema_ack':
         // Reply to "init_schema" (or an inline "formSchema" on "extract") —
         // informational only, no state to update here. Logged so a schema
@@ -507,12 +734,26 @@ class RealtimeAsrController extends ChangeNotifier {
       default:
         final data = msg['data'] as Map<String, dynamic>?;
         final transcript = data?['transcript'] as String?;
+        final requestId = data?['request_id'] as String? ?? '';
+        // Record chunk correlation: which client chunk was active when Sarvam responded.
+        _sarvamEvents.add({
+          'at_chunk': _chunksRaw,
+          'request_id': requestId,
+          'transcript': transcript?.trim() ?? '',
+          'ts_ms': DateTime.now().millisecondsSinceEpoch,
+        });
         if (transcript != null && transcript.trim().isNotEmpty) {
-          debugPrint('[RealtimeASR] recv transcript segment: "${transcript.trim()}"');
+          debugPrint(
+            '[RealtimeASR] recv transcript segment: "${transcript.trim()}" '
+            '[chunk=$_chunksRaw request_id=$requestId]',
+          );
           _segments.add(transcript.trim());
-          notifyListeners();
+          if (!_isDisposed) notifyListeners();
         } else {
-          debugPrint('[RealtimeASR] recv (type=${msg['type']}, no transcript): $msg');
+          debugPrint(
+            '[RealtimeASR] recv (type=${msg['type']}, no transcript) '
+            '[chunk=$_chunksRaw request_id=$requestId]: $msg',
+          );
         }
     }
   }
@@ -854,6 +1095,29 @@ class RealtimeAsrController extends ChangeNotifier {
     );
   }
 
+  void _fillLastExtractRecord({required int fieldsExtracted}) {
+    if (_extractCalls.isEmpty) return;
+    final last = _extractCalls.last;
+    if (last.latencyMs != null) return; // already filled
+    final start = _currentExtractStart;
+    if (start != null) {
+      last.latencyMs = DateTime.now().difference(start).inMilliseconds;
+    }
+    last.fieldsExtracted = fieldsExtracted;
+  }
+
+  static int _countClinicalFields(RealtimeClinicalFields f) {
+    var count = 0;
+    if (f.bloodPressure != null && f.bloodPressure!.isNotEmpty) count++;
+    if (f.bloodGlucose != null && f.bloodGlucose!.isNotEmpty) count++;
+    if (f.chiefComplaints.isNotEmpty) count++;
+    if (f.diagnosis != null && f.diagnosis!.isNotEmpty) count++;
+    if (f.comorbidities.isNotEmpty) count++;
+    if (f.complications.isNotEmpty) count++;
+    if (f.clinicalNotes != null && f.clinicalNotes!.isNotEmpty) count++;
+    return count;
+  }
+
   void _onSocketDone() {
     debugPrint('[RealtimeASR] websocket closed (state was $_state)');
     if (_state == RealtimeAsrState.listening || _state == RealtimeAsrState.connecting) {
@@ -863,7 +1127,7 @@ class RealtimeAsrController extends ChangeNotifier {
       // shows idle and looks tappable again.
       unawaited(_teardown());
       _state = RealtimeAsrState.idle;
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
     }
   }
 
@@ -882,7 +1146,7 @@ class RealtimeAsrController extends ChangeNotifier {
   void _setError(String message) {
     _errorMessage = message;
     _state = RealtimeAsrState.error;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
   }
 
   Future<void> _teardown() async {
@@ -947,6 +1211,7 @@ class RealtimeAsrController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _autoExtractTimer?.cancel();
     _audioSub?.cancel();
     _wsSub?.cancel();

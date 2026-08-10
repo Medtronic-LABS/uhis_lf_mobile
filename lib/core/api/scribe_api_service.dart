@@ -666,4 +666,90 @@ class ScribeApiService extends ApiRepository {
       action: 'scribe reject',
     );
   }
+
+  /// Post client-side counters + extract call list for a RealtimeASR session.
+  ///
+  /// Non-fatal — any network error is logged and swallowed; the CHW never sees
+  /// a failure from this. Called after [RealtimeAsrController.stop()] completes.
+  Future<void> postRealtimeSessionSummary({
+    required String sessionId,
+    String? encounterId,
+    String language = 'bn-IN',
+    String? assessmentType,
+    required int clientChunksRaw,
+    required int clientChunksVadGated,
+    required int clientChunksSent,
+    List<Map<String, dynamic>> extractCalls = const [],
+  }) async {
+    try {
+      await _dio.post(
+        _scribePath(Endpoints.realtimeSessionSummary),
+        data: {
+          'session_id': sessionId,
+          if (encounterId != null) 'encounter_id': encounterId,
+          'language': language,
+          if (assessmentType != null) 'assessment_type': assessmentType,
+          'client_chunks_raw': clientChunksRaw,
+          'client_chunks_vad_gated': clientChunksVadGated,
+          'client_chunks_sent': clientChunksSent,
+          'extract_calls': extractCalls,
+        },
+      );
+      debugPrint('[RealtimeTrace] session summary posted session_id=$sessionId extracts=${extractCalls.length}');
+    } catch (e) {
+      debugPrint('[RealtimeTrace] session summary POST failed (non-fatal): $e');
+    }
+  }
+
+  /// Upload a raw training audio sample for field-loss analysis.
+  ///
+  /// Sends `Idempotency-Key: [localSampleId]` so a retry after crash
+  /// between 201 and markUploaded doesn't create a duplicate server record.
+  /// Returns the server sampleId on 201 or 409 (already uploaded).
+  /// Throws [ApiException] on other errors — caller applies exponential backoff.
+  Future<String> uploadAudioSample(
+    File audioFile, {
+    required String localSampleId,
+    required String encounterId,
+    String? fhirEncounterId,
+    String scribeMode = 'formPrefill',
+    String language = 'bn',
+  }) async {
+    final ext = _extensionOf(audioFile.path);
+    final mimeType = ext == 'wav'
+        ? 'audio/wav'
+        : ext == 'm4a' || ext == 'mp4'
+            ? 'audio/mp4'
+            : ext == 'webm'
+                ? 'audio/webm'
+                : 'audio/octet-stream';
+    final form = FormData.fromMap({
+      'audio_file': await MultipartFile.fromFile(
+        audioFile.path,
+        filename: 'training.$ext',
+        contentType: DioMediaType.parse(mimeType),
+      ),
+      'encounter_id': encounterId,
+      if (fhirEncounterId != null) 'fhir_encounter_id': fhirEncounterId,
+      'scribe_mode': scribeMode,
+      'language': language,
+      'app_version': '2.1.0',
+    });
+    final resp = await _dio.post(
+      _scribePath(Endpoints.trainingAudioSample),
+      data: form,
+      options: Options(
+        headers: {'Idempotency-Key': localSampleId},
+        validateStatus: (s) => s != null && s < 500,
+      ),
+    );
+    final code = resp.statusCode ?? 0;
+    if (code == 201 || code == 409) {
+      final body = resp.data as Map<String, dynamic>;
+      final storageKey = body['storageKey'] as String? ?? '';
+      debugPrint('[AudioSample] remote S3 key: $storageKey (status=$code sampleId=${body['sampleId']})');
+      return body['sampleId'] as String;
+    }
+    throw ApiException('training audio upload', code);
+  }
 }

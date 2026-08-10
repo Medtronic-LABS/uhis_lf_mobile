@@ -4,7 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/api/realtime_asr_service.dart';
+import '../../../core/api/scribe_api_service.dart';
+import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/db/app_database.dart';
+import '../../../core/db/audio_sample_dao.dart';
 import '../../../core/preferences/vad_tuning_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
@@ -121,6 +125,9 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       permissionService: ScribePermissionService(),
       vadTuning: context.read<VadTuningNotifier>(),
     );
+    _liveCtrl.setHierarchyService(context.read<UserHierarchyService>());
+    _liveCtrl.setSampleDao(AudioSampleDao(context.read<AppDatabase>()));
+    _liveCtrl.setScribeApiService(context.read<ScribeApiService>());
     _liveCtrl.addListener(_onLiveChanged);
     final assessmentType = widget.assessmentType;
     if (assessmentType != null) {
@@ -206,6 +213,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     _liveCtrl.start(
       assessmentType: widget.assessmentType,
       symptomVocab: widget.symptomVocab,
+      encounterId: widget.encounterId,
     );
   }
 

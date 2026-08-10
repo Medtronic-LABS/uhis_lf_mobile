@@ -22,7 +22,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 41;
+  static const int schemaVersion = 42;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -56,6 +56,7 @@ class AppDatabase {
   static const String tableTreatmentDetails = 'treatment_details';
   static const String tableRxBuddyCheckins = 'rx_buddy_checkins';
   static const String tableHealthFacilities = 'health_facilities';
+  static const String tableAudioSamples = 'audio_samples';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -736,6 +737,33 @@ class AppDatabase {
     await db.execute(
         'CREATE INDEX idx_health_facilities_default '
         'ON $tableHealthFacilities(is_default DESC)');
+
+    // v42 — training audio sample queue for voice sample collection.
+    await db.execute('''
+      CREATE TABLE $tableAudioSamples (
+        id TEXT PRIMARY KEY,
+        encounter_id TEXT NOT NULL,
+        fhir_encounter_id TEXT,
+        local_file_path TEXT NOT NULL,
+        scribe_mode TEXT NOT NULL DEFAULT 'formPrefill',
+        language TEXT NOT NULL DEFAULT 'bn',
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at INTEGER,
+        created_at INTEGER NOT NULL
+      )''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audio_samples_status '
+      'ON $tableAudioSamples(upload_status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audio_samples_encounter '
+      'ON $tableAudioSamples(encounter_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audio_samples_retry '
+      'ON $tableAudioSamples(next_retry_at)',
+    );
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -1855,6 +1883,33 @@ class AppDatabase {
         'from $tablePregnancySnapshot',
       );
     }
+    if (from < 42) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableAudioSamples (
+          id TEXT PRIMARY KEY,
+          encounter_id TEXT NOT NULL,
+          fhir_encounter_id TEXT,
+          local_file_path TEXT NOT NULL,
+          scribe_mode TEXT NOT NULL DEFAULT 'formPrefill',
+          language TEXT NOT NULL DEFAULT 'bn',
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          next_retry_at INTEGER,
+          created_at INTEGER NOT NULL
+        )''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_audio_samples_status '
+        'ON $tableAudioSamples(upload_status)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_audio_samples_encounter '
+        'ON $tableAudioSamples(encounter_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_audio_samples_retry '
+        'ON $tableAudioSamples(next_retry_at)',
+      );
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -1871,7 +1926,7 @@ class AppDatabase {
     tableChatMessages, tableCoachingFaqs,
     tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
     tableTreatmentDetails, tableRxBuddyCheckins,
-    tableHealthFacilities,
+    tableHealthFacilities, tableAudioSamples,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

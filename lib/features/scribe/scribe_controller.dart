@@ -5,12 +5,16 @@ import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/api/scribe_api_service.dart';
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/audio_sample_dao.dart';
 import '../../core/errors/domain_exceptions.dart';
 import '../visit/triage/ai_scribe_triage_vocab.dart';
 import '../visit/triage/triage_transcript_matcher.dart';
+import 'audio_sample_sync_service.dart';
 import 'form_field_schema_builder.dart';
 import 'models/ai_extracted_field.dart';
 import 'scribe_permission_service.dart';
@@ -87,6 +91,16 @@ class ScribeController extends ChangeNotifier {
   ScribeMode _currentMode = ScribeMode.soap;
   List<String> _currentProgrammes = const [];
   String? _triageNotes;
+
+  AudioSampleDao? _sampleDao;
+  UserHierarchyService? _hierarchy;
+
+  /// Called once at app startup by the DI layer to inject the DAO.
+  void setSampleDao(AudioSampleDao dao) => _sampleDao = dao;
+
+  /// Inject hierarchy service so the controller can read feature flags.
+  void setHierarchyService(UserHierarchyService hierarchy) =>
+      _hierarchy = hierarchy;
 
   /// Set before starting a form recording to include Step 1 extra symptom
   /// notes in the SOAP generation context.
@@ -181,6 +195,24 @@ class ScribeController extends ChangeNotifier {
       patientId: patientId,
       encounterId: encounterId,
       mode: ScribeMode.triage,
+    );
+  }
+
+  /// Start recording for form prefill mode (Step 2, VisitFormScreen).
+  Future<void> startRecordingForFormPrefill({
+    String? patientId,
+    String? encounterId,
+    required List<FormFieldSchema> formSchema,
+    List<String> programmes = const [],
+  }) async {
+    _currentMode = ScribeMode.formPrefill;
+    _currentFormSchema = formSchema;
+    _currentProgrammes = programmes;
+
+    await _startRecordingInternal(
+      patientId: patientId,
+      encounterId: encounterId,
+      mode: ScribeMode.formPrefill,
     );
   }
 
@@ -327,12 +359,23 @@ class ScribeController extends ChangeNotifier {
       notifyListeners();
 
       _startPolling(jobId);
+
+      // Stage a copy for training BEFORE finally{} deletes the original.
+      final flagOn =
+          _hierarchy?.featureFlags.voiceSampleCollectionEnabled ?? false;
+      debugPrint(
+          '[AudioSample] flag=$flagOn dao=${_sampleDao != null} path=$effectivePath');
+      if (flagOn && _sampleDao != null) {
+        unawaited(_stageAudioForTraining(effectivePath, encounterId: encounterId));
+      }
     } catch (e) {
       _setError(NetworkErrorMapper.friendly(e));
     } finally {
       // Clean up local audio file — audio lives on the service S3, not device.
       try {
         if (_recordingPath != null) {
+          final size = await File(_recordingPath!).length().catchError((_) => 0);
+          debugPrint('[AudioSample] original deleted: $_recordingPath size=${size}B');
           await File(_recordingPath!).delete();
         }
       } catch (_) {}
@@ -393,6 +436,47 @@ class ScribeController extends ChangeNotifier {
       mode: mode ?? _currentMode,
     );
     notifyListeners();
+  }
+
+  // ── Training audio staging ────────────────────────────────────────────────
+
+  /// Copies [sourcePath] into a persistent training dir and enqueues the row
+  /// for background upload. Non-fatal — any failure is logged and swallowed so
+  /// it never surfaces to the CHW or blocks the clinical flow.
+  Future<void> _stageAudioForTraining(
+    String sourcePath, {
+    String? encounterId,
+  }) async {
+    final dao = _sampleDao;
+    if (dao == null) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final trainingDir = Directory('${dir.path}/training_audio');
+      if (!trainingDir.existsSync()) trainingDir.createSync(recursive: true);
+
+      final ext = sourcePath.contains('.')
+          ? sourcePath.substring(sourcePath.lastIndexOf('.'))
+          : '.m4a';
+      final sampleId = const Uuid().v4();
+      final copyPath = '${trainingDir.path}/$sampleId$ext';
+
+      await File(sourcePath).copy(copyPath);
+      debugPrint('[AudioSample] file copied → $copyPath');
+
+      final sample = AudioSampleModel(
+        id: sampleId,
+        encounterId: encounterId ?? sampleId,
+        localFilePath: copyPath,
+        scribeMode: 'formPrefill',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      await dao.insertSample(sample);
+      debugPrint('[AudioSample] DB row inserted id=$sampleId encounterId=$encounterId');
+      AudioSampleSyncService.instance.nudge();
+      debugPrint('[AudioSample] sync nudged');
+    } catch (e) {
+      debugPrint('[AudioSample] _stageAudioForTraining FAILED (non-fatal): $e');
+    }
   }
 
   // ── Form prefill field management ─────────────────────────────────────────

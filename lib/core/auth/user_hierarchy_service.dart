@@ -1,7 +1,11 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
+import '../config/app_config.dart';
 import '../db/health_facility_dao.dart';
 import 'auth_repository.dart';
 
@@ -228,6 +232,24 @@ class HealthFacilityRef {
 // Service
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Server-side feature flags fetched from `GET /ai-scribe/config` after login.
+///
+/// All flags default to the safe/off position so an unreachable server never
+/// enables a half-baked feature on-device.
+class FeatureFlags {
+  const FeatureFlags({this.voiceSampleCollectionEnabled = false});
+
+  factory FeatureFlags.fromJson(Map<String, dynamic> json) => FeatureFlags(
+        voiceSampleCollectionEnabled:
+            json['voice_sample_collection_enabled'] as bool? ?? false,
+      );
+
+  /// Whether raw audio should be staged for backend training analysis.
+  final bool voiceSampleCollectionEnabled;
+
+  static const FeatureFlags defaults = FeatureFlags();
+}
+
 /// Fetches and caches the full static-data hierarchy from
 /// `POST /spice-service/static-data/user-data`.
 ///
@@ -263,6 +285,7 @@ class UserHierarchyService extends ChangeNotifier {
   SkProfile? _skProfile;
   List<int> _workflowIds = const [];
   HealthFacilityRef? _defaultFacility;
+  FeatureFlags _featureFlags = FeatureFlags.defaults;
   bool _loading = false;
   String? _error;
 
@@ -280,6 +303,7 @@ class UserHierarchyService extends ChangeNotifier {
   SkProfile? get skProfile => _skProfile;
   List<int> get workflowIds => _workflowIds;
   HealthFacilityRef? get defaultFacility => _defaultFacility;
+  FeatureFlags get featureFlags => _featureFlags;
   bool get loading => _loading;
   String? get error => _error;
 
@@ -333,6 +357,8 @@ class UserHierarchyService extends ChangeNotifier {
       await _persistSideEffectsFromNetwork(entity);
       await _persistHierarchyCache();
       _ready = true;
+      // Fire-and-forget: flags failure must never fail the hierarchy load.
+      unawaited(_fetchFeatureFlags());
 
       debugPrint(
           '[UserHierarchyService] Loaded: ${_ssWorkers!.length} SS, '
@@ -531,6 +557,38 @@ class UserHierarchyService extends ChangeNotifier {
     return true;
   }
 
+  /// Fetches server-side feature flags from [Endpoints.aiScribeConfig].
+  ///
+  /// Non-fatal — any error is logged and the defaults (all flags off) remain.
+  Future<void> _fetchFeatureFlags() async {
+    try {
+      // Use AI service base URL (not UHIS backend) — config lives on leapfrog-ai-services.
+      final aiBase = AppConfig.scribeBaseUrl.replaceAll(RegExp(r'/+$'), '');
+      // Strip /ai-scribe prefix when hitting the service directly (AI_SERVICE_URL set).
+      const rawPath = Endpoints.aiScribeConfig;
+      final configPath = AppConfig.aiServiceBaseUrl.isNotEmpty &&
+              rawPath.startsWith('/ai-scribe')
+          ? rawPath.substring('/ai-scribe'.length)
+          : rawPath;
+      debugPrint('[AudioSample] fetching feature flags from $aiBase$configPath');
+      final tempDio = Dio(BaseOptions(
+        baseUrl: aiBase,
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ));
+      final resp = await tempDio.get(configPath);
+      final data = resp.data;
+      if (data is Map) {
+        _featureFlags = FeatureFlags.fromJson(Map<String, dynamic>.from(data));
+        notifyListeners();
+        debugPrint('[UserHierarchyService] FeatureFlags: '
+            'voiceSampleCollection=${_featureFlags.voiceSampleCollectionEnabled}');
+      }
+    } catch (e) {
+      debugPrint('[UserHierarchyService] _fetchFeatureFlags failed (non-fatal): $e');
+    }
+  }
+
   void invalidate() {
     _ssWorkers = null;
     _villages = null;
@@ -538,6 +596,7 @@ class UserHierarchyService extends ChangeNotifier {
     _skProfile = null;
     _workflowIds = const [];
     _defaultFacility = null;
+    _featureFlags = FeatureFlags.defaults;
     _error = null;
     _ready = false;
     _inflightFetch = null;

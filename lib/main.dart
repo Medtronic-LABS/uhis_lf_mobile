@@ -82,6 +82,7 @@ import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
+import 'features/scribe/audio_sample_sync_service.dart';
 
 
 Future<void> main() async {
@@ -107,6 +108,7 @@ Future<void> main() async {
     }
     throw e!;
   });
+  AudioSampleSyncService.init(db: appDb, api: ScribeApiService(api));
   final authState = AuthState(
     authRepo,
     biometric,
