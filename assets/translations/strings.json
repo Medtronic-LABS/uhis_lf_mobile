@@ -2788,8 +2788,8 @@
     "en": "We couldn't finish downloading your data."
   },
   "Sync.title": {
-    "bn": "আপনার ওয়ার্ড সেট আপ হচ্ছে",
-    "en": "Setting up your ward"
+    "bn": "আপনার তথ্য সেট আপ হচ্ছে",
+    "en": "Setting up your data"
   },
   "Teleconsult.comingSoon": {
     "bn": "শীঘ্রই আসছে",
@@ -11120,8 +11120,8 @@
     "en": "Verify fingerprint"
   },
   "verifyToAccess": {
-    "bn": "আপনার ওয়ার্ড ড্যাশবোর্ড দেখতে আপনার পরিচয় যাচাই করুন।",
-    "en": "Verify your identity to access your ward dashboard."
+    "bn": "আপনার ড্যাশবোর্ড দেখতে আপনার পরিচয় যাচাই করুন।",
+    "en": "Verify your identity to access your dashboard."
   },
   "versionLabel": {
     "bn": "সংস্করণ {version}",
