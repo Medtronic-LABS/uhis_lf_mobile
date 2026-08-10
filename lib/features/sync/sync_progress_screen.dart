@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../app/post_sync_refresher.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
@@ -13,9 +14,6 @@ import '../../core/sync/offline_push_service.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
-import '../dashboard/mission_dashboard_repository.dart';
-import '../referral/referral_repository.dart';
-import '../worklist/worklist_repository.dart';
 
 /// Full-screen loading indicator shown during initial data sync after login.
 ///
@@ -203,14 +201,12 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     });
     
     try {
-      // Recompute risk scores and next-due-at for proper worklist sorting
-      final worklist = context.read<WorklistRepository>();
-      await worklist.recomputeAllAfterSync();
+      // Delegates to PostSyncRefresher rather than repeating the recompute
+      // sequence: it also runs on connectivity-triggered syncs that never show
+      // this screen, and its guard means the two paths cannot recompute twice
+      // for the same login.
+      await context.read<PostSyncRefresher>().refreshNow();
 
-      // CCE: score SLA / priority on referrals just ingested from sync.
-      if (!mounted) return;
-      await context.read<ReferralRepository>().recomputeAllAfterSync();
-      
       if (!mounted) return;
       setState(() => _preparePhase = _PreparePhase.dashboard);
       
@@ -222,13 +218,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       // pre-warm) is what actually notifies that listener, so the dashboard
       // re-renders with this session's data instead of whatever it last
       // showed before this login.
-      final missionRepo = context.read<MissionDashboardRepository>();
-      final encounterDao = context.read<EncounterDao>();
-
-      await Future.wait([
-        missionRepo.refresh(),
-        encounterDao.completedTodayPatientIds(),
-      ]);
+      // refreshNow() above already refreshed the mission repo; only the
+      // encounter pre-warm is left to do here.
+      await context.read<EncounterDao>().completedTodayPatientIds();
       
       debugPrint('[Sync] Dashboard data prepared');
     } catch (e) {
