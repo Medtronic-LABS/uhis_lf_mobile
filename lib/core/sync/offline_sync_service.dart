@@ -11,7 +11,6 @@ import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../auth/user_hierarchy_service.dart';
 import '../config/app_config.dart';
-import '../constants/app_strings.dart';
 import '../errors/domain_exceptions.dart';
 import '../models/assessment_history_item.dart';
 import '../db/app_database.dart';
@@ -516,6 +515,21 @@ class OfflineSyncService extends ChangeNotifier {
   }) async {
     if (bundle.isEmpty) return const _PersistTotals();
 
+    // ── Phase timing (diagnostic) ────────────────────────────────────────────
+    // The persist phase measured ~46 s on a Pixel 10a for 1398 households /
+    // 3566 members. Before optimising or building a determinate progress bar,
+    // measure where the time actually goes rather than inferring it from log
+    // timestamps. Emits one line per phase plus a total.
+    final persistWatch = Stopwatch()..start();
+    var lastMark = 0;
+    void mark(String phase, [int rows = -1]) {
+      final now = persistWatch.elapsedMilliseconds;
+      final took = now - lastMark;
+      lastMark = now;
+      final count = rows >= 0 ? ' rows=$rows' : '';
+      debugPrint('[PersistTiming] $phase ${took}ms$count (cumulative ${now}ms)');
+    }
+
     // Log bundle keys for debugging
     debugPrint('[OfflineSyncService] Bundle keys: ${bundle.keys.toList()}');
 
@@ -698,7 +712,9 @@ class OfflineSyncService extends ChangeNotifier {
     Map<String, String> hhFhirToLocal = {};
     final memberFhirToLocal = <String, String>{};
     if (households.isNotEmpty && _households != null) {
+      mark('parse', households.length + members.length);
       hhFhirToLocal = await _households.upsertManyFromBE(households);
+      mark('households', households.length);
     }
     var persistedMembers = 0;
     var orphanMembers = 0;
@@ -731,7 +747,9 @@ class OfflineSyncService extends ChangeNotifier {
       // members.patient_id must equal the local key the patients row uses, or
       // the household screens (which look programmes/assessments up by it) and
       // getByPatientId() find nothing.
+      mark('members+patientBridge', members.length);
       await _members.backfillPatientIds();
+      mark('backfillPatientIds');
       debugPrint(
         '[OfflineSyncService] Members persisted: $persistedMembers '
         '($orphanMembers dropped — household FHIR id not resolvable)',
@@ -913,10 +931,13 @@ class OfflineSyncService extends ChangeNotifier {
 
     // Upsert patients instead of clear+insert to preserve any existing rows.
     // The upsert handles both new inserts and updates to existing rows.
+    mark('programmeInference');
     await _patients.upsertMany(patients);
+    mark('patients', patients.length);
     for (final entry in programmes.entries) {
       await _programmes.replaceFor(entry.key, entry.value);
     }
+    mark('programmes', programmes.length);
     // Remap follow-up patientIds through the member→BRN translation built above
     // so they match the IDs stored in the patients table.
     final remappedFollowUps = followUps.map((row) {
@@ -926,8 +947,11 @@ class OfflineSyncService extends ChangeNotifier {
           : row;
     }).toList();
     await _followUps.upsertMany(remappedFollowUps);
+    mark('followUps', remappedFollowUps.length);
     await _immunisations.upsertMany(immunisations);
+    mark('immunisations', immunisations.length);
     await _assessments.upsertMany(assessments);
+    mark('assessments', assessments.length);
 
     // CCE: project open follow-up referrals into the `referrals` table.
     final patientById = <String, Patient>{
@@ -1045,6 +1069,9 @@ class OfflineSyncService extends ChangeNotifier {
         }
       }
     }
+
+    mark('tail(referrals/pregnancy/treatment)');
+    debugPrint('[PersistTiming] TOTAL ${persistWatch.elapsedMilliseconds}ms');
 
     return _PersistTotals(
       patients: patients.length,
