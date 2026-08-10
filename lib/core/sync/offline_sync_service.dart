@@ -268,12 +268,12 @@ class OfflineSyncService extends ChangeNotifier {
       }
 
       // Step 1: Fetch patients bundle
-      // entityName is interpolated into localized copy by the sync screen and
-      // the foreground-service notification, so it must come from SyncStrings —
-      // a literal here renders English regardless of the selected language.
-      _emitProgress(SyncProgress(
+      // Emits data only — never localized copy. This object outlives the
+      // language-keyed MaterialApp remount (this service is an app-level
+      // singleton above it), so text localized here would stay frozen in the
+      // old language after the SK switches. The UI localizes at build.
+      _emitProgress(const SyncProgress(
         currentStep: SyncStep.fetchingPatients,
-        entityName: SyncStrings.patients,
       ));
 
       // A full bundle can take minutes to build server-side and is replayed up
@@ -285,7 +285,8 @@ class OfflineSyncService extends ChangeNotifier {
         if (path != Endpoints.offlineSyncFetch) return;
         _emitProgress(SyncProgress(
           currentStep: SyncStep.fetchingPatients,
-          entityName: SyncStrings.retryingAttempt(attempt, maxAttempts),
+          retryAttempt: attempt,
+          retryMaxAttempts: maxAttempts,
         ));
       };
       try {
@@ -299,9 +300,8 @@ class OfflineSyncService extends ChangeNotifier {
       }
 
       // Step 2: Process and persist bundle (includes households/members if in bundle - Android pattern)
-      _emitProgress(SyncProgress(
+      _emitProgress(const SyncProgress(
         currentStep: SyncStep.processingData,
-        entityName: SyncStrings.patients,
       ));
       debugPrint(
         '[OfflineSyncService] Bundle top-level keys: ${bundle.keys.toList()}',

@@ -192,6 +192,12 @@ class SyncForegroundController {
   /// "households 240 / 1200" while counts are known, otherwise the step label
   /// alone. Copy comes from [SyncStrings]; nothing user-facing is built here.
   String _notificationText(SyncProgress progress) {
+    if (progress.isRetrying) {
+      return SyncStrings.retryingAttempt(
+        progress.retryAttempt!,
+        progress.retryMaxAttempts!,
+      );
+    }
     final label = progress.entityName.isNotEmpty
         ? progress.entityName
         : progress.currentStep.label;

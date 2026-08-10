@@ -40,7 +40,16 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
   SyncReport? _report;
   bool _syncStarted = false;
   bool _preparingDashboard = false;
-  String _preparingMessage = '';
+  /// Which prepare step is running. An enum, not a localized string: a string
+  /// stored here is frozen in the language it was built in, and the SK can
+  /// switch language mid-sync.
+  _PreparePhase? _preparePhase;
+
+  String get _preparingMessage => switch (_preparePhase) {
+        _PreparePhase.visits => SyncStrings.preparingVisits,
+        _PreparePhase.dashboard => SyncStrings.preparingDashboard,
+        null => '',
+      };
   /// True when sync stopped because the session has no auth credentials —
   /// user must re-login; do not offer "continue offline".
   bool _blockedNoAuth = false;
@@ -190,7 +199,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     
     setState(() {
       _preparingDashboard = true;
-      _preparingMessage = SyncStrings.preparingVisits;
+      _preparePhase = _PreparePhase.visits;
     });
     
     try {
@@ -203,7 +212,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       await context.read<ReferralRepository>().recomputeAllAfterSync();
       
       if (!mounted) return;
-      setState(() => _preparingMessage = SyncStrings.preparingDashboard);
+      setState(() => _preparePhase = _PreparePhase.dashboard);
       
       // Pre-load mission queue and referral summary. DashboardScreen lives
       // inside a StatefulShellRoute.indexedStack, so its State (and the
@@ -385,8 +394,8 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               if (!hasError && !_progress.isComplete && _progress.itemsTotal > 0) ...[
                 const SizedBox(height: 8),
                 Text(
-                  SyncStrings.progressNamed(
-                    _progress.entityName,
+                  SyncStrings.stripProgress(
+                    _progress.currentStep.label,
                     _progress.itemsDone,
                     _progress.itemsTotal,
                   ),
@@ -600,3 +609,7 @@ class _SyncStatChip extends StatelessWidget {
     );
   }
 }
+
+/// Post-sync preparation steps. Kept as an enum so the visible message is
+/// localized at build time and follows a mid-sync language switch.
+enum _PreparePhase { visits, dashboard }

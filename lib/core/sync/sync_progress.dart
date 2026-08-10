@@ -13,15 +13,29 @@ class SyncProgress {
     this.entityName = '',
     this.error,
     this.isComplete = false,
+    this.retryAttempt,
+    this.retryMaxAttempts,
   });
 
   final SyncStep currentStep;
   final int totalSteps;
   final int itemsDone;
   final int itemsTotal;
+  /// Free-form label. Must NOT hold localized copy: this object outlives the
+  /// language-keyed MaterialApp remount (OfflineSyncService is an app-level
+  /// singleton above it), so anything localized at emit time stays frozen in
+  /// the old language after a switch. Emitters pass data; the UI localizes at
+  /// build. See [retryAttempt].
   final String entityName;
   final String? error;
   final bool isComplete;
+
+  /// 1-based attempt currently being retried, or null when not retrying.
+  /// An int rather than a message for the reason given on [entityName].
+  final int? retryAttempt;
+  final int? retryMaxAttempts;
+
+  bool get isRetrying => retryAttempt != null && retryMaxAttempts != null;
 
   /// 0.0 to 1.0 overall progress.
   double get overallProgress {
@@ -42,6 +56,8 @@ class SyncProgress {
     String? entityName,
     String? error,
     bool? isComplete,
+    int? retryAttempt,
+    int? retryMaxAttempts,
   }) =>
       SyncProgress(
         currentStep: currentStep ?? this.currentStep,
@@ -51,6 +67,8 @@ class SyncProgress {
         entityName: entityName ?? this.entityName,
         error: error,
         isComplete: isComplete ?? this.isComplete,
+        retryAttempt: retryAttempt ?? this.retryAttempt,
+        retryMaxAttempts: retryMaxAttempts ?? this.retryMaxAttempts,
       );
 
   static const SyncProgress initial = SyncProgress();

@@ -57,6 +57,13 @@ class _StripBody extends StatelessWidget {
   /// "রোগী"/"patients" and told nobody anything. Counts are appended only when
   /// the total is known.
   String _message() {
+    // Retrying is the more useful thing to say while it is happening.
+    if (progress.isRetrying) {
+      return SyncStrings.retryingAttempt(
+        progress.retryAttempt!,
+        progress.retryMaxAttempts!,
+      );
+    }
     final label = progress.currentStep.label;
     if (label.isEmpty) return SyncStrings.inProgressStrip;
     if (progress.itemsTotal > 0) {
