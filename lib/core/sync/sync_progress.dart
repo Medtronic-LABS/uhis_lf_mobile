@@ -15,6 +15,8 @@ class SyncProgress {
     this.isComplete = false,
     this.retryAttempt,
     this.retryMaxAttempts,
+    this.hasChanges = true,
+    this.persistPhase,
   });
 
   final SyncStep currentStep;
@@ -37,6 +39,24 @@ class SyncProgress {
 
   bool get isRetrying => retryAttempt != null && retryMaxAttempts != null;
 
+  /// Which part of the local write is running, when [currentStep] is
+  /// [SyncStep.processingData].
+  ///
+  /// An enum, not a label: this object outlives the language-keyed MaterialApp
+  /// remount, so text stored here would freeze in the emitting language. The
+  /// UI resolves it at build (see SyncPersistPhaseX.label).
+  final SyncPersistPhase? persistPhase;
+
+  /// Whether this sync actually wrote anything.
+  ///
+  /// A warm pull that finds nothing new still completes, and the derived-data
+  /// recompute it would trigger walks every patient — measured at **19 s for
+  /// 3566 patients after a 1.3 s no-op sync**. Since connectivity changes fire
+  /// a sync on every network flap, ungated that is near-continuous CPU and
+  /// battery burn recomputing values that cannot have changed. Defaults true so
+  /// any other completion path still refreshes.
+  final bool hasChanges;
+
   /// 0.0 to 1.0 overall progress.
   double get overallProgress {
     if (isComplete) return 1.0;
@@ -58,6 +78,8 @@ class SyncProgress {
     bool? isComplete,
     int? retryAttempt,
     int? retryMaxAttempts,
+    bool? hasChanges,
+    SyncPersistPhase? persistPhase,
   }) =>
       SyncProgress(
         currentStep: currentStep ?? this.currentStep,
@@ -69,18 +91,38 @@ class SyncProgress {
         isComplete: isComplete ?? this.isComplete,
         retryAttempt: retryAttempt ?? this.retryAttempt,
         retryMaxAttempts: retryMaxAttempts ?? this.retryMaxAttempts,
+        hasChanges: hasChanges ?? this.hasChanges,
+        persistPhase: persistPhase ?? this.persistPhase,
       );
 
   static const SyncProgress initial = SyncProgress();
 
-  static SyncProgress completed() => const SyncProgress(
+  static SyncProgress completed({bool hasChanges = true}) => SyncProgress(
         currentStep: SyncStep.done,
         isComplete: true,
+        hasChanges: hasChanges,
       );
 
   static SyncProgress failed(String message) => SyncProgress(
         error: message,
       );
+}
+
+/// Sub-phases of the local write, reported while [SyncStep.processingData] is
+/// current.
+///
+/// The persist runs 45-66 s on a Pixel 10a for 1398 households / 3566 members
+/// — long enough that a bare spinner tells the SK nothing about whether the app
+/// is working or wedged. Each phase has a row count known before it starts, so
+/// progress here is honest rather than decorative (unlike the server fetch,
+/// whose duration nobody can predict).
+enum SyncPersistPhase {
+  households,
+  members,
+  patients,
+  programmes,
+  followUps,
+  finalising,
 }
 
 /// Discrete steps in the sync process.
@@ -127,4 +169,17 @@ extension SyncStepX on SyncStep {
         return '✅';
     }
   }
+}
+
+/// Localized label for each persist phase. Resolved at build time so a
+/// mid-sync language switch is followed, matching SyncStepX.label.
+extension SyncPersistPhaseX on SyncPersistPhase {
+  String get label => switch (this) {
+        SyncPersistPhase.households => SyncStrings.savingHouseholds,
+        SyncPersistPhase.members => SyncStrings.savingMembers,
+        SyncPersistPhase.patients => SyncStrings.savingPatients,
+        SyncPersistPhase.programmes => SyncStrings.savingProgrammes,
+        SyncPersistPhase.followUps => SyncStrings.savingFollowUps,
+        SyncPersistPhase.finalising => SyncStrings.finalising,
+      };
 }

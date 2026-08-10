@@ -129,8 +129,48 @@ class OfflineSyncService extends ChangeNotifier {
   SyncProgress _progress = SyncProgress.initial;
   SyncProgress get progress => _progress;
 
+  /// Last persist emission, used to throttle. Unthrottled, the members loop
+  /// alone would emit 3566 events — each a setState on the sync screen, a strip
+  /// rebuild and a MethodChannel hop to the notification, which Android
+  /// rate-limits to roughly one update per second anyway.
+  DateTime? _lastPersistEmit;
+  static const _persistEmitInterval = Duration(milliseconds: 250);
+
+  /// Reports progress inside the local write. [done] == [total] always emits,
+  /// so a phase never appears to stall just short of finishing.
+  void _emitPersistProgress(
+    SyncPersistPhase phase,
+    int done,
+    int total, {
+    bool force = false,
+  }) {
+    final now = DateTime.now();
+    final due = force ||
+        done >= total ||
+        _lastPersistEmit == null ||
+        now.difference(_lastPersistEmit!) >= _persistEmitInterval;
+    if (!due) return;
+    _lastPersistEmit = now;
+    _emitProgress(SyncProgress(
+      currentStep: SyncStep.processingData,
+      persistPhase: phase,
+      itemsDone: done,
+      itemsTotal: total,
+    ));
+  }
+
   void _emitProgress(SyncProgress p) {
     _progress = p;
+    // Every state transition is logged. Without this a missing downstream
+    // reaction (e.g. PostSyncRefresher not firing) is undiagnosable: the
+    // absence of a completion event and the absence of a *reaction* to one
+    // look identical in logcat.
+    debugPrint(
+      '[SyncProgress] step=${p.currentStep.name} '
+      'complete=${p.isComplete} error=${p.hasError} '
+      'items=${p.itemsDone}/${p.itemsTotal}'
+      '${p.isRetrying ? ' retry=${p.retryAttempt}/${p.retryMaxAttempts}' : ''}',
+    );
     _progressController.add(p);
     notifyListeners();
   }
@@ -397,12 +437,24 @@ class OfflineSyncService extends ChangeNotifier {
       // Server rows just landed — nudge any mounted roster screen to re-query.
       // One bump per sync (not per row), so a large bundle can't turn into a
       // reload storm.
-      if (totalHouseholds > 0 || totalMembers > 0 || out.patients > 0) {
+      final rosterChanged =
+          totalHouseholds > 0 || totalMembers > 0 || out.patients > 0;
+      if (rosterChanged) {
         bumpRosterRevision();
       }
 
+      // Broader than [rosterChanged]: the derived-data recompute downstream
+      // also depends on follow-ups, assessments, immunisations and referrals,
+      // any of which can change without a household or member doing so.
+      final anythingChanged = rosterChanged ||
+          out.followUps > 0 ||
+          out.assessments > 0 ||
+          out.immunisations > 0 ||
+          out.referrals > 0 ||
+          (historyReferrals ?? 0) > 0;
+
       // Done!
-      _emitProgress(SyncProgress.completed());
+      _emitProgress(SyncProgress.completed(hasChanges: anythingChanged));
       return report;
     } catch (e) {
       _emitProgress(SyncProgress.failed('Sync failed: $e'));
@@ -713,7 +765,13 @@ class OfflineSyncService extends ChangeNotifier {
     final memberFhirToLocal = <String, String>{};
     if (households.isNotEmpty && _households != null) {
       mark('parse', households.length + members.length);
-      hhFhirToLocal = await _households.upsertManyFromBE(households);
+      _emitPersistProgress(SyncPersistPhase.households, 0, households.length,
+          force: true);
+      hhFhirToLocal = await _households.upsertManyFromBE(
+        households,
+        onProgress: (done) => _emitPersistProgress(
+            SyncPersistPhase.households, done, households.length),
+      );
       mark('households', households.length);
     }
     var persistedMembers = 0;
@@ -738,6 +796,8 @@ class OfflineSyncService extends ChangeNotifier {
           continue;
         }
         final linked = m.copyWith(householdId: localHhId);
+        _emitPersistProgress(
+            SyncPersistPhase.members, persistedMembers, members.length);
         final localId = await _members.insertOrUpdateFromBE(linked);
         memberFhirToLocal[m.fhirId!] = localId;
         persistedMembers++;
@@ -932,10 +992,16 @@ class OfflineSyncService extends ChangeNotifier {
     // Upsert patients instead of clear+insert to preserve any existing rows.
     // The upsert handles both new inserts and updates to existing rows.
     mark('programmeInference');
+    _emitPersistProgress(SyncPersistPhase.patients, 0, patients.length,
+        force: true);
     await _patients.upsertMany(patients);
     mark('patients', patients.length);
+    var programmesDone = 0;
     for (final entry in programmes.entries) {
+      _emitPersistProgress(
+          SyncPersistPhase.programmes, programmesDone, programmes.length);
       await _programmes.replaceFor(entry.key, entry.value);
+      programmesDone++;
     }
     mark('programmes', programmes.length);
     // Remap follow-up patientIds through the member→BRN translation built above
@@ -946,12 +1012,18 @@ class OfflineSyncService extends ChangeNotifier {
           ? row.copyWith(patientId: mapped)
           : row;
     }).toList();
+    _emitPersistProgress(
+        SyncPersistPhase.followUps, 0, remappedFollowUps.length, force: true);
     await _followUps.upsertMany(remappedFollowUps);
     mark('followUps', remappedFollowUps.length);
     await _immunisations.upsertMany(immunisations);
     mark('immunisations', immunisations.length);
     await _assessments.upsertMany(assessments);
     mark('assessments', assessments.length);
+    // Referrals, pregnancy episodes, snapshots and treatment presence — several
+    // small loops measured together at 10-16 s. Reported as one indeterminate
+    // phase rather than faking a count across four unrelated things.
+    _emitPersistProgress(SyncPersistPhase.finalising, 0, 0, force: true);
 
     // CCE: project open follow-up referrals into the `referrals` table.
     final patientById = <String, Patient>{
