@@ -11468,8 +11468,8 @@
     "en": "Your answers"
   },
   "Permissions.allow": {
-    "bn": "চালিয়ে যান",
-    "en": "Continue"
+    "bn": "ঠিক আছে",
+    "en": "OK, got it"
   },
   "Permissions.blockedMessage": {
     "bn": "কিছু অনুমতি বন্ধ আছে। যখন প্রয়োজন হবে, অ্যান্ড্রয়েড সেটিংস থেকে অনুমতি দিতে পারবেন।",
@@ -11516,11 +11516,19 @@
     "en": "Not now"
   },
   "Permissions.subtitle": {
-    "bn": "আপনার ফোন এগুলোর প্রতিটির জন্য অনুমতি চাইবে। এখনই অনুমতি দিলে রোগী দেখার সময় আর বাধা আসবে না।",
-    "en": "Your phone will ask about each of these. Allowing them now means you will not be interrupted during a visit."
+    "bn": "পরের ধাপে আপনার ফোন কয়েকটি প্রশ্ন করবে। প্রতিটিতে ‘Allow’ চাপুন, যাতে রোগী দেখার সময় বাধা না আসে।",
+    "en": "Next, your phone will ask a few questions. Tap “Allow” on each one, so you are not interrupted during a visit."
   },
   "Permissions.title": {
     "bn": "শুরু করতে কয়েকটি অনুমতি দরকার",
     "en": "A few permissions to get started"
+  },
+  "BatteryOptimization.settingsRowTitle": {
+    "bn": "ব্যাকগ্রাউন্ড সিঙ্ক",
+    "en": "Background sync"
+  },
+  "BatteryOptimization.settingsRowSubtitle": {
+    "bn": "অ্যাপ বন্ধ থাকলেও সিঙ্ক চালু রাখার অনুমতি",
+    "en": "Allow syncing when the app is closed"
   }
 }

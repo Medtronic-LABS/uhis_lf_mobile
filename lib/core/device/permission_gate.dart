@@ -56,7 +56,9 @@ class PermissionGate {
 
   Future<bool> hasAsked() async {
     try {
-      return await _storage.read(key: _kAsked) == 'true';
+      final raw = await _storage.read(key: _kAsked);
+      debugPrint('[Permissions] asked flag = ${raw ?? '<null>'}');
+      return raw == 'true';
     } catch (e) {
       // An unreadable flag must not turn into a prompt on every launch.
       debugPrint('[Permissions] could not read asked flag: $e');

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -9,9 +8,6 @@ import 'package:provider/provider.dart';
 
 import '../../app/locale_provider.dart';
 import '../../app/theme.dart';
-import '../../core/device/battery_optimization_gate.dart';
-import '../../core/device/battery_optimization_prompt.dart';
-import '../../core/device/battery_optimization_service.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
@@ -130,20 +126,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _loadVillagesLine();
       // Load mission data (may already be cached from sync screen)
       _loadMissionData();
-      // Fallback only. The onboarding permission step now asks this as part of
-      // one setup conversation, and its flag suppresses this call. Kept because
-      // that step does not run for SKs who already onboarded on an earlier
-      // build, or who chose "Not now" at the rationale sheet — for them this is
-      // the only path to the prompt.
-      if (!mounted) return;
-      await maybeShowBatteryOptimizationPrompt(
-        context,
-        BatteryOptimizationGate(
-          service: kIsWeb
-              ? const NoopBatteryOptimizationService()
-              : const MethodChannelBatteryOptimizationService(),
-        ),
-      );
     });
   }
 

@@ -316,10 +316,13 @@ abstract final class PermissionStrings {
 
   static String get title =>
       getTranslatedString('Permissions.title', 'A few permissions to get started');
+  /// Framed as a heads-up, not a request. The sheet cannot grant anything —
+  /// only Android's own dialogs can — so wording it like an ask makes the
+  /// system prompts that follow read as being asked twice.
   static String get subtitle => getTranslatedString(
         'Permissions.subtitle',
-        'Your phone will ask about each of these. Allowing them now means you '
-        'will not be interrupted during a visit.',
+        'Next, your phone will ask a few questions. Tap "Allow" on each one, '
+        'so you are not interrupted during a visit.',
       );
 
   static String get cameraTitle =>
@@ -345,7 +348,7 @@ abstract final class PermissionStrings {
       'To remind you about referrals and follow-ups that are due.');
 
   static String get allow =>
-      getTranslatedString('Permissions.allow', 'Continue');
+      getTranslatedString('Permissions.allow', 'OK, got it');
   static String get skip =>
       getTranslatedString('Permissions.skip', 'Not now');
 
@@ -373,6 +376,17 @@ abstract final class BatteryOptimizationStrings {
       );
   static String get openSettings => getTranslatedString(
       'BatteryOptimization.openSettings', 'Open settings');
+
+  /// Settings-screen entry. Deliberately not shown to every SK during setup:
+  /// the destination is a vendor battery screen that a frontline user cannot
+  /// realistically navigate, and the sync foreground service already survives
+  /// Doze without it (verified on device). Kept as an escape hatch for a
+  /// supervisor troubleshooting a handset that kills background work.
+  static String get settingsRowTitle => getTranslatedString(
+      'BatteryOptimization.settingsRowTitle', 'Background sync');
+  static String get settingsRowSubtitle => getTranslatedString(
+      'BatteryOptimization.settingsRowSubtitle',
+      'Allow syncing when the app is closed');
   static String get notNow =>
       getTranslatedString('BatteryOptimization.notNow', 'Not now');
   static String get couldNotOpen => getTranslatedString(
