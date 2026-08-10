@@ -10,7 +10,6 @@ import '../../core/db/immunisation_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
-import '../../core/db/sync_meta_dao.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/patient.dart';
@@ -31,7 +30,6 @@ class WorklistRepository {
     required PatientProgrammesDao programmes,
     required FollowUpDao followUps,
     required ImmunisationDao immunisations,
-    required SyncMetaDao syncMeta,
     required RiskScoringService risk,
     required LocalAssessmentDao localAssessments,
     required AssessmentDao assessments,
@@ -39,7 +37,6 @@ class WorklistRepository {
         _programmes = programmes,
         _followUps = followUps,
         _immunisations = immunisations,
-        _syncMeta = syncMeta,
         _risk = risk,
         _localAssessments = localAssessments,
         _assessments = assessments;
@@ -48,7 +45,6 @@ class WorklistRepository {
   final PatientProgrammesDao _programmes;
   final FollowUpDao _followUps;
   final ImmunisationDao _immunisations;
-  final SyncMetaDao _syncMeta;
   final RiskScoringService _risk;
   final LocalAssessmentDao _localAssessments;
   final AssessmentDao _assessments;
@@ -365,7 +361,9 @@ class WorklistRepository {
       await _followUps.deleteHistorySeededForPatients(clearHistFuPatientIds);
     }
 
-    await _syncMeta.stampWarm('worklist', DateTime.now());
+    // Do not advance sync_meta here — UHIS parity: lastSyncTime comes only
+    // from the server sync response (OfflineSyncService), never from a local
+    // risk recompute.
     _changes.value++;
     return patients.length;
   }

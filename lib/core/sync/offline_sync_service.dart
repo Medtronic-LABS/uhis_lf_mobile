@@ -347,16 +347,34 @@ class OfflineSyncService extends ChangeNotifier {
         villageIds,
         since: historySince,
       );
+
+      // UHIS parity: persist the server's response `lastSyncTime` (echo of
+      // server `currentSyncTime` at fetch start), not the device clock.
+      // Android: SecuredPreference.SERVER_LAST_SYNCED = response.lastSyncTime.
+      final serverLastSync = _parseServerLastSyncTime(bundle);
+      final cursorAt = serverLastSync ?? DateTime.now().toUtc();
+      if (serverLastSync == null) {
+        debugPrint(
+          '[OfflineSyncService] WARNING: sync response missing lastSyncTime '
+          '— falling back to device UTC clock',
+        );
+      } else {
+        debugPrint(
+          '[OfflineSyncService] using server lastSyncTime='
+          '${_toOffsetDateTime(cursorAt)}',
+        );
+      }
+
       // Only stamp the cursor forward once the fetch+persist above actually
       // succeeded — _syncAssessmentHistoryProgrammes returns null on failure,
       // so a failed pass must not silently advance `since` and skip
-      // re-fetching those rows next time.
+      // re-fetching those rows next time. Use the same server cursor as the
+      // main bundle (UHIS shares SERVER_LAST_SYNCED for both filters).
       if (historyReferrals != null) {
-        final now = DateTime.now();
         if (fullSync) {
-          await _syncMeta.stampFull(_assessmentHistoryEntityKey, now);
+          await _syncMeta.stampFull(_assessmentHistoryEntityKey, cursorAt);
         } else {
-          await _syncMeta.stampWarm(_assessmentHistoryEntityKey, now);
+          await _syncMeta.stampWarm(_assessmentHistoryEntityKey, cursorAt);
         }
       }
 
@@ -372,9 +390,9 @@ class OfflineSyncService extends ChangeNotifier {
       );
 
       if (fullSync) {
-        await _syncMeta.stampFull(_entityKey, report.finishedAt);
+        await _syncMeta.stampFull(_entityKey, cursorAt);
       } else {
-        await _syncMeta.stampWarm(_entityKey, report.finishedAt);
+        await _syncMeta.stampWarm(_entityKey, cursorAt);
       }
 
       // Server rows just landed — nudge any mounted roster screen to re-query.
@@ -410,6 +428,33 @@ class OfflineSyncService extends ChangeNotifier {
   static String _toOffsetDateTime(DateTime dt) {
     final s = dt.toUtc().toIso8601String().replaceFirst(RegExp(r'\.\d+'), '');
     return s.endsWith('Z') ? '${s.substring(0, s.length - 1)}+00:00' : s;
+  }
+
+  /// Parses `lastSyncTime` from the offline-sync response.
+  ///
+  /// Backend (`OfflineSyncServiceImpl.fetchSyncedData`) sets this to server
+  /// `currentSyncTime` at request start. Jackson may emit ISO-8601 or epoch
+  /// millis depending on config — accept both (UHIS Android stores the string
+  /// as returned).
+  static DateTime? _parseServerLastSyncTime(Map<String, dynamic> bundle) {
+    final raw = bundle['lastSyncTime'];
+    if (raw == null) return null;
+    if (raw is int) {
+      return DateTime.fromMillisecondsSinceEpoch(raw, isUtc: true);
+    }
+    if (raw is num) {
+      return DateTime.fromMillisecondsSinceEpoch(raw.toInt(), isUtc: true);
+    }
+    if (raw is String) {
+      final s = raw.trim();
+      if (s.isEmpty) return null;
+      final asInt = int.tryParse(s);
+      if (asInt != null) {
+        return DateTime.fromMillisecondsSinceEpoch(asInt, isUtc: true);
+      }
+      return DateTime.tryParse(s)?.toUtc();
+    }
+    return null;
   }
 
   Future<Map<String, dynamic>> _fetchBundle({
