@@ -334,7 +334,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
 
     // Use head's name to derive household name
     if (head.name != null && head.name!.isNotEmpty) {
-      return "${head.name}'s Household";
+      return HouseholdListStrings.namedHousehold(head.name!);
     }
 
     // Fallback to "Household #ID"

@@ -344,13 +344,26 @@ class _ImmunisationTimelineScreenState
       final months = (DateTime.now().difference(dob).inDays / 30.44).floor();
       if (months < 1) {
         final days = DateTime.now().difference(dob).inDays;
-        return '$days ${days == 1 ? 'day' : 'days'}';
+        final unit = days == 1
+            ? EnrollmentStrings.ageUnitDay
+            : EnrollmentStrings.ageUnitDays;
+        return '$days $unit';
       }
-      if (months < 24) return '$months ${months == 1 ? 'month' : 'months'}';
+      if (months < 24) {
+        final unit = months == 1
+            ? EnrollmentStrings.ageUnitMonth
+            : EnrollmentStrings.ageUnitMonths;
+        return '$months $unit';
+      }
       final years = months ~/ 12;
-      return '$years ${years == 1 ? 'year' : 'years'}';
+      final unit = years == 1
+          ? EnrollmentStrings.ageUnitYear
+          : EnrollmentStrings.ageUnitYears;
+      return '$years $unit';
     }
-    if (p.age != null) return '${p.age} years';
+    if (p.age != null) {
+      return '${p.age} ${EnrollmentStrings.ageUnitYears}';
+    }
     return '';
   }
 
@@ -360,8 +373,12 @@ class _ImmunisationTimelineScreenState
     if (age.isNotEmpty) parts.add(age);
     if (p?.gender != null) {
       final g = p!.gender!.toUpperCase();
-      if (g == 'M' || g == 'MALE') parts.add('Male');
-      if (g == 'F' || g == 'FEMALE') parts.add('Female');
+      if (g == 'M' || g == 'MALE') {
+        parts.add(EnrollmentStrings.optionDisplay('Male'));
+      }
+      if (g == 'F' || g == 'FEMALE') {
+        parts.add(EnrollmentStrings.optionDisplay('Female'));
+      }
     }
     if (p?.villageName != null && p!.villageName!.isNotEmpty) {
       parts.add(p.villageName!);
@@ -1051,8 +1068,8 @@ class _MilestoneContent extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             ageLabel.isNotEmpty
-                ? 'Due now · $patientName is $ageLabel'
-                : 'Due now',
+                ? EpiStrings.dueNowPatientAge(patientName, ageLabel)
+                : EpiStrings.statusDueNow,
             style: const TextStyle(
                 fontSize: 12, color: _kRed, fontWeight: FontWeight.w600),
           ),
@@ -1099,7 +1116,7 @@ class _MilestoneContent extends StatelessWidget {
       widgets.add(Padding(
         padding: const EdgeInsets.only(top: 4),
         child: Text(
-          '${EpiStrings.referredToFacilityLabel}: ${referred.referralFacility}',
+          '${EpiStrings.referredToFacilityLabel}: ${EpiStrings.localizeReferralFacility(referred.referralFacility)}',
           style: const TextStyle(
             fontSize: 11.5,
             color: _kReferred,
@@ -1436,11 +1453,12 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
       final givenMs = _referring ? null : _givenDate.millisecondsSinceEpoch;
       final wireStatus = _referring ? 'Missed' : 'Vaccinated';
       final reasonText = _referring ? _reasonCtrl.text.trim() : null;
+      // English name on the wire (matches UHIS / history referralReason).
       final facilityLabel = _selectedFacilityId == null
           ? null
           : referralFacilityOptions
               .firstWhere((o) => o.id == _selectedFacilityId)
-              .label;
+              .name;
 
       // 1. Save locally first (offline-first guarantee) — drives the
       // timeline's own status computation independent of sync.
@@ -1525,18 +1543,19 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
       surface = _kRedSurface;
       icon = Icons.warning_amber_rounded;
       text = widget.ageLabel.isNotEmpty
-          ? 'Status: Due now · ${widget.patientName} is ${widget.ageLabel}'
-          : 'Status: Due now';
+          ? EpiStrings.statusDueNowPatientAge(
+              widget.patientName, widget.ageLabel)
+          : EpiStrings.statusLine(EpiStrings.statusDueNow);
     } else if (widget.milestone.hasMissed) {
       color = _kReferred;
       surface = color.withValues(alpha: 0.08);
       icon = Icons.event_busy_rounded;
-      text = 'Status: ${EpiStrings.statusReferred}';
+      text = EpiStrings.statusLine(EpiStrings.statusReferred);
     } else {
       color = _kAmber;
       surface = color.withValues(alpha: 0.08);
       icon = Icons.schedule_rounded;
-      text = 'Status: ${EpiStrings.statusUpcoming}';
+      text = EpiStrings.statusLine(EpiStrings.statusUpcoming);
     }
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 4, 20, 12),
@@ -1723,7 +1742,9 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
                       ),
                       items: referralFacilityOptions
                           .map((o) => DropdownMenuItem(
-                              value: o.id, child: Text(o.label)))
+                              value: o.id,
+                              child: Text(
+                                  EpiStrings.referralFacilityLabelOf(o))))
                           .toList(),
                     ),
 

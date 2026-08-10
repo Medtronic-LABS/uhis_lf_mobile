@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 
+import '../../features/visit/immunisation/epi_schedule_engine.dart';
 import '../../features/visit/immunisation/epi_visit_summary.dart';
 import '../i18n/app_locale.dart';
 import '../models/dashboard_tier.dart';
@@ -863,6 +864,13 @@ abstract final class HouseholdListStrings {
   static String get unnamedHousehold => getTranslatedString('HouseholdList.unnamedHousehold', '(Unnamed household)');
   static String get unnamedMember => getTranslatedString('unnamedMember', '(Unnamed)');
 
+  /// UHIS-aligned possessive household name (`{name}-এর খানা`).
+  static String namedHousehold(String headName) => getTranslatedString(
+        'Household.namedHousehold',
+        "{name}'s Household",
+        params: {'name': headName},
+      );
+
   static String householdsCount(int n) => getTranslatedString('householdsCount', '{n} households', params: {'n': '$n'});
   static String membersCount(int n) => getTranslatedString('membersCount', '{n} members', params: {'n': '$n'});
 
@@ -1026,7 +1034,26 @@ abstract final class PatientContextStrings {
   static String get childHealthFindingsTitle => getTranslatedString('childHealthFindingsTitle', 'Child Health Findings');
   static String get tbFindingsTitle => getTranslatedString('tbFindingsTitle', 'TB Screening Findings');
   static String get bloodPressureLabel => getTranslatedString('bloodPressureLabel', 'Blood Pressure');
+  static String get glucoseFastingLabel => getTranslatedString(
+        'PatientContext.glucoseFasting',
+        'Blood Glucose (FBS)',
+      );
+  static String get glucoseRandomLabel => getTranslatedString(
+        'PatientContext.glucoseRandom',
+        'Blood Glucose (RBS)',
+      );
+  static String get respiratoryRateLabel => getTranslatedString(
+        'PatientContext.respiratoryRateLabel',
+        'Respiratory Rate',
+      );
+  static String get ancGapsLabel => getTranslatedString(
+        'PatientContext.ancGapsLabel',
+        'Gaps in ANC',
+      );
   static String glucoseLabel(String? type) {
+    final t = type?.toLowerCase();
+    if (t == 'fasting' || t == 'fbs') return glucoseFastingLabel;
+    if (t == 'random' || t == 'rbs') return glucoseRandomLabel;
     final base = getTranslatedString('PatientContext.glucoseLabel', 'Glucose');
     return type != null ? '$base ($type)' : base;
   }
@@ -1195,6 +1222,10 @@ abstract final class PatientProfileStrings {
         'Data not available in offline mode',
       );
   static String get enrolledInApp => getTranslatedString('enrolledInApp', 'Registered in Apon Sushashthya');
+  static String get enrolledInAppDescription => getTranslatedString(
+        'enrolledInAppDescription',
+        'Patient registered in Apon Sushashthya',
+      );
   static String get enrollmentMilestone => getTranslatedString('enrollmentMilestone', 'Registration date');
   static String get pregnancyRegistered => getTranslatedString('pregnancyRegistered', 'Pregnancy Registered');
   static String get pregnancyRegistrationCategory => getTranslatedString('pregnancyRegistrationCategory', 'Pregnancy Registration');
@@ -4824,6 +4855,22 @@ abstract final class EpiStrings {
 
   static String get statusCompleted => getTranslatedString('statusCompleted', 'Completed');
   static String get statusDueNow => getTranslatedString('statusDueNow', 'Due now');
+  static String dueNowPatientAge(String name, String age) => getTranslatedString(
+        'Epi.dueNowPatientAge',
+        'Due now · {name} is {age}',
+        params: {'name': name, 'age': age},
+      );
+  static String statusDueNowPatientAge(String name, String age) =>
+      getTranslatedString(
+        'Epi.statusDueNowPatientAge',
+        'Status: Due now · {name} is {age}',
+        params: {'name': name, 'age': age},
+      );
+  static String statusLine(String status) => getTranslatedString(
+        'Epi.statusLine',
+        'Status: {status}',
+        params: {'status': status},
+      );
   static String get statusUpcoming => getTranslatedString('statusUpcoming', 'Upcoming');
   static String get statusNotYetDue => getTranslatedString('statusNotYetDue', 'Not yet due');
   static String get statusLocked => getTranslatedString('statusLocked', 'Locked');
@@ -4849,6 +4896,29 @@ abstract final class EpiStrings {
   static String get referralFacilityLabel => getTranslatedString('referralFacilityLabel', 'Referral Facility');
   static String get referralFacilitySelectHint => getTranslatedString('referralFacilitySelectHint', 'Select facility…');
   static String get referralFacilityRequired => getTranslatedString('referralFacilityRequired', 'Please select a facility.');
+
+  /// Locale-aware EPI referral-facility spinner label (UHIS Bangla when bn).
+  static String referralFacilityLabelOf(FacilityOption option) {
+    final banglaFallback =
+        (option.cultureValue != null && option.cultureValue!.trim().isNotEmpty)
+            ? option.cultureValue!
+            : option.name;
+    return getTranslatedString(
+      'Epi.referralFacility.${option.id}',
+      AppLocale.isBangla ? banglaFallback : option.name,
+    );
+  }
+
+  /// Resolve a stored facility id or English name to a localized UI label.
+  static String localizeReferralFacility(String? stored) {
+    if (stored == null || stored.isEmpty) return stored ?? '';
+    for (final o in referralFacilityOptions) {
+      if (o.id == stored || o.name == stored) {
+        return referralFacilityLabelOf(o);
+      }
+    }
+    return stored;
+  }
   static String get missedReasonLabel => getTranslatedString('missedReasonLabel', 'Reason for Missed Dose');
   static String get missedReasonHint => getTranslatedString('missedReasonHint', 'e.g. Child was sick on scheduled date');
   static String get missedReasonRequired => getTranslatedString('missedReasonRequired', 'Please enter a reason.');
@@ -5458,8 +5528,84 @@ abstract final class FollowUpCallStrings {
   static String get openFollowUpsLoadError => getTranslatedString('FollowUpCall.openFollowUpsLoadError', 'Failed to load follow-ups');
   static String get openFollowUpsEmpty => getTranslatedString('FollowUpCall.openFollowUpsEmpty', 'No open follow-ups');
   static String facilityLabel(String siteId) => getTranslatedString('FollowUpCall.facilityLabel', 'Facility: {siteId}', params: {'siteId': siteId});
+
+  /// Localized label for a follow-up `kind` wire value (e.g. `medical_review`).
+  static String kindLabel(String? kind) {
+    switch ((kind ?? '').toLowerCase().trim()) {
+      case 'medical_review':
+      case 'medicalreview':
+      case 'ncdmedicalreview':
+        return getTranslatedString('FollowUp.medicalReview', 'Medical Review');
+      case 'screening':
+        return getTranslatedString('FollowUp.screening', 'Screening follow-up');
+      case 'assessment':
+        return getTranslatedString('FollowUp.assessment', 'Assessment follow-up');
+      case 'referred':
+      case 'referral':
+        return getTranslatedString(
+            'FollowUp.referred', 'Referral — confirm facility arrival');
+      case 'household_visit':
+      case 'householdvisit':
+        return getTranslatedString(
+            'FollowUp.householdVisit', 'Household visit due');
+      case 'lost':
+      case 'lost_to_follow_up':
+        return getTranslatedString(
+            'FollowUp.lost', 'Lost to follow-up check');
+      case 'ncd':
+        return getTranslatedString('FollowUp.ncd', 'NCD follow-up');
+      case 'registered':
+        return getTranslatedString('FollowUp.registered', 'Registered');
+      case 'generic':
+      case '':
+        return getTranslatedString('FollowUp.generic', 'Follow-up');
+      default:
+        return getTranslatedString('FollowUp.generic', 'Follow-up');
+    }
+  }
 }
 
+
+/// Localized programme titles for UI badges/headers.
+/// Prefers UHIS Bangla via `Worklist.programme*` keys in strings.json.
+abstract final class ProgrammeLabels {
+  ProgrammeLabels._();
+
+  /// Service-selector chip for IMCI (distinct from visit badge "Child Visit").
+  static String get childHealthService =>
+      getTranslatedString('Worklist.serviceChildHealth', 'Child Health');
+
+  static String of(Programme programme) {
+    switch (programme) {
+      case Programme.imci:
+        return getTranslatedString('Worklist.programmeImci', 'Child Visit');
+      case Programme.anc:
+        return getTranslatedString('Worklist.programmeAnc', 'ANC');
+      case Programme.pw:
+        return getTranslatedString('Worklist.programmePw', 'PW');
+      case Programme.pnc:
+        return getTranslatedString('Worklist.programmePnc', 'PNC');
+      case Programme.ncd:
+        return getTranslatedString('Worklist.programmeNcd', 'NCD');
+      case Programme.tb:
+        return getTranslatedString('Worklist.programmeTb', 'TB Check');
+      case Programme.epi:
+        return getTranslatedString('Worklist.programmeEpi', 'Vaccination');
+      case Programme.nutrition:
+        return getTranslatedString('Worklist.programmeNutrition', 'Nutrition');
+      case Programme.familyPlanning:
+        return getTranslatedString(
+            'Worklist.programmeFamilyPlanning', 'Family Planning');
+      case Programme.cataract:
+        return getTranslatedString('Worklist.programmeCataract', 'Cataract');
+      case Programme.eyeCare:
+        return getTranslatedString('Worklist.programmeEyeCare', 'Eye Care');
+      case Programme.unknown:
+        return getTranslatedString(
+            'Worklist.programmeUnknown', 'Scheduled Visit');
+    }
+  }
+}
 
 abstract final class EnrollStrings {
   EnrollStrings._();

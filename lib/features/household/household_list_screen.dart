@@ -262,7 +262,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
           );
           // Use head's name as household name, or fallback to "Household #ID"
           final householdName = head.name != null
-              ? "${head.name}'s Household"
+              ? HouseholdListStrings.namedHousehold(head.name!)
               : (hhId.isNotEmpty ? '#$hhId' : null);
 
           items.add(

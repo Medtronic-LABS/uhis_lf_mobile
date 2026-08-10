@@ -252,7 +252,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       case VitalType.bloodPressure:
         return _VitalRow(
           icon: Icons.favorite,
-          label: 'Blood Pressure',
+          label: PatientContextStrings.bloodPressureLabel,
           value: r.displayValue,
           unit: 'mmHg',
           date: r.date,
@@ -277,7 +277,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       case VitalType.respiratoryRate:
         return _VitalRow(
           icon: Icons.waves,
-          label: 'Respiratory Rate',
+          label: PatientContextStrings.respiratoryRateLabel,
           value: r.displayValue,
           unit: '/min',
           date: r.date,
@@ -290,7 +290,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       case VitalType.glucose:
         return _VitalRow(
           icon: Icons.bloodtype,
-          label: 'Blood Glucose',
+          label: getTranslatedString('bloodGlucose', 'Blood Glucose'),
           value: r.displayValue,
           unit: 'mg/dL',
           date: r.date,

@@ -2424,9 +2424,15 @@ class _InlineServiceSelector extends StatelessWidget {
       final ctx = patientContext;
       return (ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum)
           ? TriageStrings.pregnancyOutcomeChip
-          : 'PNC';
+          : ProgrammeLabels.of(Programme.pnc);
     }
     if (card.isDelivery) return TriageStrings.pregnancyOutcomeChip;
+    if (card.isPW) return ProgrammeLabels.of(Programme.pw);
+    if (card.isVaccination) return ProgrammeLabels.of(Programme.epi);
+    if (card.programme == Programme.imci) {
+      return ProgrammeLabels.childHealthService;
+    }
+    if (card.programme != null) return ProgrammeLabels.of(card.programme!);
     return card.label;
   }
 
