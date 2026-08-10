@@ -97,8 +97,7 @@ void main() {
             'throttle window has not elapsed — second touch must not write again');
   });
 
-  test('a real cookie-issued expiry (web flow) is never overridden',
-      () async {
+  test('a web cookie-only session keeps the server-issued expiry', () async {
     fakeStorage._values['biometric_enabled'] = 'true';
     final originalExpiry = DateTime(2030);
     fakeStorage._values['bio_authcookie_expiry'] =
@@ -113,6 +112,25 @@ void main() {
 
     expect(fakeStorage._values['bio_authcookie_expiry'],
         originalExpiry.toIso8601String());
+  });
+
+  test('mobile Bearer session slides even when an AuthCookie expiry is set',
+      () async {
+    fakeStorage._values['biometric_enabled'] = 'true';
+    final originalExpiry = DateTime(2000);
+    fakeStorage._values['bio_authcookie_expiry'] =
+        originalExpiry.toIso8601String();
+    await api.importAuthCookies(
+      jsession: 'js',
+      authCookie: 'ac',
+      authCookieExpiry: originalExpiry,
+    );
+    api.importAuthToken('bearer-token');
+
+    await repo.touchReentryExpiry();
+
+    final updated = fakeStorage._values['bio_authcookie_expiry'];
+    expect(DateTime.parse(updated!).isAfter(originalExpiry), isTrue);
   });
 
   test('no-op when reentry is not enabled', () async {

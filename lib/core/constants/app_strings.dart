@@ -759,7 +759,7 @@ abstract final class HouseholdListStrings {
         '$n patient${n == 1 ? '' : 's'}',
         params: {'n': '$n'},
       );
-  static String get searchHint => getTranslatedString('HouseholdList.searchHint', 'Search by name, house no. or village…');
+  static String get searchHint => getTranslatedString('HouseholdList.searchHint', 'Search by name or village…');
 
   // Household-card inline other-members panel
   static String otherMembersToggle(int n) => getTranslatedString(
@@ -4338,6 +4338,16 @@ abstract final class EnrollmentStrings {
   ];
   static String get guardianLabel => getTranslatedString('guardianLabel', 'Guardian Name');
   static String get guardianHint => getTranslatedString('guardianHint', 'Select guardian from household');
+  /// Spice R.string.add_guardian
+  static String get addGuardian =>
+      getTranslatedString('addGuardian', '+ Add Guardian');
+  /// Spice R.string.alert — Add Guardian leave confirm title.
+  static String get alertTitle => getTranslatedString('alertTitle', 'Alert');
+  /// Spice R.string.exit_reason — Add Guardian leave confirm body.
+  static String get exitReason => getTranslatedString(
+        'exitReason',
+        'If you leave this screen, your entered data will not be saved.',
+      );
   // Spice member_registration.json shows the `disability` question as Yes/No;
   // the wire values stay present/absent (see EnrollmentRepository).
   /// Wire values for member disability (mapped to present/absent on sync).

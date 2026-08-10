@@ -126,7 +126,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       if (_phoneCategory == null) 'phoneCategory': req,
       if (_dobCtrl.text.trim().isEmpty) 'dob': EnrollmentStrings.dobRequired,
       if (_gender == null) 'gender': req,
-      if (_ageInYears > 5 && _maritalStatus == null) 'maritalStatus': req,
+      if (EnrollmentDob.needsMaritalStatus(_dob, ageYears: _ageInYears) &&
+          _maritalStatus == null)
+        'maritalStatus': req,
       // Same as add-member: Spice member_registration.json disability mandatory.
       if (_disabilityStatus == null) 'disability': req,
     };
@@ -303,7 +305,10 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     _ageUnit = age.unit;
     _ageSummary = age.summary;
 
-    if (age.years <= 5) _maritalStatus = null;
+    // Spice handleDob: hide + reset marital status when age < 14.
+    if (!EnrollmentDob.needsMaritalStatus(dob, ageYears: age.years)) {
+      _maritalStatus = null;
+    }
   }
 
   /// Manual age entry is always whole years. Sets DOB to 01-01 of the
@@ -321,7 +326,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     _ageSummary = null;
     _dob = EnrollmentDob.fromAgeYears(years);
     _dobCtrl.text = EnrollmentDob.display(_dob!);
-    if (years <= 5) _maritalStatus = null;
+    if (!EnrollmentDob.needsMaritalStatus(_dob, ageYears: years)) {
+      _maritalStatus = null;
+    }
   }
 
   Future<void> _handleContinue(EnrollmentController controller) async {
@@ -988,7 +995,10 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    if (_ageInYears > 5) ...[
+                    if (EnrollmentDob.needsMaritalStatus(
+                      _dob,
+                      ageYears: _ageInYears,
+                    )) ...[
                       SizedBox(key: _key('maritalStatus'), height: 0),
                       EnrollmentDropdown(
                         label: EnrollmentStrings.maritalStatusLabel,

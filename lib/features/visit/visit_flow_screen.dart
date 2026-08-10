@@ -29,6 +29,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/locale_provider.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
@@ -2736,7 +2737,21 @@ class _RmnchReferralFacilityPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild when language toggles so facility rows re-resolve Bangla/English.
+    final locale = context.watch<LocaleProvider>();
     final theme = Theme.of(context);
+    final items = RmnchReferralFacility.options
+        .map(
+          (o) => DropdownMenuItem<String>(
+            value: o.id,
+            child: Text(
+              RmnchReferralFacility.labelOf(o),
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        )
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2749,7 +2764,7 @@ class _RmnchReferralFacilityPicker extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          key: ValueKey(selectedId),
+          key: ValueKey('${locale.language}_$selectedId'),
           isExpanded: true,
           initialValue: selectedId,
           onChanged: (id) {
@@ -2775,10 +2790,10 @@ class _RmnchReferralFacilityPicker extends StatelessWidget {
             filled: true,
             fillColor: AppColors.cardSurface,
           ),
-          items: RmnchReferralFacility.options
+          selectedItemBuilder: (context) => RmnchReferralFacility.options
               .map(
-                (o) => DropdownMenuItem<String>(
-                  value: o.id,
+                (o) => Align(
+                  alignment: AlignmentDirectional.centerStart,
                   child: Text(
                     RmnchReferralFacility.labelOf(o),
                     overflow: TextOverflow.ellipsis,
@@ -2787,6 +2802,7 @@ class _RmnchReferralFacilityPicker extends StatelessWidget {
                 ),
               )
               .toList(),
+          items: items,
         ),
       ],
     );

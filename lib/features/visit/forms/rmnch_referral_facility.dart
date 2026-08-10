@@ -1,3 +1,4 @@
+import '../../../core/constants/app_strings.dart';
 import '../../../core/models/programme.dart';
 import 'form_config.dart';
 
@@ -10,6 +11,8 @@ abstract final class RmnchReferralFacility {
   RmnchReferralFacility._();
 
   /// Same ids / names / Bangla labels as the Spice form JSON.
+  /// UI labels resolve via [labelOf] → `VisitFlow.rmnchReferralFacility.*`
+  /// translations so Step 3 follows the app language (not English-only).
   static const List<FieldOption> options = [
     FieldOption(
       id: 'uhfwc',
@@ -56,8 +59,14 @@ abstract final class RmnchReferralFacility {
     return programme == Programme.anc || programme == Programme.pnc;
   }
 
-  /// Locale-aware label for a spinner row.
-  static String labelOf(FieldOption option) => option.displayName;
+  /// Locale-aware label for a spinner row (Bangla when the app language is bn).
+  ///
+  /// Prefers `strings.json` so Step 3 matches other VisitFlow copy; falls back
+  /// to [FieldOption.displayName] (cultureValue / English name).
+  static String labelOf(FieldOption option) => getTranslatedString(
+        'VisitFlow.rmnchReferralFacility.${option.id}',
+        option.displayName,
+      );
 
   /// Spice spinner default: first option. Prefer [preferredId] when it is a
   /// known option (e.g. a stale Step 2 value).

@@ -12,6 +12,7 @@ import 'browser_adapter_stub.dart'
 
 const String _authCookieName = 'AuthCookie';
 const String _sessionCookieName = 'JSESSIONID';
+const String _authRetryExtra = 'authRetry';
 
 /// `RequestOptions.extra` key holding the 1-based attempt number, so a replayed
 /// request knows how many attempts have already been spent.
@@ -72,10 +73,9 @@ class ApiClient {
   // backend activity, so an actively-used mobile session doesn't hit the
   // synthetic Bearer-token expiry wall while the SK is still working.
   void Function()? onAuthenticatedActivity;
-  // Fired on a 401/403 from any authenticated endpoint (never the login
-  // endpoint itself — a wrong password legitimately 401s there) — lets
-  // AuthState detect a server-invalidated session proactively instead of
-  // only via local TTL checks.
+  // Fired only when authentication has failed for real (401 after a refresh
+  // attempt). Never fired for 403 — that means "authenticated but not
+  // permitted" and must not sign the user out.
   void Function()? onUnauthorized;
   // Awaited before every request except the login and token-validation
   // endpoints themselves — lets AuthRepository refresh a near-expiry Bearer
@@ -86,6 +86,9 @@ class ApiClient {
   // otherwise invisible; the sync screen uses this to show progress rather than
   // appearing frozen for the whole retry budget.
   void Function(String path, int attempt, int maxAttempts)? onRetryAttempt;
+  // One-shot refresh used by the 401 interceptor. Returns true when the
+  // session was restored and the original request may be retried.
+  Future<bool> Function()? onTokenRefresh;
 
   static Future<ApiClient> create() async {
     final cookieJar = CookieJar();
@@ -144,20 +147,8 @@ class ApiClient {
             }
             handler.next(options);
           },
-          onResponse: (response, handler) {
-            final authz = response.headers.value('authorization');
-            if (authz != null && authz.isNotEmpty) {
-              client._authToken = authz;
-            }
-            final status = response.statusCode;
-            if (status != null && status >= 200 && status < 300) {
-              client.onAuthenticatedActivity?.call();
-            } else if ((status == 401 || status == 403) &&
-                !response.requestOptions.path.contains('/session')) {
-              debugPrint('[ApiClient] $status on ${response.requestOptions.path} — signaling onUnauthorized');
-              client.onUnauthorized?.call();
-            }
-            handler.next(response);
+          onResponse: (response, handler) async {
+            await client._onAuthResponse(response, handler);
           },
         ),
       );
@@ -177,10 +168,6 @@ class ApiClient {
             handler.next(options);
           },
           onResponse: (response, handler) async {
-            final authz = response.headers.value('authorization');
-            if (authz != null && authz.isNotEmpty) {
-              client._authToken = authz;
-            }
             final raw = response.headers.map['set-cookie'];
             if (raw != null && raw.isNotEmpty) {
               final stored = <Cookie>[];
@@ -220,15 +207,7 @@ class ApiClient {
                 );
               }
             }
-            final status = response.statusCode;
-            if (status != null && status >= 200 && status < 300) {
-              client.onAuthenticatedActivity?.call();
-            } else if ((status == 401 || status == 403) &&
-                !response.requestOptions.path.contains('/session')) {
-              debugPrint('[ApiClient] $status on ${response.requestOptions.path} — signaling onUnauthorized');
-              client.onUnauthorized?.call();
-            }
-            handler.next(response);
+            await client._onAuthResponse(response, handler);
           },
         ),
       );
@@ -296,6 +275,60 @@ class ApiClient {
       ),
     );
     return client;
+  }
+
+  /// Shared 2xx / 401 handling for web and native interceptors.
+  ///
+  /// 403 is intentionally ignored here: it means the user is authenticated
+  /// but not permitted for that resource, and must not force a sign-out.
+  Future<void> _onAuthResponse(
+    Response response,
+    ResponseInterceptorHandler handler,
+  ) async {
+    final authz = response.headers.value('authorization');
+    if (authz != null && authz.isNotEmpty) {
+      _authToken = authz;
+    }
+    final status = response.statusCode;
+    final path = response.requestOptions.path;
+    if (status != null && status >= 200 && status < 300) {
+      onAuthenticatedActivity?.call();
+      handler.next(response);
+      return;
+    }
+    if (status == 401 &&
+        !path.contains('/session') &&
+        !path.contains('/authenticate')) {
+      final alreadyRetried =
+          response.requestOptions.extra[_authRetryExtra] == true;
+      if (!alreadyRetried && onTokenRefresh != null) {
+        debugPrint(
+            '[ApiClient] 401 on $path — attempting token refresh before sign-out');
+        final refreshed = await onTokenRefresh!();
+        if (refreshed) {
+          try {
+            final opts = response.requestOptions;
+            opts.extra[_authRetryExtra] = true;
+            final token = _authToken;
+            if (token != null && token.isNotEmpty) {
+              opts.headers['Authorization'] = token;
+            }
+            final retry = await dio.fetch(opts);
+            handler.resolve(retry);
+            return;
+          } catch (e) {
+            debugPrint('[ApiClient] retry after refresh failed: $e');
+          }
+        }
+      }
+      debugPrint(
+          '[ApiClient] 401 on $path — signaling onUnauthorized (session expired)');
+      onUnauthorized?.call();
+    } else if (status == 403) {
+      debugPrint(
+          '[ApiClient] 403 on $path — permission denied, session kept');
+    }
+    handler.next(response);
   }
 
   void setTenantId(String? id) {

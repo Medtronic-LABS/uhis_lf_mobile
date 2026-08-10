@@ -1,8 +1,33 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/core/i18n/app_locale.dart';
 import 'package:uhis_next/core/models/programme.dart';
 import 'package:uhis_next/features/visit/forms/rmnch_referral_facility.dart';
 
 void main() {
+  group('RmnchReferralFacility.labelOf', () {
+    tearDown(() {
+      AppLocale.current = AppLanguage.bangla;
+    });
+
+    test('returns Bangla when app language is Bangla', () {
+      AppLocale.current = AppLanguage.bangla;
+      final uhfwc = RmnchReferralFacility.options.firstWhere((o) => o.id == 'uhfwc');
+      expect(
+        RmnchReferralFacility.labelOf(uhfwc),
+        'ইউনিয়ন স্বাস্থ্য ও পরিবার কল্যাণ কেন্দ্র',
+      );
+    });
+
+    test('returns English when app language is English', () {
+      AppLocale.current = AppLanguage.english;
+      final uhfwc = RmnchReferralFacility.options.firstWhere((o) => o.id == 'uhfwc');
+      expect(
+        RmnchReferralFacility.labelOf(uhfwc),
+        'UHFWC (Union health and family welfare center)',
+      );
+    });
+  });
+
   group('RmnchReferralFacility.showOnStep3', () {
     test('shows for ANC/PNC when referred', () {
       expect(

@@ -16,10 +16,12 @@ enum AuthStatus { unknown, signedOut, signedIn }
 class AuthState extends ChangeNotifier {
   AuthState(this._repo, this._biometric, {Future<void> Function()? onWipeLocalData})
       : _onWipeLocalData = onWipeLocalData {
-    // Server-side session invalidation (401/403 from any authenticated call)
-    // routes through the exact same path as today's locally-detected expiry.
+    // Server-side session invalidation (401 after refresh fails) routes
+    // through the same path as a locally-detected expiry. 403 permission
+    // denials never reach here.
     _repo.onUnauthorized = () {
-      debugPrint('[AuthState] onUnauthorized fired (server 401/403) — calling handleSessionExpired()');
+      debugPrint(
+          '[AuthState] onUnauthorized fired (server 401 after refresh) — calling handleSessionExpired()');
       handleSessionExpired();
     };
   }
@@ -406,14 +408,14 @@ class AuthState extends ChangeNotifier {
   }
 
   /// User chose "Use password" from the lock barrier or `/lock` screen.
-  /// Drops the active session locally (server cookies considered abandoned),
-  /// clears the lock flag, and forces signedOut so the user can land on
-  /// `/login?from=lock`. Biometric preference is preserved — successful
-  /// password login will silently re-enrol the new session.
+  /// Clears live API credentials and unlocks navigation to `/login?from=lock`
+  /// without treating this as a dead session: biometric/PIN enrolment stays
+  /// enabled so a successful password login can re-bind the new tokens.
   Future<void> requestPasswordFallback() async {
-    await _repo.handleSessionExpired();
+    await _repo.preparePasswordFallback();
     _status = AuthStatus.signedOut;
     _locked = false;
+    _error = null;
     // Defer to avoid build scope conflicts
     _scheduleNotify();
   }

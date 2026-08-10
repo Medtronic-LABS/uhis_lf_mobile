@@ -1720,8 +1720,8 @@
     "en": "Refresh failed: {error}"
   },
   "HouseholdList.searchHint": {
-    "bn": "নাম, বাড়ি নং বা গ্রাম দিয়ে খুঁজুন…",
-    "en": "Search by name, house no. or village…"
+    "bn": "নাম বা গ্রাম দিয়ে খুঁজুন…",
+    "en": "Search by name or village…"
   },
   "HouseholdList.unnamedHousehold": {
     "bn": "(নামহীন পরিবার)",
@@ -1944,7 +1944,7 @@
     "en": "ROUTINE"
   },
   "Naba.urgencyThisWeek": {
-    "bn": "এই সপ্তাহে",
+    "bn": "এই সপ্তাহ",
     "en": "THIS WEEK"
   },
   "Naba.urgencyToday": {
@@ -3327,6 +3327,26 @@
     "bn": "উপজেলা স্বাস্থ্য কমপ্লেক্স",
     "en": "Upazila Health Complex"
   },
+  "VisitFlow.rmnchReferralFacility.districtHospital": {
+    "bn": "জেলা সদর হাসপাতাল",
+    "en": "District Hospital"
+  },
+  "VisitFlow.rmnchReferralFacility.mcwc": {
+    "bn": "মাতৃ ও শিশু কল্যাণ কেন্দ্র",
+    "en": "MCWC (Mother and Child Welfare Center)"
+  },
+  "VisitFlow.rmnchReferralFacility.medicalCollegeHospital": {
+    "bn": "মেডিকেল কলেজ হাসপাতাল",
+    "en": "Medical College Hospital"
+  },
+  "VisitFlow.rmnchReferralFacility.uhc": {
+    "bn": "উপজেলা স্বাস্থ্য কমপ্লেক্স",
+    "en": "UHC (Upazila Health complex)"
+  },
+  "VisitFlow.rmnchReferralFacility.uhfwc": {
+    "bn": "ইউনিয়ন স্বাস্থ্য ও পরিবার কল্যাণ কেন্দ্র",
+    "en": "UHFWC (Union health and family welfare center)"
+  },
   "VisitFlow.referralReasonClinicalAssessment": {
     "bn": "ক্লিনিক্যাল মূল্যায়নের ভিত্তিতে রেফারেল সুপারিশ করা হয়েছে",
     "en": "Referral recommended based on clinical assessment"
@@ -3700,7 +3720,7 @@
     "en": "Routine"
   },
   "Worklist.urgencyThisWeek": {
-    "bn": "এই সপ্তাহে",
+    "bn": "এই সপ্তাহ",
     "en": "This week"
   },
   "Worklist.urgencyToday": {
@@ -3764,7 +3784,7 @@
     "en": "Send Reminder"
   },
   "actionThisWeek": {
-    "bn": "এই সপ্তাহে",
+    "bn": "এই সপ্তাহ",
     "en": "This week"
   },
   "actionUpdateQueue": {
@@ -6451,6 +6471,18 @@
     "bn": "বৃদ্ধির প্রবণতা",
     "en": "Growth trend"
   },
+  "addGuardian": {
+    "bn": "+ অভিভাবক যোগ করুন",
+    "en": "+ Add Guardian"
+  },
+  "alertTitle": {
+    "bn": "সতর্কতা",
+    "en": "Alert"
+  },
+  "exitReason": {
+    "bn": "আপনি এই স্ক্রিন ছেড়ে গেলে আপনার প্রবেশ করা ডেটা সংরক্ষণ হবে না।",
+    "en": "If you leave this screen, your entered data will not be saved."
+  },
   "guardianHint": {
     "bn": "ঘরের সকল নিবন্ধিত সদস্যদের ড্রপডাউন তালিকা",
     "en": "Drop down list of all registered members from the house"
@@ -8144,7 +8176,7 @@
     "en": "Wrong number"
   },
   "overdue": {
-    "bn": "ওভারডিউ",
+    "bn": "বকেয়া",
     "en": "Overdue"
   },
   "overdueByDaysBadge": {
@@ -10000,7 +10032,7 @@
     "en": "Routine"
   },
   "statusPillThisWeek": {
-    "bn": "এই সপ্তাহে",
+    "bn": "এই সপ্তাহ",
     "en": "This week"
   },
   "statusPillToday": {
@@ -10480,7 +10512,7 @@
     "en": "Due today"
   },
   "tierLabelOverdue": {
-    "bn": "ওভার ডিউ",
+    "bn": "বকেয়া",
     "en": "Overdue"
   },
   "tierLabelThisWeek": {
