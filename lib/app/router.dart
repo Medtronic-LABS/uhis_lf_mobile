@@ -347,10 +347,19 @@ GoRouter buildRouter(AuthState auth) {
           ),
           GoRoute(
             path: '/household/enrollment/add-member',
-            pageBuilder: (context, state) => const MaterialPage(
-              key: ValueKey('enrollment-add-member'),
-              child: AddHouseholdMemberScreen(),
-            ),
+            pageBuilder: (context, state) {
+              final extra = state.extra is Map<String, dynamic>
+                  ? state.extra as Map<String, dynamic>
+                  : const <String, dynamic>{};
+              // formInstanceId changes on "+ Add Guardian" so pushReplacement
+              // recreates a blank form instead of reusing the old State.
+              final instanceId =
+                  extra['formInstanceId'] as String? ?? 'default';
+              return MaterialPage(
+                key: ValueKey('enrollment-add-member-$instanceId'),
+                child: const AddHouseholdMemberScreen(),
+              );
+            },
           ),
           GoRoute(
             path: '/household/enrollment/link-member',
@@ -358,8 +367,10 @@ GoRouter buildRouter(AuthState auth) {
               final extra = state.extra is Map<String, dynamic>
                   ? state.extra as Map<String, dynamic>
                   : <String, dynamic>{};
+              final instanceId =
+                  extra['formInstanceId'] as String? ?? 'default';
               return MaterialPage(
-                key: const ValueKey('link-member'),
+                key: ValueKey('link-member-$instanceId'),
                 child: AddHouseholdMemberScreen(
                   existingHouseholdId: extra['householdId'] as String?,
                   existingHouseholdReferenceId:

@@ -11,7 +11,6 @@ import 'browser_adapter_stub.dart'
 
 const String _authCookieName = 'AuthCookie';
 const String _sessionCookieName = 'JSESSIONID';
-const String _authRetryExtra = 'authRetry';
 
 class ApiClient {
   ApiClient._(this.dio, this._cookieJar);
@@ -30,22 +29,10 @@ class ApiClient {
   // web AuthCookie; the token is replayed on every subsequent request.
   String? _authToken;
   void Function(String authCookie, DateTime expiry)? onAuthCookieRotated;
-  // Fired on every successful (2xx) authenticated response — lets
-  // AuthRepository extend the locally-persisted reentry-session TTL on real
-  // backend activity, so an actively-used mobile session doesn't hit the
-  // synthetic Bearer-token expiry wall while the SK is still working.
-  void Function()? onAuthenticatedActivity;
-  // Fired only when authentication has failed for real (401 after a refresh
-  // attempt). Never fired for 403 — that means "authenticated but not
-  // permitted" and must not sign the user out.
+  // Fired only when authentication has failed for real (401). Never fired for
+  // 403 — that means "authenticated but not permitted" and must not sign the
+  // user out. UHIS parity: no client-side token refresh before this fires.
   void Function()? onUnauthorized;
-  // Awaited before every request except the login and token-validation
-  // endpoints themselves — lets AuthRepository refresh a near-expiry Bearer
-  // token before it's used, so most sessions never reach onUnauthorized.
-  Future<void> Function()? onBeforeRequest;
-  // One-shot refresh used by the 401 interceptor. Returns true when the
-  // session was restored and the original request may be retried.
-  Future<bool> Function()? onTokenRefresh;
 
   static Future<ApiClient> create() async {
     final cookieJar = CookieJar();
@@ -72,21 +59,6 @@ class ApiClient {
               return true;
             };
     }
-    // Registered first so a refreshed token (if onBeforeRequest triggers one)
-    // is what the cookie/token-header interceptor below attaches. Skips the
-    // login endpoint (no token exists yet pre-login) and the token-validation
-    // endpoint itself (would otherwise recurse — that request would trigger
-    // onBeforeRequest again, which would call it again, forever).
-    dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final skip = options.path.contains('/session') ||
-              options.path.contains('/authenticate');
-          if (!skip) await client.onBeforeRequest?.call();
-          handler.next(options);
-        },
-      ),
-    );
     if (kIsWeb) {
       configureWebCredentials(dio);
       // On web the browser manages cookies via withCredentials.  The Bearer
@@ -207,6 +179,7 @@ class ApiClient {
   ///
   /// 403 is intentionally ignored here: it means the user is authenticated
   /// but not permitted for that resource, and must not force a sign-out.
+  /// UHIS parity: 401 → [onUnauthorized] immediately (no refresh / retry).
   Future<void> _onAuthResponse(
     Response response,
     ResponseInterceptorHandler handler,
@@ -218,35 +191,12 @@ class ApiClient {
     final status = response.statusCode;
     final path = response.requestOptions.path;
     if (status != null && status >= 200 && status < 300) {
-      onAuthenticatedActivity?.call();
       handler.next(response);
       return;
     }
     if (status == 401 &&
         !path.contains('/session') &&
         !path.contains('/authenticate')) {
-      final alreadyRetried =
-          response.requestOptions.extra[_authRetryExtra] == true;
-      if (!alreadyRetried && onTokenRefresh != null) {
-        debugPrint(
-            '[ApiClient] 401 on $path — attempting token refresh before sign-out');
-        final refreshed = await onTokenRefresh!();
-        if (refreshed) {
-          try {
-            final opts = response.requestOptions;
-            opts.extra[_authRetryExtra] = true;
-            final token = _authToken;
-            if (token != null && token.isNotEmpty) {
-              opts.headers['Authorization'] = token;
-            }
-            final retry = await dio.fetch(opts);
-            handler.resolve(retry);
-            return;
-          } catch (e) {
-            debugPrint('[ApiClient] retry after refresh failed: $e');
-          }
-        }
-      }
       debugPrint(
           '[ApiClient] 401 on $path — signaling onUnauthorized (session expired)');
       onUnauthorized?.call();
