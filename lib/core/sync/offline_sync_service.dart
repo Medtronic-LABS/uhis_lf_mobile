@@ -131,6 +131,16 @@ class OfflineSyncService extends ChangeNotifier {
 
   void _emitProgress(SyncProgress p) {
     _progress = p;
+    // Every state transition is logged. Without this a missing downstream
+    // reaction (e.g. PostSyncRefresher not firing) is undiagnosable: the
+    // absence of a completion event and the absence of a *reaction* to one
+    // look identical in logcat.
+    debugPrint(
+      '[SyncProgress] step=${p.currentStep.name} '
+      'complete=${p.isComplete} error=${p.hasError} '
+      'items=${p.itemsDone}/${p.itemsTotal}'
+      '${p.isRetrying ? ' retry=${p.retryAttempt}/${p.retryMaxAttempts}' : ''}',
+    );
     _progressController.add(p);
     notifyListeners();
   }
@@ -397,12 +407,24 @@ class OfflineSyncService extends ChangeNotifier {
       // Server rows just landed — nudge any mounted roster screen to re-query.
       // One bump per sync (not per row), so a large bundle can't turn into a
       // reload storm.
-      if (totalHouseholds > 0 || totalMembers > 0 || out.patients > 0) {
+      final rosterChanged =
+          totalHouseholds > 0 || totalMembers > 0 || out.patients > 0;
+      if (rosterChanged) {
         bumpRosterRevision();
       }
 
+      // Broader than [rosterChanged]: the derived-data recompute downstream
+      // also depends on follow-ups, assessments, immunisations and referrals,
+      // any of which can change without a household or member doing so.
+      final anythingChanged = rosterChanged ||
+          out.followUps > 0 ||
+          out.assessments > 0 ||
+          out.immunisations > 0 ||
+          out.referrals > 0 ||
+          (historyReferrals ?? 0) > 0;
+
       // Done!
-      _emitProgress(SyncProgress.completed());
+      _emitProgress(SyncProgress.completed(hasChanges: anythingChanged));
       return report;
     } catch (e) {
       _emitProgress(SyncProgress.failed('Sync failed: $e'));

@@ -15,6 +15,7 @@ class SyncProgress {
     this.isComplete = false,
     this.retryAttempt,
     this.retryMaxAttempts,
+    this.hasChanges = true,
   });
 
   final SyncStep currentStep;
@@ -37,6 +38,16 @@ class SyncProgress {
 
   bool get isRetrying => retryAttempt != null && retryMaxAttempts != null;
 
+  /// Whether this sync actually wrote anything.
+  ///
+  /// A warm pull that finds nothing new still completes, and the derived-data
+  /// recompute it would trigger walks every patient — measured at **19 s for
+  /// 3566 patients after a 1.3 s no-op sync**. Since connectivity changes fire
+  /// a sync on every network flap, ungated that is near-continuous CPU and
+  /// battery burn recomputing values that cannot have changed. Defaults true so
+  /// any other completion path still refreshes.
+  final bool hasChanges;
+
   /// 0.0 to 1.0 overall progress.
   double get overallProgress {
     if (isComplete) return 1.0;
@@ -58,6 +69,7 @@ class SyncProgress {
     bool? isComplete,
     int? retryAttempt,
     int? retryMaxAttempts,
+    bool? hasChanges,
   }) =>
       SyncProgress(
         currentStep: currentStep ?? this.currentStep,
@@ -69,13 +81,15 @@ class SyncProgress {
         isComplete: isComplete ?? this.isComplete,
         retryAttempt: retryAttempt ?? this.retryAttempt,
         retryMaxAttempts: retryMaxAttempts ?? this.retryMaxAttempts,
+        hasChanges: hasChanges ?? this.hasChanges,
       );
 
   static const SyncProgress initial = SyncProgress();
 
-  static SyncProgress completed() => const SyncProgress(
+  static SyncProgress completed({bool hasChanges = true}) => SyncProgress(
         currentStep: SyncStep.done,
         isComplete: true,
+        hasChanges: hasChanges,
       );
 
   static SyncProgress failed(String message) => SyncProgress(
