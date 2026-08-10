@@ -14,6 +14,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
 import '../../realtime_asr/models/realtime_symptom_codes.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
+import '../../visit/forms/unified_form_notifier.dart';
 import '../form_field_schema_builder.dart';
 import '../models/ai_extracted_field.dart';
 import '../scribe_controller.dart';
@@ -150,6 +151,17 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       _onScribeChanged();
     }
     _liveCtrl.bindContext(context);
+
+    // Wire form-field coverage snapshot if UnifiedFormNotifier is in scope
+    // (Step 2 assessment form). Silently skipped in Step 1 triage context.
+    try {
+      final formNotifier = context.read<UnifiedFormNotifier>();
+      _liveCtrl.setCoverageBuilder(
+        (transcript) => formNotifier.coverageSnapshot(transcript),
+      );
+    } catch (_) {
+      _liveCtrl.setCoverageBuilder(null);
+    }
   }
 
   @override

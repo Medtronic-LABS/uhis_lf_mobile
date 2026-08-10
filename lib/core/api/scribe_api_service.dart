@@ -714,6 +714,7 @@ class ScribeApiService extends ApiRepository {
     String? fhirEncounterId,
     String scribeMode = 'formPrefill',
     String language = 'bn',
+    String? coverageJson,
   }) async {
     final ext = _extensionOf(audioFile.path);
     final mimeType = ext == 'wav'
@@ -734,6 +735,7 @@ class ScribeApiService extends ApiRepository {
       'scribe_mode': scribeMode,
       'language': language,
       'app_version': '2.1.0',
+      if (coverageJson != null) 'coverage_json': coverageJson,
     });
     final resp = await _dio.post(
       _scribePath(Endpoints.trainingAudioSample),

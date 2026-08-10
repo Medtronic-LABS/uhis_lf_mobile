@@ -25,6 +25,12 @@ import 'realtime_asr_channel_io.dart'
     if (dart.library.html) 'realtime_asr_channel_web.dart';
 import 'vad_gate.dart';
 
+/// Callback type used by [RealtimeAsrController] to obtain a form-field
+/// coverage snapshot at WAV staging time — avoids a direct import of
+/// [UnifiedFormNotifier] from within the realtime_asr feature module.
+typedef CoverageSnapshotBuilder = Map<String, dynamic>? Function(
+    String? transcript);
+
 enum RealtimeAsrState { idle, connecting, listening, stopping, error }
 
 /// One LLM extract call within a RealtimeASR session — used for traceability.
@@ -109,9 +115,13 @@ class RealtimeAsrController extends ChangeNotifier {
   String? _encounterId;
   final BytesBuilder _pcmBuffer = BytesBuilder(copy: false);
 
+  CoverageSnapshotBuilder? _coverageBuilder;
+
   void setSampleDao(AudioSampleDao dao) => _sampleDao = dao;
   void setHierarchyService(UserHierarchyService h) => _hierarchy = h;
   void setScribeApiService(ScribeApiService api) => _scribeApiService = api;
+  void setCoverageBuilder(CoverageSnapshotBuilder? builder) =>
+      _coverageBuilder = builder;
 
   // Traceability counters — reset on each start(), posted to backend on stop().
   String? _sessionId;
@@ -489,6 +499,14 @@ class RealtimeAsrController extends ChangeNotifier {
         '[AudioSample][Live] sidecar JSON written → $jsonPath '
         '(${sarvamEvents.length} sarvam events)',
       );
+
+      // Coverage sidecar: field fill status per programme for field-loss analysis.
+      final coverage = _coverageBuilder?.call(fullTranscript);
+      if (coverage != null) {
+        final coveragePath = '${trainingDir.path}/$sampleId.coverage.json';
+        await File(coveragePath).writeAsString(jsonEncode(coverage), flush: true);
+        debugPrint('[AudioSample][Live] coverage JSON written → $coveragePath');
+      }
 
       final sample = AudioSampleModel(
         id: sampleId,

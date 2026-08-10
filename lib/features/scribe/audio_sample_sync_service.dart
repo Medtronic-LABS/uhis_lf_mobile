@@ -87,8 +87,17 @@ class AudioSampleSyncService {
           continue;
         }
         try {
+          // Read coverage sidecar written by RealtimeAsrController (if present).
+          final dotIdx = sample.localFilePath.lastIndexOf('.');
+          final basePath = dotIdx >= 0
+              ? sample.localFilePath.substring(0, dotIdx)
+              : sample.localFilePath;
+          final coverageFile = File('$basePath.coverage.json');
+          final coverageJson =
+              coverageFile.existsSync() ? coverageFile.readAsStringSync() : null;
+
           debugPrint(
-              '[AudioSampleSync] uploading id=${sample.id} size=${file.lengthSync()}B encounterId=${sample.encounterId}');
+              '[AudioSampleSync] uploading id=${sample.id} size=${file.lengthSync()}B encounterId=${sample.encounterId} hasCoverage=${coverageJson != null}');
           await _api.uploadAudioSample(
             file,
             localSampleId: sample.id,
@@ -96,10 +105,15 @@ class AudioSampleSyncService {
             fhirEncounterId: sample.fhirEncounterId,
             scribeMode: sample.scribeMode,
             language: sample.language,
+            coverageJson: coverageJson,
           );
           debugPrint('[AudioSampleSync] upload OK id=${sample.id} — deleting local file');
           await file.delete();
           debugPrint('[AudioSampleSync] local file deleted id=${sample.id}');
+          if (coverageFile.existsSync()) {
+            await coverageFile.delete();
+            debugPrint('[AudioSampleSync] coverage JSON deleted id=${sample.id}');
+          }
           await _dao.markUploaded(sample.id);
           debugPrint('[AudioSampleSync] DB marked uploaded id=${sample.id}');
         } catch (e) {
