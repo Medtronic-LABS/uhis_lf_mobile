@@ -41,8 +41,19 @@ class PostSyncRefresher {
   bool _running = false;
 
   void attach() {
+    debugPrint('[PostSync] attached — listening for sync completion');
     _sub = _progress.listen((p) {
-      if (p.isComplete) unawaited(refreshNow());
+      if (!p.isComplete) return;
+      // A sync that wrote nothing cannot have changed anything derived from it.
+      // Measured: the recompute walks every patient and took 19 s for 3566
+      // patients after a 1.3 s no-op warm pull. Connectivity changes fire a
+      // sync on every network flap, so running it ungated would burn CPU and
+      // battery continuously for a CHW moving in and out of signal.
+      if (!p.hasChanges) {
+        debugPrint('[PostSync] sync wrote nothing — recompute skipped');
+        return;
+      }
+      unawaited(refreshNow(trigger: 'syncCompleted'));
     });
   }
 
@@ -56,19 +67,25 @@ class PostSyncRefresher {
   /// Public so `SyncProgressScreen` can call it directly for the post-login
   /// path instead of keeping a second copy of this sequence — the two must not
   /// drift, and running both would recompute twice per login.
-  Future<void> refreshNow() async {
+  Future<void> refreshNow({String trigger = 'manual'}) async {
     if (_running) {
-      debugPrint('[PostSync] refresh already running — skipped');
+      debugPrint('[PostSync] refresh already running — skipped ($trigger)');
       return;
     }
     _running = true;
+    // Logged on ENTRY, not just completion: the recompute walks every patient
+    // and can run for tens of seconds, so an end-only log is indistinguishable
+    // from never having started.
+    debugPrint('[PostSync] refresh start ($trigger)');
     final watch = Stopwatch()..start();
     try {
       // Order matters: the worklist recompute writes the risk/next-due columns
       // the mission queue reads, so refreshing the dashboard first would show
       // pre-sync ordering.
       await _worklist.recomputeAllAfterSync();
+      debugPrint('[PostSync] worklist recompute ${watch.elapsedMilliseconds}ms');
       await _referrals.recomputeAllAfterSync();
+      debugPrint('[PostSync] referral recompute ${watch.elapsedMilliseconds}ms');
       await _mission.refresh();
       debugPrint('[PostSync] refresh done in ${watch.elapsedMilliseconds}ms');
     } catch (e) {

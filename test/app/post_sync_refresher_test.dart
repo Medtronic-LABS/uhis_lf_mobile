@@ -109,6 +109,31 @@ void main() {
     expect(log, ['worklist', 'referrals', 'mission']);
   });
 
+  test('a completed sync that wrote nothing skips the recompute', () async {
+    // The measured case: a 1.3 s warm pull with an empty bundle triggering a
+    // 19 s walk over 3566 patients, on every network flap.
+    attach();
+    progress.add(SyncProgress.completed(hasChanges: false));
+    await pumpEventQueue();
+
+    expect(worklist.calls, 0);
+    expect(referrals.calls, 0);
+    expect(mission.calls, 0);
+  });
+
+  test('an explicit refreshNow still runs even when the sync wrote nothing',
+      () async {
+    // The gate belongs to the stream hook, not to the method: the sync screen
+    // calls refreshNow() directly and must still prepare the dashboard.
+    final refresher = attach();
+    progress.add(SyncProgress.completed(hasChanges: false));
+    await pumpEventQueue();
+    expect(worklist.calls, 0);
+
+    await refresher.refreshNow(trigger: 'syncScreen');
+    expect(worklist.calls, 1);
+  });
+
   test('in-progress events do not trigger a refresh', () async {
     attach();
     progress.add(const SyncProgress(currentStep: SyncStep.fetchingPatients));

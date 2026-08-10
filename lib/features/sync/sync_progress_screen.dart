@@ -205,7 +205,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       // sequence: it also runs on connectivity-triggered syncs that never show
       // this screen, and its guard means the two paths cannot recompute twice
       // for the same login.
-      await context.read<PostSyncRefresher>().refreshNow();
+      await context.read<PostSyncRefresher>().refreshNow(trigger: 'syncScreen');
 
       if (!mounted) return;
       setState(() => _preparePhase = _PreparePhase.dashboard);
