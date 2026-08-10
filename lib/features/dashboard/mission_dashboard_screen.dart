@@ -130,10 +130,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _loadVillagesLine();
       // Load mission data (may already be cached from sync screen)
       _loadMissionData();
-      // One-time, after the dashboard has settled: OEM power managers kill
-      // background work regardless of the sync foreground service, so offer to
-      // send the SK to the right settings screen. Self-suppressing — see
-      // BatteryOptimizationGate.
+      // Fallback only. The onboarding permission step now asks this as part of
+      // one setup conversation, and its flag suppresses this call. Kept because
+      // that step does not run for SKs who already onboarded on an earlier
+      // build, or who chose "Not now" at the rationale sheet — for them this is
+      // the only path to the prompt.
       if (!mounted) return;
       await maybeShowBatteryOptimizationPrompt(
         context,

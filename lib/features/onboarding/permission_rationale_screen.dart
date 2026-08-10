@@ -1,6 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/device/battery_optimization_gate.dart';
+import '../../core/device/battery_optimization_prompt.dart';
+import '../../core/device/battery_optimization_service.dart';
 import '../../core/device/permission_gate.dart';
 
 /// One card per permission, shown before Android asks anything.
@@ -165,6 +169,23 @@ Future<void> runPermissionStep(
   }
 
   final statuses = await gate.requestAll();
+
+  // Battery optimisation belongs to the same conversation: OEM power managers
+  // kill the sync regardless of any runtime permission, and asking here means
+  // one setup moment instead of this appearing separately on the dashboard.
+  // Self-suppressing via its own flag, so the dashboard fallback becomes a
+  // no-op once this has run.
+  if (!context.mounted) return;
+  await maybeShowBatteryOptimizationPrompt(
+    context,
+    BatteryOptimizationGate(
+      service: kIsWeb
+          ? const NoopBatteryOptimizationService()
+          : const MethodChannelBatteryOptimizationService(),
+    ),
+  );
+
+  // Last, so it is not buried under the dialog above.
   if (!PermissionGate.anyPermanentlyDenied(statuses)) return;
   if (!context.mounted) return;
 
