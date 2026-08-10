@@ -191,6 +191,41 @@ class AppConfig {
     defaultValue: 200,
   );
 
+  /// Receive timeout (seconds) for every call on the shared UHIS client.
+  ///
+  /// This governs how long the app waits for the server's *first byte*, not
+  /// the transfer duration — the bulk `offline-sync/fetch-synced-data` pull
+  /// builds and gzips its entire bundle before writing anything, and a full
+  /// initial sync measures ~6 minutes. 60 s (the previous hardcoded value)
+  /// could never complete one.
+  static const int apiReceiveTimeoutSeconds = int.fromEnvironment(
+    'API_RECEIVE_TIMEOUT_SECONDS',
+    defaultValue: 900,
+  );
+
+  /// Connect timeout (seconds) for the shared UHIS client. Deliberately short
+  /// and kept separate from [apiReceiveTimeoutSeconds]: a failure to connect
+  /// is how the app detects "no network", so stretching it would make every
+  /// offline action hang instead of degrading immediately.
+  static const int apiConnectTimeoutSeconds = int.fromEnvironment(
+    'API_CONNECT_TIMEOUT_SECONDS',
+    defaultValue: 30,
+  );
+
+  /// Total attempts for retry-safe (read-only) calls; 1 disables retrying.
+  /// Worst-case wall time is this × [apiReceiveTimeoutSeconds], so raise the
+  /// two together deliberately.
+  static const int apiMaxAttempts = int.fromEnvironment(
+    'API_MAX_ATTEMPTS',
+    defaultValue: 3,
+  );
+
+  /// Backoff (seconds) between retry attempts.
+  static const int apiRetryDelaySeconds = int.fromEnvironment(
+    'API_RETRY_DELAY_SECONDS',
+    defaultValue: 5,
+  );
+
   /// Timeout in milliseconds for the AI pathway suggestion call.
   ///
   /// The call is fire-and-forget; the picker never blocks on it.

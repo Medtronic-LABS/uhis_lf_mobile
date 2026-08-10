@@ -630,6 +630,35 @@ abstract final class SyncStrings {
   static String get members => getTranslatedString('members', 'members');
   static String get patients => getTranslatedString('Sync.patients', 'patients');
 
+  /// Shown while a slow bulk pull is being replayed, so the sync screen reports
+  /// activity instead of sitting still for the whole retry budget.
+  static String retryingAttempt(int n, int of) => getTranslatedString(
+        'Sync.retryingAttempt',
+        'Retrying… ({n} of {of})',
+        params: {'n': '$n', 'of': '$of'},
+      );
+
+  // Foreground-service notification shown while sync runs with the app
+  // minimized or the screen off, plus the in-app strip on every tab.
+  static String get notificationChannelName =>
+      getTranslatedString('Sync.notificationChannelName', 'Data sync');
+  static String get notificationTitle =>
+      getTranslatedString('Sync.notificationTitle', 'Apon Sushashthya');
+  static String get notificationStarting =>
+      getTranslatedString('Sync.notificationStarting', 'Syncing your data…');
+  static String get notificationFailedTitle =>
+      getTranslatedString('Sync.notificationFailedTitle', 'Sync failed');
+  static String notificationProgress(String entity, int done, int total) =>
+      getTranslatedString(
+        'Sync.notificationProgress',
+        'Syncing {entity} {done}/{total}',
+        params: {'entity': entity, 'done': '$done', 'total': '$total'},
+      );
+
+  /// Label on the in-app sync strip shown across every tab while syncing.
+  static String get inProgressStrip =>
+      getTranslatedString('Sync.inProgressStrip', 'Syncing your data…');
+
   static String get done => getTranslatedString('Sync.done', 'Ready to go');
   static String get syncFailed => getTranslatedString('Sync.syncFailed', 'We couldn\'t finish downloading your data.');
   static String get syncErrorNoInternet => getTranslatedString('syncErrorNoInternet', 'No internet connection. Please check your network and try again.');

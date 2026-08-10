@@ -11,6 +11,8 @@ import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../auth/user_hierarchy_service.dart';
 import '../config/app_config.dart';
+import '../constants/app_strings.dart';
+import '../errors/domain_exceptions.dart';
 import '../models/assessment_history_item.dart';
 import '../db/app_database.dart';
 import '../db/assessment_dao.dart';
@@ -271,11 +273,26 @@ class OfflineSyncService extends ChangeNotifier {
         entityName: 'patients',
       ));
 
+      // A full bundle can take minutes to build server-side and is replayed up
+      // to AppConfig.apiMaxAttempts times by ApiClient's retry interceptor.
+      // Surface each attempt so the sync screen shows activity instead of
+      // appearing frozen for the whole retry budget.
       Map<String, dynamic>? bundle;
+      _api.onRetryAttempt = (path, attempt, maxAttempts) {
+        if (path != Endpoints.offlineSyncFetch) return;
+        _emitProgress(SyncProgress(
+          currentStep: SyncStep.fetchingPatients,
+          entityName: SyncStrings.retryingAttempt(attempt, maxAttempts),
+        ));
+      };
       try {
         bundle = await _fetchBundle(villageIds: villageIds, since: since);
       } catch (e) {
-        throw StateError('fetch-synced-data failed: $e');
+        // Keep the failure kind: a StateError erased DioExceptionType, leaving
+        // the UI unable to tell "too slow" from "server broke".
+        throw NetworkException(cause: e, message: NetworkErrorMapper.friendly(e));
+      } finally {
+        _api.onRetryAttempt = null;
       }
 
       // Step 2: Process and persist bundle (includes households/members if in bundle - Android pattern)
