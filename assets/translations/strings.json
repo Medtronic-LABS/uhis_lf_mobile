@@ -1991,6 +1991,38 @@
     "bn": "অফলাইনে কাজ করে",
     "en": "Works offline"
   },
+  "NetworkError.accessDenied": {
+    "bn": "অ্যাক্সেস অনুমোদিত নয়। অনুগ্রহ করে লগ আউট করে আবার লগ ইন করুন।",
+    "en": "Access denied. Please log out and log back in."
+  },
+  "NetworkError.connectionTimedOut": {
+    "bn": "সংযোগের সময় শেষ হয়ে গেছে। আপনার নেটওয়ার্ক দেখে আবার চেষ্টা করুন।",
+    "en": "Connection timed out. Check your signal and try again."
+  },
+  "NetworkError.noInternet": {
+    "bn": "ইন্টারনেট সংযোগ নেই। আপনার নেটওয়ার্ক দেখে আবার চেষ্টা করুন।",
+    "en": "No internet connection. Check your signal and try again."
+  },
+  "NetworkError.notFound": {
+    "bn": "অনুরোধ করা তথ্য পাওয়া যায়নি।",
+    "en": "The requested data was not found."
+  },
+  "NetworkError.requestCancelled": {
+    "bn": "অনুরোধ বাতিল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।",
+    "en": "Request was cancelled. Please try again."
+  },
+  "NetworkError.serverBusy": {
+    "bn": "সার্ভার ব্যস্ত আছে। কিছুক্ষণ পর আবার চেষ্টা করুন।",
+    "en": "Server is busy. Please try again in a moment."
+  },
+  "NetworkError.serverError": {
+    "bn": "সার্ভারে সমস্যা হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।",
+    "en": "Server error. Please try again in a moment."
+  },
+  "OfflineSync.acceptedStillProcessing": {
+    "bn": "সিঙ্ক গৃহীত হয়েছে — সার্ভারে কাজ চলছে। রিফ্রেশ করতে আবার অফলাইন সিঙ্ক খুলুন।",
+    "en": "Sync accepted — server still processing. Open Offline Sync again to refresh."
+  },
   "OfflineSync.alreadyRunning": {
     "bn": "একটি সিঙ্ক ইতিমধ্যে চলছে",
     "en": "A sync is already in progress"
@@ -2015,6 +2047,10 @@
     "bn": "ব্যর্থ — “শুরু” চাপলে আবার চেষ্টা হবে",
     "en": "Failed — will retry on Start"
   },
+  "OfflineSync.followUpSyncFailedRetry": {
+    "bn": "ফলো-আপ সিঙ্ক ব্যর্থ হয়েছে — আবার অফলাইন সিঙ্ক করুন",
+    "en": "Follow-up sync failed — retry Offline Sync"
+  },
   "OfflineSync.followUps": {
     "bn": "ফলো-আপ",
     "en": "Follow-ups"
@@ -2031,9 +2067,25 @@
     "bn": "সর্বশেষ সিঙ্ক",
     "en": "Last synced at"
   },
+  "OfflineSync.noNetworkChangesKept": {
+    "bn": "নেটওয়ার্ক নেই — আপনার তথ্য পরে পাঠানোর জন্য রাখা হয়েছে",
+    "en": "No network — changes kept for retry"
+  },
+  "OfflineSync.notAuthenticated": {
+    "bn": "সাইন ইন করা নেই — সিঙ্ক করার আগে আবার সাইন ইন করুন",
+    "en": "Not authenticated — sign in again before syncing"
+  },
+  "OfflineSync.nothingPendingToSync": {
+    "bn": "সিঙ্ক করার মতো কিছু নেই",
+    "en": "Nothing pending to sync"
+  },
   "OfflineSync.offlineData": {
     "bn": "অফলাইন ডেটা",
     "en": "Offline data"
+  },
+  "OfflineSync.offlineSyncCompleted": {
+    "bn": "অফলাইন সিঙ্ক সম্পন্ন হয়েছে",
+    "en": "Offline sync completed"
   },
   "OfflineSync.okay": {
     "bn": "ঠিক আছে",
@@ -2042,6 +2094,10 @@
   "OfflineSync.progressPercent": {
     "bn": "{pct}%",
     "en": "{pct}%"
+  },
+  "OfflineSync.reportedFailedForSomeRecords": {
+    "bn": "কিছু তথ্যের সিঙ্ক ব্যর্থ হয়েছে",
+    "en": "Sync reported Failed for some records"
   },
   "OfflineSync.retry": {
     "bn": "আবার চেষ্টা করুন",
@@ -2058,6 +2114,14 @@
   "OfflineSync.started": {
     "bn": "অফলাইন ডেটা সিঙ্ক শুরু হয়েছে",
     "en": "Offline data has started to sync"
+  },
+  "OfflineSync.syncAlreadyInProgress": {
+    "bn": "সিঙ্ক ইতিমধ্যে চলছে",
+    "en": "Sync already in progress"
+  },
+  "OfflineSync.syncFailedHttp": {
+    "bn": "সিঙ্ক ব্যর্থ হয়েছে (HTTP {status})",
+    "en": "Sync failed (HTTP {status})"
   },
   "OfflineSync.title": {
     "bn": "অফলাইন সিঙ্ক",
