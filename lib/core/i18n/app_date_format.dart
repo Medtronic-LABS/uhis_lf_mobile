@@ -52,6 +52,10 @@ abstract final class AppDateFormat {
   /// `5:22 PM`
   static DateFormat get timeFmt => DateFormat('h:mm a', _locale);
 
+  /// `10 August 2026 · 5:22 PM` — the assessment detail sheet header.
+  static DateFormat get dayMonthNameYearTimeFmt =>
+      DateFormat('d MMMM yyyy · h:mm a', _locale);
+
   // Convenience wrappers for the common one-shot case.
   static String dayMonthYear(DateTime date) => dayMonthYearFmt.format(date);
   static String monthYear(DateTime date) => monthYearFmt.format(date);

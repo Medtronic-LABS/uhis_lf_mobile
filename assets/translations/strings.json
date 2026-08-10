@@ -11714,5 +11714,93 @@
   "BatteryOptimization.settingsRowSubtitle": {
     "bn": "অ্যাপ বন্ধ থাকলেও সিঙ্ক চালু রাখার অনুমতি",
     "en": "Allow syncing when the app is closed"
+  },
+  "ClinicalStatus.controlledBg": {
+    "bn": "নিয়ন্ত্রিত রক্তে শর্করা",
+    "en": "Controlled blood sugar"
+  },
+  "ClinicalStatus.controlledBp": {
+    "bn": "নিয়ন্ত্রিত রক্তচাপ",
+    "en": "Controlled blood pressure"
+  },
+  "ClinicalStatus.fbs": {
+    "bn": "ফাস্টিং ব্লাড সুগার",
+    "en": "Fasting blood sugar"
+  },
+  "ClinicalStatus.highRiskPw": {
+    "bn": "উচ্চ ঝুঁকিপূর্ণ গর্ভাবস্থা",
+    "en": "High-risk pregnancy"
+  },
+  "ClinicalStatus.normalPregnancy": {
+    "bn": "স্বাভাবিক গর্ভাবস্থা",
+    "en": "Normal pregnancy"
+  },
+  "ClinicalStatus.onTreatment": {
+    "bn": "চিকিৎসাধীন",
+    "en": "On treatment"
+  },
+  "ClinicalStatus.ppbs": {
+    "bn": "খাবার পরের ব্লাড সুগার",
+    "en": "Post-prandial blood sugar"
+  },
+  "ClinicalStatus.rbs": {
+    "bn": "র‍্যান্ডম ব্লাড সুগার",
+    "en": "Random blood sugar"
+  },
+  "ClinicalStatus.recovered": {
+    "bn": "সুস্থ হয়েছেন",
+    "en": "Recovered"
+  },
+  "ClinicalStatus.referred": {
+    "bn": "রেফার করা হয়েছে",
+    "en": "Referred"
+  },
+  "ClinicalStatus.uncontrolledBg": {
+    "bn": "অনিয়ন্ত্রিত রক্তে শর্করা",
+    "en": "Uncontrolled blood sugar"
+  },
+  "ClinicalStatus.uncontrolledBp": {
+    "bn": "অনিয়ন্ত্রিত রক্তচাপ",
+    "en": "Uncontrolled blood pressure"
+  },
+  "PatientDetail.gaOneWeek": {
+    "bn": "{weeks} সপ্তাহ",
+    "en": "{weeks} week"
+  },
+  "PatientDetail.gaWeeks": {
+    "bn": "{weeks} সপ্তাহ",
+    "en": "{weeks} weeks"
+  },
+  "PatientDetail.gaWeeksDays": {
+    "bn": "{weeks} সপ্তাহ {days} দিন",
+    "en": "{weeks} weeks {days} days"
+  },
+  "PatientDetail.gaWeeksOneDay": {
+    "bn": "{weeks} সপ্তাহ {days} দিন",
+    "en": "{weeks} weeks {days} day"
+  },
+  "PatientDetail.gestationalAge": {
+    "bn": "গর্ভকালীন সময়",
+    "en": "Gestational age"
+  },
+  "PatientDetail.referralMade": {
+    "bn": "রেফার করা হয়েছে",
+    "en": "Referral made"
+  },
+  "PatientDetail.referralReason": {
+    "bn": "রেফারেলের কারণ",
+    "en": "Referral reason"
+  },
+  "PatientDetail.referralStatus": {
+    "bn": "রেফারেলের অবস্থা",
+    "en": "Referral status"
+  },
+  "PatientDetail.referredTo": {
+    "bn": "যেখানে রেফার করা হয়েছে",
+    "en": "Referred to"
+  },
+  "PatientDetail.status": {
+    "bn": "অবস্থা",
+    "en": "Status"
   }
 }

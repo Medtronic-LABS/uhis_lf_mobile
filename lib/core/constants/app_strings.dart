@@ -5744,6 +5744,95 @@ abstract final class ConsentStrings {
   static String get declineCancel => getTranslatedString('declineCancel', 'Go back');
 }
 
+/// Labels and coded values shown in the assessment detail sheets.
+///
+/// The sheets previously rendered wire codes verbatim — `HIGH_RISK_PW`,
+/// `UNCONTROLLED_BP`, `Referred` — and English labels, so a Bangla SK read raw
+/// enum names for clinical status.
+abstract final class ClinicalStatusStrings {
+  ClinicalStatusStrings._();
+
+  /// Localized label for a backend status/customStatus code.
+  ///
+  /// Unknown codes fall back to a humanized form (`SOME_NEW_CODE` →
+  /// `Some new code`), never the raw enum — a new backend value should read as
+  /// awkward English, not as a database identifier.
+  static String label(String raw) {
+    final key = raw.trim().toUpperCase().replaceAll(' ', '_');
+    return switch (key) {
+      'HIGH_RISK_PW' => getTranslatedString(
+          'ClinicalStatus.highRiskPw', 'High-risk pregnancy'),
+      'NORMAL_PREGNANCY' => getTranslatedString(
+          'ClinicalStatus.normalPregnancy', 'Normal pregnancy'),
+      'UNCONTROLLED_BP' => getTranslatedString(
+          'ClinicalStatus.uncontrolledBp', 'Uncontrolled blood pressure'),
+      'CONTROLLED_BP' => getTranslatedString(
+          'ClinicalStatus.controlledBp', 'Controlled blood pressure'),
+      'UNCONTROLLED_BG' => getTranslatedString(
+          'ClinicalStatus.uncontrolledBg', 'Uncontrolled blood sugar'),
+      'CONTROLLED_BG' => getTranslatedString(
+          'ClinicalStatus.controlledBg', 'Controlled blood sugar'),
+      'REFERRED' =>
+        getTranslatedString('ClinicalStatus.referred', 'Referred'),
+      'ONTREATMENT' || 'ON_TREATMENT' => getTranslatedString(
+          'ClinicalStatus.onTreatment', 'On treatment'),
+      'RECOVERED' =>
+        getTranslatedString('ClinicalStatus.recovered', 'Recovered'),
+      'RBS' => getTranslatedString('ClinicalStatus.rbs', 'Random blood sugar'),
+      'FBS' => getTranslatedString('ClinicalStatus.fbs', 'Fasting blood sugar'),
+      'PPBS' => getTranslatedString(
+          'ClinicalStatus.ppbs', 'Post-prandial blood sugar'),
+      _ => _humanize(raw),
+    };
+  }
+
+  /// Maps a comma/JSON list of codes through [label].
+  static String labelAll(Iterable<String> codes) =>
+      codes.map(label).where((s) => s.isNotEmpty).join(', ');
+
+  static String _humanize(String raw) {
+    final cleaned = raw.trim().replaceAll('_', ' ').toLowerCase();
+    if (cleaned.isEmpty) return raw;
+    return cleaned[0].toUpperCase() + cleaned.substring(1);
+  }
+}
+
+/// Row labels in the assessment detail sheets.
+abstract final class PatientDetailStrings {
+  PatientDetailStrings._();
+
+  static String get gestationalAge =>
+      getTranslatedString('PatientDetail.gestationalAge', 'Gestational age');
+
+  /// `9 weeks 1 day`. Singular/plural is handled per unit — the previous
+  /// implementation always said "days", producing "1 days".
+  static String gestationalWeeksDays(String weeks, String days, {required bool oneDay}) =>
+      getTranslatedString(
+        oneDay
+            ? 'PatientDetail.gaWeeksOneDay'
+            : 'PatientDetail.gaWeeksDays',
+        oneDay ? '{weeks} weeks {days} day' : '{weeks} weeks {days} days',
+        params: {'weeks': weeks, 'days': days},
+      );
+  static String gestationalWeeksOnly(String weeks, {required bool oneWeek}) =>
+      getTranslatedString(
+        oneWeek ? 'PatientDetail.gaOneWeek' : 'PatientDetail.gaWeeks',
+        oneWeek ? '{weeks} week' : '{weeks} weeks',
+        params: {'weeks': weeks},
+      );
+
+  static String get status =>
+      getTranslatedString('PatientDetail.status', 'Status');
+  static String get referralStatus =>
+      getTranslatedString('PatientDetail.referralStatus', 'Referral status');
+  static String get referralReason =>
+      getTranslatedString('PatientDetail.referralReason', 'Referral reason');
+  static String get referredTo =>
+      getTranslatedString('PatientDetail.referredTo', 'Referred to');
+  static String get referralMade =>
+      getTranslatedString('PatientDetail.referralMade', 'Referral made');
+}
+
 abstract final class CareThreadStrings {
   CareThreadStrings._();
 
