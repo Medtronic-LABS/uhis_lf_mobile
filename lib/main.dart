@@ -202,7 +202,6 @@ class _UhisNextAppState extends State<UhisNextApp>
     programmes: _progDao,
     followUps: _followUpDao,
     immunisations: _immDao,
-    syncMeta: _syncMetaDao,
     risk: _risk,
     localAssessments: _localAssessmentDao,
     assessments: _assessmentDao,
@@ -288,7 +287,6 @@ class _UhisNextAppState extends State<UhisNextApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _resetInactivityTimer();
     // Register notification channels + rehydrate any pending repeat alarms
     // from the last session. Both are idempotent.
     unawaited(_bootstrapNotifications());
@@ -336,7 +334,6 @@ class _UhisNextAppState extends State<UhisNextApp>
 
   @override
   void dispose() {
-    _inactivityTimer?.cancel();
     _connectivitySync.dispose();
     widget.authState.removeListener(_onAuthStateChanged);
     _localeProvider.removeListener(_onLocaleChanged);
@@ -381,46 +378,9 @@ class _UhisNextAppState extends State<UhisNextApp>
     }
   }
 
-  static const _kLockAfter = Duration(hours: 1);
-
-  Timer? _inactivityTimer;
-
-  /// Wall-clock time of last user interaction (pointer down or app resume).
-  DateTime _lastActivityTime = DateTime.now();
-
-  /// Restart the 1-hour inactivity timer. Called on any user touch and on
-  /// app resume. Thread-safe because Flutter's event loop is single-threaded.
-  void _resetInactivityTimer() {
-    _lastActivityTime = DateTime.now();
-    _inactivityTimer?.cancel();
-    _inactivityTimer = Timer(_kLockAfter, () {
-      _inactivityTimer = null;
-      widget.authState.lock();
-    });
-  }
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
-      // Pause the inactivity countdown so wall-clock time while the screen is
-      // off doesn't count. The elapsed time is preserved via _lastActivityTime
-      // and the remaining duration is resumed when the app comes back.
-      _inactivityTimer?.cancel();
-      _inactivityTimer = null;
-    } else if (state == AppLifecycleState.resumed) {
-      // On resume, check how long the device was idle. If the elapsed time
-      // already exceeds the lock threshold, lock immediately. Otherwise,
-      // restart the timer for the remaining window.
-      final elapsed = DateTime.now().difference(_lastActivityTime);
-      if (elapsed >= _kLockAfter) {
-        widget.authState.lock();
-      } else {
-        _inactivityTimer = Timer(_kLockAfter - elapsed, () {
-          _inactivityTimer = null;
-          widget.authState.lock();
-        });
-      }
+    if (state == AppLifecycleState.resumed) {
       // SLA states drift while the device sleeps; refresh on every resume.
       // Fire-and-forget — UI listens to ReferralRepository.changes.
       unawaited(_referrals
@@ -575,10 +535,7 @@ class _UhisNextAppState extends State<UhisNextApp>
             // Wrap in Directionality since it's outside MaterialApp.
             child: Directionality(
               textDirection: TextDirection.ltr,
-              child: Listener(
-                onPointerDown: (_) => _resetInactivityTimer(),
-                behavior: HitTestBehavior.translucent,
-                child: _LockBarrierOverlay(
+              child: _LockBarrierOverlay(
                 // GoRouter caches its current page's widgets independently of
                 // this ancestor rebuilding — a plain rebuild here does NOT
                 // re-invoke the already-built route's build() method, so a
@@ -601,8 +558,7 @@ class _UhisNextAppState extends State<UhisNextApp>
                 ),
               ),
             ),
-          ),
-        );
+          );
         },
       ),
     );

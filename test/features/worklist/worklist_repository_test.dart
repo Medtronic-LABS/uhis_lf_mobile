@@ -7,7 +7,6 @@ import 'package:uhis_next/core/db/immunisation_dao.dart';
 import 'package:uhis_next/core/db/local_assessment_dao.dart';
 import 'package:uhis_next/core/db/patient_dao.dart';
 import 'package:uhis_next/core/db/patient_programmes_dao.dart';
-import 'package:uhis_next/core/db/sync_meta_dao.dart';
 import 'package:uhis_next/core/models/patient.dart';
 import 'package:uhis_next/core/models/programme.dart';
 import 'package:uhis_next/core/models/risk.dart';
@@ -23,7 +22,6 @@ void main() {
   late PatientProgrammesDao programmes;
   late FollowUpDao followUps;
   late ImmunisationDao immunisations;
-  late SyncMetaDao syncMeta;
   late LocalAssessmentDao localAssessments;
   late AssessmentDao assessments;
   late WorklistRepository repo;
@@ -41,7 +39,6 @@ void main() {
     programmes = PatientProgrammesDao(appDb);
     followUps = FollowUpDao(appDb);
     immunisations = ImmunisationDao(appDb);
-    syncMeta = SyncMetaDao(appDb);
     localAssessments = LocalAssessmentDao(appDb);
     assessments = AssessmentDao(appDb);
     repo = WorklistRepository(
@@ -49,7 +46,6 @@ void main() {
       programmes: programmes,
       followUps: followUps,
       immunisations: immunisations,
-      syncMeta: syncMeta,
       risk: const RiskScoringService(),
       localAssessments: localAssessments,
       assessments: assessments,

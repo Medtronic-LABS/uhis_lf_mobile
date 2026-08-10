@@ -16,12 +16,12 @@ enum AuthStatus { unknown, signedOut, signedIn }
 class AuthState extends ChangeNotifier {
   AuthState(this._repo, this._biometric, {Future<void> Function()? onWipeLocalData})
       : _onWipeLocalData = onWipeLocalData {
-    // Server-side session invalidation (401 after refresh fails) routes
-    // through the same path as a locally-detected expiry. 403 permission
-    // denials never reach here.
+    // Server-side session invalidation (401) → logout immediately.
+    // UHIS parity: no client-side token refresh. 403 permission denials
+    // never reach here.
     _repo.onUnauthorized = () {
       debugPrint(
-          '[AuthState] onUnauthorized fired (server 401 after refresh) — calling handleSessionExpired()');
+          '[AuthState] onUnauthorized fired (server 401) — calling handleSessionExpired()');
       handleSessionExpired();
     };
   }
@@ -146,7 +146,7 @@ class AuthState extends ChangeNotifier {
         final hashOk = await _repo.verifyOfflinePassword(username, password);
         debugPrint('[AuthState] login: offline password match=$hashOk');
         if (hashOk) {
-          final graceOk = await _repo.restoreTokensIgnoringExpiry();
+          final restored = await _repo.restorePersistedSession();
           _username = username;
           _sameUserRelogin = true;
           _biometricEnabled = await _repo.isBiometricEnabled();
@@ -154,7 +154,7 @@ class AuthState extends ChangeNotifier {
           _onboardingComplete = await _repo.isOnboardingComplete();
           _status = AuthStatus.signedIn;
           _locked = false;
-          debugPrint('[AuthState] login: offline password verified${graceOk ? ', session restored' : ', no prior session'}');
+          debugPrint('[AuthState] login: offline password verified${restored ? ', session restored' : ', no prior session'}');
           return true;
         }
         // Fall through to online login. The offline probe can false-positive
@@ -204,24 +204,8 @@ class AuthState extends ChangeNotifier {
       final restored = await _repo.restorePersistedSession();
       debugPrint('[AuthState] biometricUnlock: restored=$restored');
       if (!restored) {
-        final offline = await isDeviceOffline();
-        debugPrint('[AuthState] biometricUnlock: restore failed, offline=$offline');
-        if (offline) {
-          // Offline grace: biometric identity verified, device in hand, but
-          // no network to reach the server. Restore stored token as-is — the
-          // server will reject with 401 on the next online call, which fires
-          // handleSessionExpired() and forces a re-login at that point.
-          final graceOk = await _repo.restoreTokensIgnoringExpiry();
-          debugPrint('[AuthState] biometricUnlock: graceOk=$graceOk');
-          if (graceOk) {
-            _username = await _repo.biometricLastUsername() ?? _username;
-            _onboardingComplete = await _repo.isOnboardingComplete();
-            _status = AuthStatus.signedIn;
-            _locked = false;
-            debugPrint('[AuthState] biometricUnlock: offline grace — local expiry bypassed');
-            return true;
-          }
-        }
+        // No persisted credentials left (cleared / never enrolled). Server
+        // session death is handled separately via 401 → handleSessionExpired.
         await _repo.clearExpiredReentrySession();
         return _failExpiredRestore();
       }
@@ -270,8 +254,8 @@ class AuthState extends ChangeNotifier {
     }
   }
 
-  /// Shared failure path for [biometricUnlock]/[pinUnlock] when the
-  /// persisted reentry session has genuinely expired. Clears
+  /// Shared failure path for [biometricUnlock]/[pinUnlock] when no
+  /// persisted credentials remain to restore. Clears
   /// `biometricEnabled`/`pinEnabled` (matching [handleSessionExpired]) so
   /// `reentryEnabled` becomes false and the router's `redirect` — which
   /// re-evaluates on every `notifyListeners()` via `GoRouter(refreshListenable:
@@ -342,17 +326,6 @@ class AuthState extends ChangeNotifier {
       }
       final restored = await _repo.restorePersistedSession();
       if (!restored) {
-        if (await isDeviceOffline()) {
-          final graceOk = await _repo.restoreTokensIgnoringExpiry();
-          if (graceOk) {
-            _username = await _repo.biometricLastUsername() ?? _username;
-            _onboardingComplete = await _repo.isOnboardingComplete();
-            _status = AuthStatus.signedIn;
-            _locked = false;
-            debugPrint('[AuthState] pinUnlock: offline grace — local expiry bypassed');
-            return true;
-          }
-        }
         await _repo.clearExpiredReentrySession();
         return _failExpiredRestore();
       }

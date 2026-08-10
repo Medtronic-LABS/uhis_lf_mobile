@@ -385,7 +385,11 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         _guardianId = null;
         _fieldErrors.remove('guardian');
       });
-      await _handleAddGuardian();
+      // DropdownButton pops its menu route after onChanged. Showing a dialog
+      // in the same frame lets that pop dismiss the dialog immediately.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_handleAddGuardian());
+      });
       return;
     }
     setState(() {
@@ -416,6 +420,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     );
     if (proceed != true || !mounted) return;
 
+    // Unique formInstanceId forces a fresh MaterialPage (new State) so the
+    // child form is discarded and a blank Add Member opens — same household.
+    final formInstanceId = DateTime.now().microsecondsSinceEpoch.toString();
     if (widget.isStandalone) {
       final extra = <String, dynamic>{
         'householdId': widget.existingHouseholdId,
@@ -425,10 +432,14 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         'villageName': widget.existingVillageName,
         'subVillageId': widget.existingSubVillageId,
         'subVillageName': widget.existingSubVillageName,
+        'formInstanceId': formInstanceId,
       };
       context.pushReplacement('/household/enrollment/link-member', extra: extra);
     } else {
-      context.pushReplacement('/household/enrollment/add-member');
+      context.pushReplacement(
+        '/household/enrollment/add-member',
+        extra: <String, dynamic>{'formInstanceId': formInstanceId},
+      );
     }
   }
 
