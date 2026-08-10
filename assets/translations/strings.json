@@ -11466,5 +11466,61 @@
   "yourAnswers": {
     "bn": "আপনার উত্তর",
     "en": "Your answers"
+  },
+  "Permissions.allow": {
+    "bn": "চালিয়ে যান",
+    "en": "Continue"
+  },
+  "Permissions.blockedMessage": {
+    "bn": "কিছু অনুমতি বন্ধ আছে। যখন প্রয়োজন হবে, অ্যান্ড্রয়েড সেটিংস থেকে অনুমতি দিতে পারবেন।",
+    "en": "Some permissions were turned off. You can allow them in Android Settings whenever you need those features."
+  },
+  "Permissions.cameraBody": {
+    "bn": "নিবন্ধনের সময় জাতীয় পরিচয়পত্র স্ক্যান করতে।",
+    "en": "To scan a National ID card during enrolment."
+  },
+  "Permissions.cameraTitle": {
+    "bn": "ক্যামেরা",
+    "en": "Camera"
+  },
+  "Permissions.locationBody": {
+    "bn": "খানার অবস্থান সংরক্ষণ করতে, যাতে আপনি আবার সহজে খুঁজে পান।",
+    "en": "To record where a household is, so you can find it again."
+  },
+  "Permissions.locationTitle": {
+    "bn": "অবস্থান",
+    "en": "Location"
+  },
+  "Permissions.microphoneBody": {
+    "bn": "রোগী যা বলেন তা রেকর্ড করে অ্যাপ যেন আপনার হয়ে ফর্ম পূরণ করতে পারে।",
+    "en": "To record what the patient says so the app can fill the form for you."
+  },
+  "Permissions.microphoneTitle": {
+    "bn": "মাইক্রোফোন",
+    "en": "Microphone"
+  },
+  "Permissions.notificationBody": {
+    "bn": "রেফারেল ও ফলো-আপের সময় হলে আপনাকে মনে করিয়ে দিতে।",
+    "en": "To remind you about referrals and follow-ups that are due."
+  },
+  "Permissions.notificationTitle": {
+    "bn": "নোটিফিকেশন",
+    "en": "Notifications"
+  },
+  "Permissions.openSettings": {
+    "bn": "সেটিংস খুলুন",
+    "en": "Open settings"
+  },
+  "Permissions.skip": {
+    "bn": "এখন নয়",
+    "en": "Not now"
+  },
+  "Permissions.subtitle": {
+    "bn": "আপনার ফোন এগুলোর প্রতিটির জন্য অনুমতি চাইবে। এখনই অনুমতি দিলে রোগী দেখার সময় আর বাধা আসবে না।",
+    "en": "Your phone will ask about each of these. Allowing them now means you will not be interrupted during a visit."
+  },
+  "Permissions.title": {
+    "bn": "শুরু করতে কয়েকটি অনুমতি দরকার",
+    "en": "A few permissions to get started"
   }
 }
