@@ -262,4 +262,14 @@ class Endpoints {
   /// Presigned GET URLs for module thumbnails (batch POST, max 50 IDs).
   static const String coachingModuleThumbnails =
       '/medtronics-api/sync/modules/presigned-thumbnails';
+
+  // ── AI training audio sample collection ───────────────────────────────────
+  /// Upload raw audio for field-loss analysis training.
+  static const String trainingAudioSample = '/ai-scribe/training/audio-sample';
+
+  /// Post client-side counters + extract call log for a RealtimeASR session.
+  static const String realtimeSessionSummary = '/ai-scribe/training/realtime-session';
+
+  /// Server-side feature flags for mobile clients.
+  static const String aiScribeConfig = '/ai-scribe/config';
 }

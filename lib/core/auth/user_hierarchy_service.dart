@@ -1,7 +1,11 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
+import '../config/app_config.dart';
 import '../db/health_facility_dao.dart';
 import 'auth_repository.dart';
 
@@ -228,6 +232,24 @@ class HealthFacilityRef {
 // Service
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Server-side feature flags fetched from `GET /ai-scribe/config` after login.
+///
+/// All flags default to the safe/off position so an unreachable server never
+/// enables a half-baked feature on-device.
+class FeatureFlags {
+  const FeatureFlags({this.voiceSampleCollectionEnabled = false});
+
+  factory FeatureFlags.fromJson(Map<String, dynamic> json) => FeatureFlags(
+        voiceSampleCollectionEnabled:
+            json['voice_sample_collection_enabled'] as bool? ?? false,
+      );
+
+  /// Whether raw audio should be staged for backend training analysis.
+  final bool voiceSampleCollectionEnabled;
+
+  static const FeatureFlags defaults = FeatureFlags();
+}
+
 /// Fetches and caches the full static-data hierarchy from
 /// `POST /spice-service/static-data/user-data`.
 ///
@@ -263,12 +285,14 @@ class UserHierarchyService extends ChangeNotifier {
   SkProfile? _skProfile;
   List<int> _workflowIds = const [];
   HealthFacilityRef? _defaultFacility;
+  FeatureFlags _featureFlags = FeatureFlags.defaults;
   bool _loading = false;
   String? _error;
 
   /// True after a successful network parse or a successful disk hydrate.
   /// Failed network with no disk cache leaves this false so prefetch retries.
   bool _ready = false;
+  bool _flagsFetched = false;
 
   // Inflight future — prevents duplicate HTTP calls when multiple callers
   // await the service concurrently before the first fetch completes.
@@ -280,13 +304,25 @@ class UserHierarchyService extends ChangeNotifier {
   SkProfile? get skProfile => _skProfile;
   List<int> get workflowIds => _workflowIds;
   HealthFacilityRef? get defaultFacility => _defaultFacility;
+  FeatureFlags get featureFlags => _featureFlags;
   bool get loading => _loading;
   String? get error => _error;
 
   /// Ensures data is loaded. Safe to call multiple times — only one attempt
   /// (network, with disk fallback) runs until [invalidate] or [forceRefresh].
+  /// Fetch server-side feature flags immediately. Safe to call anytime —
+  /// fire-and-forget, never throws. Called by main.dart on every sign-in.
+  Future<void> refreshFeatureFlags() => _fetchFeatureFlags();
+
   Future<void> prefetch({bool forceRefresh = false}) async {
-    if (!forceRefresh && _ready) return;
+    if (!forceRefresh && _ready) {
+      // Hierarchy data is cached — still fetch feature flags once per session.
+      if (!_flagsFetched) {
+        _flagsFetched = true;
+        unawaited(_fetchFeatureFlags());
+      }
+      return;
+    }
     _inflightFetch ??= _doFetch(forceRefresh: forceRefresh)
         .whenComplete(() => _inflightFetch = null);
     await _inflightFetch;
@@ -333,6 +369,9 @@ class UserHierarchyService extends ChangeNotifier {
       await _persistSideEffectsFromNetwork(entity);
       await _persistHierarchyCache();
       _ready = true;
+      _flagsFetched = true;
+      // Fire-and-forget: flags failure must never fail the hierarchy load.
+      unawaited(_fetchFeatureFlags());
 
       debugPrint(
           '[UserHierarchyService] Loaded: ${_ssWorkers!.length} SS, '
@@ -528,7 +567,41 @@ class UserHierarchyService extends ChangeNotifier {
     _applyEntity(cache);
     // Disk hydrate must not wipe a soft network error used for diagnostics,
     // but enrollment only needs the lists.
+    // Re-fetch server-side feature flags on every app start (not just fresh login).
+    unawaited(_fetchFeatureFlags());
     return true;
+  }
+
+  /// Fetches server-side feature flags from [Endpoints.aiScribeConfig].
+  ///
+  /// Non-fatal — any error is logged and the defaults (all flags off) remain.
+  Future<void> _fetchFeatureFlags() async {
+    try {
+      // Use AI service base URL (not UHIS backend) — config lives on leapfrog-ai-services.
+      final aiBase = AppConfig.scribeBaseUrl.replaceAll(RegExp(r'/+$'), '');
+      // Strip /ai-scribe prefix when hitting the service directly (AI_SERVICE_URL set).
+      const rawPath = Endpoints.aiScribeConfig;
+      final configPath = AppConfig.aiServiceBaseUrl.isNotEmpty &&
+              rawPath.startsWith('/ai-scribe')
+          ? rawPath.substring('/ai-scribe'.length)
+          : rawPath;
+      debugPrint('[AudioSample] fetching feature flags from $aiBase$configPath');
+      final tempDio = Dio(BaseOptions(
+        baseUrl: aiBase,
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ));
+      final resp = await tempDio.get(configPath);
+      final data = resp.data;
+      if (data is Map) {
+        _featureFlags = FeatureFlags.fromJson(Map<String, dynamic>.from(data));
+        notifyListeners();
+        debugPrint('[UserHierarchyService] FeatureFlags: '
+            'voiceSampleCollection=${_featureFlags.voiceSampleCollectionEnabled}');
+      }
+    } catch (e) {
+      debugPrint('[UserHierarchyService] _fetchFeatureFlags failed (non-fatal): $e');
+    }
   }
 
   void invalidate() {
@@ -538,8 +611,10 @@ class UserHierarchyService extends ChangeNotifier {
     _skProfile = null;
     _workflowIds = const [];
     _defaultFacility = null;
+    _featureFlags = FeatureFlags.defaults;
     _error = null;
     _ready = false;
+    _flagsFetched = false;
     _inflightFetch = null;
     // Disk clear is awaited in AuthRepository.logout(); this is a safety net
     // if invalidate is called without a full logout.

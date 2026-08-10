@@ -4,12 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/api/realtime_asr_service.dart';
+import '../../../core/api/scribe_api_service.dart';
+import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/db/app_database.dart';
+import '../../../core/db/audio_sample_dao.dart';
 import '../../../core/preferences/vad_tuning_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
 import '../../realtime_asr/models/realtime_symptom_codes.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
+import '../../visit/forms/unified_form_notifier.dart';
 import '../form_field_schema_builder.dart';
 import '../models/ai_extracted_field.dart';
 import '../scribe_controller.dart';
@@ -121,6 +126,9 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       permissionService: ScribePermissionService(),
       vadTuning: context.read<VadTuningNotifier>(),
     );
+    _liveCtrl.setHierarchyService(context.read<UserHierarchyService>());
+    _liveCtrl.setSampleDao(AudioSampleDao(context.read<AppDatabase>()));
+    _liveCtrl.setScribeApiService(context.read<ScribeApiService>());
     _liveCtrl.addListener(_onLiveChanged);
     final assessmentType = widget.assessmentType;
     if (assessmentType != null) {
@@ -143,6 +151,17 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       _onScribeChanged();
     }
     _liveCtrl.bindContext(context);
+
+    // Wire form-field coverage snapshot if UnifiedFormNotifier is in scope
+    // (Step 2 assessment form). Silently skipped in Step 1 triage context.
+    try {
+      final formNotifier = context.read<UnifiedFormNotifier>();
+      _liveCtrl.setCoverageBuilder(
+        (transcript) => formNotifier.coverageSnapshot(transcript),
+      );
+    } catch (_) {
+      _liveCtrl.setCoverageBuilder(null);
+    }
   }
 
   @override
@@ -206,6 +225,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     _liveCtrl.start(
       assessmentType: widget.assessmentType,
       symptomVocab: widget.symptomVocab,
+      encounterId: widget.encounterId,
     );
   }
 

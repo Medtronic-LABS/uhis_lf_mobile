@@ -1381,6 +1381,59 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  /// Builds a form-field coverage snapshot for the S3 training sidecar.
+  ///
+  /// Returns a structured map with per-programme fill status and the full
+  /// ASR transcript. Written as `{sampleId}.coverage.json` alongside the WAV.
+  Map<String, dynamic> coverageSnapshot(String? transcript) {
+    final programmes = <String, dynamic>{};
+    for (final programme in _activeFormTypes) {
+      final targets = _fieldDefs.values
+          .where((d) =>
+              d.programmeIds.contains(programme) &&
+              _extractableHints.contains(d.widgetHint) &&
+              d.id != 'bmi')
+          .toList();
+      if (targets.isEmpty) continue;
+      final aiFilled = <String>[];
+      final manual = <String>[];
+      final empty = <String>[];
+      final fields = <String, dynamic>{};
+      for (final d in targets) {
+        final value = _data.getValue(d.id);
+        final source = _fieldSources[d.id];
+        final hasValue = value != null;
+        String? sourceStr;
+        if (hasValue &&
+            (source == FieldSource.aiPending ||
+                source == FieldSource.aiModified)) {
+          aiFilled.add(d.id);
+          sourceStr = source!.name;
+        } else if (hasValue) {
+          manual.add(d.id);
+          sourceStr = source?.name ?? 'manual';
+        } else {
+          empty.add(d.id);
+        }
+        fields[d.id] = {'value': value?.toString(), 'source': sourceStr};
+      }
+      programmes[programme] = {
+        'total': targets.length,
+        'aiFilled': aiFilled.length,
+        'manual': manual.length,
+        'empty': empty.length,
+        'fields': fields,
+      };
+    }
+    return {
+      'encounterId': _encounterId,
+      'assessmentType': _activeFormTypes.join(','),
+      'capturedAt': DateTime.now().toUtc().toIso8601String(),
+      'transcript': transcript,
+      'programmes': programmes,
+    };
+  }
+
   /// True when the SK typed or edited this field — AI must never overwrite.
   /// Also true for height locked from a prior visit / ANC visit 2+.
   bool _isSkOwned(String fieldId) {

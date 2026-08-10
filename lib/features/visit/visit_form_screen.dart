@@ -7,6 +7,9 @@ import 'package:provider/provider.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
+import '../../core/auth/user_hierarchy_service.dart';
+import '../../core/db/app_database.dart';
+import '../../core/db/audio_sample_dao.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
@@ -149,6 +152,9 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         api: context.read<ScribeApiService>(),
         permissionService: ScribePermissionService(),
       );
+      _scribeCtrl.setHierarchyService(context.read<UserHierarchyService>());
+      _scribeCtrl.setSampleDao(
+          AudioSampleDao(context.read<AppDatabase>()));
       _scribeInitialized = true;
     }
   }
