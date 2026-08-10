@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'app/locale_provider.dart';
+import 'core/i18n/app_date_format.dart';
 import 'core/i18n/app_locale.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
@@ -97,6 +98,9 @@ Future<void> main() async {
   // assets (if declared in pubspec fonts:) then to system fonts.
   GoogleFonts.config.allowRuntimeFetching = false;
   await loadTranslations();
+  // Bengali date symbols. Without this every DateFormat falls back to English
+  // month names regardless of app language.
+  await AppDateFormat.ensureInitialised();
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();

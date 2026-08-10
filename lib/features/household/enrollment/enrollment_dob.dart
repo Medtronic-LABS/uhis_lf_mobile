@@ -198,15 +198,15 @@ class EnrollmentAge {
       final totalMonths = age.years * 12 + age.months;
       if (totalMonths < 24) {
         if (totalMonths < 1) {
-          if (age.days < 1) return '<1d';
-          return '${age.days}d';
+          if (age.days < 1) return EnrollmentStrings.ageChipUnderOneDay;
+          return EnrollmentStrings.ageChipDays('${age.days}');
         }
-        return '${totalMonths}m';
+        return EnrollmentStrings.ageChipMonths('$totalMonths');
       }
-      return '${age.years}';
+      return EnrollmentStrings.ageChipYears('${age.years}');
     }
     if (fallbackYears == null) return null;
-    if (fallbackYears < 1) return '<1y';
-    return '$fallbackYears';
+    if (fallbackYears < 1) return EnrollmentStrings.ageChipUnderOneYear;
+    return EnrollmentStrings.ageChipYears('$fallbackYears');
   }
 }

@@ -40,6 +40,7 @@ import 'symptom_catalog.dart';
 import 'unified_symptom_catalog.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
+import '../../../core/i18n/app_date_format.dart';
 
 /// Symptom picker screen for the triage step.
 ///
@@ -2645,7 +2646,7 @@ class _InlineServiceSelector extends StatelessWidget {
 
   /// Compact "LMP … · EDD …" subtitle shown on the locked PW card.
   String _pwEpisodeSubtitle(PregnancyEpisodeRow episode) {
-    final fmt = DateFormat('d MMM yyyy');
+    final fmt = AppDateFormat.dayMonthYearFmt;
     final lmpMs = episode.obstetric.lmpDate;
     final eddMs = episode.obstetric.eddDate;
     return TriageStrings.pwEpisodeSubtitle(
@@ -2663,7 +2664,7 @@ class _InlineServiceSelector extends StatelessWidget {
   String _ancRevisitMessage(_AncRevisitStatus status) {
     final lastVisitMs = status.lastVisitMs;
     if (lastVisitMs == null) return TriageStrings.ancVisitedTodayMessage;
-    final fmt = DateFormat('d MMM yyyy');
+    final fmt = AppDateFormat.dayMonthYearFmt;
     final lastVisitStr =
         fmt.format(DateTime.fromMillisecondsSinceEpoch(lastVisitMs));
     if (status.highRisk) {

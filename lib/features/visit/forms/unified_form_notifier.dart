@@ -34,6 +34,7 @@ import 'rmnch_follow_up_calculator.dart';
 import 'unified_payload_mapper.dart';
 import 'unified_section_rules.dart';
 import 'vitals_trend.dart';
+import '../../../core/i18n/app_date_format.dart';
 
 /// Manages in-progress canonical form state for a single visit.
 ///
@@ -1132,7 +1133,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
-  static final _eddDisplayFormat = DateFormat('dd MMMM yyyy');
+  // A getter, not a static final: caching the DateFormat would freeze it in
+  // whichever language was active at first use.
+  static DateFormat get _eddDisplayFormat => AppDateFormat.dayMonthNameYearFmt;
 
   /// Fields Android resets when LMP is cleared or is < 6 weeks ago.
   static const _pwLmpClearedFieldIds = {

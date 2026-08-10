@@ -7,6 +7,7 @@ import 'package:uhis_next/core/sync/sync_activity.dart';
 import 'package:uhis_next/core/sync/sync_foreground_controller.dart';
 import 'package:uhis_next/core/sync/sync_foreground_notifier.dart';
 import 'package:uhis_next/core/sync/sync_progress.dart';
+import 'package:uhis_next/core/i18n/app_locale.dart';
 
 class _FakeNotifier implements SyncForegroundNotifier {
   _FakeNotifier({
@@ -75,6 +76,11 @@ class _FakeNotifier implements SyncForegroundNotifier {
 }
 
 void main() {
+  // These assert English copy, so pin the language. AppLocale defaults to
+  // Bangla (BD-first), and Bangla localizes digits — '12 days' becomes
+  // '১২ days' — so an unpinned test is really asserting the default locale.
+  setUp(() => AppLocale.current = AppLanguage.english);
+
   late StreamController<SyncProgress> progress;
 
   setUp(() {

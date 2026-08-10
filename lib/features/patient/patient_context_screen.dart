@@ -43,6 +43,7 @@ import '../visit/visit_controller.dart';
 import '../visit/visit_start_helper.dart';
 import 'referral_narrative.dart';
 import 'vitals_repository.dart';
+import '../../core/i18n/app_date_format.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -3142,7 +3143,7 @@ class _PregnancyProgressSection extends StatelessWidget {
     final progress = gaWeeks != null ? (gaWeeks / 40.0).clamp(0.0, 1.0) : 0.0;
     final visitsDone = int.tryParse(ancVisitNumber ?? '0') ?? 0;
 
-    final dateFormat = DateFormat('d MMM yyyy');
+    final dateFormat = AppDateFormat.dayMonthYearFmt;
 
     final card = GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -4525,7 +4526,7 @@ class _TimelineEventSheet extends StatelessWidget {
       if (millis == null) return;
       entries.add(MapEntry(
         label,
-        DateFormat('d MMM yyyy')
+        AppDateFormat.dayMonthYearFmt
             .format(DateTime.fromMillisecondsSinceEpoch(millis)),
       ));
     }
@@ -4552,7 +4553,7 @@ class _TimelineEventSheet extends StatelessWidget {
       lmpDate = eddDate.subtract(const Duration(days: 280));
     }
     if (lmpDate != null) {
-      final shortDate = DateFormat('d MMM yyyy');
+      final shortDate = AppDateFormat.dayMonthYearFmt;
       entries.add(MapEntry('LMP', shortDate.format(lmpDate)));
       eddDate ??= lmpDate.add(const Duration(days: 280));
       entries.add(MapEntry('EDD', shortDate.format(eddDate)));
@@ -4608,7 +4609,7 @@ class _TimelineEventSheet extends StatelessWidget {
     if (ageOfLastChild != null) {
       entries.add(MapEntry(
         'Age of last child (DOB)',
-        DateFormat('d MMM yyyy').format(ageOfLastChild),
+        AppDateFormat.dayMonthYearFmt.format(ageOfLastChild),
       ));
     } else {
       addWithFallback('ageOfLastChild', 'Age of last child', snap?.ageOfLastChild);
@@ -5257,11 +5258,11 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             ),
             const SizedBox(height: 10),
             if (lastDate != null)
-              _scheduleRow('Last visit', DateFormat('dd MMM yyyy').format(lastDate), scheme),
+              _scheduleRow('Last visit', AppDateFormat.dayMonthYearPaddedFmt.format(lastDate), scheme),
             if (nextDate != null)
               _scheduleRow(
                 'Next due',
-                DateFormat('dd MMM yyyy').format(nextDate),
+                AppDateFormat.dayMonthYearPaddedFmt.format(nextDate),
                 scheme,
                 valueColor: isOverdue ? AppColors.statusCritical : null,
               ),
@@ -5344,7 +5345,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
   }
 
   Widget _buildVitalsCard(BuildContext context, ColorScheme scheme, _VitalsSnapshot v) {
-    final date = DateFormat('dd MMM yyyy').format(v.recordedAt);
+    final date = AppDateFormat.dayMonthYearPaddedFmt.format(v.recordedAt);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),

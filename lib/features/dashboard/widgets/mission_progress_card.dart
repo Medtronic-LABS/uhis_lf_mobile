@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_brief.dart';
+import '../../../core/i18n/app_date_format.dart';
 
 /// Mission Progress Card — gamified daily completion tracking.
 ///
@@ -52,7 +53,7 @@ class MissionProgressCard extends StatelessWidget {
             // Header
             Text(
               MissionDashboardStrings.todaysProgressHeader(
-                DateFormat('d MMM').format(DateTime.now()),
+                AppDateFormat.dayMonthFmt.format(DateTime.now()),
               ),
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,

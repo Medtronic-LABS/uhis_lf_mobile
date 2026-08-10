@@ -875,6 +875,26 @@
     "bn": "রোগীর প্রয়োজনীয় স্বাস্থ্য সেবা যুক্ত করুন। নির্বাচন করতে সেবার ওপর ট্যাপ করুন।",
     "en": "Add the health programmes this person needs. Tap a programme to select it."
   },
+  "Enrollment.ageChipDays": {
+    "bn": "{days}দি",
+    "en": "{days}d"
+  },
+  "Enrollment.ageChipMonths": {
+    "bn": "{months}মা",
+    "en": "{months}m"
+  },
+  "Enrollment.ageChipUnderOneDay": {
+    "bn": "<১দি",
+    "en": "<1d"
+  },
+  "Enrollment.ageChipUnderOneYear": {
+    "bn": "<১ব",
+    "en": "<1y"
+  },
+  "Enrollment.ageChipYears": {
+    "bn": "{years}",
+    "en": "{years}"
+  },
   "Enrollment.ageInvalidError": {
     "bn": "বয়স সঠিক হতে হবে",
     "en": "Age must be valid"

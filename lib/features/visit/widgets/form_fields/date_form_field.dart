@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/i18n/app_date_format.dart';
 
 class DateFormField extends StatefulWidget {
   const DateFormField({
@@ -40,7 +41,8 @@ class DateFormField extends StatefulWidget {
 }
 
 class _DateFormFieldState extends State<DateFormField> {
-  static final _displayFormat = DateFormat('dd MMM yyyy');
+  // A getter, not a static final: caching would freeze the locale at first use.
+  static DateFormat get _displayFormat => AppDateFormat.dayMonthYearPaddedFmt;
   static final _isoFormat = DateFormat('yyyy-MM-dd');
 
   late final TextEditingController _ctrl;

@@ -27,6 +27,7 @@ import 'enrollment/enrollment_entry_sheet.dart';
 import 'enrollment/nid_ocr_service.dart';
 import 'enrollment/widgets/enrollment_sticky_bar.dart';
 import '../visit/widgets/mission_queue_card.dart';
+import '../../core/i18n/app_date_format.dart';
 
 /// Full details of a household member for display.
 class HouseholdMemberData {
@@ -931,7 +932,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
                   icon: Icons.calendar_today_outlined,
                   label: HouseholdDetailStrings.lastVisitDate,
                   value: household.lastVisitAt != null
-                      ? DateFormat('d MMM yyyy').format(household.lastVisitAt!)
+                      ? AppDateFormat.dayMonthYearFmt.format(household.lastVisitAt!)
                       : HouseholdDetailStrings.neverVisited,
                   color: AppColors.navy,
                 ),
