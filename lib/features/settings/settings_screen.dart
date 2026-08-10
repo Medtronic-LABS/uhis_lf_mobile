@@ -8,6 +8,8 @@ import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/device/battery_optimization_gate.dart';
+import '../../core/device/battery_optimization_service.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
@@ -185,6 +187,23 @@ class _SettingsBody extends StatelessWidget {
                   );
                   if (chosen != null) await theme.setMode(chosen);
                 },
+              ),
+              const Divider(height: 20),
+              _SettingsTapRow(
+                row: SettingsRow(
+                  emoji: '🔋',
+                  chipColor: AppColors.catHomeSurface,
+                  title: BatteryOptimizationStrings.settingsRowTitle,
+                  subtitle: BatteryOptimizationStrings.settingsRowSubtitle,
+                ),
+                // Lives here rather than in onboarding: the destination is a
+                // vendor battery screen a frontline SK cannot realistically
+                // navigate, and the sync foreground service already survives
+                // Doze without it. This is the escape hatch for a supervisor
+                // troubleshooting a handset that kills background work.
+                onTap: () => BatteryOptimizationGate(
+                  service: const MethodChannelBatteryOptimizationService(),
+                ).openBestSettingsScreen(),
               ),
               const Divider(height: 20),
               _SettingsTapRow(

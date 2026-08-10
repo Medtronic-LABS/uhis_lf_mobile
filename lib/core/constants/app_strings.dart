@@ -307,6 +307,62 @@ abstract final class DashboardStrings {
 /// Settings menu strings.
 /// Copy for the one-time prompt asking the SK to exempt the app from battery
 /// optimisation, so a multi-minute sync is not killed by the OEM.
+/// Copy for the consolidated permission step shown once during onboarding.
+///
+/// Explains each permission before Android asks, so the SK sees a reason in
+/// Bangla rather than four bare system dialogs mid-visit.
+abstract final class PermissionStrings {
+  PermissionStrings._();
+
+  static String get title =>
+      getTranslatedString('Permissions.title', 'A few permissions to get started');
+  /// Framed as a heads-up, not a request. The sheet cannot grant anything —
+  /// only Android's own dialogs can — so wording it like an ask makes the
+  /// system prompts that follow read as being asked twice.
+  static String get subtitle => getTranslatedString(
+        'Permissions.subtitle',
+        'Next, your phone will ask a few questions. Tap "Allow" on each one, '
+        'so you are not interrupted during a visit.',
+      );
+
+  static String get cameraTitle =>
+      getTranslatedString('Permissions.cameraTitle', 'Camera');
+  static String get cameraBody => getTranslatedString(
+      'Permissions.cameraBody', 'To scan a National ID card during enrolment.');
+
+  static String get microphoneTitle =>
+      getTranslatedString('Permissions.microphoneTitle', 'Microphone');
+  static String get microphoneBody => getTranslatedString(
+      'Permissions.microphoneBody',
+      'To record what the patient says so the app can fill the form for you.');
+
+  static String get locationTitle =>
+      getTranslatedString('Permissions.locationTitle', 'Location');
+  static String get locationBody => getTranslatedString(
+      'Permissions.locationBody', 'To record where a household is, so you can find it again.');
+
+  static String get notificationTitle =>
+      getTranslatedString('Permissions.notificationTitle', 'Notifications');
+  static String get notificationBody => getTranslatedString(
+      'Permissions.notificationBody',
+      'To remind you about referrals and follow-ups that are due.');
+
+  static String get allow =>
+      getTranslatedString('Permissions.allow', 'OK, got it');
+  static String get skip =>
+      getTranslatedString('Permissions.skip', 'Not now');
+
+  /// Shown when one or more permissions were permanently denied — requesting
+  /// again would show no dialog at all, so the SK must be sent to Settings.
+  static String get blockedMessage => getTranslatedString(
+        'Permissions.blockedMessage',
+        'Some permissions were turned off. You can allow them in Android '
+        'Settings whenever you need those features.',
+      );
+  static String get openSettings =>
+      getTranslatedString('Permissions.openSettings', 'Open settings');
+}
+
 abstract final class BatteryOptimizationStrings {
   BatteryOptimizationStrings._();
 
@@ -320,6 +376,17 @@ abstract final class BatteryOptimizationStrings {
       );
   static String get openSettings => getTranslatedString(
       'BatteryOptimization.openSettings', 'Open settings');
+
+  /// Settings-screen entry. Deliberately not shown to every SK during setup:
+  /// the destination is a vendor battery screen that a frontline user cannot
+  /// realistically navigate, and the sync foreground service already survives
+  /// Doze without it (verified on device). Kept as an escape hatch for a
+  /// supervisor troubleshooting a handset that kills background work.
+  static String get settingsRowTitle => getTranslatedString(
+      'BatteryOptimization.settingsRowTitle', 'Background sync');
+  static String get settingsRowSubtitle => getTranslatedString(
+      'BatteryOptimization.settingsRowSubtitle',
+      'Allow syncing when the app is closed');
   static String get notNow =>
       getTranslatedString('BatteryOptimization.notNow', 'Not now');
   static String get couldNotOpen => getTranslatedString(
