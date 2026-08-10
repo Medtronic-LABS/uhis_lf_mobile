@@ -683,6 +683,17 @@ abstract final class SyncStrings {
   static String get inProgressStrip =>
       getTranslatedString('Sync.inProgressStrip', 'Syncing your data…');
 
+  /// Strip text combining the step description with its counts, e.g.
+  /// "Downloading patients · 240/1200". Kept separate from
+  /// [notificationProgress] because that one takes a bare entity noun; this
+  /// one takes a full step label and must not read "Syncing Downloading …".
+  static String stripProgress(String label, int done, int total) =>
+      getTranslatedString(
+        'Sync.stripProgress',
+        '{label} · {done}/{total}',
+        params: {'label': label, 'done': '$done', 'total': '$total'},
+      );
+
   static String get done => getTranslatedString('Sync.done', 'Ready to go');
   static String get syncFailed => getTranslatedString('Sync.syncFailed', 'We couldn\'t finish downloading your data.');
   static String get syncErrorNoInternet => getTranslatedString('syncErrorNoInternet', 'No internet connection. Please check your network and try again.');

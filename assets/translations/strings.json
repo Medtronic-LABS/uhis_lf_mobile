@@ -2687,6 +2687,10 @@
     "bn": "আবার সাইন ইন করুন",
     "en": "Sign in again"
   },
+  "Sync.stripProgress": {
+    "bn": "{label} · {done}/{total}",
+    "en": "{label} · {done}/{total}"
+  },
   "Sync.subtitle": {
     "bn": "অফলাইনে কাজ করার জন্য আপনার খানা ও রোগীদের তথ্য ডাউনলোড হচ্ছে।",
     "en": "Downloading your households and patients so you can work offline."
