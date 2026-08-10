@@ -292,6 +292,7 @@ class UserHierarchyService extends ChangeNotifier {
   /// True after a successful network parse or a successful disk hydrate.
   /// Failed network with no disk cache leaves this false so prefetch retries.
   bool _ready = false;
+  bool _flagsFetched = false;
 
   // Inflight future — prevents duplicate HTTP calls when multiple callers
   // await the service concurrently before the first fetch completes.
@@ -309,8 +310,19 @@ class UserHierarchyService extends ChangeNotifier {
 
   /// Ensures data is loaded. Safe to call multiple times — only one attempt
   /// (network, with disk fallback) runs until [invalidate] or [forceRefresh].
+  /// Fetch server-side feature flags immediately. Safe to call anytime —
+  /// fire-and-forget, never throws. Called by main.dart on every sign-in.
+  Future<void> refreshFeatureFlags() => _fetchFeatureFlags();
+
   Future<void> prefetch({bool forceRefresh = false}) async {
-    if (!forceRefresh && _ready) return;
+    if (!forceRefresh && _ready) {
+      // Hierarchy data is cached — still fetch feature flags once per session.
+      if (!_flagsFetched) {
+        _flagsFetched = true;
+        unawaited(_fetchFeatureFlags());
+      }
+      return;
+    }
     _inflightFetch ??= _doFetch(forceRefresh: forceRefresh)
         .whenComplete(() => _inflightFetch = null);
     await _inflightFetch;
@@ -357,6 +369,7 @@ class UserHierarchyService extends ChangeNotifier {
       await _persistSideEffectsFromNetwork(entity);
       await _persistHierarchyCache();
       _ready = true;
+      _flagsFetched = true;
       // Fire-and-forget: flags failure must never fail the hierarchy load.
       unawaited(_fetchFeatureFlags());
 
@@ -554,6 +567,8 @@ class UserHierarchyService extends ChangeNotifier {
     _applyEntity(cache);
     // Disk hydrate must not wipe a soft network error used for diagnostics,
     // but enrollment only needs the lists.
+    // Re-fetch server-side feature flags on every app start (not just fresh login).
+    unawaited(_fetchFeatureFlags());
     return true;
   }
 
@@ -599,6 +614,7 @@ class UserHierarchyService extends ChangeNotifier {
     _featureFlags = FeatureFlags.defaults;
     _error = null;
     _ready = false;
+    _flagsFetched = false;
     _inflightFetch = null;
     // Disk clear is awaited in AuthRepository.logout(); this is a safety net
     // if invalidate is called without a full logout.
