@@ -641,12 +641,12 @@ abstract final class PinStrings {
   static String get backTooltip => getTranslatedString('Pin.backTooltip', 'Back');
 }
 
-/// First-login data sync: the guided "downloading your ward" gate and the
+/// First-login data sync: the guided "downloading your data" gate and the
 /// dashboard data-freshness badge.
 abstract final class SyncStrings {
   SyncStrings._();
 
-  static String get title => getTranslatedString('Sync.title', 'Setting up your ward');
+  static String get title => getTranslatedString('Sync.title', 'Setting up your data');
   static String get subtitle => getTranslatedString('Sync.subtitle', 'Downloading your households and patients so you can work offline.');
 
   // Per-entity labels used in progress lines and the data-as-of badge.
