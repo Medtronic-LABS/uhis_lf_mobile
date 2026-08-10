@@ -4205,7 +4205,7 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        opt.name,
+                        opt.displayName,
                         style: AppTextStyles.chip.copyWith(
                           color: isSelected
                               ? Colors.white

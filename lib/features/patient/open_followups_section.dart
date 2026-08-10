@@ -179,19 +179,19 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
   String _typeLabel(FollowUpType type) {
     switch (type) {
       case FollowUpType.screening:
-        return 'Screening follow-up';
+        return FollowUpCallStrings.kindLabel('screening');
       case FollowUpType.medicalReview:
-        return 'Medical review';
+        return FollowUpCallStrings.kindLabel('medical_review');
       case FollowUpType.assessment:
-        return 'Assessment follow-up';
+        return FollowUpCallStrings.kindLabel('assessment');
       case FollowUpType.referred:
-        return 'Referral — confirm facility arrival';
+        return FollowUpCallStrings.kindLabel('referred');
       case FollowUpType.householdVisit:
-        return 'Household visit due';
+        return FollowUpCallStrings.kindLabel('household_visit');
       case FollowUpType.lost:
-        return 'Lost to follow-up check';
+        return FollowUpCallStrings.kindLabel('lost');
       case FollowUpType.other:
-        return 'Follow-up';
+        return FollowUpCallStrings.kindLabel('generic');
     }
   }
 }

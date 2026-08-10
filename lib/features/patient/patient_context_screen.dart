@@ -1453,23 +1453,11 @@ class _TimelineEntry {
 /// math skips "Yesterday" (e.g. yesterday 10pm → today 8am is still 0 days).
 String _relativeDate(DateTime date, [DateTime? now]) {
   final days = CalendarDay.daysBetween(date, now ?? DateTime.now());
-  if (days <= 0) return 'Today';
-  if (days == 1) return 'Yesterday';
-  if (days < 7) return '$days days ago';
-  if (days < 14) return '1 week ago';
-  if (days < 60) {
-    final w = (days / 7).round();
-    return '$w week${w > 1 ? 's' : ''} ago';
-  }
-  if (days < 365) {
-    final m = (days / 30.5).round();
-    return '$m month${m > 1 ? 's' : ''} ago';
-  }
-  final yrs = days ~/ 365;
-  final rem = days - yrs * 365;
-  final mos = (rem / 30.5).round();
-  if (mos == 0) return '$yrs yr${yrs > 1 ? 's' : ''} ago';
-  return '$yrs yr${yrs > 1 ? 's' : ''} $mos mo ago';
+  if (days <= 0) return MissionDashboardStrings.today;
+  if (days == 1) return MissionDashboardStrings.yesterday;
+  if (days < 7) return MissionDashboardStrings.daysAgo(days);
+  // Longer spans still use day counts so BN doesn't fall back to English.
+  return MissionDashboardStrings.daysAgo(days);
 }
 
 // ── Timeline colour palette ──────────────────────────────────────────────────
@@ -1645,7 +1633,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badge = PatientContextStrings.dangerHighBpBadge;
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
-        description = 'BP $bpANC is dangerously elevated — urgent referral needed.';
+        description = ReferralStrings.bpDangerouslyElevated(bpANC);
       } else if (hbANC > 0 && hbANC < 7) {
         dotColor = _kDotCritical;
         badge = PatientContextStrings.severeAnemiaBadge;
@@ -1805,22 +1793,22 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badge = PatientContextStrings.ncdHighRiskBadge;
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
-        description = 'Both BP and blood sugar are above target — needs review today and planned follow-up.';
+        description = ClinicalFindingStrings.ncdBpAndGlucoseCombined;
       } else if (bpHighNCD) {
         dotColor = _kDotHigh;
         badge = PatientContextStrings.highBpBadge;
         badgeColor = _kBadgeHighBg;
         badgeFgColor = _kBadgeHighFg;
-        description = 'BP is above the normal. Require review and follow-up';
+        description = ClinicalFindingStrings.ncdBpAboveNormal;
       } else if (bgHighNCD) {
         dotColor = _kDotModerate;
         badge = PatientContextStrings.highBloodSugarBadge;
         badgeColor = _kBadgeAmberBg;
         badgeFgColor = _kBadgeAmberFg;
-        description = 'Blood sugar is elevated. Require review and follow-up';
+        description = ClinicalFindingStrings.ncdBloodSugarElevated;
       } else {
         dotColor = _kDotOk;
-        description = 'Vitals within target — continue current management.';
+        description = ClinicalFindingStrings.ncdWithinTarget;
       }
 
     // ─── EPI / Vaccination ────────────────────────────────────────────────
@@ -1833,7 +1821,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       final dose = raw['dose']?.toString() ?? '';
       description = vacName.isNotEmpty
           ? '$vacName${dose.isNotEmpty ? " — Dose $dose" : ""} administered.'
-          : 'Immunization on schedule, growth on track.';
+          : ClinicalFindingStrings.childImmunizationOnSchedule;
 
     // ─── IMCI ─────────────────────────────────────────────────────────────
     case Programme.imci:
@@ -1904,7 +1892,9 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         description = dx.isNotEmpty ? dx : null;
       } else {
         emoji = '📝';
-        title = prog == Programme.unknown ? PatientContextStrings.generalVisitTitle : prog.displayName;
+        title = prog == Programme.unknown
+            ? PatientContextStrings.generalVisitTitle
+            : ProgrammeLabels.of(prog);
         category = PatientContextStrings.generalCategory;
         description = a.notes?.isNotEmpty == true ? a.notes : null;
       }
@@ -1973,7 +1963,7 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
       return _TimelineEntry(
         emoji: '🔔',
         title: 'BP recheck due',
-        relativeDate: 'Today',
+        relativeDate: MissionDashboardStrings.today,
         category: 'Pre-eclampsia watch',
         date: DateTime.now(),
         dotColor: _kDotPending,
@@ -1993,7 +1983,7 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
       return _TimelineEntry(
         emoji: '🔔',
         title: 'Child visit overdue',
-        relativeDate: 'Today',
+        relativeDate: MissionDashboardStrings.today,
         category: 'IMCI / Child care',
         date: DateTime.now(),
         dotColor: _kDotPending,
@@ -2013,7 +2003,7 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
       return _TimelineEntry(
         emoji: '🔔',
         title: 'Follow-up overdue',
-        relativeDate: 'Today',
+        relativeDate: MissionDashboardStrings.today,
         category: PatientProfileStrings.ncdFollowUpCategory,
         date: DateTime.now(),
         dotColor: _kDotPending,
@@ -2182,7 +2172,7 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
       category: PatientProfileStrings.enrollmentMilestone,
       date: data.enrolledAt!,
       dotColor: _kDotEnrollment,
-      description: 'Patient registered in Apon Sushashthya',
+      description: PatientProfileStrings.enrolledInAppDescription,
     ));
   }
 
@@ -3169,7 +3159,10 @@ class _PregnancyProgressSection extends StatelessWidget {
             if (eddDate != null)
               _DetailRow(label: 'EDD', value: dateFormat.format(eddDate)),
             if (gaWeeks != null)
-              _DetailRow(label: 'Gestational age', value: '$gaWeeks weeks'),
+              _DetailRow(
+                label: PatientContextStrings.gestationalAgeLabel,
+                value: '$gaWeeks weeks',
+              ),
             if (weeksLeft != null)
               _DetailRow(label: 'Weeks remaining', value: '$weeksLeft weeks'),
             _DetailRow(
@@ -3179,7 +3172,10 @@ class _PregnancyProgressSection extends StatelessWidget {
             if (snapshot.facts.highRiskPregnantWoman)
               _DetailRow(label: 'Risk', value: 'High risk — elevated BP or other flag'),
             if (snapshot.facts.hasGapsInAnc)
-              _DetailRow(label: 'ANC gaps', value: 'Missed visits detected'),
+              _DetailRow(
+                label: PatientContextStrings.ancGapsLabel,
+                value: 'Missed visits detected',
+              ),
             if (snapshot.facts.isNearTermAnc)
               _DetailRow(label: 'Near term', value: 'Approaching EDD — monitor closely'),
           ],
@@ -5372,23 +5368,28 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             const SizedBox(height: 10),
             if (v.bpSys != null && v.bpDia != null)
               _vitalRow(
-                'Blood Pressure',
+                PatientContextStrings.bloodPressureLabel,
                 '${v.bpSys}/${v.bpDia} mmHg',
                 v.bpSys! >= 140 ? AppColors.statusCritical : null,
                 scheme,
               ),
             if (v.glucose != null)
               _vitalRow(
-                v.glucoseType == 'fasting' ? 'Glucose (fasting)' : 'Glucose (random)',
+                PatientContextStrings.glucoseLabel(v.glucoseType),
                 '${v.glucose!.toStringAsFixed(1)} ${v.glucoseUnit ?? ''}',
                 null,
                 scheme,
               ),
             if (v.weight != null)
-              _vitalRow('Weight', '${v.weight!.toStringAsFixed(1)} kg', null, scheme),
+              _vitalRow(
+                PatientContextStrings.weightLabel,
+                '${v.weight!.toStringAsFixed(1)} kg',
+                null,
+                scheme,
+              ),
             if (v.hb != null)
               _vitalRow(
-                'Haemoglobin',
+                PatientContextStrings.haemoglobinLabel,
                 '${v.hb!.toStringAsFixed(1)} g/dL',
                 v.hb! < 10 ? AppColors.statusCritical : v.hb! < 11 ? AppColors.statusWarning : null,
                 scheme,

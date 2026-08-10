@@ -118,39 +118,48 @@
     "optionsList": [
       {
         "id": "uhfwc",
-        "name": "UHFWC"
+        "name": "UHFWC",
+        "cultureValue": "ইউনিয়ন স্বাস্থ্য ও পরিবার কল্যাণ কেন্দ্র"
       },
       {
         "id": "mcwc",
-        "name": "MCWC"
+        "name": "MCWC",
+        "cultureValue": "মা ও শিশু কল্যাণ কেন্দ্র"
       },
       {
         "id": "uhc",
-        "name": "UHC"
+        "name": "UHC",
+        "cultureValue": "উপজেলা স্বাস্থ্য কমপ্লেক্স"
       },
       {
         "id": "districtHospital",
-        "name": "District Hospital"
+        "name": "District Hospital",
+        "cultureValue": "জেলা হাসপাতাল"
       },
       {
         "id": "medicalCollegeHospital",
-        "name": "Medical College Hospital"
+        "name": "Medical College Hospital",
+        "cultureValue": "মেডিকেল কলেজ হাসপাতাল"
       },
       {
         "id": "ngoFacility",
-        "name": "NGO Facility"
+        "name": "NGO Facility",
+        "cultureValue": "এনজিও স্বাস্থ্যসেবা কেন্দ্র"
       },
       {
         "id": "privateFacility",
-        "name": "Private Facility"
+        "name": "Private Facility",
+        "cultureValue": "প্রাইভেট হাসপাতাল"
       },
       {
         "id": "notIdentified",
-        "name": "Not identified yet"
+        "name": "Not identified yet",
+        "cultureValue": "এখনও ঠিক হয়নি"
       },
       {
         "id": "homeDelivery",
-        "name": "Planned for home delivery"
+        "name": "Planned for home delivery",
+        "cultureValue": "ঘরে প্রসবের পরিকল্পনা করা হয়েছে"
       }
     ],
     "clinicalConcept": [
@@ -166,7 +175,8 @@
         "workflowId": 4,
         "workflowName": "RMNCH"
       }
-    ]
+    ],
+    "titleCulture": "গর্ভবতী মা কি প্রসবের জন্য কোনো স্বাস্থ্যকেন্দ্র ঠিক করেছেন?"
   },
   "ancBloodGlucose": {
     "id": "ancBloodGlucose",
@@ -194,7 +204,8 @@
         "workflowId": 4,
         "workflowName": "RMNCH"
       }
-    ]
+    ],
+    "titleCulture": "রক্তে গ্লুকোজ পরীক্ষার ধরন"
   },
   "pregnancyProfile": {
     "id": "pregnancyProfile",
@@ -4063,7 +4074,7 @@
     "optionsList": [
       {
         "name": "Present",
-        "cultureValue": "Present",
+        "cultureValue": "রয়েছে",
         "id": "present",
         "clinicalConcept": [
           {
@@ -4075,7 +4086,7 @@
       },
       {
         "name": "Absent",
-        "cultureValue": "Absent",
+        "cultureValue": "নেই",
         "id": "absent",
         "clinicalConcept": [
           {
@@ -8591,7 +8602,7 @@
       {
         "id": "fbs",
         "name": "FBS (Before Meal)",
-        "cultureValue": "এফবিএস (খালি পেটে)",
+        "cultureValue": "রক্তের গ্লুকোজ পরীক্ষা- ফাস্টিং (খাবারের আগে)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8603,7 +8614,7 @@
       {
         "id": "rbs",
         "name": "RBS (After Meal)",
-        "cultureValue": "আরবিএস (ভরা পেটে)",
+        "cultureValue": "রক্তের গ্লুকোজ পরীক্ষা- র‍্যান্ডম (খাবারের পরে)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -10330,7 +10341,8 @@
         "id": "iccm",
         "workflowName": "ICCM"
       }
-    ]
+    ],
+    "titleCulture": "প্রধান অভিযোগ"
   },
   "presentingSymptoms": {
     "id": "presentingSymptoms",
@@ -10348,7 +10360,8 @@
         "id": "iccm",
         "workflowName": "ICCM"
       }
-    ]
+    ],
+    "titleCulture": "বর্তমান অভিযোগ"
   },
   "convulsions": {
     "id": "convulsions",
@@ -10364,11 +10377,13 @@
     "optionsList": [
       {
         "id": true,
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": false,
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "programmes": [
@@ -10392,11 +10407,13 @@
     "optionsList": [
       {
         "id": true,
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": false,
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "programmes": [
@@ -10420,11 +10437,13 @@
     "optionsList": [
       {
         "id": true,
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": false,
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "programmes": [
@@ -10448,11 +10467,13 @@
     "optionsList": [
       {
         "id": true,
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": false,
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "programmes": [
@@ -10476,11 +10497,13 @@
     "optionsList": [
       {
         "id": true,
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": false,
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "programmes": [
@@ -10504,11 +10527,13 @@
     "optionsList": [
       {
         "id": true,
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": false,
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "programmes": [
@@ -10573,19 +10598,23 @@
       },
       {
         "id": "pneumonia",
-        "name": "Pneumonia"
+        "name": "Pneumonia",
+        "cultureValue": "নিউমোনিয়া"
       },
       {
         "id": "diarrhea",
-        "name": "Diarrhea"
+        "name": "Diarrhea",
+        "cultureValue": "ডায়রিয়া"
       },
       {
         "id": "malaria",
-        "name": "Malaria"
+        "name": "Malaria",
+        "cultureValue": "ম্যালেরিয়া"
       },
       {
         "id": "malnutrition",
-        "name": "Malnutrition"
+        "name": "Malnutrition",
+        "cultureValue": "অপুষ্টি"
       },
       {
         "id": "noClassification",
@@ -10611,15 +10640,18 @@
     "optionsList": [
       {
         "id": "mild",
-        "name": "Mild"
+        "name": "Mild",
+        "cultureValue": "মৃদু"
       },
       {
         "id": "moderate",
-        "name": "Moderate"
+        "name": "Moderate",
+        "cultureValue": "মাঝারি"
       },
       {
         "id": "severe",
-        "name": "Severe"
+        "name": "Severe",
+        "cultureValue": "গুরুতর"
       }
     ],
     "programmes": [
@@ -10661,11 +10693,13 @@
     "optionsList": [
       {
         "id": true,
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": false,
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "programmes": [
@@ -10971,11 +11005,13 @@
     "optionsList": [
       {
         "id": "yes",
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": "no",
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "clinicalConcept": [
@@ -11026,11 +11062,13 @@
     "optionsList": [
       {
         "id": "yes",
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": "no",
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "clinicalConcept": [
@@ -11065,11 +11103,13 @@
     "optionsList": [
       {
         "id": "yes",
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": "no",
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "clinicalConcept": [
@@ -11098,11 +11138,13 @@
     "optionsList": [
       {
         "id": "yes",
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": "no",
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "clinicalConcept": [
@@ -11131,11 +11173,13 @@
     "optionsList": [
       {
         "id": "yes",
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": "no",
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "clinicalConcept": [
@@ -11285,11 +11329,13 @@
     "optionsList": [
       {
         "id": "yes",
-        "name": "Yes"
+        "name": "Yes",
+        "cultureValue": "হ্যাঁ"
       },
       {
         "id": "no",
-        "name": "No"
+        "name": "No",
+        "cultureValue": "না"
       }
     ],
     "clinicalConcept": [

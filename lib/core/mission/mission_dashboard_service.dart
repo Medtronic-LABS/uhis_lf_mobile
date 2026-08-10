@@ -669,7 +669,7 @@ class MissionDashboardService {
       patientId: followUp.patientId,
       householdId: hhId,
       householdNumber: hhId != null ? data.householdNumbersById[hhId] : null,
-      reason: followUp.reason ?? MissionDashboardStrings.followUpDueFallback,
+      reason: FollowUpCallStrings.kindLabel(followUp.reason),
       daysOverdue: daysUntil < 0 ? -daysUntil : null,
       dueAt: followUp.dueAt,
       aiInsight: aiInsight,

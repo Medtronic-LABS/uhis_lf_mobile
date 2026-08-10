@@ -731,7 +731,10 @@ class _ReferralPlacePicker extends StatelessWidget {
             fillColor: Colors.white,
           ),
           items: referralFacilityOptions
-              .map((o) => DropdownMenuItem(value: o.id, child: Text(o.label)))
+              .map((o) => DropdownMenuItem(
+                    value: o.id,
+                    child: Text(EpiStrings.referralFacilityLabelOf(o)),
+                  ))
               .toList(),
         ),
       ],

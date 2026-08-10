@@ -193,8 +193,9 @@ class VisitFlowHeader extends StatelessWidget {
                             .whereType<Programme>()
                             .where((p) => p != Programme.unknown)
                             .firstOrNull;
-                        final baseName = primary?.displayName ??
-                            activeFormTypes.first.toUpperCase();
+                        final baseName = primary != null
+                            ? ProgrammeLabels.of(primary)
+                            : activeFormTypes.first.toUpperCase();
                         final label = visitNumber != null &&
                                 (primary == Programme.anc ||
                                     primary == Programme.pnc ||

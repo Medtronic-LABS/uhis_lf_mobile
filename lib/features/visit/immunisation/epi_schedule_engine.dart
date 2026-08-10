@@ -5,22 +5,47 @@ import 'package:flutter/services.dart';
 import '../../../core/db/immunisation_dao.dart';
 
 /// Mirrors assets/forms/field_library.json's "childReferralFacilityType"
-/// optionsList (id + English label only — the immunisation screen has no
-/// Bangla localisation path yet). Single source of truth — the Refer flow's
-/// dropdown and the history-pull facility-id lookup both use this list.
+/// optionsList (id + English name + UHIS Bangla cultureValue).
+/// Wire / history matching uses [name]; UI labels resolve via
+/// [EpiStrings.referralFacilityLabelOf].
 class FacilityOption {
-  const FacilityOption(this.id, this.label);
+  const FacilityOption(this.id, this.name, {this.cultureValue});
   final String id;
-  final String label;
+  final String name;
+  final String? cultureValue;
 }
 
 const List<FacilityOption> referralFacilityOptions = [
-  FacilityOption('medicalCollegeHospital', 'Medical College Hospital'),
-  FacilityOption('governmentHospital', 'Government Hospital'),
-  FacilityOption('upazilaHealthComplex', 'Upazila Health Complex'),
-  FacilityOption('privateHospital', 'Private Hospital/Clinic'),
-  FacilityOption('hwc', 'Health & Family Welfare Center'),
-  FacilityOption('communityClinic', 'Community Clinic'),
+  FacilityOption(
+    'medicalCollegeHospital',
+    'Medical College Hospital',
+    cultureValue: 'মেডিকেল কলেজ হাসপাতাল',
+  ),
+  FacilityOption(
+    'governmentHospital',
+    'Government Hospital',
+    cultureValue: 'সরকারি হাসপাতাল',
+  ),
+  FacilityOption(
+    'upazilaHealthComplex',
+    'Upazila Health Complex',
+    cultureValue: 'উপজেলা স্বাস্থ্য কমপ্লেক্স',
+  ),
+  FacilityOption(
+    'privateHospital',
+    'Private Hospital/Clinic',
+    cultureValue: 'বেসরকারি হাসপাতাল/ক্লিনিক',
+  ),
+  FacilityOption(
+    'hwc',
+    'Health & Family Welfare Center',
+    cultureValue: 'স্বাস্থ্য ও পরিবার কল্যাণ কেন্দ্র',
+  ),
+  FacilityOption(
+    'communityClinic',
+    'Community Clinic',
+    cultureValue: 'কমিউনিটি ক্লিনিক',
+  ),
 ];
 
 /// One vaccine's outcome recovered from assessment history (local cache or
@@ -425,7 +450,8 @@ class EpiScheduleEngine {
     final facilityId = raw['referralFacilityType'] as String?;
     if (facilityId != null) {
       for (final o in referralFacilityOptions) {
-        if (o.id == facilityId) return o.label;
+        // Canonical English name — locale-independent for history matching.
+        if (o.id == facilityId) return o.name;
       }
     }
     final referralReason = raw['referralReason'] as String?;
@@ -440,7 +466,7 @@ class EpiScheduleEngine {
         summary is Map ? summary['referralFacilityType'] as String? : null;
     if (summaryFacilityId != null) {
       for (final o in referralFacilityOptions) {
-        if (o.id == summaryFacilityId) return o.label;
+        if (o.id == summaryFacilityId) return o.name;
       }
     }
     final reasons = raw['referredReasons'];

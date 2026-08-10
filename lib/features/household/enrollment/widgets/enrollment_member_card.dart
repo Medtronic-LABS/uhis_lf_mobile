@@ -99,7 +99,9 @@ class EnrollmentMemberCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppRadius.button),
                   ),
                   child: Text(
-                    member.relationshipToHead,
+                    // Wire value stays English (e.g. "Other"); display via
+                    // Enrollment.opt.* so BN shows অন্যান্য.
+                    EnrollmentStrings.optionDisplay(member.relationshipToHead),
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
