@@ -9,6 +9,7 @@ import '../core/constants/app_strings.dart';
 import '../core/i18n/app_locale.dart';
 import '../core/services/micro_coaching_service.dart';
 import '../core/widgets/mockup_svg_icons.dart';
+import '../features/sync/sync_progress_strip.dart';
 import 'theme.dart';
 
 /// Shell widget for the persistent 3-tab bottom navigation.
@@ -122,7 +123,15 @@ class _BottomNavShellState extends State<BottomNavShell>
         _visibleBranchIndices.indexOf(widget.navigationShell.currentIndex);
 
     return Scaffold(
-        body: widget.navigationShell,
+        // Sync progress was previously visible only on /sync, so a
+        // connectivity-triggered sync ran invisibly while the SK worked. The
+        // strip collapses to zero height when nothing is syncing.
+        body: Column(
+          children: [
+            const SyncProgressStrip(),
+            Expanded(child: widget.navigationShell),
+          ],
+        ),
         bottomNavigationBar: DecoratedBox(
           decoration: BoxDecoration(
             border: Border(top: BorderSide(color: tokens.divider)),
