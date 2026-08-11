@@ -1346,7 +1346,6 @@ class _AiBriefingSection extends StatelessWidget {
         // can't answer for themselves, so the card addresses the guardian.
         GreetWarmlyCard(
           isFemale: isFemale,
-          loading: briefingLoading,
           // Deliberately not isYoungChild (RMNCH childhoodVisit, <25mo) —
           // this card's "can't answer for themselves" rationale is a
           // communication-capability concern for the whole under-5 band,
@@ -1356,9 +1355,6 @@ class _AiBriefingSection extends StatelessWidget {
           // revert this back on a future merge.)
           isChild: patientContext.ageMonths < 60,
           selectedProgrammes: selectedProgrammes,
-          greeting: briefingData?.greeting,
-          fallbackOpeningLine:
-              briefingData?.suggestedDiscussionPoints.openingLine,
         ),
       ],
     );
@@ -1498,25 +1494,20 @@ class _BriefingCard1Content extends StatelessWidget {
 // greeting line in the SK's selected app language, footer is a small
 // helper hint so the SK leads with empathy before tapping the AI Scribe
 // below. Header/hint/greeting all follow [AppLocale] — no bilingual
-// pairing: only the selected language renders, never both at once. The
-// greeting prefers the AI-generated `greeting` block for the active
-// language and falls back to the localized static copy when it's null,
-// empty, or the SK has disabled the Step 1 AI briefing. When the briefing
-// API returns a non-empty openingLine (legacy, pre-`greeting` field) we
-// surface it as the English line before falling back to the static one —
-// only relevant when the app language is English.
+// pairing: only the selected language renders, never both at once.
+//
+// Entirely local: the card takes no briefing data and makes no network
+// call, so it paints on the first frame with no skeleton state, and the
+// opener is identical every visit and always available offline.
 //
 // Public so it can be pumped directly in a widget test — see
-// GreetWarmlyCard's own test file for the header/hint/fallback coverage.
+// GreetWarmlyCard's own test file for the header/hint coverage.
 class GreetWarmlyCard extends StatelessWidget {
   const GreetWarmlyCard({
     super.key,
     required this.isFemale,
-    required this.loading,
     this.isChild = false,
     this.selectedProgrammes = const {},
-    this.greeting,
-    this.fallbackOpeningLine,
   });
 
   /// Tri-state: `true` female, `false` male, `null` when the patient's sex
@@ -1524,12 +1515,10 @@ class GreetWarmlyCard extends StatelessWidget {
   /// instead of defaulting to one. Only those two consume it; the greeting
   /// line itself is genderless in every case.
   final bool? isFemale;
-  final bool loading;
 
   /// True for an under-5 patient — they can't answer for themselves, so
   /// every line addresses the guardian about the child rather than the
-  /// child directly (the AI-generated `greeting` block is instructed to do
-  /// the same; this only governs the offline / AI-unavailable fallback).
+  /// child directly.
   final bool isChild;
 
   /// The SK's currently-ticked service cards. Governs which static coaching
@@ -1539,65 +1528,28 @@ class GreetWarmlyCard extends StatelessWidget {
   /// [SymptomPickerStrings.sitWithGreetEnglishFor]).
   final Set<Programme> selectedProgrammes;
 
-  /// AI-generated greeting block. When null or empty, the localized static
-  /// fallback is shown so the SK still has a sensible opener offline.
-  final GreetingContent? greeting;
-
-  /// Legacy fallback — the SDP opening line was used before the dedicated
-  /// greeting block existed. Surface it as the English line when the new
-  /// `greeting.english` field is empty and the app language is English.
-  /// Not used for a child patient — an adult-patient opener wouldn't fit a
-  /// guardian-directed greeting.
-  final String? fallbackOpeningLine;
-
   static const Color _navyBg = AppColors.navy;
 
   /// Single greeting line in the SK's selected app language — Bangla when
   /// [AppLocale.isBangla], English otherwise. Never returns both languages
   /// at once.
-  String _resolveGreetingLine() {
-    final g = greeting;
-    if (AppLocale.isBangla) {
-      if (g != null && g.bangla.trim().isNotEmpty) return g.bangla.trim();
-      return SymptomPickerStrings.sitWithGreetBanglaFor(isChild: isChild);
-    }
-    if (g != null && g.english.trim().isNotEmpty) return g.english.trim();
-    if (!isChild &&
-        fallbackOpeningLine != null &&
-        fallbackOpeningLine!.trim().isNotEmpty) {
-      return fallbackOpeningLine!.trim();
-    }
-    return SymptomPickerStrings.sitWithGreetEnglishFor(isChild: isChild);
-  }
+  String _resolveGreetingLine() => AppLocale.isBangla
+      ? SymptomPickerStrings.sitWithGreetBanglaFor(isChild: isChild)
+      : SymptomPickerStrings.sitWithGreetEnglishFor(isChild: isChild);
 
   /// Coaching line shown under the greeting, in the SK's selected app
-  /// language. When the app language is Bangla, prefers `greeting.hintBn`,
-  /// then `greeting.hintBangla`, then falls through to the generic
-  /// `greeting.hint`; English just uses `greeting.hint` directly. Falls
-  /// back to the localized static coaching line when none of the AI
-  /// fields are populated so the SK still gets the "ask about home first"
-  /// nudge offline.
-  String _resolveHint() {
-    final g = greeting;
-    if (g != null) {
-      if (AppLocale.isBangla) {
-        if (g.hintBn.trim().isNotEmpty) return g.hintBn.trim();
-        if (g.hintBangla.trim().isNotEmpty) return g.hintBangla.trim();
-      }
-      if (g.hint.trim().isNotEmpty) return g.hint.trim();
-    }
-    return SymptomPickerStrings.sitWithGreetHintFor(
-      isFemale: isFemale,
-      selectedProgrammes: selectedProgrammes,
-      isChild: isChild,
-    );
-  }
+  /// language — the "ask about home first" nudge, chosen from the ticked
+  /// service cards.
+  String _resolveHint() => SymptomPickerStrings.sitWithGreetHintFor(
+    isFemale: isFemale,
+    selectedProgrammes: selectedProgrammes,
+    isChild: isChild,
+  );
 
   @override
   Widget build(BuildContext context) {
     final greetingLine = _resolveGreetingLine();
     final hint = _resolveHint();
-    final hasAi = greeting != null && !greeting!.isEmpty;
 
     return Container(
       decoration: BoxDecoration(
@@ -1624,10 +1576,9 @@ class GreetWarmlyCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 5),
-          if (loading && !hasAi)
-            const _GreetLoadingSkeleton()
-          else
-            Column(
+          // No loading branch: the copy is local, so it paints on the first
+          // frame rather than after a briefing round-trip.
+          Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -1658,39 +1609,6 @@ class GreetWarmlyCard extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-/// Skeleton shown inside [GreetWarmlyCard] while the briefing API is in
-/// flight. Mirrors the navy palette so it doesn't flash white.
-class _GreetLoadingSkeleton extends StatelessWidget {
-  const _GreetLoadingSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final w = c.maxWidth;
-        Widget bar(double fraction, double height) => Container(
-          width: w * fraction,
-          height: height,
-          decoration: BoxDecoration(
-            color: AppColors.textOnNavy.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(4),
-          ),
-        );
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            bar(0.85, 18),
-            const SizedBox(height: 8),
-            bar(0.65, 18),
-            const SizedBox(height: 12),
-            bar(0.95, 14),
-          ],
-        );
-      },
     );
   }
 }
