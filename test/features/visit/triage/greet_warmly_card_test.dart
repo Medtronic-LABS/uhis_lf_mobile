@@ -16,7 +16,7 @@ void main() {
   });
 
   Widget buildCard({
-    required bool isFemale,
+    required bool? isFemale,
     bool loading = false,
     bool isChild = false,
     Set<Programme> selectedProgrammes = const {},
@@ -36,6 +36,95 @@ void main() {
       ),
     );
   }
+
+  group('sex not recorded', () {
+    testWidgets(
+        'header says HIM/HER rather than defaulting to one — nobody recorded '
+        'a sex for this patient',
+        (tester) async {
+      await tester.pumpWidget(buildCard(isFemale: null));
+
+      expect(
+        find.text(SymptomPickerStrings.sitWithGreetHeaderFor(isFemale: null)),
+        findsOneWidget,
+      );
+      expect(find.textContaining('HIM/HER'), findsOneWidget);
+      expect(
+        find.text(SymptomPickerStrings.sitWithGreetHeaderFor(isFemale: false)),
+        findsNothing,
+      );
+      expect(
+        find.text(SymptomPickerStrings.sitWithGreetHeaderFor(isFemale: true)),
+        findsNothing,
+      );
+    });
+
+    testWidgets('hint uses he/she wording, not the male line', (tester) async {
+      await tester.pumpWidget(buildCard(isFemale: null));
+
+      expect(
+        find.text(SymptomPickerStrings.sitWithGreetHintFor(isFemale: null)),
+        findsOneWidget,
+      );
+      expect(find.textContaining('he/she'), findsOneWidget);
+      expect(
+        find.text(SymptomPickerStrings.sitWithGreetHintFor(isFemale: false)),
+        findsNothing,
+      );
+    });
+
+    testWidgets(
+        'hint stays visit-type-neutral even on an ANC or PNC visit — with no '
+        'recorded sex we cannot assume whose checkup this is',
+        (tester) async {
+      for (final programmes in <Set<Programme>>[
+        {Programme.anc},
+        {Programme.pnc},
+      ]) {
+        await tester.pumpWidget(buildCard(
+          isFemale: null,
+          selectedProgrammes: programmes,
+        ));
+
+        expect(
+          find.textContaining('pregnancy checkup'),
+          findsNothing,
+          reason: 'programmes=$programmes',
+        );
+        expect(
+          find.textContaining('postnatal checkup'),
+          findsNothing,
+          reason: 'programmes=$programmes',
+        );
+      }
+    });
+
+    testWidgets('the greeting line is unaffected — it is genderless anyway', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildCard(isFemale: null));
+
+      expect(
+        find.text(SymptomPickerStrings.sitWithGreetEnglishFor()),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a child with no recorded sex still addresses the guardian', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildCard(isFemale: null, isChild: true));
+
+      expect(
+        find.text(SymptomPickerStrings.sitWithGreetHeaderFor(
+          isFemale: null,
+          isChild: true,
+        )),
+        findsOneWidget,
+      );
+      expect(find.textContaining('HIM/HER'), findsNothing);
+    });
+  });
 
   group('header', () {
     testWidgets('renders the gendered female header', (tester) async {
