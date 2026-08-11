@@ -956,21 +956,63 @@ class _PatientContextScreenState
       summary: summary.toString(),
       apiContext: <String, dynamic>{
         'patientId': data.patientId ?? widget.patientId,
-        'name': data.name,
-        'age': data.age,
+        'patientName': data.name,
+        'ageYears': data.age,
         'gender': data.gender,
-        'programmes': progs.map((p) => p.wireTag).toList(),
-        // Duplicate of 'programmes' under the key name the sibling AI Visit
-        // Briefing/NABA requests use (see symptom_picker_screen.dart) — the
-        // backend's patient-scoped prompt may only read this key.
+        'dateOfBirth': data.dateOfBirth,
         'activeProgrammes': progs.map((p) => p.name).toList(),
         'riskBand': bandLabel,
         'riskReasons': reasons,
         'isPregnant': data.isPregnant,
         'villageName': data.villageName,
+        if (data.enrolledAt != null)
+          'registrationDate': data.enrolledAt!.toIso8601String().split('T').first,
+        if (data.pregnancySnapshot?.eddDate != null)
+          'expectedDeliveryDate': DateTime.fromMillisecondsSinceEpoch(
+            data.pregnancySnapshot!.eddDate!,
+          ).toIso8601String().split('T').first,
+        if (data.pregnancySnapshot?.gestationalWeeksFromLmp != null)
+          'gestationalWeeks': data.pregnancySnapshot!.gestationalWeeksFromLmp,
         ...extras,
       },
     );
+  }
+
+  /// Extracts key clinical fields from one assessment's rawJson for the
+  /// AI assistant context — same fields [_TimelineEventSheet] renders.
+  static Map<String, dynamic> _encounterSummary(MemberAssessment a) {
+    final raw = a.rawJson;
+    String? str(String key) {
+      final v = raw[key];
+      if (v == null) return null;
+      final s = v.toString().trim();
+      return s.isEmpty ? null : s;
+    }
+
+    return {
+      'date': a.date.toIso8601String().split('T').first,
+      'type': a.type,
+      if (a.status != null) 'status': a.status,
+      // Vitals
+      if (str('bp') != null) 'bp': str('bp'),
+      if (str('bg') != null) 'bloodGlucose': str('bg'),
+      if (str('bgType') != null) 'glucoseType': str('bgType'),
+      if (str('hemoglobin') != null) 'hemoglobin': str('hemoglobin'),
+      if (str('weight') != null) 'weight': str('weight'),
+      if (str('bmi') != null) 'bmi': str('bmi'),
+      // ANC / PW obstetric
+      if (str('ancVisitNumber') != null) 'ancVisitNumber': str('ancVisitNumber'),
+      if (str('pncVisitNumber') != null) 'pncVisitNumber': str('pncVisitNumber'),
+      if (str('fundalHeight') != null) 'fundalHeight': str('fundalHeight'),
+      if (str('dangerSignsDuringPregnancy') != null)
+        'dangerSigns': str('dangerSignsDuringPregnancy'),
+      if (str('highRiskPregnantWoman') != null) 'highRisk': str('highRiskPregnantWoman'),
+      // NCD
+      if (str('confirmDiagnosis') != null) 'diagnosis': str('confirmDiagnosis'),
+      if (str('ncdSymptoms') != null) 'symptoms': str('ncdSymptoms'),
+      if (str('referralFacilityType') != null) 'referredTo': str('referralFacilityType'),
+      if (str('followUpVisit') != null) 'followUpDate': str('followUpVisit'),
+    };
   }
 
   /// Clinical-findings/vitals/encounter-history for the assistant's
@@ -1017,19 +1059,17 @@ class _PatientContextScreenState
       final lastVisit = encounters.isNotEmpty ? encounters.first : null;
       final recentEncounters = encounters
           .take(5)
-          .map((a) => {
-                'date': a.date.toIso8601String().split('T').first,
-                'type': a.type,
-                if (a.status != null) 'status': a.status,
-              })
+          .map((a) => _encounterSummary(a))
           .toList();
 
+      // Primary: parse vitals from assessment JSON rows (same path as risk scoring).
+      // Fallback: pre-loaded vitalHistory spark data (already in memory, never fails).
       final vitalsSummary = await _mostRecentVitalsSummary(
         patientId: patientId,
         localAssessmentDao: localAssessmentDao,
         historyAssessmentDao: historyAssessmentDao,
         remoteAssessments: data.assessments,
-      );
+      ) ?? buildRecentVitalsSummary(data.vitalHistory);
 
       return {
         'visitCount': encounters.length,

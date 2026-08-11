@@ -63,6 +63,72 @@ class PatientAiContext {
 
   /// Structured context sent to the backend so it can answer from the data.
   final Map<String, dynamic> apiContext;
+
+  /// Up to 4 context-aware starter questions derived from [apiContext].
+  /// Shown as chips in the intro state before the first message.
+  List<String> get suggestedStarters {
+    final ctx = apiContext;
+    final progs = (ctx['activeProgrammes'] as List?)?.cast<String>() ?? [];
+    final isPregnant = ctx['isPregnant'] == true;
+    final riskReasons = (ctx['riskReasons'] as List?)?.cast<String>() ?? [];
+    final followUps = (ctx['openFollowUps'] as List?) ?? [];
+    final vitals = ctx['recentVitals'] as Map?;
+    final visits = ctx['visitCount'] as int? ?? 0;
+
+    final questions = <String>[];
+
+    // Overdue follow-up — highest priority
+    if (followUps.isNotEmpty) {
+      questions.add(PatientAiStrings.starterFollowUpsOverdue);
+    }
+
+    // Danger signs from risk reasons
+    if (riskReasons.isNotEmpty) {
+      questions.add(PatientAiStrings.starterDangerSigns);
+    }
+
+    // Programme-specific visit questions
+    if (progs.contains('anc') && isPregnant) {
+      questions.add(PatientAiStrings.starterAncProgress);
+    }
+    if (progs.contains('ncd')) {
+      questions.add(PatientAiStrings.starterBpDiabetes);
+    }
+    if (progs.contains('epi')) {
+      questions.add(PatientAiStrings.starterVaccines);
+    }
+    if (progs.contains('tb')) {
+      questions.add(PatientAiStrings.starterTb);
+    }
+    if (progs.contains('pnc')) {
+      questions.add(PatientAiStrings.starterPnc);
+    }
+
+    // Abnormal vitals
+    final sbp = vitals?['bloodPressureSystolic'] as num?;
+    if (sbp != null && sbp >= 140) {
+      questions.add(PatientAiStrings.starterHighBp);
+    }
+
+    // Visit history
+    if (visits > 0) {
+      questions.add(PatientAiStrings.starterLastVisit);
+    }
+
+    // Referral question — always useful if high risk
+    if (riskReasons.length >= 3) {
+      questions.add(PatientAiStrings.starterReferral);
+    }
+
+    // Fallback if nothing fired
+    if (questions.isEmpty) {
+      return PatientAiStrings.starters;
+    }
+
+    // Dedupe and cap at 4
+    final seen = <String>{};
+    return questions.where(seen.add).take(4).toList();
+  }
 }
 
 class PatientAiSheet extends StatefulWidget {
@@ -102,6 +168,22 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   @override
   void initState() {
     super.initState();
+    final ctx = widget.ctx.apiContext;
+    debugPrint(
+      '[PatientAI] context loaded — '
+      'patient=${ctx['patientName']} '
+      'age=${ctx['ageYears']} '
+      'gender=${ctx['gender']} '
+      'pregnant=${ctx['isPregnant']} '
+      'programmes=${ctx['activeProgrammes']} '
+      'riskBand=${ctx['riskBand']} '
+      'visits=${ctx['visitCount']} '
+      'lastVisit=${ctx['lastVisitDate']} '
+      'encounters=${(ctx['recentEncounters'] as List?)?.length ?? 0} '
+      'findings=${(ctx['clinicalFindings'] as List?)?.length ?? 0} '
+      'followUps=${(ctx['openFollowUps'] as List?)?.length ?? 0} '
+      'vitals=${ctx['recentVitals'] != null}',
+    );
     _speech
         .initialize(
           onStatus: _onSpeechStatus,
@@ -395,7 +477,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: PatientAiStrings.starters
+          children: widget.ctx.suggestedStarters
               .map((s) => ActionChip(label: Text(s), onPressed: () => _send(s)))
               .toList(),
         ),
