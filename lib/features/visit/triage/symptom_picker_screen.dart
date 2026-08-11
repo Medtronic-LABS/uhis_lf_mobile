@@ -1351,7 +1351,6 @@ class _AiBriefingSection extends StatelessWidget {
           // revert this back on a future merge.)
           isChild: patientContext.ageMonths < 60,
           selectedProgrammes: selectedProgrammes,
-          gestationalWeeks: patientContext.gestationalWeeks,
           greeting: briefingData?.greeting,
           fallbackOpeningLine:
               briefingData?.suggestedDiscussionPoints.openingLine,
@@ -1511,7 +1510,6 @@ class GreetWarmlyCard extends StatelessWidget {
     required this.loading,
     this.isChild = false,
     this.selectedProgrammes = const {},
-    this.gestationalWeeks,
     this.greeting,
     this.fallbackOpeningLine,
   });
@@ -1525,17 +1523,12 @@ class GreetWarmlyCard extends StatelessWidget {
   /// the same; this only governs the offline / AI-unavailable fallback).
   final bool isChild;
 
-  /// The SK's currently-ticked service cards. Governs which static
-  /// fallback question is asked — e.g. an ANC visit asks a
-  /// pregnancy-relevant question, an NCD visit asks about medicines —
-  /// instead of one question assumed for every adult patient regardless of
-  /// why they're being seen today.
+  /// The SK's currently-ticked service cards. Governs which static coaching
+  /// hint is shown, so it names the actual checkup rather than always
+  /// assuming a pregnancy one. Deliberately does NOT reach the greeting
+  /// line — that stays generic (see
+  /// [SymptomPickerStrings.sitWithGreetEnglishFor]).
   final Set<Programme> selectedProgrammes;
-
-  /// Gates the fetal-movement question within the pregnancy fallback to
-  /// when it's actually meaningful (quickening isn't felt in early
-  /// pregnancy) — null/early gestation asks about nausea/appetite instead.
-  final int? gestationalWeeks;
 
   /// AI-generated greeting block. When null or empty, the localized static
   /// fallback is shown so the SK still has a sensible opener offline.
@@ -1557,12 +1550,7 @@ class GreetWarmlyCard extends StatelessWidget {
     final g = greeting;
     if (AppLocale.isBangla) {
       if (g != null && g.bangla.trim().isNotEmpty) return g.bangla.trim();
-      return SymptomPickerStrings.sitWithGreetBanglaFor(
-        isFemale: isFemale,
-        isChild: isChild,
-        selectedProgrammes: selectedProgrammes,
-        gestationalWeeks: gestationalWeeks,
-      );
+      return SymptomPickerStrings.sitWithGreetBanglaFor(isChild: isChild);
     }
     if (g != null && g.english.trim().isNotEmpty) return g.english.trim();
     if (!isChild &&
@@ -1570,12 +1558,7 @@ class GreetWarmlyCard extends StatelessWidget {
         fallbackOpeningLine!.trim().isNotEmpty) {
       return fallbackOpeningLine!.trim();
     }
-    return SymptomPickerStrings.sitWithGreetEnglishFor(
-      isFemale: isFemale,
-      isChild: isChild,
-      selectedProgrammes: selectedProgrammes,
-      gestationalWeeks: gestationalWeeks,
-    );
+    return SymptomPickerStrings.sitWithGreetEnglishFor(isChild: isChild);
   }
 
   /// Coaching line shown under the greeting, in the SK's selected app
