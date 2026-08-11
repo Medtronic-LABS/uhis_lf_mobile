@@ -47,8 +47,6 @@ import 'core/db/pregnancy_snapshot_dao.dart';
 import 'core/db/treatment_presence_dao.dart';
 import 'core/db/referral_dao.dart';
 import 'core/db/sync_meta_dao.dart';
-import 'core/notifications/notification_service.dart';
-import 'core/notifications/repeat_scheduler.dart';
 import 'core/risk/risk_scoring_service.dart';
 import 'core/sla/priority_scorer.dart';
 import 'core/sla/sla_evaluator.dart';
@@ -222,11 +220,11 @@ class _UhisNextAppState extends State<UhisNextApp>
   // ── Referral SLA Engine wiring (ReferralDao initialized above) ──────────
   late final SlaEvaluator _slaEvaluator = const SlaEvaluator();
   late final PriorityScorer _priorityScorer = const PriorityScorer();
-  late final NotificationService _notifications = NotificationService();
-  late final RepeatScheduler _repeatScheduler = RepeatScheduler(
-    dao: _referralDao,
-    notifications: _notifications,
-  );
+  // No `notificationScheduler:` — referrals deliberately do NOT post to the OS
+  // notification bar. They surface in-app via the dashboard bell badge, the
+  // referral alert banner, and the CCE alerts drawer. Leaving this null means
+  // ReferralRepository.dispatchPendingNotifications() returns 0 at its own
+  // guard, so no future caller can reintroduce the alerts by accident.
   late final ReferralRepository _referrals = ReferralRepository(
     referrals: _referralDao,
     patients: _patientDao,
@@ -234,7 +232,6 @@ class _UhisNextAppState extends State<UhisNextApp>
     followUps: _followUpDao,
     slaEvaluator: _slaEvaluator,
     priorityScorer: _priorityScorer,
-    notificationScheduler: _repeatScheduler,
     localAssessments: _localAssessmentDao,
   );
 
@@ -312,9 +309,6 @@ class _UhisNextAppState extends State<UhisNextApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Register notification channels + rehydrate any pending repeat alarms
-    // from the last session. Both are idempotent.
-    unawaited(_bootstrapNotifications());
     // Start connectivity monitoring for automatic offline sync retry.
     _connectivitySync.start();
     // Keep the process alive across screen-off for the duration of any sync.
@@ -346,19 +340,6 @@ class _UhisNextAppState extends State<UhisNextApp>
           .timeout(const Duration(seconds: 10))
           .then((_) {}, onError: (_) {}),
     );
-  }
-
-  Future<void> _bootstrapNotifications() async {
-    try {
-      await _notifications.initialize();
-      await _repeatScheduler.rehydrateOnBoot();
-
-    } catch (e, st) {
-      // Notifications are a non-critical surface; failure should not block
-      // app startup. Surface to console for now; once a telemetry sink lands
-      // (worklist.md §8 / referral-sla-engine.md §8), route through it.
-      debugPrint('[notifications] bootstrap failed: $e\n$st');
-    }
   }
 
   @override
@@ -412,11 +393,16 @@ class _UhisNextAppState extends State<UhisNextApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // SLA states drift while the device sleeps; refresh on every resume.
-      // Fire-and-forget — UI listens to ReferralRepository.changes.
-      unawaited(_referrals
-          .recomputeAllAfterSync()
-          .then((_) => _referrals.dispatchPendingNotifications()));
+      // SLA states drift while the device sleeps; refresh on every resume so
+      // the dashboard priority pipeline and the CCE alerts drawer see current
+      // state. Fire-and-forget — UI listens to ReferralRepository.changes.
+      //
+      // Deliberately does NOT dispatch OS notifications. Referrals surface
+      // in-app only (dashboard bell, referral banner, CCE drawer). Dispatching
+      // here fired one notification per open referral on every resume — after a
+      // first login that is the entire synced history at once, since cold sync
+      // pulls referrals with past due dates that all read as SLA-breached.
+      unawaited(_referrals.recomputeAllAfterSync());
     }
   }
 
@@ -460,8 +446,6 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<ReferralDao>.value(value: _referralDao),
         Provider<SlaEvaluator>.value(value: _slaEvaluator),
         Provider<PriorityScorer>.value(value: _priorityScorer),
-        Provider<NotificationService>.value(value: _notifications),
-        Provider<RepeatScheduler>.value(value: _repeatScheduler),
         Provider<ReferralRepository>.value(value: _referrals),
         Provider<MissionDashboardRepository>.value(value: _missionDashboard),
         Provider<PatientDao>.value(value: _patientDao),
