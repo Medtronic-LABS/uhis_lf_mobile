@@ -19,6 +19,7 @@ import 'app/theme_provider.dart';
 import 'core/api/api_client.dart';
 import 'core/api/realtime_asr_service.dart';
 import 'core/preferences/ai_feature_toggles_notifier.dart';
+import 'core/preferences/scribe_audio_settings_notifier.dart';
 import 'core/preferences/scribe_engine_notifier.dart';
 import 'core/preferences/vad_tuning_notifier.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -547,6 +548,13 @@ class _UhisNextAppState extends State<UhisNextApp>
         ChangeNotifierProvider<AiFeatureTogglesNotifier>(
           create: (_) =>
               AiFeatureTogglesNotifier(const FlutterSecureStorage())..load(),
+        ),
+        // Persisted mic capture preference (Settings → Microphone capture) —
+        // whether scribe capture bypasses the handset's echo-cancellation
+        // chain. Consumed by both scribe paths via ScribeRecordConfig.
+        ChangeNotifierProvider<ScribeAudioSettingsNotifier>(
+          create: (_) =>
+              ScribeAudioSettingsNotifier(const FlutterSecureStorage())..load(),
         ),
         // SK → SS → sub-village hierarchy (memory + disk cache; cleared on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(

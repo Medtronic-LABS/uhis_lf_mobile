@@ -267,6 +267,22 @@ class AppConfig {
       ) ??
       0.6;
 
+  /// Factory default for the "raw microphone capture" switch — whether the
+  /// scribe capture paths bypass the handset's echo-cancellation / noise-
+  /// suppression chain (see [ScribeRecordConfig]).
+  ///
+  /// Defaults to **off**: the processed chain is the right choice for real
+  /// field use, where an SK speaks directly at the handset. Turn it on for
+  /// a build whose mic input is loudspeaker playback — a recorded test clip
+  /// or an emulator — where AEC cancels that audio to near-silence.
+  ///
+  /// Same three-tier precedence doctrine as the VAD tuning below: this is
+  /// the build-time floor, [ScribeAudioSettingsNotifier]'s persisted value
+  /// overrides it on-device (Settings → Microphone capture), and a future
+  /// server-driven config API would slot in above both.
+  static bool get rawMicCaptureDefault =>
+      const bool.fromEnvironment('RAW_MIC_CAPTURE', defaultValue: false);
+
   // NOTE: scribeConsentGiven is intentionally NOT stored in AppConfig because
   // it is a per-user runtime preference, not a compile-time build flag.
   // It must be read from SharedPreferences / SecureStorage and managed by

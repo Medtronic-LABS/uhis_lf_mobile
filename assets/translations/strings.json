@@ -7775,6 +7775,14 @@
     "bn": "রেফার করা হয়েছে:",
     "en": "Referred:"
   },
+  "micSectionDescription": {
+    "bn": "এআই স্ক্রাইব কীভাবে মাইক্রোফোন চালু করে। সাধারণ ভিজিটে এটি বন্ধ রাখুন — ফোনের নিজস্ব অডিও প্রসেসিং ব্যবহার করলে সরাসরি ফোনের দিকে কথা বলা ব্যক্তির রেকর্ডিং সবচেয়ে পরিষ্কার হয়।",
+    "en": "How AI Scribe opens the microphone. Leave off for normal visits — the handset's built-in audio processing gives the clearest recording of someone speaking directly at the phone."
+  },
+  "micSectionHeader": {
+    "bn": "মাইক্রোফোন ক্যাপচার",
+    "en": "Microphone capture"
+  },
   "mildAnemiaBadge": {
     "bn": "মৃদু রক্তাল্পতা",
     "en": "Mild anemia"
@@ -9066,6 +9074,14 @@
   "rationaleTitle": {
     "bn": "এআই স্ক্রাইব",
     "en": "AI Scribe"
+  },
+  "rawMicCaptureDesc": {
+    "bn": "ফোনের ইকো ক্যান্সেলেশন এড়িয়ে যায়, ফলে ফোনের কাছে জোরে বাজানো অডিও — রেকর্ড করা টেস্ট ক্লিপ বা স্পিকারে চালু থাকা দ্বিতীয় ফোন — ইকো ধরে বাদ না দিয়ে রেকর্ড করা হয়। শুধু টেস্টিং ও ডেমোর জন্য প্রয়োজন। পরবর্তী রেকর্ডিং থেকে কার্যকর হবে।",
+    "en": "Bypasses the phone's echo cancellation so audio played out loud near the handset — a recorded test clip, or a second phone on speaker — is picked up instead of being cancelled out as echo. Only needed for testing and demos. Applies from the next recording."
+  },
+  "rawMicCaptureLabel": {
+    "bn": "প্রক্রিয়াবিহীন মাইক্রোফোন ক্যাপচার",
+    "en": "Raw microphone capture"
   },
   "readingFingerprint": {
     "bn": "ফিঙ্গারপ্রিন্ট পড়া হচ্ছে…",

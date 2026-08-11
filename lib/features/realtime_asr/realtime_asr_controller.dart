@@ -7,7 +7,10 @@ import 'package:record/record.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../core/api/realtime_asr_service.dart';
+import '../../core/audio/scribe_record_config.dart';
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
 import '../scribe/form_field_schema_builder.dart';
 import '../scribe/models/ai_extracted_field.dart';
@@ -32,11 +35,24 @@ class RealtimeAsrController extends ChangeNotifier {
     required RealtimeAsrService service,
     required ScribePermissionService permissionService,
     VadTuningNotifier? vadTuning,
+    ScribeAudioSettingsNotifier? audioSettings,
   })  : _service = service,
         _perm = permissionService,
-        _vadTuning = vadTuning;
+        _vadTuning = vadTuning,
+        _audioSettings = audioSettings;
 
   final RealtimeAsrService _service;
+
+  // Nullable for the same reason as [_vadTuning] below — falls back to the
+  // build-time default rather than requiring the preferences stack.
+  final ScribeAudioSettingsNotifier? _audioSettings;
+
+  /// Read at each session start, not cached, so flipping the setting
+  /// applies to the next LIVE session without restarting the app.
+  RecordConfig get _captureConfig => ScribeRecordConfig.realtimeStream(
+        rawMicCapture: _audioSettings?.rawMicCaptureEnabled ??
+            AppConfig.rawMicCaptureDefault,
+      );
   // Nullable: callers that don't provide one (tests, a widget tree without
   // the provider registered) get VadGate's own built-in defaults instead of
   // a crash — same "degrade to defaults, never throw" stance as
@@ -256,18 +272,7 @@ class RealtimeAsrController extends ChangeNotifier {
       final hasPerm = await _recorder.hasPermission();
       debugPrint('[RealtimeASR] recorder.hasPermission()=$hasPerm');
 
-      final stream = await _recorder.startStream(
-        const RecordConfig(
-          encoder: AudioEncoder.pcm16bits,
-          sampleRate: 16000,
-          numChannels: 1,
-          // defaultSource routes through Android's AGC/NS/AEC processing
-          // chain, which has been observed to return constantly-saturated
-          // garbage (every sample pinned at the Int16 minimum) on some
-          // emulator audio HALs. Raw mic source skips that chain.
-          androidConfig: AndroidRecordConfig(audioSource: AndroidAudioSource.mic),
-        ),
-      );
+      final stream = await _recorder.startStream(_captureConfig);
       _audioSub = stream.listen(_onAudioChunk);
       debugPrint('[RealtimeASR] mic stream started');
 
@@ -400,7 +405,10 @@ class RealtimeAsrController extends ChangeNotifier {
     if (toSend.isEmpty) return;
     _silentSinceLastTick = false;
     for (final chunk in toSend) {
-      final wav = _wrapPcm16Wav(chunk, sampleRate: 16000);
+      final wav = _wrapPcm16Wav(
+        chunk,
+        sampleRate: ScribeRecordConfig.sampleRate,
+      );
       _send({
         'type': 'audio',
         'data': base64Encode(wav),

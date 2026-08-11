@@ -35,6 +35,7 @@ import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
+import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import 'models/anc_assessment.dart';
 import '../../core/db/health_facility_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
@@ -505,6 +506,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         _step1Scribe ??= ScribeController(
           api: context.read<ScribeApiService>(),
           permissionService: ScribePermissionService(),
+          audioSettings: context.read<ScribeAudioSettingsNotifier>(),
         );
         return _Step1Symptoms(
           key: ValueKey('flow-step1-${widget.visitId}'),

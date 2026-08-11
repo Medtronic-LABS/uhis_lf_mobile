@@ -17,6 +17,7 @@ import '../../core/db/pregnancy_episode_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/mission/mission_pregnancy_facts.dart';
 import '../../core/models/programme.dart';
+import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
@@ -148,6 +149,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       _scribeCtrl = ScribeController(
         api: context.read<ScribeApiService>(),
         permissionService: ScribePermissionService(),
+        audioSettings: context.read<ScribeAudioSettingsNotifier>(),
       );
       _scribeInitialized = true;
     }

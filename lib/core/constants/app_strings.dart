@@ -586,6 +586,11 @@ abstract final class AiSettingsStrings {
   static String get step3ReferralAlertDesc => getTranslatedString('step3ReferralAlertDesc', 'The alert card that flags danger signs and recommends a referral.');
   static String get step3WhatsAppLabel => getTranslatedString('step3WhatsAppLabel', 'WhatsApp draft');
   static String get step3WhatsAppDesc => getTranslatedString('step3WhatsAppDesc', 'The pre-written WhatsApp message summarising the visit for the patient.');
+
+  static String get micSectionHeader => getTranslatedString('micSectionHeader', 'Microphone capture');
+  static String get micSectionDescription => getTranslatedString('micSectionDescription', 'How AI Scribe opens the microphone. Leave off for normal visits — the handset\'s built-in audio processing gives the clearest recording of someone speaking directly at the phone.');
+  static String get rawMicCaptureLabel => getTranslatedString('rawMicCaptureLabel', 'Raw microphone capture');
+  static String get rawMicCaptureDesc => getTranslatedString('rawMicCaptureDesc', 'Bypasses the phone\'s echo cancellation so audio played out loud near the handset — a recorded test clip, or a second phone on speaker — is picked up instead of being cancelled out as echo. Only needed for testing and demos. Applies from the next recording.');
 }
 
 /// Real-Time ASR screen — live streaming transcription + live clinical
