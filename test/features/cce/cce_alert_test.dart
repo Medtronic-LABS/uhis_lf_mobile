@@ -5,11 +5,17 @@ import 'package:uhis_next/core/db/follow_up_dao.dart';
 import 'package:uhis_next/core/models/patient.dart';
 import 'package:uhis_next/core/models/referral.dart';
 import 'package:uhis_next/features/cce/cce_alert.dart';
+import 'package:uhis_next/core/i18n/app_locale.dart';
 
 /// Unit tests for the CCE derivation — the pure mapping from a 14-state
 /// [ReferralStatus] + SLA bookkeeping onto the wireframe's severity / journey /
 /// badge / status-line. No Flutter, no DB.
 void main() {
+  // These assert English copy, so pin the language. AppLocale defaults to
+  // Bangla (BD-first), and Bangla localizes digits — '12 days' becomes
+  // '১২ days' — so an unpinned test is really asserting the default locale.
+  setUp(() => AppLocale.current = AppLanguage.english);
+
   final now = DateTime(2026, 7, 13, 12, 0);
   int ms(Duration fromNow) => now.add(fromNow).millisecondsSinceEpoch;
 

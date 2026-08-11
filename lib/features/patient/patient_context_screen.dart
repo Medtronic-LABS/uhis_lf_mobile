@@ -43,6 +43,7 @@ import '../visit/visit_controller.dart';
 import '../visit/visit_start_helper.dart';
 import 'referral_narrative.dart';
 import 'vitals_repository.dart';
+import '../../core/i18n/app_date_format.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -3142,7 +3143,7 @@ class _PregnancyProgressSection extends StatelessWidget {
     final progress = gaWeeks != null ? (gaWeeks / 40.0).clamp(0.0, 1.0) : 0.0;
     final visitsDone = int.tryParse(ancVisitNumber ?? '0') ?? 0;
 
-    final dateFormat = DateFormat('d MMM yyyy');
+    final dateFormat = AppDateFormat.dayMonthYearFmt;
 
     final card = GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -4491,17 +4492,19 @@ class _TimelineEventSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
     final raw = _normalizeRaw(assessment.rawJson);
-    final dateFormat = DateFormat('d MMMM yyyy · h:mm a');
+    final dateFormat = AppDateFormat.dayMonthNameYearTimeFmt;
     final progColors = Theme.of(context).extension<ProgrammeColors>()!;
     final prog = Programme.fromString(assessment.type);
     final typeColor = progColors.of(prog);
 
     final entries = <MapEntry<String, String>>[];
     final snap = pregnancySnapshot;
-    void addIfPresent(String key, String label) {
+    // [valueMapper] localizes coded values (e.g. referralStatus 'Referred').
+    void addIfPresent(String key, String label,
+        {String Function(String)? valueMapper}) {
       final v = _rawStr(raw[key]);
       if (v != null && v.isNotEmpty) {
-        entries.add(MapEntry(label, v));
+        entries.add(MapEntry(label, valueMapper?.call(v) ?? v));
       }
     }
 
@@ -4525,7 +4528,7 @@ class _TimelineEventSheet extends StatelessWidget {
       if (millis == null) return;
       entries.add(MapEntry(
         label,
-        DateFormat('d MMM yyyy')
+        AppDateFormat.dayMonthYearFmt
             .format(DateTime.fromMillisecondsSinceEpoch(millis)),
       ));
     }
@@ -4552,7 +4555,7 @@ class _TimelineEventSheet extends StatelessWidget {
       lmpDate = eddDate.subtract(const Duration(days: 280));
     }
     if (lmpDate != null) {
-      final shortDate = DateFormat('d MMM yyyy');
+      final shortDate = AppDateFormat.dayMonthYearFmt;
       entries.add(MapEntry('LMP', shortDate.format(lmpDate)));
       eddDate ??= lmpDate.add(const Duration(days: 280));
       entries.add(MapEntry('EDD', shortDate.format(eddDate)));
@@ -4561,8 +4564,12 @@ class _TimelineEventSheet extends StatelessWidget {
         final weeks = totalDays ~/ 7;
         final days = totalDays % 7;
         entries.add(MapEntry(
-          'Gestational age',
-          days > 0 ? '$weeks weeks $days days' : '$weeks weeks',
+          PatientDetailStrings.gestationalAge,
+          days > 0
+              ? PatientDetailStrings.gestationalWeeksDays(
+                  '$weeks', '$days', oneDay: days == 1)
+              : PatientDetailStrings.gestationalWeeksOnly(
+                  '$weeks', oneWeek: weeks == 1),
         ));
       }
     } else if (prog == Programme.pw) {
@@ -4589,7 +4596,7 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('stroke', 'Stroke history');
     addIfPresent('kidneyDisease', 'Kidney disease');
     addIfPresent('copd', 'COPD');
-    addIfPresent('referralFacilityType', 'Referred to');
+    addIfPresent('referralFacilityType', PatientDetailStrings.referredTo);
 
     // ── ANC / PW obstetric ─────────────────────────────────────────────────
     addIfPresent('hemoglobin', 'Hb (g/dL)');
@@ -4608,7 +4615,7 @@ class _TimelineEventSheet extends StatelessWidget {
     if (ageOfLastChild != null) {
       entries.add(MapEntry(
         'Age of last child (DOB)',
-        DateFormat('d MMM yyyy').format(ageOfLastChild),
+        AppDateFormat.dayMonthYearFmt.format(ageOfLastChild),
       ));
     } else {
       addWithFallback('ageOfLastChild', 'Age of last child', snap?.ageOfLastChild);
@@ -4621,7 +4628,7 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('highRiskPregnantWoman', 'High risk');
     addIfPresent('gapsInAnc', 'ANC gaps');
     addIfPresent('dangerSignsDuringPregnancy', 'Danger signs');
-    addIfPresent('referralFacility', 'Referred to');
+    addIfPresent('referralFacility', PatientDetailStrings.referredTo);
     addIfPresent('followUpVisit', 'Follow-up visit');
 
     // ── PNC ────────────────────────────────────────────────────────────────
@@ -4673,7 +4680,7 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('receivedVaccine', 'Vaccines received');
     addIfPresent('childBreastFeeding', 'Breastfeeding');
     addIfPresent('dewormingMedicine', 'Deworming');
-    addIfPresent('childReferral', 'Referral made');
+    addIfPresent('childReferral', PatientDetailStrings.referralMade);
     addIfPresent('childReferralFacilityType', 'Refer to');
 
     // ── Eye care / cataract ───────────────────────────────────────────────
@@ -4695,7 +4702,8 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('desireForChildrenInFuture', 'Desire for children');
 
     // ── Referral (all programmes) ─────────────────────────────────────────
-    addIfPresent('referralStatus', 'Referral status');
+    addIfPresent('referralStatus', PatientDetailStrings.referralStatus,
+        valueMapper: ClinicalStatusStrings.label);
     // Humanize referral reason codes (JSON array or comma list → readable labels)
     final reasonRaw = raw['referralReason'] ??
         raw['referredReasons'] ??
@@ -4707,17 +4715,22 @@ class _TimelineEventSheet extends StatelessWidget {
           .where((r) => r.isNotEmpty)
           .join(', ');
       if (humanized.isNotEmpty) {
-        entries.add(MapEntry('Referral reason', humanized));
+        entries.add(MapEntry(PatientDetailStrings.referralReason, humanized));
       }
     }
 
     // ── customStatus — only if distinct from referralStatus (avoid duplicate) ──
     final cs = raw['customStatus'];
     if (cs is List && cs.isNotEmpty) {
-      final joined = cs.map((e) => e.toString()).join(', ');
+      // Codes like HIGH_RISK_PW / UNCONTROLLED_BP were rendered verbatim.
+      final joined = ClinicalStatusStrings.labelAll(
+          cs.map((e) => e.toString()));
+      final rawJoined = cs.map((e) => e.toString()).join(', ');
       final refStatus = (raw['referralStatus']?.toString() ?? assessment.status ?? '').toLowerCase();
-      if (joined.isNotEmpty && joined.toLowerCase() != refStatus) {
-        entries.add(MapEntry('Status', joined));
+      // Compare on the raw codes, not the localized text — the dedupe must not
+      // change behaviour with the language.
+      if (joined.isNotEmpty && rawJoined.toLowerCase() != refStatus) {
+        entries.add(MapEntry(PatientDetailStrings.status, joined));
       }
     }
 
@@ -5257,11 +5270,11 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             ),
             const SizedBox(height: 10),
             if (lastDate != null)
-              _scheduleRow('Last visit', DateFormat('dd MMM yyyy').format(lastDate), scheme),
+              _scheduleRow('Last visit', AppDateFormat.dayMonthYearPaddedFmt.format(lastDate), scheme),
             if (nextDate != null)
               _scheduleRow(
                 'Next due',
-                DateFormat('dd MMM yyyy').format(nextDate),
+                AppDateFormat.dayMonthYearPaddedFmt.format(nextDate),
                 scheme,
                 valueColor: isOverdue ? AppColors.statusCritical : null,
               ),
@@ -5344,7 +5357,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
   }
 
   Widget _buildVitalsCard(BuildContext context, ColorScheme scheme, _VitalsSnapshot v) {
-    final date = DateFormat('dd MMM yyyy').format(v.recordedAt);
+    final date = AppDateFormat.dayMonthYearPaddedFmt.format(v.recordedAt);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),

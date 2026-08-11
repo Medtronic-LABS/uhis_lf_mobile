@@ -24,8 +24,10 @@ import 'package:intl/intl.dart';
 import '../../features/visit/immunisation/epi_schedule_engine.dart';
 import '../../features/visit/immunisation/epi_visit_summary.dart';
 import '../i18n/app_locale.dart';
+import '../i18n/bn_numerals.dart';
 import '../models/dashboard_tier.dart';
 import '../models/programme.dart';
+import '../i18n/app_date_format.dart';
 
 Map<String, Map<String, String>>? _translations;
 
@@ -54,7 +56,12 @@ Future<void> loadTranslations() async {
 /// [fallback] if translations haven't loaded or have no entry for [code].
 /// [params] substitutes `{name}` tokens in the resolved string with
 /// caller-supplied values, for parameterized strings.
-String getTranslatedString(String code, String fallback, {Map<String, String>? params}) {
+String getTranslatedString(
+  String code,
+  String fallback, {
+  Map<String, String>? params,
+  bool localizeDigits = true,
+}) {
   final entry = _translations?[code];
   var result = entry?[AppLocale.isBangla ? 'bn' : 'en'];
   // Prefer the translated entry; otherwise use the English fallback. Params must
@@ -63,7 +70,16 @@ String getTranslatedString(String code, String fallback, {Map<String, String>? p
   result = (result == null || result.isEmpty) ? fallback : result;
   if (params != null) {
     for (final param in params.entries) {
-      result = result!.replaceAll('{${param.key}}', param.value);
+      // Interpolated values carry the numbers an SK reads — counts, ages,
+      // measurements. Converting here catches every templated string at once
+      // rather than at hundreds of call sites.
+      //
+      // Opt out with localizeDigits: false where Latin digits are REQUIRED,
+      // not merely preferred: phone numbers (a Bengali-digit number is not
+      // dialable), NIDs, HTTP status codes and version strings.
+      final value =
+          localizeDigits ? BnNumerals.localize(param.value) : param.value;
+      result = result!.replaceAll('{${param.key}}', value);
     }
   }
   return result!;
@@ -98,7 +114,7 @@ abstract final class CommonStrings {
   static String get usePassword => getTranslatedString('usePassword', 'Use password');
   static String get unnamed => getTranslatedString('unnamed', '(unnamed)');
   static String get remove => getTranslatedString('remove', 'Remove');
-  static String versionLabel(String version) => getTranslatedString('versionLabel', 'v{version}', params: {'version': version});
+  static String versionLabel(String version) => getTranslatedString('versionLabel', 'v{version}', params: {'version': version}, localizeDigits: false);
   static String get comingSoon => getTranslatedString('Common.comingSoon', 'Coming soon');
 }
 
@@ -505,7 +521,7 @@ abstract final class OfflineSyncStrings {
   /// [status] is passed pre-stringified so a null status code still renders as
   /// it does today.
   static String syncFailedHttp(String status) => getTranslatedString(
-      'OfflineSync.syncFailedHttp', 'Sync failed (HTTP {status})', params: {'status': status});
+      'OfflineSync.syncFailedHttp', 'Sync failed (HTTP {status})', params: {'status': status}, localizeDigits: false);
 }
 
 /// AI Settings sub-page — realtime-ASR VAD gate tuning UI. An internal/ops
@@ -671,7 +687,7 @@ abstract final class SearchStrings {
 
   static String scanningHouseholds(int loaded, int cap) => getTranslatedString('scanningHouseholds', 'Scanning households {loaded}/{cap}…', params: {'loaded': '$loaded', 'cap': '$cap'});
   static String age(Object age) => getTranslatedString('age', 'Age {age}', params: {'age': '$age'});
-  static String nid(Object nid) => getTranslatedString('nid', 'NID {nid}', params: {'nid': '$nid'});
+  static String nid(Object nid) => getTranslatedString('nid', 'NID {nid}', params: {'nid': '$nid'}, localizeDigits: false);
   static String householdNo(Object no) => getTranslatedString('householdNo', 'No {no}', params: {'no': '$no'});
   static String memberCount(Object count) => getTranslatedString('memberCount', '{count} members', params: {'count': '$count'});
   static String get scanNidTooltip => getTranslatedString('scanNidTooltip', 'Scan NID or QR to find patient');
@@ -4236,7 +4252,7 @@ abstract final class PerformanceStrings {
   }
 
   static String periodLabelMonth(DateTime date) =>
-      DateFormat('MMMM yyyy').format(date);
+      AppDateFormat.monthYearFmt.format(date);
 
   // ── Wireframe v2 additions ──────────────────────────────────────────────────
   static String get appBarSubtitle => getTranslatedString('Performance.appBarSubtitle', 'Jahnara Begum · SK ID 4521 · Manikganj Sadar');
@@ -4599,7 +4615,7 @@ abstract final class EnrollmentStrings {
   static String get nidScannedBadge => getTranslatedString('nidScannedBadge', '✓ Scanned');
   static String get nidClearScan => getTranslatedString('nidClearScan', 'Clear scan');
   static String get nidScanNoBrnHint => getTranslatedString('nidScanNoBrnHint', 'If member has no NID, enter Birth Registration ID instead.');
-  static String nidNumberCaptured(String number) => getTranslatedString('nidNumberCaptured', '✓ NID number captured: {number}', params: {'number': '$number'});
+  static String nidNumberCaptured(String number) => getTranslatedString('nidNumberCaptured', '✓ NID number captured: {number}', params: {'number': '$number'}, localizeDigits: false);
   static String get autoScanActive => getTranslatedString('autoScanActive', 'Auto-scanning — hold card steady');
   static String get autoScanHint => getTranslatedString('autoScanHint', 'Scanning every ~2 s · tap button to force capture');
   static String get nidScanNotFound => getTranslatedString('nidScanNotFound', 'Could not read the NID number. Try again or type it in below.');
@@ -4685,7 +4701,7 @@ abstract final class EnrollmentStrings {
   static String get postScanCreateOptionSubtitle => getTranslatedString('Enrollment.postScanCreateOptionSubtitle', 'Register this member under a new household');
 
   // ── Mobile / ID number validation messages ──────────────────────────────
-  static String mobileStartsWithError(String prefix) => getTranslatedString('Enrollment.mobileStartsWithError', 'Phone number should starts with {prefix}', params: {'prefix': prefix});
+  static String mobileStartsWithError(String prefix) => getTranslatedString('Enrollment.mobileStartsWithError', 'Phone number should starts with {prefix}', params: {'prefix': prefix}, localizeDigits: false);
   static String mobileLengthError(int maxLength) => getTranslatedString('Enrollment.mobileLengthError', 'Mobile number must be {maxLength} digits', params: {'maxLength': '$maxLength'});
   static String get mobileInvalidError => getTranslatedString('Enrollment.mobileInvalidError', 'Please enter a valid mobile number');
   static String get nidFormatError => getTranslatedString('Enrollment.nidFormatError', 'National ID must be 10, 13, or 17 digits');
@@ -4703,6 +4719,21 @@ abstract final class EnrollmentStrings {
   static String ageSummaryYearPlural(int years) => getTranslatedString('Enrollment.ageSummaryYearPlural', '{years} years old', params: {'years': '$years'});
   static String ageSummaryMonthSingular(int months) => getTranslatedString('Enrollment.ageSummaryMonthSingular', '{months} month old', params: {'months': '$months'});
   static String ageSummaryMonthPlural(int months) => getTranslatedString('Enrollment.ageSummaryMonthPlural', '{months} months old', params: {'months': '$months'});
+  /// Compact age chip on list rows and the patient header — `4m/F`, `33/M`.
+  ///
+  /// Suffixes are translated, not just the digits: converting digits alone
+  /// left `৪m/F`, since `m`/`d`/`y` are English letters.
+  static String ageChipDays(String days) => getTranslatedString(
+      'Enrollment.ageChipDays', '{days}d', params: {'days': days});
+  static String ageChipMonths(String months) => getTranslatedString(
+      'Enrollment.ageChipMonths', '{months}m', params: {'months': months});
+  static String ageChipYears(String years) => getTranslatedString(
+      'Enrollment.ageChipYears', '{years}', params: {'years': years});
+  static String get ageChipUnderOneDay =>
+      getTranslatedString('Enrollment.ageChipUnderOneDay', '<1d');
+  static String get ageChipUnderOneYear =>
+      getTranslatedString('Enrollment.ageChipUnderOneYear', '<1y');
+
   static String get ageSummaryUnderOneDay => getTranslatedString('Enrollment.ageSummaryUnderOneDay', '< 1 day old');
   static String ageSummaryDays(int days) => getTranslatedString('Enrollment.ageSummaryDays', '{days} days old', params: {'days': '$days'});
 
@@ -5711,6 +5742,95 @@ abstract final class ConsentStrings {
   static String get declineWarning => getTranslatedString('declineWarning', 'Without consent, household registration cannot be completed.');
   static String get declineConfirm => getTranslatedString('declineConfirm', 'Cancel registration');
   static String get declineCancel => getTranslatedString('declineCancel', 'Go back');
+}
+
+/// Labels and coded values shown in the assessment detail sheets.
+///
+/// The sheets previously rendered wire codes verbatim — `HIGH_RISK_PW`,
+/// `UNCONTROLLED_BP`, `Referred` — and English labels, so a Bangla SK read raw
+/// enum names for clinical status.
+abstract final class ClinicalStatusStrings {
+  ClinicalStatusStrings._();
+
+  /// Localized label for a backend status/customStatus code.
+  ///
+  /// Unknown codes fall back to a humanized form (`SOME_NEW_CODE` →
+  /// `Some new code`), never the raw enum — a new backend value should read as
+  /// awkward English, not as a database identifier.
+  static String label(String raw) {
+    final key = raw.trim().toUpperCase().replaceAll(' ', '_');
+    return switch (key) {
+      'HIGH_RISK_PW' => getTranslatedString(
+          'ClinicalStatus.highRiskPw', 'High-risk pregnancy'),
+      'NORMAL_PREGNANCY' => getTranslatedString(
+          'ClinicalStatus.normalPregnancy', 'Normal pregnancy'),
+      'UNCONTROLLED_BP' => getTranslatedString(
+          'ClinicalStatus.uncontrolledBp', 'Uncontrolled blood pressure'),
+      'CONTROLLED_BP' => getTranslatedString(
+          'ClinicalStatus.controlledBp', 'Controlled blood pressure'),
+      'UNCONTROLLED_BG' => getTranslatedString(
+          'ClinicalStatus.uncontrolledBg', 'Uncontrolled blood sugar'),
+      'CONTROLLED_BG' => getTranslatedString(
+          'ClinicalStatus.controlledBg', 'Controlled blood sugar'),
+      'REFERRED' =>
+        getTranslatedString('ClinicalStatus.referred', 'Referred'),
+      'ONTREATMENT' || 'ON_TREATMENT' => getTranslatedString(
+          'ClinicalStatus.onTreatment', 'On treatment'),
+      'RECOVERED' =>
+        getTranslatedString('ClinicalStatus.recovered', 'Recovered'),
+      'RBS' => getTranslatedString('ClinicalStatus.rbs', 'Random blood sugar'),
+      'FBS' => getTranslatedString('ClinicalStatus.fbs', 'Fasting blood sugar'),
+      'PPBS' => getTranslatedString(
+          'ClinicalStatus.ppbs', 'Post-prandial blood sugar'),
+      _ => _humanize(raw),
+    };
+  }
+
+  /// Maps a comma/JSON list of codes through [label].
+  static String labelAll(Iterable<String> codes) =>
+      codes.map(label).where((s) => s.isNotEmpty).join(', ');
+
+  static String _humanize(String raw) {
+    final cleaned = raw.trim().replaceAll('_', ' ').toLowerCase();
+    if (cleaned.isEmpty) return raw;
+    return cleaned[0].toUpperCase() + cleaned.substring(1);
+  }
+}
+
+/// Row labels in the assessment detail sheets.
+abstract final class PatientDetailStrings {
+  PatientDetailStrings._();
+
+  static String get gestationalAge =>
+      getTranslatedString('PatientDetail.gestationalAge', 'Gestational age');
+
+  /// `9 weeks 1 day`. Singular/plural is handled per unit — the previous
+  /// implementation always said "days", producing "1 days".
+  static String gestationalWeeksDays(String weeks, String days, {required bool oneDay}) =>
+      getTranslatedString(
+        oneDay
+            ? 'PatientDetail.gaWeeksOneDay'
+            : 'PatientDetail.gaWeeksDays',
+        oneDay ? '{weeks} weeks {days} day' : '{weeks} weeks {days} days',
+        params: {'weeks': weeks, 'days': days},
+      );
+  static String gestationalWeeksOnly(String weeks, {required bool oneWeek}) =>
+      getTranslatedString(
+        oneWeek ? 'PatientDetail.gaOneWeek' : 'PatientDetail.gaWeeks',
+        oneWeek ? '{weeks} week' : '{weeks} weeks',
+        params: {'weeks': weeks},
+      );
+
+  static String get status =>
+      getTranslatedString('PatientDetail.status', 'Status');
+  static String get referralStatus =>
+      getTranslatedString('PatientDetail.referralStatus', 'Referral status');
+  static String get referralReason =>
+      getTranslatedString('PatientDetail.referralReason', 'Referral reason');
+  static String get referredTo =>
+      getTranslatedString('PatientDetail.referredTo', 'Referred to');
+  static String get referralMade =>
+      getTranslatedString('PatientDetail.referralMade', 'Referral made');
 }
 
 abstract final class CareThreadStrings {

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_brief.dart';
+import '../../../core/i18n/app_date_format.dart';
 
 /// AI Daily Brief Card — the first and most prominent card on the dashboard.
 ///
@@ -73,7 +74,7 @@ class _AIBriefCardState extends State<AIBriefCard> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  MissionDashboardStrings.aiBriefTodayHeader(DateFormat('d MMM').format(DateTime.now())),
+                  MissionDashboardStrings.aiBriefTodayHeader(AppDateFormat.dayMonthFmt.format(DateTime.now())),
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: scheme.onSurface,
