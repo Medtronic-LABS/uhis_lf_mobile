@@ -12,6 +12,7 @@ import '../../core/device/battery_optimization_gate.dart';
 import '../../core/device/battery_optimization_service.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
+import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
 import '../../core/theme/app_theme.dart';
 import '../debug/db_viewer_screen.dart';
@@ -56,7 +57,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _confirmReset(BuildContext context) async {
     final togglesNotifier = context.read<AiFeatureTogglesNotifier>();
+    final audioSettings = context.read<ScribeAudioSettingsNotifier>();
     await togglesNotifier.resetToDefaults();
+    await audioSettings.resetToDefaults();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AiSettingsStrings.resetConfirmation)),
@@ -262,7 +265,55 @@ class _SettingsBody extends StatelessWidget {
           const SizedBox(height: 14),
         ],
         const _AiWidgetTogglesCard(),
+        const SizedBox(height: 14),
+        const _MicCaptureCard(),
       ],
+    );
+  }
+}
+
+/// Microphone capture mode for both scribe paths. Separate from the AI
+/// widgets card above because this changes *how* the mic is opened, not
+/// which AI surfaces are shown — and so it stays out of that card's
+/// "Select all" switch.
+class _MicCaptureCard extends StatelessWidget {
+  const _MicCaptureCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final notifier = context.watch<ScribeAudioSettingsNotifier>();
+
+    return _WhiteCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AiSettingsStrings.micSectionHeader,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            AiSettingsStrings.micSectionDescription,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: AppColors.textMuted,
+              height: 1.4,
+            ),
+          ),
+          _ToggleRow(
+            label: AiSettingsStrings.rawMicCaptureLabel,
+            description: AiSettingsStrings.rawMicCaptureDesc,
+            value: notifier.rawMicCaptureEnabled,
+            onChanged: notifier.setRawMicCaptureEnabled,
+            isLast: true,
+          ),
+        ],
+      ),
     );
   }
 }

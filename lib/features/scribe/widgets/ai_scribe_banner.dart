@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/api/realtime_asr_service.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../../core/preferences/vad_tuning_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
@@ -120,6 +121,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       service: context.read<RealtimeAsrService>(),
       permissionService: ScribePermissionService(),
       vadTuning: context.read<VadTuningNotifier>(),
+      audioSettings: context.read<ScribeAudioSettingsNotifier>(),
     );
     _liveCtrl.addListener(_onLiveChanged);
     final assessmentType = widget.assessmentType;

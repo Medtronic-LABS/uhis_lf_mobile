@@ -7,8 +7,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../core/api/scribe_api_service.dart';
+import '../../core/audio/scribe_record_config.dart';
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/errors/domain_exceptions.dart';
+import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../visit/triage/ai_scribe_triage_vocab.dart';
 import '../visit/triage/triage_transcript_matcher.dart';
 import 'form_field_schema_builder.dart';
@@ -24,11 +27,27 @@ class ScribeController extends ChangeNotifier {
   ScribeController({
     required ScribeApiService api,
     required ScribePermissionService permissionService,
+    ScribeAudioSettingsNotifier? audioSettings,
   }) : _api = api,
-       _perm = permissionService;
+       _perm = permissionService,
+       _audioSettings = audioSettings;
 
   final ScribeApiService _api;
   final ScribePermissionService _perm;
+
+  /// Supplies the on-device microphone capture preference. Nullable so
+  /// tests (and any caller without the provider registered) fall back to
+  /// [AppConfig.rawMicCaptureDefault] rather than needing the whole
+  /// preferences stack — same accommodation [RealtimeAsrController] makes
+  /// for [VadTuningNotifier].
+  final ScribeAudioSettingsNotifier? _audioSettings;
+
+  /// Read at each recording start, not cached, so flipping the setting
+  /// applies to the next recording without restarting the app.
+  RecordConfig get _captureConfig => ScribeRecordConfig.batch(
+    rawMicCapture:
+        _audioSettings?.rawMicCaptureEnabled ?? AppConfig.rawMicCaptureDefault,
+  );
   /// Drives the live recording waveform visualization only.
   /// Recycled after each session — [RecorderController] can hang on reuse after
   /// stop() on Android (audio_waveforms native quirk).
@@ -45,14 +64,15 @@ class ScribeController extends ChangeNotifier {
   /// Owned here in the scribe layer; the banner widget only renders from it.
   RecorderController get waveformRecorder => _recorder;
 
-  /// Capture settings — WAV/PCM mono @16 kHz.
+  /// Settings for the **waveform visualiser only** — WAV/PCM mono @16 kHz.
   ///
-  /// We deliberately record WAV (genuine audio) rather than AAC. On Android,
-  /// AAC is muxed into an MP4 container whose `moov` trailer is only written
-  /// during stop(); audio_waveforms' stop() can hang, leaving a truncated,
-  /// undecodable MP4. WAV uses the AudioRecord + WavEncoder path which writes
-  /// PCM immediately and finalizes the 44-byte header synchronously on stop —
-  /// no container trailer, decodable even if interrupted.
+  /// This drives [_recorder] (audio_waveforms), whose output file is a
+  /// throwaway; the audio actually uploaded comes from [_audioRecorder]
+  /// with [_captureConfig]. WAV is used here rather than AAC because on
+  /// Android AAC is muxed into an MP4 container whose `moov` trailer is
+  /// only written during stop(), and audio_waveforms' stop() can hang,
+  /// leaving a truncated file. WAV finalizes its 44-byte header
+  /// synchronously, so nothing is left half-written if stop() stalls.
   static const RecorderSettings _recorderSettings = RecorderSettings(
     androidEncoderSettings: AndroidEncoderSettings(
       androidEncoder: AndroidEncoder.wav,
@@ -131,15 +151,7 @@ class ScribeController extends ChangeNotifier {
         path: waveformPath,
         recorderSettings: _recorderSettings,
       );
-      await _audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          sampleRate: 16000,
-          numChannels: 1,
-          bitRate: 64000,
-        ),
-        path: _recordingPath!,
-      );
+      await _audioRecorder.start(_captureConfig, path: _recordingPath!);
 
       _session = const ScribeSession(state: ScribeState.recording);
       notifyListeners();
@@ -217,16 +229,8 @@ class ScribeController extends ChangeNotifier {
         recorderSettings: _recorderSettings,
       );
 
-      // Start actual audio capture via record package — produces standard WAV.
-      await _audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          sampleRate: 16000,
-          numChannels: 1,
-          bitRate: 64000,
-        ),
-        path: _recordingPath!,
-      );
+      // Start the audio capture that is actually uploaded.
+      await _audioRecorder.start(_captureConfig, path: _recordingPath!);
 
       _session = ScribeSession(state: ScribeState.recording, mode: mode);
       notifyListeners();
