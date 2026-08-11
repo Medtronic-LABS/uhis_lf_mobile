@@ -436,8 +436,41 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       final request = <String, dynamic>{
         'patientId': patientCtx.patientId,
         if (widget.patientName != null) 'patientName': widget.patientName,
-        if (widget.patientAge != null) 'ageYears': widget.patientAge,
-        if (widget.patientGender != null) 'gender': widget.patientGender,
+        // Same precedence as `gender` below: the locally-loaded context wins
+        // over the route-threaded widget.patientAge, which travels the identical
+        // five-hop `extra` map and arrives null in practice. Gated on ageKnown
+        // rather than ageMonths > 0 — ageMonths defaults to 0 when the record
+        // has neither dob nor age, which is indistinguishable from a newborn.
+        if (patientCtx.ageKnown)
+          'ageYears': patientCtx.ageYears
+        else if (widget.patientAge != null)
+          'ageYears': widget.patientAge,
+        // Prefer the locally-loaded context over the route-threaded
+        // widget.patientGender. That parameter is handed down five hops from
+        // the navigation `extra` map and arrives null in practice, so the
+        // briefing was being generated with no gender at all — the server then
+        // had to guess, and a male NCD patient was greeted "Sister". patientCtx
+        // is loaded from the local DB in this screen and is already what the
+        // banner header ("SIT WITH HER/HIM") renders from, so sourcing it here
+        // makes the header and the AI greeting agree. The threaded value is
+        // kept as a fallback so nothing regresses if some entry point does
+        // populate it while the local record's sex is unknown.
+        if (patientCtx.sex != Sex.unknown)
+          'gender': patientCtx.sex.name
+        else if (widget.patientGender != null)
+          'gender': widget.patientGender,
+        // Never sent before, so the one server path that reads it has been
+        // dead code until now. Gated on sex: patientCtx.isPregnant is true for
+        // anyone enrolled in ANC/PW, and that enrolment provably lands on male
+        // patients (72f89c5, "Male patients gets ANC"). Sending isPregnant=true
+        // alongside gender=male trips the server's fetal-movement guard
+        // (briefing_service.py, _guard_against_premature_fetal_movement_question),
+        // which swaps the greeting for the female-addressed "আপু / Sister"
+        // line — reintroducing the mis-gendering this change exists to fix.
+        // Only `male` is excluded, not "not female": an unknown-sex ANC patient
+        // is almost certainly pregnant, and `gender` is omitted entirely in that
+        // case, so no male/pregnant contradiction can reach the server.
+        'isPregnant': patientCtx.sex != Sex.male && patientCtx.isPregnant,
         'activeProgrammes': patientCtx.activeProgrammes
             .map((p) => p.name)
             .toList(),
