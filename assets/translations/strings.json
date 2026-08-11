@@ -11826,5 +11826,45 @@
   "PatientDetail.status": {
     "bn": "অবস্থা",
     "en": "Status"
+  },
+  "PatientAi.starterFollowUpsOverdue": {
+    "bn": "কোন ফলো-আপ বাকি আছে?",
+    "en": "What follow-ups are overdue?"
+  },
+  "PatientAi.starterDangerSigns": {
+    "bn": "এখনই কোনো বিপদচিহ্ন আছে কি?",
+    "en": "Any danger signs to act on now?"
+  },
+  "PatientAi.starterAncProgress": {
+    "bn": "প্রসবপূর্ব সেবা কেমন চলছে?",
+    "en": "How is the ANC progress going?"
+  },
+  "PatientAi.starterBpDiabetes": {
+    "bn": "তার রক্তচাপ ও ডায়াবেটিস কি নিয়ন্ত্রণে আছে?",
+    "en": "Is her BP and diabetes under control?"
+  },
+  "PatientAi.starterVaccines": {
+    "bn": "কোন টিকা বাকি বা মিস হয়েছে?",
+    "en": "Which vaccines are due or overdue?"
+  },
+  "PatientAi.starterTb": {
+    "bn": "সে কি নিয়মিত যক্ষ্মার ওষুধ খাচ্ছে?",
+    "en": "Is she taking TB medication regularly?"
+  },
+  "PatientAi.starterPnc": {
+    "bn": "প্রসব-পরবর্তী কোন পরীক্ষা দরকার?",
+    "en": "What postnatal checks are needed?"
+  },
+  "PatientAi.starterHighBp": {
+    "bn": "তার উচ্চ রক্তচাপ নিয়ে কী করব?",
+    "en": "What should I do about her high BP?"
+  },
+  "PatientAi.starterLastVisit": {
+    "bn": "শেষ ভিজিটে কী হয়েছিল?",
+    "en": "What happened at the last visit?"
+  },
+  "PatientAi.starterReferral": {
+    "bn": "আজকে কি তাকে রেফার করা দরকার?",
+    "en": "Does she need a referral today?"
   }
 }

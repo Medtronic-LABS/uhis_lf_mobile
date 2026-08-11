@@ -79,45 +79,45 @@ class PatientAiContext {
 
     // Overdue follow-up — highest priority
     if (followUps.isNotEmpty) {
-      questions.add('What follow-ups are overdue?');
+      questions.add(PatientAiStrings.starterFollowUpsOverdue);
     }
 
     // Danger signs from risk reasons
     if (riskReasons.isNotEmpty) {
-      questions.add('Any danger signs to act on now?');
+      questions.add(PatientAiStrings.starterDangerSigns);
     }
 
     // Programme-specific visit questions
     if (progs.contains('anc') && isPregnant) {
-      questions.add('How is the ANC progress going?');
+      questions.add(PatientAiStrings.starterAncProgress);
     }
     if (progs.contains('ncd')) {
-      questions.add('Is her BP and diabetes under control?');
+      questions.add(PatientAiStrings.starterBpDiabetes);
     }
     if (progs.contains('epi')) {
-      questions.add('Which vaccines are due or overdue?');
+      questions.add(PatientAiStrings.starterVaccines);
     }
     if (progs.contains('tb')) {
-      questions.add('Is she taking TB medication regularly?');
+      questions.add(PatientAiStrings.starterTb);
     }
     if (progs.contains('pnc')) {
-      questions.add('What postnatal checks are needed?');
+      questions.add(PatientAiStrings.starterPnc);
     }
 
     // Abnormal vitals
     final sbp = vitals?['bloodPressureSystolic'] as num?;
     if (sbp != null && sbp >= 140) {
-      questions.add('What should I do about her high BP?');
+      questions.add(PatientAiStrings.starterHighBp);
     }
 
     // Visit history
     if (visits > 0) {
-      questions.add('What happened at the last visit?');
+      questions.add(PatientAiStrings.starterLastVisit);
     }
 
     // Referral question — always useful if high risk
     if (riskReasons.length >= 3) {
-      questions.add('Does she need a referral today?');
+      questions.add(PatientAiStrings.starterReferral);
     }
 
     // Fallback if nothing fired

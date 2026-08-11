@@ -5703,6 +5703,28 @@ abstract final class PatientAiStrings {
         getTranslatedString('PatientAi.starter2', 'What should I do this visit?'),
         getTranslatedString('PatientAi.starter3', 'Is a referral needed?'),
       ];
+
+  // Dynamic context-aware starters
+  static String get starterFollowUpsOverdue => getTranslatedString(
+      'PatientAi.starterFollowUpsOverdue', 'What follow-ups are overdue?');
+  static String get starterDangerSigns => getTranslatedString(
+      'PatientAi.starterDangerSigns', 'Any danger signs to act on now?');
+  static String get starterAncProgress => getTranslatedString(
+      'PatientAi.starterAncProgress', 'How is the ANC progress going?');
+  static String get starterBpDiabetes => getTranslatedString(
+      'PatientAi.starterBpDiabetes', 'Is her BP and diabetes under control?');
+  static String get starterVaccines => getTranslatedString(
+      'PatientAi.starterVaccines', 'Which vaccines are due or overdue?');
+  static String get starterTb => getTranslatedString(
+      'PatientAi.starterTb', 'Is she taking TB medication regularly?');
+  static String get starterPnc => getTranslatedString(
+      'PatientAi.starterPnc', 'What postnatal checks are needed?');
+  static String get starterHighBp => getTranslatedString(
+      'PatientAi.starterHighBp', 'What should I do about her high BP?');
+  static String get starterLastVisit => getTranslatedString(
+      'PatientAi.starterLastVisit', 'What happened at the last visit?');
+  static String get starterReferral => getTranslatedString(
+      'PatientAi.starterReferral', 'Does she need a referral today?');
 }
 
 abstract final class ConsentStrings {
