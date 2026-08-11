@@ -451,8 +451,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         'clinicalFindings': clinicalFindings.map((f) => f.toJson()).toList(),
         if (patientCtx.gestationalWeeks != null)
           'gestationalWeeks': patientCtx.gestationalWeeks,
+        'appLanguage': AppLocale.isBangla ? 'bn' : 'en',
       };
 
+      debugPrint('[Briefing] appLanguage=${request['appLanguage']} '
+          'isBangla=${AppLocale.isBangla} locale=${AppLocale.current}');
       debugPrint('[DebugTrace] briefing request patientId=${request['patientId']} '
           'body=${jsonEncode(request)}');
       final data = await briefingRepo.generate(request);
