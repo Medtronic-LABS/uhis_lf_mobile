@@ -6,6 +6,18 @@ import '../../../core/models/programme.dart';
 abstract final class ProgrammeGridSync {
   ProgrammeGridSync._();
 
+  /// Female-only maternal / reproductive programmes.
+  ///
+  /// Never auto-select or seed these for confirmed male patients — symptom
+  /// catalogue tags (e.g. chest_pain → ANC+NCD) and bad ANC/PW enrolment
+  /// data must not open pregnancy forms for males.
+  static const Set<Programme> maternalProgrammes = {
+    Programme.anc,
+    Programme.pnc,
+    Programme.pw,
+    Programme.familyPlanning,
+  };
+
   /// Pathway activations that should be added to the SK's selection set.
   ///
   /// Never resurrects a programme the SK explicitly deselected in this visit
@@ -17,27 +29,40 @@ abstract final class ProgrammeGridSync {
   }) =>
       activated.difference(selected).difference(dismissedBySk);
 
+  /// Drops [maternalProgrammes] when [isMale] is true; otherwise returns
+  /// [programmes] unchanged. Prefer this over `!isFemale` so `Sex.unknown`
+  /// patients are not blocked by missing gender data.
+  static Set<Programme> withoutMaternalIfMale(
+    Set<Programme> programmes, {
+    required bool isMale,
+  }) =>
+      isMale ? programmes.difference(maternalProgrammes) : programmes;
+
   /// Enrolled programmes that may be auto-selected for *this* visit.
   ///
   /// Maternal programmes are gated by current state so a historical PNC
   /// enrollment does not force PNC forms onto a still-pregnant ANC visit
   /// (and vice versa). NCD / FP / other programmes stay eligible when enrolled.
+  /// Confirmed males never receive maternal seeds regardless of pregnancy
+  /// flags or stale ANC/PW enrolment.
   static Set<Programme> applicableEnrolledSeed({
     required Set<Programme> enrolled,
     required bool isPregnant,
     required bool isPostpartum,
+    bool isMale = false,
   }) {
     return enrolled.where((p) {
       switch (p) {
         case Programme.anc:
         case Programme.pw:
-          return isPregnant;
+          return !isMale && isPregnant;
         case Programme.pnc:
-          return isPostpartum;
+          return !isMale && isPostpartum;
         case Programme.unknown:
           return false;
         // FP: hidden during pregnancy; after delivery only once PNC is enrolled.
         case Programme.familyPlanning:
+          if (isMale) return false;
           if (isPregnant) return false;
           if (isPostpartum) return enrolled.contains(Programme.pnc);
           return true;
@@ -69,13 +94,20 @@ abstract final class ProgrammeGridSync {
   /// would falsely mark the visit as a child visit (see
   /// `VisitFlowScreen._isChildVisit`), routing Step 2 to the immunisation
   /// timeline instead of the real programme form.
+  ///
+  /// When [isMale] is true, also drops [maternalProgrammes] so ANC-tagged
+  /// adult symptoms (chest pain, headache, …) cannot silently open ANC/PNC
+  /// forms for male patients.
   static Set<Programme> catalogProgrammesFor(
     Set<Programme> symptomProgrammes, {
     required bool isChildVisitEligible,
-  }) =>
-      isChildVisitEligible
-          ? symptomProgrammes
-          : symptomProgrammes.difference({Programme.imci, Programme.epi});
+    bool isMale = false,
+  }) {
+    final withoutChild = isChildVisitEligible
+        ? Set<Programme>.from(symptomProgrammes)
+        : symptomProgrammes.difference({Programme.imci, Programme.epi});
+    return withoutMaternalIfMale(withoutChild, isMale: isMale);
+  }
 
   /// Apply Pregnancy Outcome (delivery) selection to the service grid.
   ///

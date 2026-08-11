@@ -34,6 +34,7 @@ import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
+import 'ai_scribe_triage_vocab.dart';
 import 'programme_grid_sync.dart';
 import 'service_selection_resolver.dart';
 import 'symptom_catalog.dart';
@@ -333,18 +334,22 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       );
       // Pregnancy Outcome is an explicit SK choice — never auto-on.
       // Postpartum mothers get PNC via [enrolledSeed], not this flag.
+      final isMale = ctx.sex == Sex.male;
       final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
         enrolled: ctx.activeProgrammes.toSet(),
         isPregnant: ctx.isPregnant,
         isPostpartum: ctx.isPostpartum,
+        isMale: isMale,
       );
+      final gatedPathwaySet =
+          ProgrammeGridSync.withoutMaternalIfMale(pathwaySet, isMale: isMale);
       vm.addListener(_syncPathwaysToServiceGrid);
       setState(() {
         _patientContext = ctx;
         _viewModel = vm;
         _selectedProgrammes
           ..clear()
-          ..addAll(pathwaySet)
+          ..addAll(gatedPathwaySet)
           // Only seed enrolled programmes that apply to *this* visit state
           // (e.g. skip enrolled PNC while still pregnant). SK can still add
           // or remove cards after load.
@@ -365,7 +370,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         }
         _pathwayActivatedProgrammes
           ..clear()
-          ..addAll(pathwaySet);
+          ..addAll(gatedPathwaySet);
         _isPW = isPw;
         _isDelivery = false;
         _ancVisitedToday = ancToday;
@@ -582,22 +587,30 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // Each UnifiedSymptomDef.programmes names every service that symptom
     // belongs to, providing finer-grained auto-selection than the rule engine.
     // See ProgrammeGridSync.catalogProgrammesFor for why imci/epi are gated
-    // on the patient actually being a young child.
+    // on the patient actually being a young child, and why maternal programmes
+    // are dropped for confirmed males.
     final isYoungChild = _patientContext?.isYoungChild == true;
+    final isMale = _patientContext?.sex == Sex.male;
     for (final code in currentSymptoms) {
       final def = UnifiedSymptomCatalog.byCode(code);
       if (def == null) continue;
       activated.addAll(ProgrammeGridSync.catalogProgrammesFor(
         def.programmes,
         isChildVisitEligible: isYoungChild,
+        isMale: isMale,
       ));
     }
+
+    // Belt-and-suspenders: pathway rules should already sex-gate ANC, but
+    // never let maternal programmes enter the male selection set.
+    final gatedActivated =
+        ProgrammeGridSync.withoutMaternalIfMale(activated, isMale: isMale);
 
     // Exclude programmes currently locked in the grid — a newly-selected
     // symptom must not silently resurrect ANC (within its revisit interval)
     // or PW (already registered) after they were stripped/locked at load.
     final unseen = ProgrammeGridSync.additionsFromPathways(
-      activated: activated,
+      activated: gatedActivated,
       selected: _selectedProgrammes,
       dismissedBySk: _skDismissedProgrammes,
     ).where((p) {
@@ -782,6 +795,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         ancRevisitBlocked: ancRevisitBlocked,
         isDeliveryVisit: _isDelivery,
         pncDismissedBySk: _skDismissedProgrammes.contains(Programme.pnc),
+        isMale: _patientContext?.sex == Sex.male,
       );
 
       if (result.blockedReason != null) {
@@ -1830,10 +1844,20 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
         final isSearching = _query.isNotEmpty;
 
         // Search pool: full applicable vocab for cross-programme discovery
-        // once the SK types 3+ chars; otherwise restricted to catalog codes.
+        // once the SK types 3+ chars; otherwise restricted to catalog codes
+        // that pass the demographic gate (males must not see maternal chips
+        // like reduced_fetal_movement in short-prefix search).
         final searchPool = _query.length >= _secondaryThreshold
             ? vm.applicableVocabCodes
-            : SymptomCatalog.all.map((s) => s.code).toList();
+            : SymptomCatalog.all
+                .map((s) => s.code)
+                .where(
+                  (c) => AiScribeTriageVocab.isDemographicallyPlausible(
+                    c,
+                    vm.patientContext,
+                  ),
+                )
+                .toList();
 
         // Determine which sections to show in the grid.
         // Searching → flat headerless section of matches.

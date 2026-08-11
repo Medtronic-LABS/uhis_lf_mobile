@@ -60,6 +60,22 @@ void main() {
       );
       expect(seeded, {Programme.ncd});
     });
+
+    test('male never seeds ANC/PW/PNC/FP even when pregnant flags are set', () {
+      final seeded = ProgrammeGridSync.applicableEnrolledSeed(
+        enrolled: {
+          Programme.anc,
+          Programme.pw,
+          Programme.pnc,
+          Programme.familyPlanning,
+          Programme.ncd,
+        },
+        isPregnant: true,
+        isPostpartum: true,
+        isMale: true,
+      );
+      expect(seeded, {Programme.ncd});
+    });
   });
 
   group('ProgrammeGridSync.catalogProgrammesFor', () {
@@ -85,6 +101,44 @@ void main() {
         isChildVisitEligible: false,
       );
       expect(result, {Programme.ncd});
+    });
+
+    test('male drops maternal tags but keeps NCD from a shared symptom', () {
+      final result = ProgrammeGridSync.catalogProgrammesFor(
+        {Programme.anc, Programme.ncd, Programme.tb},
+        isChildVisitEligible: false,
+        isMale: true,
+      );
+      expect(result, {Programme.ncd, Programme.tb});
+    });
+
+    test('female keeps maternal tags from the same symptom', () {
+      final result = ProgrammeGridSync.catalogProgrammesFor(
+        {Programme.anc, Programme.ncd},
+        isChildVisitEligible: false,
+        isMale: false,
+      );
+      expect(result, {Programme.anc, Programme.ncd});
+    });
+  });
+
+  group('ProgrammeGridSync.withoutMaternalIfMale', () {
+    test('strips ANC/PNC/PW/FP for males only', () {
+      final input = {
+        Programme.anc,
+        Programme.pnc,
+        Programme.pw,
+        Programme.familyPlanning,
+        Programme.ncd,
+      };
+      expect(
+        ProgrammeGridSync.withoutMaternalIfMale(input, isMale: true),
+        {Programme.ncd},
+      );
+      expect(
+        ProgrammeGridSync.withoutMaternalIfMale(input, isMale: false),
+        input,
+      );
     });
   });
 
