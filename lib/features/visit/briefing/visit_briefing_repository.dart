@@ -53,7 +53,8 @@ class VisitBriefingRepository {
 
   String _cacheKeyFor(String kind, Map<String, dynamic> ctx) {
     final pid = (ctx['patientId'] as String?)?.trim() ?? 'unknown';
-    return '$kind:$pid';
+    final lang = (ctx['appLanguage'] as String?)?.trim() ?? 'en';
+    return '$kind:$pid:$lang';
   }
 
   Future<VisitBriefingResponse> generate(Map<String, dynamic> patientContext) async {
