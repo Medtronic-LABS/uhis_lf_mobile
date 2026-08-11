@@ -102,6 +102,22 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   @override
   void initState() {
     super.initState();
+    final ctx = widget.ctx.apiContext;
+    debugPrint(
+      '[PatientAI] context loaded — '
+      'patient=${ctx['patientName']} '
+      'age=${ctx['ageYears']} '
+      'gender=${ctx['gender']} '
+      'pregnant=${ctx['isPregnant']} '
+      'programmes=${ctx['activeProgrammes']} '
+      'riskBand=${ctx['riskBand']} '
+      'visits=${ctx['visitCount']} '
+      'lastVisit=${ctx['lastVisitDate']} '
+      'encounters=${(ctx['recentEncounters'] as List?)?.length ?? 0} '
+      'findings=${(ctx['clinicalFindings'] as List?)?.length ?? 0} '
+      'followUps=${(ctx['openFollowUps'] as List?)?.length ?? 0} '
+      'vitals=${ctx['recentVitals'] != null}',
+    );
     _speech
         .initialize(
           onStatus: _onSpeechStatus,
