@@ -10083,6 +10083,10 @@
     "bn": "👋 তার পাশে বসুন — উষ্ণভাবে শুভেচ্ছা জানান",
     "en": "👋 SIT WITH HIM — GREET WARMLY"
   },
+  "sitWithGreetHeaderUnknownSex": {
+    "bn": "👋 তার পাশে বসুন — উষ্ণভাবে শুভেচ্ছা জানান",
+    "en": "👋 SIT WITH HIM/HER — GREET WARMLY"
+  },
   "sitWithGreetHintFemale": {
     "bn": "ক্লিনিকাল প্রশ্ন শুরু করার আগে বাড়ি, পরিবার ও ঘুম নিয়ে জিজ্ঞাসা করুন — গর্ভাবস্থার চেকআপের আগে",
     "en": "Ask how she feels at home, with family, and about her sleep — before the pregnancy checkup"
@@ -10102,6 +10106,10 @@
   "sitWithGreetHintPostpartum": {
     "bn": "প্রসবোত্তর চেকআপের আগে বাড়ি, পরিবার ও ঘুম নিয়ে তাকে জিজ্ঞাসা করুন",
     "en": "Ask how she feels at home, with family, and about her sleep — before the postnatal checkup"
+  },
+  "sitWithGreetHintUnknownSex": {
+    "bn": "ভিজিট শুরু করার আগে বাড়ি, পরিবার ও ঘুম নিয়ে জিজ্ঞাসা করুন",
+    "en": "Ask how he/she feels at home, with family, and about his/her sleep — before the visit"
   },
   "skAsksFamily": {
     "bn": "এসকে পরিবারকে জিজ্ঞাসা করেন",

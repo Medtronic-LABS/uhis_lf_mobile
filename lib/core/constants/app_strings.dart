@@ -3165,14 +3165,26 @@ abstract final class SymptomPickerStrings {
   /// Header (uppercase, small). Gendered + locale-aware; guardian-directed
   /// for a child patient. Not service-specific — the instruction to the SK
   /// doesn't change with the visit type.
+  ///
+  /// `isFemale` is tri-state: `true` female, `false` male, **`null` when the
+  /// patient's sex isn't recorded** — which says "HIM/HER" rather than
+  /// silently picking one. An unrecorded sex used to collapse into the male
+  /// branch, so the card confidently told the SK to sit with "HIM" for a
+  /// patient nobody had recorded a sex for.
   static String sitWithGreetHeaderFor({
-    required bool isFemale,
+    required bool? isFemale,
     bool isChild = false,
   }) {
     if (isChild) {
       return getTranslatedString(
         'sitWithGreetHeaderGuardian',
         '👋 SIT WITH THE GUARDIAN — GREET WARMLY',
+      );
+    }
+    if (isFemale == null) {
+      return getTranslatedString(
+        'sitWithGreetHeaderUnknownSex',
+        '👋 SIT WITH HIM/HER — GREET WARMLY',
       );
     }
     return getTranslatedString(
@@ -3236,8 +3248,12 @@ abstract final class SymptomPickerStrings {
   /// before launching the clinical conversation. Gendered + locale-aware;
   /// guardian-directed for a child patient; names the actual visit type
   /// instead of always assuming a pregnancy checkup.
+  ///
+  /// `isFemale` is tri-state exactly as in [sitWithGreetHeaderFor] — `null`
+  /// (sex not recorded) gets he/she wording rather than the male line, so
+  /// this stays consistent with the header directly above it.
   static String sitWithGreetHintFor({
-    required bool isFemale,
+    required bool? isFemale,
     bool isChild = false,
     Set<Programme>? selectedProgrammes,
   }) {
@@ -3245,6 +3261,14 @@ abstract final class SymptomPickerStrings {
       return getTranslatedString(
         'sitWithGreetHintGuardian',
         'Ask the guardian about feeding, sleep, and any danger signs — before starting the checkup',
+      );
+    }
+    if (isFemale == null) {
+      // Visit-type-neutral like the male line: with no recorded sex we can't
+      // assume a pregnancy or postnatal checkup either.
+      return getTranslatedString(
+        'sitWithGreetHintUnknownSex',
+        'Ask how he/she feels at home, with family, and about his/her sleep — before the visit',
       );
     }
     if (!isFemale) {

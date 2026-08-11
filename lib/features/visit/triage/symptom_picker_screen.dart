@@ -1315,9 +1315,14 @@ class _AiBriefingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Pronoun resolution — spec §4.1 ANC greeting "আপু" (her),
-    // §5.1 NCD "কাকা" (him). Defaults to him when sex is unknown.
-    final isFemale = patientContext.sex == Sex.female;
+    // Pronoun resolution for the SK-facing header and hint. Tri-state on
+    // purpose: an unrecorded sex must not silently read as male, so it maps
+    // to null and the card says "HIM/HER" instead of picking one.
+    final isFemale = switch (patientContext.sex) {
+      Sex.female => true,
+      Sex.male => false,
+      Sex.unknown => null,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -1514,7 +1519,11 @@ class GreetWarmlyCard extends StatelessWidget {
     this.fallbackOpeningLine,
   });
 
-  final bool isFemale;
+  /// Tri-state: `true` female, `false` male, `null` when the patient's sex
+  /// isn't recorded — the header and hint then say "HIM/HER" and "he/she"
+  /// instead of defaulting to one. Only those two consume it; the greeting
+  /// line itself is genderless in every case.
+  final bool? isFemale;
   final bool loading;
 
   /// True for an under-5 patient — they can't answer for themselves, so
