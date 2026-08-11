@@ -17,6 +17,17 @@ void main() {
       ]);
     });
 
+    test(
+        'delivery visit with empty programme set still seeds pregnancyOutcome '
+        '(Outcome selected, PNC deselected at triage)', () {
+      final types = FormTypeResolver.resolve(const [], isDelivery: true);
+      expect(types, [
+        'pregnancyOutcome',
+        'pncMother',
+        'pncChild',
+      ]);
+    });
+
     test('non-delivery expands pnc to mother only', () {
       final types = FormTypeResolver.resolve(['pnc', 'ncd']);
       expect(types, ['pncMother', 'ncd']);

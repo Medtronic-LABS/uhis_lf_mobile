@@ -3041,6 +3041,61 @@ class _AiCounsellingCard extends StatelessWidget {
     }
   }
 
+  Future<void> _sendSms(BuildContext context) async {
+    final encoded = Uri.encodeComponent(text);
+    final phone = patientPhone ?? '';
+    final uri = Uri.parse('sms:$phone?body=$encoded');
+    if (!await canLaunchUrl(uri)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(NabaStrings.smsNotAvailable)),
+        );
+      }
+      return;
+    }
+    await launchUrl(uri);
+  }
+
+  Widget _sendChip({
+    required Color color,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: Colors.white),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final recipientLine = patientLabel != null
@@ -3144,41 +3199,26 @@ class _AiCounsellingCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  // Send button
-                  GestureDetector(
-                    onTap: () => _sendWhatsApp(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 7),
-                      decoration: BoxDecoration(
+                  // WhatsApp + SMS — same counselling body; SMS for patients
+                  // without WhatsApp (parity with CounsellingScreen).
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      _sendChip(
                         color: const Color(0xFF25D366),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
+                        icon: Icons.chat_rounded,
+                        label: NabaStrings.sendViaWhatsApp,
+                        onTap: () => _sendWhatsApp(context),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.chat_rounded,
-                              size: 12, color: Colors.white),
-                          const SizedBox(width: 7),
-                          Text(
-                            NabaStrings.sendThisMessage,
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
+                      _sendChip(
+                        color: const Color(0xFF1565C0),
+                        icon: Icons.sms_rounded,
+                        label: NabaStrings.sendViaSms,
+                        onTap: () => _sendSms(context),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),

@@ -139,8 +139,16 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   List<String>? _notifierFormTypes;
   String? _notifierEncounterId;
 
+  /// Delivery / Pregnancy Outcome is tracked as [isDeliveryVisit], not as a
+  /// programme name in [activatedPathways]. When the SK selects Outcome and
+  /// deselects PNC, Step 1 correctly finalizes an empty programme set — but
+  /// [FormTypeResolver] still seeds `pregnancyOutcome` (+ mother/child PNC
+  /// cards for birth documentation). Without this gate, that visit hit the
+  /// blank "No assessment pathways activated" body.
   bool get _hasActivatedPathways =>
-      widget.activatedPathways != null && widget.activatedPathways!.isNotEmpty;
+      widget.isDeliveryVisit ||
+      (widget.activatedPathways != null &&
+          widget.activatedPathways!.isNotEmpty);
 
   @override
   void didChangeDependencies() {
@@ -211,8 +219,17 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     return out;
   }
 
-  Programme _getPrimaryProgramme() =>
-      ServiceSelectionResolver.primaryFrom(widget.activatedPathways ?? const []);
+  Programme _getPrimaryProgramme() {
+    final fromPathways = ServiceSelectionResolver.primaryFrom(
+      widget.activatedPathways ?? const [],
+    );
+    if (fromPathways != Programme.unknown) return fromPathways;
+    // Outcome-only delivery visit (PNC deselected) still needs a primary
+    // for summary / enrolment housekeeping — PNC is the clinical home for
+    // birth documentation alongside pregnancyOutcome forms.
+    if (widget.isDeliveryVisit) return Programme.pnc;
+    return Programme.unknown;
+  }
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
