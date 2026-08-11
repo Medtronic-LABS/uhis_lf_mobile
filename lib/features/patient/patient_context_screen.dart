@@ -959,11 +959,20 @@ class _PatientContextScreenState
         'patientName': data.name,
         'ageYears': data.age,
         'gender': data.gender,
+        'dateOfBirth': data.dateOfBirth,
         'activeProgrammes': progs.map((p) => p.name).toList(),
         'riskBand': bandLabel,
         'riskReasons': reasons,
         'isPregnant': data.isPregnant,
         'villageName': data.villageName,
+        if (data.enrolledAt != null)
+          'registrationDate': data.enrolledAt!.toIso8601String().split('T').first,
+        if (data.pregnancySnapshot?.eddDate != null)
+          'expectedDeliveryDate': DateTime.fromMillisecondsSinceEpoch(
+            data.pregnancySnapshot!.eddDate!,
+          ).toIso8601String().split('T').first,
+        if (data.pregnancySnapshot?.gestationalWeeksFromLmp != null)
+          'gestationalWeeks': data.pregnancySnapshot!.gestationalWeeksFromLmp,
         ...extras,
       },
     );
@@ -1020,12 +1029,14 @@ class _PatientContextScreenState
               })
           .toList();
 
+      // Primary: parse vitals from assessment JSON rows (same path as risk scoring).
+      // Fallback: pre-loaded vitalHistory spark data (already in memory, never fails).
       final vitalsSummary = await _mostRecentVitalsSummary(
         patientId: patientId,
         localAssessmentDao: localAssessmentDao,
         historyAssessmentDao: historyAssessmentDao,
         remoteAssessments: data.assessments,
-      );
+      ) ?? buildRecentVitalsSummary(data.vitalHistory);
 
       return {
         'visitCount': encounters.length,
