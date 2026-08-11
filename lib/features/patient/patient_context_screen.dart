@@ -956,13 +956,9 @@ class _PatientContextScreenState
       summary: summary.toString(),
       apiContext: <String, dynamic>{
         'patientId': data.patientId ?? widget.patientId,
-        'name': data.name,
-        'age': data.age,
+        'patientName': data.name,
+        'ageYears': data.age,
         'gender': data.gender,
-        'programmes': progs.map((p) => p.wireTag).toList(),
-        // Duplicate of 'programmes' under the key name the sibling AI Visit
-        // Briefing/NABA requests use (see symptom_picker_screen.dart) — the
-        // backend's patient-scoped prompt may only read this key.
         'activeProgrammes': progs.map((p) => p.name).toList(),
         'riskBand': bandLabel,
         'riskReasons': reasons,
