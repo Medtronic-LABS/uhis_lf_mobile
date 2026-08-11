@@ -218,6 +218,66 @@ void main() {
     });
   });
 
+  group('ServiceSelectionResolver.finalize — male maternal strip', () {
+    test('strips ANC/PNC/PW/FP for males and keeps NCD', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {
+          Programme.anc,
+          Programme.pnc,
+          Programme.pw,
+          Programme.familyPlanning,
+          Programme.ncd,
+        },
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        isMale: true,
+      );
+
+      expect(result.programmes, {Programme.ncd});
+      expect(result.blockedReason, isNull);
+      expect(result.silentlyEmptied, isFalse);
+    });
+
+    test('does not auto-add PNC on delivery visits for males', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.ncd},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        isDeliveryVisit: true,
+        isMale: true,
+      );
+
+      expect(result.programmes, {Programme.ncd});
+    });
+
+    test('male maternal-only selection empties without PW snackbar flag', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.anc, Programme.pw},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        isMale: true,
+      );
+
+      expect(result.programmes, isEmpty);
+      expect(result.silentlyEmptied, isFalse);
+    });
+
+    test('non-male finalize still auto-adds PW with ANC', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.anc},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        isMale: false,
+      );
+
+      expect(result.programmes, {Programme.anc, Programme.pw});
+    });
+  });
+
   group('ServiceSelectionResolver.primaryFrom', () {
     test('picks the first known programme, skipping unknown names', () {
       expect(

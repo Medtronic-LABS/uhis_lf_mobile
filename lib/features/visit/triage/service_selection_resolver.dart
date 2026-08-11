@@ -1,4 +1,5 @@
 import '../../../core/models/programme.dart';
+import 'programme_grid_sync.dart';
 
 /// Why [ServiceSelectionResolver.finalize] blocked a programme and the SK
 /// must be told before the visit can proceed. `null` on
@@ -88,23 +89,28 @@ abstract final class ServiceSelectionResolver {
 
   /// Finalizes the SK's Step-1 selection into the set Step 2 will render.
   ///
-  /// Ports, in order, the 4 rules that used to run in Step 2's
+  /// Ports, in order, the rules that used to run in Step 2's
   /// `_hydrate()`:
   /// 1. Delivery visits include PNC by default, unless the SK explicitly
   ///    deselected it in the grid ([pncDismissedBySk]) — Pregnancy Outcome
-  ///    and PNC are independently selectable on a delivery visit.
-  /// 2. **PW-once-only** — dropped silently when [pwRegistrationBlocked].
+  ///    and PNC are independently selectable on a delivery visit. Skipped
+  ///    for confirmed males ([isMale]).
+  /// 2. **Male maternal strip** — silent drop of
+  ///    [ProgrammeGridSync.maternalProgrammes] when [isMale]. Does not set
+  ///    [ServiceSelectionResult.silentlyEmptied] (that flag is reserved for
+  ///    the PW-already-enrolled snackbar path).
+  /// 3. **PW-once-only** — dropped silently when [pwRegistrationBlocked].
   ///    If that empties the selection, returns immediately with
   ///    [ServiceSelectionResult.silentlyEmptied] (no further rules run —
   ///    matches the original code's immediate home-navigation branch).
-  /// 3. **ANC blocked postpartum** — removed with
+  /// 4. **ANC blocked postpartum** — removed with
   ///    [ServiceSelectionBlockReason.ancBlockedPostpartum] when
   ///    [isPostpartum].
-  /// 4. **ANC blocked by revisit interval** — removed with
+  /// 5. **ANC blocked by revisit interval** — removed with
   ///    [ServiceSelectionBlockReason.ancBlockedRevisit] when
   ///    [ancRevisitBlocked] (1 day since last ANC visit if it was
   ///    high-risk, else 15 days — computed by the caller).
-  /// 5. **PW auto-add** — added alongside a first-time (not
+  /// 6. **PW auto-add** — added alongside a first-time (not
   ///    [pwRegistrationBlocked]) ANC selection.
   ///
   /// Finally applies [excludedFromSelection] and returns the surviving set
@@ -116,11 +122,20 @@ abstract final class ServiceSelectionResolver {
     required bool ancRevisitBlocked,
     bool isDeliveryVisit = false,
     bool pncDismissedBySk = false,
+    bool isMale = false,
   }) {
     var programmes = Set<Programme>.from(selected);
 
-    if (isDeliveryVisit && !pncDismissedBySk) {
+    if (isDeliveryVisit && !pncDismissedBySk && !isMale) {
       programmes.add(Programme.pnc);
+    }
+
+    // Confirmed males never proceed with maternal services — even when
+    // symptom catalogue tags or stale enrolment smuggled them into
+    // [selected]. Prefer [isMale] over !female so Sex.unknown is untouched.
+    if (isMale) {
+      programmes =
+          ProgrammeGridSync.withoutMaternalIfMale(programmes, isMale: true);
     }
 
     // Pilot-scope exclusion — silent, applies regardless of how the
@@ -132,6 +147,15 @@ abstract final class ServiceSelectionResolver {
       programmes.remove(Programme.pw);
     }
     if (programmes.isEmpty && selected.isNotEmpty) {
+      // Male + only maternal programmes (or maternal + already-excluded
+      // tags) — empty is correct, but must not trigger the PW-already-
+      // enrolled snackbar path ([silentlyEmptied]).
+      final nonMaternalSelected = isMale
+          ? ProgrammeGridSync.withoutMaternalIfMale(selected, isMale: true)
+          : selected;
+      if (isMale && nonMaternalSelected.isEmpty) {
+        return const ServiceSelectionResult(programmes: {});
+      }
       return const ServiceSelectionResult(
         programmes: {},
         silentlyEmptied: true,

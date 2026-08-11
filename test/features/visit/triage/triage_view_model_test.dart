@@ -514,6 +514,44 @@ void main() {
     });
   });
 
+  group('TriageViewModel simpleProgrammeSections — male maternal gate', () {
+    test('adult male with ANC enrolment / pregnant flag → no ANC section', () {
+      final ctx = PatientContext(
+        patientId: 'simple-male-anc',
+        ageMonths: 300,
+        sex: Sex.male,
+        isPregnant: true,
+        activeProgrammes: {Programme.anc, Programme.ncd},
+      );
+      final vm = TriageViewModel(patientContext: ctx);
+
+      expect(
+        vm.simpleProgrammeSections.map((s) => s.programme),
+        isNot(contains(Programme.anc)),
+      );
+      expect(
+        vm.simpleProgrammeSections.map((s) => s.programme),
+        contains(Programme.ncd),
+      );
+    });
+
+    test('adult female pregnant → ANC section present', () {
+      final ctx = PatientContext(
+        patientId: 'simple-female-anc',
+        ageMonths: 300,
+        sex: Sex.female,
+        isPregnant: true,
+        activeProgrammes: {Programme.anc},
+      );
+      final vm = TriageViewModel(patientContext: ctx);
+
+      expect(
+        vm.simpleProgrammeSections.map((s) => s.programme),
+        contains(Programme.anc),
+      );
+    });
+  });
+
   group('TriageViewModel Notifier', () {
     test('toggleSymptom notifies listeners', () {
       final ctx = PatientContext(

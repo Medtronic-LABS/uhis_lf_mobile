@@ -670,11 +670,16 @@ class TriageViewModel extends ChangeNotifier {
     // Maternal symptoms (ANC/PNC) only apply to patients old enough to be a
     // mother. A neonate or infant enrolled in 'pnc' is a neonatal PNC case —
     // those patients must never see vaginal_bleeding or other maternal symptoms.
+    // Confirmed males are excluded even when stale ANC/PW enrolment or a bad
+    // pregnancy flag would otherwise open these sections.
     final isMaternalAge =
         ctx.ageMonths >= AiScribeTriageVocab.maternalMinAgeMonths;
+    final isMale = ctx.sex == Sex.male;
 
     // ANC: enrolled, or patient is pregnant (may not be formally enrolled yet).
-    if (isMaternalAge && (enrolled.contains(Programme.anc) || ctx.isPregnant)) {
+    if (!isMale &&
+        isMaternalAge &&
+        (enrolled.contains(Programme.anc) || ctx.isPregnant)) {
       final codes = codesFor(Programme.anc);
       if (codes.isNotEmpty) {
         sections.add(SymptomSection(programme: Programme.anc, codes: codes));
@@ -682,7 +687,9 @@ class TriageViewModel extends ChangeNotifier {
     }
 
     // PNC: enrolled, or patient is postpartum.
-    if (isMaternalAge && (enrolled.contains(Programme.pnc) || ctx.isPostpartum)) {
+    if (!isMale &&
+        isMaternalAge &&
+        (enrolled.contains(Programme.pnc) || ctx.isPostpartum)) {
       final codes = codesFor(Programme.pnc);
       if (codes.isNotEmpty) {
         sections.add(SymptomSection(programme: Programme.pnc, codes: codes));
