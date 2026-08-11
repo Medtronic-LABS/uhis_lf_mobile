@@ -34,6 +34,57 @@ void main() {
     });
   });
 
+  group('the disabled path is a no-op vs. the pre-setting behaviour', () {
+    // Before this setting existed, the batch path passed NO androidConfig at
+    // all, so it got the record package's implicit AndroidRecordConfig().
+    // Now it always passes one. These pin that the off-path is still
+    // field-for-field identical, so the setting genuinely changes nothing
+    // until an SK turns it on.
+    test('batch off-path matches an implicit AndroidRecordConfig()', () {
+      final a = ScribeRecordConfig.batch(rawMicCapture: false).androidConfig;
+      const implicit = AndroidRecordConfig();
+
+      expect(a.audioSource, implicit.audioSource);
+      expect(a.useLegacy, implicit.useLegacy);
+      expect(a.muteAudio, implicit.muteAudio);
+      expect(a.manageBluetooth, implicit.manageBluetooth);
+      expect(a.speakerphone, implicit.speakerphone);
+      expect(a.audioManagerMode, implicit.audioManagerMode);
+    });
+
+    test('realtime off-path changes only audioSource from the defaults', () {
+      final a =
+          ScribeRecordConfig.realtimeStream(rawMicCapture: false).androidConfig;
+      const implicit = AndroidRecordConfig();
+
+      // The realtime path deliberately overrode the source to mic before
+      // this setting existed; everything else stayed at the defaults.
+      expect(a.audioSource, AndroidAudioSource.mic);
+      expect(a.useLegacy, implicit.useLegacy);
+      expect(a.muteAudio, implicit.muteAudio);
+      expect(a.manageBluetooth, implicit.manageBluetooth);
+      expect(a.speakerphone, implicit.speakerphone);
+      expect(a.audioManagerMode, implicit.audioManagerMode);
+    });
+
+    test('enabling changes the audio source and nothing else', () {
+      for (final build in [
+        ScribeRecordConfig.batch,
+        ScribeRecordConfig.realtimeStream,
+      ]) {
+        final off = build(rawMicCapture: false).androidConfig;
+        final on = build(rawMicCapture: true).androidConfig;
+
+        expect(on.audioSource, isNot(off.audioSource));
+        expect(on.useLegacy, off.useLegacy);
+        expect(on.muteAudio, off.muteAudio);
+        expect(on.manageBluetooth, off.manageBluetooth);
+        expect(on.speakerphone, off.speakerphone);
+        expect(on.audioManagerMode, off.audioManagerMode);
+      }
+    });
+  });
+
   group('ScribeRecordConfig.realtimeStream', () {
     test('keeps the raw mic source when raw capture is off', () {
       final cfg = ScribeRecordConfig.realtimeStream(rawMicCapture: false);
