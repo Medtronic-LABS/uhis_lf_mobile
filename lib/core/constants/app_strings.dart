@@ -3068,15 +3068,14 @@ abstract final class TriageResultStrings {
 // SymptomPickerStrings
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Which service the Greet Warmly card's fallback content is written for —
-/// see [SymptomPickerStrings.sitWithGreetEnglishFor]. Only pregnancy and
-/// postpartum get a distinct question; every other service (TB, NCD, or
-/// nothing selected) shares one generic wellbeing question.
-enum _GreetWarmlyService { pregnancy, postpartum, general }
-
-/// Pregnancy stage bucket gating the fetal-movement question — see
+/// Which service the Greet Warmly card's coaching hint is written for —
+/// see [SymptomPickerStrings.sitWithGreetHintFor]. Only pregnancy and
+/// postpartum name a distinct checkup; every other service (TB, NCD, or
+/// nothing selected) shares one generic line.
+///
+/// The spoken greeting line deliberately does NOT branch on this — see
 /// [SymptomPickerStrings.sitWithGreetEnglishFor].
-enum _PregnancyStage { early, mid, late }
+enum _GreetWarmlyService { pregnancy, postpartum, general }
 
 abstract final class SymptomPickerStrings {
   SymptomPickerStrings._();
@@ -3142,23 +3141,16 @@ abstract final class SymptomPickerStrings {
   // child directly. Gender-neutral: a guardian greeting doesn't depend on
   // the child's sex.
   //
-  // The greeting line and hint also key off `selectedProgrammes` (the SK's
-  // currently-ticked service cards) so an ANC visit asks pregnancy-relevant
-  // questions and a PNC visit asks about postpartum recovery, instead of
-  // one question assumed for every adult woman regardless of why she's
-  // being seen. Every other service (TB, NCD, or nothing selected) shares
-  // one generic wellbeing question — no distinct question was worth
-  // maintaining for those. Within the pregnancy branch, `gestationalWeeks`
-  // further gates the
-  // fetal-movement question to when it's actually meaningful — quickening
-  // isn't felt in early pregnancy, so a 1-week patient must never be asked
-  // "is the baby moving".
+  // The hint keys off `selectedProgrammes` (the SK's currently-ticked
+  // service cards) so it names the actual checkup instead of always
+  // assuming a pregnancy one. The spoken greeting line does not — see
+  // [sitWithGreetEnglishFor].
 
-  /// Which service the greeting/hint content should be written for, derived
-  /// from the SK's currently-selected programme cards. Pregnancy takes
-  /// priority over any other simultaneously-selected service since it's the
-  /// most safety-relevant context to greet correctly. TB and NCD don't get
-  /// a distinct question — they fall through to the general bucket.
+  /// Which service the coaching hint should be written for, derived from the
+  /// SK's currently-selected programme cards. Pregnancy takes priority over
+  /// any other simultaneously-selected service since it's the most
+  /// safety-relevant context. TB and NCD don't get a distinct hint — they
+  /// fall through to the general bucket.
   static _GreetWarmlyService _greetWarmlyServiceFor(
     Set<Programme>? selectedProgrammes,
   ) {
@@ -3168,18 +3160,6 @@ abstract final class SymptomPickerStrings {
     }
     if (p.contains(Programme.pnc)) return _GreetWarmlyService.postpartum;
     return _GreetWarmlyService.general;
-  }
-
-  /// Pregnancy stage bucket for the greeting line. Quickening (the mother
-  /// first feeling fetal movement) isn't reliable before roughly 24 weeks,
-  /// so the movement question is reserved for [_PregnancyStage.late] —
-  /// unknown gestational age is treated as [_PregnancyStage.early] rather
-  /// than risk asking a too-early patient about movement.
-  static _PregnancyStage _pregnancyStageFor(int? gestationalWeeks) {
-    final weeks = gestationalWeeks;
-    if (weeks == null || weeks < 13) return _PregnancyStage.early;
-    if (weeks < 24) return _PregnancyStage.mid;
-    return _PregnancyStage.late;
   }
 
   /// Header (uppercase, small). Gendered + locale-aware; guardian-directed
@@ -3203,10 +3183,9 @@ abstract final class SymptomPickerStrings {
     );
   }
 
-  /// Bangla greeting the SK opens with — branches on the currently-selected
-  /// service (and, for pregnancy, gestational stage) so the question
-  /// actually fits the visit. For a child patient, addresses the guardian
-  /// about the child instead.
+  /// Bangla greeting the SK opens with. Two cases only — a child patient
+  /// (the guardian is addressed about the child) and everyone else — see
+  /// [sitWithGreetEnglishFor] for why nothing else branches.
   ///
   /// Deliberately NOT routed through `getTranslatedString`/`strings.json`
   /// like the rest of this file: this method (and [sitWithGreetEnglishFor])
@@ -3219,66 +3198,39 @@ abstract final class SymptomPickerStrings {
   /// "Bangla app language falls back to static Bangla when greeting is
   /// null", which fails if this is refactored to share a
   /// `getTranslatedString`-based helper with [sitWithGreetEnglishFor].
-  static String sitWithGreetBanglaFor({
-    required bool isFemale,
-    bool isChild = false,
-    Set<Programme>? selectedProgrammes,
-    int? gestationalWeeks,
-  }) {
-    if (isChild) {
-      return '"বাবুটি কেমন আছে? ঠিকমতো খাচ্ছে ও ঘুমাচ্ছে তো?"';
-    }
-    switch (_greetWarmlyServiceFor(selectedProgrammes)) {
-      case _GreetWarmlyService.pregnancy:
-        switch (_pregnancyStageFor(gestationalWeeks)) {
-          case _PregnancyStage.early:
-            return '"আপু, আপনি কেমন বোধ করছেন?\nবমি ভাব বা খেতে অসুবিধা হচ্ছে কি?"';
-          case _PregnancyStage.mid:
-            return '"আপু, আপনি কেমন আছেন?\nসম্প্রতি ফোলা বা মাথাব্যথা হয়েছে কি?"';
-          case _PregnancyStage.late:
-            return '"আপু, আপনি কেমন আছেন?\nবাচ্চা আজ ভালোভাবে নড়াচড়া করছে তো?"';
-        }
-      case _GreetWarmlyService.postpartum:
-        return '"আপু, প্রসবের পর আপনি কেমন বোধ করছেন?\nবাচ্চা কেমন খাচ্ছে?"';
-      case _GreetWarmlyService.general:
-        return isFemale
-            ? '"আপু, আপনি কেমন বোধ করছেন?\nকোনো সমস্যা আছে কি?"'
-            : '"কাকা, আপনি কেমন বোধ করছেন?\nকোনো সমস্যা আছে কি?"';
-    }
-  }
+  static String sitWithGreetBanglaFor({bool isChild = false}) => isChild
+      ? 'বাবুটি কেমন আছে?\nঠিকমতো খাচ্ছে ও ঘুমাচ্ছে তো?'
+      : 'আপনি কেমন বোধ করছেন?\nকোনো সমস্যা আছে কি?';
 
-  /// English translation of [sitWithGreetBanglaFor] — same service +
-  /// gestational-stage branching. See that method's doc comment for why
-  /// this stays hardcoded rather than routed through `getTranslatedString`.
-  static String sitWithGreetEnglishFor({
-    required bool isFemale,
-    bool isChild = false,
-    Set<Programme>? selectedProgrammes,
-    int? gestationalWeeks,
-  }) {
-    if (isChild) {
-      return isFemale
-          ? 'How is the little one? Is she eating and sleeping well?'
-          : 'How is the little one? Is he eating and sleeping well?';
-    }
-    switch (_greetWarmlyServiceFor(selectedProgrammes)) {
-      case _GreetWarmlyService.pregnancy:
-        switch (_pregnancyStageFor(gestationalWeeks)) {
-          case _PregnancyStage.early:
-            return 'Sister, how are you feeling? Any nausea or difficulty eating?';
-          case _PregnancyStage.mid:
-            return 'Sister, how are you? Any swelling or headaches lately?';
-          case _PregnancyStage.late:
-            return 'Sister, how are you? Is the baby moving well today?';
-        }
-      case _GreetWarmlyService.postpartum:
-        return 'Sister, how are you feeling since delivery? How is the baby feeding?';
-      case _GreetWarmlyService.general:
-        return isFemale
-            ? 'Sister, how are you feeling? Do you have any concern?'
-            : 'Brother, how are you feeling? Do you have any concern?';
-    }
-  }
+  /// English translation of [sitWithGreetBanglaFor] — same two cases. See
+  /// that method's doc comment for why this stays hardcoded rather than
+  /// routed through `getTranslatedString`.
+  ///
+  /// Carries no salutation and no gendered wording, at any age, whether or
+  /// not the patient's sex is recorded. This mirrors the AI greeting
+  /// contract in leapfrog-ai-service (`_EN_SALUTATION_RE` /
+  /// `_BN_SALUTATION_RE` in `briefing_service.py`, and the `greeting` spec in
+  /// `prompts/briefing_visit.txt`), which forbids "আপু" / "কাকা" / "Sister" /
+  /// "Brother" and opens with the question itself in the genderless polite
+  /// আপনি form. Keeping the offline fallback salutation-free means the SK
+  /// reads the same register whether or not the briefing call succeeded, and
+  /// it removes the mis-address risk that a gendered vocative carries when
+  /// the patient's sex is unrecorded — the online path hit exactly that (a
+  /// male NCD patient greeted "Sister") before the vocative was dropped.
+  ///
+  /// The greeting also does not branch on the visit type or gestational age,
+  /// so it can never ask a question the visit doesn't warrant. The AI path
+  /// still tailors both when it is reachable — including the fetal-movement
+  /// question, which that service permits only once a gestational age is
+  /// known and indicates late pregnancy.
+  ///
+  /// `isChild` (under-5) is the one branch: the child cannot answer for
+  /// themselves, so both lines ask the guardian *about* the child. No
+  /// pronoun for the child either — the Bangla line never had one, and the
+  /// guardian's own gender is never known.
+  static String sitWithGreetEnglishFor({bool isChild = false}) => isChild
+      ? 'How is the little one? Eating and sleeping well?'
+      : 'How are you feeling? Do you have any concern?';
 
   /// Helper hint below the greeting — primes the SK to talk about home life
   /// before launching the clinical conversation. Gendered + locale-aware;

@@ -20,7 +20,6 @@ void main() {
     bool loading = false,
     bool isChild = false,
     Set<Programme> selectedProgrammes = const {},
-    int? gestationalWeeks,
     GreetingContent? greeting,
     String? fallbackOpeningLine,
   }) {
@@ -31,7 +30,6 @@ void main() {
           loading: loading,
           isChild: isChild,
           selectedProgrammes: selectedProgrammes,
-          gestationalWeeks: gestationalWeeks,
           greeting: greeting,
           fallbackOpeningLine: fallbackOpeningLine,
         ),
@@ -318,12 +316,12 @@ void main() {
         await tester.pumpWidget(buildCard(isFemale: isFemale));
 
         expect(
-          find.text(SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: isFemale)),
+          find.text(SymptomPickerStrings.sitWithGreetEnglishFor()),
           findsOneWidget,
           reason: 'isFemale=$isFemale',
         );
         expect(
-          find.text(SymptomPickerStrings.sitWithGreetBanglaFor(isFemale: isFemale)),
+          find.text(SymptomPickerStrings.sitWithGreetBanglaFor()),
           findsNothing,
           reason: 'isFemale=$isFemale',
         );
@@ -339,12 +337,12 @@ void main() {
         await tester.pumpWidget(buildCard(isFemale: isFemale));
 
         expect(
-          find.text(SymptomPickerStrings.sitWithGreetBanglaFor(isFemale: isFemale)),
+          find.text(SymptomPickerStrings.sitWithGreetBanglaFor()),
           findsOneWidget,
           reason: 'isFemale=$isFemale',
         );
         expect(
-          find.text(SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: isFemale)),
+          find.text(SymptomPickerStrings.sitWithGreetEnglishFor()),
           findsNothing,
           reason: 'isFemale=$isFemale',
         );
@@ -367,7 +365,7 @@ void main() {
 
       expect(find.text('Legacy SDP opener'), findsOneWidget);
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: true)),
+        find.text(SymptomPickerStrings.sitWithGreetEnglishFor()),
         findsNothing,
       );
     });
@@ -386,7 +384,7 @@ void main() {
       ));
 
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: true)),
+        find.text(SymptomPickerStrings.sitWithGreetEnglishFor()),
         findsOneWidget,
       );
     });
@@ -408,7 +406,7 @@ void main() {
 
       expect(find.text('Legacy SDP opener'), findsNothing);
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetBanglaFor(isFemale: true)),
+        find.text(SymptomPickerStrings.sitWithGreetBanglaFor()),
         findsOneWidget,
       );
     });
@@ -420,7 +418,7 @@ void main() {
       ));
 
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: true)),
+        find.text(SymptomPickerStrings.sitWithGreetEnglishFor()),
         findsOneWidget,
       );
       expect(
@@ -445,7 +443,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: true)),
+        find.text(SymptomPickerStrings.sitWithGreetEnglishFor()),
         findsNothing,
       );
       expect(
@@ -499,14 +497,11 @@ void main() {
       await tester.pumpWidget(buildCard(isFemale: true, isChild: true));
 
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetEnglishFor(
-          isFemale: true,
-          isChild: true,
-        )),
+        find.text(SymptomPickerStrings.sitWithGreetEnglishFor(isChild: true)),
         findsOneWidget,
       );
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: true)),
+        find.text(SymptomPickerStrings.sitWithGreetEnglishFor()),
         findsNothing,
       );
     });
@@ -539,10 +534,7 @@ void main() {
 
       expect(find.text('Legacy SDP opener'), findsNothing);
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetEnglishFor(
-          isFemale: true,
-          isChild: true,
-        )),
+        find.text(SymptomPickerStrings.sitWithGreetEnglishFor(isChild: true)),
         findsOneWidget,
       );
     });
@@ -575,163 +567,131 @@ void main() {
       await tester.pumpWidget(buildCard(isFemale: true, isChild: true));
 
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetBanglaFor(
-          isFemale: true,
-          isChild: true,
-        )),
+        find.text(SymptomPickerStrings.sitWithGreetBanglaFor(isChild: true)),
         findsOneWidget,
       );
       expect(
-        find.text(SymptomPickerStrings.sitWithGreetBanglaFor(isFemale: true)),
+        find.text(SymptomPickerStrings.sitWithGreetBanglaFor()),
         findsNothing,
       );
     });
   });
 
-  group('static fallback follows the currently-selected service', () {
+  group('static greeting fallback is generic — two cases only', () {
     testWidgets(
-        'a 1-week ANC patient is asked about nausea/appetite, never about '
-        'fetal movement',
+        'every service and both sexes get the same salutation-free line',
         (tester) async {
-      await tester.pumpWidget(buildCard(
-        isFemale: true,
-        selectedProgrammes: {Programme.anc},
-        gestationalWeeks: 1,
-      ));
+      for (final programmes in <Set<Programme>>[
+        {},
+        {Programme.anc},
+        {Programme.pw},
+        {Programme.pnc},
+        {Programme.ncd},
+        {Programme.tb},
+        {Programme.anc, Programme.ncd},
+      ]) {
+        for (final isFemale in [true, false]) {
+          await tester.pumpWidget(buildCard(
+            isFemale: isFemale,
+            selectedProgrammes: programmes,
+          ));
 
-      expect(
-        find.text('Sister, how are you feeling? Any nausea or difficulty eating?'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('baby moving'), findsNothing);
-    });
-
-    testWidgets('an ANC patient at 13-23 weeks is asked about swelling/headaches, '
-        'not fetal movement', (tester) async {
-      await tester.pumpWidget(buildCard(
-        isFemale: true,
-        selectedProgrammes: {Programme.anc},
-        gestationalWeeks: 20,
-      ));
-
-      expect(
-        find.text('Sister, how are you? Any swelling or headaches lately?'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('baby moving'), findsNothing);
+          expect(
+            find.text('How are you feeling? Do you have any concern?'),
+            findsOneWidget,
+            reason: 'programmes=$programmes isFemale=$isFemale',
+          );
+        }
+      }
     });
 
     testWidgets(
-        'an ANC patient at 24+ weeks is asked about fetal movement',
+        'never asks about fetal movement or pregnancy-stage symptoms — the AI '
+        'path owns that question now, and its service gates it on a known '
+        'late gestational age',
         (tester) async {
-      await tester.pumpWidget(buildCard(
-        isFemale: true,
-        selectedProgrammes: {Programme.anc},
-        gestationalWeeks: 30,
-      ));
+      for (final programmes in <Set<Programme>>[
+        {Programme.anc},
+        {Programme.pw},
+        {Programme.pnc},
+      ]) {
+        await tester.pumpWidget(buildCard(
+          isFemale: true,
+          selectedProgrammes: programmes,
+        ));
 
-      expect(
-        find.text('Sister, how are you? Is the baby moving well today?'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('a PW-only patient (no ANC yet) with unknown gestational age '
-        'defaults to the early-pregnancy question, not fetal movement',
-        (tester) async {
-      await tester.pumpWidget(buildCard(
-        isFemale: true,
-        selectedProgrammes: {Programme.pw},
-        gestationalWeeks: null,
-      ));
-
-      expect(
-        find.text('Sister, how are you feeling? Any nausea or difficulty eating?'),
-        findsOneWidget,
-      );
+        expect(find.textContaining('baby moving'), findsNothing);
+        expect(find.textContaining('nausea'), findsNothing);
+        expect(find.textContaining('since delivery'), findsNothing);
+      }
     });
 
     testWidgets(
-        'an NCD patient is asked the generic wellbeing question, not '
-        'pregnancy or a medicine-specific one',
+        'carries no salutation in either language, for either case — mirrors '
+        'the AI service greeting contract (_EN_SALUTATION_RE / '
+        '_BN_SALUTATION_RE in briefing_service.py)',
         (tester) async {
-      await tester.pumpWidget(buildCard(
-        isFemale: true,
-        selectedProgrammes: {Programme.ncd},
-      ));
+      const banned = [
+        'Sister',
+        'Brother',
+        'Sir',
+        'Madam',
+        'Aunty',
+        'Uncle',
+        'আপু',
+        'কাকা',
+        'ভাই',
+        'খালা',
+      ];
 
-      expect(
-        find.text('Sister, how are you feeling? Do you have any concern?'),
-        findsOneWidget,
-      );
+      for (final locale in AppLanguage.values) {
+        AppLocale.current = locale;
+        for (final isChild in [true, false]) {
+          await tester.pumpWidget(buildCard(isFemale: true, isChild: isChild));
 
-      await tester.pumpWidget(buildCard(
-        isFemale: false,
-        selectedProgrammes: {Programme.ncd},
-      ));
-
-      expect(
-        find.text('Brother, how are you feeling? Do you have any concern?'),
-        findsOneWidget,
-      );
+          for (final term in banned) {
+            expect(
+              find.textContaining(term),
+              findsNothing,
+              reason: 'locale=$locale isChild=$isChild term=$term',
+            );
+          }
+        }
+      }
     });
 
     testWidgets(
-        'a TB patient is asked the same generic wellbeing question, not a '
-        'cough/fever-specific one',
+        'static lines are never quote-wrapped, in either language — the '
+        'greeting wire format is not either',
         (tester) async {
-      await tester.pumpWidget(buildCard(
-        isFemale: true,
-        selectedProgrammes: {Programme.tb},
-      ));
+      for (final locale in AppLanguage.values) {
+        AppLocale.current = locale;
+        await tester.pumpWidget(buildCard(isFemale: true));
 
-      expect(
-        find.text('Sister, how are you feeling? Do you have any concern?'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('a PNC patient is asked about recovery and the baby\'s feeding',
-        (tester) async {
-      await tester.pumpWidget(buildCard(
-        isFemale: true,
-        selectedProgrammes: {Programme.pnc},
-      ));
-
-      expect(
-        find.text(
-          'Sister, how are you feeling since delivery? How is the baby feeding?',
-        ),
-        findsOneWidget,
-      );
+        expect(
+          find.textContaining('"'),
+          findsNothing,
+          reason: 'locale=$locale',
+        );
+      }
     });
 
     testWidgets(
-        'pregnancy takes priority when ANC and NCD are both selected',
+        'the child line asks about the child and carries no pronoun for '
+        'either the child or the guardian',
         (tester) async {
-      await tester.pumpWidget(buildCard(
-        isFemale: true,
-        selectedProgrammes: {Programme.anc, Programme.ncd},
-        gestationalWeeks: 30,
-      ));
+      await tester.pumpWidget(buildCard(isFemale: true, isChild: true));
 
       expect(
-        find.text('Sister, how are you? Is the baby moving well today?'),
+        find.text('How is the little one? Eating and sleeping well?'),
         findsOneWidget,
       );
+      expect(find.textContaining('Is she'), findsNothing);
+      expect(find.textContaining('Is he'), findsNothing);
     });
+  });
 
-    testWidgets(
-        'no service selected falls back to the gender-only general question',
-        (tester) async {
-      await tester.pumpWidget(buildCard(isFemale: true));
-
-      expect(
-        find.text('Sister, how are you feeling? Do you have any concern?'),
-        findsOneWidget,
-      );
-    });
-
+  group('static hint follows the currently-selected service', () {
     testWidgets('hint names the actual visit type instead of always assuming '
         'a pregnancy checkup', (tester) async {
       await tester.pumpWidget(buildCard(
