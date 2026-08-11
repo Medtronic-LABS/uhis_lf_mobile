@@ -881,6 +881,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
     // either widget updates the other (pulse already did this; sys/dia
     // were missing — SK reported only pulse mirrored).
     _mirrorBpAcrossProgrammes(fieldId, value);
+    // Cross-programme BG sync: NCD/ANC BloodGlucoseEntry uses
+    // glucoseType + glucose; PNC (and legacy ANC) use bloodSugar +
+    // fastingBloodSugar/randomBloodSugar (and bloodSugarFasting/
+    // bloodSugarRandom). Keep both vocabularies aligned for ANC+NCD and
+    // PNC+NCD combined visits.
+    _mirrorGlucoseAcrossProgrammes(fieldId, value);
     if (fieldId == 'liveBirthNumbers') {
       _resizeNewbornDetails(value);
     }
@@ -1069,6 +1075,119 @@ class UnifiedFormNotifier extends ChangeNotifier {
     _data = _data.setValue('newbornDetails', list);
     notifyListeners();
     _saveDraft();
+  }
+
+  /// Keeps NCD/ANC `glucoseType`+`glucose` and PNC/ANC maternal BG keys in sync.
+  ///
+  /// Vocabularies:
+  /// - NCD / ANC BloodGlucoseEntry: `glucoseType` (`fbs`/`rbs`) + `glucose`
+  /// - PNC: `bloodSugar` (`fasting`/`random`) + `fastingBloodSugar` /
+  ///   `randomBloodSugar`
+  /// - Legacy ANC typed fields: `bloodSugarFasting` / `bloodSugarRandom`
+  ///
+  /// Mutates [_data] only (same pattern as [_mirrorBpAcrossProgrammes]) so
+  /// we never recurse through [updateField].
+  void _mirrorGlucoseAcrossProgrammes(String fieldId, dynamic value) {
+    const ncdType = 'glucoseType';
+    const ncdValue = 'glucose';
+    const maternalType = 'bloodSugar';
+    const maternalFbs = 'fastingBloodSugar';
+    const maternalRbs = 'randomBloodSugar';
+    const ancFbs = 'bloodSugarFasting';
+    const ancRbs = 'bloodSugarRandom';
+
+    String? toMaternalType(String? raw) {
+      switch (raw) {
+        case 'fbs':
+        case 'fasting':
+          return 'fasting';
+        case 'rbs':
+        case 'ppbs':
+        case 'random':
+          return 'random';
+        default:
+          return null;
+      }
+    }
+
+    String? toNcdType(String? raw) {
+      switch (raw) {
+        case 'fbs':
+        case 'fasting':
+          return 'fbs';
+        case 'rbs':
+        case 'ppbs':
+        case 'random':
+          return 'rbs';
+        default:
+          return null;
+      }
+    }
+
+    void writeFasting(dynamic v) {
+      _data = _data.setValue(maternalType, 'fasting');
+      _data = _data.setValue(ncdType, 'fbs');
+      _data = _data.setValue(ncdValue, v);
+      _data = _data.setValue(maternalFbs, v);
+      _data = _data.setValue(ancFbs, v);
+    }
+
+    void writeRandom(dynamic v) {
+      _data = _data.setValue(maternalType, 'random');
+      _data = _data.setValue(ncdType, 'rbs');
+      _data = _data.setValue(ncdValue, v);
+      _data = _data.setValue(maternalRbs, v);
+      _data = _data.setValue(ancRbs, v);
+    }
+
+    if (fieldId == ncdType) {
+      final maternal = toMaternalType(value?.toString());
+      _data = _data.setValue(maternalType, maternal);
+      final g = _data.getValue(ncdValue);
+      if (maternal == 'fasting' && g != null) {
+        _data = _data.setValue(maternalFbs, g);
+        _data = _data.setValue(ancFbs, g);
+      } else if (maternal == 'random' && g != null) {
+        _data = _data.setValue(maternalRbs, g);
+        _data = _data.setValue(ancRbs, g);
+      }
+      return;
+    }
+
+    if (fieldId == ncdValue) {
+      final type = toMaternalType(
+        _data.getValue(ncdType)?.toString() ??
+            _data.getValue(maternalType)?.toString(),
+      );
+      if (type == 'fasting') {
+        writeFasting(value);
+      } else if (type == 'random') {
+        writeRandom(value);
+      }
+      return;
+    }
+
+    if (fieldId == maternalType) {
+      final ncd = toNcdType(value?.toString());
+      _data = _data.setValue(ncdType, ncd);
+      if (ncd == 'fbs') {
+        final v = _data.getValue(maternalFbs) ?? _data.getValue(ancFbs);
+        if (v != null) _data = _data.setValue(ncdValue, v);
+      } else if (ncd == 'rbs') {
+        final v = _data.getValue(maternalRbs) ?? _data.getValue(ancRbs);
+        if (v != null) _data = _data.setValue(ncdValue, v);
+      }
+      return;
+    }
+
+    if (fieldId == maternalFbs || fieldId == ancFbs) {
+      writeFasting(value);
+      return;
+    }
+
+    if (fieldId == maternalRbs || fieldId == ancRbs) {
+      writeRandom(value);
+    }
   }
 
   /// Keeps NCD `bpLogDetails` and ANC/PNC flat BP keys in sync.
