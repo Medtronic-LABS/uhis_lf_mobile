@@ -432,7 +432,24 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         'patientId': patientCtx.patientId,
         if (widget.patientName != null) 'patientName': widget.patientName,
         if (widget.patientAge != null) 'ageYears': widget.patientAge,
-        if (widget.patientGender != null) 'gender': widget.patientGender,
+        // Prefer the locally-loaded context over the route-threaded
+        // widget.patientGender. That parameter is handed down five hops from
+        // the navigation `extra` map and arrives null in practice, so the
+        // briefing was being generated with no gender at all — the server then
+        // had to guess, and a male NCD patient was greeted "Sister". patientCtx
+        // is loaded from the local DB in this screen and is already what the
+        // banner header ("SIT WITH HER/HIM") renders from, so sourcing it here
+        // makes the header and the AI greeting agree. The threaded value is
+        // kept as a fallback so nothing regresses if some entry point does
+        // populate it while the local record's sex is unknown.
+        if (patientCtx.sex != Sex.unknown)
+          'gender': patientCtx.sex.name
+        else if (widget.patientGender != null)
+          'gender': widget.patientGender,
+        // Never sent before. The server's pregnancy-visit check falls back to
+        // programme membership without it (see _is_pregnancy_visit), which
+        // works but is an inference — this is the direct signal.
+        'isPregnant': patientCtx.isPregnant,
         'activeProgrammes': patientCtx.activeProgrammes
             .map((p) => p.name)
             .toList(),
