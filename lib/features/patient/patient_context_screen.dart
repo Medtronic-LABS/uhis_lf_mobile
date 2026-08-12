@@ -1627,7 +1627,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     title = PatientProfileStrings.ncdEnrollment;
     category = PatientProfileStrings.ncdEnrollmentCategory;
     dotColor = _kDotOk;
-    description = 'NCD programme enrollment recorded.';
+    description = PatientContextStrings.timelineNcdEnrollmentRecorded;
     return _TimelineEntry(
       emoji: emoji,
       title: title,
@@ -1654,12 +1654,12 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         title = PatientProfileStrings.pregnancyRegistered;
         category = PatientProfileStrings.pregnancyRegistrationCategory;
         dotColor = _kDotAnc;
-        description = 'Pregnant woman profile created — ANC care started';
+        description = PatientContextStrings.timelinePwProfileCreated;
         break;
       }
       final vn = _ancVisitNumberFrom(a, raw);
       title = vn != null
-          ? '${PatientContextStrings.ancVisitLabel} $vn'
+          ? PatientContextStrings.timelineAncVisitN(vn)
           : PatientContextStrings.ancCheckupTitle;
       category = PatientContextStrings.antenatalCareCategory;
 
@@ -1680,31 +1680,37 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badge = PatientContextStrings.severeAnemiaBadge;
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
-        description = 'Hb ${hbANC}g/dL — severe anemia. Urgent review needed.';
+        description = PatientContextStrings.timelineHbSevereAnemia(hbANC);
       } else if (sysANC >= 140 || diaANC >= 90) {
         dotColor = _kDotHigh;
         badge = CareThreadStrings.highrisk;
         badgeColor = _kBadgeHighBg;
         badgeFgColor = _kBadgeHighFg;
         final dp = <String>[];
-        if (bpANC.isNotEmpty) dp.add('BP $bpANC above target');
-        if (hbANC > 0 && hbANC < 10) dp.add('Anemia (Hb ${hbANC}g/dL)');
-        description = dp.isEmpty ? 'High BP detected — monitor closely.' : dp.join(' · ');
+        if (bpANC.isNotEmpty) {
+          dp.add(PatientContextStrings.timelineBpAboveTarget(bpANC));
+        }
+        if (hbANC > 0 && hbANC < 10) {
+          dp.add(PatientContextStrings.timelineAnemiaHb(hbANC));
+        }
+        description = dp.isEmpty
+            ? PatientContextStrings.timelineHighBpDetected
+            : dp.join(' · ');
       } else if (hbANC > 0 && hbANC < 10) {
         dotColor = _kDotModerate;
         badge = PatientContextStrings.anemiaBadge;
         badgeColor = _kBadgeAmberBg;
         badgeFgColor = _kBadgeAmberFg;
-        description = 'Hb ${hbANC}g/dL — anemia. Review iron supplementation.';
+        description = PatientContextStrings.timelineHbAnemiaReviewIron(hbANC);
       } else if (hbANC >= 10 && hbANC < 11) {
         dotColor = _kDotModerate;
         badge = PatientContextStrings.mildAnemiaBadge;
         badgeColor = _kBadgeAmberBg;
         badgeFgColor = _kBadgeAmberFg;
-        description = 'Hb ${hbANC}g/dL — mild anemia. Ensure iron supplementation continues.';
+        description = PatientContextStrings.timelineHbMildAnemia(hbANC);
       } else {
         dotColor = _kDotAnc;
-        description = 'Routine antenatal visit — vitals within normal range.';
+        description = PatientContextStrings.timelineRoutineAnc;
       }
 
     // ─── PNC / Delivery ───────────────────────────────────────────────────
@@ -1732,13 +1738,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
           badge = PatientContextStrings.stillbirthNeonatalDeathBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
-          description = 'Stillbirth or neonatal death recorded — follow-up and counselling needed.';
+          description = PatientContextStrings.timelineStillbirthNeonatalDeath;
         } else if (allVals.contains('abortion') || allVals.contains('miscarriage')) {
           dotColor = _kDotHigh;
           badge = PatientContextStrings.pregnancyLossBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
-          description = 'Pregnancy loss (abortion) recorded — follow-up care advised.';
+          description = PatientContextStrings.timelinePregnancyLoss;
         } else {
           final isCs = delivery.toLowerCase().contains('caesar') ||
               delivery.toLowerCase().contains('c-section') ||
@@ -1750,16 +1756,21 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
           badgeColor = isCs ? _kBadgeHighBg : _kBadgeGreenBg;
           badgeFgColor = isCs ? _kBadgeHighFg : _kBadgeGreenFg;
           final babyWt = raw['babyBirthWeight']?.toString() ?? raw['birthWeight']?.toString();
-          description = delivery.isEmpty
-              ? 'Pregnancy outcome recorded.'
-              : 'Healthy delivery outcome — mother and baby both doing well.'
-                  '${babyWt != null && babyWt.isNotEmpty ? ' Baby $babyWt kg.' : ''}';
+          if (delivery.isEmpty) {
+            description = PatientContextStrings.timelinePregnancyOutcomeRecorded;
+          } else {
+            final baby = (babyWt != null && babyWt.isNotEmpty)
+                ? ' ${PatientContextStrings.timelineBabyWeight(babyWt)}'
+                : '';
+            description =
+                '${PatientContextStrings.timelineHealthyDelivery}$baby';
+          }
         }
       } else {
         // PNC follow-up
         emoji = '🤱';
         title = pncVN.isNotEmpty
-            ? '${PatientContextStrings.pncVisitLabel} $pncVN'
+            ? PatientContextStrings.timelinePncVisitN(pncVN)
             : PatientContextStrings.pncVisitLabel;
         category = PatientContextStrings.postnatalCareCategory;
 
@@ -1782,30 +1793,40 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
           badge = PatientContextStrings.dangerSignBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
-          description = 'Danger sign reported: $dSign.';
+          description = PatientContextStrings.timelineDangerSignReported(dSign);
         } else if (bpHighPNC || tempHighC || pulseHigh || pulseLow) {
           dotColor = _kDotCritical;
           badge = PatientContextStrings.urgentPncBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
           final urgentParts = <String>[];
-          if (bpHighPNC) urgentParts.add('BP $bpPNC is above target');
-          if (tempHighC) urgentParts.add('Temperature is elevated');
-          if (pulseHigh) urgentParts.add('Pulse $pulse bpm is above normal');
-          if (pulseLow)  urgentParts.add('Pulse $pulse bpm is below normal');
-          description = '${urgentParts.join(', ')} — needs urgent attention.';
+          if (bpHighPNC) {
+            urgentParts.add(PatientContextStrings.timelineBpIsAboveTarget(bpPNC));
+          }
+          if (tempHighC) {
+            urgentParts.add(PatientContextStrings.timelineTemperatureElevated);
+          }
+          if (pulseHigh) {
+            urgentParts.add(PatientContextStrings.timelinePulseAboveNormal(pulse));
+          }
+          if (pulseLow) {
+            urgentParts.add(PatientContextStrings.timelinePulseBelowNormal(pulse));
+          }
+          description = PatientContextStrings.timelinePartsUrgentAttention(
+            urgentParts.join(', '),
+          );
         } else if (hbPNC > 0 && hbPNC < 8) {
           dotColor = _kDotHigh;
           badge = PatientContextStrings.severeAnemiaBadge;
           badgeColor = _kBadgeAmberBg;
           badgeFgColor = _kBadgeAmberFg;
-          description = 'Severe anemia (Hb $hbPNC g/dL).';
+          description = PatientContextStrings.timelineSevereAnemiaHb(hbPNC);
         } else if (fpMethod.isEmpty || ['none', 'no method', 'not using'].contains(fpMethod.trim().toLowerCase())) {
           dotColor = _kDotPnc;
-          description = 'No contraception method in use — counsel on options.';
+          description = PatientContextStrings.timelineNoContraception;
         } else {
           dotColor = _kDotOk;
-          description = 'Recovering well — no concerns at this PNC visit.';
+          description = PatientContextStrings.timelineRecoveringWellPnc;
         }
       }
 
@@ -1861,7 +1882,12 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       final vacName = raw['vaccineName']?.toString() ?? raw['vaccine']?.toString() ?? '';
       final dose = raw['dose']?.toString() ?? '';
       description = vacName.isNotEmpty
-          ? '$vacName${dose.isNotEmpty ? " — Dose $dose" : ""} administered.'
+          ? (dose.isNotEmpty
+              ? PatientContextStrings.timelineVaccineDoseAdministered(
+                  vacName,
+                  dose,
+                )
+              : PatientContextStrings.timelineVaccineAdministered(vacName))
           : ClinicalFindingStrings.childImmunizationOnSchedule;
 
     // ─── IMCI ─────────────────────────────────────────────────────────────
@@ -1876,13 +1902,15 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
         dotColor = _kDotCritical;
-        description = 'Danger sign: $dSignImci — urgent referral needed.';
+        description =
+            PatientContextStrings.timelineDangerSignUrgentReferral(dSignImci);
       } else {
         final wtImci = raw['weight']?.toString();
         final vaccines = raw['receivedVaccine']?.toString() ?? '';
         final imciParts = <String>[
-          if (wtImci != null) 'Weight $wtImci kg',
-          if (vaccines.isNotEmpty) 'Vaccines: $vaccines',
+          if (wtImci != null) PatientContextStrings.timelineWeightKg(wtImci),
+          if (vaccines.isNotEmpty)
+            PatientContextStrings.timelineVaccinesList(vaccines),
         ];
         description = imciParts.isEmpty ? null : imciParts.join(' · ');
       }
@@ -1893,7 +1921,9 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       title = PatientContextStrings.tbFollowUpTitle;
       category = PatientContextStrings.tbProgrammeCategory;
       dotColor = _kDotTb;
-      description = dx.isNotEmpty ? 'Status: $dx' : null;
+      description = dx.isNotEmpty
+          ? PatientContextStrings.timelineStatusDx(dx)
+          : null;
 
     // ─── Family Planning ──────────────────────────────────────────────────
     case Programme.familyPlanning:
@@ -1902,7 +1932,9 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       category = PatientContextStrings.familyPlanningLabel;
       dotColor = _kDotFp;
       final fpM = _rawStr(raw['familyPlanningMethods']) ?? '';
-      description = fpM.isNotEmpty ? 'Method: $fpM' : null;
+      description = fpM.isNotEmpty
+          ? PatientContextStrings.timelineMethodFp(fpM)
+          : null;
 
     // ─── General / Unknown ────────────────────────────────────────────────
     default:
@@ -1914,7 +1946,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badge = CareThreadStrings.illness;
         badgeColor = _kBadgeGrayBg;
         badgeFgColor = _kBadgeGrayFg;
-        description = 'Tested positive, completed antimalarial course';
+        description = PatientContextStrings.timelineMalariaTreated;
       } else if (combined.contains('diarrhea') || combined.contains('diarrhoea') || combined.contains('vomit')) {
         emoji = '🤢';
         title = PatientContextStrings.severeDiarrheaVomitingTreatedTitle;
@@ -1922,7 +1954,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badge = CareThreadStrings.illness;
         badgeColor = _kBadgeGrayBg;
         badgeFgColor = _kBadgeGrayFg;
-        description = 'Treated with ORS & antibiotics, fully recovered';
+        description = PatientContextStrings.timelineOrsAntibioticsRecovered;
       } else if (combined.contains('fever')) {
         emoji = '🌡️';
         title = PatientContextStrings.feverTreatedTitle;
@@ -2003,12 +2035,12 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
     if (sys != null && (sys >= 130 || rising)) {
       return _TimelineEntry(
         emoji: '🔔',
-        title: 'BP recheck due',
+        title: PatientContextStrings.timelineBpRecheckDue,
         relativeDate: MissionDashboardStrings.today,
-        category: 'Pre-eclampsia watch',
+        category: PatientContextStrings.timelinePreEclampsiaWatch,
         date: DateTime.now(),
         dotColor: _kDotPending,
-        description: 'Rising trend flagged — check urine protein & danger signs',
+        description: PatientContextStrings.timelineRisingTrendFlagged,
         isPending: true,
         programme: Programme.anc,
       );
@@ -2023,12 +2055,13 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
     if (daysSince >= 60) {
       return _TimelineEntry(
         emoji: '🔔',
-        title: 'Child visit overdue',
+        title: PatientContextStrings.timelineChildVisitOverdue,
         relativeDate: MissionDashboardStrings.today,
-        category: 'IMCI / Child care',
+        category: PatientContextStrings.timelineImciChildCare,
         date: DateTime.now(),
         dotColor: _kDotPending,
-        description: 'Last child health visit was $daysSince days ago — check growth & vaccines',
+        description:
+            PatientContextStrings.timelineLastChildVisitDaysAgo(daysSince),
         isPending: true,
         programme: Programme.imci,
       );
@@ -2043,12 +2076,12 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
     if (daysSince >= 30) {
       return _TimelineEntry(
         emoji: '🔔',
-        title: 'Follow-up overdue',
+        title: PatientContextStrings.timelineFollowUpOverdue,
         relativeDate: MissionDashboardStrings.today,
         category: PatientProfileStrings.ncdFollowUpCategory,
         date: DateTime.now(),
         dotColor: _kDotPending,
-        description: 'NCD follow-up due — last visit $daysSince days ago',
+        description: PatientContextStrings.timelineNcdFollowUpDue(daysSince),
         isPending: true,
         programme: Programme.ncd,
       );
@@ -2183,14 +2216,28 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
 
     final showAsReferral = latestReferredId == null || a.id == latestReferredId;
     final entry = _assessmentToEntry(a, showAsReferral: showAsReferral);
-    if (entry.title == 'ANC Checkup' && ancOrdinal[a.id] != null) {
-      entries.add(entry.copyWith(title: 'ANC Visit ${ancOrdinal[a.id]}'));
-    } else if (entry.title == 'PNC Visit' && pncOrdinal[a.id] != null) {
-      entries.add(entry.copyWith(title: 'PNC Visit ${pncOrdinal[a.id]}'));
-    } else if (entry.title == 'Vaccination visit' &&
+    if (entry.title == PatientContextStrings.ancCheckupTitle &&
+        ancOrdinal[a.id] != null) {
+      entries.add(
+        entry.copyWith(
+          title: PatientContextStrings.timelineAncVisitN(ancOrdinal[a.id]!),
+        ),
+      );
+    } else if (entry.title == PatientContextStrings.pncVisitLabel &&
+        pncOrdinal[a.id] != null) {
+      entries.add(
+        entry.copyWith(
+          title: PatientContextStrings.timelinePncVisitN(pncOrdinal[a.id]!),
+        ),
+      );
+    } else if (entry.title == EpiStrings.screenTitle &&
         epiOrdinal[a.id] != null) {
       entries.add(
-        entry.copyWith(title: 'Vaccination visit ${epiOrdinal[a.id]}'),
+        entry.copyWith(
+          title: PatientContextStrings.timelineVaccinationVisitN(
+            epiOrdinal[a.id]!,
+          ),
+        ),
       );
     } else {
       entries.add(entry);
@@ -3211,14 +3258,20 @@ class _PregnancyProgressSection extends StatelessWidget {
               value: '$visitsDone / $_totalAncVisits',
             ),
             if (snapshot.facts.highRiskPregnantWoman)
-              _DetailRow(label: 'Risk', value: 'High risk — elevated BP or other flag'),
+              _DetailRow(
+                label: 'Risk',
+                value: PatientContextStrings.highRiskElevatedBp,
+              ),
             if (snapshot.facts.hasGapsInAnc)
               _DetailRow(
                 label: PatientContextStrings.ancGapsLabel,
                 value: 'Missed visits detected',
               ),
             if (snapshot.facts.isNearTermAnc)
-              _DetailRow(label: 'Near term', value: 'Approaching EDD — monitor closely'),
+              _DetailRow(
+                label: 'Near term',
+                value: PatientContextStrings.approachingEdd,
+              ),
           ],
         ),
       ),
@@ -5987,7 +6040,9 @@ class _NoServicesCardState extends State<_NoServicesCard> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(controller.error ?? 'Failed to start visit'),
+            content: Text(
+              controller.error ?? PatientContextStrings.startVisitFailed,
+            ),
           ),
         );
       }

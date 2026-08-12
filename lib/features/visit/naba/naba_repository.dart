@@ -8,7 +8,10 @@
 /// No caching — every call is unique (post-assessment context).
 library;
 
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/endpoints.dart';
@@ -19,6 +22,8 @@ class NabaRepository {
   const NabaRepository(this._client);
 
   final ApiClient _client;
+
+  static const _jsonPretty = JsonEncoder.withIndent('  ');
 
   (Dio, String) _resolve() {
     final aiUrl = AppConfig.aiServiceBaseUrl;
@@ -35,19 +40,45 @@ class NabaRepository {
 
   Future<NabaResponse> generate(NabaRequest request) async {
     final (dio, path) = _resolve();
-    final response = await dio.post<dynamic>(
-      path,
-      data: request.toJson(),
-    );
-    final raw = response.data;
-    if (raw is! Map<String, dynamic>) {
-      throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-        type: DioExceptionType.badResponse,
-        error: 'Expected JSON object, got ${raw.runtimeType}',
-      );
+    final payload = request.toJson();
+    if (kDebugMode) {
+      final base = dio.options.baseUrl;
+      debugPrint('[NABA] POST $base$path');
+      debugPrint('[NABA] request payload:\n${_jsonPretty.convert(payload)}');
     }
-    return NabaResponse.fromJson(raw);
+    try {
+      final response = await dio.post<dynamic>(
+        path,
+        data: payload,
+      );
+      final raw = response.data;
+      if (raw is! Map<String, dynamic>) {
+        if (kDebugMode) {
+          debugPrint('[NABA] unexpected response type=${raw.runtimeType} '
+              'status=${response.statusCode} body=$raw');
+        }
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+          type: DioExceptionType.badResponse,
+          error: 'Expected JSON object, got ${raw.runtimeType}',
+        );
+      }
+      if (kDebugMode) {
+        debugPrint('[NABA] response status=${response.statusCode}');
+        debugPrint('[NABA] response body:\n${_jsonPretty.convert(raw)}');
+        final referral = raw['referralRecommendation'] ?? raw['referral_recommendation'];
+        final danger = raw['dangerSigns'] ?? raw['danger_signs'];
+        debugPrint('[NABA] referralRecommendation=$referral');
+        debugPrint('[NABA] dangerSigns=$danger');
+      }
+      return NabaResponse.fromJson(raw);
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('[NABA] generate failed: $e');
+        debugPrint('$st');
+      }
+      rethrow;
+    }
   }
 }

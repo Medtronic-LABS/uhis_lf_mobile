@@ -222,6 +222,7 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer>
       onCall: alert.canCall ? () => _onCall(alert) : null,
       onLocate: () => _onLocate(alert),
       onWhatsapp: alert.hasPhone ? () => _onWhatsapp(alert) : null,
+      onSms: alert.hasPhone ? () => _onSms(alert) : null,
     );
   }
 
@@ -306,6 +307,21 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer>
       if (!ok && mounted) _snack(CceStrings.dialFailed);
     } catch (_) {
       if (mounted) _snack(CceStrings.dialFailed);
+    }
+  }
+
+  Future<void> _onSms(CceAlert alert) async {
+    final phone = alert.patientPhone;
+    if (phone == null || phone.trim().isEmpty) {
+      _snack(CceStrings.noPhone);
+      return;
+    }
+    final uri = Uri.parse('sms:${phone.trim()}');
+    try {
+      final ok = await launchUrl(uri);
+      if (!ok && mounted) _snack(CceStrings.smsFailed);
+    } catch (_) {
+      if (mounted) _snack(CceStrings.smsFailed);
     }
   }
 

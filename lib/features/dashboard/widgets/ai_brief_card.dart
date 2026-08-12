@@ -443,7 +443,7 @@ class _RiskFactorsPanel extends StatelessWidget {
                     Text('• ', style: TextStyle(color: scheme.error)),
                     Expanded(
                       child: Text(
-                        factor,
+                        MissionDashboardStrings.pwRiskFactorDisplay(factor),
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: scheme.onSurface,
                             ),
