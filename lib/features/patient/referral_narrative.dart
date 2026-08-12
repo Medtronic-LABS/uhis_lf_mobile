@@ -44,12 +44,17 @@ List<String> parseReferralReasonTokens(Object? reasons) {
 String shortReasonLabel(String reason) {
   final k = reason.toLowerCase().replaceAll(RegExp(r'[\s_]+'), ' ').trim();
   final compact = k.replaceAll(' ', '');
-  if (compact.contains('bloodglucose') ||
+  // Spice NCD wire reasons: "High BP", "High BG", "Symptoms".
+  if (compact == 'highbg' ||
+      compact == 'highbloodglucose' ||
+      compact.contains('bloodglucose') ||
       (compact.contains('glucose') && !compact.contains('bloodpressure'))) {
-    return ReferralStrings.shortReasonBloodGlucoseElevated;
+    return ReferralStrings.shortReasonHighBg;
   }
   if (compact.contains('pulse')) return ReferralStrings.shortReasonAbnormalPulse;
-  if (compact.contains('bloodpressure') ||
+  if (compact == 'highbp' ||
+      compact == 'highbloodpressure' ||
+      compact.contains('bloodpressure') ||
       k == 'bp' ||
       compact.contains('hypertension')) {
     return ReferralStrings.shortReasonHighBp;
