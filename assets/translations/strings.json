@@ -4179,6 +4179,10 @@
     "bn": "+ অভিভাবক যোগ করুন",
     "en": "+ Add Guardian"
   },
+  "addHousehold": {
+    "bn": "খানা যোগ করুন",
+    "en": "Add Household"
+  },
   "addMemberAppBar": {
     "bn": "সদস্য যুক্ত করুন",
     "en": "Add Member"
