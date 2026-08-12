@@ -208,6 +208,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     _liveCtrl.start(
       assessmentType: widget.assessmentType,
       symptomVocab: widget.symptomVocab,
+      encounterId: widget.encounterId,
     );
   }
 

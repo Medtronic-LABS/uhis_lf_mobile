@@ -11,6 +11,7 @@ import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import '../../../core/debug/asr_diagnostics.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/mission/mission_pregnancy_facts.dart';
 import '../../../core/models/json_read.dart';
@@ -1362,6 +1363,13 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }) {
     final rejected = <String>[];
     var appliedAny = false;
+    var appliedCount = 0;
+    // Category counts only — never field ids or values — for the
+    // ASR_FORM_APPLY diagnostic event below.
+    final rejectedByCategory = <String, int>{};
+    void countRejection(String category) {
+      rejectedByCategory[category] = (rejectedByCategory[category] ?? 0) + 1;
+    }
 
     debugPrint(
         '<==================== ASR FORM FILL: ${fields.length} field(s) '
@@ -1372,6 +1380,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         debugPrint('<----- asr SKIPPED  [${field.fieldId}] SK-owned '
             '(${_fieldSources[field.fieldId]?.name}) — value "${field.value}" '
             'NOT applied ----->');
+        countRejection('sk_owned');
         continue;
       }
 
@@ -1380,6 +1389,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         debugPrint('<----- asr REJECTED [${field.fieldId}] unknown field — '
             'value "${field.value}" ----->');
         rejected.add('${field.fieldId}: unknown field');
+        countRejection('unsupported_field');
         continue;
       }
 
@@ -1389,6 +1399,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
             'failed ${def.widgetHint.name} validation '
             '(allowed: ${def.options.map((o) => o.id).join('/')}) ----->');
         rejected.add('${def.label}: "${field.value}" not a valid value');
+        countRejection('validation_failed');
         continue;
       }
 
@@ -1402,6 +1413,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
           incomingSegment != null &&
           storedSegment == incomingSegment &&
           _data.getValue(field.fieldId) != null) {
+        countRejection('unchanged_duplicate');
         continue;
       }
 
@@ -1410,6 +1422,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _fieldSources[field.fieldId] = FieldSource.aiPending;
       _fieldSourceSegments[field.fieldId] = field.sourceSegment;
       appliedAny = true;
+      appliedCount++;
       debugPrint('<----- asr APPLIED  [${field.fieldId}] = $validated '
           '${previous == null ? '' : '(was: $previous) '}'
           'src="${field.sourceSegment ?? '-'}" ----->');
@@ -1454,6 +1467,18 @@ class UnifiedFormNotifier extends ChangeNotifier {
         '${fields.length - rejected.length} applied, '
         '${rejected.length} rejected ====================>');
     _logAsrCoverage(fieldDefs);
+
+    // Correlated with the realtime controller's own ASR_SESSION_SUMMARY by
+    // the same encounter id — this event carries fields_applied/rejected,
+    // which the controller has no visibility into (form population happens
+    // here, several layers away from the WebSocket/controller). Counts and
+    // category labels only — never a field id or value.
+    AsrDiagnostics.event('ASR_FORM_APPLY', encounterId: _encounterId, fields: {
+      'fieldsReceived': fields.length,
+      'fieldsApplied': appliedCount,
+      'fieldsRejected': fields.length - appliedCount,
+      'rejectedByCategory': rejectedByCategory,
+    });
 
     if (appliedAny) {
       notifyListeners();

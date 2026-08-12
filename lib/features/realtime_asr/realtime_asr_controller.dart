@@ -10,6 +10,7 @@ import '../../core/api/realtime_asr_service.dart';
 import '../../core/audio/scribe_record_config.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/debug/asr_diagnostics.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
 import '../scribe/form_field_schema_builder.dart';
@@ -166,6 +167,68 @@ class RealtimeAsrController extends ChangeNotifier {
 
   String? _lastExtractedTranscript;
 
+  // ── Diagnostics-only state ──────────────────────────────────────────────
+  //
+  // Everything below exists purely to answer "what happened in this session"
+  // after the fact (production instrumentation for the intermittent
+  // silent-failure investigation). None of it feeds back into control flow —
+  // it is written but never read by any decision the controller makes.
+  // Correlated by the visit's existing [encounterId], not a new session id.
+
+  /// The visit's existing encounter id, passed in at [start] — the
+  /// correlation key for every diagnostic event this controller emits.
+  String? _encounterId;
+
+  DateTime? _sessionStartedAt;
+
+  /// True for the duration of a caller-initiated [stop] — lets
+  /// [_onSocketDone] report whether a close was expected. `_teardown`'s own
+  /// `_wsSub?.cancel()` normally prevents `_onSocketDone` from firing at all
+  /// during a manual stop; this flag only matters for the rare race where a
+  /// done event slips through anyway.
+  bool _manualStopInProgress = false;
+
+  /// Guards [_emitSessionSummaryOnce] so exactly one summary is emitted per
+  /// session, however it ends.
+  bool _summaryEmitted = false;
+
+  /// Reason passed to the most recent [_teardown] call — surfaced in the
+  /// session summary as `wsCloseReason`.
+  String _wsCloseReason = 'none';
+
+  int _vadChunksReceived = 0;
+  int _vadChunksPassedCount = 0;
+  int _vadChunksDroppedCount = 0;
+  DateTime? _lastVadPassAt;
+  int _longestVadSilenceGapMs = 0;
+
+  int _chunksSentWs = 0;
+  int _audioBytesSentWs = 0;
+  int _chunksDroppedNoChannel = 0;
+
+  int _transcriptMessagesReceived = 0;
+  int _transcriptSegmentsReceived = 0;
+  int _transcriptCharacterCount = 0;
+  DateTime? _firstTranscriptAt;
+  DateTime? _lastTranscriptAt;
+
+  /// Cumulative field count across every `form_fill` reply this session —
+  /// the realtime controller's own view of §12's `fields_received_count`.
+  /// Whether those fields were actually *applied* is decided several layers
+  /// away in `UnifiedFormNotifier.applyAiPrefill`, which emits its own
+  /// `ASR_FORM_APPLY` event correlated by the same encounter id — this
+  /// controller has no visibility into that outcome and does not guess at it.
+  int _formFillFieldsReceived = 0;
+
+  int _extractRequestsSentCount = 0;
+  int _extractResponsesReceivedCount = 0;
+  int _extractTimeoutsCount = 0;
+  bool _finalExtractRequested = false;
+  bool _finalExtractResponseReceived = false;
+
+  int _errorEventCount = 0;
+  String? _lastErrorCategory;
+
   bool get isActive =>
       _state == RealtimeAsrState.connecting ||
       _state == RealtimeAsrState.listening ||
@@ -194,16 +257,26 @@ class RealtimeAsrController extends ChangeNotifier {
     String language = 'bn-IN',
     String? assessmentType,
     List<String>? symptomVocab,
+    String? encounterId,
   }) async {
     if (isActive) return;
 
+    // Set before any early return so even a same-session immediate failure
+    // (unsupported platform, unmounted context) has a correlation id ready —
+    // though those two guards intentionally emit no event at all, matching
+    // their existing (silent) behavior; instrumentation starts at ASR_START.
+    _encounterId = encounterId;
+
     if (!realtimeAsrSupported) {
-      _setError(RealtimeAsrStrings.notSupportedOnWeb);
+      _setError(RealtimeAsrStrings.notSupportedOnWeb, category: 'unsupported_platform');
+      _emitSessionSummaryOnce();
       return;
     }
 
     final ctx = _context;
     if (ctx == null || !ctx.mounted) return;
+
+    final stateBeforeReset = _state.name;
 
     // Flip to "connecting" and reset session state up-front so the banner
     // reacts the instant the button is tapped — the permission prompt and
@@ -222,12 +295,47 @@ class RealtimeAsrController extends ChangeNotifier {
     _recentAmplitudes.clear();
     _vadGate = _buildVadGate();
     _silentSinceLastTick = false;
+
+    // Diagnostics-only resets — new session, fresh counters.
+    _sessionStartedAt = DateTime.now();
+    _manualStopInProgress = false;
+    _summaryEmitted = false;
+    _wsCloseReason = 'none';
+    _vadChunksReceived = 0;
+    _vadChunksPassedCount = 0;
+    _vadChunksDroppedCount = 0;
+    _lastVadPassAt = null;
+    _longestVadSilenceGapMs = 0;
+    _chunksSentWs = 0;
+    _audioBytesSentWs = 0;
+    _chunksDroppedNoChannel = 0;
+    _transcriptMessagesReceived = 0;
+    _transcriptSegmentsReceived = 0;
+    _transcriptCharacterCount = 0;
+    _firstTranscriptAt = null;
+    _lastTranscriptAt = null;
+    _formFillFieldsReceived = 0;
+    _extractRequestsSentCount = 0;
+    _extractResponsesReceivedCount = 0;
+    _extractTimeoutsCount = 0;
+    _finalExtractRequested = false;
+    _finalExtractResponseReceived = false;
+    _errorEventCount = 0;
+    _lastErrorCategory = null;
+
     _state = RealtimeAsrState.connecting;
     notifyListeners();
 
+    _logEvent('ASR_START', {
+      'assessmentType': assessmentType,
+      'currentState': stateBeforeReset,
+    });
+
     final granted = await _perm.ensureMicPermission(ctx);
+    _logEvent('ASR_MIC_PERMISSION', {'granted': granted});
     if (!granted) {
-      _setError(RealtimeAsrStrings.micPermissionDenied);
+      _setError(RealtimeAsrStrings.micPermissionDenied, category: 'mic_permission_denied');
+      _emitSessionSummaryOnce();
       return;
     }
 
@@ -238,17 +346,28 @@ class RealtimeAsrController extends ChangeNotifier {
         symptomVocab: _symptomVocab,
       );
       debugPrint('[RealtimeASR] connecting to ${info.uri} headers=${info.headers.keys}');
+      _logEvent('ASR_WS_CONNECT_START', const {});
       _channel = connectRealtimeChannel(info.uri, info.headers);
+      // Diagnostic-only: `.ready` completes once the handshake actually
+      // finishes (or errors) — logged purely for observability, never
+      // awaited by the control flow below, so it cannot change timing or
+      // behavior. Connection errors are still handled exclusively by the
+      // existing `onError` callback; this just records that the handshake
+      // *did* succeed, when it does.
+      unawaited(_channel!.ready.then((_) {
+        _logEvent('ASR_WS_CONNECTED', const {});
+      }).catchError((Object _) {}));
       _wsSub = _channel!.stream.listen(
         _onMessage,
         onDone: _onSocketDone,
         onError: (Object e) {
           debugPrint('[RealtimeASR] websocket error: $e');
-          _setError(RealtimeAsrStrings.connectionError('$e'));
+          _logEvent('ASR_WS_ERROR', {'errorType': e.runtimeType.toString()});
+          _setError(RealtimeAsrStrings.connectionError('$e'), category: 'ws_connection_error');
           // A socket error leaves the mic stream and auto-extract timer
           // running against a dead channel unless torn down here too — same
           // leak as an unexpected close (see _onSocketDone).
-          unawaited(_teardown());
+          unawaited(_teardown(reason: 'ws_error'));
         },
       );
 
@@ -275,9 +394,33 @@ class RealtimeAsrController extends ChangeNotifier {
       final stream = await _recorder.startStream(_captureConfig);
       _audioSub = stream.listen(_onAudioChunk);
       debugPrint('[RealtimeASR] mic stream started');
+      // Reference point for "how long has audio been captured with nothing
+      // passing VAD" (see _onAudioChunk) — seeded here so a session where
+      // VAD never once passes anything still measures a real gap, instead
+      // of one that stays at zero because no prior pass ever happened.
+      _lastVadPassAt = DateTime.now();
+      _logEvent('ASR_RECORDER_START', {'hasPermission': hasPerm});
+
+      // ── T6 instrumentation ────────────────────────────────────────────
+      // Immediately before the unconditional state write below: record
+      // whether the channel is actually available, and what state we are
+      // transitioning *from* — captured here, not after, because if the WS
+      // handshake already failed during the awaits above, `_setError` will
+      // already have flipped `_state` to `error`, and this line is about to
+      // overwrite that. Diagnostic only — the write below is unchanged.
+      final channelAvailable = _channel != null;
+      _logEvent('ASR_START_FINAL_STATE', {
+        'channelAvailable': channelAvailable,
+        'currentState': _state.name,
+        'recorderStarted': true,
+      });
+      if (!channelAvailable) {
+        _logEvent('ASR_LISTENING_WITHOUT_WS', {'currentState': _state.name});
+      }
 
       _state = RealtimeAsrState.listening;
       notifyListeners();
+      _logEvent('ASR_LISTENING', const {});
 
       _autoExtractTimer = Timer.periodic(_autoExtractInterval, (_) {
         // A gap in "audio" frames is new behaviour now that VadGate withholds
@@ -292,8 +435,9 @@ class RealtimeAsrController extends ChangeNotifier {
       });
     } catch (e, st) {
       debugPrint('[RealtimeASR] start() failed: $e\n$st');
-      _setError(RealtimeAsrStrings.couldNotStart('$e'));
-      await _teardown();
+      _setError(RealtimeAsrStrings.couldNotStart('$e'), category: 'start_exception');
+      await _teardown(reason: 'start_failed');
+      _emitSessionSummaryOnce();
     }
   }
 
@@ -307,6 +451,7 @@ class RealtimeAsrController extends ChangeNotifier {
         _state == RealtimeAsrState.stopping) {
       return;
     }
+    _manualStopInProgress = true;
     // Surface "stopping" immediately — the flush + final-extraction wait below
     // can take several seconds, during which the banner would otherwise look
     // unchanged and the Stop tap would appear to do nothing.
@@ -319,6 +464,7 @@ class RealtimeAsrController extends ChangeNotifier {
     _send({'type': 'flush'});
     await Future.delayed(const Duration(milliseconds: 500));
 
+    _finalExtractRequested = true;
     extractNow();
     final completer = _extractionCompleter;
     if (completer != null) {
@@ -329,9 +475,10 @@ class RealtimeAsrController extends ChangeNotifier {
     }
 
     _send({'type': 'stop'});
-    await _teardown();
+    await _teardown(reason: 'manual_stop');
     _state = RealtimeAsrState.idle;
     notifyListeners();
+    _emitSessionSummaryOnce();
   }
 
   void extractNow() {
@@ -353,6 +500,7 @@ class RealtimeAsrController extends ChangeNotifier {
     _lastExtractedTranscript = transcript;
     final completer = Completer<void>();
     _extractionCompleter = completer;
+    _extractRequestsSentCount++;
     notifyListeners();
     debugPrint('[RealtimeASR] extract requested (${transcript.length} chars): "$transcript"');
 
@@ -371,6 +519,7 @@ class RealtimeAsrController extends ChangeNotifier {
     Future.delayed(_extractionSafetyTimeout, () {
       if (identical(_extractionCompleter, completer) && _extracting) {
         debugPrint('[RealtimeASR] extractNow(): no reply within ${_extractionSafetyTimeout.inSeconds}s — resetting so future attempts are not blocked');
+        _extractTimeoutsCount++;
         _extracting = false;
         _extractionCompleter = null;
         notifyListeners();
@@ -402,19 +551,39 @@ class RealtimeAsrController extends ChangeNotifier {
     _trackStuckAmplitude(amp);
 
     final toSend = _vadGate.process(pcm);
-    if (toSend.isEmpty) return;
+    _vadChunksReceived++;
+    if (toSend.isEmpty) {
+      _vadChunksDroppedCount++;
+      if (_lastVadPassAt != null) {
+        final gapMs = DateTime.now().difference(_lastVadPassAt!).inMilliseconds;
+        if (gapMs > _longestVadSilenceGapMs) _longestVadSilenceGapMs = gapMs;
+      }
+      return;
+    }
+    _vadChunksPassedCount += toSend.length;
+    _lastVadPassAt = DateTime.now();
     _silentSinceLastTick = false;
     for (final chunk in toSend) {
       final wav = _wrapPcm16Wav(
         chunk,
         sampleRate: ScribeRecordConfig.sampleRate,
       );
+      // Recorded before _send() because a null channel means _send() drops
+      // the frame silently (existing behavior, unchanged) — this is exactly
+      // the condition the T6 hypothesis needs counted.
+      final channelWasAvailable = _channel != null;
       _send({
         'type': 'audio',
         'data': base64Encode(wav),
         'encoding': 'audio/wav',
         'sample_rate': 16000,
       });
+      if (channelWasAvailable) {
+        _chunksSentWs++;
+        _audioBytesSentWs += chunk.length;
+      } else {
+        _chunksDroppedNoChannel++;
+      }
     }
   }
 
@@ -458,6 +627,11 @@ class RealtimeAsrController extends ChangeNotifier {
       msg = jsonDecode(raw as String) as Map<String, dynamic>;
     } catch (e) {
       debugPrint('[RealtimeASR] recv: unparseable message: $raw ($e)');
+      // Raw message deliberately not logged here — it's server content and
+      // may contain transcript/PHI even when malformed.
+      _logEvent('ASR_WS_MESSAGE_PARSE_ERROR', {
+        'errorType': e.runtimeType.toString(),
+      });
       return;
     }
 
@@ -465,6 +639,10 @@ class RealtimeAsrController extends ChangeNotifier {
       case 'symptoms':
         debugPrint('[RealtimeASR] recv symptoms: ${msg['data']}');
         _extracting = false;
+        _extractResponsesReceivedCount++;
+        if (_finalExtractRequested && !_finalExtractResponseReceived) {
+          _finalExtractResponseReceived = true;
+        }
         final symptomsData =
             (msg['data'] as Map<String, dynamic>?) ?? const {};
         if (_symptomVocab != null) {
@@ -491,14 +669,23 @@ class RealtimeAsrController extends ChangeNotifier {
       case 'form_fill':
         debugPrint('[RealtimeASR] recv form_fill: ${msg['data']}');
         _extracting = false;
+        _extractResponsesReceivedCount++;
+        if (_finalExtractRequested && !_finalExtractResponseReceived) {
+          _finalExtractResponseReceived = true;
+        }
         final data = (msg['data'] as Map<String, dynamic>?) ?? const {};
         _formFill = FormPrefillResult.fromJson(data);
+        _formFillFieldsReceived += _formFill!.fields.length;
         _extractionCompleter?.complete();
         _extractionCompleter = null;
         notifyListeners();
       case 'error':
         debugPrint('[RealtimeASR] recv error: ${msg['message']}');
         _extracting = false;
+        _extractResponsesReceivedCount++;
+        if (_finalExtractRequested && !_finalExtractResponseReceived) {
+          _finalExtractResponseReceived = true;
+        }
         _errorMessage = msg['message'] as String?;
         _extractionCompleter?.complete();
         _extractionCompleter = null;
@@ -513,10 +700,20 @@ class RealtimeAsrController extends ChangeNotifier {
           'dropped=${msg['droppedCount']} reasons=${msg['dropped']}',
         );
       default:
+        // Every message that reaches here is one Sarvam forwarded through
+        // the bridge, whether or not it happens to carry transcript text —
+        // counted first, before inspecting content, so a session with zero
+        // messages at all (never forwarded anything) is distinguishable
+        // from one that received messages with no usable transcript field.
+        _transcriptMessagesReceived++;
         final data = msg['data'] as Map<String, dynamic>?;
         final transcript = data?['transcript'] as String?;
         if (transcript != null && transcript.trim().isNotEmpty) {
           debugPrint('[RealtimeASR] recv transcript segment: "${transcript.trim()}"');
+          _transcriptSegmentsReceived++;
+          _transcriptCharacterCount += transcript.trim().length;
+          _firstTranscriptAt ??= DateTime.now();
+          _lastTranscriptAt = DateTime.now();
           _segments.add(transcript.trim());
           notifyListeners();
         } else {
@@ -863,15 +1060,35 @@ class RealtimeAsrController extends ChangeNotifier {
   }
 
   void _onSocketDone() {
+    final previousState = _state;
     debugPrint('[RealtimeASR] websocket closed (state was $_state)');
-    if (_state == RealtimeAsrState.listening || _state == RealtimeAsrState.connecting) {
+    _logEvent('ASR_WS_DONE', {
+      'previousState': previousState.name,
+      'expected': _manualStopInProgress,
+      'closeCode': _channel?.closeCode,
+      'closeReason': _channel?.closeReason,
+    });
+    if (previousState == RealtimeAsrState.listening || previousState == RealtimeAsrState.connecting) {
       // An unexpected close (network blip, server restart) must stop the mic
       // and auto-extract timer here, not just flip the reported state —
       // otherwise both keep running against a dead channel while the banner
       // shows idle and looks tappable again.
-      unawaited(_teardown());
+      unawaited(_teardown(reason: 'ws_done'));
       _state = RealtimeAsrState.idle;
       notifyListeners();
+      // Only safe to close out the summary here when the prior state was
+      // `listening` — that state is set as the very last step of a
+      // successful `start()`, so observing it guarantees `start()` has
+      // already returned and cannot later overwrite this `idle` back to
+      // `listening` (T6's race). If the prior state was `connecting`,
+      // `start()` is still in flight and will go on to do exactly that —
+      // emitting now would freeze the summary mid-race and (being
+      // once-only) permanently suppress the real final summary for the
+      // zombie session that follows. `stop` and `dispose` remain the
+      // emission points for that case.
+      if (previousState == RealtimeAsrState.listening) {
+        _emitSessionSummaryOnce();
+      }
     }
   }
 
@@ -887,13 +1104,36 @@ class RealtimeAsrController extends ChangeNotifier {
     }
   }
 
-  void _setError(String message) {
+  /// Single chokepoint for every client-side ASR error this controller can
+  /// report. [category] is a fixed, coarse label supplied by the caller
+  /// (never derived from the exception text) so error volume/type can be
+  /// measured without logging the raw message.
+  ///
+  /// Diagnostic-only note: this does NOT emit the session summary — a
+  /// session that reaches `error` here can still have that state
+  /// overwritten moments later by the unconditional `_state = listening`
+  /// write in [start] (the T6 race). Emitting a summary here would either
+  /// fire prematurely for a session that isn't actually over, or (if guarded
+  /// against re-firing) suppress the real final summary later. The summary
+  /// is instead emitted only from genuinely terminal points: [stop],
+  /// [_onSocketDone]'s teardown branch, [start]'s own catch block, and
+  /// [dispose] as a last-resort catch-all for a session abandoned in this
+  /// error state without ever being stopped.
+  void _setError(String message, {String category = 'unknown'}) {
+    final previousState = _state.name;
     _errorMessage = message;
     _state = RealtimeAsrState.error;
+    _errorEventCount++;
+    _lastErrorCategory = category;
+    _logEvent('ASR_ERROR', {
+      'previousState': previousState,
+      'errorCategory': category,
+    });
     notifyListeners();
   }
 
-  Future<void> _teardown() async {
+  Future<void> _teardown({String reason = 'unknown'}) async {
+    _wsCloseReason = reason;
     _autoExtractTimer?.cancel();
     _autoExtractTimer = null;
     await _audioSub?.cancel();
@@ -908,7 +1148,63 @@ class RealtimeAsrController extends ChangeNotifier {
     try {
       await _channel?.sink.close();
     } catch (_) {}
+    if (_channel != null) {
+      _logEvent('ASR_WS_CLOSED', {
+        'reason': reason,
+        'expected': reason == 'manual_stop',
+        'closeCode': _channel?.closeCode,
+        'closeReason': _channel?.closeReason,
+      });
+    }
     _channel = null;
+  }
+
+  /// Convenience wrapper so every diagnostic call site doesn't repeat
+  /// `encounterId: _encounterId`.
+  void _logEvent(String name, Map<String, Object?> fields) {
+    AsrDiagnostics.event(name, encounterId: _encounterId, fields: fields);
+  }
+
+  /// Emits exactly one `ASR_SESSION_SUMMARY` per session, however it ends.
+  /// Guarded by [_summaryEmitted] — safe to call from multiple terminal
+  /// paths (only the first call after [start] resets the guard does anything).
+  void _emitSessionSummaryOnce() {
+    if (_summaryEmitted) return;
+    _summaryEmitted = true;
+    final durationMs = _sessionStartedAt == null
+        ? null
+        : DateTime.now().difference(_sessionStartedAt!).inMilliseconds;
+    final vadPassRatio = _vadChunksReceived == 0
+        ? null
+        : _vadChunksPassedCount / _vadChunksReceived;
+    _logEvent('ASR_SESSION_SUMMARY', {
+      'durationMs': durationMs,
+      'rawChunksCaptured': _chunkCount,
+      'audioBytesCaptured': _chunkBytes,
+      'vadChunksReceived': _vadChunksReceived,
+      'vadChunksPassed': _vadChunksPassedCount,
+      'vadChunksDropped': _vadChunksDroppedCount,
+      'vadPassRatio': vadPassRatio,
+      'longestVadSilenceGapMs': _longestVadSilenceGapMs,
+      'chunksSentWs': _chunksSentWs,
+      'audioBytesSentWs': _audioBytesSentWs,
+      'chunksDroppedNoChannel': _chunksDroppedNoChannel,
+      'transcriptMessagesReceived': _transcriptMessagesReceived,
+      'transcriptSegmentsReceived': _transcriptSegmentsReceived,
+      'transcriptCharacterCount': _transcriptCharacterCount,
+      'firstTranscriptAt': _firstTranscriptAt?.toIso8601String(),
+      'lastTranscriptAt': _lastTranscriptAt?.toIso8601String(),
+      'formFillFieldsReceived': _formFillFieldsReceived,
+      'extractRequestsSent': _extractRequestsSentCount,
+      'extractResponsesReceived': _extractResponsesReceivedCount,
+      'extractTimeouts': _extractTimeoutsCount,
+      'finalExtractRequested': _finalExtractRequested,
+      'finalExtractResponseReceived': _finalExtractResponseReceived,
+      'errorEventCount': _errorEventCount,
+      'lastErrorCategory': _lastErrorCategory,
+      'finalState': _state.name,
+      'wsCloseReason': _wsCloseReason,
+    });
   }
 
   /// Wraps raw PCM16LE mono bytes (as emitted by `record`'s pcm16bits
@@ -960,6 +1256,11 @@ class RealtimeAsrController extends ChangeNotifier {
     _wsSub?.cancel();
     _channel?.sink.close();
     _recorder.dispose();
+    // Last-resort catch-all: a session abandoned in `error` state (T6's
+    // race, or any `_setError` path) never reaches `stop()` or
+    // `_onSocketDone`'s teardown branch — this guarantees its summary still
+    // gets emitted once, whenever the controller itself is finally disposed.
+    _emitSessionSummaryOnce();
     super.dispose();
   }
 }
