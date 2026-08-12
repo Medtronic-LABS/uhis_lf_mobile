@@ -590,7 +590,7 @@ abstract final class AiSettingsStrings {
   static String get micSectionHeader => getTranslatedString('micSectionHeader', 'Microphone capture');
   static String get micSectionDescription => getTranslatedString('micSectionDescription', 'How AI Scribe opens the microphone. Leave off for normal visits — the handset\'s built-in audio processing gives the clearest recording of someone speaking directly at the phone.');
   static String get rawMicCaptureLabel => getTranslatedString('rawMicCaptureLabel', 'Raw microphone capture');
-  static String get rawMicCaptureDesc => getTranslatedString('rawMicCaptureDesc', 'Bypasses the phone\'s echo cancellation so audio played out loud near the handset — a recorded test clip, or a second phone on speaker — is picked up instead of being cancelled out as echo. Only needed for testing and demos. Applies from the next recording.');
+  static String get rawMicCaptureDesc => getTranslatedString('rawMicCaptureDesc', 'Uses the raw microphone input, bypassing all on-device audio processing including automatic gain control. Intended for emulator testing and diagnostics only — on most real devices, leaving this off gives better recognition. Applies from the next recording.');
 }
 
 /// Real-Time ASR screen — live streaming transcription + live clinical
@@ -660,6 +660,10 @@ abstract final class RealtimeAsrStrings {
       'Mic signal looks stuck/invalid — check the device microphone '
           '(on an emulator, try a cold restart with host audio input enabled, '
           'or test on a physical device).');
+  static String get micGainLow => getTranslatedString(
+      'RealtimeAsr.micGainLow',
+      'Microphone signal is very quiet. Try speaking closer to the handset. '
+          'If the problem persists, contact your administrator.');
 
   // "Label: {value}" prefixes for the live-extraction summary line. Distinct
   // from the bare-label getters above, which carry no colon and no value.

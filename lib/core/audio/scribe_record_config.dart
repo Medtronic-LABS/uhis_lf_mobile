@@ -13,27 +13,25 @@ import 'package:record/record.dart';
 ///
 /// ## The [rawMicCapture] switch
 ///
-/// * `false` (default) — each path keeps the source it shipped with:
-///   [AndroidAudioSource.defaultSource] for batch capture,
-///   [AndroidAudioSource.mic] for the realtime stream. `defaultSource`
-///   routes the signal through the handset's acoustic echo cancellation
-///   (AEC), noise suppression and automatic gain control chain.
-/// * `true` — both paths use [AndroidAudioSource.voiceRecognition], the
-///   source Android documents as "tuned for voice recognition": supported
-///   on every device since API 7, and not subject to the AEC that
-///   `defaultSource` and `voiceCommunication` apply, while still keeping
-///   the gain control that helps a distant or quiet speaker register.
+/// * `false` (default, field use) — each path uses the best source for a
+///   person speaking directly at the handset:
+///   [AndroidAudioSource.defaultSource] (AEC + NS + AGC) for batch capture,
+///   [AndroidAudioSource.voiceRecognition] (AGC, no AEC) for the realtime
+///   stream. `voiceRecognition` is Android's documented speech-recognition
+///   source (API 7+) and normalises gain across OEM hardware differences
+///   without imposing AEC — important because AEC is tuned for phone-call
+///   echo, not voice-form-fill.
+/// * `true` (emulator / diagnostic mode) — both paths use the truly raw
+///   [AndroidAudioSource.mic] source, bypassing all on-device processing
+///   including automatic gain control. Use this when the emulator's audio
+///   HAL returns constantly-saturated samples through the processed chain
+///   (all samples pinned at Int16 min), or when you need unprocessed PCM
+///   for diagnostic purposes. On most real devices, leaving this off gives
+///   better recognition across all OEM hardware variants.
 ///
-/// Turn it on when the mic input is **audio being played back through a
-/// loudspeaker** — a recorded test clip played at the handset, or a second
-/// phone on speaker. AEC exists precisely to subtract speaker output from
-/// mic input, so with the processed chain such a clip is cancelled down to
-/// near-silence and the transcript comes back empty with no error. Some
-/// emulator audio HALs also return constantly-saturated samples through
-/// the processed chain.
-///
-/// Default is off: real field use is a person speaking directly at the
-/// handset, where the processed chain is the better choice.
+/// The [RealtimeAsrController] stuck-amplitude detector fires a UI warning
+/// if samples are pinned at a constant value for 40 consecutive chunks —
+/// that is the signal to toggle this on when testing on an emulator.
 abstract final class ScribeRecordConfig {
   ScribeRecordConfig._();
 
@@ -57,7 +55,7 @@ abstract final class ScribeRecordConfig {
         bitRate: batchBitRate,
         androidConfig: AndroidRecordConfig(
           audioSource: rawMicCapture
-              ? AndroidAudioSource.voiceRecognition
+              ? AndroidAudioSource.mic
               : AndroidAudioSource.defaultSource,
         ),
       );
@@ -70,13 +68,15 @@ abstract final class ScribeRecordConfig {
         sampleRate: sampleRate,
         numChannels: numChannels,
         androidConfig: AndroidRecordConfig(
+          // voiceRecognition: Android's speech-recognition source (API 7+).
+          // AGC enabled, AEC disabled — normalises gain across OEM hardware
+          // without the phone-call echo cancellation that would suppress a
+          // distant speaker. rawMicCapture=true uses raw mic (no AGC) as an
+          // emulator escape hatch when the processed chain returns saturated
+          // samples.
           audioSource: rawMicCapture
-              ? AndroidAudioSource.voiceRecognition
-              // defaultSource routes through Android's AGC/NS/AEC processing
-              // chain, which has been observed to return constantly-saturated
-              // garbage (every sample pinned at the Int16 minimum) on some
-              // emulator audio HALs. Raw mic source skips that chain.
-              : AndroidAudioSource.mic,
+              ? AndroidAudioSource.mic
+              : AndroidAudioSource.voiceRecognition,
         ),
       );
 }
