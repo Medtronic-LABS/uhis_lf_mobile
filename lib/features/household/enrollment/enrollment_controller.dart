@@ -15,6 +15,8 @@ import '../../../core/db/patient_dao.dart';
 import '../../../core/db/roster_revision.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/services/location_service.dart';
+import '../../../core/sync/offline_push_service.dart';
+import '../../../core/sync/sync_activity.dart';
 import 'enrollment_dob.dart';
 import 'enrollment_id_number.dart';
 import 'enrollment_mobile_number.dart';
@@ -60,12 +62,16 @@ class EnrollmentController extends ChangeNotifier {
   HouseholdHeadInfo? _householdHead;
   final List<HouseholdMember> _members = [];
   bool _loading = false;
+  /// True after a successful local persist — blocks a second Save from
+  /// inserting another household row for the same enrollment session.
+  bool _submitted = false;
   String? _error;
 
   Household? get household => _household;
   HouseholdHeadInfo? get householdHead => _householdHead;
   List<HouseholdMember> get members => List.unmodifiable(_members);
   bool get loading => _loading;
+  bool get submitted => _submitted;
   String? get error => _error;
 
   int get totalMembers => (_members.length) + (_householdHead != null ? 1 : 0);
@@ -339,7 +345,21 @@ class EnrollmentController extends ChangeNotifier {
   ///
   /// Spice order: insert local rows (autoincrement PKs) → push with
   /// `referenceId = localId` → poll status to stamp `fhir_id` on the same rows.
+  ///
+  /// One-shot per enrollment session: a second call after a successful local
+  /// persist returns true without inserting another household.
   Future<bool> submitHousehold() async {
+    if (_submitted) {
+      debugPrint('[EnrollmentController] submitHousehold ignored — already '
+          'submitted');
+      return true;
+    }
+    if (_loading) {
+      debugPrint('[EnrollmentController] submitHousehold ignored — already '
+          'in progress');
+      return false;
+    }
+
     final householdErrors = validateHouseholdForm();
     final headErrors = validateHeadForm();
 
@@ -372,6 +392,17 @@ class EnrollmentController extends ChangeNotifier {
           return false;
         }
 
+        // Block a second Save / OfflinePush re-POST of this enrollment.
+        _submitted = true;
+        await _householdDao?.updateSyncStatus(
+          [result.hhReferenceId],
+          'InProgress',
+        );
+        await _memberDao?.updateSyncStatus(
+          result.memberReferenceIds,
+          'InProgress',
+        );
+
         // 2) Build create payload using those local ids as referenceId.
         final (:body, requestId: requestId) = repo.buildPayload(
           household: _household!,
@@ -391,8 +422,7 @@ class EnrollmentController extends ChangeNotifier {
         // getSyncStatusForOffline). The rows are already on disk, so the
         // enrollment is done from the health worker's side — awaiting the
         // network here would only make them sit on the form through a status
-        // poll, and let a failure send them back to Continue, which would
-        // re-run _persistLocally and duplicate the household.
+        // poll. Rows are InProgress so Offline Sync cannot duplicate the POST.
         unawaited(
           _pushEnrollment(
             repo: repo,
@@ -400,14 +430,18 @@ class EnrollmentController extends ChangeNotifier {
             requestId: requestId,
             deviceId: deviceId,
             userId: userId,
+            hhLocalId: result.hhReferenceId,
+            memberLocalIds: result.memberReferenceIds,
           ),
         );
       } else {
         debugPrint('[EnrollmentController] mock submit: ${_household?.toJson()}');
         await Future.delayed(const Duration(milliseconds: 800));
+        _submitted = true;
       }
 
-      _setLoading(false);
+      // Keep [loading] true until [reset] so Save stays disabled on the
+      // success screen through snackbar + navigate-home.
       return true;
     } on DioException catch (e) {
       // Anticipated failure: the request never reached the server (or was
@@ -415,21 +449,21 @@ class EnrollmentController extends ChangeNotifier {
       // the raw exception — a stack trace / status code means nothing to an SK.
       debugPrint('[EnrollmentController] submitHousehold network error: $e');
       _error = EnrollmentStrings.enrollmentFailed;
-      _setLoading(false);
-      return false;
+      if (!_submitted) _setLoading(false);
+      return _submitted;
     } on SocketException catch (e) {
       // Anticipated failure: device is offline.
       debugPrint('[EnrollmentController] submitHousehold offline: $e');
       _error = EnrollmentStrings.enrollmentFailed;
-      _setLoading(false);
-      return false;
+      if (!_submitted) _setLoading(false);
+      return _submitted;
     } catch (e) {
       // Truly unclassified — no getter can localize an arbitrary exception
       // message, so this is the only path that still surfaces raw text.
       debugPrint('[EnrollmentController] submitHousehold unexpected error: $e');
       _error = 'Enrollment failed: $e';
-      _setLoading(false);
-      return false;
+      if (!_submitted) _setLoading(false);
+      return _submitted;
     }
   }
 
@@ -445,7 +479,13 @@ class EnrollmentController extends ChangeNotifier {
     required String requestId,
     required String deviceId,
     required int userId,
+    required String hhLocalId,
+    required List<String> memberLocalIds,
   }) async {
+    // Blocks warmSync while create is in flight. OfflinePush cannot re-POST
+    // these rows either — they stay InProgress (excluded from getUnsynced)
+    // until status stamps Success or [_requeueForSync] reopens them.
+    SyncActivity.householdMemberPushInFlight = true;
     try {
       await repo.postEnrollment(body);
       await repo.pollAndApplyFhirIds(
@@ -457,15 +497,48 @@ class EnrollmentController extends ChangeNotifier {
       );
       debugPrint('[EnrollmentController] background push done');
     } on DioException catch (e) {
-      debugPrint(_isNetworkError(e)
+      final network = _isNetworkError(e);
+      debugPrint(network
           ? '[EnrollmentController] offline — enrollment queued for sync'
           : '[EnrollmentController] push failed (HTTP ${e.response?.statusCode})'
               ' — enrollment queued for sync');
+      // Re-open for Offline Sync retry (InProgress is excluded from getUnsynced).
+      await _requeueForSync(
+        hhLocalId: hhLocalId,
+        memberLocalIds: memberLocalIds,
+        network: network,
+      );
     } on SocketException {
       debugPrint('[EnrollmentController] offline — enrollment queued for sync');
+      await _requeueForSync(
+        hhLocalId: hhLocalId,
+        memberLocalIds: memberLocalIds,
+        network: true,
+      );
     } catch (e) {
       debugPrint('[EnrollmentController] background push error: $e');
+      await _requeueForSync(
+        hhLocalId: hhLocalId,
+        memberLocalIds: memberLocalIds,
+        network: false,
+      );
+    } finally {
+      // OfflinePush also owns this flag — don't clear it out from under a
+      // concurrent pushAll (it will clear both locks in its own finally).
+      if (!OfflinePushService.isPushInFlight) {
+        SyncActivity.householdMemberPushInFlight = false;
+      }
     }
+  }
+
+  Future<void> _requeueForSync({
+    required String hhLocalId,
+    required List<String> memberLocalIds,
+    required bool network,
+  }) async {
+    final status = network ? 'NetworkError' : 'NotSynced';
+    await _householdDao?.updateSyncStatus([hhLocalId], status);
+    await _memberDao?.updateSyncStatus(memberLocalIds, status);
   }
 
   /// Persist household + members with autoincrement local PKs (Spice order).
@@ -647,6 +720,7 @@ class EnrollmentController extends ChangeNotifier {
     _householdHead = null;
     _members.clear();
     _loading = false;
+    _submitted = false;
     _error = null;
     notifyListeners();
   }

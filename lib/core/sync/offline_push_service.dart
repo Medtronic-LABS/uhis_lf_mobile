@@ -152,6 +152,7 @@ class OfflinePushService extends ChangeNotifier {
     }
     if (_running ||
         isPushInFlight ||
+        SyncActivity.householdMemberPushInFlight ||
         SyncActivity.assessmentPushInFlight ||
         SyncActivity.pullInFlight) {
       return OfflinePushResult(
