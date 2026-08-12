@@ -71,11 +71,14 @@ abstract final class ScribeRecordConfig {
           // voiceRecognition: Android's speech-recognition source (API 7+).
           // AGC enabled, AEC disabled — normalises gain across OEM hardware
           // without the phone-call echo cancellation that would suppress a
-          // distant speaker. rawMicCapture=true uses raw mic (no AGC) as an
-          // emulator escape hatch when the processed chain returns saturated
-          // samples.
+          // distant speaker.
+          // rawMicCapture=true uses defaultSource (inputSource 0) as the
+          // emulator escape hatch — emulator audio HALs that saturate with
+          // voiceRecognition/mic (inputSource 6/1) typically work fine with
+          // DEFAULT, which is what other Android apps use and what the
+          // platform's hasPermission() probe also uses.
           audioSource: rawMicCapture
-              ? AndroidAudioSource.mic
+              ? AndroidAudioSource.defaultSource
               : AndroidAudioSource.voiceRecognition,
         ),
       );
