@@ -1801,7 +1801,9 @@ abstract final class MissionDashboardStrings {
   static String get aiSortedTagOverdue => getTranslatedString('aiSortedTagOverdue', '✦Overdue flags');
   static String get aiSortedTagCce => getTranslatedString('aiSortedTagCce', '✦CCE alerts');
 
-  // ── "+ Enrol new" FAB ────────────────────────────────────────────────────
+  // ── Home FAB — Spice R.string.add_household ──────────────────────────────
+  static String get addHousehold =>
+      getTranslatedString('addHousehold', 'Add Household');
   static String get enrolNewCta => getTranslatedString('enrolNewCta', 'Enroll new');
   static String get enrolNewComingSoon => getTranslatedString('enrolNewComingSoon', 'QR enrolment flow coming soon. Use the Patients tab to view existing patients.');
 

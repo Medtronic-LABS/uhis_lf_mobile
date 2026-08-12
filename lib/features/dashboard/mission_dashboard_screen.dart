@@ -35,7 +35,6 @@ import '../visit/widgets/widgets.dart';
 import 'dashboard_filter_state.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
-import '../household/enrollment/enrollment_entry_sheet.dart';
 import '../cce/cce_alerts_drawer.dart';
 import '../cce/cce_repository.dart';
 import '../settings/settings_actions.dart';
@@ -698,7 +697,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Pink "+ Enrol new" FAB — fixed bottom-right per spec §2.1. Opens
       // QR enrolment flow when the route lands; for now surfaces a snackbar
       // so the SK gets clear feedback rather than silent taps.
-      floatingActionButton: _EnrolNewFab(),
+      floatingActionButton: _CreateHouseholdFab(),
       body: SafeArea(
         top: false,
         bottom: false,
@@ -1181,18 +1180,18 @@ class _SettingsMenu extends StatelessWidget {
 // village tabs, category bubbles, priority-ordered patient cards.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Pink "Enroll new" compact pill FAB — Apon Sushashthya V1 §2.1.
-class _EnrolNewFab extends StatelessWidget {
-  const _EnrolNewFab();
+/// Pink "Add Household" compact pill FAB — Spice R.string.add_household.
+class _CreateHouseholdFab extends StatelessWidget {
+  const _CreateHouseholdFab();
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<WorklistCategoryColors>()!;
     return Semantics(
       button: true,
-      label: MissionDashboardStrings.enrolNewCta,
+      label: MissionDashboardStrings.addHousehold,
       child: Container(
-        key: const Key('dashboard_enrol_new_fab'),
+        key: const Key('dashboard_create_household_fab'),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.fabPill),
           boxShadow: [
@@ -1207,7 +1206,7 @@ class _EnrolNewFab extends StatelessWidget {
           color: tokens.fabBackground,
           borderRadius: BorderRadius.circular(AppRadius.fabPill),
           child: InkWell(
-            onTap: () => showEnrollmentEntrySheet(context),
+            onTap: () => context.push('/household/enrollment/create'),
             borderRadius: BorderRadius.circular(AppRadius.fabPill),
             splashColor: Colors.white.withValues(alpha: 0.15),
             child: Padding(
@@ -1215,10 +1214,10 @@ class _EnrolNewFab extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.person_add_alt_1_rounded, size: 16, color: Colors.white),
+                  const Icon(Icons.add_home_rounded, size: 16, color: Colors.white),
                   const SizedBox(width: 8),
                   Text(
-                    MissionDashboardStrings.enrolNewCta,
+                    MissionDashboardStrings.addHousehold,
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
