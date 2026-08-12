@@ -192,6 +192,16 @@ class RealtimeAsrController extends ChangeNotifier {
   /// session, however it ends.
   bool _summaryEmitted = false;
 
+  /// Set exactly once, in [dispose]. Every method that can run after an
+  /// async gap (an awaited call, a Future.delayed callback, a stream
+  /// event) must check this before touching state or calling
+  /// notifyListeners() — ChangeNotifier's own post-dispose guard is wrapped
+  /// in `assert()`, which compiles out in release builds, so without this
+  /// check a post-dispose call silently operates on a disposed instance in
+  /// production and throws only in debug builds (this is exactly what
+  /// crashed a live test session — see Task 1 of the remediation plan).
+  bool _disposed = false;
+
   /// Reason passed to the most recent [_teardown] call — surfaced in the
   /// session summary as `wsCloseReason`.
   String _wsCloseReason = 'none';
@@ -324,7 +334,7 @@ class RealtimeAsrController extends ChangeNotifier {
     _lastErrorCategory = null;
 
     _state = RealtimeAsrState.connecting;
-    notifyListeners();
+    _safeNotify();
 
     _logEvent('ASR_START', {
       'assessmentType': assessmentType,
@@ -419,7 +429,7 @@ class RealtimeAsrController extends ChangeNotifier {
       }
 
       _state = RealtimeAsrState.listening;
-      notifyListeners();
+      _safeNotify();
       _logEvent('ASR_LISTENING', const {});
 
       _autoExtractTimer = Timer.periodic(_autoExtractInterval, (_) {
@@ -447,6 +457,7 @@ class RealtimeAsrController extends ChangeNotifier {
   /// server's receive loop hit "stop" first and cancel the in-flight
   /// extraction task before the LLM call finishes.
   Future<void> stop() async {
+    if (_disposed) return;
     if (_state == RealtimeAsrState.idle ||
         _state == RealtimeAsrState.stopping) {
       return;
@@ -456,7 +467,7 @@ class RealtimeAsrController extends ChangeNotifier {
     // can take several seconds, during which the banner would otherwise look
     // unchanged and the Stop tap would appear to do nothing.
     _state = RealtimeAsrState.stopping;
-    notifyListeners();
+    _safeNotify();
 
     _autoExtractTimer?.cancel();
     _autoExtractTimer = null;
@@ -477,7 +488,7 @@ class RealtimeAsrController extends ChangeNotifier {
     _send({'type': 'stop'});
     await _teardown(reason: 'manual_stop');
     _state = RealtimeAsrState.idle;
-    notifyListeners();
+    _safeNotify();
     _emitSessionSummaryOnce();
   }
 
@@ -501,7 +512,7 @@ class RealtimeAsrController extends ChangeNotifier {
     final completer = Completer<void>();
     _extractionCompleter = completer;
     _extractRequestsSentCount++;
-    notifyListeners();
+    _safeNotify();
     debugPrint('[RealtimeASR] extract requested (${transcript.length} chars): "$transcript"');
 
     final schema = _formSchema;
@@ -522,7 +533,7 @@ class RealtimeAsrController extends ChangeNotifier {
         _extractTimeoutsCount++;
         _extracting = false;
         _extractionCompleter = null;
-        notifyListeners();
+        _safeNotify();
       }
     });
   }
@@ -605,7 +616,7 @@ class RealtimeAsrController extends ChangeNotifier {
       _micWarning = stuckValue == 0
           ? RealtimeAsrStrings.noMicSignal
           : RealtimeAsrStrings.micSignalStuck;
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -665,7 +676,7 @@ class RealtimeAsrController extends ChangeNotifier {
         }
         _extractionCompleter?.complete();
         _extractionCompleter = null;
-        notifyListeners();
+        _safeNotify();
       case 'form_fill':
         debugPrint('[RealtimeASR] recv form_fill: ${msg['data']}');
         _extracting = false;
@@ -678,7 +689,7 @@ class RealtimeAsrController extends ChangeNotifier {
         _formFillFieldsReceived += _formFill!.fields.length;
         _extractionCompleter?.complete();
         _extractionCompleter = null;
-        notifyListeners();
+        _safeNotify();
       case 'error':
         debugPrint('[RealtimeASR] recv error: ${msg['message']}');
         _extracting = false;
@@ -689,7 +700,7 @@ class RealtimeAsrController extends ChangeNotifier {
         _errorMessage = msg['message'] as String?;
         _extractionCompleter?.complete();
         _extractionCompleter = null;
-        notifyListeners();
+        _safeNotify();
       case 'schema_ack':
         // Reply to "init_schema" (or an inline "formSchema" on "extract") —
         // informational only, no state to update here. Logged so a schema
@@ -715,7 +726,7 @@ class RealtimeAsrController extends ChangeNotifier {
           _firstTranscriptAt ??= DateTime.now();
           _lastTranscriptAt = DateTime.now();
           _segments.add(transcript.trim());
-          notifyListeners();
+          _safeNotify();
         } else {
           debugPrint('[RealtimeASR] recv (type=${msg['type']}, no transcript): $msg');
         }
@@ -1060,6 +1071,7 @@ class RealtimeAsrController extends ChangeNotifier {
   }
 
   void _onSocketDone() {
+    if (_disposed) return;
     final previousState = _state;
     debugPrint('[RealtimeASR] websocket closed (state was $_state)');
     _logEvent('ASR_WS_DONE', {
@@ -1075,7 +1087,7 @@ class RealtimeAsrController extends ChangeNotifier {
       // shows idle and looks tappable again.
       unawaited(_teardown(reason: 'ws_done'));
       _state = RealtimeAsrState.idle;
-      notifyListeners();
+      _safeNotify();
       // Only safe to close out the summary here when the prior state was
       // `listening` — that state is set as the very last step of a
       // successful `start()`, so observing it guarantees `start()` has
@@ -1129,7 +1141,7 @@ class RealtimeAsrController extends ChangeNotifier {
       'previousState': previousState,
       'errorCategory': category,
     });
-    notifyListeners();
+    _safeNotify();
   }
 
   Future<void> _teardown({String reason = 'unknown'}) async {
@@ -1157,6 +1169,15 @@ class RealtimeAsrController extends ChangeNotifier {
       });
     }
     _channel = null;
+  }
+
+  /// Guarded notifyListeners() — every call site in this file goes through
+  /// here instead of calling notifyListeners() directly, so a callback that
+  /// resumes after [dispose] (an awaited call, a Timer, a Future.delayed)
+  /// can never throw "used after being disposed".
+  void _safeNotify() {
+    if (_disposed) return;
+    notifyListeners();
   }
 
   /// Convenience wrapper so every diagnostic call site doesn't repeat
@@ -1251,6 +1272,7 @@ class RealtimeAsrController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _autoExtractTimer?.cancel();
     _audioSub?.cancel();
     _wsSub?.cancel();

@@ -418,6 +418,30 @@ void main() {
     });
   });
 
+  group('disposed guard', () {
+    test('calling stop() after dispose() does not throw', () async {
+      final ctrl = buildController(Uri.parse('ws://127.0.0.1:1'), granted: false);
+      ctrl.bindContext(_dummyContext());
+      await ctrl.start(encounterId: 'enc-dispose-guard');
+      ctrl.dispose();
+      // Must not throw "used after being disposed" — this reproduces the
+      // shape of the live crash (a call landing after dispose()), just via
+      // a synchronous call instead of the harder-to-reproduce async race.
+      expect(() => ctrl.stop(), returnsNormally);
+    });
+
+    test('extractNow safety-timeout callback firing after dispose does not throw', () async {
+      final ctrl = buildController(Uri.parse('ws://127.0.0.1:1'), granted: false);
+      ctrl.bindContext(_dummyContext());
+      await ctrl.start(encounterId: 'enc-dispose-guard-2');
+      ctrl.dispose();
+      // extractNow()'s Future.delayed(_extractionSafetyTimeout, ...) callback
+      // can still be scheduled from before dispose() — pump past it and
+      // confirm no notifyListeners()-after-dispose throw.
+      await Future<void>.delayed(const Duration(seconds: 21));
+    });
+  });
+
   group('session summary emitted exactly once', () {
     test('dispose() after an error state still emits exactly one summary', () async {
       final ctrl = buildController(Uri.parse('ws://127.0.0.1:1'), granted: false);
