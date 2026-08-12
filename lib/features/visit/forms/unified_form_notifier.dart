@@ -27,6 +27,7 @@ import '../../referral/referral_repository.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
 import '../models/anc_assessment.dart';
+import '../naba/naba_models.dart';
 import 'canonical_visit_data.dart';
 import 'childhood_visit.dart';
 import 'form_config.dart';
@@ -115,6 +116,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool _lastIsReferred = false;
   List<String> _lastReferredReasons = const [];
   String? _lastReferralFacility;
+  List<String> _lastPwRiskFactors = const [];
+  List<NabaReferralAssessment> _lastNabaReferralAssessments = const [];
 
   /// Provenance per fieldId — who last set the value (SK vs AI scribe).
   /// Fields never touched have no entry (treated as manual-owned once typed).
@@ -168,6 +171,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool get lastIsReferred => _lastIsReferred;
   List<String> get lastReferredReasons => _lastReferredReasons;
   String? get lastReferralFacility => _lastReferralFacility;
+  /// PWPROFILE risk labels for Step 3 (UHIS “Risk factors identified”).
+  List<String> get lastPwRiskFactors => _lastPwRiskFactors;
+
+  /// Per-assessment referral inputs for `naba/generate` (mirrors `_computeReferral`).
+  List<NabaReferralAssessment> get lastNabaReferralAssessments =>
+      _lastNabaReferralAssessments;
   String? get submitError => _submitError;
   Set<String> get validationErrors => _validationErrors;
 
@@ -1668,6 +1677,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
       final (isReferred, referredReasons) =
           _computeReferral(isNcdFollowUp: isNcdFollowUp);
+      _lastNabaReferralAssessments =
+          _buildNabaReferralAssessments(isNcdFollowUp: isNcdFollowUp);
 
       Map<String, dynamic>? ncdOtherDetails;
       final cataractNcdProvided = _activeFormTypes.contains('cataract') &&
@@ -1746,14 +1757,26 @@ class UnifiedFormNotifier extends ChangeNotifier {
       ConsoleLog.step('[ReferralFacility] form submit — referralFacility=${_data.getValue('referralFacility')} referralFacilityType=${_data.getValue('referralFacilityType')} → _lastReferralFacility=$_lastReferralFacility');
 
       final savedIds = <String>[];
-      final pwStatus = payloads.any((p) => p.assessmentType == 'PWPROFILE')
-          ? PwRiskFactors.status(
-              pregnancyHistory: payloads
-                  .firstWhere((p) => p.assessmentType == 'PWPROFILE')
-                  .details,
-              dateOfBirth: await _patientDateOfBirth(),
-            )
-          : null;
+      final pwPayload = payloads
+          .where((p) => p.assessmentType == 'PWPROFILE')
+          .firstOrNull;
+      List<String>? pwStatus;
+      if (pwPayload != null) {
+        final dob = await _patientDateOfBirth();
+        final riskScreening = _pwRiskScreeningFromData();
+        _lastPwRiskFactors = PwRiskFactors.compute(
+          pregnancyHistory: pwPayload.details,
+          riskScreening: riskScreening,
+          dateOfBirth: dob,
+        );
+        pwStatus = [
+          _lastPwRiskFactors.isEmpty
+              ? PwRiskFactors.normalPregnancy
+              : PwRiskFactors.highRisk,
+        ];
+      } else {
+        _lastPwRiskFactors = const [];
+      }
       final poStatus = payloads.any((p) =>
               p.assessmentType == 'PREGNANCY_OUTCOME' ||
               p.assessmentType == 'PREGNANCYOUTCOME')
@@ -2183,6 +2206,32 @@ class UnifiedFormNotifier extends ChangeNotifier {
     return out;
   }
 
+  /// NCD symptom option `value` codes — same as sync `symptomsLog.ncdSymptoms`
+  /// (e.g. `shortnessOfBreath`), not numeric widget ids (`"1"`).
+  List<String> _ncdSymptomWireValues(Object? raw) {
+    if (raw is! List || raw.isEmpty) return const [];
+    final options = _fieldDefs['ncdSymptoms']?.options ?? const <FieldOption>[];
+    final out = <String>[];
+    for (final item in raw) {
+      final id = FieldOption.coerceId(item);
+      if (id == null || id.isEmpty) continue;
+      final lower = id.toLowerCase();
+      if (lower == 'none' || lower == 'nosymptoms') continue;
+      String? wire;
+      for (final option in options) {
+        if (option.id == id ||
+            option.wireValue == id ||
+            option.name == id) {
+          wire = option.wireValue;
+          break;
+        }
+      }
+      final token = (wire ?? id).trim();
+      if (token.isNotEmpty && !out.contains(token)) out.add(token);
+    }
+    return out;
+  }
+
   /// Local `patients.id` for [_patientId]. Snapshot + programmes are keyed by
   /// the member PK; the visit route often carries `members.patient_id`.
   Future<String> _localPatientId() async {
@@ -2273,6 +2322,194 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// Runs clinical evaluators against current form data and returns
+  /// Flat form values that UHIS nests under `healthRiskScreening`.
+  Map<String, dynamic>? _pwRiskScreeningFromData() {
+    final obstetric = _data.getValue('obstetricComplications');
+    final medical = _data.getValue('medicalComplications');
+    final conditions = _data.getValue('currentMedicalConditions');
+    if (obstetric == null && medical == null && conditions == null) {
+      return null;
+    }
+    return {
+      if (obstetric != null) 'obstetricComplications': obstetric,
+      if (medical != null) 'medicalComplications': medical,
+      if (conditions != null) 'currentMedicalConditions': conditions,
+    };
+  }
+
+  /// Fields Flutter uses in [_computeReferral], grouped per assessment for NABA.
+  List<NabaReferralAssessment> _buildNabaReferralAssessments({
+    required bool isNcdFollowUp,
+  }) {
+    final out = <NabaReferralAssessment>[];
+    double? asDouble(String k) => _asDoubleField(k);
+
+    final avgBp = UnifiedPayloadMapper.ncdAvgBp(_data);
+    final sys = avgBp.systolic?.toDouble() ??
+        asDouble('systolic') ??
+        asDouble('bloodPressureSystolic');
+    final dia = avgBp.diastolic?.toDouble() ??
+        asDouble('diastolic') ??
+        asDouble('bloodPressureDiastolic');
+    final glucoseType = _data.getValue('glucoseType') as String?;
+    final glVal = asDouble('glucoseValue') ??
+        asDouble('glucose') ??
+        asDouble('fastingBloodSugar') ??
+        asDouble('randomBloodSugar');
+    final tempF = asDouble('temperature');
+    final tempC = tempF == null ? null : fahrenheitToCelsius(tempF);
+    final pulse = asDouble('pulse')?.toInt();
+    final hemoglobin = asDouble('hemoglobin');
+    final oedema = (_data.getValue('oedema') ?? _data.getValue('edema'))
+        ?.toString();
+
+    Map<String, dynamic> compact(Map<String, dynamic> raw) {
+      final m = <String, dynamic>{};
+      raw.forEach((k, v) {
+        if (v == null) return;
+        if (v is String && v.isEmpty) return;
+        if (v is List && v.isEmpty) return;
+        m[k] = v;
+      });
+      return m;
+    }
+
+    List<String> stringList(Object? raw) {
+      if (raw is! List) return const [];
+      return raw
+          .map((e) {
+            if (e is Map) {
+              return (e['value'] ?? e['id'] ?? e['name'])?.toString();
+            }
+            return e?.toString();
+          })
+          .whereType<String>()
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+
+    final includeNcd = _activeFormTypes.contains('ncd') ||
+        (_activeFormTypes.contains('cataract') &&
+            _data.getValue('ncdServiceProvided')?.toString().toLowerCase() ==
+                'yes');
+    if (includeNcd) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'NCD',
+        referralInputs: compact({
+          'isFollowUpVisit': isNcdFollowUp,
+          'systolic': sys,
+          'diastolic': dia,
+          'glucoseValue': glVal,
+          'glucoseType': glucoseType,
+          'hba1c': asDouble('hba1c'),
+          'ncdSymptoms': _ncdSymptomWireValues(_data.getValue('ncdSymptoms')),
+        }),
+      ));
+    }
+
+    if (_activeFormTypes.contains('anc')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'ANC',
+        referralInputs: compact({
+          'bloodPressureSystolic': sys?.toInt(),
+          'bloodPressureDiastolic': dia?.toInt(),
+          'fundalHeight': asDouble('fundalHeight'),
+          'oedema': oedema,
+          'weight': asDouble('weight'),
+          'height': asDouble('height'),
+          'hemoglobin': hemoglobin,
+          'urinaryAlbumin': _data.getValue('urinaryAlbumin')?.toString(),
+          'urinaryBilirubin': _data.getValue('urinaryBilirubin')?.toString(),
+          'urinarySugar': _data.getValue('urinarySugar')?.toString(),
+          'bloodSugarFasting': glucoseType == 'fbs' ? glVal : null,
+          'bloodSugarRandom': glucoseType != 'fbs' ? glVal : null,
+          'glucoseType': glucoseType,
+          'dangerSignsExperienced12':
+              stringList(_data.getValue('dangerSignsExperienced12')),
+          'dangerSignsExperienced13To27':
+              stringList(_data.getValue('dangerSignsExperienced13To27')),
+          'dangerSignsExperienced28To40':
+              stringList(_data.getValue('dangerSignsExperienced28To40')),
+          'gestationalWeeks': asDouble('gestationalAge')?.toInt() ??
+              asDouble('gestationalWeeks')?.toInt(),
+          'temperatureFahrenheit': tempF,
+          'temperatureCelsius': tempC,
+          'pulse': pulse,
+          'ttTdCompleted': _data.getValue('ttTdCompleted')?.toString(),
+          'ultrasound': _data.getValue('ultrasound')?.toString(),
+          'ancFromMedicalDoctor':
+              _data.getValue('ancFromMedicalDoctor')?.toString(),
+          'facilityIdentifiedForDelivery':
+              _data.getValue('facilityIdentifiedForDelivery')?.toString(),
+          'ifaTotalConsumed': asDouble('ifaTotalConsumed')?.toInt() ??
+              asDouble('ifaTabletsConsumed')?.toInt(),
+          'calciumTotalConsumed': asDouble('calciumTotalConsumed')?.toInt() ??
+              asDouble('calciumTabletsConsumed')?.toInt(),
+          'ancVisitNumber': _data.getValue('ancVisitNumber') ??
+              _data.getValue('visitNo'),
+        }),
+      ));
+    }
+
+    if (_activeFormTypes.contains('pncMother')) {
+      final willEmitPnc = !_activeFormTypes.contains('pregnancyOutcome') ||
+          _data.getValue('deliveryOutcomeType')?.toString() == 'liveBirth';
+      if (willEmitPnc) {
+        out.add(NabaReferralAssessment(
+          assessmentType: 'PNC_MOTHER',
+          referralInputs: compact({
+            'postpartumDangerSigns':
+                stringList(_data.getValue('postpartumDangerSigns')),
+            'systolic': sys,
+            'diastolic': dia,
+            'temperatureFahrenheit': tempF,
+            'temperatureCelsius': tempC,
+            'pulse': pulse,
+            'hemoglobin': hemoglobin,
+            'bloodSugarFasting': glucoseType == 'fbs' ? glVal : null,
+            'bloodSugarRandom': glucoseType != 'fbs' ? glVal : null,
+            'glucoseType': glucoseType,
+            'urinaryBilirubin': _data.getValue('urinaryBilirubin')?.toString(),
+            'urinaryAlbumin': _data.getValue('urinaryAlbumin')?.toString(),
+            'oedema': oedema,
+            'htnPatient': _data.getValue('htnPatient')?.toString(),
+            'eclampsia': _data.getValue('eclampsia')?.toString(),
+            'onTreatmentHtnEclampsia':
+                _data.getValue('onTreatmentHtnEclampsia')?.toString(),
+            'dmPatient': _data.getValue('dmPatient')?.toString(),
+            'gdmPatient': _data.getValue('gdmPatient')?.toString(),
+            'onTreatmentDmGdm': _data.getValue('onTreatmentDmGdm')?.toString(),
+            'vitaminAConsumed': _data.getValue('vitaminAConsumed')?.toString(),
+            'daysSinceDelivery': _asInt(_data.getValue('daysSinceDelivery')),
+            'ifaTabletsConsumed': _asInt(_data.getValue('ifaTabletsConsumed') ??
+                _data.getValue('ifaTotalConsumed')),
+            'calciumTabletsConsumed': _asInt(
+                _data.getValue('calciumTabletsConsumed') ??
+                    _data.getValue('calciumTotalConsumed')),
+            'familyPlanningMethods':
+                _data.getValue('familyPlanningMethods')?.toString(),
+            'pncVisitNumber': _data.getValue('pncVisitNumber') ??
+                _data.getValue('visitNo'),
+            'deliveryOutcomeType':
+                _data.getValue('deliveryOutcomeType')?.toString(),
+          }),
+        ));
+      }
+    }
+
+    if (_activeFormTypes.contains('pncChild')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'CHILDHOOD_VISIT',
+        referralInputs: compact({
+          'childReferral': _data.getValue('childReferral')?.toString(),
+        }),
+      ));
+    }
+
+    return List<NabaReferralAssessment>.unmodifiable(out);
+  }
+
   /// `(isReferred, referredReasons)`.  Called inside [submit] so every
   /// saved [LocalAssessmentEntity] carries the correct referral flag.
   (bool, List<String>) _computeReferral({bool isNcdFollowUp = false}) {

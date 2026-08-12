@@ -370,6 +370,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
   List<String> _referredReasons = const [];
+  List<String> _pwRiskFactors = const [];
+  List<NabaReferralAssessment> _nabaReferralAssessments = const [];
   String? _referralFacility;
 
   /// Vaccine-aware summary from Step 2's vaccination timeline, when this
@@ -583,12 +585,14 @@ class _VisitFlowState extends State<VisitFlowScreen> {
               confirmedSymptoms: _confirmedSymptoms.toList(),
               aiPickedSymptoms: _aiPickedSymptoms,
               enrolledProgrammes: const {},
-              onAdvance: (prog, referred, reasons, facility) {
+              onAdvance: (prog, referred, reasons, facility, pwRisks, nabaAssessments) {
                 setState(() {
                   _primaryProgramme = Programme.imci;
                   _referralRecommended = referred;
                   _referredReasons = reasons;
                   _referralFacility = facility;
+                  _pwRiskFactors = pwRisks;
+                  _nabaReferralAssessments = nabaAssessments;
                   _step = 2;
                 });
               },
@@ -652,13 +656,15 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           enrolledProgrammes: _enrolledProgrammes,
           isDeliveryVisit: _isDeliveryVisit,
           origin: widget.origin,
-          onAdvance: (programme, referral, reasons, facility) {
+          onAdvance: (programme, referral, reasons, facility, pwRisks, nabaAssessments) {
             debugPrint('[ReferralFacility] flow captured — facility=$facility referral=$referral');
             setState(() {
               _primaryProgramme = programme;
               _referralRecommended = referral;
               _referredReasons = reasons;
               _referralFacility = facility;
+              _pwRiskFactors = pwRisks;
+              _nabaReferralAssessments = nabaAssessments;
               _step = 2;
             });
           },
@@ -680,6 +686,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           primaryProgramme: _primaryProgramme,
           referralRecommended: _referralRecommended,
           referredReasons: _referredReasons,
+          pwRiskFactors: _pwRiskFactors,
+          nabaReferralAssessments: _nabaReferralAssessments,
           referralFacility: _referralFacility,
           epiVisitSummary: _epiVisitSummary,
           memberId: widget.memberId,
@@ -950,6 +958,8 @@ class _Step2VitalsForm extends StatelessWidget {
     bool referralRecommended,
     List<String> referredReasons,
     String? referralFacility,
+    List<String> pwRiskFactors,
+    List<NabaReferralAssessment> nabaReferralAssessments,
   ) onAdvance;
 
   @override
@@ -1139,6 +1149,8 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
     bool referralRecommended,
     List<String> referredReasons,
     String? referralFacility,
+    List<String> pwRiskFactors,
+    List<NabaReferralAssessment> nabaReferralAssessments,
   ) onAdvance;
 
   @override
@@ -1194,6 +1206,8 @@ class _Step3AiReco extends StatefulWidget {
     required this.origin,
     required this.confirmedSymptoms,
     required this.confirmedProgrammes,
+    this.pwRiskFactors = const [],
+    this.nabaReferralAssessments = const [],
     this.patientLabel,
     this.patientAge,
     this.patientGender,
@@ -1221,6 +1235,10 @@ class _Step3AiReco extends StatefulWidget {
   final Programme primaryProgramme;
   final bool referralRecommended;
   final List<String> referredReasons;
+  /// PWPROFILE risk labels from Step 2 (`PwRiskFactors.compute`).
+  final List<String> pwRiskFactors;
+  /// Per-assessment referral inputs for `naba/generate`.
+  final List<NabaReferralAssessment> nabaReferralAssessments;
   final String? memberId;
   final String? householdId;
   final String origin;
@@ -1406,6 +1424,13 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
         currentVitals: _loadedVitals,
         labResults: _loadedLabs,
+        assessments: widget.nabaReferralAssessments,
+        // Same clinical copy the Step 3 referral card shows offline / as fallback.
+        isReferred: widget.referralRecommended,
+        referredReasons: widget.referredReasons,
+        referralReason: widget.referralRecommended
+            ? _offlineReferralReasonText()
+            : null,
       );
       final ai = await repo.generate(req);
       // Backfill empty fields from rule-based fallback so the UI always
@@ -1835,11 +1860,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               required_: true,
               destination: VisitFlowStrings.referralDestinationUpazilaHealthComplex,
               urgency: 'Today',
-              reason: (hasEpi && epi != null && epi.overdueCount > 0)
-                  ? EpiVisitRecoStrings.referralReason(
-                      EpiVisitRecoStrings.currentMilestone(epi),
-                      EpiVisitRecoStrings.overdueNames(epi))
-                  : VisitFlowStrings.referralReasonClinicalAssessment,
+              // Offline card copy = Step 2 referredReasons (or EPI overdue
+              // text). Never the generic "clinical assessment" sentence.
+              reason: _offlineReferralReasonText(epi: epi),
             )
           : null,
     );
@@ -2219,8 +2242,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final worklistRepo = context.read<WorklistRepository>();
     final missionRepo = context.read<MissionDashboardRepository>();
 
-    final isReferred = widget.referralRecommended ||
-        (naba.referralRecommendation?.required_ ?? false);
+    // Referral stamp follows Step 2 clinical decision only (not NABA).
+    final isReferred = widget.referralRecommended;
     // Spice RMNCH summary: selected spinner option id → summary.referralFacilityType.
     // Other programmes keep the Step 2 / NCD auto type string.
     final referralFacilityType = RmnchReferralFacility.showOnStep3(
@@ -2513,9 +2536,56 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     return widget.referralFacility == NcdStatus.facilityCommunityClinic;
   }
 
+  /// UHIS PW registration summary: risk-factor list only (not a Referred card).
+  bool get _showPwSummary {
+    final isPw = widget.primaryProgramme == Programme.pw ||
+        widget.confirmedProgrammes.contains(Programme.pw);
+    return isPw && widget.pwRiskFactors.isNotEmpty;
+  }
+
+  /// Offline Step 3 referral-card body from Step 2 `referredReasons`.
+  ///
+  /// Per programme (when clinically referred):
+  /// - ANC: `High risk pregnant woman` / `Gaps in ANC` (+ ` - ANC Visit N`)
+  /// - PNC: `High risk mother` / `Gaps in PNC` (+ ` - PNC Visit N`)
+  /// - NCD: `Symptoms`, `High BP`, `High BG` (any subset)
+  /// - Childhood: `Child illness referral`
+  /// - EPI manual refer: facility label; overdue: [EpiVisitRecoStrings.referralReason]
+  /// - PW / TB / Eye / FP / Pregnancy outcome: no Step 2 referral card
+  String _offlineReferralReasonText({EpiVisitSummary? epi}) {
+    if (widget.referredReasons.isNotEmpty) {
+      return widget.referredReasons.join('\n');
+    }
+    final summary = epi ?? widget.epiVisitSummary;
+    if (summary != null && summary.overdueCount > 0) {
+      return EpiVisitRecoStrings.referralReason(
+        EpiVisitRecoStrings.currentMilestone(summary),
+        EpiVisitRecoStrings.overdueNames(summary),
+      );
+    }
+    return VisitFlowStrings.referralRecommendedFallback;
+  }
+
+  /// Online → NABA `referral_recommendation.reason`; offline → Step 2 reasons.
+  String _referralCardReason(NabaResponse naba) {
+    final clinical = widget.referredReasons.isNotEmpty
+        ? widget.referredReasons.join('\n')
+        : null;
+    final isOffline = naba.modelVersion == 'rule-based-fallback';
+    if (isOffline) {
+      return clinical ??
+          naba.referralRecommendation?.reason ??
+          _offlineReferralReasonText();
+    }
+    final nabaReason = naba.referralRecommendation?.reason?.trim();
+    if (nabaReason != null && nabaReason.isNotEmpty) return nabaReason;
+    return clinical ?? VisitFlowStrings.referralRecommendedFallback;
+  }
+
   Widget _buildResult(NabaResponse naba) {
-    final referral =
-        naba.referralRecommendation?.required_ ?? widget.referralRecommended;
+    // Referral card + facility pickers are gated by Step 2 clinical referral
+    // only — never by AI danger_signs / NABA required alone.
+    final referral = widget.referralRecommended;
     final showRmnchFacility = RmnchReferralFacility.showOnStep3(
       programme: widget.primaryProgramme,
       isReferred: referral,
@@ -2547,22 +2617,19 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── 1. Referral banner — edge-to-edge, flush top ────────────
-          // Reason prefers the clinically-detected conditions threaded
-          // from _computeReferral(); falls back to NABA text only when
-          // no evaluator conditions are available (e.g. NABA-only referral).
-          if (referral || naba.dangerSigns.isNotEmpty) ...[
+          // Shown only when Step 2 set isReferred. Online copy from NABA;
+          // offline copy from Step 2 referredReasons.
+          if (referral) ...[
             _ReferralAlertCard(
-              // Prefer NABA reason — it carries the 'context — finding' format
-              // the two-line banner needs. Fall back to referredReasons bullets
-              // only when no NABA reason is available.
-              reason: naba.referralRecommendation?.reason ??
-                  (widget.referredReasons.isNotEmpty
-                      ? widget.referredReasons.join('\n')
-                      : (naba.dangerSigns.isNotEmpty
-                          ? naba.dangerSigns.take(2).join(', ')
-                          : VisitFlowStrings.referralRecommendedFallback)),
+              reason: _referralCardReason(naba),
               urgency: naba.referralRecommendation?.urgency ?? 'Today',
             ),
+            Container(height: 1.5, color: const Color(0xFFFECACA)),
+          ],
+
+          // ── PW risk factors — same edge-to-edge alert chrome as Referred ─
+          if (_showPwSummary) ...[
+            _PwProfileSummaryBlock(riskFactors: widget.pwRiskFactors),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
 
@@ -2649,6 +2716,92 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 }
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
+
+/// UHIS PW summary: risk factors in the same edge-to-edge alert chrome as
+/// [_ReferralAlertCard], with comma-separated values (not bullets).
+class _PwProfileSummaryBlock extends StatelessWidget {
+  const _PwProfileSummaryBlock({required this.riskFactors});
+
+  final List<String> riskFactors;
+
+  @override
+  Widget build(BuildContext context) {
+    const bg = Color(0xFFFEE2E2);
+    const accent = Color(0xFFDC2626);
+    final body = riskFactors
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .map(MissionDashboardStrings.pwRiskFactorDisplay)
+        .join(', ');
+
+    return Container(
+      width: double.infinity,
+      color: bg,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.warning_amber_rounded,
+                    size: 18, color: Colors.white),
+              ),
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFBBF24),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: bg, width: 1.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  MissionDashboardStrings.riskFactorsIdentified,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: accent,
+                  ),
+                ),
+                if (body.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    body,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: accent.withValues(alpha: 0.85),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Android BDNCDAssessmentSummaryFragment nearest-facility spinner.
 /// Selection fhirId → `summary.referredSiteId`.
@@ -2866,6 +3019,9 @@ class _ReferralAlertCard extends StatelessWidget {
   static Map<String, String> get _reasonLabels => <String, String>{
     'High risk pregnant woman': VisitFlowStrings.reasonHighRiskPregnantWoman,
     'Gaps in ANC':            VisitFlowStrings.reasonGapsInAntenatalCare,
+    'High risk mother':       VisitFlowStrings.reasonHighRiskMother,
+    'Gaps in PNC':            VisitFlowStrings.reasonGapsInPnc,
+    'Child illness referral': VisitFlowStrings.reasonChildIllnessReferral,
     'High BP':                VisitFlowStrings.reasonHighBloodPressure,
     'High BG':                VisitFlowStrings.reasonHighBloodGlucose,
     'Symptoms':               VisitFlowStrings.reasonReportedSymptoms,
@@ -2890,15 +3046,14 @@ class _ReferralAlertCard extends StatelessWidget {
     final hasSplit = reason.contains(' — ');
     final parts    = hasSplit ? reason.split(' — ') : <String>[];
     final title    = hasSplit ? VisitFlowStrings.referredTitleFor(parts.first.trim()) : VisitFlowStrings.referralBadge;
-    final subtitle = hasSplit ? parts.skip(1).join(' — ').trim() : null;
-    final bullets  = hasSplit
-        ? const <String>[]
+    final subtitle = hasSplit
+        ? parts.skip(1).join(' — ').trim()
         : reason
             .split('\n')
             .map((s) => s.trim())
             .where((s) => s.isNotEmpty)
-            .map((s) => _reasonLabels[s] ?? s)
-            .toList();
+            .map(_displayReason)
+            .join(', ');
 
     return Container(
       width: double.infinity,
@@ -2949,7 +3104,7 @@ class _ReferralAlertCard extends StatelessWidget {
                     color: accent,
                   ),
                 ),
-                if (subtitle != null) ...[
+                if (subtitle != null && subtitle.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
@@ -2961,19 +3116,6 @@ class _ReferralAlertCard extends StatelessWidget {
                     ),
                   ),
                 ],
-                ...bullets.map(
-                  (c) => Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Text(
-                      '• $c',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: accent.withValues(alpha: 0.85),
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -2997,6 +3139,36 @@ class _ReferralAlertCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Maps Step 2 wire reasons (and `label - Visit N` suffixes) to UI copy.
+  static String _displayReason(String raw) {
+    final visitOnly = _displayVisitLabel(raw);
+    if (visitOnly != null) return visitOnly;
+
+    final exact = _reasonLabels[raw];
+    if (exact != null) return exact;
+    for (final e in _reasonLabels.entries) {
+      final prefix = '${e.key} - ';
+      if (raw.startsWith(prefix)) {
+        final suffix = raw.substring(e.key.length); // starts with ' - …'
+        final visit = suffix.startsWith(' - ')
+            ? _displayVisitLabel(suffix.substring(3))
+            : null;
+        if (visit != null) return '${e.value} - $visit';
+        return '${e.value}$suffix';
+      }
+    }
+    return raw;
+  }
+
+  /// `ANC Visit` / `ANC Visit 2` / `PNC Visit 1` → localised visit label.
+  static String? _displayVisitLabel(String raw) {
+    final anc = RegExp(r'^ANC Visit(?:\s+(.+))?$').firstMatch(raw);
+    if (anc != null) return VisitFlowStrings.ancVisitLabel(anc.group(1));
+    final pnc = RegExp(r'^PNC Visit(?:\s+(.+))?$').firstMatch(raw);
+    if (pnc != null) return VisitFlowStrings.pncVisitLabel(pnc.group(1));
+    return null;
   }
 }
 

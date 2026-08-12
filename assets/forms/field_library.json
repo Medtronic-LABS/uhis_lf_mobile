@@ -5204,7 +5204,7 @@
     "visibility": "visible",
     "hint": "Enter number of tablets",
     "hintCulture": "এই ভিজিটের সময় প্রদানকৃত",
-    "titleCulture": "এই ভিজিটে ব্র্যাক হতে প্রদানকৃত আয়রন বড়ির সংখ্যা",
+    "titleCulture": "এই ভিজিটে কতটি ফলিক অ্যাসিড বড়ি প্রদান করা হয়েছে?",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
     "inputType": "integer",
@@ -8602,7 +8602,7 @@
       {
         "id": "fbs",
         "name": "FBS (Before Meal)",
-        "cultureValue": "রক্তের গ্লুকোজ পরীক্ষা- ফাস্টিং (খাবারের আগে)",
+        "cultureValue": "খালি পেটে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8614,7 +8614,7 @@
       {
         "id": "rbs",
         "name": "RBS (After Meal)",
-        "cultureValue": "রক্তের গ্লুকোজ পরীক্ষা- র‍্যান্ডম (খাবারের পরে)",
+        "cultureValue": "র‍্যান্ডম",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -10947,43 +10947,52 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "নবজাতক মৃত্যুর কারণ",
+    "titleCulture": "নবজাতকের মৃত্যুর কারণ",
     "options": [
       {
         "id": "asphyxia",
-        "name": "Asphyxia"
+        "name": "Asphyxia",
+        "cultureValue": "শ্বাসরোধ"
       },
       {
         "id": "lowTemperature",
-        "name": "Abnormally low temperature"
+        "name": "Abnormally low temperature",
+        "cultureValue": "অস্বাভাবিক কম তাপমাত্রা"
       },
       {
         "id": "lowBirthWeight",
-        "name": "Low birth weight"
+        "name": "Low birth weight",
+        "cultureValue": "কম জন্ম ওজন"
       },
       {
         "id": "convulsions",
-        "name": "Convulsions"
+        "name": "Convulsions",
+        "cultureValue": "খিঁচুনি"
       },
       {
         "id": "prematureBirth",
-        "name": "Premature birth"
+        "name": "Premature birth",
+        "cultureValue": "অপরিণত জন্ম"
       },
       {
         "id": "sepsis",
-        "name": "Sepsis / umbilical sepsis"
+        "name": "Sepsis / umbilical sepsis",
+        "cultureValue": "নাভির সংক্রমণ / সংক্রমণ"
       },
       {
         "id": "pneumonia",
-        "name": "Pneumonia"
+        "name": "Pneumonia",
+        "cultureValue": "নিউমোনিয়া"
       },
       {
         "id": "congenitalAnomaly",
-        "name": "Congenital anomaly"
+        "name": "Congenital anomaly",
+        "cultureValue": "জন্মগত ত্রুটি"
       },
       {
         "id": "unknown",
-        "name": "Unknown"
+        "name": "Unknown",
+        "cultureValue": "জানা নেই"
       }
     ],
     "programmes": [

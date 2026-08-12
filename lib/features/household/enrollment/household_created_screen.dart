@@ -34,6 +34,10 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
 
   Future<void> _handleSave(EnrollmentController controller) async {
     debugPrint('[_HouseholdCreatedScreenState] _handleSave');
+    // Belt-and-suspenders: controller also guards, but skip before the
+    // await so a double-tap never starts a second submit animation.
+    if (controller.loading || controller.submitted) return;
+
     final success = await controller.submitHousehold();
 
     if (mounted) {
@@ -45,14 +49,13 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
           ),
         );
 
-        // Trigger a warm sync so newly enrolled members appear in the member
-        // list immediately after navigating home. Fire-and-forget — the sync
-        // service shows its own progress indicator on the home screen.
-        final sync = context.read<OfflineSyncService>();
-        unawaited(sync.warmSync());
-
+        // Defer warm pull until after the short success pause so it does not
+        // race the background enrollment POST (rows are InProgress + push
+        // lock is held; warmSync would no-op while the lock is set anyway).
         await Future.delayed(const Duration(seconds: 1));
         if (mounted) {
+          final sync = context.read<OfflineSyncService>();
+          unawaited(sync.warmSync());
           controller.reset();
           context.go('/home');
         }
@@ -278,7 +281,7 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                   bottom: 0,
                   child: EnrollmentStickyBar(
                     label: EnrollmentStrings.saveHousehold,
-                    loading: controller.loading,
+                    loading: controller.loading || controller.submitted,
                     onPressed: () => _handleSave(controller),
                   ),
                 ),

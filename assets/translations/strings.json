@@ -115,6 +115,10 @@
     "bn": "নাম বা গ্রাম দিয়ে খুঁজুন…",
     "en": "Search by name or village…"
   },
+  "Cce.smsFailed": {
+    "bn": "এসএমএস খোলা সম্ভব হয়নি",
+    "en": "Could not open SMS"
+  },
   "Cce.willingNo": {
     "bn": "না",
     "en": "No"
@@ -1124,7 +1128,7 @@
     "en": "Agriculture"
   },
   "Enrollment.opt.BRAC VO": {
-    "bn": "BRAC VO",
+    "bn": "ব্র্যাক ভি ও",
     "en": "BRAC VO"
   },
   "Enrollment.opt.BRN": {
@@ -1172,7 +1176,7 @@
     "en": "Married"
   },
   "Enrollment.opt.NVO": {
-    "bn": "NVO",
+    "bn": "এন ভি ও",
     "en": "NVO"
   },
   "Enrollment.opt.National ID": {
@@ -1452,11 +1456,11 @@
     "en": "Bacillus Calmette–Guérin"
   },
   "Epi.vaccineDesc.FIPV1": {
-    "bn": "Inactivated Poliovirus Vaccine (IPV)",
+    "bn": "নিষ্ক্রিয় পোলিও ভাইরাস টিকা (আইপিভি)",
     "en": "Inactivated Poliovirus Vaccine (IPV)"
   },
   "Epi.vaccineDesc.FIPV2": {
-    "bn": "Inactivated Poliovirus Vaccine (IPV)",
+    "bn": "নিষ্ক্রিয় পোলিও ভাইরাস টিকা (আইপিভি)",
     "en": "Inactivated Poliovirus Vaccine (IPV)"
   },
   "Epi.vaccineDesc.MR1": {
@@ -1468,27 +1472,27 @@
     "en": "Measles-Rubella (MR) Vaccination"
   },
   "Epi.vaccineDesc.OPV1": {
-    "bn": "Oral Polio Vaccine (OPV)",
+    "bn": "মুখে খাওয়ার পোলিও টিকা (ওপিভি)",
     "en": "Oral Polio Vaccine (OPV)"
   },
   "Epi.vaccineDesc.OPV2": {
-    "bn": "Oral Polio Vaccine (OPV)",
+    "bn": "মুখে খাওয়ার পোলিও টিকা (ওপিভি)",
     "en": "Oral Polio Vaccine (OPV)"
   },
   "Epi.vaccineDesc.OPV3": {
-    "bn": "Oral Polio Vaccine (OPV)",
+    "bn": "মুখে খাওয়ার পোলিও টিকা (ওপিভি)",
     "en": "Oral Polio Vaccine (OPV)"
   },
   "Epi.vaccineDesc.PCV1": {
-    "bn": "Pneumococcal Conjugate Vaccine (PCV)",
+    "bn": "নিউমোকক্কাল কনজুগেট টিকা (পিসিভি)",
     "en": "Pneumococcal Conjugate Vaccine (PCV)"
   },
   "Epi.vaccineDesc.PCV2": {
-    "bn": "Pneumococcal Conjugate Vaccine (PCV)",
+    "bn": "নিউমোকক্কাল কনজুগেট টিকা (পিসিভি)",
     "en": "Pneumococcal Conjugate Vaccine (PCV)"
   },
   "Epi.vaccineDesc.PCV3": {
-    "bn": "Pneumococcal Conjugate Vaccine (PCV)",
+    "bn": "নিউমোকক্কাল কনজুগেট টিকা (পিসিভি)",
     "en": "Pneumococcal Conjugate Vaccine (PCV)"
   },
   "Epi.vaccineDesc.PENTA1": {
@@ -1504,7 +1508,7 @@
     "en": "Diphtheria, Pertussis, and Tetanus, Hepatitis B, Hib"
   },
   "Epi.vaccineDesc.TCV": {
-    "bn": "Typhoid Conjugate Vaccine (TCV)",
+    "bn": "টাইফয়েড কনজুগেট টিকা (টিসিভি)",
     "en": "Typhoid Conjugate Vaccine (TCV)"
   },
   "Epi.vaccineDisease.BCG": {
@@ -1908,7 +1912,7 @@
     "en": "✦ 1 visit today"
   },
   "MissionDashboard.ancVisitLabel": {
-    "bn": "গর্ভবতী ভিজিট",
+    "bn": "এএনসি ভিজিট",
     "en": "ANC Visit"
   },
   "MissionDashboard.celebrationEmoji": {
@@ -2028,7 +2032,7 @@
     "en": "{count} pending referrals awaiting follow-up"
   },
   "MissionDashboard.pncVisitLabel": {
-    "bn": "প্রসবোত্তর সাক্ষাৎ",
+    "bn": "পিএনসি ভিজিট",
     "en": "PNC Visit"
   },
   "MissionDashboard.startVisit": {
@@ -2424,7 +2428,7 @@
     "en": "Gaps in ANC"
   },
   "PatientContext.ancVisitLabel": {
-    "bn": "গর্ভবতী ভিজিট",
+    "bn": "এএনসি ভিজিট",
     "en": "ANC Visit"
   },
   "PatientContext.close": {
@@ -2472,7 +2476,7 @@
     "en": "No"
   },
   "PatientContext.pncVisitLabel": {
-    "bn": "প্রসবোত্তর সাক্ষাৎ",
+    "bn": "পিএনসি ভিজিট",
     "en": "PNC Visit"
   },
   "PatientContext.recoveredBadge": {
@@ -3631,6 +3635,34 @@
     "bn": "উচ্চ ঝুঁকিপূর্ণ গর্ভবতী নারী",
     "en": "High-risk pregnant woman"
   },
+  "VisitFlow.reasonHighRiskMother": {
+    "bn": "উচ্চ ঝুঁকিপূর্ণ মা",
+    "en": "High-risk mother"
+  },
+  "VisitFlow.reasonGapsInPnc": {
+    "bn": "পিএনসি সময়ে / প্রসবের পর মায়ের জন্য প্রয়োজনীয় সেবায় ঘাটতি",
+    "en": "Gaps in postnatal care"
+  },
+  "VisitFlow.reasonChildIllnessReferral": {
+    "bn": "শিশু অসুস্থতার রেফারেল",
+    "en": "Child illness referral"
+  },
+  "VisitFlow.ancVisitLabel": {
+    "bn": "এএনসি ভিজিট",
+    "en": "ANC Visit"
+  },
+  "VisitFlow.ancVisitWithNo": {
+    "bn": "এএনসি ভিজিট {n}",
+    "en": "ANC Visit {n}"
+  },
+  "VisitFlow.pncVisitLabel": {
+    "bn": "পিএনসি ভিজিট",
+    "en": "PNC Visit"
+  },
+  "VisitFlow.pncVisitWithNo": {
+    "bn": "পিএনসি ভিজিট {n}",
+    "en": "PNC Visit {n}"
+  },
   "VisitFlow.reasonLowHaemoglobin": {
     "bn": "নিম্ন হিমোগ্লোবিন",
     "en": "Low haemoglobin"
@@ -4178,6 +4210,10 @@
   "addGuardian": {
     "bn": "+ অভিভাবক যোগ করুন",
     "en": "+ Add Guardian"
+  },
+  "addHousehold": {
+    "bn": "খানা যোগ করুন",
+    "en": "Add Household"
   },
   "addMemberAppBar": {
     "bn": "সদস্য যুক্ত করুন",
@@ -5892,7 +5928,7 @@
     "en": "1"
   },
   "durationValue2to3": {
-    "bn": "46056",
+    "bn": "২-৩",
     "en": "2-3"
   },
   "durationValue4plus": {
@@ -7152,7 +7188,7 @@
     "en": "Past illness"
   },
   "imciChildCareCategory": {
-    "bn": "IMCI / শিশু পরিচর্যা",
+    "bn": "আইএমসিআই / শিশু পরিচর্যা",
     "en": "IMCI / Child care"
   },
   "imciLabel": {
@@ -9396,8 +9432,24 @@
     "en": "Risk drivers"
   },
   "riskFactorsIdentified": {
-    "bn": "শনাক্তকৃত ঝুঁকির কারণ",
+    "bn": "শনাক্তকৃত ঝুঁকির কারণসমূহ",
     "en": "Risk Factors Identified"
+  },
+  "PwRisk.ageUnder18": {
+    "bn": "বয়স ১৮ বছরের কম",
+    "en": "Age <18 years"
+  },
+  "PwRisk.ageOver35": {
+    "bn": "বয়স ৩৫ বছরের বেশি",
+    "en": "Age >35 years"
+  },
+  "PwRisk.shortBirthSpacing": {
+    "bn": "সংক্ষিপ্ত জন্মের ব্যবধান < ২ বছর",
+    "en": "Short birth spacing <2 year"
+  },
+  "PwRisk.multipara": {
+    "bn": "> ৩ (সন্তান সংখ্যা ৩ এর বেশি)",
+    "en": "Multipara >3"
   },
   "riskLabel": {
     "bn": "ঝুঁকি",
@@ -11866,5 +11918,205 @@
   "PatientAi.starterReferral": {
     "bn": "আজকে কি তাকে রেফার করা দরকার?",
     "en": "Does she need a referral today?"
+  },
+  "PatientContext.startVisitFailed": {
+    "bn": "ভিজিট শুরু করা যায়নি",
+    "en": "Failed to start visit"
+  },
+  "PatientContext.timeline.ancVisitN": {
+    "bn": "এএনসি ভিজিট {n}",
+    "en": "ANC Visit {n}"
+  },
+  "PatientContext.timeline.anemiaHb": {
+    "bn": "রক্তস্বল্পতা (Hb {n}g/dL)",
+    "en": "Anemia (Hb {n}g/dL)"
+  },
+  "PatientContext.approachingEdd": {
+    "bn": "প্রসবের প্রত্যাশিত তারিখ (EDD) কাছাকাছি — নিবিড়ভাবে পর্যবেক্ষণ করুন",
+    "en": "Approaching EDD — monitor closely"
+  },
+  "PatientContext.timeline.babyWeight": {
+    "bn": "শিশুর ওজন {wt} কেজি।",
+    "en": "Baby {wt} kg."
+  },
+  "PatientContext.timeline.bpRecheckDue": {
+    "bn": "রক্তচাপ পুনরায় পরীক্ষা করা প্রয়োজন",
+    "en": "BP recheck due"
+  },
+  "PatientContext.timeline.bpAboveTarget": {
+    "bn": "রক্তচাপ {bp} লক্ষ্যমাত্রার চেয়ে বেশি",
+    "en": "BP {bp} above target"
+  },
+  "PatientContext.timeline.bpIsAboveTarget": {
+    "bn": "রক্তচাপ {bp} লক্ষ্যমাত্রার চেয়ে বেশি",
+    "en": "BP {bp} is above target"
+  },
+  "PatientContext.timeline.childVisitOverdue": {
+    "bn": "শিশুর ভিজিটের সময় পার হয়ে গেছে",
+    "en": "Child visit overdue"
+  },
+  "PatientContext.timeline.dangerSignReported": {
+    "bn": "বিপদ চিহ্ন রিপোর্ট করা হয়েছে: {sign}।",
+    "en": "Danger sign reported: {sign}."
+  },
+  "PatientContext.timeline.dangerSignUrgentReferral": {
+    "bn": "বিপদ চিহ্ন: {sign} — জরুরি রেফারেল প্রয়োজন।",
+    "en": "Danger sign: {sign} — urgent referral needed."
+  },
+  "PatientContext.timeline.followUpOverdue": {
+    "bn": "ফলো-আপের সময় পার হয়ে গেছে",
+    "en": "Follow-up overdue"
+  },
+  "PatientContext.timeline.hbAnemiaReviewIron": {
+    "bn": "Hb {n}g/dL — রক্তস্বল্পতা। আয়রন সাপ্লিমেন্ট পর্যালোচনা করুন।",
+    "en": "Hb {n}g/dL — anemia. Review iron supplementation."
+  },
+  "PatientContext.timeline.hbMildAnemia": {
+    "bn": "Hb {n}g/dL — মৃদু রক্তস্বল্পতা। আয়রন সাপ্লিমেন্ট চালিয়ে যাবে কিনা নিশ্চিত করুন।",
+    "en": "Hb {n}g/dL — mild anemia. Ensure iron supplementation continues."
+  },
+  "PatientContext.timeline.hbSevereAnemia": {
+    "bn": "Hb {n}g/dL — তীব্র রক্তস্বল্পতা। জরুরি পর্যালোচনা প্রয়োজন।",
+    "en": "Hb {n}g/dL — severe anemia. Urgent review needed."
+  },
+  "PatientContext.timeline.healthyDelivery": {
+    "bn": "সুস্থ প্রসব — মা ও শিশু উভয়েই ভালো আছেন।",
+    "en": "Healthy delivery outcome — mother and baby both doing well."
+  },
+  "PatientContext.timeline.highBpDetected": {
+    "bn": "উচ্চ রক্তচাপ শনাক্ত হয়েছে — নিবিড়ভাবে পর্যবেক্ষণ করুন।",
+    "en": "High BP detected — monitor closely."
+  },
+  "PatientContext.highRiskElevatedBp": {
+    "bn": "উচ্চ ঝুঁকি — উচ্চ রক্তচাপ বা অন্যান্য ঝুঁকির সংকেত",
+    "en": "High risk — elevated BP or other flag"
+  },
+  "PatientContext.timeline.imciChildCare": {
+    "bn": "আইএমসিআই / শিশু পরিচর্যা",
+    "en": "IMCI / Child care"
+  },
+  "PatientContext.timeline.lastChildVisitDaysAgo": {
+    "bn": "সর্বশেষ শিশু স্বাস্থ্য ভিজিট {n} দিন আগে হয়েছিল — শিশুর বৃদ্ধি ও টিকাদান পরীক্ষা করুন",
+    "en": "Last child health visit was {n} days ago — check growth & vaccines"
+  },
+  "PatientContext.timeline.methodFp": {
+    "bn": "পদ্ধতি: {fp}",
+    "en": "Method: {fp}"
+  },
+  "PatientContext.timeline.ncdFollowUpDue": {
+    "bn": "এনসিডি ফলো-আপ প্রয়োজন — সর্বশেষ ভিজিট {n} দিন আগে",
+    "en": "NCD follow-up due — last visit {n} days ago"
+  },
+  "PatientContext.timeline.ncdEnrollmentRecorded": {
+    "bn": "এনসিডি প্রোগ্রামে নিবন্ধন সম্পন্ন হয়েছে।",
+    "en": "NCD programme enrollment recorded."
+  },
+  "PatientContext.timeline.noContraception": {
+    "bn": "বর্তমানে কোনো জন্মনিয়ন্ত্রণ পদ্ধতি ব্যবহার হচ্ছে না — বিকল্পগুলো সম্পর্কে পরামর্শ দিন।",
+    "en": "No contraception method in use — counsel on options."
+  },
+  "PatientContext.timeline.pncVisitN": {
+    "bn": "পিএনসি ভিজিট {n}",
+    "en": "PNC Visit {n}"
+  },
+  "PatientContext.timeline.preEclampsiaWatch": {
+    "bn": "প্রি-এক্লাম্পসিয়া পর্যবেক্ষণ",
+    "en": "Pre-eclampsia watch"
+  },
+  "PatientContext.timeline.pregnancyLoss": {
+    "bn": "গর্ভপাত রেকর্ড করা হয়েছে — ফলো-আপ পরিচর্যার পরামর্শ দেওয়া হয়েছে।",
+    "en": "Pregnancy loss (abortion) recorded — follow-up care advised."
+  },
+  "PatientContext.timeline.pregnancyOutcomeRecorded": {
+    "bn": "গর্ভাবস্থার ফলাফল রেকর্ড করা হয়েছে।",
+    "en": "Pregnancy outcome recorded."
+  },
+  "PatientContext.timeline.pwProfileCreated": {
+    "bn": "গর্ভবতী মা এর প্রোফাইল তৈরি হয়েছে — এএনসি সেবা শুরু হয়েছে",
+    "en": "Pregnant woman profile created — ANC care started"
+  },
+  "PatientContext.timeline.pulseAboveNormal": {
+    "bn": "স্পন্দন  {n} bpm স্বাভাবিকের চেয়ে বেশি",
+    "en": "Pulse {n} bpm is above normal"
+  },
+  "PatientContext.timeline.pulseBelowNormal": {
+    "bn": "স্পন্দন  {n} bpm স্বাভাবিকের চেয়ে কম",
+    "en": "Pulse {n} bpm is below normal"
+  },
+  "PatientContext.timeline.recoveringWellPnc": {
+    "bn": "ভালোভাবে সুস্থ হয়ে উঠছেন — এই পিএনসি ভিজিটে কোনো সমস্যা নেই।",
+    "en": "Recovering well — no concerns at this PNC visit."
+  },
+  "PatientContext.timeline.risingTrendFlagged": {
+    "bn": "ঊর্ধ্বমুখী প্রবণতা চিহ্নিত হয়েছে — প্রস্রাবে প্রোটিন ও বিপদ চিহ্ন পরীক্ষা করুন",
+    "en": "Rising trend flagged — check urine protein & danger signs"
+  },
+  "PatientContext.timeline.routineAnc": {
+    "bn": "নিয়মিত গর্ভকালীন ভিজিট — গুরুত্বপূর্ণ লক্ষণগুলো স্বাভাবিক সীমার মধ্যে।",
+    "en": "Routine antenatal visit — vitals within normal range."
+  },
+  "PatientContext.timeline.severeAnemiaHb": {
+    "bn": "তীব্র রক্তস্বল্পতা (Hb {n} g/dL)।",
+    "en": "Severe anemia (Hb {n} g/dL)."
+  },
+  "PatientContext.timeline.statusDx": {
+    "bn": "অবস্থা: {dx}",
+    "en": "Status: {dx}"
+  },
+  "PatientContext.timeline.stillbirthNeonatalDeath": {
+    "bn": "মৃত সন্তান প্রসব বা নবজাতকের মৃত্যু রেকর্ড করা হয়েছে — ফলো-আপ ও কাউন্সেলিং প্রয়োজন।",
+    "en": "Stillbirth or neonatal death recorded — follow-up and counselling needed."
+  },
+  "PatientContext.timeline.temperatureElevated": {
+    "bn": "শরীরের তাপমাত্রা বেড়ে গেছে",
+    "en": "Temperature is elevated"
+  },
+  "PatientContext.timeline.malariaTreated": {
+    "bn": "পরীক্ষায় পজিটিভ পাওয়া গেছে, ম্যালেরিয়া প্রতিরোধী ওষুধের কোর্স সম্পন্ন হয়েছে",
+    "en": "Tested positive, completed antimalarial course"
+  },
+  "PatientContext.timeline.orsAntibioticsRecovered": {
+    "bn": "ওরস্যালাইন ও অ্যান্টিবায়োটিক দিয়ে চিকিৎসা করা হয়েছে, সম্পূর্ণ সুস্থ হয়েছেন",
+    "en": "Treated with ORS & antibiotics, fully recovered"
+  },
+  "PatientContext.timeline.vaccinationVisitN": {
+    "bn": "টিকাদান ভিজিট {n}",
+    "en": "Vaccination visit {n}"
+  },
+  "PatientContext.timeline.vaccinesList": {
+    "bn": "টিকা: {list}",
+    "en": "Vaccines: {list}"
+  },
+  "PatientContext.timeline.weightKg": {
+    "bn": "ওজন {n} কেজি",
+    "en": "Weight {n} kg"
+  },
+  "PatientContext.timeline.partsUrgentAttention": {
+    "bn": "{parts} — জরুরি মনোযোগ প্রয়োজন।",
+    "en": "{parts} — needs urgent attention."
+  },
+  "PatientContext.timeline.vaccineDoseAdministered": {
+    "bn": "{vaccineName} — {dose} নম্বর ডোজ প্রদান করা হয়েছে।",
+    "en": "{vaccineName} — Dose {dose} administered."
+  },
+  "PatientContext.notApplicable": {
+    "bn": "প্রযোজ্য নয়",
+    "en": "N/A"
+  },
+  "PatientContext.timeline.vaccineAdministered": {
+    "bn": "{vaccineName} প্রদান করা হয়েছে।",
+    "en": "{vaccineName} administered."
+  },
+  "UnifiedForm.babyAliveLabel": {
+    "bn": "শিশু কি জীবিত?",
+    "en": "Is the baby alive?"
+  },
+  "UnifiedForm.babySexLabel": {
+    "bn": "লিঙ্গ",
+    "en": "Sex"
+  },
+  "UnifiedForm.neonatalDeathCauseLabel": {
+    "bn": "নবজাতকের মৃত্যুর কারণ",
+    "en": "Cause of neonatal death"
   }
 }
