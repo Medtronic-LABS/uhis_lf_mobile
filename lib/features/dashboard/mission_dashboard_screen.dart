@@ -35,6 +35,7 @@ import '../visit/widgets/widgets.dart';
 import 'dashboard_filter_state.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
+import '../household/enrollment/enrollment_entry_sheet.dart';
 import '../cce/cce_alerts_drawer.dart';
 import '../cce/cce_repository.dart';
 import '../settings/settings_actions.dart';
@@ -1206,7 +1207,7 @@ class _CreateHouseholdFab extends StatelessWidget {
           color: tokens.fabBackground,
           borderRadius: BorderRadius.circular(AppRadius.fabPill),
           child: InkWell(
-            onTap: () => context.push('/household/enrollment/create'),
+            onTap: () => showEnrollmentEntrySheet(context),
             borderRadius: BorderRadius.circular(AppRadius.fabPill),
             splashColor: Colors.white.withValues(alpha: 0.15),
             child: Padding(
