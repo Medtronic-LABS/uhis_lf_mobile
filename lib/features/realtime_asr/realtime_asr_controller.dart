@@ -97,6 +97,15 @@ class RealtimeAsrController extends ChangeNotifier {
   static const int _stuckWindowSize = 40;
   final List<int> _recentAmplitudes = [];
 
+  // Consecutive chunk count where peak amplitude is below _lowAmpThreshold.
+  // Resets on any chunk that exceeds the threshold. If it reaches
+  // _lowAmpWindow the mic gain is too low to produce usable ASR results —
+  // fires _micWarning to surface a user-visible hint (complements the stuck
+  // detector above which fires only when samples are bit-for-bit identical).
+  static const int _lowAmpThreshold = 800; // ~−32 dBFS; AGC-normalised speech sits well above this
+  static const int _lowAmpWindow = 60;     // ≈4.7 s of continuous audio at 2560-byte chunks
+  int _lowAmpCount = 0;
+
   // Gates silence/noise out of the audio sent to the server — saves mobile
   // bandwidth and server ASR/LLM cost on the low-connectivity, low-end
   // devices this app targets. See VadGate's own doc comment for the
@@ -220,6 +229,7 @@ class RealtimeAsrController extends ChangeNotifier {
     _chunkCount = 0;
     _chunkBytes = 0;
     _recentAmplitudes.clear();
+    _lowAmpCount = 0;
     _vadGate = _buildVadGate();
     _silentSinceLastTick = false;
     _state = RealtimeAsrState.connecting;
@@ -400,6 +410,7 @@ class RealtimeAsrController extends ChangeNotifier {
     // stuck-silent mic as ordinary silence, starving this detector of the
     // samples it needs to ever fire.
     _trackStuckAmplitude(amp);
+    _trackLowAmplitude(amp);
 
     final toSend = _vadGate.process(pcm);
     if (toSend.isEmpty) return;
@@ -437,6 +448,30 @@ class RealtimeAsrController extends ChangeNotifier {
           ? RealtimeAsrStrings.noMicSignal
           : RealtimeAsrStrings.micSignalStuck;
       notifyListeners();
+    }
+  }
+
+  // Complementary to _trackStuckAmplitude: catches real-but-too-quiet signal
+  // (varying amplitudes all below a usable threshold) rather than a pinned
+  // constant. Fires after _lowAmpWindow consecutive low-amplitude chunks so a
+  // brief quiet moment doesn't trigger it. Resets on any chunk that exceeds
+  // the threshold — only sustained quiet triggers the warning.
+  void _trackLowAmplitude(int amp) {
+    if (_micWarning != null) return;
+    if (amp < _lowAmpThreshold) {
+      _lowAmpCount++;
+      if (_lowAmpCount >= _lowAmpWindow) {
+        debugPrint(
+          '[RealtimeASR] WARNING: peak amplitude has stayed below '
+          '$_lowAmpThreshold for $_lowAmpWindow consecutive chunks — mic '
+          'gain is too low for reliable ASR. Device may need voiceRecognition '
+          'audio source or the handset microphone hardware gain is insufficient.',
+        );
+        _micWarning = RealtimeAsrStrings.micGainLow;
+        notifyListeners();
+      }
+    } else {
+      _lowAmpCount = 0;
     }
   }
 

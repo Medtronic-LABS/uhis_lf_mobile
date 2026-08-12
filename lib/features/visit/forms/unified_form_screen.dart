@@ -4300,8 +4300,15 @@ class _NumericFieldState extends State<_NumericField> {
         final newNum  = double.tryParse(newText);
         final sameValue = ctrlNum != null && newNum != null && ctrlNum == newNum;
         if (!sameValue) {
-          _ctrl.text = newText;
-          _ctrl.selection = TextSelection.collapsed(offset: newText.length);
+          // Setting _ctrl.text synchronously here would trigger
+          // TextEditingController.notifyListeners → FormState.setState during
+          // the parent's build frame, causing the "setState during build"
+          // assertion. Defer to post-frame so the current build completes first.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _ctrl.text = newText;
+            _ctrl.selection = TextSelection.collapsed(offset: newText.length);
+          });
         }
       }
     }
