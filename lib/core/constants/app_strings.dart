@@ -1608,6 +1608,9 @@ abstract final class ReferralStrings {
   // surface, so they stay independently translatable.
   static String get shortReasonBloodGlucoseElevated =>
       getTranslatedString('Referral.shortReasonBloodGlucoseElevated', 'Blood glucose elevated');
+  /// Spice NCD wire reason `High BG` (UHIS `high_bg`).
+  static String get shortReasonHighBg =>
+      getTranslatedString('Referral.shortReasonHighBg', 'High BG');
   static String get shortReasonAbnormalPulse =>
       getTranslatedString('Referral.shortReasonAbnormalPulse', 'Abnormal pulse');
   static String get shortReasonHighBp =>
@@ -6110,6 +6113,141 @@ abstract final class PatientDetailStrings {
       getTranslatedString('PatientDetail.referredTo', 'Referred to');
   static String get referralMade =>
       getTranslatedString('PatientDetail.referralMade', 'Referral made');
+
+  // ── Detail-sheet / care-thread labels (localized) ───────────────────────
+  static String get bp => getTranslatedString('PatientDetail.bp', 'BP');
+  static String get bloodGlucose => getTranslatedString('PatientDetail.bloodGlucose', 'Blood glucose');
+  static String get glucoseType => getTranslatedString('PatientDetail.glucoseType', 'Glucose type');
+  static String get bmi => getTranslatedString('PatientDetail.bmi', 'BMI');
+  static String get weightKg => getTranslatedString('PatientDetail.weightKg', 'Weight (kg)');
+  static String get heightCm => getTranslatedString('PatientDetail.heightCm', 'Height (cm)');
+  static String get cvdRisk => getTranslatedString('PatientDetail.cvdRisk', 'CVD risk');
+  static String get diagnosis => getTranslatedString('PatientDetail.diagnosis', 'Diagnosis');
+  static String get symptoms => getTranslatedString('PatientDetail.symptoms', 'Symptoms');
+  static String get takingMedication => getTranslatedString('PatientDetail.takingMedication', 'Taking medication');
+  static String get heartAttackHistory => getTranslatedString('PatientDetail.heartAttackHistory', 'Heart attack history');
+  static String get strokeHistory => getTranslatedString('PatientDetail.strokeHistory', 'Stroke history');
+  static String get kidneyDisease => getTranslatedString('PatientDetail.kidneyDisease', 'Kidney disease');
+  static String get copd => getTranslatedString('PatientDetail.copd', 'COPD');
+  static String get hb => getTranslatedString('PatientDetail.hb', 'Hb (g/dL)');
+  static String get fundalHeight => getTranslatedString('PatientDetail.fundalHeight', 'Fundal height (cm)');
+  static String get gravida => getTranslatedString('PatientDetail.gravida', 'Gravida');
+  static String get parity => getTranslatedString('PatientDetail.parity', 'Parity');
+  static String get livingChildren => getTranslatedString('PatientDetail.livingChildren', 'Living children');
+  static String get pregnancyTest => getTranslatedString('PatientDetail.pregnancyTest', 'Pregnancy test');
+  static String get ageOfLastChild => getTranslatedString('PatientDetail.ageOfLastChild', 'Age of last child');
+  static String get ageOfLastChildDob => getTranslatedString('PatientDetail.ageOfLastChildDob', 'Age of last child (DOB)');
+  static String get ancVisitNo => getTranslatedString('PatientDetail.ancVisitNo', 'ANC visit no.');
+  static String get highRisk => getTranslatedString('PatientDetail.highRisk', 'High risk');
+  static String get ancGaps => getTranslatedString('PatientDetail.ancGaps', 'ANC gaps');
+  static String get dangerSigns => getTranslatedString('PatientDetail.dangerSigns', 'Danger signs');
+  static String get followUpVisit => getTranslatedString('PatientDetail.followUpVisit', 'Follow-up visit');
+  static String get pncVisitNo => getTranslatedString('PatientDetail.pncVisitNo', 'PNC visit no.');
+  static String get modeOfDelivery => getTranslatedString('PatientDetail.modeOfDelivery', 'Mode of delivery');
+  static String get complications => getTranslatedString('PatientDetail.complications', 'Complications');
+  static String get complicationDetails => getTranslatedString('PatientDetail.complicationDetails', 'Complication details');
+  static String get postnatalCare => getTranslatedString('PatientDetail.postnatalCare', 'Postnatal care');
+  static String get newbornCare => getTranslatedString('PatientDetail.newbornCare', 'Newborn care');
+  static String get previousComplications => getTranslatedString('PatientDetail.previousComplications', 'Previous complications');
+  static String get existingIllness => getTranslatedString('PatientDetail.existingIllness', 'Existing illness');
+  static String get onTreatment => getTranslatedString('PatientDetail.onTreatment', 'On treatment');
+  static String get ttTdCompleted => getTranslatedString('PatientDetail.ttTdCompleted', 'TT/Td completed');
+  static String get deliveryFacility => getTranslatedString('PatientDetail.deliveryFacility', 'Delivery facility');
+  static String get lastAncWeightKg => getTranslatedString('PatientDetail.lastAncWeightKg', 'Last ANC weight (kg)');
+  static String get lastAncVisit => getTranslatedString('PatientDetail.lastAncVisit', 'Last ANC visit');
+  static String get deliveryDate => getTranslatedString('PatientDetail.deliveryDate', 'Delivery date');
+  static String get cough => getTranslatedString('PatientDetail.cough', 'Cough');
+  static String get coughOver2Weeks => getTranslatedString('PatientDetail.coughOver2Weeks', 'Cough >2 weeks');
+  static String get nightSweats => getTranslatedString('PatientDetail.nightSweats', 'Night sweats');
+  static String get fever => getTranslatedString('PatientDetail.fever', 'Fever');
+  static String get weightLoss => getTranslatedString('PatientDetail.weightLoss', 'Weight loss');
+  static String get illnessComplication => getTranslatedString('PatientDetail.illnessComplication', 'Illness/complication');
+  static String get complicationType => getTranslatedString('PatientDetail.complicationType', 'Complication type');
+  static String get vaccinesReceived => getTranslatedString('PatientDetail.vaccinesReceived', 'Vaccines received');
+  static String get breastfeeding => getTranslatedString('PatientDetail.breastfeeding', 'Breastfeeding');
+  static String get deworming => getTranslatedString('PatientDetail.deworming', 'Deworming');
+  static String get referTo => getTranslatedString('PatientDetail.referTo', 'Refer to');
+  static String get eyeTestOutcome => getTranslatedString('PatientDetail.eyeTestOutcome', 'Eye test outcome');
+  static String get eyeDisease => getTranslatedString('PatientDetail.eyeDisease', 'Eye disease');
+  static String get glassPower => getTranslatedString('PatientDetail.glassPower', 'Glass power');
+  static String get glassesSold => getTranslatedString('PatientDetail.glassesSold', 'Glasses sold');
+  static String get glassType => getTranslatedString('PatientDetail.glassType', 'Glass type');
+  static String get frameType => getTranslatedString('PatientDetail.frameType', 'Frame type');
+  static String get firstTimeUser => getTranslatedString('PatientDetail.firstTimeUser', 'First time user');
+  static String get referredForOperation => getTranslatedString('PatientDetail.referredForOperation', 'Referred for operation');
+  static String get operation => getTranslatedString('PatientDetail.operation', 'Operation');
+  static String get postSurgeryStatus => getTranslatedString('PatientDetail.postSurgeryStatus', 'Post-surgery status');
+  static String get ncdServiceProvided => getTranslatedString('PatientDetail.ncdServiceProvided', 'NCD service provided');
+  static String get fpMethod => getTranslatedString('PatientDetail.fpMethod', 'FP method');
+  static String get desireForChildren => getTranslatedString('PatientDetail.desireForChildren', 'Desire for children');
+  static String get lmp => getTranslatedString('PatientDetail.lmp', 'LMP');
+  static String get edd => getTranslatedString('PatientDetail.edd', 'EDD');
+  static String get weeksRemaining => getTranslatedString('PatientDetail.weeksRemaining', 'Weeks remaining');
+  static String weeksValue(Object n) => getTranslatedString(
+        'PatientDetail.weeksValue',
+        '$n weeks',
+        params: {'n': '$n'},
+      );
+  static String get risk => getTranslatedString('PatientDetail.risk', 'Risk');
+  static String get nearTerm => getTranslatedString('PatientDetail.nearTerm', 'Near term');
+  static String get missedVisitsDetected => getTranslatedString('PatientDetail.missedVisitsDetected', 'Missed visits detected');
+  static String get lastBp => getTranslatedString('PatientDetail.lastBp', 'Last BP');
+  static String get haemoglobin => getTranslatedString('PatientDetail.haemoglobin', 'Haemoglobin');
+  static String get weight => getTranslatedString('PatientDetail.weight', 'Weight');
+  static String get gravidaParity => getTranslatedString('PatientDetail.gravidaParity', 'Gravida / Parity');
+  static String get ancVisits => getTranslatedString('PatientDetail.ancVisits', 'ANC visits');
+  static String get ncdVisits => getTranslatedString('PatientDetail.ncdVisits', 'NCD visits');
+  static String get pncVisits => getTranslatedString('PatientDetail.pncVisits', 'PNC visits');
+  static String get imciVisits => getTranslatedString('PatientDetail.imciVisits', 'IMCI visits');
+  static String get tbVisits => getTranslatedString('PatientDetail.tbVisits', 'TB visits');
+  static String get bloodSugar => getTranslatedString('PatientDetail.bloodSugar', 'Blood sugar');
+  static String bloodSugarWithType(Object type) => getTranslatedString(
+        'PatientDetail.bloodSugarWithType',
+        'Blood sugar ($type)',
+        params: {'type': '$type'},
+      );
+  static String get lastWeight => getTranslatedString('PatientDetail.lastWeight', 'Last weight');
+  static String get delivery => getTranslatedString('PatientDetail.delivery', 'Delivery');
+  static String get yes => getTranslatedString('PatientDetail.yes', 'Yes');
+  static String get lastVisit => getTranslatedString('PatientDetail.lastVisit', 'Last visit');
+  static String get nextDue => getTranslatedString('PatientDetail.nextDue', 'Next due');
+  static String get assessmentsThisVisit => getTranslatedString('PatientDetail.assessmentsThisVisit', 'Assessments this visit');
+  static String get visits => getTranslatedString('PatientDetail.visits', 'Visits');
+  static String get overdue => getTranslatedString('PatientDetail.overdue', 'OVERDUE');
+  static String get critical => getTranslatedString('PatientDetail.critical', 'CRITICAL');
+  static String get highRiskBadge => getTranslatedString('PatientDetail.highRiskBadge', 'HIGH RISK');
+  static String get monitoring => getTranslatedString('PatientDetail.monitoring', 'MONITORING');
+  static String get pregnancy => getTranslatedString('PatientDetail.pregnancy', 'Pregnancy');
+  static String get pregnancyOutcome => getTranslatedString('PatientDetail.pregnancyOutcome', 'Pregnancy Outcome');
+  static String get antenatalCare => getTranslatedString('PatientDetail.antenatalCare', 'Antenatal Care');
+  static String get postnatalCareCategory => getTranslatedString('PatientDetail.postnatalCareCategory', 'Postnatal Care');
+  static String get onTreatmentBadge => getTranslatedString('PatientDetail.onTreatmentBadge', 'on treatment');
+  static String band(Object n) => getTranslatedString(
+        'PatientDetail.band',
+        'Band $n',
+        params: {'n': '$n'},
+      );
+  static String get pregnantSuffix => getTranslatedString('PatientDetail.pregnantSuffix', 'Pregnant');
+  static String get editPlus => getTranslatedString('PatientDetail.editPlus', '+ Edit');
+
+  /// NCD `referralFacilityType` wire value → UI label.
+  static String ncdFacilityType(String raw) {
+    final t = raw.trim();
+    if (t == 'Community Clinic' || t == 'communityClinic') {
+      return getTranslatedString(
+        'Epi.referralFacility.communityClinic',
+        'Community Clinic',
+      );
+    }
+    if (t == 'Upazila Health Complex' || t == 'upazilaHealthComplex') {
+      return getTranslatedString(
+        'VisitFlow.referralDestinationUpazilaHealthComplex',
+        'Upazila Health Complex',
+      );
+    }
+    return t;
+  }
+
 }
 
 abstract final class CareThreadStrings {

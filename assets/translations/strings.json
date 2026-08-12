@@ -12118,5 +12118,465 @@
   "UnifiedForm.neonatalDeathCauseLabel": {
     "bn": "নবজাতকের মৃত্যুর কারণ",
     "en": "Cause of neonatal death"
+  },
+  "PatientDetail.bp": {
+    "bn": "বিপি",
+    "en": "BP"
+  },
+  "PatientDetail.bloodGlucose": {
+    "bn": "রক্তে গ্লুকোজ",
+    "en": "Blood glucose"
+  },
+  "PatientDetail.glucoseType": {
+    "bn": "গ্লুকোজের ধরন",
+    "en": "Glucose type"
+  },
+  "PatientDetail.bmi": {
+    "bn": "BMI",
+    "en": "BMI"
+  },
+  "PatientDetail.weightKg": {
+    "bn": "ওজন (কেজি)",
+    "en": "Weight (kg)"
+  },
+  "PatientDetail.heightCm": {
+    "bn": "উচ্চতা (সেমি)",
+    "en": "Height (cm)"
+  },
+  "Referral.shortReasonHighBp": {
+    "bn": "উচ্চ (বিপি)",
+    "en": "High BP"
+  },
+  "Referral.shortReasonHighBg": {
+    "bn": "উচ্চ (বিজি)",
+    "en": "High BG"
+  },
+  "Referral.shortReasonBloodGlucoseElevated": {
+    "bn": "রক্তে গ্লুকোজ বেশি",
+    "en": "Blood glucose elevated"
+  },
+  "Referral.shortReasonAbnormalPulse": {
+    "bn": "অস্বাভাবিক নাড়ি",
+    "en": "Abnormal pulse"
+  },
+  "Referral.shortReasonLowHbAnemia": {
+    "bn": "নিম্ন Hb / রক্তস্বল্পতা",
+    "en": "Low Hb / Anemia"
+  },
+  "Referral.shortReasonDangerSign": {
+    "bn": "বিপদ চিহ্ন",
+    "en": "Danger sign"
+  },
+  "Referral.shortReasonElevatedTemp": {
+    "bn": "উচ্চ তাপমাত্রা",
+    "en": "Elevated temperature"
+  },
+  "Referral.shortReasonLowWeight": {
+    "bn": "কম ওজন",
+    "en": "Low weight"
+  },
+  "Referral.shortReasonLowAdherence": {
+    "bn": "ওষুধ সেবনে কম আনুগত্য",
+    "en": "Low medication adherence"
+  },
+  "Referral.shortReasonNoFpMethod": {
+    "bn": "কোনো এফপি পদ্ধতি নেই",
+    "en": "No FP method"
+  },
+  "Referral.shortReasonSupplementGap": {
+    "bn": "সাপ্লিমেন্ট ঘাটতি",
+    "en": "Supplement gap"
+  },
+  "Referral.shortReasonVisitOverdue": {
+    "bn": "ভিজিট বকেয়া",
+    "en": "Visit overdue"
+  },
+  "Referral.shortReasonClinicalSymptoms": {
+    "bn": "ক্লিনিক্যাল উপসর্গ",
+    "en": "Clinical symptoms"
+  },
+  "PatientDetail.cvdRisk": {
+    "bn": "সিভিডি ঝুঁকি",
+    "en": "CVD risk"
+  },
+  "PatientDetail.diagnosis": {
+    "bn": "রোগ নির্ণয়",
+    "en": "Diagnosis"
+  },
+  "PatientDetail.symptoms": {
+    "bn": "লক্ষণ",
+    "en": "Symptoms"
+  },
+  "PatientDetail.takingMedication": {
+    "bn": "নিয়মিত ঔষধ সেবন",
+    "en": "Taking medication"
+  },
+  "PatientDetail.heartAttackHistory": {
+    "bn": "হার্ট অ্যাটাক",
+    "en": "Heart attack history"
+  },
+  "PatientDetail.strokeHistory": {
+    "bn": "স্ট্রোক",
+    "en": "Stroke history"
+  },
+  "PatientDetail.kidneyDisease": {
+    "bn": "কিডনি রোগ",
+    "en": "Kidney disease"
+  },
+  "PatientDetail.copd": {
+    "bn": "সিওপিডি",
+    "en": "COPD"
+  },
+  "PatientDetail.hb": {
+    "bn": "হিমোগ্লোবিন (gm/dl)",
+    "en": "Hb (g/dL)"
+  },
+  "PatientDetail.fundalHeight": {
+    "bn": "জরায়ুর উচ্চতা (সেমি)",
+    "en": "Fundal height (cm)"
+  },
+  "PatientDetail.gravida": {
+    "bn": "গর্ভসংখ্যা",
+    "en": "Gravida"
+  },
+  "PatientDetail.parity": {
+    "bn": "প্রসব সংখ্যা",
+    "en": "Parity"
+  },
+  "PatientDetail.livingChildren": {
+    "bn": "জীবিত সন্তান সংখ্যা",
+    "en": "Living children"
+  },
+  "PatientDetail.pregnancyTest": {
+    "bn": "গর্ভধারণ পরীক্ষা",
+    "en": "Pregnancy test"
+  },
+  "PatientDetail.ageOfLastChild": {
+    "bn": "সবচেয়ে ছোট সন্তানের বয়স",
+    "en": "Age of last child"
+  },
+  "PatientDetail.ageOfLastChildDob": {
+    "bn": "সবচেয়ে ছোট সন্তানের জন্ম তারিখ",
+    "en": "Age of last child (DOB)"
+  },
+  "PatientDetail.ancVisitNo": {
+    "bn": "এএনসি ভিজিট নং",
+    "en": "ANC visit no."
+  },
+  "PatientDetail.highRisk": {
+    "bn": "উচ্চ ঝুঁকি",
+    "en": "High risk"
+  },
+  "PatientDetail.ancGaps": {
+    "bn": "গর্ভকালীন পরিচর্যায় অসম্পূর্ণতা",
+    "en": "ANC gaps"
+  },
+  "PatientDetail.dangerSigns": {
+    "bn": "বিপদচিহ্ন",
+    "en": "Danger signs"
+  },
+  "PatientDetail.followUpVisit": {
+    "bn": "পরবর্তী পরিদর্শন",
+    "en": "Follow-up visit"
+  },
+  "PatientDetail.pncVisitNo": {
+    "bn": "পিএনসি ভিজিট নং",
+    "en": "PNC visit no."
+  },
+  "PatientDetail.modeOfDelivery": {
+    "bn": "প্রসবের পদ্ধতি",
+    "en": "Mode of delivery"
+  },
+  "PatientDetail.complications": {
+    "bn": "জটিলতা",
+    "en": "Complications"
+  },
+  "PatientDetail.complicationDetails": {
+    "bn": "প্রসবকালীন জটিলতা",
+    "en": "Complication details"
+  },
+  "PatientDetail.postnatalCare": {
+    "bn": "প্রসব পরবর্তী মায়ের পরিচর্যা",
+    "en": "Postnatal care"
+  },
+  "PatientDetail.newbornCare": {
+    "bn": "নবজাতকের যত্ন",
+    "en": "Newborn care"
+  },
+  "PatientDetail.previousComplications": {
+    "bn": "পূর্ববর্তী গর্ভকালীন জটিলতা",
+    "en": "Previous complications"
+  },
+  "PatientDetail.existingIllness": {
+    "bn": "বিদ্যমান রোগ",
+    "en": "Existing illness"
+  },
+  "PatientDetail.onTreatment": {
+    "bn": "চিকিৎসাধীন",
+    "en": "On treatment"
+  },
+  "PatientDetail.ttTdCompleted": {
+    "bn": "টিটি টিকা সম্পূর্ণ",
+    "en": "TT/Td completed"
+  },
+  "PatientDetail.deliveryFacility": {
+    "bn": "প্রসবের স্বাস্থ্যকেন্দ্র",
+    "en": "Delivery facility"
+  },
+  "PatientDetail.lastAncWeightKg": {
+    "bn": "শেষ এএনসি ওজন (কেজি)",
+    "en": "Last ANC weight (kg)"
+  },
+  "PatientDetail.lastAncVisit": {
+    "bn": "শেষ এএনসি ভিজিট",
+    "en": "Last ANC visit"
+  },
+  "PatientDetail.deliveryDate": {
+    "bn": "প্রসবের তারিখ",
+    "en": "Delivery date"
+  },
+  "PatientDetail.cough": {
+    "bn": "কাশি",
+    "en": "Cough"
+  },
+  "PatientDetail.coughOver2Weeks": {
+    "bn": "কাশি (>২ সপ্তাহ)",
+    "en": "Cough >2 weeks"
+  },
+  "PatientDetail.nightSweats": {
+    "bn": "রাতের ঘাম",
+    "en": "Night sweats"
+  },
+  "PatientDetail.fever": {
+    "bn": "জ্বর",
+    "en": "Fever"
+  },
+  "PatientDetail.weightLoss": {
+    "bn": "ওজন কমে যাওয়া",
+    "en": "Weight loss"
+  },
+  "PatientDetail.illnessComplication": {
+    "bn": "রোগ/জটিলতা",
+    "en": "Illness/complication"
+  },
+  "PatientDetail.complicationType": {
+    "bn": "জটিলতার ধরন",
+    "en": "Complication type"
+  },
+  "PatientDetail.vaccinesReceived": {
+    "bn": "প্রাপ্ত টিকা",
+    "en": "Vaccines received"
+  },
+  "PatientDetail.breastfeeding": {
+    "bn": "বুকের দুধ খাওয়ানো",
+    "en": "Breastfeeding"
+  },
+  "PatientDetail.deworming": {
+    "bn": "কৃমিনাশক",
+    "en": "Deworming"
+  },
+  "PatientDetail.referTo": {
+    "bn": "রেফার করুন",
+    "en": "Refer to"
+  },
+  "PatientDetail.eyeTestOutcome": {
+    "bn": "চোখ পরীক্ষার ফলাফল",
+    "en": "Eye test outcome"
+  },
+  "PatientDetail.eyeDisease": {
+    "bn": "চোখের রোগ",
+    "en": "Eye disease"
+  },
+  "PatientDetail.glassPower": {
+    "bn": "পাওয়ার",
+    "en": "Glass power"
+  },
+  "PatientDetail.glassesSold": {
+    "bn": "চশমা বিক্রয়",
+    "en": "Glasses sold"
+  },
+  "PatientDetail.glassType": {
+    "bn": "চশমার ধরন",
+    "en": "Glass type"
+  },
+  "PatientDetail.frameType": {
+    "bn": "ফ্রেমের ধরন",
+    "en": "Frame type"
+  },
+  "PatientDetail.firstTimeUser": {
+    "bn": "প্রথম ব্যবহারকারী",
+    "en": "First time user"
+  },
+  "PatientDetail.referredForOperation": {
+    "bn": "অপারেশনের জন্য রেফার",
+    "en": "Referred for operation"
+  },
+  "PatientDetail.operation": {
+    "bn": "অপারেশন",
+    "en": "Operation"
+  },
+  "PatientDetail.postSurgeryStatus": {
+    "bn": "অপারেশন পরবর্তী অবস্থা",
+    "en": "Post-surgery status"
+  },
+  "PatientDetail.ncdServiceProvided": {
+    "bn": "এনসিডি সেবা প্রদান",
+    "en": "NCD service provided"
+  },
+  "PatientDetail.fpMethod": {
+    "bn": "পরিবার পরিকল্পনা পদ্ধতি",
+    "en": "FP method"
+  },
+  "PatientDetail.desireForChildren": {
+    "bn": "ভবিষ্যতে সন্তান নেওয়ার ইচ্ছা",
+    "en": "Desire for children"
+  },
+  "PatientDetail.lmp": {
+    "bn": "এলএমপি",
+    "en": "LMP"
+  },
+  "PatientDetail.edd": {
+    "bn": "ইডিডি",
+    "en": "EDD"
+  },
+  "PatientDetail.weeksRemaining": {
+    "bn": "অবশিষ্ট সপ্তাহ",
+    "en": "Weeks remaining"
+  },
+  "PatientDetail.weeksValue": {
+    "bn": "{n} সপ্তাহ",
+    "en": "{n} weeks"
+  },
+  "PatientDetail.risk": {
+    "bn": "ঝুঁকি",
+    "en": "Risk"
+  },
+  "PatientDetail.nearTerm": {
+    "bn": "প্রসবের কাছাকাছি",
+    "en": "Near term"
+  },
+  "PatientDetail.missedVisitsDetected": {
+    "bn": "বাদ পড়া ভিজিট শনাক্ত",
+    "en": "Missed visits detected"
+  },
+  "PatientDetail.lastBp": {
+    "bn": "শেষ বিপি",
+    "en": "Last BP"
+  },
+  "PatientDetail.haemoglobin": {
+    "bn": "হিমোগ্লোবিন",
+    "en": "Haemoglobin"
+  },
+  "PatientDetail.weight": {
+    "bn": "ওজন",
+    "en": "Weight"
+  },
+  "PatientDetail.gravidaParity": {
+    "bn": "গর্ভসংখ্যা / প্রসব সংখ্যা",
+    "en": "Gravida / Parity"
+  },
+  "PatientDetail.ancVisits": {
+    "bn": "এএনসি ভিজিট",
+    "en": "ANC visits"
+  },
+  "PatientDetail.ncdVisits": {
+    "bn": "এনসিডি ভিজিট",
+    "en": "NCD visits"
+  },
+  "PatientDetail.pncVisits": {
+    "bn": "পিএনসি ভিজিট",
+    "en": "PNC visits"
+  },
+  "PatientDetail.imciVisits": {
+    "bn": "আইএমসিআই ভিজিট",
+    "en": "IMCI visits"
+  },
+  "PatientDetail.tbVisits": {
+    "bn": "টিবি ভিজিট",
+    "en": "TB visits"
+  },
+  "PatientDetail.bloodSugar": {
+    "bn": "রক্তে শর্করা",
+    "en": "Blood sugar"
+  },
+  "PatientDetail.bloodSugarWithType": {
+    "bn": "রক্তে শর্করা ({type})",
+    "en": "Blood sugar ({type})"
+  },
+  "PatientDetail.lastWeight": {
+    "bn": "শেষ ওজন",
+    "en": "Last weight"
+  },
+  "PatientDetail.delivery": {
+    "bn": "প্রসব",
+    "en": "Delivery"
+  },
+  "PatientDetail.yes": {
+    "bn": "হ্যাঁ",
+    "en": "Yes"
+  },
+  "PatientDetail.lastVisit": {
+    "bn": "শেষ ভিজিট",
+    "en": "Last visit"
+  },
+  "PatientDetail.nextDue": {
+    "bn": "পরবর্তী নির্ধারিত",
+    "en": "Next due"
+  },
+  "PatientDetail.assessmentsThisVisit": {
+    "bn": "এই ভিজিটের মূল্যায়ন",
+    "en": "Assessments this visit"
+  },
+  "PatientDetail.visits": {
+    "bn": "ভিজিট",
+    "en": "Visits"
+  },
+  "PatientDetail.overdue": {
+    "bn": "বকেয়া",
+    "en": "OVERDUE"
+  },
+  "PatientDetail.critical": {
+    "bn": "জরুরি",
+    "en": "CRITICAL"
+  },
+  "PatientDetail.highRiskBadge": {
+    "bn": "উচ্চ ঝুঁকি",
+    "en": "HIGH RISK"
+  },
+  "PatientDetail.monitoring": {
+    "bn": "পর্যবেক্ষণ",
+    "en": "MONITORING"
+  },
+  "PatientDetail.pregnancy": {
+    "bn": "গর্ভাবস্থা",
+    "en": "Pregnancy"
+  },
+  "PatientDetail.pregnancyOutcome": {
+    "bn": "প্রসবের ফলাফল",
+    "en": "Pregnancy Outcome"
+  },
+  "PatientDetail.antenatalCare": {
+    "bn": "প্রসবপূর্ব সেবা",
+    "en": "Antenatal Care"
+  },
+  "PatientDetail.postnatalCareCategory": {
+    "bn": "প্রসবোত্তর সেবা",
+    "en": "Postnatal Care"
+  },
+  "PatientDetail.onTreatmentBadge": {
+    "bn": "চিকিৎসাধীন",
+    "en": "on treatment"
+  },
+  "PatientDetail.band": {
+    "bn": "ব্যান্ড {n}",
+    "en": "Band {n}"
+  },
+  "PatientDetail.pregnantSuffix": {
+    "bn": "গর্ভবতী",
+    "en": "Pregnant"
+  },
+  "PatientDetail.editPlus": {
+    "bn": "+ সম্পাদনা",
+    "en": "+ Edit"
   }
 }

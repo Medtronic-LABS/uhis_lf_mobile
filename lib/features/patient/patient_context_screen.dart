@@ -926,7 +926,7 @@ class _PatientContextScreenState
     final progs = data.programmes.toList();
 
     final band = data.riskBand;
-    final bandLabel = band == null ? null : 'Band ${band.index + 1}';
+    final bandLabel = band == null ? null : PatientDetailStrings.band(band.index + 1);
     final reasons = data.riskReasons;
 
     final chip = <String>[
@@ -937,7 +937,7 @@ class _PatientContextScreenState
     final summary = StringBuffer()
       ..write('${data.age != null ? '${data.age}y' : '—'}'
           '${data.gender != null ? ', ${data.gender}' : ''}');
-    if (data.isPregnant) summary.write('  ·  Pregnant');
+    if (data.isPregnant) summary.write('  ·  ${PatientDetailStrings.pregnantSuffix}');
 
     final extras = await _clinicalContextExtras(data);
 
@@ -1298,16 +1298,16 @@ class _PatientContextScreenState
     Color statusBg = Colors.transparent;
     Color statusFg = Colors.white;
     if (pendingEntry != null) {
-      statusLabel = 'OVERDUE';
+      statusLabel = PatientDetailStrings.overdue;
       statusBg = AppColors.statusCritical;
     } else if (data.riskBand == Band.band1) {
-      statusLabel = 'CRITICAL';
+      statusLabel = PatientDetailStrings.critical;
       statusBg = AppColors.statusCritical;
     } else if (data.riskBand == Band.band2) {
-      statusLabel = 'HIGH RISK';
+      statusLabel = PatientDetailStrings.highRiskBadge;
       statusBg = AppColors.statusWarning;
     } else if (data.riskBand == Band.band3) {
-      statusLabel = 'MONITORING';
+      statusLabel = PatientDetailStrings.monitoring;
       statusBg = AppColors.navy;
     }
 
@@ -2309,6 +2309,8 @@ _TimelineEntry _mergeVisitDayEntries(List<_TimelineEntry> dayEntries) {
   // Prefer a referred / on-treatment row as the tap primary when present.
   final primary = ordered.firstWhere(
     (e) =>
+        (e.badge ?? '') == PatientContextStrings.referredBadge ||
+        (e.badge ?? '') == PatientContextStrings.onTreatmentBadge ||
         (e.badge ?? '').toLowerCase() == 'referred' ||
         (e.badge ?? '').toLowerCase() == 'on treatment',
     orElse: () => ordered.first,
@@ -2334,7 +2336,7 @@ _TimelineEntry _mergeVisitDayEntries(List<_TimelineEntry> dayEntries) {
     emoji: primary.emoji,
     title: titles.join(' · '),
     relativeDate: _relativeDate(newest),
-    category: titles.length > 1 ? 'Visit' : primary.category,
+    category: titles.length > 1 ? PatientDetailStrings.visits : primary.category,
     date: newest,
     dotColor: primary.dotColor,
     description: descriptions.isEmpty ? null : descriptions.join(' · '),
@@ -2356,8 +2358,8 @@ _TimelineFlow _timelineFlow(_TimelineEntry e) {
   final category = e.category;
 
   if (_isPregnancyOutcomeType(type) ||
-      title == 'Pregnancy Outcome' ||
-      category == 'Delivery') {
+      title == PatientContextStrings.pregnancyOutcomeTitle ||
+      category == PatientContextStrings.deliveryCategory) {
     return _TimelineFlow.postnatal;
   }
   if (e.programme == Programme.pw ||
@@ -2367,13 +2369,13 @@ _TimelineFlow _timelineFlow(_TimelineEntry e) {
       e.programme == Programme.anc ||
       Programme.fromString(type) == Programme.anc ||
       title.startsWith('ANC') ||
-      category == 'Antenatal Care') {
+      category == PatientContextStrings.antenatalCareCategory) {
     return _TimelineFlow.antenatal;
   }
   if (e.programme == Programme.pnc ||
       Programme.fromString(type) == Programme.pnc ||
       title.startsWith('PNC') ||
-      category == 'Postnatal Care') {
+      category == PatientContextStrings.postnatalCareCategory) {
     return _TimelineFlow.postnatal;
   }
   return _TimelineFlow.other;
@@ -2387,8 +2389,8 @@ int _timelineFlowRank(_TimelineEntry e) {
   final category = e.category;
 
   if (_isPregnancyOutcomeType(type) ||
-      title == 'Pregnancy Outcome' ||
-      category == 'Delivery') {
+      title == PatientContextStrings.pregnancyOutcomeTitle ||
+      category == PatientContextStrings.deliveryCategory) {
     return 1; // below PNC
   }
   if (e.programme == Programme.pw ||
@@ -2639,17 +2641,25 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final visitNum = _rawStr(raw['ancVisitNumber']);
     if (visitNum != null && visitNum.isNotEmpty) stats[PatientProfileStrings.visitsCompleted] = visitNum;
     final ancBp = _rawStr(raw['bp']);
-    if (ancBp != null && ancBp.isNotEmpty) stats['Last BP'] = '$ancBp mmHg';
+    if (ancBp != null && ancBp.isNotEmpty) {
+      stats[PatientDetailStrings.lastBp] = '$ancBp mmHg';
+    }
     final hb = _rawStr(raw['hemoglobin']);
-    if (hb != null && hb.isNotEmpty) stats['Haemoglobin'] = '$hb g/dL';
+    if (hb != null && hb.isNotEmpty) {
+      stats[PatientDetailStrings.haemoglobin] = '$hb g/dL';
+    }
     final ancWeight = _rawStr(raw['weight']);
-    if (ancWeight != null && ancWeight.isNotEmpty) stats['Weight'] = '$ancWeight kg';
+    if (ancWeight != null && ancWeight.isNotEmpty) {
+      stats[PatientDetailStrings.weight] = '$ancWeight kg';
+    }
     final g = _rawStr(raw['gravida']);
     final p = _rawStr(raw['parity']);
-    if (g != null && g.isNotEmpty && p != null && p.isNotEmpty) stats['Gravida / Parity'] = 'G$g P$p';
+    if (g != null && g.isNotEmpty && p != null && p.isNotEmpty) {
+      stats[PatientDetailStrings.gravidaParity] = 'G$g P$p';
+    }
     final ancTotal =
         data.assessments.where((a) => Programme.fromString(a.type) == Programme.anc).length;
-    if (ancTotal > 0) stats['ANC visits'] = '$ancTotal';
+    if (ancTotal > 0) stats[PatientDetailStrings.ancVisits] = '$ancTotal';
 
     threads.add(_CareThread(
       programme: Programme.anc,
@@ -2677,9 +2687,9 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.ncdSurface,
       textColor: AppColors.ncdText,
       stats: {
-        if (bp != null && bp.isNotEmpty) 'Last BP': '$bp mmHg',
-        if (ncdTotal > 0) 'NCD visits': '$ncdTotal',
-        if (dx != null && dx.isNotEmpty) 'Diagnosis': dx,
+        if (bp != null && bp.isNotEmpty) PatientDetailStrings.lastBp: '$bp mmHg',
+        if (ncdTotal > 0) PatientDetailStrings.ncdVisits: '$ncdTotal',
+        if (dx != null && dx.isNotEmpty) PatientDetailStrings.diagnosis: dx,
       },
       checkupDate: latest?.date,
     ));
@@ -2687,7 +2697,9 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final bg = _rawStr(raw['bg']);
     if (bg != null && bg.isNotEmpty) {
       final bgType = _rawStr(raw['bgType'])?.trim();
-      final bgLabel = (bgType != null && bgType.isNotEmpty) ? 'Blood sugar ($bgType)' : 'Blood sugar';
+      final bgLabel = (bgType != null && bgType.isNotEmpty)
+          ? PatientDetailStrings.bloodSugarWithType(bgType)
+          : PatientDetailStrings.bloodSugar;
       threads.add(_CareThread(
         programme: Programme.ncd,
         label: CareThreadStrings.sugar,
@@ -2714,10 +2726,12 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.pncSurface,
       textColor: AppColors.pncText,
       stats: {
-        if (pncVisit != null) 'PNC visits': pncVisit,
-        if (deliveryMode != null) 'Delivery': deliveryMode,
-        if (complications?.toLowerCase() == 'yes') 'Complications': 'Yes',
-        if (livingChildren != null) 'Living children': livingChildren,
+        if (pncVisit != null) PatientDetailStrings.pncVisits: pncVisit,
+        if (deliveryMode != null) PatientDetailStrings.delivery: deliveryMode,
+        if (complications?.toLowerCase() == 'yes')
+          PatientDetailStrings.complications: PatientDetailStrings.yes,
+        if (livingChildren != null)
+          PatientDetailStrings.livingChildren: livingChildren,
       },
       checkupDate: latest?.date,
     ));
@@ -2736,8 +2750,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.threadImmBg,
       textColor: AppColors.tbText,
       stats: {
-        if (weight != null) 'Last weight': '$weight kg',
-        if (imciTotal > 0) 'IMCI visits': '$imciTotal',
+        if (weight != null) PatientDetailStrings.lastWeight: '$weight kg',
+        if (imciTotal > 0) PatientDetailStrings.imciVisits: '$imciTotal',
       },
       checkupDate: latest?.date,
     ));
@@ -2764,8 +2778,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.tbSurface,
       textColor: AppColors.tbText,
       stats: {
-        if (dx != null && dx.isNotEmpty) 'Diagnosis': dx,
-        if (tbTotal > 0) 'TB visits': '$tbTotal',
+        if (dx != null && dx.isNotEmpty) PatientDetailStrings.diagnosis: dx,
+        if (tbTotal > 0) PatientDetailStrings.tbVisits: '$tbTotal',
       },
       checkupDate: latest?.date,
     ));
@@ -3243,33 +3257,42 @@ class _PregnancyProgressSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (effectiveLmp != null)
-              _DetailRow(label: 'LMP', value: dateFormat.format(effectiveLmp)),
+              _DetailRow(
+                label: PatientDetailStrings.lmp,
+                value: dateFormat.format(effectiveLmp),
+              ),
             if (eddDate != null)
-              _DetailRow(label: 'EDD', value: dateFormat.format(eddDate)),
+              _DetailRow(
+                label: PatientDetailStrings.edd,
+                value: dateFormat.format(eddDate),
+              ),
             if (gaWeeks != null)
               _DetailRow(
                 label: PatientContextStrings.gestationalAgeLabel,
-                value: '$gaWeeks weeks',
+                value: PatientDetailStrings.weeksValue(gaWeeks),
               ),
             if (weeksLeft != null)
-              _DetailRow(label: 'Weeks remaining', value: '$weeksLeft weeks'),
+              _DetailRow(
+                label: PatientDetailStrings.weeksRemaining,
+                value: PatientDetailStrings.weeksValue(weeksLeft),
+              ),
             _DetailRow(
               label: PatientProfileStrings.visitsCompleted,
               value: '$visitsDone / $_totalAncVisits',
             ),
             if (snapshot.facts.highRiskPregnantWoman)
               _DetailRow(
-                label: 'Risk',
+                label: PatientDetailStrings.risk,
                 value: PatientContextStrings.highRiskElevatedBp,
               ),
             if (snapshot.facts.hasGapsInAnc)
               _DetailRow(
                 label: PatientContextStrings.ancGapsLabel,
-                value: 'Missed visits detected',
+                value: PatientDetailStrings.missedVisitsDetected,
               ),
             if (snapshot.facts.isNearTermAnc)
               _DetailRow(
-                label: 'Near term',
+                label: PatientDetailStrings.nearTerm,
                 value: PatientContextStrings.approachingEdd,
               ),
           ],
@@ -3465,43 +3488,114 @@ class _StatsGrid extends StatelessWidget {
   final List<MemberAssessment> assessments;
   final String noDataLabel;
 
+  static bool _isBloodSugarLabel(String label) =>
+      label.startsWith(PatientDetailStrings.bloodSugar) ||
+      label.startsWith('Blood sugar');
+
   static (IconData, Color) _iconFor(String label) {
-    if (label.startsWith('Blood sugar')) {
+    if (_isBloodSugarLabel(label)) {
       return (Icons.bloodtype_outlined, const Color(0xFFE65100));
     }
-    return switch (label) {
-      'Last BP'               => (Icons.favorite_rounded,                const Color(0xFFD32F2F)),
-      'Haemoglobin'           => (Icons.water_drop_rounded,              const Color(0xFFD32F2F)),
-      'Weight' || 'Last weight' => (Icons.monitor_weight_outlined,       const Color(0xFF1565C0)),
-      'Visits completed'      => (Icons.assignment_turned_in_outlined,   const Color(0xFF2E7D32)),
-      'Visits'                => (Icons.event_note_outlined,             AppColors.navy),
-      'ANC visits'            => (Icons.pregnant_woman_outlined,         const Color(0xFF7B1FA2)),
-      'Diagnosis'             => (Icons.local_hospital_outlined,         const Color(0xFF7B1FA2)),
-      'Delivery'              => (Icons.child_care_outlined,             const Color(0xFFAD1457)),
-      'PNC visits'            => (Icons.baby_changing_station_outlined,  const Color(0xFF00695C)),
-      'Living children'       => (Icons.people_outline_rounded,          const Color(0xFF2E7D32)),
-      'Gravida / Parity'      => (Icons.pregnant_woman_outlined,         const Color(0xFF7B1FA2)),
-      _                       => (Icons.bar_chart_rounded,               AppColors.navy),
-    };
+    if (label == PatientDetailStrings.lastBp || label == 'Last BP') {
+      return (Icons.favorite_rounded, const Color(0xFFD32F2F));
+    }
+    if (label == PatientDetailStrings.haemoglobin || label == 'Haemoglobin') {
+      return (Icons.water_drop_rounded, const Color(0xFFD32F2F));
+    }
+    if (label == PatientDetailStrings.weight ||
+        label == PatientDetailStrings.lastWeight ||
+        label == 'Weight' ||
+        label == 'Last weight') {
+      return (Icons.monitor_weight_outlined, const Color(0xFF1565C0));
+    }
+    if (label == PatientProfileStrings.visitsCompleted ||
+        label == 'Visits completed') {
+      return (Icons.assignment_turned_in_outlined, const Color(0xFF2E7D32));
+    }
+    if (label == PatientDetailStrings.visits || label == 'Visits') {
+      return (Icons.event_note_outlined, AppColors.navy);
+    }
+    if (label == PatientDetailStrings.ancVisits || label == 'ANC visits') {
+      return (Icons.pregnant_woman_outlined, const Color(0xFF7B1FA2));
+    }
+    if (label == PatientDetailStrings.diagnosis || label == 'Diagnosis') {
+      return (Icons.local_hospital_outlined, const Color(0xFF7B1FA2));
+    }
+    if (label == PatientDetailStrings.delivery || label == 'Delivery') {
+      return (Icons.child_care_outlined, const Color(0xFFAD1457));
+    }
+    if (label == PatientDetailStrings.pncVisits || label == 'PNC visits') {
+      return (Icons.baby_changing_station_outlined, const Color(0xFF00695C));
+    }
+    if (label == PatientDetailStrings.livingChildren ||
+        label == 'Living children') {
+      return (Icons.people_outline_rounded, const Color(0xFF2E7D32));
+    }
+    if (label == PatientDetailStrings.gravidaParity ||
+        label == 'Gravida / Parity') {
+      return (Icons.pregnant_woman_outlined, const Color(0xFF7B1FA2));
+    }
+    return (Icons.bar_chart_rounded, AppColors.navy);
   }
 
   // Maps a stat label to the rawJson field name + display unit.
-  static const Map<String, (String field, String suffix)> _fieldMap = {
-    'Last BP': ('bp', ' mmHg'),
-    'Haemoglobin': ('hemoglobin', ' g/dL'),
-    'Weight': ('weight', ' kg'),
-    'Last weight': ('weight', ' kg'),
-    'Diagnosis': ('confirmDiagnosis', ''),
-    'Delivery': ('modeOfDelivery', ''),
-    'PNC visits': ('pncVisitNumber', ''),
-    'Living children': ('numberOfLivingChildren', ''),
-    'Visits completed': ('ancVisitNumber', ''),
-    'Gravida / Parity': ('_gravida_parity', ''),
-  };
+  static Map<String, (String field, String suffix)> get _fieldMap => {
+        PatientDetailStrings.lastBp: ('bp', ' mmHg'),
+        'Last BP': ('bp', ' mmHg'),
+        PatientDetailStrings.haemoglobin: ('hemoglobin', ' g/dL'),
+        'Haemoglobin': ('hemoglobin', ' g/dL'),
+        PatientDetailStrings.weight: ('weight', ' kg'),
+        'Weight': ('weight', ' kg'),
+        PatientDetailStrings.lastWeight: ('weight', ' kg'),
+        'Last weight': ('weight', ' kg'),
+        PatientDetailStrings.diagnosis: ('confirmDiagnosis', ''),
+        'Diagnosis': ('confirmDiagnosis', ''),
+        PatientDetailStrings.delivery: ('modeOfDelivery', ''),
+        'Delivery': ('modeOfDelivery', ''),
+        PatientDetailStrings.pncVisits: ('pncVisitNumber', ''),
+        'PNC visits': ('pncVisitNumber', ''),
+        PatientDetailStrings.livingChildren: ('numberOfLivingChildren', ''),
+        'Living children': ('numberOfLivingChildren', ''),
+        PatientProfileStrings.visitsCompleted: ('ancVisitNumber', ''),
+        'Visits completed': ('ancVisitNumber', ''),
+        PatientDetailStrings.gravidaParity: ('_gravida_parity', ''),
+        'Gravida / Parity': ('_gravida_parity', ''),
+      };
+
+  static bool _isVisitCountLabel(String key) =>
+      key == PatientDetailStrings.ancVisits ||
+      key == PatientDetailStrings.ncdVisits ||
+      key == PatientDetailStrings.pncVisits ||
+      key == PatientDetailStrings.imciVisits ||
+      key == PatientDetailStrings.tbVisits ||
+      key.endsWith(' visits');
+
+  static String? _programmeKeyFromVisitStatLabel(String key) {
+    if (key == PatientDetailStrings.ancVisits || key == 'ANC visits') {
+      return 'anc';
+    }
+    if (key == PatientDetailStrings.ncdVisits || key == 'NCD visits') {
+      return 'ncd';
+    }
+    if (key == PatientDetailStrings.pncVisits || key == 'PNC visits') {
+      return 'pnc';
+    }
+    if (key == PatientDetailStrings.imciVisits || key == 'IMCI visits') {
+      return 'imci';
+    }
+    if (key == PatientDetailStrings.tbVisits || key == 'TB visits') {
+      return 'tb';
+    }
+    final stripped = key.replaceAll(' visits', '').toLowerCase();
+    if (const {'anc', 'ncd', 'pnc', 'imci', 'tb'}.contains(stripped)) {
+      return stripped;
+    }
+    return null;
+  }
 
   List<(DateTime date, String display, MemberAssessment assessment)> _extractHistory(
       String label) {
-    final fieldEntry = label.startsWith('Blood sugar')
+    final fieldEntry = _isBloodSugarLabel(label)
         ? ('bg', ' mg/dL')
         : _fieldMap[label];
     if (fieldEntry == null) return const [];
@@ -3530,7 +3624,8 @@ class _StatsGrid extends StatelessWidget {
   List<(DateTime date, String display, MemberAssessment assessment)>
       _extractVisitHistory(List<MapEntry<String, String>> visitEntries) {
     final progNames = visitEntries
-        .map((e) => e.key.replaceAll(' visits', '').toLowerCase())
+        .map((e) => _programmeKeyFromVisitStatLabel(e.key))
+        .whereType<String>()
         .toSet();
     final entries = <(DateTime, String, MemberAssessment)>[];
     for (final a in assessments) {
@@ -3771,15 +3866,16 @@ class _StatsGrid extends StatelessWidget {
       ..sort((a, b) => b.checkupDate!.compareTo(a.checkupDate!));
     final latestThread = threadsWithDate.isNotEmpty ? threadsWithDate.first : null;
 
-    // Merge all "* visits" keys into one combined tile.
-    final visitEntries = raw.where((e) => e.key.endsWith(' visits')).toList();
-    final displayStats = raw.where((e) => !e.key.endsWith(' visits')).toList();
+    // Merge all visit-count keys into one combined tile.
+    final visitEntries =
+        raw.where((e) => _isVisitCountLabel(e.key)).toList();
+    final displayStats =
+        raw.where((e) => !_isVisitCountLabel(e.key)).toList();
     if (visitEntries.isNotEmpty) {
       final combinedValue = visitEntries.map((e) {
-        final prog = e.key.replaceAll(' visits', '');
-        return '$prog  ${e.value}';
+        return '${e.key}  ${e.value}';
       }).join('\n');
-      displayStats.add(MapEntry('Visits', combinedValue));
+      displayStats.add(MapEntry(PatientDetailStrings.visits, combinedValue));
     }
 
     final hasStats = displayStats.isNotEmpty || latestThread != null;
@@ -3805,7 +3901,7 @@ class _StatsGrid extends StatelessWidget {
           final tiles = <Widget>[];
           for (final e in displayStats) {
             final (icon, iconColor) = _iconFor(e.key);
-            if (e.key == 'Visits') {
+            if (e.key == PatientDetailStrings.visits || e.key == 'Visits') {
               final hist = _extractVisitHistory(visitEntries);
               tiles.add(GestureDetector(
                 onTap: hist.isNotEmpty
@@ -4022,10 +4118,7 @@ class _LastCheckupTile extends StatelessWidget {
       _ => (const Color(0xFFF3F4F6), AppColors.textMid),
     };
 
-String _monthAbbr(int month) => const [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ][month];
+String _monthAbbr(int month) => DateFormatStrings.monthAbbrev(month);
 
 // ─── Shared card-detail helpers ────────────────────────────────────────────
 
@@ -4514,11 +4607,11 @@ Future<void> _openVisitDayDetail(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Text(
-              'Assessments this visit',
-              style: TextStyle(
+              PatientDetailStrings.assessmentsThisVisit,
+              style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textPrimary,
@@ -4649,9 +4742,9 @@ class _TimelineEventSheet extends StatelessWidget {
     }
     if (lmpDate != null) {
       final shortDate = AppDateFormat.dayMonthYearFmt;
-      entries.add(MapEntry('LMP', shortDate.format(lmpDate)));
+      entries.add(MapEntry(PatientDetailStrings.lmp, shortDate.format(lmpDate)));
       eddDate ??= lmpDate.add(const Duration(days: 280));
-      entries.add(MapEntry('EDD', shortDate.format(eddDate)));
+      entries.add(MapEntry(PatientDetailStrings.edd, shortDate.format(eddDate)));
       final totalDays = DateTime.now().difference(lmpDate).inDays;
       if (totalDays >= 0) {
         final weeks = totalDays ~/ 7;
@@ -4673,33 +4766,49 @@ class _TimelineEventSheet extends StatelessWidget {
     }
 
     // ── Vitals (all programmes) ────────────────────────────────────────────
-    addIfPresent('bp', 'BP');
-    addIfPresent('bg', 'Blood glucose');
-    addIfPresent('bgType', 'Glucose type');
-    addIfPresent('bmi', 'BMI');
-    addIfPresent('cvdRisk', 'CVD risk');
-    addIfPresent('weight', 'Weight (kg)');
-    addIfPresent('height', 'Height (cm)');
+    addIfPresent('bp', PatientDetailStrings.bp);
+    addIfPresent('bg', PatientDetailStrings.bloodGlucose);
+    addIfPresent(
+      'bgType',
+      PatientDetailStrings.glucoseType,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent('bmi', PatientDetailStrings.bmi);
+    addIfPresent('cvdRisk', PatientDetailStrings.cvdRisk);
+    addIfPresent('weight', PatientDetailStrings.weightKg);
+    addIfPresent('height', PatientDetailStrings.heightCm);
 
     // ── NCD ────────────────────────────────────────────────────────────────
-    addIfPresent('confirmDiagnosis', 'Diagnosis');
-    addIfPresent('ncdSymptoms', 'Symptoms');
-    addIfPresent('ncdSymptomsMedication', 'Taking medication');
-    addIfPresent('heartAttack', 'Heart attack history');
-    addIfPresent('stroke', 'Stroke history');
-    addIfPresent('kidneyDisease', 'Kidney disease');
-    addIfPresent('copd', 'COPD');
-    addIfPresent('referralFacilityType', PatientDetailStrings.referredTo);
+    addIfPresent('confirmDiagnosis', PatientDetailStrings.diagnosis);
+    addIfPresent('ncdSymptoms', PatientDetailStrings.symptoms);
+    addIfPresent('ncdSymptomsMedication', PatientDetailStrings.takingMedication);
+    addIfPresent('heartAttack', PatientDetailStrings.heartAttackHistory);
+    addIfPresent('stroke', PatientDetailStrings.strokeHistory);
+    addIfPresent('kidneyDisease', PatientDetailStrings.kidneyDisease);
+    addIfPresent('copd', PatientDetailStrings.copd);
+    addIfPresent(
+      'referralFacilityType',
+      PatientDetailStrings.referredTo,
+      valueMapper: PatientDetailStrings.ncdFacilityType,
+    );
 
     // ── ANC / PW obstetric ─────────────────────────────────────────────────
-    addIfPresent('hemoglobin', 'Hb (g/dL)');
-    addIfPresent('fundalHeight', 'Fundal height (cm)');
-    addWithFallback('gravida', 'Gravida', snap?.gravida);
-    addWithFallback('parity', 'Parity', snap?.parity);
-    addWithFallback('livingChildren', 'Living children', snap?.livingChildren);
+    addIfPresent('hemoglobin', PatientDetailStrings.hb);
+    addIfPresent('fundalHeight', PatientDetailStrings.fundalHeight);
+    addWithFallback('gravida', PatientDetailStrings.gravida, snap?.gravida);
+    addWithFallback('parity', PatientDetailStrings.parity, snap?.parity);
+    addWithFallback(
+      'livingChildren',
+      PatientDetailStrings.livingChildren,
+      snap?.livingChildren,
+    );
     // Pregnancy test is a PW-form field (GA ≤ 16 weeks) — not ANC/PNC.
     if (prog == Programme.pw) {
-      addWithFallback('pregnancyTest', 'Pregnancy test', snap?.pregnancyTest);
+      addWithFallback(
+        'pregnancyTest',
+        PatientDetailStrings.pregnancyTest,
+        snap?.pregnancyTest,
+      );
     }
     // ageOfLastChild is stored as DOB on the wire — show formatted if parseable.
     final ageOfLastChild = _parseFlexibleDate(
@@ -4707,33 +4816,54 @@ class _TimelineEventSheet extends StatelessWidget {
     );
     if (ageOfLastChild != null) {
       entries.add(MapEntry(
-        'Age of last child (DOB)',
+        PatientDetailStrings.ageOfLastChildDob,
         AppDateFormat.dayMonthYearFmt.format(ageOfLastChild),
       ));
     } else {
-      addWithFallback('ageOfLastChild', 'Age of last child', snap?.ageOfLastChild);
+      addWithFallback(
+        'ageOfLastChild',
+        PatientDetailStrings.ageOfLastChild,
+        snap?.ageOfLastChild,
+      );
     }
     // Visit counters belong on the visit that produced them, not PW registration
     // (snapshot often holds 0 / a later count from a different encounter).
     if (prog == Programme.anc) {
-      addWithFallback('ancVisitNumber', 'ANC visit no.', snap?.ancVisitNo);
+      addWithFallback(
+        'ancVisitNumber',
+        PatientDetailStrings.ancVisitNo,
+        snap?.ancVisitNo,
+      );
     }
-    addIfPresent('highRiskPregnantWoman', 'High risk');
-    addIfPresent('gapsInAnc', 'ANC gaps');
-    addIfPresent('dangerSignsDuringPregnancy', 'Danger signs');
+    addIfPresent('highRiskPregnantWoman', PatientDetailStrings.highRisk);
+    addIfPresent('gapsInAnc', PatientDetailStrings.ancGaps);
+    addIfPresent('dangerSignsDuringPregnancy', PatientDetailStrings.dangerSigns);
     addIfPresent('referralFacility', PatientDetailStrings.referredTo);
-    addIfPresent('followUpVisit', 'Follow-up visit');
+    addIfPresent('followUpVisit', PatientDetailStrings.followUpVisit);
 
     // ── PNC ────────────────────────────────────────────────────────────────
     if (prog == Programme.pnc) {
-      addWithFallback('pncVisitNumber', 'PNC visit no.', snap?.pncVisitNo);
+      addWithFallback(
+        'pncVisitNumber',
+        PatientDetailStrings.pncVisitNo,
+        snap?.pncVisitNo,
+      );
     }
-    addIfPresent('modeOfDelivery', 'Mode of delivery');
-    addIfPresent('anyComplicationsDuringDelivery', 'Complications');
-    addIfPresent('complicationsDuringDelivery', 'Complication details');
-    addIfPresent('numberOfLivingChildren', 'Living children');
-    addIfPresent('motherCare', 'Postnatal care');
-    addIfPresent('newbornCare', 'Newborn care');
+    addIfPresent('modeOfDelivery', PatientDetailStrings.modeOfDelivery);
+    addIfPresent(
+      'anyComplicationsDuringDelivery',
+      PatientDetailStrings.complications,
+    );
+    addIfPresent(
+      'complicationsDuringDelivery',
+      PatientDetailStrings.complicationDetails,
+    );
+    addIfPresent(
+      'numberOfLivingChildren',
+      PatientDetailStrings.livingChildren,
+    );
+    addIfPresent('motherCare', PatientDetailStrings.postnatalCare);
+    addIfPresent('newbornCare', PatientDetailStrings.newbornCare);
 
     // ── Snapshot-only obstetric detail (programme-scoped) ──────────────────
     // These columns are written by ANC / outcome flows, not PW registration.
@@ -4741,58 +4871,82 @@ class _TimelineEventSheet extends StatelessWidget {
     // answers the SK never saw.
     if (snap != null && prog == Programme.anc) {
       addSnapshotList(
-          snap.previousPregnancyComplications, 'Previous complications');
-      addSnapshotList(snap.existingIllness, 'Existing illness');
-      addSnapshotList(snap.onTreatment, 'On treatment');
+        snap.previousPregnancyComplications,
+        PatientDetailStrings.previousComplications,
+      );
+      addSnapshotList(snap.existingIllness, PatientDetailStrings.existingIllness);
+      addSnapshotList(snap.onTreatment, PatientDetailStrings.onTreatment);
       if (snap.ttTdCompleted?.isNotEmpty == true) {
-        entries.add(MapEntry('TT/Td completed', snap.ttTdCompleted!));
+        entries.add(
+          MapEntry(PatientDetailStrings.ttTdCompleted, snap.ttTdCompleted!),
+        );
       }
       if (snap.facilityIdentifiedForDelivery?.isNotEmpty == true) {
-        entries.add(
-            MapEntry('Delivery facility', snap.facilityIdentifiedForDelivery!));
+        entries.add(MapEntry(
+          PatientDetailStrings.deliveryFacility,
+          snap.facilityIdentifiedForDelivery!,
+        ));
       }
       if (snap.ancWeight != null) {
-        entries.add(MapEntry('Last ANC weight (kg)', '${snap.ancWeight}'));
+        entries.add(MapEntry(
+          PatientDetailStrings.lastAncWeightKg,
+          '${snap.ancWeight}',
+        ));
       }
-      addSnapshotDate(snap.lastAncVisitDateMs, 'Last ANC visit');
+      addSnapshotDate(snap.lastAncVisitDateMs, PatientDetailStrings.lastAncVisit);
     }
     if (snap != null && prog == Programme.pnc) {
-      addSnapshotDate(snap.deliveryDateMillis, 'Delivery date');
+      addSnapshotDate(
+        snap.deliveryDateMillis,
+        PatientDetailStrings.deliveryDate,
+      );
     }
 
     // ── TB ─────────────────────────────────────────────────────────────────
-    addIfPresent('has_cough', 'Cough');
-    addIfPresent('had_tb_before', 'Cough >2 weeks');
-    addIfPresent('has_night_sweats', 'Night sweats');
-    addIfPresent('has_fever', 'Fever');
-    addIfPresent('has_weight_loss', 'Weight loss');
+    addIfPresent('has_cough', PatientDetailStrings.cough);
+    addIfPresent('had_tb_before', PatientDetailStrings.coughOver2Weeks);
+    addIfPresent('has_night_sweats', PatientDetailStrings.nightSweats);
+    addIfPresent('has_fever', PatientDetailStrings.fever);
+    addIfPresent('has_weight_loss', PatientDetailStrings.weightLoss);
 
     // ── IMCI / childhood ──────────────────────────────────────────────────
-    addIfPresent('anyIllness', 'Illness/complication');
-    addIfPresent('childIllnessType', 'Complication type');
-    addIfPresent('receivedVaccine', 'Vaccines received');
-    addIfPresent('childBreastFeeding', 'Breastfeeding');
-    addIfPresent('dewormingMedicine', 'Deworming');
+    addIfPresent('anyIllness', PatientDetailStrings.illnessComplication);
+    addIfPresent('childIllnessType', PatientDetailStrings.complicationType);
+    addIfPresent('receivedVaccine', PatientDetailStrings.vaccinesReceived);
+    addIfPresent('childBreastFeeding', PatientDetailStrings.breastfeeding);
+    addIfPresent('dewormingMedicine', PatientDetailStrings.deworming);
     addIfPresent('childReferral', PatientDetailStrings.referralMade);
-    addIfPresent('childReferralFacilityType', 'Refer to');
+    addIfPresent('childReferralFacilityType', PatientDetailStrings.referTo);
 
     // ── Eye care / cataract ───────────────────────────────────────────────
-    addIfPresent('eyeTestOutcome', 'Eye test outcome');
-    addIfPresent('eyeDisease', 'Eye disease');
-    addIfPresent('glassPower', 'Glass power');
-    addIfPresent('haveTheGlassesBeenSold', 'Glasses sold');
-    addIfPresent('typeOfGlass', 'Glass type');
-    addIfPresent('typeOfFrame', 'Frame type');
-    addIfPresent('firstTimeUser', 'First time user');
-    addIfPresent('referPlace', 'Refer to');
-    addIfPresent('patientReferredForOperation', 'Referred for operation');
-    addIfPresent('operationName', 'Operation');
-    addIfPresent('pseudophakiaPostCataractSurgery', 'Post-surgery status');
-    addIfPresent('ncdServiceProvided', 'NCD service provided');
+    addIfPresent('eyeTestOutcome', PatientDetailStrings.eyeTestOutcome);
+    addIfPresent('eyeDisease', PatientDetailStrings.eyeDisease);
+    addIfPresent('glassPower', PatientDetailStrings.glassPower);
+    addIfPresent('haveTheGlassesBeenSold', PatientDetailStrings.glassesSold);
+    addIfPresent('typeOfGlass', PatientDetailStrings.glassType);
+    addIfPresent('typeOfFrame', PatientDetailStrings.frameType);
+    addIfPresent('firstTimeUser', PatientDetailStrings.firstTimeUser);
+    addIfPresent('referPlace', PatientDetailStrings.referTo);
+    addIfPresent(
+      'patientReferredForOperation',
+      PatientDetailStrings.referredForOperation,
+    );
+    addIfPresent('operationName', PatientDetailStrings.operation);
+    addIfPresent(
+      'pseudophakiaPostCataractSurgery',
+      PatientDetailStrings.postSurgeryStatus,
+    );
+    addIfPresent(
+      'ncdServiceProvided',
+      PatientDetailStrings.ncdServiceProvided,
+    );
 
     // ── FP ─────────────────────────────────────────────────────────────────
-    addIfPresent('familyPlanningMethods', 'FP method');
-    addIfPresent('desireForChildrenInFuture', 'Desire for children');
+    addIfPresent('familyPlanningMethods', PatientDetailStrings.fpMethod);
+    addIfPresent(
+      'desireForChildrenInFuture',
+      PatientDetailStrings.desireForChildren,
+    );
 
     // ── Referral (all programmes) ─────────────────────────────────────────
     addIfPresent('referralStatus', PatientDetailStrings.referralStatus,
@@ -4936,7 +5090,15 @@ class _TimelineEventSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    assessment.notes!,
+                    () {
+                      final localized = parseReferralReasonTokens(assessment.notes)
+                          .map(shortReasonLabel)
+                          .where((s) => s.isNotEmpty)
+                          .join(', ');
+                      return localized.isNotEmpty
+                          ? localized
+                          : assessment.notes!;
+                    }(),
                     style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.5),
                   ),
                 ],
@@ -5240,9 +5402,9 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                           },
                         );
                       },
-                      child: const Text(
-                        '+ Edit',
-                        style: TextStyle(
+                      child: Text(
+                        PatientDetailStrings.editPlus,
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: AppColors.navy,
@@ -5363,10 +5525,14 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             ),
             const SizedBox(height: 10),
             if (lastDate != null)
-              _scheduleRow('Last visit', AppDateFormat.dayMonthYearPaddedFmt.format(lastDate), scheme),
+              _scheduleRow(
+                PatientDetailStrings.lastVisit,
+                AppDateFormat.dayMonthYearPaddedFmt.format(lastDate),
+                scheme,
+              ),
             if (nextDate != null)
               _scheduleRow(
-                'Next due',
+                PatientDetailStrings.nextDue,
                 AppDateFormat.dayMonthYearPaddedFmt.format(nextDate),
                 scheme,
                 valueColor: isOverdue ? AppColors.statusCritical : null,
@@ -6111,7 +6277,7 @@ class _NoServicesCardState extends State<_NoServicesCard> {
                     : const Icon(Icons.add, size: 18, color: Colors.white),
                 label: Text(
                   _starting
-                      ? 'Starting...'
+                      ? PatientContextStrings.startingEllipsis
                       : EnrollStrings.addServicesCta,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
