@@ -98,6 +98,26 @@ class NabaPriorVisit {
       };
 }
 
+/// One assessment's clinical inputs used by Flutter `_computeReferral`.
+/// Backend can recompute the same referral rules from [referralInputs] alone.
+class NabaReferralAssessment {
+  const NabaReferralAssessment({
+    required this.assessmentType,
+    required this.referralInputs,
+  });
+
+  /// Wire assessment type: `ANC`, `NCD`, `PNC_MOTHER`, `CHILDHOOD_VISIT`, …
+  final String assessmentType;
+
+  /// Only fields the client uses for referral for this assessment type.
+  final Map<String, dynamic> referralInputs;
+
+  Map<String, dynamic> toJson() => {
+        'assessmentType': assessmentType,
+        'referralInputs': referralInputs,
+      };
+}
+
 // ── Primary request ───────────────────────────────────────────────────────────
 
 class NabaRequest {
@@ -122,6 +142,10 @@ class NabaRequest {
     this.priorVisits = const [],
     this.openFollowUps = const [],
     this.riskIndicators = const [],
+    this.assessments = const [],
+    this.isReferred = false,
+    this.referredReasons = const [],
+    this.referralReason,
   });
 
   final String requestId;
@@ -144,6 +168,18 @@ class NabaRequest {
   final List<NabaPriorVisit> priorVisits;
   final List<Map<String, dynamic>> openFollowUps;
   final List<String> riskIndicators;
+
+  /// Per-assessment referral inputs (same fields Flutter uses clinically).
+  final List<NabaReferralAssessment> assessments;
+
+  /// Step 2 clinical referral flag (same gate as the Step 3 referral card).
+  final bool isReferred;
+
+  /// Step 2 wire reasons shown on the offline referral card (bullets).
+  final List<String> referredReasons;
+
+  /// Joined referral-card body text (offline card copy / clinical fallback).
+  final String? referralReason;
 
   Map<String, dynamic> toJson() => {
         'requestId': requestId,
@@ -168,6 +204,12 @@ class NabaRequest {
         'priorVisits': priorVisits.map((v) => v.toJson()).toList(),
         'openFollowUps': openFollowUps,
         'riskIndicators': riskIndicators,
+        if (assessments.isNotEmpty)
+          'assessments': assessments.map((a) => a.toJson()).toList(),
+        'isReferred': isReferred,
+        'referredReasons': referredReasons,
+        if (referralReason != null && referralReason!.isNotEmpty)
+          'referralReason': referralReason,
       };
 }
 

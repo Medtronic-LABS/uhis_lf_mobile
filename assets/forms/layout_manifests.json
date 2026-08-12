@@ -391,6 +391,7 @@
           },
           {
             "fieldName": "Cause of neonatal death",
+            "fieldNameCulture": "নবজাতকের মৃত্যুর কারণ",
             "isMandatory": true,
             "id": "neonatalDeathCause"
           }

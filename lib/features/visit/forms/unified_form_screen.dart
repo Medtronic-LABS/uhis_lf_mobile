@@ -2390,7 +2390,8 @@ class _SectionCard extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               _FieldShell(
-                label: aliveDef?.displayLabel ?? 'Is the baby alive?',
+                label: aliveDef?.displayLabel ??
+                    UnifiedFormStrings.babyAliveLabel,
                 isMandatory: true,
                 hasError: aliveError,
                 child: RadioFormField(
@@ -2405,7 +2406,7 @@ class _SectionCard extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               _FieldShell(
-                label: sexDef?.displayLabel ?? 'Sex',
+                label: sexDef?.displayLabel ?? UnifiedFormStrings.babySexLabel,
                 isMandatory: true,
                 hasError: sexError,
                 child: RadioFormField(
@@ -2422,7 +2423,8 @@ class _SectionCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.md),
                 _InlineListSelectField(
                   key: Key('unified_form_newborn_${i}_cause'),
-                  label: causeDef?.displayLabel ?? 'Cause of neonatal death',
+                  label: causeDef?.displayLabel ??
+                      UnifiedFormStrings.neonatalDeathCauseLabel,
                   subLabel: null,
                   isMandatory: true,
                   hasError: causeError,
@@ -4135,9 +4137,16 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
         final sameValue =
             ctrlNum != null && newNum != null && ctrlNum == newNum;
         if (!sameValue) {
-          _ctrl.text = newText;
-          _ctrl.selection =
-              TextSelection.collapsed(offset: newText.length);
+          // Defer so controller updates never fire mid-build (Form setState).
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _ctrl.text == newText) return;
+            final curNum = double.tryParse(_ctrl.text);
+            final tgtNum = double.tryParse(newText);
+            if (curNum != null && tgtNum != null && curNum == tgtNum) return;
+            _ctrl.text = newText;
+            _ctrl.selection =
+                TextSelection.collapsed(offset: newText.length);
+          });
         }
       }
     }
@@ -4297,11 +4306,22 @@ class _NumericFieldState extends State<_NumericField> {
         // is reset to "1.0" after the first "1", and the next character
         // inserts at the wrong cursor position.
         final ctrlNum = double.tryParse(_ctrl.text);
-        final newNum  = double.tryParse(newText);
-        final sameValue = ctrlNum != null && newNum != null && ctrlNum == newNum;
+        final newNum = double.tryParse(newText);
+        final sameValue =
+            ctrlNum != null && newNum != null && ctrlNum == newNum;
         if (!sameValue) {
-          _ctrl.text = newText;
-          _ctrl.selection = TextSelection.collapsed(offset: newText.length);
+          // Defer so TextEditingController.text= never fires mid-build.
+          // It notifies TextFormField → FormState._forceRebuild → setState(),
+          // which crashes if called during the build phase.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _ctrl.text == newText) return;
+            final curNum = double.tryParse(_ctrl.text);
+            final tgtNum = double.tryParse(newText);
+            if (curNum != null && tgtNum != null && curNum == tgtNum) return;
+            _ctrl.text = newText;
+            _ctrl.selection =
+                TextSelection.collapsed(offset: newText.length);
+          });
         }
       }
     }
@@ -4599,10 +4619,13 @@ class _BpReadingFieldState extends State<_BpReadingField> {
   }
 
   void _syncCtrl(TextEditingController ctrl, String newText) {
-    if (ctrl.text != newText) {
+    if (ctrl.text == newText) return;
+    // Defer so controller updates never fire mid-build (Form setState).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || ctrl.text == newText) return;
       ctrl.text = newText;
       ctrl.selection = TextSelection.collapsed(offset: newText.length);
-    }
+    });
   }
 
   @override

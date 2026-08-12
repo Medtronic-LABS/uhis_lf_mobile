@@ -30,6 +30,7 @@ import 'forms/form_type_resolver.dart';
 import 'forms/pregnancy_outcome_side_effects.dart';
 import 'forms/unified_form_notifier.dart';
 import 'forms/unified_form_screen.dart';
+import 'naba/naba_models.dart';
 import 'triage/service_selection_resolver.dart';
 import 'visit_controller.dart';
 import 'visit_session.dart';
@@ -96,13 +97,16 @@ class VisitFormScreen extends StatefulWidget {
   final String? origin;
 
   /// When non-null the screen calls this with the primary programme,
-  /// referral flag, and the list of detected clinical referral conditions.
+  /// referral flag, detected clinical referral conditions, and PW risk
+  /// factors (empty unless PWPROFILE was submitted).
   /// Used by [VisitFlowScreen] to keep the SK on the same route for all 3 steps.
   final void Function(
     Programme primaryProgramme,
     bool referralRecommended,
     List<String> referredReasons,
     String? referralFacility,
+    List<String> pwRiskFactors,
+    List<NabaReferralAssessment> nabaReferralAssessments,
   )? onAdvance;
 
   /// Programmes the patient is already enrolled in (from [PatientProgrammesDao]).
@@ -547,6 +551,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
             _referralRecommended,
             formNotifier.lastReferredReasons,
             formNotifier.lastReferralFacility,
+            formNotifier.lastPwRiskFactors,
+            formNotifier.lastNabaReferralAssessments,
           );
         } else {
           ctx.go(
