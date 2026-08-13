@@ -98,18 +98,22 @@ class NabaPriorVisit {
       };
 }
 
-/// One assessment's clinical inputs used by Flutter `_computeReferral`.
-/// Backend can recompute the same referral rules from [referralInputs] alone.
+/// One assessment's clinical inputs for NABA.
+///
+/// For referral programmes, mirrors Flutter `_computeReferral` inputs so the
+/// backend can recompute the same rules. For `PWPROFILE`, carries pregnancy
+/// history / risk-screening context (PW has no referral card).
 class NabaReferralAssessment {
   const NabaReferralAssessment({
     required this.assessmentType,
     required this.referralInputs,
   });
 
-  /// Wire assessment type: `ANC`, `NCD`, `PNC_MOTHER`, `CHILDHOOD_VISIT`, …
+  /// Wire assessment type: `ANC`, `NCD`, `PNC_MOTHER`, `CHILDHOOD_VISIT`,
+  /// `PWPROFILE`, …
   final String assessmentType;
 
-  /// Only fields the client uses for referral for this assessment type.
+  /// Clinical fields for this assessment type (referral inputs, or PW profile).
   final Map<String, dynamic> referralInputs;
 
   Map<String, dynamic> toJson() => {

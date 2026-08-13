@@ -1615,6 +1615,11 @@ abstract final class ReferralStrings {
       getTranslatedString('Referral.shortReasonAbnormalPulse', 'Abnormal pulse');
   static String get shortReasonHighBp =>
       getTranslatedString('Referral.shortReasonHighBp', 'High BP');
+  /// ANC AI-trend wire reason [kAncRisingBpTrendCondition].
+  static String get shortReasonRisingBpTrend => getTranslatedString(
+        'Referral.shortReasonRisingBpTrend',
+        'Rising BP trend',
+      );
   static String get shortReasonLowHbAnemia =>
       getTranslatedString('Referral.shortReasonLowHbAnemia', 'Low Hb / Anemia');
   static String get shortReasonDangerSign =>
@@ -1697,6 +1702,10 @@ abstract final class ReferralStrings {
       'Referral.visitOverdueNarrative', 'Visit overdue — schedule follow-up urgently.');
   static String get clinicalSymptomsPresent => getTranslatedString(
       'Referral.clinicalSymptomsPresent', 'Clinical symptoms present — review and follow-up required.');
+  static String get risingBpTrendNarrative => getTranslatedString(
+        'Referral.risingBpTrendNarrative',
+        'BP is rising across recent visits — referral recommended.',
+      );
 
   /// Terminates an already-localized [label]; a getter so locales that end
   /// sentences differently (e.g. '।') can override the punctuation.

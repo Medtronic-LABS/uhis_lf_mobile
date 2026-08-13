@@ -42,8 +42,10 @@ abstract final class UnifiedPayloadMapper {
 
   static List<ProgrammePayload> decompose(
     CanonicalVisitData data,
-    Set<String> activeFormTypes,
-  ) {
+    Set<String> activeFormTypes, {
+    /// ANC AI BP-trend referral flag from [VitalsTrendAnalyzer.hasRisingBpTrend].
+    bool risingBpTrend = false,
+  }) {
     final payloads = <ProgrammePayload>[];
 
     if (activeFormTypes.contains('pwProfile')) {
@@ -56,7 +58,7 @@ abstract final class UnifiedPayloadMapper {
     if (activeFormTypes.contains('anc')) {
       payloads.add(ProgrammePayload(
         assessmentType: 'ANC',
-        details: _toAnc(data),
+        details: _toAnc(data, risingBpTrend: risingBpTrend),
       ));
     }
 
@@ -208,7 +210,10 @@ abstract final class UnifiedPayloadMapper {
   // temperature/pulse/weight/height are numbers.
   // BP lives in medicalHistoryPhysicalExamination — NOT in a separate bpLog.
 
-  static Map<String, dynamic> _toAnc(CanonicalVisitData d) {
+  static Map<String, dynamic> _toAnc(
+    CanonicalVisitData d, {
+    bool risingBpTrend = false,
+  }) {
     double? asNum(dynamic v) {
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v);
@@ -420,6 +425,7 @@ abstract final class UnifiedPayloadMapper {
       ),
       temperatureCelsius: tempC,
       pulseBpm: pulseBpm,
+      risingBpTrend: risingBpTrend,
     );
 
     final highRisk = <String, dynamic>{};

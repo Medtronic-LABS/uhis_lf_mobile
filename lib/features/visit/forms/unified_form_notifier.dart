@@ -1675,8 +1675,20 @@ class UnifiedFormNotifier extends ChangeNotifier {
           ? await _assessmentRepo.hasPriorNcdAssessment(_patientId)
           : false;
 
-      final (isReferred, referredReasons) =
-          _computeReferral(isNcdFollowUp: isNcdFollowUp);
+      // ANC AI BP-trend: same analyzer as the Step 2 trend card. When
+      // systolic/diastolic rise ≥5 across last 2 priors + today, auto-refer
+      // even if today's reading is still below 140/90.
+      final risingBpTrend = _activeFormTypes.contains('anc')
+          ? VitalsTrendAnalyzer.hasRisingBpTrend(
+              priorVisits: await ancVitalsHistory(),
+              today: _todayAncVisitVitals(),
+            )
+          : false;
+
+      final (isReferred, referredReasons) = _computeReferral(
+        isNcdFollowUp: isNcdFollowUp,
+        risingBpTrend: risingBpTrend,
+      );
       _lastNabaReferralAssessments =
           _buildNabaReferralAssessments(isNcdFollowUp: isNcdFollowUp);
 
@@ -1743,6 +1755,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final payloads = UnifiedPayloadMapper.decompose(
         _withWireOptionValues(_data),
         _activeFormTypes.toSet(),
+        risingBpTrend: risingBpTrend,
       );
       if (payloads.isEmpty) {
         debugPrint(
@@ -2337,7 +2350,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
     };
   }
 
-  /// Fields Flutter uses in [_computeReferral], grouped per assessment for NABA.
+  /// Per-assessment clinical inputs for NABA (`naba/generate`).
+  ///
+  /// Includes [_computeReferral] inputs for NCD/ANC/PNC/childhood, plus
+  /// PWPROFILE pregnancy-history / risk-screening fields (PW has no referral
+  /// card, but NABA still needs the registration context).
   List<NabaReferralAssessment> _buildNabaReferralAssessments({
     required bool isNcdFollowUp,
   }) {
@@ -2404,6 +2421,26 @@ class UnifiedFormNotifier extends ChangeNotifier {
           'glucoseType': glucoseType,
           'hba1c': asDouble('hba1c'),
           'ncdSymptoms': _ncdSymptomWireValues(_data.getValue('ncdSymptoms')),
+        }),
+      ));
+    }
+
+    if (_activeFormTypes.contains('pwProfile')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'PWPROFILE',
+        referralInputs: compact({
+          'lmp': _data.getValue('lmp')?.toString(),
+          'gravida': asDouble('gravida'),
+          'parity': asDouble('parity'),
+          'livingChildren': asDouble('livingChildren'),
+          'ageOfLastChild': _data.getValue('ageOfLastChild')?.toString(),
+          'pregnancyTest': _data.getValue('pregnancyTest')?.toString(),
+          'obstetricComplications':
+              stringList(_data.getValue('obstetricComplications')),
+          'medicalComplications':
+              stringList(_data.getValue('medicalComplications')),
+          'currentMedicalConditions':
+              stringList(_data.getValue('currentMedicalConditions')),
         }),
       ));
     }
@@ -2510,9 +2547,29 @@ class UnifiedFormNotifier extends ChangeNotifier {
     return List<NabaReferralAssessment>.unmodifiable(out);
   }
 
+  /// Today's ANC vitals snapshot from the in-progress form (for AI-trend).
+  VisitVitals _todayAncVisitVitals() {
+    double? asDouble(String k) => _asDoubleField(k);
+    return VisitVitals(
+      systolic: asDouble('systolic')?.toInt() ??
+          asDouble('bloodPressureSystolic')?.toInt(),
+      diastolic: asDouble('diastolic')?.toInt() ??
+          asDouble('bloodPressureDiastolic')?.toInt(),
+      weight: asDouble('weight'),
+      urineProtein: () {
+        final v = _data.getValue('urinaryAlbumin');
+        if (v == null) return null;
+        return v is String ? v : v.toString();
+      }(),
+    );
+  }
+
   /// `(isReferred, referredReasons)`.  Called inside [submit] so every
   /// saved [LocalAssessmentEntity] carries the correct referral flag.
-  (bool, List<String>) _computeReferral({bool isNcdFollowUp = false}) {
+  (bool, List<String>) _computeReferral({
+    bool isNcdFollowUp = false,
+    bool risingBpTrend = false,
+  }) {
     bool referred = false;
     final reasons = <String>[];
 
@@ -2612,6 +2669,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         ancAssessment,
         temperatureCelsius: temperatureCelsius(),
         pulseBpm: asDouble('pulse')?.toInt(),
+        risingBpTrend: risingBpTrend,
       );
       final gaps = AncReferralEvaluator.evaluateGaps(
         gestationalAgeWeeks:
@@ -2632,6 +2690,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final hasGaps = gaps.hasGaps;
       debugPrint(
           '[Referral][ANC] highRisk=$hasHighRisk gaps=$hasGaps '
+          'risingBpTrend=$risingBpTrend '
           'emergency=${result.emergencyConditions} '
           'nonEmergency=${result.nonEmergencyConditions} gapsList=${gaps.gaps}');
       if (hasHighRisk || hasGaps) referred = true;
@@ -2642,6 +2701,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
           visitNo: _data.getValue('ancVisitNumber') ?? _data.getValue('visitNo'),
         ),
       );
+      // Surface the AI-trend wire reason for timeline / detail localization
+      // (Spice LABEL_* reasons stay first; this is an extra display token).
+      if (risingBpTrend && !reasons.contains(kAncRisingBpTrendCondition)) {
+        reasons.add(kAncRisingBpTrendCondition);
+      }
     }
 
     if (_activeFormTypes.contains('pncMother')) {
