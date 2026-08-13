@@ -10918,15 +10918,18 @@
     "options": [
       {
         "id": "driedWrappedWarm",
-        "name": "Dried, wrapped & kept warm immediately"
+        "name": "Dried, wrapped & kept warm immediately",
+        "cultureValue": "শুকনো, মোড়ানো ও তাৎক্ষণিকভাবে গরম রাখা হয়েছে"
       },
       {
         "id": "breastfeedingInitiated",
-        "name": "Breastfeeding initiated within 1 hour"
+        "name": "Breastfeeding initiated within 1 hour",
+        "cultureValue": "১ ঘণ্টার মধ্যে বুকের দুধ খাওয়ানো শুরু হয়েছে"
       },
       {
         "id": "breathingNormal",
-        "name": "Breathing normally, no danger signs"
+        "name": "Breathing normally, no danger signs",
+        "cultureValue": "স্বাভাবিকভাবে শ্বাস নিচ্ছে, কোনো বিপদ চিহ্ন নেই"
       }
     ],
     "programmes": [

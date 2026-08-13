@@ -131,7 +131,7 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
                   leading: const Icon(Icons.error_outline),
                   title: Text(FollowUpCallStrings.openFollowUpsLoadError),
                   trailing: IconButton(
-                    tooltip: 'Retry loading follow-ups',
+                    tooltip: FollowUpCallStrings.retryLoadingFollowUps,
                     icon: const Icon(Icons.refresh),
                     onPressed: _load,
                   ),

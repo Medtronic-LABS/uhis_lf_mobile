@@ -420,9 +420,9 @@ class _HeadMemberCard extends StatelessWidget {
                 color: AppColors.tbSurface,
                 borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
-              child: const Text(
-                '📇 NID scan',
-                style: TextStyle(
+              child: Text(
+                EnrollmentStrings.nidScanBadge,
+                style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   color: AppColors.enrollmentSuccess,

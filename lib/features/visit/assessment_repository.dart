@@ -556,9 +556,12 @@ class AssessmentRepository extends ChangeNotifier {
           debugPrint('[AssessmentSync] Marked ${ids.length} as success');
           if (pushedFollowUpIds.isNotEmpty && _followUpCalls != null) {
             try {
-              await _followUpCalls.markPushed(pushedFollowUpIds);
+              // Poll already confirmed Success — stamp FollowUp Success +
+              // synced calls (do not leave tickets stuck at InProgress).
+              await _followUpCalls.markPushSucceeded(pushedFollowUpIds);
             } catch (e) {
-              debugPrint('[AssessmentSync] follow-up markPushed skipped: $e');
+              debugPrint(
+                  '[AssessmentSync] follow-up markPushSucceeded skipped: $e');
             }
           }
           if (pushedMemberIds.isNotEmpty && _memberDao != null) {
