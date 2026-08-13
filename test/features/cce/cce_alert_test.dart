@@ -326,6 +326,29 @@ void main() {
       expect(a.intelTags, contains('At facility'));
     });
 
+    test('enrollment after NCD visit → Facility done (case-insensitive)', () {
+      final ncdMs = now.add(const Duration(days: -10)).millisecondsSinceEpoch;
+      final a = CceAlert.fromFollowUp(
+        ncdFollowUp(),
+        now: now,
+        assessments: [
+          CceAssessmentSignal(
+            id: 'enc-ncd-1',
+            kind: 'NCD',
+            occurredAt: ncdMs,
+          ),
+          CceAssessmentSignal(
+            id: 'enc-enroll-2',
+            kind: 'Enrollment',
+            occurredAt: ncdMs + const Duration(days: 1).inMilliseconds,
+          ),
+        ],
+      );
+      expect(a.journey[2].state, CceStepState.done);
+      expect(a.journey[3].state, CceStepState.pending);
+      expect(a.intelTags, contains('At facility'));
+    });
+
     test('ncdmedicalreview after NCD visit → Treatment + Facility done', () {
       final ncdMs = now.add(const Duration(days: -10)).millisecondsSinceEpoch;
       final a = CceAlert.fromFollowUp(

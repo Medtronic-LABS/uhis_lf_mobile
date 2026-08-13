@@ -367,7 +367,7 @@ class CceAlert {
 
   /// Facility / Treatment progress for a REFERRED follow-up card.
   ///
-  /// NCD: `medicalreviewvisit` after NCD visit → Facility;
+  /// NCD: `medicalreviewvisit` / `enrollment` after NCD visit → Facility;
   /// `ncdmedicalreview` / `medicalReview` after NCD visit → Treatment
   /// (Treatment implies Facility). Non-NCD: Facility when call attempts > 0.
   static ({bool atFacility, bool treated}) _followUpProgress({
@@ -401,9 +401,9 @@ class CceAlert {
   static String _compactKind(String? kind) =>
       (kind ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]'), '');
 
-  /// Facility check-in shell (`medicalreviewvisit`).
+  /// Facility check-in shell (`medicalreviewvisit` / `enrollment`).
   static bool _isFacilityKind(String compact) =>
-      compact == 'MEDICALREVIEWVISIT';
+      compact == 'MEDICALREVIEWVISIT' || compact == 'ENROLLMENT';
 
   /// Clinical NCD medical review (`ncdmedicalreview` / `medicalReview`).
   static bool _isTreatmentKind(String compact) =>
