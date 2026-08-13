@@ -145,6 +145,23 @@ bool isUrineProteinPresent(String? grade) {
 abstract final class VitalsTrendAnalyzer {
   VitalsTrendAnalyzer._();
 
+  /// True when systolic and/or diastolic qualify as a rising AI-trend signal
+  /// (same rules as [analyze] — last 2 priors + today, ≥5 each step).
+  ///
+  /// Used by ANC auto-referral; weight / urine rows do not trigger referral.
+  static bool hasRisingBpTrend({
+    required List<VisitVitals> priorVisits,
+    required VisitVitals today,
+  }) {
+    final result = analyze(priorVisits: priorVisits, today: today);
+    return result.metrics.any(
+      (m) =>
+          m.rising &&
+          (m.metric == VitalMetric.systolic ||
+              m.metric == VitalMetric.diastolic),
+    );
+  }
+
   /// Analyse [priorVisits] (oldest-first) plus the in-progress [today] snapshot.
   ///
   /// Requires **two** prior visits in the window. Each metric is included only

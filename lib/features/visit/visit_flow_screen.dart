@@ -3024,6 +3024,7 @@ class _ReferralAlertCard extends StatelessWidget {
     'Child illness referral': VisitFlowStrings.reasonChildIllnessReferral,
     'High BP':                VisitFlowStrings.reasonHighBloodPressure,
     'High BG':                VisitFlowStrings.reasonHighBloodGlucose,
+    kAncRisingBpTrendCondition: ReferralStrings.shortReasonRisingBpTrend,
     'Symptoms':               VisitFlowStrings.reasonReportedSymptoms,
     'bloodPressure':          VisitFlowStrings.reasonHighBloodPressure,
     'bloodGlucose':           VisitFlowStrings.reasonHighBloodGlucose,

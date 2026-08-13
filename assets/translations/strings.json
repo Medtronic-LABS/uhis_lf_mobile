@@ -12147,6 +12147,14 @@
     "bn": "উচ্চ (বিপি)",
     "en": "High BP"
   },
+  "Referral.shortReasonRisingBpTrend": {
+    "bn": "ক্রমবর্ধমান রক্তচাপ প্রবণতা",
+    "en": "Rising BP trend"
+  },
+  "Referral.risingBpTrendNarrative": {
+    "bn": "সাম্প্রতিক ভিজিটগুলোতে রক্তচাপ বাড়ছে — রেফারেল সুপারিশকৃত।",
+    "en": "BP is rising across recent visits — referral recommended."
+  },
   "Referral.shortReasonHighBg": {
     "bn": "উচ্চ (বিজি)",
     "en": "High BG"
