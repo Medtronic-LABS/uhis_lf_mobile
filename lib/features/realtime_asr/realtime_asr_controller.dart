@@ -354,6 +354,7 @@ class RealtimeAsrController extends ChangeNotifier {
         language: language,
         assessmentType: assessmentType,
         symptomVocab: _symptomVocab,
+        encounterId: _encounterId,
       );
       debugPrint('[RealtimeASR] connecting to ${info.uri} headers=${info.headers.keys}');
       _logEvent('ASR_WS_CONNECT_START', const {});

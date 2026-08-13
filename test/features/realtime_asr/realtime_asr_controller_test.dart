@@ -85,6 +85,7 @@ class _FakeRealtimeAsrService extends RealtimeAsrService {
     String model = 'saarika:v2.5',
     String? assessmentType,
     List<String>? symptomVocab,
+    String? encounterId,
   }) async => RealtimeAsrConnectionInfo(uri: _uri, headers: const {});
 }
 

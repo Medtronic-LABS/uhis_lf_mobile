@@ -35,6 +35,7 @@ class RealtimeAsrService {
     String model = 'saarika:v2.5',
     String? assessmentType,
     List<String>? symptomVocab,
+    String? encounterId,
   }) async {
     final endpoint = Endpoints.scribeRealtimeTranscribe;
     final path = AppConfig.aiServiceBaseUrl.isNotEmpty &&
@@ -67,6 +68,8 @@ class RealtimeAsrService {
         // Ignored server-side when assessmentType is set.
         if (symptomVocab != null && symptomVocab.isNotEmpty)
           'symptomVocab': symptomVocab.join(','),
+        if (encounterId != null && encounterId.isNotEmpty)
+          'encounterId': encounterId,
         // Fallback for WS clients that can't set headers (kept for parity
         // with the server's authenticate_websocket, not used on native).
         if (api.tenantId != null) 'tenantId': api.tenantId!,
