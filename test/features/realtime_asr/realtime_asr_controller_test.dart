@@ -19,6 +19,7 @@ import 'package:record_platform_interface/record_platform_interface.dart';
 
 import 'package:uhis_next/core/api/api_client.dart';
 import 'package:uhis_next/core/api/realtime_asr_service.dart';
+import 'package:uhis_next/core/constants/app_strings.dart';
 import 'package:uhis_next/features/realtime_asr/realtime_asr_controller.dart';
 import 'package:uhis_next/features/scribe/scribe_permission_service.dart';
 
@@ -416,6 +417,84 @@ void main() {
       expect(asrLines.any((l) => l.contains(malformed)), isFalse);
 
       await ctrl.stop();
+      ctrl.dispose();
+    });
+  });
+
+  group('server error frame ("case error")', () {
+    test('a recognized server error code flips state to error with a '
+        'localized message, not the raw backend code', () async {
+      late WebSocket serverSocket;
+      final connected = Completer<void>();
+      final server = await startWsServer((ws) {
+        serverSocket = ws;
+        connected.complete();
+      });
+      addTearDown(server.close);
+
+      final wsUri = Uri.parse('ws://127.0.0.1:${server.port}');
+      final ctrl = buildController(wsUri);
+      ctrl.bindContext(_dummyContext());
+
+      final startFuture = ctrl.start(encounterId: 'enc-server-error');
+      await connected.future;
+      fakeRecord.startStreamGate.complete(fakeRecord.audioController.stream);
+      await startFuture;
+      expect(ctrl.state, RealtimeAsrState.listening);
+
+      serverSocket.add('{"type":"error","message":"audio_transcription_failed"}');
+      for (var i = 0; i < 200 && ctrl.state != RealtimeAsrState.error; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      // Bug (a): previously `_state` never flipped to `error` here — the
+      // socket close that always follows this frame would then be seen by
+      // `_onSocketDone` as coming from `listening`, resetting to `idle`
+      // instead of `error`, and the banner's error panel would never render
+      // (showLivePanel = liveActive || state == error evaluates false for
+      // idle).
+      expect(ctrl.state, RealtimeAsrState.error);
+      // Bug (b): previously `errorMessage` was the raw backend code verbatim
+      // ("audio_transcription_failed") — an untranslated, machine-readable
+      // token that would have rendered straight into a Bangla-language UI.
+      expect(ctrl.errorMessage, RealtimeAsrStrings.audioTranscriptionFailed);
+      expect(ctrl.errorMessage, isNot(contains('audio_transcription_failed')));
+
+      // The raw code is still captured for diagnostics (category), just
+      // never surfaced in the user-visible message.
+      final errorLine = logs.firstWhere((l) => l.contains('ASR_ERROR'));
+      expect(errorLine, contains('errorCategory=audio_transcription_failed'));
+
+      ctrl.dispose();
+    });
+
+    test('an unrecognized server error code falls back to the generic, '
+        'localized error message', () async {
+      late WebSocket serverSocket;
+      final connected = Completer<void>();
+      final server = await startWsServer((ws) {
+        serverSocket = ws;
+        connected.complete();
+      });
+      addTearDown(server.close);
+
+      final wsUri = Uri.parse('ws://127.0.0.1:${server.port}');
+      final ctrl = buildController(wsUri);
+      ctrl.bindContext(_dummyContext());
+
+      final startFuture = ctrl.start(encounterId: 'enc-server-error-2');
+      await connected.future;
+      fakeRecord.startStreamGate.complete(fakeRecord.audioController.stream);
+      await startFuture;
+
+      serverSocket.add('{"type":"error","message":"some_future_backend_code"}');
+      for (var i = 0; i < 200 && ctrl.state != RealtimeAsrState.error; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(ctrl.state, RealtimeAsrState.error);
+      expect(ctrl.errorMessage, RealtimeAsrStrings.genericError);
+
       ctrl.dispose();
     });
   });

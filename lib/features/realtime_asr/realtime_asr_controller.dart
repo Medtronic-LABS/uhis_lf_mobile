@@ -374,7 +374,9 @@ class RealtimeAsrController extends ChangeNotifier {
         onError: (Object e) {
           debugPrint('[RealtimeASR] websocket error: $e');
           _logEvent('ASR_WS_ERROR', {'errorType': e.runtimeType.toString()});
-          _setError(RealtimeAsrStrings.connectionError('$e'), category: 'ws_connection_error');
+          // The raw exception ($e) is diagnostic-only (logged above, never
+          // shown) — the SK sees a generic, localized connectivity message.
+          _setError(RealtimeAsrStrings.connectionUnavailable, category: 'ws_connection_error');
           // A socket error leaves the mic stream and auto-extract timer
           // running against a dead channel unless torn down here too — same
           // leak as an unexpected close (see _onSocketDone).
@@ -412,13 +414,21 @@ class RealtimeAsrController extends ChangeNotifier {
       _lastVadPassAt = DateTime.now();
       _logEvent('ASR_RECORDER_START', {'hasPermission': hasPerm});
 
-      // ── T6 instrumentation ────────────────────────────────────────────
-      // Immediately before the unconditional state write below: record
-      // whether the channel is actually available, and what state we are
-      // transitioning *from* — captured here, not after, because if the WS
-      // handshake already failed during the awaits above, `_setError` will
-      // already have flipped `_state` to `error`, and this line is about to
-      // overwrite that. Diagnostic only — the write below is unchanged.
+      // ── T6 guard: don't resurrect a dead WS channel into "listening" ──
+      // Record channel availability and the current state immediately
+      // before deciding whether to proceed to `listening` — captured here,
+      // not after, because if the WS handshake already failed during the
+      // awaits above, `_setError` (onError) or `_onSocketDone` may already
+      // have moved `_state` to `error`/`idle`, and the unconditional write
+      // that used to follow this check would silently overwrite that real
+      // outcome. The `_state == idle` half of the check below also catches
+      // the specific race where the WS close triggers `_onSocketDone`'s
+      // `_teardown`, which is itself blocked on `_recorder.isRecording()`
+      // behind the per-instance semaphore this in-flight `startStream()`
+      // call is holding — so `_channel` hasn't been nulled yet, but `_state`
+      // was already flipped to `idle`. In either case, tear down the mic
+      // stream we just started and end this attempt as a failed start
+      // instead of claiming `listening`.
       final channelAvailable = _channel != null;
       _logEvent('ASR_START_FINAL_STATE', {
         'channelAvailable': channelAvailable,
@@ -429,20 +439,10 @@ class RealtimeAsrController extends ChangeNotifier {
           _state == RealtimeAsrState.idle ||
           _state == RealtimeAsrState.error) {
         _logEvent('ASR_LISTENING_WITHOUT_WS', {'currentState': _state.name});
-        // The WS already failed (onError/onSocketDone already ran, or is
-        // running) while we were awaiting the recorder — do not resurrect a
-        // dead session by claiming `listening`. This checks both channel
-        // availability and whether another handler has already reset the state
-        // to idle/error; this second clause catches the case where the WS
-        // close triggers _onSocketDone's _teardown (which is blocked on
-        // _recorder.isRecording due to the per-instance semaphore held by this
-        // same in-flight startStream() call), so _channel hasn't been nulled
-        // yet but state was already changed to idle. Tear down the mic stream
-        // we just started and end this attempt as a failure instead.
         await _teardown(reason: 'start_failed_no_channel');
         if (_state != RealtimeAsrState.error) {
           _setError(
-            RealtimeAsrStrings.couldNotStart('WebSocket unavailable'),
+            RealtimeAsrStrings.connectionUnavailable,
             category: 'ws_not_available_at_listening',
           );
         }
@@ -467,7 +467,10 @@ class RealtimeAsrController extends ChangeNotifier {
       });
     } catch (e, st) {
       debugPrint('[RealtimeASR] start() failed: $e\n$st');
-      _setError(RealtimeAsrStrings.couldNotStart('$e'), category: 'start_exception');
+      // The raw exception ($e) stays in the debug log above only — the SK
+      // sees a generic, localized connectivity message, never Dart exception
+      // text.
+      _setError(RealtimeAsrStrings.connectionUnavailable, category: 'start_exception');
       await _teardown(reason: 'start_failed');
       _emitSessionSummaryOnce();
     }
@@ -713,16 +716,26 @@ class RealtimeAsrController extends ChangeNotifier {
         _extractionCompleter = null;
         _safeNotify();
       case 'error':
-        debugPrint('[RealtimeASR] recv error: ${msg['message']}');
+        final rawServerErrorCode = msg['message'] as String?;
+        debugPrint('[RealtimeASR] recv error: $rawServerErrorCode');
         _extracting = false;
         _extractResponsesReceivedCount++;
         if (_finalExtractRequested && !_finalExtractResponseReceived) {
           _finalExtractResponseReceived = true;
         }
-        _errorMessage = msg['message'] as String?;
+        // Route through the same chokepoint every other error path uses —
+        // this is what actually flips `_state` to `error` (previously it
+        // never did, so the server closing the socket right after this frame
+        // left `_onSocketDone` resetting to `idle` instead, and the banner's
+        // error panel never rendered). The raw backend code is passed only as
+        // `category` (diagnostic-only, never shown); the SK sees a localized
+        // message via [_localizedServerErrorMessage].
+        _setError(
+          _localizedServerErrorMessage(rawServerErrorCode),
+          category: rawServerErrorCode ?? 'server_error_unknown',
+        );
         _extractionCompleter?.complete();
         _extractionCompleter = null;
-        _safeNotify();
       case 'schema_ack':
         // Reply to "init_schema" (or an inline "formSchema" on "extract") —
         // informational only, no state to update here. Logged so a schema
@@ -1135,6 +1148,20 @@ class RealtimeAsrController extends ChangeNotifier {
       _channel?.sink.add(jsonEncode(msg));
     } catch (e) {
       debugPrint('[RealtimeASR] _send(${msg['type']}) failed: $e');
+    }
+  }
+
+  /// Maps a raw backend error code (the `message` field on a server
+  /// `{"type":"error",...}` frame, e.g. `"audio_transcription_failed"`) to a
+  /// localized, SK-facing message. The raw code itself must never reach the
+  /// user — callers pass it separately as [_setError]'s diagnostic-only
+  /// `category` instead.
+  String _localizedServerErrorMessage(String? rawCode) {
+    switch (rawCode) {
+      case 'audio_transcription_failed':
+        return RealtimeAsrStrings.audioTranscriptionFailed;
+      default:
+        return RealtimeAsrStrings.genericError;
     }
   }
 

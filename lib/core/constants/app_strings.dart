@@ -653,6 +653,24 @@ abstract final class RealtimeAsrStrings {
   /// in practice ([RealtimeAsrController] always sets a message alongside the
   /// error state), but keeps the banner from ever rendering an empty subtitle.
   static String get genericError => getTranslatedString('RealtimeAsr.genericError', 'Real-time ASR ran into a problem.');
+
+  /// Generic connectivity-failure message shown to the SK whenever the live
+  /// session cannot reach (or loses) the realtime ASR WebSocket — covers the
+  /// "channel never came up" start failure, a mid-session socket error, and
+  /// any other exception raised while starting the session. Deliberately
+  /// generic and non-technical: the underlying exception text (`'$e'`) is
+  /// never shown to the user, only logged via [AsrDiagnostics.event]'s
+  /// diagnostic-only `category` field.
+  static String get connectionUnavailable => getTranslatedString(
+      'RealtimeAsr.connectionUnavailable', "Couldn't connect — check your network and try again.");
+
+  /// Shown when the server's `{"type":"error"}` frame carries the
+  /// `audio_transcription_failed` code — the one raw backend error code this
+  /// controller recognizes and gives a specific, localized message for.
+  /// Any other/unrecognized code falls back to [genericError].
+  static String get audioTranscriptionFailed => getTranslatedString(
+      'RealtimeAsr.audioTranscriptionFailed', "Couldn't transcribe the audio — try speaking again.");
+
   static String get bloodPressure => getTranslatedString('bloodPressure', 'Blood Pressure');
   static String get bloodGlucose => getTranslatedString('bloodGlucose', 'Blood Glucose');
   static String get clinicalNotes => getTranslatedString('clinicalNotes', 'Clinical Notes');
