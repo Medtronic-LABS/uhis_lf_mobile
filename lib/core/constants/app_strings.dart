@@ -642,6 +642,17 @@ abstract final class RealtimeAsrStrings {
   static String get symptomsEmpty => getTranslatedString('symptomsEmpty', 'No extraction yet.');
   static String get notSupportedOnWeb => getTranslatedString('RealtimeAsr.notSupportedOnWeb', 'Real-time ASR is not available in the web preview — use the Android or iOS app.');
   static String get micPermissionDenied => getTranslatedString('RealtimeAsr.micPermissionDenied', 'Microphone permission is required for real-time ASR.');
+
+  /// Banner title shown while a live-ASR session is in [RealtimeAsrState.error]
+  /// — distinct from [title] so the SK can tell an errored session apart from
+  /// one that is actively listening.
+  static String get errorTitle => getTranslatedString('RealtimeAsr.errorTitle', 'Real-Time ASR — Error');
+
+  /// Fallback banner subtitle for a [RealtimeAsrState.error] session whose
+  /// [RealtimeAsrController.errorMessage] is somehow null — should not occur
+  /// in practice ([RealtimeAsrController] always sets a message alongside the
+  /// error state), but keeps the banner from ever rendering an empty subtitle.
+  static String get genericError => getTranslatedString('RealtimeAsr.genericError', 'Real-time ASR ran into a problem.');
   static String get bloodPressure => getTranslatedString('bloodPressure', 'Blood Pressure');
   static String get bloodGlucose => getTranslatedString('bloodGlucose', 'Blood Glucose');
   static String get clinicalNotes => getTranslatedString('clinicalNotes', 'Clinical Notes');

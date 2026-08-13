@@ -235,6 +235,12 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
     final session = controller.session;
     final liveActive = _liveCtrl.isActive;
+    // Distinct from `isActive`: `error` must still render (the panel that
+    // shows `errorMessage`), even though the session itself is no longer
+    // occupying the mic/socket. Using `isActive` alone here is exactly the
+    // bug that made every realtime ASR error structurally invisible.
+    final liveErrored = _liveCtrl.state == RealtimeAsrState.error;
+    final showLivePanel = liveActive || liveErrored;
     final isRecording = !liveActive && session.state == ScribeState.recording;
     final isError =
         !liveActive && !_showDone && session.state == ScribeState.error;
@@ -246,8 +252,8 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     final idleChoice =
         !liveActive && !isRecording && !isError && !isProcessing;
 
-    final title = liveActive
-        ? RealtimeAsrStrings.title
+    final title = showLivePanel
+        ? (liveErrored ? RealtimeAsrStrings.errorTitle : RealtimeAsrStrings.title)
         : _showDone
             ? SymptomPickerStrings.scribeBannerDone
             : isError
@@ -260,12 +266,14 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                             isFemale: widget.isFemale,
                           );
 
-    final subtitle = liveActive
-        ? (switch (_liveCtrl.state) {
-            RealtimeAsrState.connecting => RealtimeAsrStrings.connecting,
-            RealtimeAsrState.stopping => RealtimeAsrStrings.stopping,
-            _ => RealtimeAsrStrings.listening,
-          })
+    final subtitle = showLivePanel
+        ? (liveErrored
+            ? (_liveCtrl.errorMessage ?? RealtimeAsrStrings.genericError)
+            : switch (_liveCtrl.state) {
+                RealtimeAsrState.connecting => RealtimeAsrStrings.connecting,
+                RealtimeAsrState.stopping => RealtimeAsrStrings.stopping,
+                _ => RealtimeAsrStrings.listening,
+              })
         : _showDone
             ? SymptomPickerStrings.scribeBannerDoneSubtitle
             : isError
@@ -414,7 +422,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                     ),
                   ],
                 ),
-                if (liveActive) ...[
+                if (showLivePanel) ...[
                   const SizedBox(height: 10),
                   AiScribeLiveAsrPanel(controller: _liveCtrl),
                 ],

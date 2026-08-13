@@ -2615,6 +2615,10 @@
     "bn": "সংযুক্ত হচ্ছে…",
     "en": "Connecting…"
   },
+  "RealtimeAsr.errorTitle": {
+    "bn": "রিয়েল-টাইম এএসআর — সমস্যা",
+    "en": "Real-Time ASR — Error"
+  },
   "RealtimeAsr.extractNow": {
     "bn": "এখনই বের করুন",
     "en": "Extract Now"
@@ -2622,6 +2626,10 @@
   "RealtimeAsr.extracting": {
     "bn": "বের করা হচ্ছে…",
     "en": "Extracting…"
+  },
+  "RealtimeAsr.genericError": {
+    "bn": "রিয়েল-টাইম এএসআরে একটি সমস্যা হয়েছে।",
+    "en": "Real-time ASR ran into a problem."
   },
   "RealtimeAsr.idle": {
     "bn": "নিষ্ক্রিয়",

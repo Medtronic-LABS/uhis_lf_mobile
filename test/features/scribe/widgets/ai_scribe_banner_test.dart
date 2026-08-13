@@ -1,0 +1,185 @@
+/// Widget test for [AiScribeBanner]'s realtime-ASR error visibility.
+///
+/// Regression coverage for the bug described in
+/// `.superpowers/sdd/2026-08-13-realtime-asr-silent-failure-fixes/task-3-brief.md`:
+/// [RealtimeAsrController.isActive] deliberately excludes
+/// [RealtimeAsrState.error] (it means "session occupying the mic/socket"),
+/// but the banner used to gate *rendering* on `isActive` alone — so the
+/// instant a live session errored, the banner fell back to looking like the
+/// plain idle "tap to record" state, and the only widget that ever displayed
+/// `errorMessage` ([AiScribeLiveAsrPanel]) unmounted with it. The SK never
+/// saw the error.
+///
+/// [AiScribeBanner] builds its own [RealtimeAsrController] internally (not
+/// injectable), and its [ScribePermissionService] is hardcoded to the real
+/// implementation — so this test reaches [RealtimeAsrState.error] via the
+/// same real mic-permission-denied path production code takes, using the
+/// permission_handler plugin's own supported test seam
+/// ([PermissionHandlerPlatform.instance]) to make [ScribePermissionService]
+/// see a "denied" status without a real platform channel or any network
+/// call. Declining the on-screen rationale sheet then completes the "denied"
+/// path deterministically, matching [RealtimeAsrController]'s own
+/// `mic_permission_denied` category (see
+/// test/features/realtime_asr/realtime_asr_controller_test.dart, which
+/// reaches the same state by injecting a fake [ScribePermissionService]
+/// directly into [RealtimeAsrController] — not an option here since
+/// [AiScribeBanner] doesn't expose that seam).
+library;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler_platform_interface/permission_handler_platform_interface.dart';
+import 'package:provider/provider.dart';
+import 'package:record_platform_interface/record_platform_interface.dart';
+
+import 'package:uhis_next/core/api/api_client.dart';
+import 'package:uhis_next/core/api/realtime_asr_service.dart';
+import 'package:uhis_next/core/api/scribe_api_service.dart';
+import 'package:uhis_next/core/constants/app_strings.dart';
+import 'package:uhis_next/core/preferences/scribe_audio_settings_notifier.dart';
+import 'package:uhis_next/core/preferences/vad_tuning_notifier.dart';
+import 'package:uhis_next/features/scribe/scribe_controller.dart';
+import 'package:uhis_next/features/scribe/scribe_permission_service.dart';
+import 'package:uhis_next/features/scribe/widgets/ai_scribe_banner.dart';
+
+/// Minimal fake of the `record` plugin's platform interface — same
+/// convention as `test/features/realtime_asr/realtime_asr_controller_test.dart`'s
+/// `FakeRecordPlatform`. [ScribeController] and [RealtimeAsrController] both
+/// construct a `record` recorder eagerly; this test never reaches any actual
+/// recording call (the mic-permission-denied path returns before any
+/// recorder method is invoked), so only construction-adjacent calls need a
+/// safe (non-throwing) stand-in.
+class _FakeRecordPlatform extends RecordPlatform {
+  @override
+  Future<void> create(String recorderId) async {}
+
+  @override
+  Future<void> dispose(String recorderId) async {}
+
+  @override
+  Stream<RecordState> onStateChanged(String recorderId) =>
+      const Stream<RecordState>.empty();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName} not faked');
+}
+
+/// Fakes the `permission_handler` plugin's platform interface so
+/// `Permission.microphone.status` resolves to "denied" (not "granted", not
+/// "permanently denied") without a real platform channel — the exact seam
+/// the `permission_handler` package's own test suite uses to stub this
+/// interface. "Denied" (rather than "permanently denied") is what routes
+/// [ScribePermissionService] through the in-app rationale sheet instead of
+/// the settings dialog, so declining it is a plain widget tap, not a
+/// simulated OS settings round-trip.
+class _DeniedPermissionHandlerPlatform extends PermissionHandlerPlatform {
+  @override
+  Future<PermissionStatus> checkPermissionStatus(Permission permission) async =>
+      PermissionStatus.denied;
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late RecordPlatform originalRecordPlatform;
+  late PermissionHandlerPlatform originalPermissionPlatform;
+  late ApiClient apiClient;
+
+  setUp(() async {
+    originalRecordPlatform = RecordPlatform.instance;
+    RecordPlatform.instance = _FakeRecordPlatform();
+
+    originalPermissionPlatform = PermissionHandlerPlatform.instance;
+    PermissionHandlerPlatform.instance = _DeniedPermissionHandlerPlatform();
+
+    apiClient = await ApiClient.create();
+  });
+
+  tearDown(() {
+    RecordPlatform.instance = originalRecordPlatform;
+    PermissionHandlerPlatform.instance = originalPermissionPlatform;
+  });
+
+  Widget buildBanner() {
+    final audioSettings = ScribeAudioSettingsNotifier(const FlutterSecureStorage());
+    final scribeController = ScribeController(
+      api: ScribeApiService(apiClient),
+      permissionService: ScribePermissionService(),
+      audioSettings: audioSettings,
+    );
+
+    return MaterialApp(
+      home: Scaffold(
+        body: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ScribeController>.value(value: scribeController),
+            Provider<RealtimeAsrService>.value(value: RealtimeAsrService(apiClient)),
+            ChangeNotifierProvider<VadTuningNotifier>.value(
+              value: VadTuningNotifier(const FlutterSecureStorage()),
+            ),
+            ChangeNotifierProvider<ScribeAudioSettingsNotifier>.value(
+              value: audioSettings,
+            ),
+          ],
+          child: AiScribeBanner(
+            encounterId: 'enc-1',
+            patientId: 'patient-1',
+            isFemale: false,
+            tapStartsLiveAsr: true,
+            onReviewReady: (_) {},
+          ),
+        ),
+      ),
+    );
+  }
+
+  testWidgets(
+      'an errored live session shows an error message, not a bare idle banner',
+      (tester) async {
+    await tester.pumpWidget(buildBanner());
+    await tester.pump();
+
+    // Sanity check on the starting point: plain idle banner, no error.
+    expect(
+      find.text(SymptomPickerStrings.scribeBannerTitleFor(isFemale: false)),
+      findsOneWidget,
+    );
+
+    // Act: tap the idle banner — `tapStartsLiveAsr: true` routes this
+    // through `RealtimeAsrController.start()`, which awaits
+    // `ScribePermissionService.ensureMicPermission()` before ever touching
+    // the network. That call shows the in-app rationale sheet first.
+    //
+    // Note: this deliberately avoids `pumpAndSettle()` here — while
+    // permission resolution is pending, the banner shows an indeterminate
+    // `CircularProgressIndicator` (the "connecting" mic-circle spinner),
+    // which animates forever and would make `pumpAndSettle()` time out.
+    await tester.tap(find.byType(AiScribeBanner));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text(ScribeStrings.rationaleNotNow), findsOneWidget,
+        reason: 'the rationale sheet should be showing while mic permission '
+            'is not yet granted');
+    await tester.tap(find.text(ScribeStrings.rationaleNotNow));
+    await tester.pumpAndSettle();
+
+    // Assert: the live session is now in RealtimeAsrState.error, and that
+    // must be visible — not indistinguishable from the plain idle banner.
+    expect(find.text(RealtimeAsrStrings.errorTitle), findsOneWidget);
+    // The error message renders in both the banner subtitle and the inline
+    // live panel — assert it is visible at all, not an exact count, since
+    // that duplication is an implementation detail of where the panel
+    // chooses to also echo it.
+    expect(find.text(RealtimeAsrStrings.micPermissionDenied), findsWidgets);
+    expect(
+      find.text(SymptomPickerStrings.scribeBannerTitleFor(isFemale: false)),
+      findsNothing,
+      reason: 'an unacknowledged live-ASR error must not be indistinguishable '
+          'from the plain idle "tap to record" banner',
+    );
+  });
+}
