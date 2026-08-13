@@ -48,9 +48,10 @@ import 'package:uhis_next/features/scribe/widgets/ai_scribe_banner.dart';
 /// convention as `test/features/realtime_asr/realtime_asr_controller_test.dart`'s
 /// `FakeRecordPlatform`. [ScribeController] and [RealtimeAsrController] both
 /// construct a `record` recorder eagerly; this test never reaches any actual
-/// recording call (the mic-permission-denied path returns before any
-/// recorder method is invoked), so only construction-adjacent calls need a
-/// safe (non-throwing) stand-in.
+/// recording call (both the mic-permission-denied path and the
+/// encounterId-forwarding test's [_CapturingRealtimeAsrService] return/throw
+/// before any recorder method is invoked), so only construction-adjacent
+/// calls need a safe (non-throwing) stand-in.
 class _FakeRecordPlatform extends RecordPlatform {
   @override
   Future<void> create(String recorderId) async {}
@@ -79,6 +80,50 @@ class _DeniedPermissionHandlerPlatform extends PermissionHandlerPlatform {
   @override
   Future<PermissionStatus> checkPermissionStatus(Permission permission) async =>
       PermissionStatus.denied;
+}
+
+/// Same seam as [_DeniedPermissionHandlerPlatform], resolved "granted"
+/// instead — lets a test drive [RealtimeAsrController.start] past the
+/// mic-permission check (which short-circuits immediately on
+/// `status.isGranted`, see [ScribePermissionService.ensureMicPermission])
+/// without a real platform channel, so the banner's call into
+/// [RealtimeAsrService.connectionInfo] is actually reached.
+class _GrantedPermissionHandlerPlatform extends PermissionHandlerPlatform {
+  @override
+  Future<PermissionStatus> checkPermissionStatus(Permission permission) async =>
+      PermissionStatus.granted;
+}
+
+/// Records the `encounterId` argument [AiScribeBanner] passes down into
+/// [RealtimeAsrController.start] -> [RealtimeAsrService.connectionInfo] —
+/// the regression seam for the bug where `_startAsr()` never forwarded
+/// `widget.encounterId`, so this always arrived as `null` in production.
+///
+/// Throws immediately after capturing, instead of returning a connection and
+/// letting `start()` attempt a real WebSocket handshake: [RealtimeAsrState]
+/// wiring beyond this call (the socket, the recorder, the auto-extract
+/// timer) is exercised and asserted elsewhere in this codebase — this test
+/// only needs to prove the argument below, and `start()`'s own catch block
+/// already turns this into a clean, immediate error state (see
+/// `RealtimeAsrController.start`'s `catch (e, st)` clause).
+class _CapturingRealtimeAsrService extends RealtimeAsrService {
+  _CapturingRealtimeAsrService(super.api);
+
+  String? capturedEncounterId;
+  bool connectionInfoCalled = false;
+
+  @override
+  Future<RealtimeAsrConnectionInfo> connectionInfo({
+    required String language,
+    String model = 'saarika:v2.5',
+    String? assessmentType,
+    List<String>? symptomVocab,
+    String? encounterId,
+  }) async {
+    connectionInfoCalled = true;
+    capturedEncounterId = encounterId;
+    throw StateError('_CapturingRealtimeAsrService: no real connection in this test');
+  }
 }
 
 /// The banner wraps its tappable content in exactly one `Semantics(button:
@@ -119,7 +164,7 @@ void main() {
     PermissionHandlerPlatform.instance = originalPermissionPlatform;
   });
 
-  Widget buildBanner() {
+  Widget buildBanner({RealtimeAsrService? realtimeAsrService, String encounterId = 'enc-1'}) {
     final audioSettings = ScribeAudioSettingsNotifier(const FlutterSecureStorage());
     final scribeController = ScribeController(
       api: ScribeApiService(apiClient),
@@ -132,7 +177,9 @@ void main() {
         body: MultiProvider(
           providers: [
             ChangeNotifierProvider<ScribeController>.value(value: scribeController),
-            Provider<RealtimeAsrService>.value(value: RealtimeAsrService(apiClient)),
+            Provider<RealtimeAsrService>.value(
+              value: realtimeAsrService ?? RealtimeAsrService(apiClient),
+            ),
             ChangeNotifierProvider<VadTuningNotifier>.value(
               value: VadTuningNotifier(const FlutterSecureStorage()),
             ),
@@ -141,7 +188,7 @@ void main() {
             ),
           ],
           child: AiScribeBanner(
-            encounterId: 'enc-1',
+            encounterId: encounterId,
             patientId: 'patient-1',
             isFemale: false,
             tapStartsLiveAsr: true,
@@ -206,5 +253,43 @@ void main() {
     // or a screen-reader user gets no indication anything went wrong even
     // though sighted users now see the fix above.
     expect(_bannerSemanticsLabel(tester), RealtimeAsrStrings.errorTitle);
+  });
+
+  testWidgets(
+      'tapping the banner forwards widget.encounterId into the realtime ASR '
+      'connection request',
+      (tester) async {
+    // Regression coverage for the encounterId-not-forwarded bug: `_startAsr()`
+    // in ai_scribe_banner.dart called `_liveCtrl.start(...)` without
+    // `encounterId: widget.encounterId`, so the correlation id Task 4 added
+    // never reached `RealtimeAsrService.connectionInfo` (and so never reached
+    // the backend, or this widget's own `[AsrDiag]` log lines) in production —
+    // even though `RealtimeAsrController` itself, and `RealtimeAsrService`
+    // directly, both handled `encounterId` correctly. Unlike
+    // `test/features/realtime_asr/realtime_asr_controller_test.dart`'s own
+    // encounterId coverage (which calls `ctrl.start(encounterId: ...)`
+    // directly), this drives the real production entry point — a tap on
+    // [AiScribeBanner] — so it actually exercises the wiring that broke.
+    PermissionHandlerPlatform.instance = _GrantedPermissionHandlerPlatform();
+    final capturingService = _CapturingRealtimeAsrService(apiClient);
+
+    await tester.pumpWidget(
+      buildBanner(realtimeAsrService: capturingService, encounterId: 'enc-encounter-forwarding'),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byType(AiScribeBanner));
+
+    // Mic permission is already granted, so `ensureMicPermission` returns
+    // immediately without showing the rationale sheet — a few pumps are
+    // enough to carry `start()` through to its `connectionInfo(...)` call.
+    for (var i = 0; i < 50 && !capturingService.connectionInfoCalled; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+
+    expect(capturingService.connectionInfoCalled, isTrue,
+        reason: 'start() should have reached RealtimeAsrService.connectionInfo '
+            'by now');
+    expect(capturingService.capturedEncounterId, 'enc-encounter-forwarding');
   });
 }
