@@ -431,14 +431,52 @@ void main() {
     });
 
     test('extractNow safety-timeout callback firing after dispose does not throw', () async {
-      final ctrl = buildController(Uri.parse('ws://127.0.0.1:1'), granted: false);
+      // Set up a real WebSocket server that won't reply to extractions,
+      // so the _extractionSafetyTimeout callback stays pending after dispose.
+      late WebSocket serverSocket;
+      final connected = Completer<void>();
+      final server = await startWsServer((ws) {
+        serverSocket = ws;
+        connected.complete();
+        addTearDown(ws.close);
+      });
+      addTearDown(server.close);
+
+      final wsUri = Uri.parse('ws://127.0.0.1:${server.port}');
+      final ctrl = buildController(wsUri); // granted=true by default
       ctrl.bindContext(_dummyContext());
-      await ctrl.start(encounterId: 'enc-dispose-guard-2');
+
+      // Start the session and reach listening state.
+      final startFuture = ctrl.start(encounterId: 'enc-dispose-guard-2');
+      await connected.future;
+      fakeRecord.startStreamGate.complete(fakeRecord.audioController.stream);
+      await startFuture;
+      expect(ctrl.state, RealtimeAsrState.listening);
+
+      // Send a transcript segment from the server so fullTranscript is non-empty.
+      // extractNow() returns early if transcript is empty.
+      serverSocket.add('{"type":"data","data":{"transcript":"test symptom"}}');
+      // Wait for the controller to receive and process the message.
+      for (var i = 0; i < 200 && ctrl.fullTranscript.isEmpty; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(ctrl.fullTranscript, isNotEmpty);
+
+      // Call extractNow() — this schedules the _extractionSafetyTimeout callback.
+      ctrl.extractNow();
+      expect(ctrl.isExtracting, isTrue,
+          reason: 'extractNow() should have set _extracting = true');
+
+      // Dispose immediately, while the safety-timeout callback is still scheduled.
+      // This is the real crash case: a Future.delayed callback fires after dispose().
       ctrl.dispose();
-      // extractNow()'s Future.delayed(_extractionSafetyTimeout, ...) callback
-      // can still be scheduled from before dispose() — pump past it and
-      // confirm no notifyListeners()-after-dispose throw.
+
+      // Pump past the safety-timeout (21 seconds) — if the dispose guard weren't
+      // in place, the _safeNotify() call inside that callback would throw
+      // "used after being disposed". With the guard, it silently returns.
       await Future<void>.delayed(const Duration(seconds: 21));
+
+      // If we reach here without a throw, the guard worked.
     });
   });
 
