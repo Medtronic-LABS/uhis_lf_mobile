@@ -544,6 +544,112 @@ Highlights:
   eliminate — the "`channelAvailable=false`" sub-variant's real-world window; both are logged distinctly
   so production data will show which actually dominates.
 
+## Controller create/dispose churn — static-analysis-only finding (Task 7)
+
+> **This finding was produced by static code reading only — it was NOT live-verified.** The environment
+> this task ran in has only the `ai-scribe-service` stack up; the full UHIS platform backend (auth,
+> spice-service, offline-service) is not running, so the app cannot log in and reach the visit screens
+> needed for a live repro with logcat. Unlike the T1–T13 findings above (which were confirmed by tracing
+> an actual session or, per Part 2/3, by a real local-loopback test), this is a code-structure argument
+> only. A future session with device access should still run the live repro this task's brief specifies
+> (Step 1: navigate Step 1 ⇄ Step 2 repeatedly while grepping `[AsrDiag]` `ASR_SESSION_SUMMARY` lines)
+> before this is treated as fully closed.
+
+**Observation being investigated:** live testing logged three `RealtimeAsrController`s created and
+disposed within ~10 seconds, every one with `durationMs=null` (i.e. `start()` was never called on any of
+them) — emitted by `_emitSessionSummaryOnce()` (`realtime_asr_controller.dart:1214-1251`), which
+`dispose()` calls unconditionally as a last resort (`:1295-1307`) guarded by the `_disposed` flag Task 1
+added.
+
+**Where the controller lives, and whether it can be recreated by a bare rebuild:**
+`_liveCtrl` is a `late final RealtimeAsrController` field on `_AiScribeBannerState`, constructed exactly
+once in `initState()` and never reassigned (`ai_scribe_banner.dart:112, 118-135`). `build()`
+(`:227-436`) only reads `_liveCtrl`, never constructs one. So the controller's lifecycle is 1:1 with
+`_AiScribeBannerState`'s own lifecycle — the question reduces entirely to *what can tear down and
+recreate `_AiScribeBannerState`*.
+
+**`AiScribeBanner` carries no stable key at either call site.** `AiScribeBanner`'s constructor accepts
+`super.key` (`ai_scribe_banner.dart:41-53`) but neither host passes one:
+- `lib/features/visit/forms/unified_form_screen.dart:548-570` (Step 2)
+- `lib/features/visit/triage/symptom_picker_screen.dart:1164-1196` (Step 1)
+
+Both instantiate it inline with no `key:` argument, so it relies entirely on Flutter's default
+type+position matching to preserve its `State` across rebuilds.
+
+**Both hosts sit under a `Consumer` that rebuilds frequently — but that alone does not tear the banner
+down.** `UnifiedFormScreen.build()` wraps its whole body in `Consumer<UnifiedFormNotifier>`
+(`unified_form_screen.dart:376-377`); the banner sits inside that builder at a fixed `if`-gated slot in a
+`Column`'s `children` (`:543-571`), gated by `AppConfig.scribeEnabled && context.watch<AiFeatureTogglesNotifier>().toggles.step2AsrEnabled`
+(`:543-544`). `SymptomPickerScreen.build()` wraps its body in `Consumer<TriageViewModel>`
+(`symptom_picker_screen.dart:1116-1118`); the banner sits inside that builder at a fixed `if`-gated
+`SliverToBoxAdapter` in a `CustomScrollView`'s `slivers` list (`:1159-1196`), gated by
+`AppConfig.scribeEnabled && aiToggles.step1AsrEnabled` (`:1160`, `aiToggles` read at `:1118`).
+
+This is the exact shape the task brief's Step 3 flagged as the classic cause ("a `Consumer`/`Selector`
+listening to a notifier that changes more often than intended... causing `AiScribeBanner`... to be torn
+down and recreated"). **Tracing it precisely shows this mechanism does not apply here.** Flutter's
+element reconciliation matches an unkeyed widget at a stable list position by `runtimeType` alone; as
+long as `AiScribeBanner` keeps occupying the same slot with the same type on every rebuild (true whenever
+the `if` gate's condition doesn't flip), the framework calls `build()`/`didUpdateWidget()` on the
+*existing* `Element`/`State` — it does not call `dispose()` followed by a fresh `initState()`. A
+`Consumer` firing on every keystroke, every symptom-chip tap, or every `notifyListeners()` from
+`UnifiedFormNotifier`/`TriageViewModel` only forces `AiScribeBanner.build()` to re-run; it cannot, by
+itself, recreate `_AiScribeBannerState` or `_liveCtrl`.
+
+**The `if` gate's own notifier (`AiFeatureTogglesNotifier`) cannot flip repeatedly during one visit
+either.** It is constructed exactly once at app startup — `lib/main.dart:534`
+(`AiFeatureTogglesNotifier(const FlutterSecureStorage())..load()`) — and `.load()` calls
+`notifyListeners()` exactly once after reading persisted prefs (`ai_feature_toggles_notifier.dart:114-130`).
+Its `AiFeatureToggles.defaults()` already sets every flag `true`
+(`ai_feature_toggles_notifier.dart:22-29`), so absent an SK explicitly toggling AI Settings mid-visit
+(not plausible within a 10s window), `step1AsrEnabled`/`step2AsrEnabled` are stable for the whole app
+session — ruling out gate-flip-driven show/hide churn as the cause.
+
+I also grepped both host files for any internal mechanism that could remove/re-add the banner's subtree
+independent of the outer `Consumer` or of real navigation — `IndexedStack`, `PageView`,
+`Navigator.push`, `showModalBottomSheet`, `AnimatedSwitcher` — and found none in
+`symptom_picker_screen.dart` or `unified_form_screen.dart`. `UnifiedFormScreen`'s own pre-`Consumer` gate
+(`_configLoading`/`_config == null`, `:364-374`) is set exactly once, from `_loadConfig()` called only in
+`initState()` (`:177-180`, `:347-358`) — not a repeated-remount source either.
+
+**What actually does tear down and recreate `AiScribeBanner`'s State: real step navigation in
+`VisitFlowScreen`.** `_VisitFlowState._buildStepBody()` (`lib/features/visit/visit_flow_screen.dart:505-698`)
+is a `switch (_step)` that returns a **structurally different widget subtree per step** — `_Step1Symptoms`
+(wraps `SymptomPickerScreen`) for step 0, one of `_Step2VitalsForm`/`_Step2Vaccination`/
+`_Step2ProgrammesThenForm` (all eventually wrap `UnifiedFormScreen` via `VisitFormScreen`) for step 1,
+`_Step3AiReco` for step 2 — rendered at the single `Expanded(child: _buildStepBody())` slot (`:487`).
+Because the widget's `runtimeType` changes across a step transition, Flutter's `canUpdate` check fails
+regardless of keys, so the *entire* previous subtree is deactivated and disposed, and a fresh one is
+mounted. Concretely: advancing Step 1 → Step 2 disposes the `AiScribeBanner` living inside
+`SymptomPickerScreen` (which never had `start()` called if the SK didn't tap the mic) and mounts a brand
+new `AiScribeBanner`/`RealtimeAsrController` inside `UnifiedFormScreen`; going back to Step 1
+(`onBack: () { if (_step == 1) setState(() => _step = 0); ... }`, `:479-485`) disposes that one and
+mounts yet another fresh `_Step1Symptoms`/`SymptomPickerScreen`/`AiScribeBanner` (the per-step
+`ValueKey('flow-step1-${widget.visitId}')` etc. at `:514, 575, 613, 637, 675` only stabilizes identity
+*within* a step across `_VisitFlowState.build()` reruns — e.g. from `onProgrammesLive`'s
+`setState(() => _step1LiveProgrammes = ...)` firing on every service-card toggle at `:544-546` — it does
+not, and cannot, span the step-index switch itself, since the widget on either side of that switch is a
+different type).
+
+**Conclusion.** The code structure supports the **"benign, tied to real navigation"** explanation as the
+mechanism actually present in this codebase, not the "spurious `Consumer` rebuild" mechanism the brief
+hypothesized as the common cause — I found no ancestor listener capable of tearing the banner down while
+`_step` stays fixed. Three create/dispose cycles in ~10 seconds is consistent with three step-boundary
+crossings within that window (e.g. Step 1 → Step 2 → Step 1 → Step 2, a plausible pattern for a tester
+deliberately bouncing between steps to exercise the banner in both places), each of which is fully
+expected to tear down and rebuild the banner by design.
+
+This is **not** the same as full live confirmation: I did not verify that the three logged summaries
+actually lined up with three step transitions in that specific test session (I have code, not timestamps
+correlated with taps). If a future session has device access, the fastest one-shot confirmation is: add
+one `debugPrint('[VisitFlow] step -> $_step')` at the top of `_VisitFlowState.build()` (or reuse the
+existing `[AsrDiag]` filter alongside a logcat grep for `_VisitFlowState`), navigate Step 1 ⇄ Step 2
+rapidly several times, and confirm the count of step-index changes equals the count of
+`ASR_SESSION_SUMMARY` lines. If it does not — if summaries outnumber step transitions — that would
+falsify this finding and point back to the `Consumer`/gate mechanism after all (or something not found
+here), and would need a fresh static pass. No `ValueKey` or other code change is proposed here: this
+finding does not identify anything to fix, so per this task's scope, none is warranted.
+
 ---
 
 ## Appendix — files read in this investigation
@@ -553,7 +659,8 @@ Highlights:
 `ai_scribe_banner.dart`, `ai_form_fields.dart`, `realtime_asr_controller.dart`,
 `realtime_asr_channel_io.dart`, `realtime_asr_channel_web.dart`, `vad_gate.dart`,
 `unified_form_screen.dart`, `unified_form_notifier.dart`, `visit_form_screen.dart`,
-`symptom_picker_screen.dart`, `pubspec.yaml`.
+`symptom_picker_screen.dart`, `pubspec.yaml`, `visit_flow_screen.dart`,
+`ai_feature_toggles_notifier.dart`, `main.dart` (Provider wiring only, Task 7).
 
 **Backend (`leapfrog-ai-service/`):** `app/api/scribe.py`, `app/api/realtime.py`,
 `app/api/realtime_transcribe.py`, `app/api/upload.py`, `app/services/pipeline.py`,
