@@ -424,8 +424,21 @@ class RealtimeAsrController extends ChangeNotifier {
         'currentState': _state.name,
         'recorderStarted': true,
       });
-      if (!channelAvailable) {
+      if (!channelAvailable || _state != RealtimeAsrState.connecting) {
         _logEvent('ASR_LISTENING_WITHOUT_WS', {'currentState': _state.name});
+        // The WS already failed (onError/onSocketDone already ran, or is
+        // running) while we were awaiting the recorder — do not resurrect a
+        // dead session by claiming `listening`. Tear down the mic stream we
+        // just started and end this attempt as a failure instead.
+        await _teardown(reason: 'start_failed_no_channel');
+        if (_state != RealtimeAsrState.error) {
+          _setError(
+            RealtimeAsrStrings.couldNotStart('WebSocket unavailable'),
+            category: 'ws_not_available_at_listening',
+          );
+        }
+        _emitSessionSummaryOnce();
+        return;
       }
 
       _state = RealtimeAsrState.listening;

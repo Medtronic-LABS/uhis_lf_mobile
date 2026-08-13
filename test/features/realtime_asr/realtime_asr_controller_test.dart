@@ -267,8 +267,9 @@ void main() {
       // reliably reproducible in this exact construction).
       final finalStateLine = logs.firstWhere((l) => l.contains('ASR_START_FINAL_STATE'));
       expect(finalStateLine, contains('currentState=idle'));
-      expect(ctrl.state, RealtimeAsrState.listening,
-          reason: 'start() overwrote the already-torn-down idle state');
+      // Fixed behavior: start() must NOT resurrect the already-torn-down
+      // idle state back into listening.
+      expect(ctrl.state, isNot(RealtimeAsrState.listening));
 
       ctrl.dispose();
     });
