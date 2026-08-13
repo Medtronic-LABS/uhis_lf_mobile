@@ -81,6 +81,22 @@ class _DeniedPermissionHandlerPlatform extends PermissionHandlerPlatform {
       PermissionStatus.denied;
 }
 
+/// The banner wraps its tappable content in exactly one `Semantics(button:
+/// ..., label: ...)` node (see `ai_scribe_banner.dart`'s `build()`) — found
+/// here by that `button` property rather than by type, since `MaterialApp`/
+/// `Scaffold` insert their own framework `Semantics` nodes elsewhere in the
+/// tree. No existing test in this codebase asserts on a `Semantics` label
+/// (confirmed via a repo-wide search), so this is a new, minimal pattern:
+/// read the widget's `properties.label` directly rather than standing up the
+/// full semantics-tree binding (`tester.ensureSemantics()`), since only the
+/// label string — not focus/traversal order — is under test here.
+String? _bannerSemanticsLabel(WidgetTester tester) {
+  final semantics = tester.widgetList<Semantics>(
+    find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.button == true),
+  );
+  return semantics.single.properties.label;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -147,6 +163,10 @@ void main() {
       find.text(SymptomPickerStrings.scribeBannerTitleFor(isFemale: false)),
       findsOneWidget,
     );
+    expect(
+      _bannerSemanticsLabel(tester),
+      SymptomPickerStrings.scribeBannerTitleFor(isFemale: false),
+    );
 
     // Act: tap the idle banner — `tapStartsLiveAsr: true` routes this
     // through `RealtimeAsrController.start()`, which awaits
@@ -181,5 +201,10 @@ void main() {
       reason: 'an unacknowledged live-ASR error must not be indistinguishable '
           'from the plain idle "tap to record" banner',
     );
+    // The visible title/subtitle are not what a screen-reader user hears —
+    // the accessibility label must independently announce the error too,
+    // or a screen-reader user gets no indication anything went wrong even
+    // though sighted users now see the fix above.
+    expect(_bannerSemanticsLabel(tester), RealtimeAsrStrings.errorTitle);
   });
 }

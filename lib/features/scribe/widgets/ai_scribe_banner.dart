@@ -312,8 +312,10 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       color: Colors.transparent,
       child: Semantics(
         button: !isProcessing,
-        label: liveActive
-            ? RealtimeAsrStrings.stopLiveLabel
+        label: showLivePanel
+            ? (liveErrored
+                ? RealtimeAsrStrings.errorTitle
+                : RealtimeAsrStrings.stopLiveLabel)
             : isRecording
                 ? SymptomPickerStrings.scribeStopRecordingLabel
                 : isError
