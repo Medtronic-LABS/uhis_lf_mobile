@@ -1,7 +1,7 @@
 name: uhis_next
 description: "LEAPWELL (Apon Sushashthya) — Powered by Medtronic Labs for frontline health workers"
 publish_to: 'none'
-version: 1.0.5+5
+version: 1.0.6+6
 
 environment:
   sdk: ^3.12.0
