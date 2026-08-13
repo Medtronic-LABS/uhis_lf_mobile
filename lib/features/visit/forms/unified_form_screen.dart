@@ -4408,7 +4408,7 @@ class _SpinnerField extends StatelessWidget {
       isExpanded: true,
       initialValue: safeValue,
       hint: Text(
-        '— Select —',
+        ComposerStrings.selectPlaceholder,
         style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
       ),
       decoration: InputDecoration(

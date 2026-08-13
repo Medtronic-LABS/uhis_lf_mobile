@@ -7,6 +7,7 @@
 /// Spec: AI Mission Dashboard (Screen 2) — Mission Queue section.
 library;
 
+import '../constants/app_strings.dart';
 import '../mission/programme_reason.dart' show primaryProgrammeOf;
 import 'dashboard_tier.dart';
 import 'programme.dart';
@@ -52,13 +53,13 @@ enum MissionPriority {
   String get label {
     switch (this) {
       case MissionPriority.critical:
-        return 'CRITICAL';
+        return MissionDashboardStrings.priorityCriticalBadge;
       case MissionPriority.high:
-        return 'HIGH';
+        return MissionDashboardStrings.priorityHighBadge;
       case MissionPriority.medium:
-        return 'MEDIUM';
+        return MissionDashboardStrings.priorityMediumBadge;
       case MissionPriority.low:
-        return 'LOW';
+        return MissionDashboardStrings.priorityLowBadge;
     }
   }
 

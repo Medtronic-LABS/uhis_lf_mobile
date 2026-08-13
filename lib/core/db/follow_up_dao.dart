@@ -18,9 +18,9 @@ abstract final class FollowUpKind {
 }
 
 /// Sync state of a follow-up row (mirrors Android `OfflineSyncStatus`).
-/// `success` = server-authoritative; `notSynced` = a device call attempt is
-/// pending push; `inProgress` = pushed, awaiting server confirmation on the
-/// next pull; `networkError` = push failed, eligible for retry.
+/// `success` = server confirmed (or pull-authoritative); `notSynced` = a
+/// device call attempt is pending push; `inProgress` = create accepted,
+/// awaiting status-poll Success; `networkError` = push failed, retry.
 abstract final class FollowUpSyncStatus {
   FollowUpSyncStatus._();
 
@@ -441,26 +441,44 @@ class FollowUpDao {
     return rows.map(FollowUpRow.fromDb).toList(growable: false);
   }
 
+  /// Offline Sync badge: distinct follow-ups that still have unsynced call
+  /// logs (`follow_up_calls.is_synced = 0`), not raw ticket `sync_status`.
   Future<int> pendingPushCount() async {
-    final placeholders =
-        List.filled(FollowUpSyncStatus.pending.length, '?').join(',');
     final rows = await _db.db.rawQuery(
-      'SELECT COUNT(*) AS c FROM ${AppDatabase.tableFollowUps} '
-      'WHERE sync_status IN ($placeholders)',
-      FollowUpSyncStatus.pending,
+      'SELECT COUNT(DISTINCT follow_up_id) AS c '
+      'FROM ${AppDatabase.tableFollowUpCalls} '
+      'WHERE is_synced = 0',
     );
     final c = rows.first['c'];
     return c is num ? c.toInt() : 0;
   }
 
-  /// After a successful push: flip the given follow-ups to InProgress and
-  /// mark their calls synced, so they are not re-pushed.
+  /// After create accepts: flip follow-ups to InProgress and mark their calls
+  /// synced so they are not re-pushed while the status poll runs.
   Future<void> markPushed(List<String> followUpIds) async {
     if (followUpIds.isEmpty) return;
     final placeholders = List.filled(followUpIds.length, '?').join(',');
     await _db.db.update(
       AppDatabase.tableFollowUps,
       {'sync_status': FollowUpSyncStatus.inProgress},
+      where: 'id IN ($placeholders)',
+      whereArgs: followUpIds,
+    );
+    await _db.db.update(
+      AppDatabase.tableFollowUpCalls,
+      {'is_synced': 1},
+      where: 'follow_up_id IN ($placeholders)',
+      whereArgs: followUpIds,
+    );
+  }
+
+  /// After status poll confirms Success: promote InProgress → Success.
+  Future<void> markPushSucceeded(List<String> followUpIds) async {
+    if (followUpIds.isEmpty) return;
+    final placeholders = List.filled(followUpIds.length, '?').join(',');
+    await _db.db.update(
+      AppDatabase.tableFollowUps,
+      {'sync_status': FollowUpSyncStatus.success},
       where: 'id IN ($placeholders)',
       whereArgs: followUpIds,
     );

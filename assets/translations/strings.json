@@ -332,27 +332,27 @@
     "en": "💉  Vaccination  →"
   },
   "ClinicalFinding.childImmunizationOnSchedule": {
-    "bn": "টিকাদান নির্ধারিত সময় অনুযায়ী চলছে। বৃদ্ধি স্বাভাবিক গতিতে এগোচ্ছে।",
+    "bn": "সময়মতো টিকাদান, বৃদ্ধি সঠিক পথে",
     "en": "Immunization on schedule, growth on track."
   },
   "ClinicalFinding.childImmunizationOverdueDoses": {
-    "bn": "{count}টি ডোজ নির্ধারিত সময়ের পরেও দেওয়া হয়নি: {names}।",
+    "bn": "{count}টি ডোজ বাকি: {names}।",
     "en": "{count} dose(s) overdue: {names}."
   },
   "ClinicalFinding.ncdBloodSugarElevated": {
-    "bn": "রক্তে শর্করার পরিমাণ বেশি। পর্যালোচনা ও পরবর্তী পর্যবেক্ষণ প্রয়োজন।",
+    "bn": "রক্তে গ্লুকোজ  বেড়ে গেছে। পর্যালোচনা ও ফলো-আপ প্রয়োজন।",
     "en": "Blood sugar is elevated. Requires review and follow-up."
   },
   "ClinicalFinding.ncdBpAboveNormal": {
-    "bn": "রক্তচাপ স্বাভাবিকের চেয়ে বেশি। পর্যালোচনা ও পরবর্তী পর্যবেক্ষণ প্রয়োজন।",
+    "bn": "রক্তচাপ স্বাভাবিকের চেয়ে বেশি। পর্যালোচনা ও ফলো-আপ প্রয়োজন।",
     "en": "BP is above normal. Requires review and follow-up."
   },
   "ClinicalFinding.ncdBpAndGlucoseCombined": {
-    "bn": "রক্তচাপ ও রক্তে শর্করা দুটোই লক্ষ্যমাত্রার উপরে — আজই পর্যালোচনা এবং পরবর্তী পর্যবেক্ষণ প্রয়োজন।",
+    "bn": "রক্তচাপ ও রক্তে শর্করা উভয়ই লক্ষ্যমাত্রার উপরে — আজই পর্যালোচনা এবং পরিকল্পিত ফলো-আপ প্রয়োজন।",
     "en": "Both BP and blood sugar are above target — needs review today and planned follow-up."
   },
   "ClinicalFinding.ncdWithinTarget": {
-    "bn": "ভাইটাল লক্ষ্যমাত্রার মধ্যে — বর্তমান ব্যবস্থাপনা চালিয়ে যান।",
+    "bn": "গুরুত্বপূর্ণ শারীরিক সূচকগুলো লক্ষ্যমাত্রার মধ্যে রয়েছে — বর্তমান ব্যবস্থাপনা অব্যাহত রাখুন।",
     "en": "Vitals within target — continue current management."
   },
   "Coaching.allModulesTitle": {
@@ -536,7 +536,7 @@
     "en": "Has fever"
   },
   "Composer.field.fieldHasNightSweats": {
-    "bn": "রাতে ঘাম",
+    "bn": "রাতের ঘাম",
     "en": "Night sweats"
   },
   "Composer.field.fieldHasSymptoms": {
@@ -724,7 +724,7 @@
     "en": "EPI / Immunization"
   },
   "Composer.section.eye-care-exam": {
-    "bn": "চক্ষু পরীক্ষা",
+    "bn": "চোখের যত্ন",
     "en": "Eye Care"
   },
   "Composer.section.family-planning": {
@@ -1764,7 +1764,7 @@
     "en": "Bio metrics"
   },
   "FormSection.commonVitals": {
-    "bn": "শারীরিক লক্ষণ",
+    "bn": "ভাইটালস",
     "en": "Vitals"
   },
   "FormSection.contactTracing": {
@@ -1792,7 +1792,7 @@
     "en": "Treatment & Referral"
   },
   "FormSection.iccmVitals": {
-    "bn": "শারীরিক লক্ষণ",
+    "bn": "ভাইটালস",
     "en": "Vitals"
   },
   "FormSection.patientDiagnosisStatus": {
@@ -1816,7 +1816,7 @@
     "en": "{name}'s Household"
   },
   "HouseholdDetail.addMember": {
-    "bn": "সদস্য যুক্ত করুন",
+    "bn": "সদস্য যোগ করুন",
     "en": "Add Member"
   },
   "HouseholdDetail.householdNumber": {
@@ -1880,7 +1880,7 @@
     "en": "(Unnamed household)"
   },
   "LinkMember.title": {
-    "bn": "সদস্য যুক্ত করুন",
+    "bn": "সদস্য যোগ করুন",
     "en": "Add Member"
   },
   "Lock.households": {
@@ -2296,7 +2296,7 @@
     "en": "Secure Your Account"
   },
   "Pathway.programmeAnc": {
-    "bn": "এএনসি (ANC)",
+    "bn": "এএনসি",
     "en": "ANC"
   },
   "Pathway.programmeCataract": {
@@ -2308,7 +2308,7 @@
     "en": "EPI / Immunization"
   },
   "Pathway.programmeEyeCare": {
-    "bn": "চক্ষু পরীক্ষা",
+    "bn": "চোখের যত্ন",
     "en": "Eye Care"
   },
   "Pathway.programmeFamilyPlanning": {
@@ -2328,7 +2328,7 @@
     "en": "Nutrition Assessment"
   },
   "Pathway.programmePnc": {
-    "bn": "পিএনসি (PNC)",
+    "bn": "পিএনসি",
     "en": "PNC"
   },
   "Pathway.programmeTb": {
@@ -2484,7 +2484,7 @@
     "en": "Recovered"
   },
   "PatientContext.referredBadge": {
-    "bn": "রেফারকৃত",
+    "bn": "রেফার করা হয়েছে",
     "en": "Referred"
   },
   "PatientContext.refreshFailed": {
@@ -2708,19 +2708,19 @@
     "en": "🟢 COMPLETED"
   },
   "Referral.bpAboveNormal": {
-    "bn": "রক্তচাপ {bp} স্বাভাবিকের চেয়ে বেশি — পর্যালোচনা ও পরবর্তী পর্যবেক্ষণ প্রয়োজন।",
+    "bn": "রক্তচাপ {bp} স্বাভাবিকের চেয়ে বেশি — পর্যালোচনা ও ফলো-আপ প্রয়োজন।",
     "en": "BP {bp} is above the normal — review and follow-up required."
   },
   "Referral.bpAboveNormalGeneric": {
-    "bn": "রক্তচাপ স্বাভাবিকের চেয়ে বেশি — পর্যালোচনা ও পরবর্তী পর্যবেক্ষণ প্রয়োজন।",
+    "bn": "রক্তচাপ স্বাভাবিকের চেয়ে বেশি — পর্যালোচনা ও ফলো-আপ প্রয়োজন।",
     "en": "BP is above the normal — review and follow-up required."
   },
   "Referral.bpDangerouslyElevated": {
-    "bn": "রক্তচাপ {bp} বিপজ্জনকভাবে বেশি — অবিলম্বে রেফারাল প্রয়োজন।",
+    "bn": "রক্তচাপ {bp} বিপজ্জনকভাবে বেশি — জরুরি রেফারেল প্রয়োজন।",
     "en": "BP {bp} is dangerously elevated — urgent referral needed."
   },
   "Referral.clinicalSymptomsPresent": {
-    "bn": "ক্লিনিক্যাল উপসর্গ রয়েছে — পর্যালোচনা ও পরবর্তী পর্যবেক্ষণ প্রয়োজন।",
+    "bn": "ক্লিনিক্যাল লক্ষণ বিদ্যমান — পর্যালোচনা এবং ফলো-আপ প্রয়োজন।",
     "en": "Clinical symptoms present — review and follow-up required."
   },
   "Referral.emptyBody": {
@@ -2756,7 +2756,7 @@
     "en": "🎙 AI Scribe — tap and let him/her speak"
   },
   "ScribeBanner.preFillTitle": {
-    "bn": "AI স্ক্রাইব",
+    "bn": "এআই স্ক্রাইব",
     "en": "AI Scribe"
   },
   "ScribeBanner.reviewAllCta": {
@@ -3100,7 +3100,7 @@
     "en": "Cough > 2 weeks"
   },
   "Triage.symptom.diarrhea": {
-    "bn": "পাতলা পায়খানা",
+    "bn": "ডায়রিয়া",
     "en": "Diarrhea"
   },
   "Triage.symptom.difficulty_breathing": {
@@ -3128,7 +3128,7 @@
     "en": "Epigastric pain"
   },
   "Triage.symptom.excessive_thirst": {
-    "bn": "অতিরিক্ত তৃষ্ণা",
+    "bn": "অতিরিক্ত তৃষ্ণা / ডায়াবেটিস",
     "en": "Excessive thirst"
   },
   "Triage.symptom.eye_discharge": {
@@ -3140,7 +3140,7 @@
     "en": "Fast breathing"
   },
   "Triage.symptom.fatigue": {
-    "bn": "ক্লান্তি",
+    "bn": "ক্লান্ত/দুর্বল বোধ করা",
     "en": "Fatigue"
   },
   "Triage.symptom.feeling_sad": {
@@ -3160,7 +3160,7 @@
     "en": "Foot pain"
   },
   "Triage.symptom.foot_wound": {
-    "bn": "পায়ে ঘা",
+    "bn": "ক্ষত",
     "en": "Foot wound"
   },
   "Triage.symptom.foul_smelling_vaginal_discharge": {
@@ -3200,7 +3200,7 @@
     "en": "Leaking fluids"
   },
   "Triage.symptom.lethargy": {
-    "bn": "অস্বাভাবিক ঘুম ঘুম",
+    "bn": "অস্বাভাবিক ঘুম/জাগানো কঠিন",
     "en": "Unusually sleepy / Difficult to wake"
   },
   "Triage.symptom.loss_appetite": {
@@ -3212,19 +3212,19 @@
     "en": "MUAC red zone"
   },
   "Triage.symptom.night_sweats": {
-    "bn": "রাতে ঘাম",
+    "bn": "রাতের ঘাম",
     "en": "Night sweats"
   },
   "Triage.symptom.not_eating": {
-    "bn": "খাচ্ছে না",
+    "bn": "না খাওয়া/না পান করা",
     "en": "Not eating / drinking"
   },
   "Triage.symptom.numbness": {
-    "bn": "অবশ / ঝিনঝিন",
+    "bn": "অবশভাব/ঝিনঝিন করা",
     "en": "Numbness / Tingling"
   },
   "Triage.symptom.one_sided_weakness": {
-    "bn": "একপাশে দুর্বলতা",
+    "bn": "শরীরের একপাশ দুর্বল হওয়া",
     "en": "One-sided weakness"
   },
   "Triage.symptom.painful_urination": {
@@ -3316,7 +3316,7 @@
     "en": "Water break / Leaking"
   },
   "Triage.symptom.weakness": {
-    "bn": "দুর্বলতা",
+    "bn": "দুর্বল বোধ করা",
     "en": "Weakness"
   },
   "Triage.symptom.weight_loss": {
@@ -3700,7 +3700,7 @@
     "en": "To: {label} · {phone}"
   },
   "VisitFlow.referralBadge": {
-    "bn": "রেফারকৃত",
+    "bn": "রেফার করা হয়েছে",
     "en": "Referred"
   },
   "VisitFlow.referralDestinationUpazilaHealthComplex": {
@@ -4044,7 +4044,7 @@
     "en": "Model version"
   },
   "Worklist.programmeAnc": {
-    "bn": "এএনসি (ANC)",
+    "bn": "এএনসি",
     "en": "ANC"
   },
   "Worklist.programmeCataract": {
@@ -4056,11 +4056,11 @@
     "en": "Vaccination"
   },
   "Worklist.programmeEyeCare": {
-    "bn": "চক্ষু পরীক্ষা",
+    "bn": "চোখের যত্ন",
     "en": "Eye Care"
   },
   "Worklist.programmeFamilyPlanning": {
-    "bn": "খানা পরিকল্পনা",
+    "bn": "এফপি",
     "en": "FP"
   },
   "Worklist.programmeImci": {
@@ -4072,7 +4072,7 @@
     "en": "Child Visit"
   },
   "Worklist.programmeNcd": {
-    "bn": "এনসিডি (NCD)",
+    "bn": "এনসিডি",
     "en": "NCD"
   },
   "Worklist.programmeNutrition": {
@@ -4080,7 +4080,7 @@
     "en": "Nutrition"
   },
   "Worklist.programmePnc": {
-    "bn": "প্রসবোত্তর পরীক্ষা",
+    "bn": "পিএনসি",
     "en": "PNC"
   },
   "Worklist.programmePw": {
@@ -4232,7 +4232,7 @@
     "en": "Add Household"
   },
   "addMemberAppBar": {
-    "bn": "সদস্য যুক্ত করুন",
+    "bn": "সদস্য যোগ করুন",
     "en": "Add Member"
   },
   "addMemberSubtitle": {
@@ -4244,7 +4244,7 @@
     "en": "Bio Data"
   },
   "addMoreMembers": {
-    "bn": "সদস্য যুক্ত করুন",
+    "bn": "সদস্য যোগ করুন",
     "en": "Add Member"
   },
   "addPathwayButton": {
@@ -4580,7 +4580,7 @@
     "en": "Antenatal Care"
   },
   "appName": {
-    "bn": "LEAPWELL",
+    "bn": "লিপওয়েল",
     "en": "LEAPWELL"
   },
   "appTagline": {
@@ -4692,7 +4692,7 @@
     "en": "Back"
   },
   "badgeAnc": {
-    "bn": "এএনসি (ANC)",
+    "bn": "এএনসি",
     "en": "ANC"
   },
   "badgeCritical": {
@@ -4700,7 +4700,7 @@
     "en": "🔴 CRITICAL"
   },
   "badgeEpi": {
-    "bn": "EPI",
+    "bn": "ইপিআই",
     "en": "EPI"
   },
   "badgeHigh": {
@@ -4708,7 +4708,7 @@
     "en": "🟠 HIGH"
   },
   "badgeImci": {
-    "bn": "IMCI",
+    "bn": "আইএমসিআই",
     "en": "IMCI"
   },
   "badgeLabel": {
@@ -4756,7 +4756,7 @@
     "en": "Referred"
   },
   "badgeTb": {
-    "bn": "TB",
+    "bn": "টিবি",
     "en": "TB"
   },
   "bandHigh": {
@@ -4764,7 +4764,7 @@
     "en": "High"
   },
   "bandLow": {
-    "bn": "কম",
+    "bn": "নিম্ন",
     "en": "Low"
   },
   "bandModerate": {
@@ -4884,7 +4884,7 @@
     "en": "Blood sugar (fasting)"
   },
   "bmiLabel": {
-    "bn": "BMI",
+    "bn": "বিএমআই",
     "en": "BMI"
   },
   "bookTeleconsult": {
@@ -5844,15 +5844,15 @@
     "en": "{n} pages"
   },
   "domainAnc": {
-    "bn": "এএনসি (ANC)",
+    "bn": "এএনসি",
     "en": "ANC"
   },
   "domainEpi": {
-    "bn": "EPI",
+    "bn": "ইপিআই",
     "en": "EPI"
   },
   "domainImci": {
-    "bn": "IMCI",
+    "bn": "আইএমসিআই",
     "en": "IMCI"
   },
   "domainNcd": {
@@ -5864,7 +5864,7 @@
     "en": "Nutrition"
   },
   "domainTb": {
-    "bn": "TB",
+    "bn": "টিবি",
     "en": "TB"
   },
   "doneForNow": {
@@ -6616,7 +6616,7 @@
     "en": "fields filled"
   },
   "filterAnc": {
-    "bn": "এএনসি (ANC)",
+    "bn": "এএনসি",
     "en": "ANC"
   },
   "filterByLocation": {
@@ -6636,7 +6636,7 @@
     "en": "Programme"
   },
   "filterCritical": {
-    "bn": "সংকটাপন্ন",
+    "bn": "জরুরি",
     "en": "Critical"
   },
   "filterHigh": {
@@ -6648,7 +6648,7 @@
     "en": "IMCI"
   },
   "filterLow": {
-    "bn": "কম",
+    "bn": "নিম্ন",
     "en": "Low"
   },
   "filterMedium": {
@@ -6988,7 +6988,7 @@
     "en": "High blood sugar"
   },
   "highBpBadge": {
-    "bn": "উচ্চ রক্তচাপ (BP)",
+    "bn": "উচ্চ রক্তচাপ",
     "en": "High BP"
   },
   "highConfidence": {
@@ -7364,7 +7364,7 @@
     "en": "Encounter ID"
   },
   "labelFacility": {
-    "bn": "স্বাস্থ্যকেন্দ্র",
+    "bn": "ফ্যাসিলিটি",
     "en": "Facility"
   },
   "labelFrequency": {
@@ -7880,7 +7880,7 @@
     "en": "Mobile Number"
   },
   "modeAsr": {
-    "bn": "ASR",
+    "bn": "এএসআর",
     "en": "ASR"
   },
   "modeAsrDesc": {
@@ -8104,7 +8104,7 @@
     "en": "Eye care"
   },
   "needFacilityReferral": {
-    "bn": "স্বাস্থ্যকেন্দ্র",
+    "bn": "ফ্যাসিলিটি",
     "en": "Facility"
   },
   "needHighRisk": {
@@ -8848,7 +8848,7 @@
     "en": "Previous"
   },
   "priorityCritical": {
-    "bn": "সংকটাপন্ন",
+    "bn": "জরুরি",
     "en": "Critical"
   },
   "priorityHigh": {
@@ -9336,7 +9336,7 @@
     "en": "Approved"
   },
   "requestStatusPending": {
-    "bn": "মুলতুবি",
+    "bn": "অপেক্ষমাণ",
     "en": "Pending"
   },
   "requestStatusRejected": {
@@ -9412,7 +9412,7 @@
     "en": "Review"
   },
   "reviewReject": {
-    "bn": "বাতিল করুন",
+    "bn": "প্রত্যাখ্যান করুন",
     "en": "Reject"
   },
   "reviewRequired": {
@@ -10008,7 +10008,7 @@
     "en": "Send via WhatsApp"
   },
   "serviceAnc": {
-    "bn": "এএনসি (ANC)",
+    "bn": "এএনসি",
     "en": "ANC"
   },
   "serviceChild": {
@@ -10028,7 +10028,7 @@
     "en": "NCD"
   },
   "servicePnc": {
-    "bn": "পিএনসি (PNC)",
+    "bn": "পিএনসি",
     "en": "PNC"
   },
   "servicesProvidedTitle": {
@@ -10092,7 +10092,7 @@
     "en": "High"
   },
   "severityLow": {
-    "bn": "কম",
+    "bn": "নিম্ন",
     "en": "Low"
   },
   "severityMedium": {
@@ -10260,7 +10260,7 @@
     "en": "BD national"
   },
   "sourceBrac": {
-    "bn": "BRAC",
+    "bn": "ব্র্যাক",
     "en": "BRAC"
   },
   "sourcePatientContext": {
@@ -10416,7 +10416,7 @@
     "en": "Checked in"
   },
   "statusCompleted": {
-    "bn": "দেওয়া হয়েছে",
+    "bn": "সম্পন্ন",
     "en": "Completed"
   },
   "statusDischarged": {
@@ -10572,7 +10572,7 @@
     "en": "Acked"
   },
   "stepArrived": {
-    "bn": "পৌঁছেছেন",
+    "bn": "পৌঁছেছে",
     "en": "Arrived"
   },
   "stepBreached": {
@@ -10648,7 +10648,7 @@
     "en": "Transport declined"
   },
   "stepTreatmentStarted": {
-    "bn": "চিকিৎসা শুরু",
+    "bn": "চিকিৎসা করা হয়েছে",
     "en": "Treated"
   },
   "stillbirthNeonatalDeathBadge": {
@@ -10660,7 +10660,7 @@
     "en": "Stop"
   },
   "stopListening": {
-    "bn": "বন্ধ করুন",
+    "bn": "থামুন",
     "en": "Stop"
   },
   "storedDataTitle": {
@@ -10712,7 +10712,7 @@
     "en": "Member linked successfully"
   },
   "sugar": {
-    "bn": "রক্তে শর্করা",
+    "bn": "রক্তে গ্লুকোজ",
     "en": "Blood sugar"
   },
   "suggestedAncDanger": {
@@ -10944,7 +10944,7 @@
     "en": "Emergency (6h SLA)"
   },
   "tierLabelCritical": {
-    "bn": "সংকটাপন্ন",
+    "bn": "জরুরি",
     "en": "Critical"
   },
   "tierLabelDueToday": {
@@ -10980,7 +10980,7 @@
     "en": "Urgent (24h SLA)"
   },
   "timelineArrived": {
-    "bn": "পৌঁছেছেন",
+    "bn": "পৌঁছেছে",
     "en": "Arrived"
   },
   "timelineDischarged": {
@@ -11000,7 +11000,7 @@
     "en": "SK Visit"
   },
   "timelineTreated": {
-    "bn": "চিকিৎসা হয়েছে",
+    "bn": "চিকিৎসা করা হয়েছে",
     "en": "Treated"
   },
   "timelineWaiting": {
@@ -12060,7 +12060,7 @@
     "en": "Pulse {n} bpm is below normal"
   },
   "PatientContext.timeline.recoveringWellPnc": {
-    "bn": "ভালোভাবে সুস্থ হয়ে উঠছেন — এই পিএনসি ভিজিটে কোনো সমস্যা নেই।",
+    "bn": "ভালোভাবে সুস্থ হচ্ছেন — এই পিএনসি ভিজিটে কোনো সমস্যা নেই।",
     "en": "Recovering well — no concerns at this PNC visit."
   },
   "PatientContext.timeline.risingTrendFlagged": {
@@ -12160,7 +12160,7 @@
     "en": "Height (cm)"
   },
   "Referral.shortReasonHighBp": {
-    "bn": "উচ্চ (বিপি)",
+    "bn": "উচ্চ রক্তচাপ",
     "en": "High BP"
   },
   "Referral.shortReasonRisingBpTrend": {
@@ -12176,15 +12176,15 @@
     "en": "High BG"
   },
   "Referral.shortReasonBloodGlucoseElevated": {
-    "bn": "রক্তে গ্লুকোজ বেশি",
+    "bn": "রক্তে গ্লুকোজ বৃদ্ধি",
     "en": "Blood glucose elevated"
   },
   "Referral.shortReasonAbnormalPulse": {
-    "bn": "অস্বাভাবিক নাড়ি",
+    "bn": "অস্বাভাবিক পালস",
     "en": "Abnormal pulse"
   },
   "Referral.shortReasonLowHbAnemia": {
-    "bn": "নিম্ন Hb / রক্তস্বল্পতা",
+    "bn": "কম Hb / রক্তস্বল্পতা",
     "en": "Low Hb / Anemia"
   },
   "Referral.shortReasonDangerSign": {
@@ -12200,7 +12200,7 @@
     "en": "Low weight"
   },
   "Referral.shortReasonLowAdherence": {
-    "bn": "ওষুধ সেবনে কম আনুগত্য",
+    "bn": "ওষুধ সেবনের নিয়ম মেনে না চলা",
     "en": "Low medication adherence"
   },
   "Referral.shortReasonNoFpMethod": {
@@ -12208,11 +12208,11 @@
     "en": "No FP method"
   },
   "Referral.shortReasonSupplementGap": {
-    "bn": "সাপ্লিমেন্ট ঘাটতি",
+    "bn": "সাপ্লিমেন্টের ঘাটতি",
     "en": "Supplement gap"
   },
   "Referral.shortReasonVisitOverdue": {
-    "bn": "ভিজিট বকেয়া",
+    "bn": "ভিজিটের সময় পার হয়ে গেছে",
     "en": "Visit overdue"
   },
   "Referral.shortReasonClinicalSymptoms": {
@@ -12348,7 +12348,7 @@
     "en": "Delivery facility"
   },
   "PatientDetail.lastAncWeightKg": {
-    "bn": "শেষ এএনসি ওজন (কেজি)",
+    "bn": "শেষ এএনসি তে ওজন (কেজি)",
     "en": "Last ANC weight (kg)"
   },
   "PatientDetail.lastAncVisit": {
@@ -12520,11 +12520,11 @@
     "en": "TB visits"
   },
   "PatientDetail.bloodSugar": {
-    "bn": "রক্তে শর্করা",
+    "bn": "রক্তে গ্লুকোজ",
     "en": "Blood sugar"
   },
   "PatientDetail.bloodSugarWithType": {
-    "bn": "রক্তে শর্করা ({type})",
+    "bn": "রক্তে গ্লুকোজ ({type})",
     "en": "Blood sugar ({type})"
   },
   "PatientDetail.lastWeight": {
@@ -12602,5 +12602,1073 @@
   "PatientDetail.editPlus": {
     "bn": "+ সম্পাদনা",
     "en": "+ Edit"
+  },
+  "Performance.weekdayMon": {
+    "bn": "সো",
+    "en": "M"
+  },
+  "Performance.weekdayTue": {
+    "bn": "ম",
+    "en": "T"
+  },
+  "Performance.weekdayWed": {
+    "bn": "বু",
+    "en": "W"
+  },
+  "Performance.weekdayThu": {
+    "bn": "বৃ",
+    "en": "T"
+  },
+  "Performance.weekdayFri": {
+    "bn": "শু",
+    "en": "F"
+  },
+  "Performance.weekdaySat": {
+    "bn": "শ",
+    "en": "S"
+  },
+  "Performance.weekdaySun": {
+    "bn": "র",
+    "en": "S"
+  },
+  "MissionDashboard.moreAlerts": {
+    "bn": "+{n}টি আরও সতর্কবার্তা",
+    "en": "+{n} more alerts"
+  },
+  "RealtimeAsr.micSignalStuck": {
+    "bn": "মাইক্রোফোনের সিগন্যাল আটকে গেছে বা সঠিক নয় — ডিভাইসের মাইক্রোফোন পরীক্ষা করুন",
+    "en": "Mic signal looks stuck/invalid — check the device microphone (on an emulator, try a cold restart with host audio input enabled, or test on a physical device)."
+  },
+  "Assistant.actionCallPatient": {
+    "bn": "রোগীকে কল করুন",
+    "en": "Call patient"
+  },
+  "Assistant.actionOpenReferral": {
+    "bn": "রেফারেল খুলুন",
+    "en": "Open referral"
+  },
+  "Assistant.actionScheduleFollowUp": {
+    "bn": "ফলো-আপের সময় নির্ধারণ করুন",
+    "en": "Schedule follow-up"
+  },
+  "Assistant.actionStartVisit": {
+    "bn": "ভিজিট শুরু করুন",
+    "en": "Start visit"
+  },
+  "Assistant.emptyResponse": {
+    "bn": "উত্তর নাই",
+    "en": "Empty response"
+  },
+  "Assistant.enterAtLeast3Chars": {
+    "bn": "অনুগ্রহ করে অন্তত ৩টি অক্ষর লিখুন।",
+    "en": "Please enter at least 3 characters."
+  },
+  "Assistant.noAnswerInResponse": {
+    "bn": "উত্তরে কোনো তথ্য পাওয়া যায়নি",
+    "en": "No answer in response"
+  },
+  "Assistant.settingUpRetryLater": {
+    "bn": "কোচিং অ্যাসিস্ট্যান্ট প্রস্তুত করা হচ্ছে। অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।",
+    "en": "Coaching assistant is being set up. Please try again later."
+  },
+  "Assistant.thinkingIndicator": {
+    "bn": "✦ চিন্তা করা হচ্ছে…",
+    "en": "✦ thinking…"
+  },
+  "Auth.invalidCredentials": {
+    "bn": "লগইন তথ্য ভুল",
+    "en": "Invalid credentials"
+  },
+  "Auth.noActiveSessionToEnrol": {
+    "bn": "তালিকাভুক্তির জন্য কোনো সক্রিয় সেশন নেই",
+    "en": "No active session to enrol"
+  },
+  "Auth.tenantIdMissing": {
+    "bn": "লগইন রেসপন্সে tenantId পাওয়া যায়নি",
+    "en": "Login response missing tenantId"
+  },
+  "Cce.actionRecommended": {
+    "bn": "প্রস্তাবিত পদক্ষেপ",
+    "en": "Action recommended"
+  },
+  "Cce.atFacilityOnTrack": {
+    "bn": "ফ্যাসিলিটিতে আছেন — চিকিৎসা চলছে",
+    "en": "At facility — care in progress"
+  },
+  "Cce.attentionBadge": {
+    "bn": "মনোযোগ প্রয়োজন",
+    "en": "Needs attention"
+  },
+  "Cce.awaitingReview": {
+    "bn": "উপস্থিতি নিশ্চিত হয়েছে — পর্যালোচনার অপেক্ষায় · {waiting} জন অপেক্ষমাণ",
+    "en": "Checked in — awaiting review · {waiting} waiting"
+  },
+  "Cce.breachBadge": {
+    "bn": "এসএলএ লঙ্ঘিত হয়েছে +{over}",
+    "en": "SLA BREACHED +{over}"
+  },
+  "Cce.callAttemptsStatus": {
+    "bn": "{retryAttempts} টির মধ্যে {attempts} টি কল করা হয়েছে · {remaining} টি বাকি",
+    "en": "{attempts} of {retryAttempts} calls · {remaining} left"
+  },
+  "Cce.closedDeceased": {
+    "bn": "বন্ধ করা হয়েছে {date} · মৃত্যু হয়েছে",
+    "en": "Closed {date} · deceased"
+  },
+  "Cce.completedBadge": {
+    "bn": "সম্পন্ন",
+    "en": "Completed"
+  },
+  "Cce.dischargedLine": {
+    "bn": "ছাড়পত্র দেওয়া হয়েছে {date} · সেবা সম্পন্ন",
+    "en": "Discharged {date} · care complete"
+  },
+  "Cce.dueSoon": {
+    "bn": "{left}-এর মধ্যে বাকি · দ্রুত ব্যবস্থা নিন",
+    "en": "Due in {left} · act soon"
+  },
+  "Cce.followingUp": {
+    "bn": "ফলো-আপ করা হচ্ছে",
+    "en": "Following up"
+  },
+  "Cce.lastAttempt": {
+    "bn": "সর্বশেষ চেষ্টা",
+    "en": "Last attempt"
+  },
+  "Cce.leftBadge": {
+    "bn": "এসএলএ: {left} বাকি",
+    "en": "SLA: {left} left"
+  },
+  "Cce.notArrivedOverdue": {
+    "bn": "পৌঁছাননি · {overdue} দেরি · এসএলএ ছিল {slaWindow}",
+    "en": "Not arrived · {overdue} overdue · SLA was {slaWindow}"
+  },
+  "Cce.onTrackBadge": {
+    "bn": "ঠিক পথে আছে",
+    "en": "On track"
+  },
+  "Cce.onTrackLine": {
+    "bn": "ঠিক পথে আছে — কোনো পদক্ষেপের প্রয়োজন নেই",
+    "en": "On track — no action needed"
+  },
+  "MissionDashboard.referralFallback": {
+    "bn": "রেফারেল",
+    "en": "Referral"
+  },
+  "Cce.referralReasonFallback": {
+    "bn": "রেফারেল",
+    "en": "Referral"
+  },
+  "Cce.referredMeta": {
+    "bn": "রেফার করা হয়েছে: {date} · {reason}",
+    "en": "Referred: {date} · {reason}"
+  },
+  "Cce.referredMetaWithFacility": {
+    "bn": "রেফার করা হয়েছে: {date} · {facility} · {reason}",
+    "en": "Referred: {date} · {facility} · {reason}"
+  },
+  "Cce.slaEmergencyWindow": {
+    "bn": "৬ ঘণ্টা",
+    "en": "6 hours"
+  },
+  "Cce.slaRoutineWindow": {
+    "bn": "৭২ ঘণ্টা",
+    "en": "72 hours"
+  },
+  "Cce.slaUrgentWindow": {
+    "bn": "২৪ ঘণ্টা",
+    "en": "24 hours"
+  },
+  "Cce.stepArrived": {
+    "bn": "পৌঁছেছে",
+    "en": "Arrived"
+  },
+  "Cce.stepDischarged": {
+    "bn": "ছাড়পত্র দেওয়া হয়েছে",
+    "en": "Discharged"
+  },
+  "Cce.stepFacility": {
+    "bn": "ফ্যাসিলিটি",
+    "en": "Facility"
+  },
+  "Cce.stepInProgress": {
+    "bn": "চলমান",
+    "en": "In progress"
+  },
+  "Cce.stepNotArrived": {
+    "bn": "পৌঁছায়নি",
+    "en": "Not arrived"
+  },
+  "Cce.stepPending": {
+    "bn": "অপেক্ষমাণ",
+    "en": "Pending"
+  },
+  "Cce.stepReferred": {
+    "bn": "রেফার করা হয়েছে",
+    "en": "Referred"
+  },
+  "Cce.stepSkVisit": {
+    "bn": "এসকে ভিজিট",
+    "en": "SK Visit"
+  },
+  "Cce.stepTreated": {
+    "bn": "চিকিৎসা করা হয়েছে",
+    "en": "Treated"
+  },
+  "Cce.stepTreatment": {
+    "bn": "চিকিৎসা",
+    "en": "Treatment"
+  },
+  "Cce.tagAtFacility": {
+    "bn": "ফ্যাসিলিটিতে আছেন",
+    "en": "At facility"
+  },
+  "Cce.tagCareComplete": {
+    "bn": "সেবা সম্পন্ন হয়েছে",
+    "en": "Care completed"
+  },
+  "Cce.tagEscalated": {
+    "bn": "এসকেলেট করা হয়েছে L{level}",
+    "en": "Escalated L{level}"
+  },
+  "Cce.tagNotCheckedIn": {
+    "bn": "চেক-ইন করা হয়নি",
+    "en": "Not checked in"
+  },
+  "Cce.tagTransportBarrier": {
+    "bn": "পরিবহন সমস্যা?",
+    "en": "Transport barrier?"
+  },
+  "Cce.treatmentOverdue": {
+    "bn": "চিকিৎসার সময় পার হয়েছে · এসএলএ ছিল {slaWindow}",
+    "en": "Treatment overdue · SLA was {slaWindow}"
+  },
+  "Cce.unknownPatient": {
+    "bn": "রোগী",
+    "en": "Patient"
+  },
+  "Cce.wrongNumberClosed": {
+    "bn": "ভুল নম্বর · বন্ধ",
+    "en": "Wrong number · closed"
+  },
+  "ClinicalFinding.ancAnemiaReinforceIron": {
+    "bn": "রক্তস্বল্পতা লক্ষ্য করা গেছে। আয়রন-ফলিক গ্রহণ জোরদার করুন।",
+    "en": "Anemia noted. Reinforce iron-folic intake."
+  },
+  "ClinicalFinding.ancBpAboveSafeThreshold": {
+    "bn": "রক্তচাপ নিরাপদ মাত্রার উপরে। প্রি-এক্লাম্পসিয়ার জন্য সতর্ক থাকুন।",
+    "en": "BP is above the safe threshold. Watch for pre-eclampsia."
+  },
+  "ClinicalFinding.ancBpRisingTwoVisits": {
+    "bn": "গত দুটি ভিজিটে রক্তচাপ বেড়েছে। নিবিড়ভাবে পর্যবেক্ষণ করুন।",
+    "en": "BP has risen over the last two visits. Monitor closely."
+  },
+  "ClinicalFinding.ancIronFolicBelowExpected": {
+    "bn": "আয়রন-ফলিক গ্রহণের হার প্রত্যাশিত দৈনিক মাত্রার চেয়ে কম।",
+    "en": "Iron-folic intake is below the expected daily rate."
+  },
+  "ClinicalFinding.ancMissedVisit": {
+    "bn": "এএনসি ভিজিট বাদ পড়েছে — {daysOverdue} দিনের ব্যবধান।",
+    "en": "Missed ANC — gap of {daysOverdue} days."
+  },
+  "ClinicalFinding.ancRoutineVisit": {
+    "bn": "নিয়মিত ভিজিট — কোনো সমস্যা চিহ্নিত হয়নি। ভিজিট {visitNumber} ঠিক পথে আছে।",
+    "en": "Routine visit — no concerns flagged. Visit {visitNumber} on track."
+  },
+  "ClinicalFinding.childImmunizationDueSoon": {
+    "bn": "{display} শীঘ্রই প্রয়োজন — পরবর্তী ভিজিটের জন্য পরিকল্পনা করুন।",
+    "en": "{display} due soon — plan for next visit."
+  },
+  "ClinicalFinding.childImmunizationWeightGainSlowed": {
+    "bn": "শেষ পরীক্ষার পর থেকে ওজন বৃদ্ধির হার কমেছে — পুষ্টি পর্যবেক্ষণ করুন।",
+    "en": "Weight gain has slowed since the last check — monitor nutrition."
+  },
+  "ClinicalFinding.dangerSignReported": {
+    "bn": "বিপদ চিহ্ন রিপোর্ট করা হয়েছে: {label}।",
+    "en": "Danger sign reported: {label}."
+  },
+  "Referral.medicationAdherenceLow": {
+    "bn": "ওষুধ সেবনের নিয়মিততা কম — প্রতিদিনের সেবন নিশ্চিত করুন।",
+    "en": "Medication adherence is low — confirm daily intake."
+  },
+  "ClinicalFinding.ncdLowAdherence": {
+    "bn": "ওষুধ সেবনের নিয়মিততা কম — প্রতিদিনের সেবন নিশ্চিত করুন।",
+    "en": "Medication adherence is low — confirm daily intake."
+  },
+  "ClinicalFinding.ncdTrendingDown": {
+    "bn": "রক্তচাপ/গ্লুকোজ কমছে — বর্তমান পরিকল্পনা চালিয়ে যান।",
+    "en": "BP/sugar trending down — continue current plan."
+  },
+  "Referral.noContraceptionMethod": {
+    "bn": "বর্তমানে কোনো জন্মনিয়ন্ত্রণ পদ্ধতি ব্যবহার হচ্ছে না — বিকল্পগুলো সম্পর্কে পরামর্শ দিন।",
+    "en": "No contraception method in use — counsel on options."
+  },
+  "ClinicalFinding.pncNoContraception": {
+    "bn": "বর্তমানে কোনো জন্মনিয়ন্ত্রণ পদ্ধতি ব্যবহার হচ্ছে না — বিকল্পগুলো সম্পর্কে পরামর্শ দিন।",
+    "en": "No contraception method in use — counsel on options."
+  },
+  "ClinicalFinding.pncOverdueVisit": {
+    "bn": "পিএনসি ভিজিট {visitNumber}-এর সময় {daysOverdue} দিন পার হয়ে গেছে।",
+    "en": "PNC Visit {visitNumber} is overdue by {daysOverdue} days."
+  },
+  "ClinicalFinding.pncRoutine": {
+    "bn": "ভালোভাবে সুস্থ হচ্ছেন — এই পিএনসি ভিজিটে কোনো সমস্যা নেই।",
+    "en": "Recovering well — no concerns at this PNC visit."
+  },
+  "ClinicalFinding.pncSevereAnemia": {
+    "bn": "তীব্র রক্তস্বল্পতা।",
+    "en": "Severe anemia."
+  },
+  "ClinicalFinding.pncSupplementGapCalcium": {
+    "bn": "সাপ্লিমেন্টের ঘাটতি — ক্যালসিয়ামের মাত্রা ঠিক নেই।",
+    "en": "Supplement gap — Calcium not on track."
+  },
+  "ClinicalFinding.pncSupplementGapIfa": {
+    "bn": "সাপ্লিমেন্টের ঘাটতি — আয়রন-ফলিক অ্যাসিড গ্রহণ ঠিকমতো হচ্ছে না।",
+    "en": "Supplement gap — Iron-folic acid not on track."
+  },
+  "ClinicalFinding.pncSupplementGapVitaminA": {
+    "bn": "সাপ্লিমেন্টের ঘাটতি — ভিটামিন এর ঘাটতি সঠিক মাত্রায় নেই।",
+    "en": "Supplement gap — Vitamin A not on track."
+  },
+  "ClinicalFinding.pncUrgentBp": {
+    "bn": "রক্তচাপ স্বাভাবিকের চেয়ে বেশি (≥140/90) অবিলম্বে মনোযোগ দেওয়া প্রয়োজন।",
+    "en": "BP is above normal (≥140/90). Needs urgent attention."
+  },
+  "ClinicalFinding.pncUrgentPulse": {
+    "bn": "পালস স্বাভাবিক নয় (60–90 bpm-এর বাইরে) অবিলম্বে মনোযোগ দেওয়া প্রয়োজন।",
+    "en": "Pulse is abnormal (outside 60–90 bpm). Needs urgent attention."
+  },
+  "ClinicalFinding.pncUrgentTemperature": {
+    "bn": "তাপমাত্রা স্বাভাবিকের চেয়ে বেশি (≥102°F) অবিলম্বে মনোযোগ দেওয়া প্রয়োজন।",
+    "en": "Temperature is above normal (≥102°F). Needs urgent attention."
+  },
+  "ClinicalFinding.pregnancyOutcomeAbortion": {
+    "bn": "গর্ভপাত ({abortionTypeLabel}) রেকর্ড করা হয়েছে — পরবর্তী পরিচর্যার পরামর্শ দেওয়া হয়েছে।",
+    "en": "Pregnancy loss (abortion, {abortionTypeLabel}) recorded — follow-up care advised."
+  },
+  "ClinicalFinding.pregnancyOutcomeHealthy": {
+    "bn": "সুস্থ প্রসব — মা ও শিশু উভয়েই ভালো আছেন।",
+    "en": "Healthy delivery outcome — mother and baby both doing well."
+  },
+  "ClinicalFinding.pregnancyOutcomeStillbirthOrNeonatalDeath": {
+    "bn": "মৃত সন্তান প্রসব বা নবজাতকের মৃত্যু রেকর্ড করা হয়েছে।",
+    "en": "Stillbirth or neonatal death recorded."
+  },
+  "Enroll.confirmCtaEmpty": {
+    "bn": "প্রোগ্রাম নির্বাচন করুন",
+    "en": "Select Programmes"
+  },
+  "Enroll.confirmCtaSelected": {
+    "bn": "তালিকাভুক্তি নিশ্চিত করুন ({n}টি নির্বাচিত)",
+    "en": "Confirm Enrollment ({n} selected)"
+  },
+  "Lock.fingerprintSemanticLabel": {
+    "bn": "ফিঙ্গারপ্রিন্ট দিয়ে যাচাই করুন",
+    "en": "Authenticate with fingerprint"
+  },
+  "Login.hidePasswordTooltip": {
+    "bn": "পাসওয়ার্ড লুকান",
+    "en": "Hide password"
+  },
+  "Login.showPasswordTooltip": {
+    "bn": "পাসওয়ার্ড দেখান",
+    "en": "Show password"
+  },
+  "MissionDashboard.checkUpFallback": {
+    "bn": "চেক-আপ",
+    "en": "Check-up"
+  },
+  "MissionDashboard.collapseRiskFactors": {
+    "bn": "ঝুঁকির কারণসমূহ সংকুচিত করুন",
+    "en": "Collapse risk factors"
+  },
+  "MissionDashboard.daysOverdueSuffix": {
+    "bn": "+{n}দি",
+    "en": "+{n}d"
+  },
+  "MissionDashboard.dismissAlertTooltip": {
+    "bn": "সতর্কবার্তা বাতিল করুন",
+    "en": "Dismiss alert"
+  },
+  "MissionDashboard.driverInsightChildUnder5": {
+    "bn": "৫ বছরের কম বয়সী শিশু — অগ্রাধিকার বেশি।",
+    "en": "Child under 5 — higher priority."
+  },
+  "MissionDashboard.driverInsightFollowUp": {
+    "bn": "হাসপাতাল থেকে ছাড়ের পরের ফলো-আপ বাকি।",
+    "en": "Post-discharge follow-up due."
+  },
+  "MissionDashboard.driverInsightHighRisk": {
+    "bn": "উচ্চ ক্লিনিক্যাল ঝুঁকি।",
+    "en": "High clinical risk."
+  },
+  "MissionDashboard.driverInsightMissedFollowUp": {
+    "bn": "নির্ধারিত ফলো-আপ মিস হয়েছে।",
+    "en": "Missed scheduled follow-up."
+  },
+  "MissionDashboard.driverInsightOverdueDays": {
+    "bn": "{days} দিন সময় পার হয়ে গেছে।",
+    "en": "Overdue by {days} days."
+  },
+  "MissionDashboard.driverInsightReferral": {
+    "bn": "সক্রিয় রেফারেল ট্র্যাকিং প্রয়োজন।",
+    "en": "Active referral requires tracking."
+  },
+  "MissionDashboard.driverInsightSlaBreached": {
+    "bn": "এসএলএ লঙ্ঘিত হয়েছে — অবিলম্বে ব্যবস্থা নেয়া প্রয়োজন।",
+    "en": "SLA breached — immediate action required."
+  },
+  "MissionDashboard.driverInsightUrgentRisk": {
+    "bn": "জরুরি চিকিৎসাগত ঝুঁকি শনাক্ত করা হয়েছে",
+    "en": "Urgent clinical risk identified."
+  },
+  "MissionDashboard.driverInsightVisitOverdue": {
+    "bn": "ভিজিটের সময় পার হয়ে গেছে।",
+    "en": "Visit overdue."
+  },
+  "MissionDashboard.dueSuffix": {
+    "bn": "বাকি",
+    "en": "due"
+  },
+  "MissionDashboard.dueSuffixTitleCase": {
+    "bn": "বাকি",
+    "en": "Due"
+  },
+  "MissionDashboard.expandRiskFactors": {
+    "bn": "ঝুঁকির কারণসমূহ সম্প্রসারিত করুন",
+    "en": "Expand risk factors"
+  },
+  "MissionDashboard.filterBy": {
+    "bn": "{label} অনুযায়ী ফিল্টার করুন",
+    "en": "Filter by {label}"
+  },
+  "MissionDashboard.filterSelected": {
+    "bn": "{label} ফিল্টার, নির্বাচিত",
+    "en": "{label} filter, selected"
+  },
+  "MissionDashboard.filterUnavailable": {
+    "bn": "{label} ফিল্টার, অনুপলব্ধ",
+    "en": "{label} filter, unavailable"
+  },
+  "MissionDashboard.followUpDueFallback": {
+    "bn": "ফলো-আপ বাকি",
+    "en": "Follow-up due"
+  },
+  "MissionDashboard.insightRequiresAttention": {
+    "bn": "মনোযোগ প্রয়োজন।",
+    "en": "Requires attention."
+  },
+  "MissionDashboard.insightScheduledCheckUp": {
+    "bn": "নিয়মিত চেক-আপের জন্য নির্ধারিত।",
+    "en": "Scheduled for regular check-up."
+  },
+  "MissionDashboard.memberFallback": {
+    "bn": "সদস্য",
+    "en": "Member"
+  },
+  "MissionDashboard.notificationsCountSemantic": {
+    "bn": "{count}টি নোটিফিকেশন",
+    "en": "{count} notifications"
+  },
+  "MissionDashboard.openAiBrief": {
+    "bn": "এআই ব্রিফ খুলুন",
+    "en": "Open AI brief"
+  },
+  "MissionDashboard.openAiBriefCritical": {
+    "bn": "এআই ব্রিফ খুলুন — আজকের জরুরি বিষয়সমূহ",
+    "en": "Open AI brief — critical items today"
+  },
+  "MissionDashboard.openCriticalCase": {
+    "bn": "জরুরি কেস খুলুন: {name}",
+    "en": "Open critical case: {name}"
+  },
+  "MissionDashboard.patientLabel": {
+    "bn": "রোগী {id}",
+    "en": "Patient {id}"
+  },
+  "MissionDashboard.referralAlertsSemantic": {
+    "bn": "রেফারেল সতর্কবার্তা: {total}",
+    "en": "Referral alerts: {total}"
+  },
+  "MissionDashboard.removeFilter": {
+    "bn": "ফিল্টার সরিয়ে ফেলুন: {label}",
+    "en": "Remove filter: {label}"
+  },
+  "MissionDashboard.riskMissedFollowUps": {
+    "bn": "{n} জন রোগীর ফলো-আপ মিস হয়েছে",
+    "en": "{n} patient(s) missed follow-up"
+  },
+  "MissionDashboard.riskPatientsWaiting": {
+    "bn": "{n} জন রোগী ফ্যাসিলিটি পর্যালোচনার অপেক্ষায়",
+    "en": "{n} patient(s) waiting for facility review"
+  },
+  "MissionDashboard.riskReferralOverdue": {
+    "bn": "রেফারেলের সময় {days} দিন পার হয়ে গেছে",
+    "en": "Referral overdue by {days} days"
+  },
+  "MissionDashboard.urgentSuffix": {
+    "bn": "জরুরি",
+    "en": "urgent"
+  },
+  "MissionDashboard.viewReferralStatusSemantic": {
+    "bn": "রেফারেলের অবস্থা দেখুন",
+    "en": "View referral status"
+  },
+  "MissionDashboard.workSuffix": {
+    "bn": "কাজ",
+    "en": "work"
+  },
+  "PatientAi.starter1": {
+    "bn": "কোনো বিপদ চিহ্ন আছে কি পরীক্ষা করার?",
+    "en": "Any danger signs to check?"
+  },
+  "PatientAi.starter2": {
+    "bn": "এই ভিজিটে আমার কী করা উচিত?",
+    "en": "What should I do this visit?"
+  },
+  "PatientAi.starter3": {
+    "bn": "রেফারেল প্রয়োজন আছে কি??",
+    "en": "Is a referral needed?"
+  },
+  "PatientContext.startingEllipsis": {
+    "bn": "শুরু হচ্ছে...",
+    "en": "Starting..."
+  },
+  "Performance.dueRoutine": {
+    "bn": "নিয়মিত",
+    "en": "Routine"
+  },
+  "Performance.dueTomorrow": {
+    "bn": "আগামীকাল",
+    "en": "Tomorrow"
+  },
+  "Performance.dueUpcomingInDays": {
+    "bn": "{days} দিনের মধ্যে আসছে",
+    "en": "Upcoming in {days} days"
+  },
+  "Performance.lastVisitLabel": {
+    "bn": "সর্বশেষ ভিজিট",
+    "en": "Last Visit"
+  },
+  "Performance.myPatientsTab": {
+    "bn": "আমার রোগীরা",
+    "en": "My Patients"
+  },
+  "Performance.nextVisitLabel": {
+    "bn": "পরবর্তী ভিজিট",
+    "en": "Next Visit"
+  },
+  "Performance.outOf100": {
+    "bn": "/ ১০০",
+    "en": "/ 100"
+  },
+  "Performance.overdueByDays": {
+    "bn": "{d} দিন বাকি নেই (Overdue)",
+    "en": "{d} day(s) Overdue"
+  },
+  "Performance.performanceTab": {
+    "bn": "কর্মদক্ষতা",
+    "en": "Performance"
+  },
+  "Performance.ratingExcellent": {
+    "bn": "চমৎকার",
+    "en": "Excellent"
+  },
+  "Performance.ratingFair": {
+    "bn": "মোটামুটি",
+    "en": "Fair"
+  },
+  "Performance.ratingGood": {
+    "bn": "ভালো",
+    "en": "Good"
+  },
+  "Performance.ratingNeedsImprovement": {
+    "bn": "উন্নতি প্রয়োজন",
+    "en": "Needs Improvement"
+  },
+  "Performance.serviceLabel": {
+    "bn": "সেবা",
+    "en": "Service"
+  },
+  "Performance.week1": {
+    "bn": "সপ্তাহ ১",
+    "en": "W1"
+  },
+  "Performance.week2": {
+    "bn": "সপ্তাহ ২",
+    "en": "W2"
+  },
+  "Performance.week3": {
+    "bn": "সপ্তাহ ৩",
+    "en": "W3"
+  },
+  "Performance.week4": {
+    "bn": "সপ্তাহ ৪",
+    "en": "W4"
+  },
+  "Pin.backTooltip": {
+    "bn": "পেছনে",
+    "en": "Back"
+  },
+  "RealtimeAsr.bloodPressurePrefix": {
+    "bn": "রক্তচাপ: {bp}",
+    "en": "BP: {bp}"
+  },
+  "RealtimeAsr.comorbiditiesPrefix": {
+    "bn": "সহ-রোগসমূহ: {list}",
+    "en": "Comorbidities: {list}"
+  },
+  "RealtimeAsr.connectionError": {
+    "bn": "সংযোগ ত্রুটি: {detail}",
+    "en": "Connection error: {detail}"
+  },
+  "RealtimeAsr.couldNotStart": {
+    "bn": "রিয়েল-টাইম এএসআর শুরু করা যায়নি: {detail}",
+    "en": "Could not start real-time ASR: {detail}"
+  },
+  "RealtimeAsr.diagnosisPrefix": {
+    "bn": "রোগ নির্ণয়: {diagnosis}",
+    "en": "Diagnosis: {diagnosis}"
+  },
+  "RealtimeAsr.glucosePrefix": {
+    "bn": "গ্লুকোজ: {glucose}",
+    "en": "Glucose: {glucose}"
+  },
+  "RealtimeAsr.noMicSignal": {
+    "bn": "কোনো মাইক্রোফোন সিগন্যাল পাওয়া যায়নি — ডিভাইসের মাইক্রোফোন পরীক্ষা করুন।",
+    "en": "No mic signal detected — check the device microphone."
+  },
+  "Referral.anemiaWithValue": {
+    "bn": "রক্তস্বল্পতা (Hb {hb} g/dL) — আয়রন সাপ্লিমেন্ট পর্যালোচনা করুন।",
+    "en": "Anemia (Hb {hb} g/dL) — review iron supplementation."
+  },
+  "Referral.bloodSugarElevated": {
+    "bn": "রক্তে শর্করা {bg} mmol/L ({bgType}) বেড়ে গেছে — পর্যালোচনা ও ফলো-আপ প্রয়োজন।",
+    "en": "Blood sugar {bg} mmol/L ({bgType}) is elevated — review and follow-up required."
+  },
+  "Referral.bloodSugarElevatedGeneric": {
+    "bn": "রক্তে গ্লুকোজ বেড়ে গেছে — পর্যালোচনা ও ফলো-আপ প্রয়োজন।",
+    "en": "Blood sugar is elevated — review and follow-up required."
+  },
+  "Referral.bulkClosedBy": {
+    "bn": "{actor} কর্তৃক একসাথে বন্ধ করা হয়েছে",
+    "en": "Bulk closed by {actor}"
+  },
+  "Referral.dangerSignReported": {
+    "bn": "বিপদ চিহ্ন রিপোর্ট করা হয়েছে: {dSign}।",
+    "en": "Danger sign reported: {dSign}."
+  },
+  "Referral.dangerSignReportedGeneric": {
+    "bn": "বিপদ চিহ্ন রিপোর্ট করা হয়েছে — জরুরি মনোযোগ প্রয়োজন।",
+    "en": "Danger sign reported — urgent attention required."
+  },
+  "Referral.elevatedTemperatureGeneric": {
+    "bn": "উচ্চ তাপমাত্রা — জরুরি মনোযোগ প্রয়োজন।",
+    "en": "Elevated temperature — needs urgent attention."
+  },
+  "Referral.escalatedToLevel": {
+    "bn": "লেভেল {level}-এ এসকেলেট করা হয়েছে",
+    "en": "Escalated to level {level}"
+  },
+  "Referral.labelWithPeriod": {
+    "bn": "{label}।",
+    "en": "{label}."
+  },
+  "Referral.lowWeightGeneric": {
+    "bn": "কম ওজন শনাক্ত হয়েছে — পুষ্টি পর্যবেক্ষণ করুন।",
+    "en": "Low weight detected — monitor nutrition."
+  },
+  "Referral.lowWeightWithValue": {
+    "bn": "কম ওজন ({wt} কেজি) — পুষ্টি পর্যবেক্ষণ করুন।",
+    "en": "Low weight ({wt} kg) — monitor nutrition."
+  },
+  "Referral.notifDefaultBody": {
+    "bn": "উন্মুক্ত রেফারেলের প্রতি আপনার মনোযোগ প্রয়োজন",
+    "en": "Open referral needs your attention."
+  },
+  "Referral.notifGenericTitle": {
+    "bn": "রেফারেল আপডেট",
+    "en": "Referral update"
+  },
+  "Referral.notifReferralCompletedTitle": {
+    "bn": "🟢 রেফারেল সম্পন্ন হয়েছে",
+    "en": "🟢 Referral completed"
+  },
+  "Referral.notifSlaBreachTitle": {
+    "bn": "🔴 এসএলএ লঙ্ঘন",
+    "en": "🔴 SLA breach"
+  },
+  "Referral.pulseAbnormalGeneric": {
+    "bn": "পালস স্বাভাবিক নয় — জরুরি মনোযোগ প্রয়োজন।",
+    "en": "Pulse is abnormal — needs urgent attention."
+  },
+  "Referral.pulseAboveNormal": {
+    "bn": "পালস {pulse} bpm স্বাভাবিকের চেয়ে বেশি — জরুরি মনোযোগ প্রয়োজন।",
+    "en": "Pulse {pulse} bpm is above normal — needs urgent attention."
+  },
+  "Referral.pulseBelowNormal": {
+    "bn": "পালস {pulse} bpm স্বাভাবিকের চেয়ে কম — জরুরি মনোযোগ প্রয়োজন।",
+    "en": "Pulse {pulse} bpm is below normal — needs urgent attention."
+  },
+  "Referral.referredForClinicalReviewFallback": {
+    "bn": "ক্লিনিক্যাল পর্যালোচনার জন্য রেফার করা হয়েছে — ফলো-আপ প্রয়োজন।",
+    "en": "Referred for clinical review — follow-up required."
+  },
+  "Referral.severeAnemiaGeneric": {
+    "bn": "তীব্র রক্তস্বল্পতা — জরুরি পর্যালোচনা প্রয়োজন।",
+    "en": "Severe anemia — urgent review needed."
+  },
+  "Referral.severeAnemiaWithValue": {
+    "bn": "তীব্র রক্তস্বল্পতা (Hb {hb} g/dL) — জরুরি পর্যালোচনা প্রয়োজন।",
+    "en": "Severe anemia (Hb {hb} g/dL) — urgent review needed."
+  },
+  "Referral.supplementGapNarrative": {
+    "bn": "সাপ্লিমেন্টের ঘাটতি — সাপ্লিমেন্ট চালিয়ে যাওয়া নিশ্চিত করুন।",
+    "en": "Supplement gap — ensure continued supplementation."
+  },
+  "Referral.temperatureElevated": {
+    "bn": "তাপমাত্রা {tempC}°C বেড়ে গেছে — জরুরি মনোযোগ প্রয়োজন।",
+    "en": "Temperature {tempC}°C is elevated — needs urgent attention."
+  },
+  "Referral.visitOverdueNarrative": {
+    "bn": "ভিজিটের সময় পার হয়ে গেছে — জরুরিভিত্তিতে ফলো-আপের সময় নির্ধারণ করুন।",
+    "en": "Visit overdue — schedule follow-up urgently."
+  },
+  "Scribe.bulletAudioDeletedAfterProcessing": {
+    "bn": "প্রক্রিয়াকরণের পর সার্ভার থেকে অডিও মুছে ফেলা হয়েছে",
+    "en": "Audio deleted from server after processing"
+  },
+  "Scribe.bulletRecordsAudio": {
+    "bn": "পরামর্শের অডিও রেকর্ড করে",
+    "en": "Records consultation audio"
+  },
+  "Scribe.bulletReviewBeforeSave": {
+    "bn": "সংরক্ষণের আগে আপনি পর্যালোচনা করে গ্রহণ করেন",
+    "en": "You review and accept before it saves"
+  },
+  "Scribe.confidencePctModel": {
+    "bn": "{pct}% নির্ভরযোগ্যতা · {model}",
+    "en": "{pct}% confidence · {model}"
+  },
+  "Scribe.recordingTimer": {
+    "bn": "রেকর্ড হচ্ছে…  {mm}:{ss}",
+    "en": "Recording…  {mm}:{ss}"
+  },
+  "Scribe.soapAssessmentSubtitle": {
+    "bn": "রোগ নির্ণয় / ধারণা",
+    "en": "Diagnosis / impression"
+  },
+  "Scribe.soapAssessmentTitle": {
+    "bn": "মূল্যায়ন",
+    "en": "Assessment"
+  },
+  "Scribe.soapObjectiveSubtitle": {
+    "bn": "ক্লিনিক্যাল ফলাফল ও ভাইটালস",
+    "en": "Clinical findings & vitals"
+  },
+  "Scribe.soapObjectiveTitle": {
+    "bn": "অবজেক্টিভ",
+    "en": "Objective"
+  },
+  "Scribe.soapPlanSubtitle": {
+    "bn": "চিকিৎসা ও ফলো-আপ",
+    "en": "Treatment & follow-up"
+  },
+  "Scribe.soapPlanTitle": {
+    "bn": "পরিকল্পনা",
+    "en": "Plan"
+  },
+  "Scribe.soapSubjectiveTitle": {
+    "bn": "বিষয়ভিত্তিক",
+    "en": "Subjective"
+  },
+  "Scribe.uploadProgress": {
+    "bn": "আপলোড হচ্ছে…  {pct}%",
+    "en": "Uploading…  {pct}%"
+  },
+  "ScribeBanner.acceptTooltip": {
+    "bn": "গ্রহণ করুন",
+    "en": "Accept"
+  },
+  "ScribeBanner.aiScribeLabel": {
+    "bn": "এআই স্ক্রাইব",
+    "en": "AI Scribe"
+  },
+  "ScribeBanner.confidenceHigh": {
+    "bn": "আত্মবিশ্বাস বেশি",
+    "en": "High confidence"
+  },
+  "ScribeBanner.confidenceMedium": {
+    "bn": "মাঝারি",
+    "en": "Medium"
+  },
+  "ScribeBanner.confidenceReviewNeeded": {
+    "bn": "পর্যালোচনা প্রয়োজন",
+    "en": "Review needed"
+  },
+  "ScribeBanner.editTooltip": {
+    "bn": "সম্পাদনা",
+    "en": "Edit"
+  },
+  "ScribeBanner.fieldsExtractedCount": {
+    "bn": "রেকর্ডিং থেকে {fieldCount}টি ফিল্ড বের করা হয়েছে",
+    "en": "{fieldCount} fields extracted from recording"
+  },
+  "ScribeBanner.processingEllipsis": {
+    "bn": "প্রক্রিয়াকরণ হচ্ছে...",
+    "en": "Processing..."
+  },
+  "ScribeBanner.rejectTooltip": {
+    "bn": "প্রত্যাখ্যান করুন",
+    "en": "Reject"
+  },
+  "ScribeBanner.statusAccepted": {
+    "bn": "গৃহীত",
+    "en": "Accepted"
+  },
+  "ScribeBanner.statusModified": {
+    "bn": "পরিবর্তিত",
+    "en": "Modified"
+  },
+  "ScribeBanner.stopLabel": {
+    "bn": "থামুন",
+    "en": "Stop"
+  },
+  "SymptomPicker.addSymptomSheetCounterNone": {
+    "bn": "কোনো উপসর্গ নির্বাচিত হয়নি",
+    "en": "No symptoms selected"
+  },
+  "SymptomPicker.addSymptomSheetCounterSome": {
+    "bn": "{added}টি নির্বাচিত",
+    "en": "{added} selected"
+  },
+  "SymptomPicker.scribeBannerSubtitleFemale": {
+    "bn": "তিনি কথা বলার সময় উপসর্গগুলো স্বয়ংক্রিয়ভাবে দেখা যায়",
+    "en": "Symptoms appear automatically as she talks"
+  },
+  "SymptomPicker.scribeBannerSubtitleMale": {
+    "bn": "তিনি কথা বলার সময় উপসর্গগুলো স্বয়ংক্রিয়ভাবে দেখা যায়",
+    "en": "Symptoms appear automatically as he talks"
+  },
+  "SymptomPicker.scribeDoneManySymptoms": {
+    "bn": "স্ক্রাইব সম্পন্ন · {n}টি উপসর্গ শনাক্ত হয়েছে",
+    "en": "Scribe complete · {n} symptoms detected"
+  },
+  "SymptomPicker.scribeDoneNoSymptoms": {
+    "bn": "স্ক্রাইব সম্পন্ন",
+    "en": "Scribe complete"
+  },
+  "SymptomPicker.scribeDoneOneSymptom": {
+    "bn": "স্ক্রাইব সম্পন্ন · ১টি উপসর্গ শনাক্ত হয়েছে",
+    "en": "Scribe complete · 1 symptom detected"
+  },
+  "SymptomPicker.symptomsSelectedMany": {
+    "bn": "{n}টি উপসর্গ নির্বাচিত",
+    "en": "{n} symptoms selected"
+  },
+  "SymptomPicker.symptomsSelectedOne": {
+    "bn": "{n}টি উপসর্গ নির্বাচিত",
+    "en": "{n} symptom selected"
+  },
+  "Training.loadFailedGeneric": {
+    "bn": "এই কনটেন্ট লোড করতে সমস্যা হয়েছে।",
+    "en": "Something went wrong loading this content."
+  },
+  "TriageResult.stepSubtitle1": {
+    "bn": "ধাপ ১ / ৩ · উল্লেখিত সব উপসর্গে ট্যাপ করুন",
+    "en": "Step 1 of 3 · Tap all symptoms mentioned"
+  },
+  "TriageResult.stepSubtitle2": {
+    "bn": "ধাপ ২ / ৩ · এআই ট্রায়াজ সক্রিয়",
+    "en": "Step 2 of 3 · AI triage active"
+  },
+  "TriageResult.stepSubtitle3": {
+    "bn": "ধাপ ৩ / ৩ · আপনি যা দেখছেন তা পূরণ করুন",
+    "en": "Step 3 of 3 · Fill in what you see"
+  },
+  "UnifiedForm.badgeAnc": {
+    "bn": "এএনসি",
+    "en": "ANC"
+  },
+  "UnifiedForm.badgeCataract": {
+    "bn": "ছানি",
+    "en": "Cataract"
+  },
+  "UnifiedForm.badgeChild": {
+    "bn": "শিশু",
+    "en": "Child"
+  },
+  "UnifiedForm.badgeEyeCare": {
+    "bn": "চোখের যত্ন",
+    "en": "Eye Care"
+  },
+  "UnifiedForm.badgeFamilyPlanning": {
+    "bn": "এফপি",
+    "en": "FP"
+  },
+  "UnifiedForm.badgeNcd": {
+    "bn": "এনসিডি",
+    "en": "NCD"
+  },
+  "UnifiedForm.badgeNeonate": {
+    "bn": "নবজাতক",
+    "en": "Neonate"
+  },
+  "UnifiedForm.badgePnc": {
+    "bn": "পিএনসি",
+    "en": "PNC"
+  },
+  "UnifiedForm.badgePregnancyOutcome": {
+    "bn": "গর্ভাবস্থার ফলাফল",
+    "en": "Preg. Outcome"
+  },
+  "UnifiedForm.badgeProfile": {
+    "bn": "প্রোফাইল",
+    "en": "Profile"
+  },
+  "UnifiedForm.badgeVitals": {
+    "bn": "ভাইটালস",
+    "en": "Vitals"
+  },
+  "UnifiedForm.trendDaysAgo": {
+    "bn": "{d}দি",
+    "en": "{d}d"
+  },
+  "UnifiedForm.trendWeeksAgo": {
+    "bn": "{weeks}সপ্তাহ",
+    "en": "{weeks}wks"
+  },
+  "UnifiedForm.triageSymptomsCountMany": {
+    "bn": "ধাপ ১ থেকে {n}টি উপসর্গ",
+    "en": "{n} symptoms from Step 1"
+  },
+  "UnifiedForm.triageSymptomsCountOne": {
+    "bn": "ধাপ ১ থেকে {n}টি উপসর্গ",
+    "en": "{n} symptom from Step 1"
+  },
+  "UnifiedForm.validationFieldRequiredOne": {
+    "bn": "জমা দেওয়ার আগে {n}টি আবশ্যক ফিল্ড পূরণ করতে হবে।",
+    "en": "{n} required field must be filled before submitting."
+  },
+  "UnifiedForm.validationFieldsRequiredMany": {
+    "bn": "জমা দেওয়ার আগে {n}টি আবশ্যক ফিল্ড পূরণ করতে হবে।",
+    "en": "{n} required fields must be filled before submitting."
+  },
+  "UnifiedForm.vsLastWeight": {
+    "bn": "সর্বশেষ: {kg} কেজি",
+    "en": "Last: {kg} kg"
+  },
+  "VisitFlow.step2TitlePregnancyChecks": {
+    "bn": "গর্ভাবস্থার পরীক্ষা",
+    "en": "Pregnancy checks"
+  },
+  "VitalClassifier.critical": {
+    "bn": "জরুরি",
+    "en": "Critical"
+  },
+  "VitalClassifier.high": {
+    "bn": "উচ্চ",
+    "en": "High"
+  },
+  "VitalClassifier.low": {
+    "bn": "নিম্ন",
+    "en": "Low"
+  },
+  "VitalClassifier.normal": {
+    "bn": "স্বাভাবিক",
+    "en": "Normal"
+  },
+  "Worklist.unnamedPatient": {
+    "bn": "(নামহীন রোগী)",
+    "en": "(Unnamed patient)"
+  },
+  "notifReminderBody": {
+    "bn": "আপনার একটি রেফারেল সতর্কবার্তা অপেক্ষমাণ আছে।",
+    "en": "You have a pending referral alert."
+  },
+  "notifReminderTitle": {
+    "bn": "রেফারেল স্মারক",
+    "en": "Referral reminder"
+  },
+  "Enroll.ancBengali": {
+    "bn": "মাতৃস্বাস্থ্য সেবা",
+    "en": "মাতৃস্বাস্থ্য সেবা"
+  },
+  "Enroll.epiBengali": {
+    "bn": "টিকা",
+    "en": "টিকা"
+  },
+  "Enroll.imciBengali": {
+    "bn": "শিশু স্বাস্থ্য সেবা",
+    "en": "শিশু স্বাস্থ্য সেবা"
+  },
+  "Enroll.ncdBengali": {
+    "bn": "অসংক্রামক রোগ",
+    "en": "অসংক্রামক রোগ"
+  },
+  "Enroll.pncBengali": {
+    "bn": "প্রসবোত্তর সেবা",
+    "en": "প্রসবোত্তর সেবা"
+  },
+  "Enroll.pregnantWomanBengali": {
+    "bn": "গর্ভবতী মা",
+    "en": "গর্ভবতী মা"
+  },
+  "Naba.callDoctorNowBn": {
+    "bn": "ডাক্তারকে ফোন করুন",
+    "en": "ডাক্তারকে ফোন করন"
+  },
+  "RecentVitals.retryLoadingVitals": {
+    "bn": "ভাইটালস পুনরায় লোড করার চেষ্টা করুন",
+    "en": "Retry loading vitals"
+  },
+  "RecentVitals.olderVisit": {
+    "bn": "পুরনো ভিজিট",
+    "en": "Older visit"
+  },
+  "RecentVitals.newerVisit": {
+    "bn": "নতুন ভিজিট",
+    "en": "Newer visit"
+  },
+  "RecentVitals.spo2Label": {
+    "bn": "এসপিও২",
+    "en": "SpO2"
+  },
+  "FollowUpCall.retryLoadingFollowUps": {
+    "bn": "ফলো-আপগুলি পুনরায় লোড করার চেষ্টা করুন",
+    "en": "Retry loading follow-ups"
+  },
+  "Composer.selectPlaceholder": {
+    "bn": "— নির্বাচন করুন —",
+    "en": "— Select —"
+  },
+  "Enrollment.nidScanBadge": {
+    "bn": "📇 এনআইডি স্ক্যান",
+    "en": "📇 NID scan"
+  },
+  "MissionDashboard.priorityHighBadge": {
+    "bn": "উচ্চ",
+    "en": "HIGH"
+  },
+  "MissionDashboard.priorityMediumBadge": {
+    "bn": "মাঝারি",
+    "en": "MEDIUM"
+  },
+  "MissionDashboard.priorityLowBadge": {
+    "bn": "নিম্ন",
+    "en": "LOW"
+  },
+  "MissionDashboard.priorityLow": {
+    "bn": "নিম্ন",
+    "en": "Low"
+  },
+  "Household.immunisationDue": {
+    "bn": "টিকাদানের সময় হয়েছে",
+    "en": "Immunisation due"
+  },
+  "Triage.symptom.bleeding": {
+    "bn": "রক্তক্ষরণ",
+    "en": "Bleeding"
   }
 }

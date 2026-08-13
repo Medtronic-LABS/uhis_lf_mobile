@@ -1524,6 +1524,14 @@ abstract final class RecentVitalsStrings {
   static String get loadError => getTranslatedString('RecentVitals.loadError', 'Failed to load vitals');
   static String get emptyState => getTranslatedString('RecentVitals.emptyState', 'No vitals recorded yet');
   static String get latestBadge => getTranslatedString('RecentVitals.latestBadge', 'Latest');
+  static String get retryLoadingVitals =>
+      getTranslatedString('RecentVitals.retryLoadingVitals', 'Retry loading vitals');
+  static String get olderVisit =>
+      getTranslatedString('RecentVitals.olderVisit', 'Older visit');
+  static String get newerVisit =>
+      getTranslatedString('RecentVitals.newerVisit', 'Newer visit');
+  static String get spo2Label =>
+      getTranslatedString('RecentVitals.spo2Label', 'SpO2');
 }
 
 abstract final class ContactSheetStrings {
@@ -1881,6 +1889,8 @@ abstract final class MissionDashboardStrings {
   static String get ancVisitLabel => getTranslatedString('MissionDashboard.ancVisitLabel', 'ANC Visit');
   static String get pncVisitLabel => getTranslatedString('MissionDashboard.pncVisitLabel', 'PNC Visit');
   static String get childImmunisation => getTranslatedString('childImmunisation', 'Child immunisation');
+  static String get immunisationDue =>
+      getTranslatedString('Household.immunisationDue', 'Immunisation due');
   static String get ncdCheckup => getTranslatedString('ncdCheckup', 'NCD checkup');
   static String get tbCheck => getTranslatedString('tbCheck', 'TB check');
   static String get newVisit => getTranslatedString('newVisit', 'New visit');
@@ -1974,7 +1984,15 @@ abstract final class MissionDashboardStrings {
   static String get priorityCritical => getTranslatedString('priorityCritical', 'Critical');
   static String get priorityHigh => getTranslatedString('priorityHigh', 'High');
   static String get priorityMedium => getTranslatedString('priorityMedium', 'Medium');
-  static String get priorityLow => getTranslatedString('priorityLow', 'Low');
+  static String get priorityLow => getTranslatedString('MissionDashboard.priorityLow', 'Low');
+  static String get priorityCriticalBadge =>
+      getTranslatedString('PatientDetail.critical', 'CRITICAL');
+  static String get priorityHighBadge =>
+      getTranslatedString('MissionDashboard.priorityHighBadge', 'HIGH');
+  static String get priorityMediumBadge =>
+      getTranslatedString('MissionDashboard.priorityMediumBadge', 'MEDIUM');
+  static String get priorityLowBadge =>
+      getTranslatedString('MissionDashboard.priorityLowBadge', 'LOW');
 
   // ── Programme Badges ─────────────────────────────────────────────────────
   // Standardized clinical shorthand SKs are trained on — kept in Latin
@@ -2546,9 +2564,11 @@ abstract final class TriageStrings {
       case 'unconscious':
         return getTranslatedString('Triage.symptom.unconscious', 'Unconscious / Unresponsive');
       case 'lethargy':
-        return getTranslatedString('Triage.symptom.lethargy', 'Unusually sleepy / Difficult to wake');
+        return getTranslatedString(
+            'Triage.symptom.lethargy', 'Unusually sleepy / Difficult to wake');
       case 'not_eating':
-        return getTranslatedString('Triage.symptom.not_eating', 'Not eating / drinking');
+        return getTranslatedString(
+            'Triage.symptom.not_eating', 'Not eating / drinking');
       case 'chest_indrawing':
         return getTranslatedString('Triage.symptom.chest_indrawing', 'Chest in-drawing');
       case 'stridor':
@@ -2672,7 +2692,10 @@ abstract final class TriageStrings {
       case 'painful_uterine_contractions':
         return getTranslatedString('Triage.symptom.painful_uterine_contractions', 'Painful uterine contractions');
       case 'one_sided_weakness':
-        return getTranslatedString('Triage.symptom.one_sided_weakness', 'One-sided weakness');
+        return getTranslatedString(
+            'Triage.symptom.one_sided_weakness', 'One-sided weakness');
+      case 'bleeding':
+        return getTranslatedString('Triage.symptom.bleeding', 'Bleeding');
       case 'swelling_both_feet':
         return getTranslatedString('Triage.symptom.swelling_both_feet', 'Swelling of both feet');
       case 'palpitations':
@@ -2722,6 +2745,9 @@ abstract final class TriageStrings {
 abstract final class ComposerStrings {
   ComposerStrings._();
 
+  /// Dropdown empty hint on assessment form selects.
+  static String get selectPlaceholder =>
+      getTranslatedString('Composer.selectPlaceholder', '— Select —');
 
   /// Resolve a field label by its [labelKey].  Matches the key constants used
   /// in [FieldDef.labelKey] and returns the localized string.  Unknown keys
@@ -4975,6 +5001,9 @@ abstract final class EnrollmentStrings {
   static String get nidScannedHint => getTranslatedString('Enrollment.nidScannedHint', 'Scanned from NID — edit if needed');
   static String get clearNidScan => getTranslatedString('Enrollment.clearNidScan', 'Clear');
   static String get nidScannedChipLabel => getTranslatedString('Enrollment.nidScannedChipLabel', 'NID Scanned');
+  /// Compact badge on household-created member row after NID OCR.
+  static String get nidScanBadge =>
+      getTranslatedString('Enrollment.nidScanBadge', '📇 NID scan');
   static String get headBadgeLabel => getTranslatedString('Enrollment.headBadgeLabel', 'Head');
 
   // ── Entry sheet — scanner body headline/subtitle ternaries ─────────────
@@ -5856,6 +5885,8 @@ abstract final class FollowUpCallStrings {
   static String get openFollowUpsTitle => getTranslatedString('FollowUpCall.openFollowUpsTitle', 'Open Follow-ups');
   static String get openFollowUpsLoadError => getTranslatedString('FollowUpCall.openFollowUpsLoadError', 'Failed to load follow-ups');
   static String get openFollowUpsEmpty => getTranslatedString('FollowUpCall.openFollowUpsEmpty', 'No open follow-ups');
+  static String get retryLoadingFollowUps => getTranslatedString(
+      'FollowUpCall.retryLoadingFollowUps', 'Retry loading follow-ups');
   static String facilityLabel(String siteId) => getTranslatedString('FollowUpCall.facilityLabel', 'Facility: {siteId}', params: {'siteId': siteId});
 
   /// Localized label for a follow-up `kind` wire value (e.g. `medical_review`).
