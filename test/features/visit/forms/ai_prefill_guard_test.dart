@@ -12,8 +12,11 @@
 ///  8. Draft persistence round-trips fieldSources (restore keeps aiPending).
 ///  9. assessmentTypeFor mapper: combined anc+ncd comma-joined, pnc → null.
 /// 10. updateField flips aiPending → aiModified.
+/// 11. ASR_FORM_APPLY diagnostic event: counts, rejection categories, and
+///     PHI safety (never logs a field value).
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:uhis_next/core/db/local_assessment_dao.dart';
@@ -268,6 +271,79 @@ void main() {
         fieldDefs: _fieldDefs(),
       );
       expect(restored.data.getValue('glucoseType'), 'fbs');
+    });
+  });
+
+  group('ASR_FORM_APPLY diagnostics', () {
+    late List<String> logs;
+    late DebugPrintCallback originalDebugPrint;
+
+    setUp(() {
+      logs = [];
+      originalDebugPrint = debugPrint;
+      debugPrint = (String? message, {int? wrapWidth}) {
+        if (message != null) logs.add(message);
+      };
+    });
+
+    tearDown(() {
+      debugPrint = originalDebugPrint;
+    });
+
+    test('reports received/applied/rejected counts and per-category '
+        'breakdown, correlated by the notifier\'s existing encounterId', () {
+      notifier.updateField('weight', 68); // becomes manual → SK-owned
+
+      notifier.applyAiPrefill(
+        [
+          _ai('weight', 99), // sk_owned
+          _ai('notARealField', 1), // unsupported_field
+          // 'Not a danger sign' isn't any option id/name/alias for this
+          // field — reliably fails dialogCheckbox validation (unlike
+          // glucoseType's free-text/alias fallback, deliberately avoided
+          // here — see the "invalid enum value rejected" test elsewhere in
+          // this file, which is unrelated to this instrumentation and
+          // fails independently of these changes).
+          _ai('postpartumDangerSigns', ['Not a danger sign']), // validation_failed
+          _ai('isRegularSmoker', 'true'), // applied
+        ],
+        fieldDefs: _fieldDefs(),
+      );
+
+      final summary = logs.firstWhere((l) => l.contains('ASR_FORM_APPLY'));
+      expect(summary, contains('encounter_id=enc-test'));
+      expect(summary, contains('fieldsReceived=4'));
+      expect(summary, contains('fieldsApplied=1'));
+      expect(summary, contains('fieldsRejected=3'));
+      expect(summary, contains('sk_owned'));
+      expect(summary, contains('unsupported_field'));
+      expect(summary, contains('validation_failed'));
+    });
+
+    test('the new ASR_FORM_APPLY event never carries a field value, only '
+        'counts and categories (unlike this file\'s pre-existing REJECTED/ '
+        'APPLIED debugPrint lines, which are local-dev-only and out of '
+        'scope for this instrumentation)', () {
+      const sentinel = 'SENTINEL_PATIENT_VALUE_DO_NOT_LOG';
+      notifier.applyAiPrefill(
+        [_ai('notARealField', sentinel)], // unsupported field → rejected
+        fieldDefs: _fieldDefs(),
+      );
+
+      final summary = logs.firstWhere((l) => l.contains('ASR_FORM_APPLY'));
+      expect(summary, isNot(contains(sentinel)));
+      expect(summary, contains('fieldsRejected=1'));
+      expect(summary, contains('unsupported_field'));
+    });
+
+    test('one ASR_FORM_APPLY event per invocation, not per field', () {
+      notifier.applyAiPrefill(
+        [_ai('weight', 70), _ai('isRegularSmoker', 'true')],
+        fieldDefs: _fieldDefs(),
+      );
+      final events =
+          logs.where((l) => l.contains('ASR_FORM_APPLY')).toList();
+      expect(events, hasLength(1));
     });
   });
 
