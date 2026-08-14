@@ -11,6 +11,7 @@ import '../../core/audio/scribe_record_config.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/debug/asr_diagnostics.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
 import '../scribe/form_field_schema_builder.dart';
@@ -394,11 +395,14 @@ class RealtimeAsrController extends ChangeNotifier {
       // change in which fields are on screen.
       final schema = _formSchema;
       if (schema != null && schema.isNotEmpty) {
-        _send({
+        final initSchemaPayload = {
           'type': 'init_schema',
           if (assessmentType != null) 'assessmentType': assessmentType,
           'fields': schema.map((f) => f.toJson()).toList(),
-        });
+        };
+        debugPrint('\n\n================= INIT SCHEMA =================\n\n');
+        ConsoleLog.json('[PayloadDebug] init_schema', initSchemaPayload);
+        _send(initSchemaPayload);
       }
 
       final hasPerm = await _recorder.hasPermission();
