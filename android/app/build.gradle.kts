@@ -107,13 +107,6 @@ flutter {
     source = "../.."
 }
 
-configurations.all {
-    // audio_waveforms pulls in exoplayer2.ui which ships exo_player_view.xml with old class names.
-    // Media3's PlayerView inflates the same resource name → ClassCastException. Exclude the UI
-    // module; audio_waveforms only needs the player core, not the ExoPlayer2 UI layer.
-    exclude(group = "com.google.android.exoplayer", module = "exoplayer-ui")
-}
-
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("androidx.core:core-splashscreen:1.0.1")

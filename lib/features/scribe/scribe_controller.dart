@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -48,42 +47,15 @@ class ScribeController extends ChangeNotifier {
     rawMicCapture:
         _audioSettings?.rawMicCaptureEnabled ?? AppConfig.rawMicCaptureDefault,
   );
-  /// Drives the live recording waveform visualization only.
-  /// Recycled after each session — [RecorderController] can hang on reuse after
-  /// stop() on Android (audio_waveforms native quirk).
-  RecorderController _recorder = RecorderController();
 
-  /// Captures the actual audio file using the `record` package, which produces
-  /// a standard WAV decodable by the backend. [_recorder] handles waveform only.
+  /// Captures the audio file uploaded to the backend (`record` / AAC-LC).
   final AudioRecorder _audioRecorder = AudioRecorder();
 
   ScribeSession _session = const ScribeSession();
   ScribeSession get session => _session;
 
-  /// Live recorder controller backing the in-circle waveform visualizer.
-  /// Owned here in the scribe layer; the banner widget only renders from it.
-  RecorderController get waveformRecorder => _recorder;
-
-  /// Settings for the **waveform visualiser only** — WAV/PCM mono @16 kHz.
-  ///
-  /// This drives [_recorder] (audio_waveforms), whose output file is a
-  /// throwaway; the audio actually uploaded comes from [_audioRecorder]
-  /// with [_captureConfig]. WAV is used here rather than AAC because on
-  /// Android AAC is muxed into an MP4 container whose `moov` trailer is
-  /// only written during stop(), and audio_waveforms' stop() can hang,
-  /// leaving a truncated file. WAV finalizes its 44-byte header
-  /// synchronously, so nothing is left half-written if stop() stalls.
-  static const RecorderSettings _recorderSettings = RecorderSettings(
-    androidEncoderSettings: AndroidEncoderSettings(
-      androidEncoder: AndroidEncoder.wav,
-    ),
-    iosEncoderSettings: IosEncoderSetting(
-      iosEncoder: IosEncoder.kAudioFormatLinearPCM,
-    ),
-    sampleRate: 16000,
-  );
-
-  /// File extension for captured audio — kept in sync with [_recorderSettings].
+  /// File extension for captured audio — matches [ScribeRecordConfig.batch]
+  /// (`AudioEncoder.aacLc`).
   static const String _recordingExtension = 'm4a';
 
   Timer? _elapsedTimer;
@@ -140,17 +112,9 @@ class ScribeController extends ChangeNotifier {
     }
 
     try {
-      _prepareFreshRecorder();
-
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
       _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
-      final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
-
-      await _recorder.record(
-        path: waveformPath,
-        recorderSettings: _recorderSettings,
-      );
       await _audioRecorder.start(_captureConfig, path: _recordingPath!);
 
       _session = const ScribeSession(state: ScribeState.recording);
@@ -215,21 +179,9 @@ class ScribeController extends ChangeNotifier {
     }
 
     try {
-      _prepareFreshRecorder();
-
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
       _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
-      // Waveform visualization recorder writes to a separate dummy path.
-      final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
-
-      // Start waveform recorder (audio_waveforms) for UI animation only.
-      await _recorder.record(
-        path: waveformPath,
-        recorderSettings: _recorderSettings,
-      );
-
-      // Start the audio capture that is actually uploaded.
       await _audioRecorder.start(_captureConfig, path: _recordingPath!);
 
       _session = ScribeSession(state: ScribeState.recording, mode: mode);
@@ -258,7 +210,7 @@ class ScribeController extends ChangeNotifier {
     if (_session.state != ScribeState.recording) return;
     _elapsedTimer?.cancel();
 
-    // Flip to uploading immediately so the banner swaps waveform → spinner
+    // Flip to uploading immediately so the banner swaps recording → spinner
     // without waiting for the native recorder stop call.
     _session = _session.copyWith(
       state: ScribeState.uploading,
@@ -269,9 +221,6 @@ class ScribeController extends ChangeNotifier {
     debugPrint(
       '[AIScribe] Stopping recording after ${_session.elapsedSeconds}s',
     );
-
-    // Drop WaveformWidget before native stop — reduces audio_waveforms hang.
-    await Future<void>.delayed(const Duration(milliseconds: 50));
 
     final effectivePath = await _stopRecorderSafely();
     if (effectivePath == null) {
@@ -381,7 +330,6 @@ class ScribeController extends ChangeNotifier {
     _currentProgrammes = const [];
     _currentMode = ScribeMode.soap;
     _triageNotes = null;
-    _recycleRecorder();
     _session = const ScribeSession();
     notifyListeners();
   }
@@ -390,7 +338,6 @@ class ScribeController extends ChangeNotifier {
   void surfaceError(String message, {ScribeMode? mode}) {
     _elapsedTimer?.cancel();
     _pollTimer?.cancel();
-    _recycleRecorder();
     _session = ScribeSession(
       state: ScribeState.error,
       errorMessage: message,
@@ -576,41 +523,10 @@ class ScribeController extends ChangeNotifier {
   // ── private helpers ───────────────────────────────────────────────────────
 
 
-  void _prepareFreshRecorder() {
-    if (_recorder.isRecording) return;
-    _recycleRecorder();
-  }
-
-  void _recycleRecorder() {
-    try {
-      _recorder.dispose();
-    } catch (e) {
-      debugPrint('[AIScribe] recorder dispose: $e');
-    }
-    _recorder = RecorderController();
-  }
-
   /// Stops capture and waits for the recording to be fully finalized before
   /// returning its path. Returns null when the file never finalized (so the
-  /// caller fails instead of uploading a truncated, undecodable MP4).
-  ///
-  /// audio_waveforms records AAC into an MP4 container; the `moov` trailer is
-  /// written during the native stop(). On Android the Dart stop() Future can
-  /// hang even though the native writer completes, so we fire stop() but gate
-  /// on the file actually being finalized (moov atom present + size stable).
+  /// caller fails instead of uploading a truncated, undecodable file).
   Future<String?> _stopRecorderSafely() async {
-    // Stop waveform recorder (fire-and-forget — may hang on audio_waveforms).
-    unawaited(
-      _recorder
-          .stop()
-          .then((p) => debugPrint('[AIScribe] waveform stop() path=$p'))
-          .catchError((Object e) {
-        debugPrint('[AIScribe] waveform stop() error: $e');
-        return null;
-      }),
-    );
-
-    // Stop actual audio capture — record package awaits proper finalization.
     final String? capturedPath = await _audioRecorder
         .stop()
         .catchError((Object e) {
@@ -624,7 +540,6 @@ class ScribeController extends ChangeNotifier {
       debugPrint('[AIScribe] audio captured: path=$path size=${size}B');
     }
 
-    _recycleRecorder();
     notifyListeners();
     return path;
   }
@@ -931,9 +846,6 @@ class ScribeController extends ChangeNotifier {
   void dispose() {
     _elapsedTimer?.cancel();
     _pollTimer?.cancel();
-    try {
-      _recorder.dispose();
-    } catch (_) {}
     _audioRecorder.dispose();
     super.dispose();
   }
