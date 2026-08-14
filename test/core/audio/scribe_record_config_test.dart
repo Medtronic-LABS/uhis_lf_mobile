@@ -38,8 +38,9 @@ void main() {
     // Before this setting existed, the batch path passed NO androidConfig at
     // all, so it got the record package's implicit AndroidRecordConfig().
     // Now it always passes one. These pin that the off-path is still
-    // field-for-field identical, so the setting genuinely changes nothing
-    // until an SK turns it on.
+    // field-for-field identical EXCEPT manageBluetooth (deliberately forced
+    // off — see ScribeRecordConfig._manageBluetooth), so the rawMicCapture
+    // setting itself genuinely changes nothing until an SK turns it on.
     test('batch off-path matches an implicit AndroidRecordConfig()', () {
       final a = ScribeRecordConfig.batch(rawMicCapture: false).androidConfig;
       const implicit = AndroidRecordConfig();
@@ -47,22 +48,25 @@ void main() {
       expect(a.audioSource, implicit.audioSource);
       expect(a.useLegacy, implicit.useLegacy);
       expect(a.muteAudio, implicit.muteAudio);
-      expect(a.manageBluetooth, implicit.manageBluetooth);
+      expect(a.manageBluetooth, isFalse);
       expect(a.speakerphone, implicit.speakerphone);
       expect(a.audioManagerMode, implicit.audioManagerMode);
     });
 
-    test('realtime off-path changes only audioSource from the defaults', () {
+    test('realtime off-path changes only audioSource and manageBluetooth '
+        'from the defaults', () {
       final a =
           ScribeRecordConfig.realtimeStream(rawMicCapture: false).androidConfig;
       const implicit = AndroidRecordConfig();
 
       // The realtime path deliberately overrode the source to mic before
-      // this setting existed; everything else stayed at the defaults.
+      // this setting existed; everything else stayed at the defaults except
+      // manageBluetooth, forced off for every path (see
+      // ScribeRecordConfig._manageBluetooth).
       expect(a.audioSource, AndroidAudioSource.mic);
       expect(a.useLegacy, implicit.useLegacy);
       expect(a.muteAudio, implicit.muteAudio);
-      expect(a.manageBluetooth, implicit.manageBluetooth);
+      expect(a.manageBluetooth, isFalse);
       expect(a.speakerphone, implicit.speakerphone);
       expect(a.audioManagerMode, implicit.audioManagerMode);
     });
@@ -82,6 +86,43 @@ void main() {
         expect(on.speakerphone, off.speakerphone);
         expect(on.audioManagerMode, off.audioManagerMode);
       }
+    });
+  });
+
+  group('Bluetooth SCO management is disabled', () {
+    // record_android's BluetoothManager registers a receiver that replies to
+    // the start() method channel call from EITHER onBlScoConnected or
+    // onBlScoNone — if a Bluetooth device's SCO connection state churns
+    // right as recording starts, both fire and the second reply throws
+    // "IllegalStateException: Reply already submitted", crashing the whole
+    // app (live-caught with earbuds connected/disconnecting during AI
+    // Scribe). This app has no use for SCO auto-negotiation — the phone's
+    // own mic is what every capture path wants — so disabling it entirely
+    // sidesteps the crash instead of racing it.
+    test('batch config disables manageBluetooth', () {
+      expect(
+        ScribeRecordConfig.batch(rawMicCapture: false).androidConfig.manageBluetooth,
+        isFalse,
+      );
+      expect(
+        ScribeRecordConfig.batch(rawMicCapture: true).androidConfig.manageBluetooth,
+        isFalse,
+      );
+    });
+
+    test('realtime config disables manageBluetooth', () {
+      expect(
+        ScribeRecordConfig.realtimeStream(rawMicCapture: false)
+            .androidConfig
+            .manageBluetooth,
+        isFalse,
+      );
+      expect(
+        ScribeRecordConfig.realtimeStream(rawMicCapture: true)
+            .androidConfig
+            .manageBluetooth,
+        isFalse,
+      );
     });
   });
 
