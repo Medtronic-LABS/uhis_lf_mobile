@@ -34,6 +34,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/i18n/app_locale.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import 'models/anc_assessment.dart';
@@ -1489,6 +1490,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       final req = NabaRequest(
         requestId: widget.visitId,
         patientId: widget.patientId,
+        // Same contract as briefing (symptom_picker_screen) and the assistant:
+        // drives the backend's output-language instruction.
+        appLanguage: AppLocale.isBangla ? 'bn' : 'en',
         visitType: 'routine',
         ageYears: widget.patientAge,
         sex: widget.patientGender,
