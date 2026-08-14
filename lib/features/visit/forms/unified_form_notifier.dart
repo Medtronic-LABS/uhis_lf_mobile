@@ -2270,6 +2270,26 @@ class UnifiedFormNotifier extends ChangeNotifier {
     return out;
   }
 
+  /// English option `name` for NABA (ids like `"3"` → `"Severe vomiting"`).
+  /// Falls back to the stored token if the field library has no match.
+  List<String> _optionNamesForField(String fieldId, Object? raw) {
+    if (raw is! List || raw.isEmpty) return const [];
+    final options = _fieldDefs[fieldId]?.options ?? const <FieldOption>[];
+    final out = <String>[];
+    for (final item in raw) {
+      final token = item is Map
+          ? (item['value'] ?? item['id'] ?? item['name'])
+          : item;
+      if (token == null) continue;
+      final option = FieldOption.find(token, options);
+      final name = (option != null && option.name.trim().isNotEmpty)
+          ? option.name.trim()
+          : token.toString().trim();
+      if (name.isNotEmpty && !out.contains(name)) out.add(name);
+    }
+    return out;
+  }
+
   /// Local `patients.id` for [_patientId]. Snapshot + programmes are keyed by
   /// the member PK; the visit route often carries `members.patient_id`.
   Future<String> _localPatientId() async {
@@ -2506,12 +2526,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
           'bloodSugarFasting': glucoseType == 'fbs' ? glVal : null,
           'bloodSugarRandom': glucoseType != 'fbs' ? glVal : null,
           'glucoseType': glucoseType,
-          'dangerSignsExperienced12':
-              stringList(_data.getValue('dangerSignsExperienced12')),
-          'dangerSignsExperienced13To27':
-              stringList(_data.getValue('dangerSignsExperienced13To27')),
-          'dangerSignsExperienced28To40':
-              stringList(_data.getValue('dangerSignsExperienced28To40')),
+          'dangerSignsExperienced12': _optionNamesForField(
+              'dangerSignsExperienced12',
+              _data.getValue('dangerSignsExperienced12')),
+          'dangerSignsExperienced13To27': _optionNamesForField(
+              'dangerSignsExperienced13To27',
+              _data.getValue('dangerSignsExperienced13To27')),
+          'dangerSignsExperienced28To40': _optionNamesForField(
+              'dangerSignsExperienced28To40',
+              _data.getValue('dangerSignsExperienced28To40')),
           'gestationalWeeks': asDouble('gestationalAge')?.toInt() ??
               asDouble('gestationalWeeks')?.toInt(),
           'temperatureFahrenheit': tempF,

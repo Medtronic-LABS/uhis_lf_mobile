@@ -63,6 +63,49 @@ class EpiVisitSummary {
   final String? nextMilestoneKey;
 
   bool get referralWarranted => overdueCount > 0;
+
+  /// Inputs for `naba/generate` `assessments[]` (`CHILD_IMMUNIZATION`).
+  ///
+  /// Mirrors the schedule facts Step 3 already uses offline via
+  /// [EpiVisitSummary] — overdue doses, current/next milestone — so the
+  /// online model sees the same vaccination context.
+  Map<String, dynamic> toNabaReferralInputs() {
+    final out = <String, dynamic>{
+      'overdueCount': overdueCount,
+      'referralWarranted': referralWarranted,
+    };
+    if (overdueVaccineCodes.isNotEmpty) {
+      out['overdueVaccineCodes'] = overdueVaccineCodes;
+    }
+    if (overdueVaccineNames.isNotEmpty) {
+      out['overdueVaccineNames'] = overdueVaccineNames;
+    }
+    if (currentMilestoneKey.isNotEmpty) {
+      out['currentMilestoneKey'] = currentMilestoneKey;
+    }
+    if (currentMilestoneLabel.isNotEmpty) {
+      out['currentMilestoneLabel'] = currentMilestoneLabel;
+    }
+    if (nextMilestoneKey != null && nextMilestoneKey!.isNotEmpty) {
+      out['nextMilestoneKey'] = nextMilestoneKey;
+    }
+    if (nextMilestoneLabel != null && nextMilestoneLabel!.isNotEmpty) {
+      out['nextMilestoneLabel'] = nextMilestoneLabel;
+    }
+    if (nextMilestoneDate != null) {
+      final d = nextMilestoneDate!;
+      final mm = d.month.toString().padLeft(2, '0');
+      final dd = d.day.toString().padLeft(2, '0');
+      out['nextMilestoneDate'] = '${d.year}-$mm-$dd';
+    }
+    if (nextMilestoneVaccineCodes.isNotEmpty) {
+      out['nextMilestoneVaccineCodes'] = nextMilestoneVaccineCodes;
+    }
+    if (nextMilestoneVaccineNames.isNotEmpty) {
+      out['nextMilestoneVaccineNames'] = nextMilestoneVaccineNames;
+    }
+    return out;
+  }
 }
 
 /// Builds an [EpiVisitSummary] from the milestone list the vaccination

@@ -601,11 +601,25 @@ class _VisitFlowState extends State<VisitFlowScreen> {
               onAdvance: (prog, referred, reasons, facility, pwRisks, nabaAssessments) {
                 setState(() {
                   _primaryProgramme = Programme.imci;
-                  _referralRecommended = referred;
-                  _referredReasons = reasons;
+                  _referralRecommended = referred || _referralRecommended;
+                  // Keep EPI overdue reasons when childhood adds its own.
+                  _referredReasons = {
+                    ..._referredReasons,
+                    ...reasons,
+                  }.toList();
                   _referralFacility = facility;
                   _pwRiskFactors = pwRisks;
-                  _nabaReferralAssessments = nabaAssessments;
+                  // Merge childhood assessments with any CHILD_IMMUNIZATION
+                  // already stamped from the vaccination step.
+                  final epiAssessments = _nabaReferralAssessments
+                      .where((a) => a.assessmentType == 'CHILD_IMMUNIZATION')
+                      .toList();
+                  _nabaReferralAssessments = [
+                    ...epiAssessments,
+                    ...nabaAssessments.where(
+                      (a) => a.assessmentType != 'CHILD_IMMUNIZATION',
+                    ),
+                  ];
                   _step = 2;
                 });
               },
@@ -637,7 +651,34 @@ class _VisitFlowState extends State<VisitFlowScreen> {
               setState(() {
                 _epiVisitSummary = summary;
                 _primaryProgramme = hasImci ? Programme.imci : Programme.epi;
+                // Vaccination-only clears confirmedProgrammes in Step 1; re-seed
+                // EPI (and IMCI when selected) so naba/generate activeProgrammes
+                // is not empty.
+                _confirmedProgrammes = {
+                  ..._confirmedProgrammes,
+                  Programme.epi,
+                  if (hasImci) Programme.imci,
+                };
                 _referralRecommended = summary.referralWarranted;
+                _referredReasons = summary.referralWarranted
+                    ? [
+                        EpiVisitRecoStrings.referralReason(
+                          EpiVisitRecoStrings.currentMilestone(summary),
+                          EpiVisitRecoStrings.overdueNames(summary),
+                        ),
+                      ]
+                    : const [];
+                // Stamp CHILD_IMMUNIZATION for naba/generate (was missing —
+                // vaccination advance never set _nabaReferralAssessments).
+                _nabaReferralAssessments = [
+                  ..._nabaReferralAssessments.where(
+                    (a) => a.assessmentType != 'CHILD_IMMUNIZATION',
+                  ),
+                  NabaReferralAssessment(
+                    assessmentType: 'CHILD_IMMUNIZATION',
+                    referralInputs: summary.toNabaReferralInputs(),
+                  ),
+                ];
                 _step = 2;
               });
             },
@@ -1418,10 +1459,32 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     }
     try {
       final repo = NabaRepository(apiClient);
-      final programmes = widget.confirmedProgrammes
-          .where((p) => p != Programme.unknown)
-          .map((p) => p.wireTag)
-          .toList();
+      final programmes = <String>[
+        for (final p in widget.confirmedProgrammes)
+          if (p != Programme.unknown) p.wireTag,
+      ];
+      // Vaccination-only used to leave confirmedProgrammes empty; also cover
+      // any path where primary/summary says EPI but the set was not re-seeded.
+      if ((widget.primaryProgramme == Programme.epi ||
+              widget.epiVisitSummary != null) &&
+          !programmes.contains(Programme.epi.wireTag)) {
+        programmes.add(Programme.epi.wireTag);
+      }
+
+      // Ensure CHILD_IMMUNIZATION assessment is present when we have an EPI
+      // summary (e.g. Step 3 rebuilt without re-running vaccination advance).
+      var assessments = widget.nabaReferralAssessments;
+      final epi = widget.epiVisitSummary;
+      if (epi != null &&
+          !assessments.any((a) => a.assessmentType == 'CHILD_IMMUNIZATION')) {
+        assessments = [
+          ...assessments,
+          NabaReferralAssessment(
+            assessmentType: 'CHILD_IMMUNIZATION',
+            referralInputs: epi.toNabaReferralInputs(),
+          ),
+        ];
+      }
 
       final req = NabaRequest(
         requestId: widget.visitId,
@@ -1437,7 +1500,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
         currentVitals: _loadedVitals,
         labResults: _loadedLabs,
-        assessments: widget.nabaReferralAssessments,
+        assessments: assessments,
         // Same clinical copy the Step 3 referral card shows offline / as fallback.
         isReferred: widget.referralRecommended,
         referredReasons: widget.referredReasons,
