@@ -4324,7 +4324,7 @@ abstract final class UnifiedFormStrings {
   static String get supplementProvidedLabel => getTranslatedString('supplementProvidedLabel', 'Provided this visit');
   static String get folatePairLabel => getTranslatedString('folatePairLabel', 'Folic acid tablets');
   static String get folatePairSubLabel => getTranslatedString('folatePairSubLabel', 'Folic Acid');
-  static String get ifaPairLabel => getTranslatedString('ifaPairLabel', 'IFA tables');
+  static String get ifaPairLabel => getTranslatedString('ifaPairLabel', 'IFA tablets');
   static String get ifaPairSubLabel => getTranslatedString('ifaPairSubLabel', 'Iron-Folic Acid');
   static String get calciumPairLabel => getTranslatedString('calciumPairLabel', 'Calcium tablets');
   static String get calciumPairSubLabel => getTranslatedString('calciumPairSubLabel', 'Calcium');

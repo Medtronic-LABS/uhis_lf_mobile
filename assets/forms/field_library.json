@@ -1792,7 +1792,7 @@
   },
   "ifaTablets": {
     "id": "ifaTablets",
-    "label": "IFA tables",
+    "label": "IFA tablets",
     "widgetHint": "TextLabel",
     "family": "maternalHealthAssessment",
     "orderId": 21,
