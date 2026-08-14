@@ -47,7 +47,6 @@ class ScribeController extends ChangeNotifier {
     rawMicCapture:
         _audioSettings?.rawMicCaptureEnabled ?? AppConfig.rawMicCaptureDefault,
   );
-
   /// Captures the audio file uploaded to the backend (`record` / AAC-LC).
   final AudioRecorder _audioRecorder = AudioRecorder();
 
@@ -522,10 +521,14 @@ class ScribeController extends ChangeNotifier {
 
   // ── private helpers ───────────────────────────────────────────────────────
 
-
   /// Stops capture and waits for the recording to be fully finalized before
   /// returning its path. Returns null when the file never finalized (so the
-  /// caller fails instead of uploading a truncated, undecodable file).
+  /// caller fails instead of uploading a truncated, undecodable MP4).
+  ///
+  /// `record` writes AAC into an MP4 container; the `moov` trailer is
+  /// written during the native stop(). On Android the Dart stop() Future can
+  /// hang even though the native writer completes, so we fire stop() but gate
+  /// on the file actually being finalized (moov atom present + size stable).
   Future<String?> _stopRecorderSafely() async {
     final String? capturedPath = await _audioRecorder
         .stop()
