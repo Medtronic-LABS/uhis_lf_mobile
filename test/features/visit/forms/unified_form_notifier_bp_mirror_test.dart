@@ -2,9 +2,36 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/features/scribe/models/ai_extracted_field.dart';
+import 'package:uhis_next/features/visit/forms/form_config.dart';
 import 'package:uhis_next/features/visit/forms/unified_form_notifier.dart';
 
 import '../../../helpers/fake_form_deps.dart';
+
+Map<String, FieldDef> _bpFieldDefs() => {
+      'systolic': FieldDef.fromJson('systolic', {
+        'label': 'Systolic',
+        'widgetHint': 'EditText',
+      }),
+      'diastolic': FieldDef.fromJson('diastolic', {
+        'label': 'Diastolic',
+        'widgetHint': 'EditText',
+      }),
+      'pulse': FieldDef.fromJson('pulse', {
+        'label': 'Pulse',
+        'widgetHint': 'EditText',
+      }),
+      'bpLogDetails': FieldDef.fromJson('bpLogDetails', {
+        'label': 'BP Readings',
+        'widgetHint': 'BP',
+      }),
+    };
+
+AIExtractedField _ai(String fieldId, dynamic value) => AIExtractedField(
+      fieldId: fieldId,
+      value: value,
+      confidence: 1.0,
+    );
 
 void main() {
   late UnifiedFormNotifier notifier;
@@ -15,6 +42,8 @@ void main() {
       activeFormTypes: const ['anc', 'ncd'],
     );
   });
+
+  tearDown(() => notifier.dispose());
 
   group('BP cross-programme mirror', () {
     test('bpLogDetails mirrors systolic/diastolic/pulse to flat keys', () {
@@ -52,6 +81,32 @@ void main() {
       expect(log.first['systolic'], 120);
       expect(log.last['systolic'], 148);
       expect(log.last['diastolic'], 92);
+    });
+  });
+
+  group('BP cross-programme mirror — applyAiPrefill', () {
+    late UnifiedFormNotifier asrNotifier;
+
+    setUp(() {
+      asrNotifier = buildTestNotifier(
+        draftDao: FakeAssessmentDraftDao(),
+        activeFormTypes: const ['pncMother', 'ncd'],
+      );
+    });
+
+    tearDown(() => asrNotifier.dispose());
+
+    test('flat systolic/diastolic fill seeds NCD bpLogDetails', () {
+      asrNotifier.applyAiPrefill(
+        [_ai('systolic', 130), _ai('diastolic', 85)],
+        fieldDefs: _bpFieldDefs(),
+      );
+
+      final log = asrNotifier.data.getValue('bpLogDetails') as List;
+      expect(log, isNotEmpty);
+      final last = log.last as Map;
+      expect(last['systolic'], 130);
+      expect(last['diastolic'], 85);
     });
   });
 }

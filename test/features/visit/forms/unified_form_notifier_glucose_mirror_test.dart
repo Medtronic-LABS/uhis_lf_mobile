@@ -2,9 +2,44 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/features/scribe/models/ai_extracted_field.dart';
+import 'package:uhis_next/features/visit/forms/form_config.dart';
 import 'package:uhis_next/features/visit/forms/unified_form_notifier.dart';
 
 import '../../../helpers/fake_form_deps.dart';
+
+Map<String, FieldDef> _bgFieldDefs() => {
+      'glucoseType': FieldDef.fromJson('glucoseType', {
+        'label': 'Glucose Test Type',
+        'widgetHint': 'BloodGlucoseEntry',
+        'optionsList': [
+          {'id': 'fbs', 'name': 'Fasting'},
+          {'id': 'rbs', 'name': 'Random'},
+        ],
+      }),
+      'glucose': FieldDef.fromJson('glucose', {
+        'label': 'Glucose',
+        'widgetHint': 'EditText',
+      }),
+      'bloodSugar': FieldDef.fromJson('bloodSugar', {
+        'label': 'Blood Sugar Type',
+        'widgetHint': 'SingleSelectionView',
+        'optionsList': [
+          {'id': 'fasting', 'name': 'Fasting'},
+          {'id': 'random', 'name': 'Random'},
+        ],
+      }),
+      'fastingBloodSugar': FieldDef.fromJson('fastingBloodSugar', {
+        'label': 'Fasting Blood Sugar',
+        'widgetHint': 'EditText',
+      }),
+    };
+
+AIExtractedField _ai(String fieldId, dynamic value) => AIExtractedField(
+      fieldId: fieldId,
+      value: value,
+      confidence: 1.0,
+    );
 
 void main() {
   group('BG cross-programme mirror — PNC + NCD', () {
@@ -96,6 +131,42 @@ void main() {
       expect(notifier.data.getValue('glucose'), 5.2);
       expect(notifier.data.getValue('bloodSugar'), 'fasting');
       expect(notifier.data.getValue('fastingBloodSugar'), 5.2);
+    });
+  });
+
+  group('BG cross-programme mirror — applyAiPrefill PNC + NCD', () {
+    late UnifiedFormNotifier notifier;
+
+    setUp(() {
+      notifier = buildTestNotifier(
+        draftDao: FakeAssessmentDraftDao(),
+        activeFormTypes: const ['pncMother', 'ncd'],
+      );
+    });
+
+    tearDown(() => notifier.dispose());
+
+    test('NCD glucoseType + glucose fill PNC maternal keys', () {
+      notifier.applyAiPrefill(
+        [_ai('glucoseType', 'fbs'), _ai('glucose', 5.6)],
+        fieldDefs: _bgFieldDefs(),
+      );
+
+      expect(notifier.data.getValue('bloodSugar'), 'fasting');
+      expect(notifier.data.getValue('fastingBloodSugar'), 5.6);
+      expect(notifier.data.getValue('glucoseType'), 'fbs');
+      expect(notifier.data.getValue('glucose'), 5.6);
+    });
+
+    test('PNC fastingBloodSugar fill seeds NCD glucoseType + glucose', () {
+      notifier.applyAiPrefill(
+        [_ai('fastingBloodSugar', 6.1)],
+        fieldDefs: _bgFieldDefs(),
+      );
+
+      expect(notifier.data.getValue('glucoseType'), 'fbs');
+      expect(notifier.data.getValue('glucose'), 6.1);
+      expect(notifier.data.getValue('bloodSugar'), 'fasting');
     });
   });
 }

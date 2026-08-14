@@ -10,7 +10,9 @@
 ///  6. dialogCheckbox list validation (one bad entry rejects the set).
 ///  7. bpLogDetails shape validation.
 ///  8. Draft persistence round-trips fieldSources (restore keeps aiPending).
-///  9. assessmentTypeFor mapper: combined anc+ncd comma-joined, pnc → null.
+///  9. assessmentTypeFor mapper: combined anc+ncd comma-joined,
+///     standalone PNC mother → pncMother, delivery+NCD →
+///     pregnancyOutcome,pncMother,ncd, later PNC+NCD → pncMother,ncd.
 /// 10. updateField flips aiPending → aiModified.
 /// 11. ASR_FORM_APPLY diagnostic event: counts, rejection categories, and
 ///     PHI safety (never logs a field value).
@@ -159,7 +161,7 @@ void main() {
   group('applyAiPrefill — schema validation', () {
     test('invalid enum value rejected and reported', () {
       final rejected = notifier.applyAiPrefill(
-        [_ai('glucoseType', 'postprandial')],
+        [_ai('glucoseType', 'not-a-glucose-type')],
         fieldDefs: _fieldDefs(),
       );
 
@@ -357,17 +359,52 @@ void main() {
           FormFieldSchemaBuilder.assessmentTypeFor(['ncd', 'anc']), 'anc,ncd');
     });
 
-    test('pnc (any expansion) disables auto-fill', () {
-      expect(FormFieldSchemaBuilder.assessmentTypeFor(['pnc']), isNull);
+    test('standalone PNC mother visit → pncMother', () {
+      expect(FormFieldSchemaBuilder.assessmentTypeFor(['pncMother']),
+          'pncMother');
+      expect(FormFieldSchemaBuilder.assessmentTypeFor(['pnc']), 'pncMother');
+    });
+
+    test('delivery (first) visit fills PO and PNC mother, not child', () {
+      expect(
+        FormFieldSchemaBuilder.assessmentTypeFor(
+            ['pregnancyOutcome', 'pncMother', 'pncChild']),
+        'pregnancyOutcome,pncMother',
+      );
+      expect(
+        FormFieldSchemaBuilder.assessmentTypeFor(
+            ['pregnancyOutcome', 'pncMother', 'pncChild', 'ncd']),
+        'pregnancyOutcome,pncMother,ncd',
+      );
+      expect(
+        FormFieldSchemaBuilder.assessmentTypeFor(['pregnancyOutcome']),
+        'pregnancyOutcome',
+      );
+    });
+
+    test('PNC + NCD (no childhood) sends both types', () {
+      expect(
+        FormFieldSchemaBuilder.assessmentTypeFor(['pncMother', 'ncd']),
+        'pncMother,ncd',
+      );
+    });
+
+    test('PNC mixed with childhood (no PO) stays off', () {
       expect(
         FormFieldSchemaBuilder.assessmentTypeFor(
             ['pncMother', 'pncChild', 'ncd']),
+        isNull,
+      );
+      expect(
+        FormFieldSchemaBuilder.assessmentTypeFor(['pncMother', 'pncChild']),
         isNull,
       );
     });
 
     test('unsupported programmes → null', () {
       expect(FormFieldSchemaBuilder.assessmentTypeFor(['tb']), isNull);
+      expect(FormFieldSchemaBuilder.assessmentTypeFor(['pncChild']), isNull);
+      expect(FormFieldSchemaBuilder.assessmentTypeFor(['pwProfile']), isNull);
       expect(FormFieldSchemaBuilder.assessmentTypeFor([]), isNull);
     });
   });
