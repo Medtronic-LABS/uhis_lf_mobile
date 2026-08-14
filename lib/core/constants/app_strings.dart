@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 
+import '../../features/visit/forms/childhood_visit.dart';
 import '../../features/visit/immunisation/epi_schedule_engine.dart';
 import '../../features/visit/immunisation/epi_visit_summary.dart';
 import '../i18n/app_locale.dart';
@@ -5578,31 +5579,54 @@ abstract final class ChildAssessmentStrings {
   static String get noOption => getTranslatedString('noOption', 'No');
   static String get vaccinationCta => getTranslatedString('ChildAssessment.vaccinationCta', '💉  Vaccination  →');
 
-  // WIRE CONTRACT: the selected complications are persisted straight into the
-  // assessment payload's `complications` field, so these ids are the current
-  // English strings and the transmitted value is unchanged. Only the rendered
-  // label is localized — same split as [feedLast24hOptionIds] below.
-  static const List<String> complicationOptionIds = [
-    'Diarrhea',
-    'Pneumonia',
-    'Cannot stand or walk',
-    'Cannot maintain body balance',
-    'Cannot speak two meaningful words',
-  ];
+  // WIRE CONTRACT: selected complications are sent as `childIllnessType` wire
+  // ids (UHIS Symptoms entity / server `getFormMetadata`) — not display
+  // labels. Only the chip label is localized — same split as feed options.
+  static List<String> complicationOptionIdsForAge(int? ageInMonths) =>
+      ChildhoodVisit.childIllnessOptionIdsForAge(ageInMonths);
 
   static const Map<String, String> _complicationCodes = {
-    'Diarrhea': 'ChildAssessment.complicationDiarrhea',
-    'Pneumonia': 'ChildAssessment.complicationPneumonia',
-    'Cannot stand or walk': 'ChildAssessment.complicationCannotStandOrWalk',
-    'Cannot maintain body balance': 'ChildAssessment.complicationCannotMaintainBalance',
-    'Cannot speak two meaningful words': 'ChildAssessment.complicationCannotSpeakTwoWords',
+    'diarrhea': 'ChildAssessment.illness.diarrhea',
+    'pneumonia': 'ChildAssessment.illness.pneumonia',
+    'convulsion': 'ChildAssessment.illness.convulsion',
+    'rapidBreathing': 'ChildAssessment.illness.rapidBreathing',
+    'fever': 'ChildAssessment.illness.fever',
+    'lethargy': 'ChildAssessment.illness.lethargy',
+    'unableToSuckMilk': 'ChildAssessment.illness.unableToSuckMilk',
+    'redUmbilicus': 'ChildAssessment.illness.redUmbilicus',
+    'skinRash': 'ChildAssessment.illness.skinRash',
+    'eyeProblem': 'ChildAssessment.illness.eyeProblem',
+    'cannotStandWalk': 'ChildAssessment.illness.cannotStandWalk',
+    'cannotBalance': 'ChildAssessment.illness.cannotBalance',
+    'cannotSpeak': 'ChildAssessment.illness.cannotSpeak',
+    'other': 'ChildAssessment.illness.other',
   };
 
-  /// Each id doubles as its own English fallback, so an unrecognised id renders
-  /// as itself rather than being swallowed.
+  static const Map<String, String> _complicationFallbackLabels = {
+    'diarrhea': 'Diarrhea',
+    'pneumonia': 'Pneumonia',
+    'convulsion': 'Convulsion',
+    'rapidBreathing': 'Rapid breathing / chest indrawing',
+    'fever': 'Fever or cold body',
+    'lethargy': 'Lethargy',
+    'unableToSuckMilk': 'Unable to suck milk',
+    'redUmbilicus': 'Red or swollen umbilicus',
+    'skinRash': 'Skin rash',
+    'eyeProblem': 'Eye problem',
+    'cannotStandWalk': 'Cannot stand or walk',
+    'cannotBalance': 'Cannot maintain body balance',
+    'cannotSpeak': 'Cannot speak two meaningful words',
+    'other': 'Other',
+  };
+
+  /// Localized label for a `childIllnessType` wire id; unknown ids render as-is.
   static String complicationOptionLabel(String id) {
     final code = _complicationCodes[id];
-    return code == null ? id : getTranslatedString(code, id);
+    if (code == null) return id;
+    return getTranslatedString(
+      code,
+      _complicationFallbackLabels[id] ?? id,
+    );
   }
 
   // Wire ids (Android rmnch_childhood_visit.json "childFeedLast24Hrs" optionsList

@@ -45,6 +45,23 @@ void main() {
       expect(ChildhoodVisit.weightRangeKg(10), (4.0, 15.0));
       expect(ChildhoodVisit.weightRangeKg(20), (6.0, 25.0));
     });
+
+    test('childIllnessType wire ids match UHIS Symptoms entity table', () {
+      expect(ChildhoodVisit.allChildIllnessOptionIds, hasLength(14));
+      expect(ChildhoodVisit.allChildIllnessOptionIds.first, 'diarrhea');
+      expect(ChildhoodVisit.allChildIllnessOptionIds.last, 'other');
+    });
+
+    test('childIllnessType age filter matches Spice AssessmentRMNCHFragment', () {
+      final infant = ChildhoodVisit.childIllnessOptionIdsForAge(12);
+      expect(infant, contains('diarrhea'));
+      expect(infant, contains('pneumonia'));
+      expect(infant, isNot(contains('cannotStandWalk')));
+
+      final older = ChildhoodVisit.childIllnessOptionIdsForAge(24);
+      expect(older, contains('cannotStandWalk'));
+      expect(older, isNot(contains('convulsion')));
+    });
   });
 
   group('UnifiedPayloadMapper childhood visit', () {

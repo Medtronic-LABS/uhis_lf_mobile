@@ -56,7 +56,7 @@ void main() {
       expect(childAssessmentMissingRequired(base), isNotEmpty);
 
       final withReferral = base.copyWith(
-        complications: const ['Diarrhea'],
+        complications: const ['fever'],
         referralMade: true,
         referralPlace: 'communityClinic',
       );
