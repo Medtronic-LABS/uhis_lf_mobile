@@ -323,6 +323,62 @@
     "bn": "নির্বাচন করুন…",
     "en": "Select…"
   },
+  "ChildAssessment.illness.cannotBalance": {
+    "bn": "শরীরের ভারসাম্য রাখতে পারে না",
+    "en": "Cannot maintain body balance"
+  },
+  "ChildAssessment.illness.cannotSpeak": {
+    "bn": "দুটি অর্থপূর্ণ শব্দ বলতে পারে না",
+    "en": "Cannot speak two meaningful words"
+  },
+  "ChildAssessment.illness.cannotStandWalk": {
+    "bn": "দাঁড়াতে বা হাঁটতে পারে না",
+    "en": "Cannot stand or walk"
+  },
+  "ChildAssessment.illness.convulsion": {
+    "bn": "খিঁচুনি",
+    "en": "Convulsion"
+  },
+  "ChildAssessment.illness.diarrhea": {
+    "bn": "ডায়রিয়া",
+    "en": "Diarrhea"
+  },
+  "ChildAssessment.illness.eyeProblem": {
+    "bn": "চোখের সমস্যা",
+    "en": "Eye problem"
+  },
+  "ChildAssessment.illness.fever": {
+    "bn": "জ্বর বা শরীর ঠান্ডা",
+    "en": "Fever or cold body"
+  },
+  "ChildAssessment.illness.lethargy": {
+    "bn": "অবসাদ",
+    "en": "Lethargy"
+  },
+  "ChildAssessment.illness.other": {
+    "bn": "অন্যান্য",
+    "en": "Other"
+  },
+  "ChildAssessment.illness.pneumonia": {
+    "bn": "নিউমোনিয়া",
+    "en": "Pneumonia"
+  },
+  "ChildAssessment.illness.rapidBreathing": {
+    "bn": "দ্রুত শ্বাসপ্রশ্বাস / বুক ধসে পড়া",
+    "en": "Rapid breathing / chest indrawing"
+  },
+  "ChildAssessment.illness.redUmbilicus": {
+    "bn": "নাভি লাল বা ফোলা",
+    "en": "Red or swollen umbilicus"
+  },
+  "ChildAssessment.illness.skinRash": {
+    "bn": "চর্মরোগ",
+    "en": "Skin rash"
+  },
+  "ChildAssessment.illness.unableToSuckMilk": {
+    "bn": "দুধ চুষতে অক্ষম",
+    "en": "Unable to suck milk"
+  },
   "ChildAssessment.sectionTitle": {
     "bn": "শিশু স্বাস্থ্য",
     "en": "Child Assessment"

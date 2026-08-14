@@ -13,6 +13,7 @@ import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../patient/member_detail_repository.dart';
 import '../assessment_repository.dart';
+import '../forms/childhood_visit.dart';
 import '../triage/child_assessment_section.dart';
 import 'child_immunization_dto.dart';
 import 'epi_schedule_engine.dart';
@@ -335,6 +336,13 @@ class _ImmunisationTimelineScreenState
     }).toList();
   }
 
+  int? _ageInMonths(Patient? p) {
+    if (p?.dob == null || p!.dob!.isEmpty) return null;
+    final dob = DateTime.tryParse(p.dob!);
+    if (dob == null) return null;
+    return ChildhoodVisit.ageInMonths(dob);
+  }
+
   String _ageLabel(Patient? p) {
     if (p == null) return '';
     final dob = (p.dob != null && p.dob!.isNotEmpty)
@@ -476,6 +484,7 @@ class _ImmunisationTimelineScreenState
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: ChildAssessmentSection(
                     data: _childAssessmentData,
+                    ageInMonths: _ageInMonths(_patient),
                     onChanged: (updated) =>
                         setState(() => _childAssessmentData = updated),
                   ),
@@ -531,9 +540,7 @@ class _ImmunisationTimelineScreenState
                 'dewormingMedicine': yesNo(data.dewormingTaken),
               if (data.anyIllness != null)
                 'anyIllness': yesNo(data.anyIllness),
-              // childIllnessType option ids are server-issued (Android's
-              // getFormMetadata) and not available locally — known limitation,
-              // sends our display labels as a best-effort placeholder.
+              // UHIS wire ids from field_library.json (convulsion, fever, …).
               if (data.complications.isNotEmpty)
                 'childIllnessType': data.complications,
               if (data.referralMade != null)
