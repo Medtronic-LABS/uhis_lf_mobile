@@ -2227,13 +2227,14 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     // does not stamp nextVisitDate (e.g. childhood keeps its age-band stamp).
     // Soonest follow-up wins — same order as the Step 3 timeline UI — so the
     // stamped nextVisitDate matches the date shown next to "Follow-up".
+    final isReferred = _effectiveReferral(naba);
     final followUps = _FollowUpTimeline.sortedBySoonest(naba.followUp);
     final followUpDate = _selectedFollowUpDate ??
         (followUps.isNotEmpty
             ? _FollowUpDateRowState.resolveDate(followUps.first)
             : _defaultSummaryFollowUpDate(
                 widget.primaryProgramme,
-                referred: widget.referralRecommended,
+                referred: isReferred,
               ));
 
     final assessmentRepo = context.read<AssessmentRepository>();
@@ -2242,8 +2243,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final worklistRepo = context.read<WorklistRepository>();
     final missionRepo = context.read<MissionDashboardRepository>();
 
-    // Referral stamp follows Step 2 clinical decision only (not NABA).
-    final isReferred = widget.referralRecommended;
+    // Referral stamp: Step 2 clinical decision, or PW + online NABA required.
     // Spice RMNCH summary: selected spinner option id → summary.referralFacilityType.
     // Other programmes keep the Step 2 / NCD auto type string.
     final referralFacilityType = RmnchReferralFacility.showOnStep3(
@@ -2536,11 +2536,22 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     return widget.referralFacility == NcdStatus.facilityCommunityClinic;
   }
 
+  bool get _isPwVisit =>
+      widget.primaryProgramme == Programme.pw ||
+      widget.confirmedProgrammes.contains(Programme.pw);
+
   /// UHIS PW registration summary: risk-factor list only (not a Referred card).
-  bool get _showPwSummary {
-    final isPw = widget.primaryProgramme == Programme.pw ||
-        widget.confirmedProgrammes.contains(Programme.pw);
-    return isPw && widget.pwRiskFactors.isNotEmpty;
+  bool get _showPwSummary =>
+      _isPwVisit && widget.pwRiskFactors.isNotEmpty;
+
+  /// PW has no Step 2 clinical referral flag. When online NABA succeeds with
+  /// `referral_recommendation.required`, treat as referred (same Step 3 card /
+  /// stamp as other programmes).
+  bool _effectiveReferral(NabaResponse naba) {
+    if (widget.referralRecommended) return true;
+    if (!_isPwVisit) return false;
+    if (naba.modelVersion == 'rule-based-fallback') return false;
+    return naba.referralRecommendation?.required_ == true;
   }
 
   /// Offline Step 3 referral-card body from Step 2 `referredReasons`.
@@ -2583,9 +2594,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Widget _buildResult(NabaResponse naba) {
-    // Referral card + facility pickers are gated by Step 2 clinical referral
-    // only — never by AI danger_signs / NABA required alone.
-    final referral = widget.referralRecommended;
+    // Referral card + facility pickers: Step 2 clinical referral, or PW when
+    // online NABA returns referral_recommendation.required (PW has no Step 2
+    // flag). Other programmes still ignore NABA required alone.
+    final referral = _effectiveReferral(naba);
     final showRmnchFacility = RmnchReferralFacility.showOnStep3(
       programme: widget.primaryProgramme,
       isReferred: referral,
@@ -2617,8 +2629,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── 1. Referral banner — edge-to-edge, flush top ────────────
-          // Shown only when Step 2 set isReferred. Online copy from NABA;
-          // offline copy from Step 2 referredReasons.
+          // Step 2 isReferred, or PW + online NABA required. Online copy from
+          // NABA; offline copy from Step 2 referredReasons.
           if (referral) ...[
             _ReferralAlertCard(
               reason: _referralCardReason(naba),
