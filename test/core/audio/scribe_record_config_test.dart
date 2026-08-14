@@ -14,13 +14,13 @@ void main() {
       expect(cfg.bitRate, 64000);
     });
 
-    test('uses the voiceRecognition source when raw capture is on', () {
+    test('uses the truly raw mic source when raw capture is on', () {
       final cfg = ScribeRecordConfig.batch(rawMicCapture: true);
 
-      // voiceRecognition is the source that skips acoustic echo cancellation,
-      // which is what lets loudspeaker playback reach the recording instead
-      // of being cancelled out as echo.
-      expect(cfg.androidConfig.audioSource, AndroidAudioSource.voiceRecognition);
+      // mic bypasses all on-device processing, including automatic gain
+      // control — the emulator/diagnostic escape hatch when the processed
+      // chain returns saturated garbage.
+      expect(cfg.androidConfig.audioSource, AndroidAudioSource.mic);
     });
 
     test('keeps encoding identical across both capture modes', () {
@@ -59,11 +59,12 @@ void main() {
           ScribeRecordConfig.realtimeStream(rawMicCapture: false).androidConfig;
       const implicit = AndroidRecordConfig();
 
-      // The realtime path deliberately overrode the source to mic before
-      // this setting existed; everything else stayed at the defaults except
-      // manageBluetooth, forced off for every path (see
+      // voiceRecognition normalises gain across OEM hardware (fixes
+      // low-native-gain Motorola-class mics that never trigger server VAD
+      // on the raw mic source); everything else stayed at the defaults
+      // except manageBluetooth, forced off for every path (see
       // ScribeRecordConfig._manageBluetooth).
-      expect(a.audioSource, AndroidAudioSource.mic);
+      expect(a.audioSource, AndroidAudioSource.voiceRecognition);
       expect(a.useLegacy, implicit.useLegacy);
       expect(a.muteAudio, implicit.muteAudio);
       expect(a.manageBluetooth, isFalse);
@@ -127,17 +128,20 @@ void main() {
   });
 
   group('ScribeRecordConfig.realtimeStream', () {
-    test('keeps the raw mic source when raw capture is off', () {
+    test('uses the voiceRecognition source when raw capture is off', () {
       final cfg = ScribeRecordConfig.realtimeStream(rawMicCapture: false);
 
-      expect(cfg.androidConfig.audioSource, AndroidAudioSource.mic);
+      // voiceRecognition (AGC on, AEC off) is the field-use default — it
+      // normalises gain across OEM hardware differences instead of leaving
+      // low-native-gain handsets too quiet for server-side VAD.
+      expect(cfg.androidConfig.audioSource, AndroidAudioSource.voiceRecognition);
       expect(cfg.encoder, AudioEncoder.pcm16bits);
     });
 
-    test('uses the voiceRecognition source when raw capture is on', () {
+    test('uses the defaultSource emulator escape hatch when raw capture is on', () {
       final cfg = ScribeRecordConfig.realtimeStream(rawMicCapture: true);
 
-      expect(cfg.androidConfig.audioSource, AndroidAudioSource.voiceRecognition);
+      expect(cfg.androidConfig.audioSource, AndroidAudioSource.defaultSource);
     });
 
     test('streams PCM16 mono at the rate the WAV header writer assumes', () {
