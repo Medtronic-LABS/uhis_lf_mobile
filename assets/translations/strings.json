@@ -9184,8 +9184,8 @@
     "en": "AI Scribe"
   },
   "rawMicCaptureDesc": {
-    "bn": "ফোনের ইকো ক্যান্সেলেশন এড়িয়ে যায়, ফলে ফোনের কাছে জোরে বাজানো অডিও — রেকর্ড করা টেস্ট ক্লিপ বা স্পিকারে চালু থাকা দ্বিতীয় ফোন — ইকো ধরে বাদ না দিয়ে রেকর্ড করা হয়। শুধু টেস্টিং ও ডেমোর জন্য প্রয়োজন। পরবর্তী রেকর্ডিং থেকে কার্যকর হবে।",
-    "en": "Bypasses the phone's echo cancellation so audio played out loud near the handset — a recorded test clip, or a second phone on speaker — is picked up instead of being cancelled out as echo. Only needed for testing and demos. Applies from the next recording."
+    "bn": "প্রক্রিয়াবিহীন মাইক্রোফোন ইনপুট ব্যবহার করে, স্বয়ংক্রিয় গেইন কন্ট্রোল সহ ডিভাইসের সব অডিও প্রসেসিং এড়িয়ে যায়। শুধু এমুলেটর টেস্টিং ও ডায়াগনস্টিকসের জন্য — বেশিরভাগ প্রকৃত ডিভাইসে এটি বন্ধ রাখলে ভালো রেজাল্ট পাওয়া যায়। পরবর্তী রেকর্ডিং থেকে কার্যকর হবে।",
+    "en": "Uses the raw microphone input, bypassing all on-device audio processing including automatic gain control. Intended for emulator testing and diagnostics only — on most real devices, leaving this off gives better recognition. Applies from the next recording."
   },
   "rawMicCaptureLabel": {
     "bn": "প্রক্রিয়াবিহীন মাইক্রোফোন ক্যাপচার",
@@ -12694,6 +12694,10 @@
   "RealtimeAsr.micSignalStuck": {
     "bn": "মাইক্রোফোনের সিগন্যাল আটকে গেছে বা সঠিক নয় — ডিভাইসের মাইক্রোফোন পরীক্ষা করুন",
     "en": "Mic signal looks stuck/invalid — check the device microphone (on an emulator, try a cold restart with host audio input enabled, or test on a physical device)."
+  },
+  "RealtimeAsr.micGainLow": {
+    "bn": "মাইক্রোফোনের সিগন্যাল খুব কম। ফোনের কাছাকাছি কথা বলার চেষ্টা করুন। সমস্যা থেকে গেলে আপনার প্রশাসকের সাথে যোগাযোগ করুন।",
+    "en": "Microphone signal is very quiet. Try speaking closer to the handset. If the problem persists, contact your administrator."
   },
   "Assistant.actionCallPatient": {
     "bn": "রোগীকে কল করুন",

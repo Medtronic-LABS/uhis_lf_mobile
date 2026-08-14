@@ -99,6 +99,17 @@ class RealtimeAsrController extends ChangeNotifier {
   static const int _stuckWindowSize = 40;
   final List<int> _recentAmplitudes = [];
 
+  // Complementary to the stuck-amplitude detector above: catches real-but-
+  // too-quiet signal (varying amplitudes, all below a usable threshold)
+  // rather than a pinned constant — the low-native-mic-gain failure mode
+  // seen on some OEM handsets, where peaks never exceed ~10% of full scale
+  // and server-side VAD never triggers, so ASR silently produces zero
+  // transcripts. Counts consecutive low-amplitude chunks; resets on any
+  // chunk that exceeds the threshold, so only sustained quiet fires it.
+  static const int _lowAmpThreshold = 800; // ~-32 dBFS; AGC-normalised speech sits well above this
+  static const int _lowAmpWindow = 60; // ~4.7s of continuous audio at this chunk size
+  int _lowAmpCount = 0;
+
   // Gates silence/noise out of the audio sent to the server — saves mobile
   // bandwidth and server ASR/LLM cost on the low-connectivity, low-end
   // devices this app targets. See VadGate's own doc comment for the
@@ -304,6 +315,7 @@ class RealtimeAsrController extends ChangeNotifier {
     _chunkCount = 0;
     _chunkBytes = 0;
     _recentAmplitudes.clear();
+    _lowAmpCount = 0;
     _vadGate = _buildVadGate();
     _silentSinceLastTick = false;
 
@@ -589,6 +601,7 @@ class RealtimeAsrController extends ChangeNotifier {
     // stuck-silent mic as ordinary silence, starving this detector of the
     // samples it needs to ever fire.
     _trackStuckAmplitude(amp);
+    _trackLowAmplitude(amp);
 
     final toSend = _vadGate.process(pcm);
     _vadChunksReceived++;
@@ -646,6 +659,25 @@ class RealtimeAsrController extends ChangeNotifier {
           ? RealtimeAsrStrings.noMicSignal
           : RealtimeAsrStrings.micSignalStuck;
       _safeNotify();
+    }
+  }
+
+  void _trackLowAmplitude(int amp) {
+    if (_micWarning != null) return; // already flagged this session
+    if (amp < _lowAmpThreshold) {
+      _lowAmpCount++;
+      if (_lowAmpCount >= _lowAmpWindow) {
+        debugPrint(
+          '[RealtimeASR] WARNING: peak amplitude has stayed below '
+          '$_lowAmpThreshold for $_lowAmpWindow consecutive chunks — mic '
+          'gain is too low for reliable ASR (low native mic gain, seen on '
+          'some OEM handsets).',
+        );
+        _micWarning = RealtimeAsrStrings.micGainLow;
+        _safeNotify();
+      }
+    } else {
+      _lowAmpCount = 0;
     }
   }
 
