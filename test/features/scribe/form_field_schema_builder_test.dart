@@ -137,7 +137,7 @@ void main() {
       expect(schema.map((f) => f.fieldId), isNot(contains('bloodPressure')));
     });
 
-    test('unsupported formTypes (pncMother, imci, tb) return no fields even with real layout data', () {
+    test('pncMother includes a field that is programme-tagged and a real fieldRef', () {
       final config = _buildConfig(
         fields: {
           'weight': _field('weight', programmeIds: ['pncMother'], unitMeasurement: 'kg'),
@@ -155,6 +155,57 @@ void main() {
       );
 
       final schema = FormFieldSchemaBuilder.forProgrammeNames(['pncMother'], config: config);
+
+      expect(schema.map((f) => f.fieldId), contains('weight'));
+    });
+
+    test('pregnancyOutcome includes a field that is programme-tagged and a real fieldRef', () {
+      final config = _buildConfig(
+        fields: {
+          'deliveryOutcomeType': _field(
+            'deliveryOutcomeType',
+            programmeIds: ['pregnancyOutcome'],
+            widgetHint: 'Spinner',
+            options: const [FieldOption(id: 'liveBirth', name: 'Delivery outcome')],
+          ),
+        },
+        forms: {
+          'pregnancyOutcome': [
+            const FormSection(
+              sectionId: 'outcomeType',
+              title: 'Outcome',
+              formType: 'pregnancyOutcome',
+              fieldRefs: [FieldRef(id: 'deliveryOutcomeType', isMandatory: true, inputType: 0)],
+            ),
+          ],
+        },
+      );
+
+      final schema = FormFieldSchemaBuilder.forProgrammeNames(
+          ['pregnancyOutcome'],
+          config: config);
+
+      expect(schema.map((f) => f.fieldId), contains('deliveryOutcomeType'));
+    });
+
+    test('unsupported formTypes (pncChild, imci, tb) return no fields even with real layout data', () {
+      final config = _buildConfig(
+        fields: {
+          'weight': _field('weight', programmeIds: ['pncChild'], unitMeasurement: 'kg'),
+        },
+        forms: {
+          'pncChild': [
+            const FormSection(
+              sectionId: 'pncChild',
+              title: 'Child',
+              formType: 'pncChild',
+              fieldRefs: [FieldRef(id: 'weight', isMandatory: false, inputType: 2)],
+            ),
+          ],
+        },
+      );
+
+      final schema = FormFieldSchemaBuilder.forProgrammeNames(['pncChild'], config: config);
 
       expect(schema, isEmpty);
     });

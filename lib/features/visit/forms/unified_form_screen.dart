@@ -538,8 +538,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           children: [
             // ── Step 2 AI Scribe banner — the SAME widget as Step 1, in
             // live-first mode. When the programme mix supports auto-fill
-            // (NCD/ANC), extractions come back as form_fill and are written
-            // straight into the form through the validated prefill gate.
+            // (NCD, ANC, PNC mother, pregnancy outcome, and combinations),
+            // extractions come back as form_fill and are written straight
+            // into the form through the validated prefill gate.
             if (AppConfig.scribeEnabled &&
                 context.watch<AiFeatureTogglesNotifier>().toggles.step2AsrEnabled)
               Padding(
@@ -549,7 +550,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   encounterId: notifier.encounterId,
                   patientId: notifier.patientId,
                   isFemale: widget.activeFormTypes.contains('anc') ||
-                      widget.activeFormTypes.contains('pnc'),
+                      widget.activeFormTypes.contains('pnc') ||
+                      widget.activeFormTypes.contains('pncMother') ||
+                      widget.activeFormTypes.contains('pregnancyOutcome'),
                   tapStartsLiveAsr: true,
                   assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
                       widget.activeFormTypes),

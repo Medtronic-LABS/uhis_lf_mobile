@@ -90,24 +90,52 @@ class FormFieldSchema {
 abstract final class FormFieldSchemaBuilder {
   FormFieldSchemaBuilder._();
 
+  /// Server types the AI service can extract, in merge order (first
+  /// occurrence wins on a shared `fieldId` such as `weight`).
+  static const _serverTypeOrder = [
+    'pregnancyOutcome',
+    'pncMother',
+    'anc',
+    'ncd',
+  ];
+
   /// Server `assessmentType` for a Step 2 realtime ASR session, or null when
   /// auto-fill is not yet supported for this visit's programme mix.
   ///
-  /// v1 scope is NCD and ANC only. PNC intentionally returns null: the PNC
-  /// screen renders mother + child + outcome forms together and a
-  /// mother-only extraction would silently drop every newborn utterance —
-  /// worse than no fill. ANC outranks NCD in combined visits (maternal
-  /// danger signs are the higher-stakes capture).
+  /// Joins every selected service the server knows (`ncd`, `anc`,
+  /// `pncMother`, `pregnancyOutcome`). Child is never sent — childhood is
+  /// not submitted on delivery, and mother vs newborn share the `weight`
+  /// key. A later visit that actually includes childhood stays off so
+  /// adult weight is not written onto the child form. Uses form type
+  /// strings (not [Programme.pnc]) because `pregnancyOutcome` also maps
+  /// to that enum.
   static String? assessmentTypeFor(List<String> activeFormTypes) {
-    final programmes =
-        activeFormTypes.map(Programme.fromString).toSet();
-    if (programmes.contains(Programme.pnc)) return null;
+    final types = {
+      for (final t in activeFormTypes)
+        if (t.trim().isNotEmpty) t.trim(),
+    };
+    final programmes = types.map(Programme.fromString).toSet();
     final hasAnc = programmes.contains(Programme.anc);
     final hasNcd = programmes.contains(Programme.ncd);
-    if (hasAnc && hasNcd) return 'anc,ncd';
-    if (hasAnc) return 'anc';
-    if (hasNcd) return 'ncd';
-    return null;
+    final hasPncMother = types.contains('pncMother') || types.contains('pnc');
+    final hasPo = types.contains('pregnancyOutcome');
+    final hasChild =
+        types.contains('pncChild') || types.contains('pncNeonatal');
+
+    if (hasChild && !hasPo) return null;
+
+    final selected = <String>{
+      if (hasPo) 'pregnancyOutcome',
+      if (hasPncMother) 'pncMother',
+      if (hasAnc) 'anc',
+      if (hasNcd) 'ncd',
+    };
+    final ordered = [
+      for (final t in _serverTypeOrder)
+        if (selected.contains(t)) t,
+    ];
+    if (ordered.isEmpty) return null;
+    return ordered.join(',');
   }
 
   /// Build the combined schema for a list of programme name strings.
@@ -160,15 +188,17 @@ abstract final class FormFieldSchemaBuilder {
 
   /// Build schema for a single formType string (e.g. `'ncd'`, `'anc'`).
   ///
-  /// v1 scope is NCD and ANC only — mirrors [assessmentTypeFor]'s own gate.
-  /// Every other formType (pncMother, pncChild, imci, tb, ...) returns an
-  /// empty list even though `config.forms` may have real layout data for
-  /// them; [assessmentTypeFor] never emits those names today (PNC's
-  /// mother-only-extraction risk is exactly why), so this stays an explicit
-  /// allow-list rather than silently supporting them the moment a future
-  /// caller passes one directly.
+  /// Allow-list mirrors [assessmentTypeFor]: NCD, ANC, PNC mother, and
+  /// pregnancy outcome. Every other formType (pncChild, imci, tb, ...)
+  /// returns an empty list even though `config.forms` may have real
+  /// layout data for them.
   static List<FormFieldSchema> _forProgramme(String formType, FormConfig config) {
-    if (formType != 'ncd' && formType != 'anc') return const [];
+    if (formType != 'ncd' &&
+        formType != 'anc' &&
+        formType != 'pncMother' &&
+        formType != 'pregnancyOutcome') {
+      return const [];
+    }
 
     final sections = config.forms[formType] ?? const [];
     final inputTypeById = <String, int>{
