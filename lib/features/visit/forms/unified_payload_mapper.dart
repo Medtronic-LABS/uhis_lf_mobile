@@ -471,7 +471,7 @@ abstract final class UnifiedPayloadMapper {
       'gravida': _asDoubleWire(d.getValue('gravida')),
       'parity': _asDoubleWire(d.getValue('parity')),
       'livingChildren': _asDoubleWire(d.getValue('livingChildren')),
-      'ageOfLastChild': _asDobWire(d.getValue('ageOfLastChild')),
+      'ageOfLastChild': asDobWire(d.getValue('ageOfLastChild')),
       'pregnancyTest': d.getValue('pregnancyTest'),
     });
   }
@@ -1321,7 +1321,7 @@ abstract final class UnifiedPayloadMapper {
     return _compact({
       'numberOfLivingChildren':
           d.getValue('numberOfLivingChildren')?.toString(),
-      'ageOfLastChild': _asDobWire(d.getValue('ageOfLastChild')),
+      'ageOfLastChild': asDobWire(d.getValue('ageOfLastChild')),
       'desireForChildrenInFuture': d.getValue('desireForChildrenInFuture') ??
           d.getValue('desireForChildren'),
       'familyPlanningMethods':
@@ -1401,7 +1401,7 @@ abstract final class UnifiedPayloadMapper {
   /// widget stores, matching DateUtils.calculateDOBFromAge: 1 January of
   /// (current year − age), at midnight UTC. Values that are already a date
   /// pass through untouched.
-  static String? _asDobWire(Object? value) {
+  static String? asDobWire(Object? value) {
     if (value == null) return null;
     final raw = value.toString().trim();
     if (raw.isEmpty) return null;

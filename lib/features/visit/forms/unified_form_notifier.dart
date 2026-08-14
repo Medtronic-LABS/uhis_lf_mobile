@@ -2378,8 +2378,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Per-assessment clinical inputs for NABA (`naba/generate`).
   ///
   /// Includes [_computeReferral] inputs for NCD/ANC/PNC/childhood, plus
-  /// PWPROFILE pregnancy-history / risk-screening fields (PW has no referral
-  /// card, but NABA still needs the registration context).
+  /// PWPROFILE / FAMILY_PLANNING form context (those programmes have no Step 2
+  /// referral card, but NABA still needs the assessment details).
   List<NabaReferralAssessment> _buildNabaReferralAssessments({
     required bool isNcdFollowUp,
   }) {
@@ -2466,6 +2466,25 @@ class UnifiedFormNotifier extends ChangeNotifier {
               stringList(_data.getValue('medicalComplications')),
           'currentMedicalConditions':
               stringList(_data.getValue('currentMedicalConditions')),
+        }),
+      ));
+    }
+
+    // Same fields as UnifiedPayloadMapper._toFamilyPlanning (wire assessment).
+    if (_activeFormTypes.contains('familyPlanning') ||
+        _activeFormTypes.contains('family_planning')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'FAMILY_PLANNING',
+        referralInputs: compact({
+          'numberOfLivingChildren':
+              _data.getValue('numberOfLivingChildren')?.toString(),
+          'ageOfLastChild':
+              UnifiedPayloadMapper.asDobWire(_data.getValue('ageOfLastChild')),
+          'desireForChildrenInFuture':
+              _data.getValue('desireForChildrenInFuture') ??
+                  _data.getValue('desireForChildren'),
+          'familyPlanningMethods':
+              stringList(_data.getValue('familyPlanningMethods')),
         }),
       ));
     }

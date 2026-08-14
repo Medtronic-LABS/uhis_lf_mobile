@@ -66,12 +66,23 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
     // Prefer live members-table counts — households.member_count can lag
     // after link-member until the next sync rewrite. Keep the stored value
     // only when the live query finds nobody (id-key mismatch / empty HH).
+    // Head phone often lives on the head member row (synced HHs), not on
+    // households.head_phone_number — resolve once from the members table.
+    final membersByHh = await memberDao.getAllGroupedByHousehold();
     final withLiveCounts = <HouseholdEntity>[];
     for (final h in hhs) {
-      final live = await memberDao.countByHousehold(h.id);
+      final members = membersByHh[h.id] ?? const <HouseholdMemberEntity>[];
+      final live = members.length;
       final stored = h.memberCount ?? 0;
+      final storedPhone = h.headPhoneNumber?.trim();
+      final headPhone = (storedPhone != null && storedPhone.isNotEmpty)
+          ? storedPhone
+          : _headPhoneFromMembers(members);
       withLiveCounts.add(
-        h.copyWith(memberCount: live > 0 ? live : stored),
+        h.copyWith(
+          memberCount: live > 0 ? live : stored,
+          headPhoneNumber: headPhone,
+        ),
       );
     }
     if (mounted) {
@@ -83,6 +94,26 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
     }
   }
 
+  /// Head member phone, else first non-empty phone in the household.
+  static String? _headPhoneFromMembers(List<HouseholdMemberEntity> members) {
+    if (members.isEmpty) return null;
+    HouseholdMemberEntity? head;
+    for (final m in members) {
+      if (m.isHouseholdHead) {
+        head = m;
+        break;
+      }
+    }
+    final preferred = head ?? members.first;
+    final phone = preferred.phone?.trim();
+    if (phone != null && phone.isNotEmpty) return phone;
+    for (final m in members) {
+      final p = m.phone?.trim();
+      if (p != null && p.isNotEmpty) return p;
+    }
+    return null;
+  }
+
   void _onSearch() {
     debugPrint('[_SelectHouseholdScreenState] _onSearch query=${_searchCtrl.text}');
     final q = _searchCtrl.text.toLowerCase();
@@ -92,6 +123,7 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
           : _households.where((h) {
               return (h.name?.toLowerCase().contains(q) ?? false) ||
                   (h.householdNo?.toLowerCase().contains(q) ?? false) ||
+                  (h.headPhoneNumber?.toLowerCase().contains(q) ?? false) ||
                   (h.village?.toLowerCase().contains(q) ?? false);
             }).toList();
     });
@@ -328,14 +360,16 @@ class _HouseholdCard extends StatelessWidget {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
+                  if (_subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      _subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
                     ),
-                  ),
+                  ],
                   if (household.memberCount != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
@@ -376,7 +410,8 @@ class _HouseholdCard extends StatelessWidget {
 
   String get _subtitle {
     final parts = <String>[];
-    if (household.householdNo != null) parts.add(household.householdNo!);
+    final phone = household.headPhoneNumber?.trim();
+    if (phone != null && phone.isNotEmpty) parts.add(phone);
     if (household.village != null) parts.add(household.village!);
     return parts.join(' \u00b7 ');
   }
