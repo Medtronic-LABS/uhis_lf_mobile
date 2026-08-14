@@ -10,6 +10,7 @@ import '../../core/api/scribe_api_service.dart';
 import '../../core/audio/scribe_record_config.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/i18n/app_locale.dart';
 import '../../core/errors/domain_exceptions.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../visit/triage/ai_scribe_triage_vocab.dart';
@@ -306,6 +307,7 @@ class ScribeController extends ChangeNotifier {
             encounterId: encounterId,
             programmes: _currentProgrammes,
             triageNotes: _triageNotes,
+            language: AppLocale.isBangla ? 'bn' : 'en',
           );
           break;
         case ScribeMode.triage:
@@ -314,6 +316,7 @@ class ScribeController extends ChangeNotifier {
             symptomCatalog: _currentSymptomCatalog ?? [],
             patientId: patientId,
             encounterId: encounterId,
+            language: AppLocale.isBangla ? 'bn' : 'en',
           );
           break;
         case ScribeMode.soap:
@@ -324,6 +327,7 @@ class ScribeController extends ChangeNotifier {
             encounterId: encounterId,
             programmes: programme != null ? [programme] : [],
             triageNotes: _triageNotes,
+            language: AppLocale.isBangla ? 'bn' : 'en',
           );
       }
 
@@ -894,6 +898,7 @@ class ScribeController extends ChangeNotifier {
         patientId: patientId,
         encounterId: encounterId,
         programme: programme,
+        language: AppLocale.isBangla ? 'bn' : 'en',
       );
       _session = _session.copyWith(state: ScribeState.processing, jobId: jobId);
       notifyListeners();

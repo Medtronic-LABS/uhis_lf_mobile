@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/api/realtime_asr_service.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/i18n/app_locale.dart';
 import '../../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../../core/preferences/vad_tuning_notifier.dart';
 import '../../../core/theme/app_theme.dart';
@@ -206,6 +207,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
           '${widget.assessmentType} ==========>>');
     }
     _liveCtrl.start(
+      language: AppLocale.isBangla ? 'bn-IN' : 'en-IN',
       assessmentType: widget.assessmentType,
       symptomVocab: widget.symptomVocab,
       encounterId: widget.encounterId,
