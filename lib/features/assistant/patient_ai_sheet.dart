@@ -14,6 +14,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/i18n/app_locale.dart';
 import '../visit/visit_start_helper.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/referral.dart';
@@ -215,6 +216,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
             TextSelection.fromPosition(TextPosition(offset: words.length));
         if (r.finalResult) _setListening(false);
       },
+      localeId: AppLocale.isBangla ? 'bn-BD' : 'en-IN',
       listenOptions: SpeechListenOptions(pauseFor: const Duration(seconds: 3)),
     );
     _setListening(true);
@@ -268,18 +270,21 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
         ));
         _loading = false;
       });
+      _input.clear();
     } on AssistantException catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = e.message;
       });
+      _input.clear();
     } on Object catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = AssistantStrings.errorMessage;
       });
+      _input.clear();
     }
     _scrollToBottom();
   }
@@ -642,6 +647,10 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
               if (_speechAvail) const SizedBox(width: 8),
               IconButton.filled(
                 onPressed: _loading ? null : () => _send(_input.text),
+                style: IconButton.styleFrom(
+                  backgroundColor: scheme.primary,
+                  foregroundColor: scheme.onPrimary,
+                ),
                 icon: const Icon(Icons.send_rounded),
               ),
             ],
