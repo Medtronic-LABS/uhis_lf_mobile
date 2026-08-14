@@ -1056,6 +1056,31 @@ class UnifiedFormNotifier extends ChangeNotifier {
     _data = _data.setValue('newbornDetails', existing);
   }
 
+  /// Copies flat `babyAlive` / `babySex` / `neonatalDeathCause` (the
+  /// fieldRefs the PO layout and ASR schema use) onto the first
+  /// `newbornDetails` card so the on-screen baby widgets and the wire
+  /// payload both see the fill. Extra babies stay empty for the SK.
+  void _stampAiBabyFieldsOntoNewbornCards() {
+    final raw = _data.getValue('newbornDetails');
+    if (raw is! List || raw.isEmpty) return;
+    final alive = _data.getValue('babyAlive');
+    final sex = _data.getValue('babySex');
+    final cause = _data.getValue('neonatalDeathCause');
+    if (alive == null && sex == null && cause == null) return;
+
+    final list = <Map<String, dynamic>>[
+      for (final e in raw)
+        e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{},
+    ];
+    if (list.isEmpty) return;
+    final first = list.first;
+    if (alive != null) first['isBabyAlive'] = alive;
+    if (sex != null) first['sex'] = sex;
+    if (cause != null) first['causeOfNeonatalDeath'] = cause;
+    list[0] = first;
+    _data = _data.setValue('newbornDetails', list);
+  }
+
   /// Updates one baby entry inside `newbornDetails` and notifies listeners.
   void updateNewbornField(int babyIndex, String key, dynamic value) {
     final existingRaw = _data.getValue('newbornDetails');
@@ -1086,6 +1111,16 @@ class UnifiedFormNotifier extends ChangeNotifier {
     notifyListeners();
     _saveDraft();
   }
+
+  static const _glucoseMirrorFieldIds = {
+    'glucoseType',
+    'glucose',
+    'bloodSugar',
+    'fastingBloodSugar',
+    'randomBloodSugar',
+    'bloodSugarFasting',
+    'bloodSugarRandom',
+  };
 
   /// Keeps NCD/ANC `glucoseType`+`glucose` and PNC/ANC maternal BG keys in sync.
   ///
@@ -1364,6 +1399,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
     final rejected = <String>[];
     var appliedAny = false;
     var appliedCount = 0;
+    var appliedDeliveryOutcomeType = false;
+    var appliedLiveBirthNumbers = false;
     // Category counts only — never field ids or values — for the
     // ASR_FORM_APPLY diagnostic event below.
     final rejectedByCategory = <String, int>{};
@@ -1423,6 +1460,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _fieldSourceSegments[field.fieldId] = field.sourceSegment;
       appliedAny = true;
       appliedCount++;
+      if (field.fieldId == 'deliveryOutcomeType') {
+        appliedDeliveryOutcomeType = true;
+      }
+      if (field.fieldId == 'liveBirthNumbers') {
+        appliedLiveBirthNumbers = true;
+      }
       debugPrint('<----- asr APPLIED  [${field.fieldId}] = $validated '
           '${previous == null ? '' : '(was: $previous) '}'
           'src="${field.sourceSegment ?? '-'}" ----->');
@@ -1448,6 +1491,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
           debugPrint('<----- asr APPLIED  [$key] = $v '
               '(mirrored from bpLogDetails) ----->');
         }
+      } else if (const {'systolic', 'diastolic', 'pulse'}
+              .contains(field.fieldId) &&
+          !_isSkOwned('bpLogDetails')) {
+        // Inverse: PNC/ANC flat BP → NCD bpLogDetails so both widgets
+        // show the reading on a combined PNC+NCD (or PO+PNC+NCD) visit.
+        _mirrorBpAcrossProgrammes(field.fieldId, validated);
+      }
+      if (_glucoseMirrorFieldIds.contains(field.fieldId)) {
+        final protected = {
+          for (final k in _glucoseMirrorFieldIds)
+            if (k != field.fieldId && _isSkOwned(k)) k: _data.getValue(k),
+        };
+        _mirrorGlucoseAcrossProgrammes(field.fieldId, validated);
+        for (final e in protected.entries) {
+          _data = _data.setValue(e.key, e.value);
+        }
       }
       // Inverse of the BP case: the ANC screen renders deliveryFacilityType
       // but the payload mapper reads facilityIdentifiedForDelivery (identical
@@ -1462,6 +1521,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
             '$validated (mirrored from deliveryFacilityType) ----->');
       }
     }
+
+    // Same branch cleanup typing runs in updateField — otherwise AI can
+    // fill abortion + live-birth fields in one pass and leave a hidden
+    // branch driving visibility. After the batch so later fields in this
+    // same extraction cannot re-populate a branch we just cleared.
+    if (appliedDeliveryOutcomeType) {
+      _resetPregnancyOutcomeBranches(
+        _data.getValue('deliveryOutcomeType')?.toString(),
+      );
+    } else if (appliedLiveBirthNumbers) {
+      _resizeNewbornDetails(_data.getValue('liveBirthNumbers'));
+    }
+    _stampAiBabyFieldsOntoNewbornCards();
 
     debugPrint('<==================== ASR FORM FILL done: '
         '${fields.length - rejected.length} applied, '
