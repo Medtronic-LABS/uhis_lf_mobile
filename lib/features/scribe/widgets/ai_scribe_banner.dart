@@ -469,10 +469,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     }
     if (showDone) return const ScribeDoneMicOrb();
     if (isRecording) {
-      return ScribeRecordingMicOrb(
-        recorderController: controller.waveformRecorder,
-        backgroundColor: _recordingIconBg,
-      );
+      return const ScribeRecordingMicOrb(backgroundColor: _recordingIconBg);
     }
     if (isProcessing) {
       return const ScribeProcessingMicOrb(backgroundColor: _iconBg);

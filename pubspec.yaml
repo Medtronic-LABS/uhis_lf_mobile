@@ -36,7 +36,6 @@ dependencies:
   flutter_svg: ^2.0.10+1
   permission_handler: ^11.3.1
   path_provider: ^2.1.4
-  audio_waveforms: ^2.0.2
   record: ^7.0.0
   speech_to_text: ^7.0.0
   web_socket_channel: ^3.0.1

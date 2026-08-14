@@ -1622,23 +1622,27 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final bsf = poc['bloodSugarFasting'];
     if (bsf != null) {
       final v = (bsf as num).toDouble();
+      final unit = poc['bloodSugarFastingUnit'] as String? ?? 'mmol/L';
+      final isMmol = unit == 'mmol/L';
       labs.add(NabaLabResult(
         name: 'Blood Glucose (Fasting)',
-        value: v.toStringAsFixed(0),
-        unit: 'mg/dL',
-        referenceRange: '<100 mg/dL',
-        abnormal: v >= 126,
+        value: v.toStringAsFixed(1),
+        unit: unit,
+        referenceRange: isMmol ? '<5.6 mmol/L' : '<100 mg/dL',
+        abnormal: isMmol ? v >= 7.0 : v >= 126,
       ));
     }
     final bsr = poc['bloodSugarRandom'];
     if (bsr != null) {
       final v = (bsr as num).toDouble();
+      final unit = poc['bloodSugarRandomUnit'] as String? ?? 'mmol/L';
+      final isMmol = unit == 'mmol/L';
       labs.add(NabaLabResult(
         name: 'Blood Glucose (Random)',
-        value: v.toStringAsFixed(0),
-        unit: 'mg/dL',
-        referenceRange: '<140 mg/dL',
-        abnormal: v >= 200,
+        value: v.toStringAsFixed(1),
+        unit: unit,
+        referenceRange: isMmol ? '<7.8 mmol/L' : '<140 mg/dL',
+        abnormal: isMmol ? v >= 11.1 : v >= 200,
       ));
     }
     _loadedLabs = labs;
@@ -1666,12 +1670,18 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (gv != null) {
       final isFasting = glucose['glucoseType'] == 'fasting';
       final v = (gv as num).toDouble();
+      final unit = glucose['glucoseUnit'] as String? ?? 'mmol/L';
+      final isMmol = unit == 'mmol/L';
       labs.add(NabaLabResult(
         name: isFasting ? 'Blood Glucose (Fasting)' : 'Blood Glucose (Random)',
-        value: v.toStringAsFixed(0),
-        unit: glucose['glucoseUnit'] as String? ?? 'mg/dL',
-        referenceRange: isFasting ? '<100 mg/dL' : '<140 mg/dL',
-        abnormal: isFasting ? v >= 126 : v >= 200,
+        value: v.toStringAsFixed(1),
+        unit: unit,
+        referenceRange: isFasting
+            ? (isMmol ? '<5.6 mmol/L' : '<100 mg/dL')
+            : (isMmol ? '<7.8 mmol/L' : '<140 mg/dL'),
+        abnormal: isFasting
+            ? (isMmol ? v >= 7.0 : v >= 126)
+            : (isMmol ? v >= 11.1 : v >= 200),
       ));
     }
     final hba1cRaw = glucose['hba1c'];
