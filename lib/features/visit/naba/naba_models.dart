@@ -129,6 +129,7 @@ class NabaRequest {
   const NabaRequest({
     required this.requestId,
     required this.patientId,
+    this.appLanguage = 'bn',
     this.visitType = 'routine',
     this.aiScribeConfidence = 1.0,
     this.clinicalRuleIds = const [],
@@ -155,6 +156,11 @@ class NabaRequest {
 
   final String requestId;
   final String patientId;
+
+  /// SK's app locale (`bn` / `en`). The backend appends an output-language
+  /// instruction keyed off this, so clinical copy — including the referral
+  /// banner's reason — comes back in the SK's language instead of English.
+  final String appLanguage;
   final String visitType;
   final double aiScribeConfidence;
   final List<String> clinicalRuleIds;
@@ -189,6 +195,7 @@ class NabaRequest {
   Map<String, dynamic> toJson() => {
         'requestId': requestId,
         'patientId': patientId,
+        'appLanguage': appLanguage,
         'visitType': visitType,
         'aiScribeConfidence': aiScribeConfidence,
         'clinicalRuleIds': clinicalRuleIds,
