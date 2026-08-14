@@ -441,6 +441,21 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       // the 25-month boundary even when only years-of-age is on record.
       (_ageInMonths != null && _ageInMonths! < 25);
 
+  /// Programme for the navy header — prefer SK-confirmed / form programmes
+  /// over pathway ranking so Step 2 title matches the form (e.g. NCD vs ANC).
+  Programme get _headerPrimaryProgramme {
+    if (_primaryProgramme != Programme.unknown &&
+        (_confirmedProgrammes.isEmpty ||
+            _confirmedProgrammes.contains(_primaryProgramme))) {
+      return _primaryProgramme;
+    }
+    if (_confirmedProgrammes.isNotEmpty) {
+      return _confirmedProgrammes.first;
+    }
+    if (_pathways.isNotEmpty) return _pathways.first.programme;
+    return _primaryProgramme;
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -470,9 +485,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   householdId: widget.householdId,
                   patientGender: widget.patientGender,
                   visitNumber: _visitNumber,
-                  primaryProgramme: _pathways.isNotEmpty
-                      ? _pathways.first.programme
-                      : _primaryProgramme,
+                  primaryProgramme: _headerPrimaryProgramme,
                   activeFormTypes: _step == 0
                       ? _step1LiveProgrammes.map((p) => p.name).toList()
                       : _confirmedProgrammes.map((p) => p.name).toList(),

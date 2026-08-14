@@ -925,14 +925,9 @@ abstract final class HouseholdListStrings {
   static String membersCount(int n) => getTranslatedString('membersCount', '{n} members', params: {'n': '$n'});
 
   // Header (v13 mockup: navy header, 🏠 title, combined live count)
-  static String get headerTitle => getTranslatedString('headerTitle', '🏠 Households & Patients');
+  static String get headerTitle => getTranslatedString('headerTitle', '🏠 Households & Members');
   static String headerSummary(int households, int patients) =>
-      '${householdsCount(households)} · ${_patientsCount(patients)}';
-  static String _patientsCount(int n) => getTranslatedString(
-        'HouseholdList.patientsCount',
-        '$n patient${n == 1 ? '' : 's'}',
-        params: {'n': '$n'},
-      );
+      '${householdsCount(households)} · ${membersCount(patients)}';
   static String get searchHint => getTranslatedString('HouseholdList.searchHint', 'Search by name or village…');
 
   // Household-card inline other-members panel
@@ -2525,7 +2520,7 @@ abstract final class BottomNavStrings {
   BottomNavStrings._();
 
   static String get home => getTranslatedString('home', 'Home');
-  static String get patients => getTranslatedString('BottomNav.patients', 'Patients');
+  static String get patients => getTranslatedString('BottomNav.patients', 'Members');
   static String get assistant => getTranslatedString('assistant', 'Assistant');
 
   static String get pressBackAgainToExit => getTranslatedString('pressBackAgainToExit', 'Press back again to exit');

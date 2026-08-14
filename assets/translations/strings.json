@@ -48,8 +48,8 @@
     "en": "Keep sync running"
   },
   "BottomNav.patients": {
-    "bn": "রোগী",
-    "en": "Patients"
+    "bn": "সদস্য",
+    "en": "Members"
   },
   "Cce.actionCallFamily": {
     "bn": "পরিবারের কাউকে কল করুন",
@@ -6933,7 +6933,7 @@
   },
   "headerTitle": {
     "bn": "🏠 খানা ও সদস্য",
-    "en": "🏠 Households & Patients"
+    "en": "🏠 Households & Members"
   },
   "headerVisitFallback": {
     "bn": "ভিজিট",
