@@ -59,6 +59,7 @@ abstract final class ScribeRecordConfig {
           audioSource: rawMicCapture
               ? AndroidAudioSource.voiceRecognition
               : AndroidAudioSource.defaultSource,
+          manageBluetooth: _manageBluetooth,
         ),
       );
 
@@ -77,6 +78,21 @@ abstract final class ScribeRecordConfig {
               // garbage (every sample pinned at the Int16 minimum) on some
               // emulator audio HALs. Raw mic source skips that chain.
               : AndroidAudioSource.mic,
+          manageBluetooth: _manageBluetooth,
         ),
       );
+
+  /// `record_android`'s Bluetooth SCO manager registers a receiver that
+  /// replies to the native `start()` method-channel call from *either* a
+  /// "SCO connected" or "SCO none" broadcast — whichever fires first. If a
+  /// paired Bluetooth device's SCO connection state changes twice in quick
+  /// succession right as recording starts (observed live: earbuds connected
+  /// at app launch, still settling their connection when AI Scribe started),
+  /// both broadcasts fire and the second reply throws
+  /// `IllegalStateException: Reply already submitted`, crashing the app.
+  ///
+  /// Every capture path here wants the handset's own mic, never a Bluetooth
+  /// headset's, so there is nothing this negotiation buys us — disabling it
+  /// removes the crash instead of racing it.
+  static const bool _manageBluetooth = false;
 }
