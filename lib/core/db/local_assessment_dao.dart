@@ -8,6 +8,7 @@ import '../models/risk.dart';
 import '../models/provance_dto.dart';
 import '../sync/latest_visit_follow_up.dart';
 import 'app_database.dart';
+import 'follow_up_dao.dart';
 import 'pregnancy_episode_dao.dart';
 
 /// Sync status for local assessments, matching Android's OfflineSyncStatus.
@@ -246,13 +247,9 @@ class LocalAssessmentEntity {
 
   /// Convert to API request format matching Android's Assessment model.
   ///
-  /// [provenance] — map with `organizationId`, `spiceUserId`, `userId`,
-  /// `modifiedDate` from the logged-in user session.
-  /// [peerSupervisorId] — numeric user ID used as `peerSupervisorId`.
-  /// Convert to API request format matching Android's Assessment model.
-  ///
-  /// [provenance] — ProvanceDto with `organizationId`, `spiceUserId`, `userId`,
-  /// `modifiedDate` from the logged-in user session (matches Android ProvanceDto).
+  /// [provenance] supplies session identity (`organizationId`, `spiceUserId`,
+  /// `userId`). Visit time is always this row's [createdAt], matching Android
+  /// `ProvanceDto(modifiedDate = entity.createdAt)` and `updatedAt = entity.createdAt`.
   /// [peerSupervisorId] — numeric user ID used as `peerSupervisorId`.
   Map<String, dynamic> toApiRequest({
     required ProvanceDto? provenance,
@@ -278,6 +275,17 @@ class LocalAssessmentEntity {
     final isPregnancyType =
         kPregnancyEpisodeLinkedTypes.contains(assessmentType.toUpperCase());
 
+    // Android OfflineSyncRepository.convertEntityToRequest: each assessment
+    // carries its own createdAt as provenance.modifiedDate and updatedAt so a
+    // later batch sync cannot collapse two backdated visits onto one date.
+    final visitAt = createdAt ?? updatedAt;
+    final visitIso =
+        visitAt == null ? null : toOfflineOffsetDateTime(visitAt);
+    final provenanceJson = provenance?.toJson();
+    if (provenanceJson != null && visitIso != null) {
+      provenanceJson['modifiedDate'] = visitIso;
+    }
+
     final request = <String, dynamic>{
       // Android sends the assessment row's own numeric PK. Ours is a UUID, so
       // schema v38 carries a parallel numeric reference_id; pre-v38 rows that
@@ -289,7 +297,7 @@ class LocalAssessmentEntity {
       // household sub-village with a '0' fallback. A null here fails the whole
       // entity server-side.
       'villageId': villageId?.isNotEmpty == true ? villageId : '0',
-      'assessmentDate': createdAt?.toUtc().toIso8601String(),
+      'assessmentDate': visitIso,
       'patientStatus': referralStatus ?? 'Recovered',
       // Android Assessment DTO has no top-level assessmentStatus — only
       // encounter.customStatus. Omitting keeps the wire shape Android-shaped.
@@ -304,11 +312,11 @@ class LocalAssessmentEntity {
         'memberId': memberId,
         'referred': isReferred,
         'patientId': patientId,
-        'provenance': provenance?.toJson(),
+        'provenance': provenanceJson,
         'latitude': latitude,
         'longitude': longitude,
-        'startTime': createdAt?.toUtc().toIso8601String(),
-        'endTime': updatedAt?.toUtc().toIso8601String(),
+        'startTime': visitIso,
+        'endTime': visitIso,
         // All RMNCH types (ANC, PNC_MOTHER, PNC_NEONATE, ChildHood_Visit) carry visitNumber.
         'visitNumber': ?visitNum,
         if (isPregnancyType) 'pregnancyEpisodeId': ?pregnancyEpisodeId,
@@ -327,7 +335,7 @@ class LocalAssessmentEntity {
           'customStatus': status,
       },
       if (followUpId != null) 'followUpId': followUpId,
-      'updatedAt': updatedAt?.millisecondsSinceEpoch ?? 0,
+      'updatedAt': visitAt?.millisecondsSinceEpoch ?? 0,
     };
 
     ConsoleLog.banner('[PayloadDebug] assessment-payload ($wireType)\n${request.toString()}');

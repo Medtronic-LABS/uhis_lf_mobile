@@ -352,6 +352,9 @@ class AssessmentRepository extends ChangeNotifier {
     final deviceId = await _auth.deviceId();
     debugPrint('[AssessmentSync] Provenance — userId=$userId, userFhirId=$userFhirId, orgId=$orgId, deviceId=$deviceId');
 
+    // Session identity only. Each assessment overwrites modifiedDate with its
+    // own createdAt inside toApiRequest (Android ProvanceDto(modifiedDate =
+    // entity.createdAt)). Follow-ups below still use this push-time stamp.
     final provenance = ProvanceDto.fromMap({
       'modifiedDate': DateTime.now().toUtc().toIso8601String(),
       'organizationId': orgId,
