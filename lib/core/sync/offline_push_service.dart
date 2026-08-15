@@ -274,6 +274,9 @@ class OfflinePushService extends ChangeNotifier {
       }
       final pendingAssessments = assessmentQueue.ready;
       final assessmentIds = pendingAssessments.map((e) => e.id).toList();
+      // Session provenance is shared for households/members/follow-ups.
+      // toApiRequest restamps each assessment's modifiedDate from createdAt
+      // (Android convertEntityToRequest).
       final assessmentPayloads = pendingAssessments
           .map(
             (e) => e.toApiRequest(
