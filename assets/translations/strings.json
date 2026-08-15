@@ -12823,6 +12823,38 @@
     "bn": "রেফার করা হয়েছে: {date} · {facility} · {reason}",
     "en": "Referred: {date} · {facility} · {reason}"
   },
+  "Cce.rejectReasonDied": {
+    "bn": "মারা গিয়েছেন",
+    "en": "Died"
+  },
+  "Cce.rejectReasonLongDistance": {
+    "bn": "অনেক দূরত্ব",
+    "en": "Long Distance"
+  },
+  "Cce.rejectReasonLongWaitingQueue": {
+    "bn": "দীর্ঘ সময় লাইনে দাঁড়িয়ে থাকা",
+    "en": "Long waiting queue"
+  },
+  "Cce.rejectReasonMigrated": {
+    "bn": "অন্যত্র চলে গিয়েছেন",
+    "en": "Migrated to other places"
+  },
+  "Cce.rejectReasonNoMedicine": {
+    "bn": "ওষুধ নাই",
+    "en": "No Medicine"
+  },
+  "Cce.rejectReasonOther": {
+    "bn": "অন্যান্য",
+    "en": "Other"
+  },
+  "Cce.rejectReasonTransportCost": {
+    "bn": "যাতায়াত ও ওষুধ ক্রয়ের অতিরিক্ত খরচ",
+    "en": "Transportation and unsupplied medicine cost"
+  },
+  "Cce.rejectReasonTreatmentOtherFacility": {
+    "bn": "অন্য কোন স্বাস্থ্যকেন্দ্র থেকে চিকিৎসা নেন",
+    "en": "Treatment from other facility"
+  },
   "Cce.slaEmergencyWindow": {
     "bn": "৬ ঘণ্টা",
     "en": "6 hours"
