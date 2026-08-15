@@ -4398,7 +4398,7 @@ abstract final class UnifiedFormStrings {
   static String get trendMissingValue => getTranslatedString('trendMissingValue', '—');
 
   /// Explanatory footer under the trend table — shown when BP is rising.
-  static String get trendFooter => getTranslatedString('trendFooter', 'Each reading is below its alert line — but they are climbing together across visits. No single rule fires.');
+  static String get trendFooter => getTranslatedString('trendFooter', 'While vitals are still within normal range but it is showing rising trend and so refer early before it becomes above threshold level.');
 
   /// Footer when readings are stable (no rising BP trend detected).
   static String get trendFooterStable => getTranslatedString('trendFooterStable', 'Readings are stable across visits. No rising trend detected.');

@@ -11144,8 +11144,8 @@
     "en": "Diastolic"
   },
   "trendFooter": {
-    "bn": "প্রতিটি রিডিং সতর্কতা সীমার নিচে — কিন্তু ভিজিট জুড়ে একসাথে বাড়ছে। কোনো একক নিয়ম সক্রিয় হয়নি।",
-    "en": "Each reading is below its alert line — but they are climbing together across visits. No single rule fires."
+    "bn": "যদিও ভাইটালস এখনও স্বাভাবিক সীমার মধ্যে আছে, কিন্তু এটি ঊর্ধ্বমুখী প্রবণতা দেখাচ্ছে এবং তাই থ্রেশহোল্ড লেভেলের উপরে যাওয়ার আগেই দ্রুত রেফার করুন।",
+    "en": "While vitals are still within normal range but it is showing rising trend and so refer early before it becomes above threshold level."
   },
   "trendFooterStable": {
     "bn": "রিডিংগুলো পরিদর্শন জুড়ে স্থিতিশীল। কোনো ঊর্ধ্বমুখী প্রবণতা শনাক্ত হয়নি।",
@@ -12224,7 +12224,7 @@
     "en": "Rising BP trend"
   },
   "Referral.risingBpTrendNarrative": {
-    "bn": "সাম্প্রতিক ভিজিটগুলোতে রক্তচাপ বাড়ছে — রেফারেল সুপারিশকৃত।",
+    "bn": "সাম্প্রতিক ভিজিটগুলোতে রক্তচাপ বাড়ছে — রেফার করার সুপারিশ করা হয়েছে।",
     "en": "BP is rising across recent visits — referral recommended."
   },
   "Referral.shortReasonHighBg": {
@@ -12822,6 +12822,38 @@
   "Cce.referredMetaWithFacility": {
     "bn": "রেফার করা হয়েছে: {date} · {facility} · {reason}",
     "en": "Referred: {date} · {facility} · {reason}"
+  },
+  "Cce.rejectReasonDied": {
+    "bn": "মারা গিয়েছেন",
+    "en": "Died"
+  },
+  "Cce.rejectReasonLongDistance": {
+    "bn": "অনেক দূরত্ব",
+    "en": "Long Distance"
+  },
+  "Cce.rejectReasonLongWaitingQueue": {
+    "bn": "দীর্ঘ সময় লাইনে দাঁড়িয়ে থাকা",
+    "en": "Long waiting queue"
+  },
+  "Cce.rejectReasonMigrated": {
+    "bn": "অন্যত্র চলে গিয়েছেন",
+    "en": "Migrated to other places"
+  },
+  "Cce.rejectReasonNoMedicine": {
+    "bn": "ওষুধ নাই",
+    "en": "No Medicine"
+  },
+  "Cce.rejectReasonOther": {
+    "bn": "অন্যান্য",
+    "en": "Other"
+  },
+  "Cce.rejectReasonTransportCost": {
+    "bn": "যাতায়াত ও ওষুধ ক্রয়ের অতিরিক্ত খরচ",
+    "en": "Transportation and unsupplied medicine cost"
+  },
+  "Cce.rejectReasonTreatmentOtherFacility": {
+    "bn": "অন্য কোন স্বাস্থ্যকেন্দ্র থেকে চিকিৎসা নেন",
+    "en": "Treatment from other facility"
   },
   "Cce.slaEmergencyWindow": {
     "bn": "৬ ঘণ্টা",

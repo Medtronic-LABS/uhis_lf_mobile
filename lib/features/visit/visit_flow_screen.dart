@@ -2317,7 +2317,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     // does not stamp nextVisitDate (e.g. childhood keeps its age-band stamp).
     // Soonest follow-up wins — same order as the Step 3 timeline UI — so the
     // stamped nextVisitDate matches the date shown next to "Follow-up".
-    final isReferred = _effectiveReferral(naba);
+    final isReferred = _isUiReferred;
     final followUps = _FollowUpTimeline.sortedBySoonest(naba.followUp);
     final followUpDate = _selectedFollowUpDate ??
         (followUps.isNotEmpty
@@ -2333,7 +2333,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final worklistRepo = context.read<WorklistRepository>();
     final missionRepo = context.read<MissionDashboardRepository>();
 
-    // Referral stamp: Step 2 clinical decision, or PW + online NABA required.
+    // Referral stamp: Step 2 clinical decision only (never NABA required).
     // Spice RMNCH summary: selected spinner option id → summary.referralFacilityType.
     // Other programmes keep the Step 2 / NCD auto type string.
     final referralFacilityType = RmnchReferralFacility.showOnStep3(
@@ -2630,19 +2630,33 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       widget.primaryProgramme == Programme.pw ||
       widget.confirmedProgrammes.contains(Programme.pw);
 
-  /// UHIS PW registration summary: risk-factor list only (not a Referred card).
-  bool get _showPwSummary =>
-      _isPwVisit && widget.pwRiskFactors.isNotEmpty;
+  /// Referred is Step 2 UI only (`lastIsReferred`). NABA never turns the
+  /// red card on — including PW, where online `required` used to override.
+  bool get _isUiReferred => widget.referralRecommended;
 
-  /// PW has no Step 2 clinical referral flag. When online NABA succeeds with
-  /// `referral_recommendation.required`, treat as referred (same Step 3 card /
-  /// stamp as other programmes).
-  bool _effectiveReferral(NabaResponse naba) {
-    if (widget.referralRecommended) return true;
-    if (!_isPwVisit) return false;
-    if (naba.modelVersion == 'rule-based-fallback') return false;
-    return naba.referralRecommendation?.required_ == true;
+  bool _isNabaOffline(NabaResponse naba) =>
+      naba.modelVersion == 'rule-based-fallback';
+
+  /// Offline / missing NABA reason → Step 2 [PwRiskFactors] labels.
+  String _mobilePwRiskBody() => widget.pwRiskFactors
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .map(MissionDashboardStrings.pwRiskFactorDisplay)
+      .join(', ');
+
+  /// PW card body: mobile reasons offline; `referral_recommendation.reason`
+  /// online. Empty NABA reason falls back to the mobile list so the card
+  /// never blanks.
+  String _pwSummaryBody(NabaResponse naba) {
+    final mobile = _mobilePwRiskBody();
+    if (_isNabaOffline(naba)) return mobile;
+    final nabaReason = naba.referralRecommendation?.reason?.trim();
+    if (nabaReason != null && nabaReason.isNotEmpty) return nabaReason;
+    return mobile;
   }
+
+  bool _showPwSummaryFor(NabaResponse naba) =>
+      _isPwVisit && _pwSummaryBody(naba).isNotEmpty;
 
   /// Offline Step 3 referral-card body from Step 2 `referredReasons`.
   ///
@@ -2684,10 +2698,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Widget _buildResult(NabaResponse naba) {
-    // Referral card + facility pickers: Step 2 clinical referral, or PW when
-    // online NABA returns referral_recommendation.required (PW has no Step 2
-    // flag). Other programmes still ignore NABA required alone.
-    final referral = _effectiveReferral(naba);
+    // Referral card + facility pickers: Step 2 clinical referral only.
+    // Online NABA may rewrite the reason text; it does not flip Referred.
+    final referral = _isUiReferred;
     final showRmnchFacility = RmnchReferralFacility.showOnStep3(
       programme: widget.primaryProgramme,
       isReferred: referral,
@@ -2719,8 +2732,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── 1. Referral banner — edge-to-edge, flush top ────────────
-          // Step 2 isReferred, or PW + online NABA required. Online copy from
-          // NABA; offline copy from Step 2 referredReasons.
+          // Shown only when Step 2 referred. Online copy from NABA reason;
+          // offline copy from Step 2 referredReasons. PW uses Risk Factors.
           if (referral) ...[
             _ReferralAlertCard(
               reason: _referralCardReason(naba),
@@ -2729,9 +2742,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
 
-          // ── PW risk factors — same edge-to-edge alert chrome as Referred ─
-          if (_showPwSummary) ...[
-            _PwProfileSummaryBlock(riskFactors: widget.pwRiskFactors),
+          // ── PW risk factors — heading always "Risk Factors Identified".
+          // Offline body = mobile PwRiskFactors; online = NABA reason.
+          if (_showPwSummaryFor(naba)) ...[
+            _PwProfileSummaryBlock(body: _pwSummaryBody(naba)),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
 
@@ -2819,22 +2833,17 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
 
-/// UHIS PW summary: risk factors in the same edge-to-edge alert chrome as
-/// [_ReferralAlertCard], with comma-separated values (not bullets).
+/// UHIS PW summary: heading is always Risk Factors Identified. [body] is
+/// the mobile risk list offline, or NABA `reason` online.
 class _PwProfileSummaryBlock extends StatelessWidget {
-  const _PwProfileSummaryBlock({required this.riskFactors});
+  const _PwProfileSummaryBlock({required this.body});
 
-  final List<String> riskFactors;
+  final String body;
 
   @override
   Widget build(BuildContext context) {
     const bg = Color(0xFFFEE2E2);
     const accent = Color(0xFFDC2626);
-    final body = riskFactors
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .map(MissionDashboardStrings.pwRiskFactorDisplay)
-        .join(', ');
 
     return Container(
       width: double.infinity,
