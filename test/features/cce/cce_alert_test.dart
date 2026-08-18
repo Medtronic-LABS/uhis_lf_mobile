@@ -442,5 +442,30 @@ void main() {
       expect(a.journey[2].sublabel, 'Following up');
       expect(a.journey[3].state, CceStepState.pending);
     });
+
+    test('localizes Spice NCD reason chips in referredMeta', () {
+      final a = CceAlert.fromFollowUp(ncdFollowUp(), now: now);
+      expect(a.referredMeta, contains('High BP'));
+      expect(a.referredMeta, isNot(contains('bloodPressure')));
+
+      final combined = CceAlert.fromFollowUp(
+        FollowUpRow(
+          id: 'fu-2',
+          patientId: 'member-1',
+          kind: 'referred',
+          type: 'REFERRED',
+          rawJson: jsonEncode({
+            'memberId': 'member-1',
+            'encounterName': 'NCD',
+            'referredReasons': ['Symptoms', 'High BP', 'High BG'],
+            'referredSiteName': 'UHC Manikganj',
+          }),
+        ),
+        now: now,
+      );
+      expect(combined.referredMeta, contains('Symptoms'));
+      expect(combined.referredMeta, contains('High BP'));
+      expect(combined.referredMeta, contains('High BG'));
+    });
   });
 }

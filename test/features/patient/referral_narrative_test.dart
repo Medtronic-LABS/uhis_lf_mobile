@@ -36,6 +36,17 @@ void main() {
         ['bloodpressure', 'symptoms'],
       );
     });
+
+    test('splits English and / middle-dot lists used on CCE cards', () {
+      expect(
+        parseReferralReasonTokens('Symptoms, High BP and High BG'),
+        ['Symptoms', 'High BP', 'High BG'],
+      );
+      expect(
+        parseReferralReasonTokens('Symptoms · High BP · High BG'),
+        ['Symptoms', 'High BP', 'High BG'],
+      );
+    });
   });
 
   group('buildReferralNarrative', () {
@@ -147,6 +158,12 @@ void main() {
 
     test('humanizes overdueVisit via the overdue match branch', () {
       expect(shortReasonLabel('overdueVisit'), 'Visit overdue');
+    });
+
+    test('maps Spice NCD wire chips', () {
+      expect(shortReasonLabel('Symptoms'), 'Symptoms');
+      expect(shortReasonLabel('High BP'), 'High BP');
+      expect(shortReasonLabel('High BG'), 'High BG');
     });
   });
 }
