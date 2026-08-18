@@ -1669,6 +1669,9 @@ abstract final class ReferralStrings {
       getTranslatedString('Referral.shortReasonSupplementGap', 'Supplement gap');
   static String get shortReasonVisitOverdue =>
       getTranslatedString('Referral.shortReasonVisitOverdue', 'Visit overdue');
+  /// Spice NCD wire reason `Symptoms`.
+  static String get shortReasonSymptoms =>
+      getTranslatedString('Referral.shortReasonSymptoms', 'Symptoms');
   static String get shortReasonClinicalSymptoms =>
       getTranslatedString('Referral.shortReasonClinicalSymptoms', 'Clinical symptoms');
 
