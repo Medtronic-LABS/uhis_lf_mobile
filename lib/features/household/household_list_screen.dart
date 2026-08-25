@@ -24,6 +24,8 @@ import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../visit/widgets/mission_queue_card.dart' show programmeBadgeColors;
 import 'enrollment/enrollment_dob.dart';
+import 'enrollment/enrollment_entry_sheet.dart';
+import 'enrollment/nid_ocr_service.dart';
 import 'household_detail_screen.dart';
 
 /// Watches the Patients branch navigator; registered in `router.dart`.
@@ -671,6 +673,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
             _MemberInfo.fromMember(other, item),
           ),
           onTap: () => _navigateToDetail(context, item),
+          onAddMember: () => _addMemberToHousehold(item),
         );
       },
     );
@@ -700,6 +703,55 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     // A member may have been added from the detail screen. This list only
     // queries on init, so without this the card's member count (and the header
     // totals) would keep showing the roster as it was when the screen opened.
+    if (mounted) _loadData();
+  }
+
+  /// Opens the NID scanner then the add-member form for [item]'s household.
+  Future<void> _addMemberToHousehold(_HouseholdItem item) async {
+    final localId = item.id ?? '';
+    if (localId.isEmpty) return;
+
+    // Use the screen State's context — not a ListView itemBuilder context,
+    // which is deactivated after the async scanner closes.
+    final result = await showNidScannerForMember(context);
+    if (!mounted || result == null) return;
+
+    final householdEntity =
+        await context.read<HouseholdDao>().getById(localId);
+    if (!mounted) return;
+
+    final serverHouseholdId = householdEntity?.fhirId ?? localId;
+
+    final villageId = householdEntity?.villageId ??
+        item.members.firstOrNull?.villageId ??
+        item.rawJson?['villageId'] as String? ??
+        '';
+    final subVillageId = householdEntity?.subVillageId ?? '';
+    final subVillageName = householdEntity?.subVillageName ?? '';
+    final memberNames = item.members
+        .map((m) => m.name)
+        .whereType<String>()
+        .where((n) => n.isNotEmpty)
+        .toList();
+    final extra = <String, dynamic>{
+      'householdId': serverHouseholdId,
+      'householdReferenceId': localId,
+      'householdName': item.name ?? '',
+      'householdNo': item.householdNo ?? '',
+      'villageId': villageId,
+      'villageName': item.village ?? '',
+      'subVillageId': subVillageId,
+      'subVillageName': subVillageName,
+      'memberNames': memberNames,
+    };
+    if (result.status == NidScanStatus.success && result.data != null) {
+      extra['fromNidScan'] = true;
+      extra['nidNumber'] = result.data!.nidNumber;
+      extra['name'] = result.data!.name;
+      extra['dateOfBirth'] = result.data!.dateOfBirth;
+    }
+    if (!mounted) return;
+    await context.push('/household/enrollment/link-member', extra: extra);
     if (mounted) _loadData();
   }
 
@@ -820,6 +872,7 @@ class _HouseholdCard extends StatelessWidget {
     required this.onToggleExpanded,
     required this.onMemberTap,
     this.onTap,
+    this.onAddMember,
   });
 
   final _HouseholdItem item;
@@ -841,6 +894,7 @@ class _HouseholdCard extends StatelessWidget {
   final VoidCallback? onToggleExpanded;
   final void Function(_HouseholdMember other) onMemberTap;
   final VoidCallback? onTap;
+  final VoidCallback? onAddMember;
 
   @override
   Widget build(BuildContext context) {
@@ -875,60 +929,65 @@ class _HouseholdCard extends StatelessWidget {
         children: [
           Material(
             color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: lc.cardSurfaceMuted,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: lc.surfaceTrack,
-                      width: 1,
-                    ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: lc.cardSurfaceMuted,
+                border: Border(
+                  bottom: BorderSide(
+                    color: lc.surfaceTrack,
+                    width: 1,
                   ),
                 ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    const Text('🏠', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              child: Row(
+                children: [
+                  const Text('🏠', style: TextStyle(fontSize: 14)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: onTap,
+                      borderRadius: BorderRadius.circular(6),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontFamily: AppFonts.display,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              color: AppColors.navy,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (villageDisplayName != null &&
-                              villageDisplayName!.isNotEmpty) ...[
-                            const SizedBox(height: 1),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              villageDisplayName!,
+                              title,
                               style: const TextStyle(
-                                fontSize: 9.5,
-                                color: AppColors.textMuted,
+                                fontFamily: AppFonts.display,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                color: AppColors.navy,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (villageDisplayName != null &&
+                                villageDisplayName!.isNotEmpty) ...[
+                              const SizedBox(height: 1),
+                              Text(
+                                villageDisplayName!,
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  color: AppColors.textMuted,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
+                    if (onAddMember != null) ...[
+                      const SizedBox(width: 8),
+                      _HouseholdAddMemberButton(onPressed: onAddMember!),
+                    ],
                   ],
                 ),
               ),
             ),
-          ),
           if (primaryRelation != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
@@ -1015,6 +1074,37 @@ class _HouseholdCard extends StatelessWidget {
               );
             }),
         ],
+      ),
+    );
+  }
+}
+
+/// Circular "+" on a household card header — opens add-member for that household.
+class _HouseholdAddMemberButton extends StatelessWidget {
+  const _HouseholdAddMemberButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: HouseholdDetailStrings.addMember,
+      child: Material(
+        color: AppColors.navy.withValues(alpha: 0.08),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: const SizedBox(
+            width: 28,
+            height: 28,
+            child: Icon(
+              Icons.add_rounded,
+              size: 18,
+              color: AppColors.navy,
+            ),
+          ),
+        ),
       ),
     );
   }
