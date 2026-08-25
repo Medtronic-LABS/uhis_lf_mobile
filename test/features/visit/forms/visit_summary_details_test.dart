@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/core/models/programme.dart';
 import 'package:uhis_next/features/visit/forms/visit_summary_details.dart';
+import 'package:uhis_next/features/visit/naba/naba_models.dart';
 
 void main() {
   group('VisitSummaryDetails.patchFor', () {
@@ -87,6 +89,50 @@ void main() {
       );
       expect(patch.containsKey('nextVisitDate'), isFalse);
       expect(patch['referralFacilityType'], 'Community Clinic');
+    });
+
+    test('FAMILY_PLANNING does not stamp nextVisitDate', () {
+      final patch = VisitSummaryDetails.patchFor(
+        assessmentType: 'FAMILY_PLANNING',
+        nextVisitDate: date,
+        isReferred: false,
+      );
+      expect(patch, isEmpty);
+    });
+  });
+
+  group('VisitSummaryDetails follow-up summary UI', () {
+    test('filters family planning follow-up rows', () {
+      const items = [
+        NabaFollowUpItem(
+          activity: 'ANC visit',
+          timeline: 'In 4 weeks',
+          programme: 'ANC',
+        ),
+        NabaFollowUpItem(
+          activity: 'FP counselling',
+          timeline: 'In 2 weeks',
+          programme: 'FAMILY_PLANNING',
+        ),
+      ];
+      final filtered = VisitSummaryDetails.followUpItemsForSummary(items);
+      expect(filtered, hasLength(1));
+      expect(filtered.first.programme, 'ANC');
+    });
+
+    test('skips generic follow-up fallback on FP-only visits', () {
+      expect(
+        VisitSummaryDetails.shouldAddGenericFollowUpFallback(
+          programmes: {Programme.familyPlanning},
+        ),
+        isFalse,
+      );
+      expect(
+        VisitSummaryDetails.shouldAddGenericFollowUpFallback(
+          programmes: {Programme.anc, Programme.familyPlanning},
+        ),
+        isTrue,
+      );
     });
   });
 }

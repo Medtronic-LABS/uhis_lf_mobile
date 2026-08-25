@@ -1,3 +1,5 @@
+import '../../../core/models/programme.dart';
+import '../naba/naba_models.dart';
 import 'childhood_visit.dart';
 
 /// Builds Spice-shaped assessment `summary` / `otherDetails` patches from
@@ -14,6 +16,36 @@ abstract final class VisitSummaryDetails {
   /// [ChildhoodVisit.formatNextVisitDate] / [NcdStatus.referredSummary].
   static String formatNextVisitDate(DateTime date) =>
       ChildhoodVisit.formatNextVisitDate(date);
+
+  /// Spice `AssessmentFamilyPlanningSummaryFragment` — no follow-up date row.
+  static bool isFamilyPlanningWireType(String? tag) {
+    if (tag == null || tag.isEmpty) return false;
+    final n = tag.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+    return n == 'FP' || n == 'FAMILYPLANNING';
+  }
+
+  /// Step 3 timeline rows — drop FP items; combined visits keep ANC/PNC/etc.
+  static List<NabaFollowUpItem> followUpItemsForSummary(
+    List<NabaFollowUpItem> items,
+  ) =>
+      items.where((i) => !isFamilyPlanningWireType(i.programme)).toList();
+
+  /// Rule-based fallback must not invent a generic follow-up on FP-only visits.
+  static bool shouldAddGenericFollowUpFallback({
+    required Set<Programme> programmes,
+    Programme primaryProgramme = Programme.unknown,
+  }) {
+    final effective = programmes.isNotEmpty
+        ? programmes
+        : (primaryProgramme != Programme.unknown
+            ? {primaryProgramme}
+            : programmes);
+    if (effective.length == 1 &&
+        effective.contains(Programme.familyPlanning)) {
+      return false;
+    }
+    return true;
+  }
 
   /// Per-assessment-type patch for keys that belong in wire `summary`.
   ///

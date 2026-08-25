@@ -57,6 +57,7 @@ import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../worklist/worklist_repository.dart';
 import 'forms/childhood_visit.dart';
+import 'forms/visit_summary_details.dart';
 import 'forms/rmnch_referral_facility.dart';
 import 'immunisation/epi_visit_summary.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
@@ -1908,10 +1909,15 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         urgency: 'Today',
       ));
       counselling.add(VisitFlowStrings.noActionsCounselling);
-      followUp.add(NabaFollowUpItem(
-        activity: VisitFlowStrings.noActionsFollowUpActivity,
-        timeline: VisitFlowStrings.followUpTimelineFourWeeks,
-      ));
+      if (VisitSummaryDetails.shouldAddGenericFollowUpFallback(
+        programmes: progs,
+        primaryProgramme: widget.primaryProgramme,
+      )) {
+        followUp.add(NabaFollowUpItem(
+          activity: VisitFlowStrings.noActionsFollowUpActivity,
+          timeline: VisitFlowStrings.followUpTimelineFourWeeks,
+        ));
+      }
     }
 
     return NabaResponse(
@@ -2318,7 +2324,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     // Soonest follow-up wins — same order as the Step 3 timeline UI — so the
     // stamped nextVisitDate matches the date shown next to "Follow-up".
     final isReferred = _isUiReferred;
-    final followUps = _FollowUpTimeline.sortedBySoonest(naba.followUp);
+    final followUps = _FollowUpTimeline.sortedBySoonest(
+      VisitSummaryDetails.followUpItemsForSummary(naba.followUp),
+    );
     final followUpDate = _selectedFollowUpDate ??
         (followUps.isNotEmpty
             ? _FollowUpDateRowState.resolveDate(followUps.first)
@@ -2371,19 +2379,21 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       debugPrint('[Step3] applyStep3Summary failed (non-blocking): $e');
     }
 
-    // Local follow-up ticket (separate from assessment summary) — keep even
-    // when summary has no nextVisitDate so Tasks still shows an open item.
-    final scheduleDate =
-        followUpDate ?? DateTime.now().add(const Duration(days: 14));
-    try {
-      await followUpSvc.scheduleLocal(
-        patientId: widget.patientId,
-        dueDate: scheduleDate,
-        type: 'MEDICAL_REVIEW',
-      );
-      debugPrint('[Step3] follow-up scheduled: $scheduleDate');
-    } catch (e) {
-      debugPrint('[Step3] follow-up schedule failed (non-blocking): $e');
+    // Local follow-up ticket (separate from assessment summary). FP summary
+    // has no follow-up date (Spice AssessmentFamilyPlanningSummaryFragment).
+    if (followUpDate != null || followUps.isNotEmpty) {
+      final scheduleDate =
+          followUpDate ?? DateTime.now().add(const Duration(days: 14));
+      try {
+        await followUpSvc.scheduleLocal(
+          patientId: widget.patientId,
+          dueDate: scheduleDate,
+          type: 'MEDICAL_REVIEW',
+        );
+        debugPrint('[Step3] follow-up scheduled: $scheduleDate');
+      } catch (e) {
+        debugPrint('[Step3] follow-up schedule failed (non-blocking): $e');
+      }
     }
 
     // Summary follow-up date wins over the Step 2 fallback written at form
@@ -2784,14 +2794,19 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           ],
 
           // ── 5. Follow-up timeline ──────────────────────────────────
-          if (naba.followUp.isNotEmpty) ...[
-            _FollowUpTimeline(
-              items: naba.followUp,
-              programme: widget.primaryProgramme,
-              onDateChanged: (d) => setState(() => _selectedFollowUpDate = d),
-            ),
-            const SizedBox(height: 16),
-          ],
+          ...() {
+            final followUpItems =
+                VisitSummaryDetails.followUpItemsForSummary(naba.followUp);
+            if (followUpItems.isEmpty) return <Widget>[];
+            return [
+              _FollowUpTimeline(
+                items: followUpItems,
+                programme: widget.primaryProgramme,
+                onDateChanged: (d) => setState(() => _selectedFollowUpDate = d),
+              ),
+              const SizedBox(height: 16),
+            ];
+          }(),
 
           // Spice AssessmentRMNCHSummaryFragment: facility after follow-up date.
           if (showRmnchFacility && rmnchFacilityId != null) ...[
