@@ -2325,15 +2325,34 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     // stamped nextVisitDate matches the date shown next to "Follow-up".
     final isReferred = _isUiReferred;
     final followUps = _FollowUpTimeline.sortedBySoonest(
-      VisitSummaryDetails.followUpItemsForSummary(naba.followUp),
+      VisitSummaryDetails.followUpItemsForSummary(
+        naba.followUp,
+        programmes: widget.confirmedProgrammes,
+        primaryProgramme: widget.primaryProgramme,
+        isReferred: isReferred,
+        assessmentTypes: _submittedAssessmentTypes,
+      ),
     );
-    final followUpDate = _selectedFollowUpDate ??
-        (followUps.isNotEmpty
-            ? _FollowUpDateRowState.resolveDate(followUps.first)
-            : _defaultSummaryFollowUpDate(
-                widget.primaryProgramme,
-                referred: isReferred,
-              ));
+    final followUpDate = VisitSummaryDetails.resolveStep3FollowUpDate(
+      programmes: widget.confirmedProgrammes,
+      primaryProgramme: widget.primaryProgramme,
+      isReferred: isReferred,
+      skSelected: _selectedFollowUpDate,
+      firstTimelineDate: followUps.isNotEmpty
+          ? _FollowUpDateRowState.resolveDate(followUps.first)
+          : null,
+      programmeDefault: _defaultSummaryFollowUpDate(
+        widget.primaryProgramme,
+        referred: isReferred,
+      ),
+      assessmentTypes: _submittedAssessmentTypes,
+    );
+    final scheduleFollowUp = VisitSummaryDetails.shouldScheduleStep3FollowUp(
+      programmes: widget.confirmedProgrammes,
+      primaryProgramme: widget.primaryProgramme,
+      isReferred: isReferred,
+      assessmentTypes: _submittedAssessmentTypes,
+    );
 
     final assessmentRepo = context.read<AssessmentRepository>();
     final followUpSvc = context.read<FollowUpCallService>();
@@ -2379,9 +2398,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       debugPrint('[Step3] applyStep3Summary failed (non-blocking): $e');
     }
 
-    // Local follow-up ticket (separate from assessment summary). FP summary
-    // has no follow-up date (Spice AssessmentFamilyPlanningSummaryFragment).
-    if (followUpDate != null || followUps.isNotEmpty) {
+    // Local follow-up ticket (separate from assessment summary). Programmes
+    // without a Spice summary follow-up date are excluded above.
+    if (scheduleFollowUp &&
+        (followUpDate != null || followUps.isNotEmpty)) {
       final scheduleDate =
           followUpDate ?? DateTime.now().add(const Duration(days: 14));
       try {
@@ -2399,7 +2419,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     // Summary follow-up date wins over the Step 2 fallback written at form
     // submit (kept when Step 3 is skipped). Stamp patients.next_due_at so Home
     // matches the date the SK saw on this screen.
-    if (followUpDate != null && widget.patientId.isNotEmpty) {
+    if (scheduleFollowUp &&
+        followUpDate != null &&
+        widget.patientId.isNotEmpty) {
       try {
         final local = await patientDao.byAnyId(widget.patientId);
         if (!mounted) return;
@@ -2644,6 +2666,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   /// red card on — including PW, where online `required` used to override.
   bool get _isUiReferred => widget.referralRecommended;
 
+  List<String> get _submittedAssessmentTypes => widget.nabaReferralAssessments
+      .map((a) => a.assessmentType)
+      .toList(growable: false);
+
   bool _isNabaOffline(NabaResponse naba) =>
       naba.modelVersion == 'rule-based-fallback';
 
@@ -2795,8 +2821,13 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
           // ── 5. Follow-up timeline ──────────────────────────────────
           ...() {
-            final followUpItems =
-                VisitSummaryDetails.followUpItemsForSummary(naba.followUp);
+            final followUpItems = VisitSummaryDetails.followUpItemsForSummary(
+              naba.followUp,
+              programmes: widget.confirmedProgrammes,
+              primaryProgramme: widget.primaryProgramme,
+              isReferred: _isUiReferred,
+              assessmentTypes: _submittedAssessmentTypes,
+            );
             if (followUpItems.isEmpty) return <Widget>[];
             return [
               _FollowUpTimeline(

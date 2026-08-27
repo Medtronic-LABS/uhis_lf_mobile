@@ -99,6 +99,35 @@ void main() {
       );
       expect(patch, isEmpty);
     });
+
+    test('PWPROFILE does not stamp nextVisitDate', () {
+      final patch = VisitSummaryDetails.patchFor(
+        assessmentType: 'PWPROFILE',
+        nextVisitDate: date,
+        isReferred: false,
+      );
+      expect(patch, isEmpty);
+    });
+
+    test('CATARACT stamps nextVisitDate only when referred', () {
+      expect(
+        VisitSummaryDetails.patchFor(
+          assessmentType: 'CATARACT',
+          nextVisitDate: date,
+          isReferred: false,
+        ),
+        isEmpty,
+      );
+      expect(
+        VisitSummaryDetails.patchFor(
+          assessmentType: 'CATARACT',
+          nextVisitDate: date,
+          isReferred: true,
+          referralFacilityType: 'Community Clinic',
+        )['nextVisitDate'],
+        '2026-08-15T00:00:00+00:00',
+      );
+    });
   });
 
   group('VisitSummaryDetails follow-up summary UI', () {
@@ -120,6 +149,24 @@ void main() {
       expect(filtered.first.programme, 'ANC');
     });
 
+    test('filters PW registration follow-up rows', () {
+      const items = [
+        NabaFollowUpItem(
+          activity: 'ANC visit',
+          timeline: 'In 4 weeks',
+          programme: 'ANC',
+        ),
+        NabaFollowUpItem(
+          activity: 'Return for ANC',
+          timeline: 'In 4 weeks',
+          programme: 'PWPROFILE',
+        ),
+      ];
+      final filtered = VisitSummaryDetails.followUpItemsForSummary(items);
+      expect(filtered, hasLength(1));
+      expect(filtered.first.programme, 'ANC');
+    });
+
     test('skips generic follow-up fallback on FP-only visits', () {
       expect(
         VisitSummaryDetails.shouldAddGenericFollowUpFallback(
@@ -132,6 +179,115 @@ void main() {
           programmes: {Programme.anc, Programme.familyPlanning},
         ),
         isTrue,
+      );
+    });
+
+    test('skips generic follow-up fallback on PW-only visits', () {
+      expect(
+        VisitSummaryDetails.shouldAddGenericFollowUpFallback(
+          programmes: {Programme.pw},
+        ),
+        isFalse,
+      );
+      expect(
+        VisitSummaryDetails.shouldAddGenericFollowUpFallback(
+          programmes: {Programme.pw, Programme.anc},
+        ),
+        isTrue,
+      );
+    });
+
+    test('skips generic follow-up fallback on eye-care-only visits', () {
+      expect(
+        VisitSummaryDetails.shouldAddGenericFollowUpFallback(
+          programmes: {Programme.eyeCare},
+        ),
+        isFalse,
+      );
+    });
+
+    test('skips generic follow-up fallback on cataract-only visits', () {
+      expect(
+        VisitSummaryDetails.shouldAddGenericFollowUpFallback(
+          programmes: {Programme.cataract},
+        ),
+        isFalse,
+      );
+    });
+
+    test('filters eye care and cataract follow-up rows', () {
+      const items = [
+        NabaFollowUpItem(
+          activity: 'Return',
+          timeline: 'In 4 weeks',
+          programme: 'EYE_CARE',
+        ),
+        NabaFollowUpItem(
+          activity: 'Camp review',
+          timeline: 'In 5 days',
+          programme: 'CATARACT',
+        ),
+      ];
+      expect(VisitSummaryDetails.followUpItemsForSummary(items), isEmpty);
+    });
+
+    test('eye-care-only visit drops untagged NABA follow-up rows', () {
+      const items = [
+        NabaFollowUpItem(
+          activity: 'Routine review',
+          timeline: 'In 4 weeks',
+        ),
+      ];
+      expect(
+        VisitSummaryDetails.followUpItemsForSummary(
+          items,
+          programmes: {Programme.eyeCare},
+          primaryProgramme: Programme.eyeCare,
+        ),
+        isEmpty,
+      );
+      expect(
+        VisitSummaryDetails.followUpItemsForSummary(
+          items,
+          assessmentTypes: const ['EYE_CARE'],
+        ),
+        isEmpty,
+      );
+    });
+
+    test('resolveStep3FollowUpDate eye-care-only is always null', () {
+      expect(
+        VisitSummaryDetails.resolveStep3FollowUpDate(
+          programmes: {Programme.eyeCare},
+          isReferred: true,
+          programmeDefault: DateTime.utc(2026, 9, 1),
+        ),
+        isNull,
+      );
+    });
+
+    test('resolveStep3FollowUpDate cataract-only when not referred', () {
+      expect(
+        VisitSummaryDetails.resolveStep3FollowUpDate(
+          programmes: {Programme.cataract},
+          isReferred: false,
+          programmeDefault: DateTime.utc(2026, 9, 1),
+        ),
+        isNull,
+      );
+    });
+
+    test('resolveStep3FollowUpDate cataract-only when referred uses default',
+        () {
+      final defaultDate = DateTime.utc(2026, 9, 6);
+      expect(
+        VisitSummaryDetails.resolveStep3FollowUpDate(
+          programmes: {Programme.cataract},
+          primaryProgramme: Programme.cataract,
+          isReferred: true,
+          programmeDefault: defaultDate,
+        ),
+        defaultDate,
       );
     });
   });
