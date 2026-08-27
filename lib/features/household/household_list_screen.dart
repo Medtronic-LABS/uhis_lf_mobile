@@ -8,6 +8,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/roster_revision.dart';
@@ -23,7 +24,10 @@ import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../visit/widgets/mission_queue_card.dart' show programmeBadgeColors;
+import 'member_assessment_lookup.dart';
 import 'enrollment/enrollment_dob.dart';
+import 'enrollment/enrollment_entry_sheet.dart';
+import 'enrollment/nid_ocr_service.dart';
 import 'household_detail_screen.dart';
 
 /// Watches the Patients branch navigator; registered in `router.dart`.
@@ -210,28 +214,30 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
       if (membersByHousehold.isNotEmpty) {
         // Batch-load programmes for all members in one SQL round-trip.
         final allEntities = membersByHousehold.values.expand((e) => e).toList();
-        final allPatientIds = allEntities
-            .map((e) => e.patientId)
-            .whereType<String>()
-            .toSet()
-            .toList();
+        final allLookupKeys = <String>{
+          for (final e in allEntities) ...memberAssessmentLookupKeysFromEntity(e),
+        }.toList();
         final appDb = context.read<AppDatabase>();
         final programmesDao = PatientProgrammesDao(appDb);
         final programmesByPatient = await programmesDao.programmesForMany(
-          allPatientIds,
+          allLookupKeys,
         );
         // Visit counts so a non-queue member's badge is visit-count-aware
         // ("ANC Visit 3 due"), identical to the dashboard's real badge —
         // same DAO/kind-lists WorklistRepository uses (programme_reason.dart).
         final assessmentDao = AssessmentDao(appDb);
+        final localAssessmentDao = LocalAssessmentDao(appDb);
         final ancCounts = await assessmentDao.visitCountsByPatients(
-          allPatientIds,
+          allLookupKeys,
           ancVisitKinds,
         );
         final pncCounts = await assessmentDao.visitCountsByPatients(
-          allPatientIds,
+          allLookupKeys,
           pncVisitKinds,
         );
+        final assessmentsByPatient = await assessmentDao.forMany(allLookupKeys);
+        final localServices =
+            await localAssessmentDao.latestLocalServiceForMany(allLookupKeys);
 
         final items = <_HouseholdItem>[];
         for (final entry in membersByHousehold.entries) {
@@ -240,18 +246,26 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
           // Create household item from member data
           final firstMember = members.first;
           final memberList = members.map((e) {
-            final progs = e.patientId != null
-                ? (programmesByPatient[e.patientId!] ?? const <Programme>{})
+            final lookupKeys = memberAssessmentLookupKeysFromEntity(e);
+            final tableKey = memberSideTableKey(e);
+            final progs = tableKey != null
+                ? (programmesByPatient[tableKey] ?? const <Programme>{})
                 : const <Programme>{};
+            final recentService = resolveRecentServiceKind(
+              lookupKeys: lookupKeys,
+              syncedByKey: assessmentsByPatient,
+              localLatestByPatientId: localServices,
+            );
             return _HouseholdMember.fromEntity(
               e,
               programmes: progs,
-              ancVisitCount: e.patientId != null
-                  ? (ancCounts[e.patientId!] ?? 0)
+              ancVisitCount: tableKey != null
+                  ? (ancCounts[tableKey] ?? 0)
                   : 0,
-              pncVisitCount: e.patientId != null
-                  ? (pncCounts[e.patientId!] ?? 0)
+              pncVisitCount: tableKey != null
+                  ? (pncCounts[tableKey] ?? 0)
                   : 0,
+              recentService: recentService,
             );
           }).toList();
 
@@ -703,6 +717,60 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     if (mounted) _loadData();
   }
 
+  /// Opens the NID scanner then the add-member form for [item]'s household.
+  Future<void> _addMemberToHousehold(_HouseholdItem item) async {
+    final localId = item.id ?? '';
+    if (localId.isEmpty) return;
+
+    // Use the screen State's context — not a ListView itemBuilder context,
+    // which is deactivated after the async scanner closes.
+    final result = await showNidScannerForMember(context);
+    if (!mounted || result == null) return;
+
+    final householdEntity =
+        await context.read<HouseholdDao>().getById(localId);
+    if (!mounted) return;
+
+    final serverHouseholdId = householdEntity?.fhirId ?? localId;
+
+    final villageId = householdEntity?.villageId ??
+        item.members.firstOrNull?.villageId ??
+        item.rawJson?['villageId'] as String? ??
+        '';
+    final subVillageId = householdEntity?.subVillageId ?? '';
+    final subVillageName = householdEntity?.subVillageName ?? '';
+    final memberNames = item.members
+        .map((m) => m.name)
+        .whereType<String>()
+        .where((n) => n.isNotEmpty)
+        .toList();
+    final head = _headMember(item.members);
+    final extra = <String, dynamic>{
+      'householdId': serverHouseholdId,
+      'householdReferenceId': localId,
+      'householdName': item.name ?? '',
+      'householdNo': item.householdNo ?? '',
+      'headName': head?.name ?? '',
+      'headPhoneNumber': head?.phoneNumber?.trim().isNotEmpty == true
+          ? head!.phoneNumber!.trim()
+          : householdEntity?.headPhoneNumber?.trim(),
+      'villageId': villageId,
+      'villageName': item.village ?? '',
+      'subVillageId': subVillageId,
+      'subVillageName': subVillageName,
+      'memberNames': memberNames,
+    };
+    if (result.status == NidScanStatus.success && result.data != null) {
+      extra['fromNidScan'] = true;
+      extra['nidNumber'] = result.data!.nidNumber;
+      extra['name'] = result.data!.name;
+      extra['dateOfBirth'] = result.data!.dateOfBirth;
+    }
+    if (!mounted) return;
+    await context.push('/household/enrollment/link-member', extra: extra);
+    if (mounted) _loadData();
+  }
+
   void _navigateToMemberDetail(BuildContext context, _MemberInfo member) {
     debugPrint('[_HouseholdListScreenState] _navigateToMemberDetail patientId=${member.patientId} id=${member.id} name=${member.name}');
     final id = (member.patientId != null && member.patientId!.isNotEmpty)
@@ -788,6 +856,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
       (m) => m.isHouseholdHead == true,
       orElse: () => item.members.first,
     );
+  }
+
+  _HouseholdMember? _headMember(List<_HouseholdMember> members) {
+    if (members.isEmpty) return null;
+    for (final m in members) {
+      if (m.isHouseholdHead == true) return m;
+    }
+    return members.first;
   }
 }
 
@@ -1021,11 +1097,8 @@ class _HouseholdCard extends StatelessWidget {
 }
 
 /// One row in a household card's expanded "other members" panel — initials
-/// avatar, name, relation + age/gender, phone, and a "Registered" tag,
-/// matching the v13 mockup's `otherMembers` treatment. The mockup's static
-/// prototype has no tap action here; this app has a real Patient Details
-/// page, so tapping opens it — real capability shouldn't regress just
-/// because the mockup couldn't demonstrate it.
+/// avatar, name, relation + age/gender, phone, and the latest service tag
+/// (or "Registered" when no visit history exists).
 class _OtherMemberRow extends StatelessWidget {
   const _OtherMemberRow({
     required this.member,
@@ -1055,6 +1128,19 @@ class _OtherMemberRow extends StatelessWidget {
     ].whereType<String>().join(' · ');
     final phone = member.phoneNumber?.trim();
     final hasPhone = phone != null && phone.isNotEmpty;
+
+    final serviceKind = member.recentService?.trim();
+    final hasService = serviceKind != null && serviceKind.isNotEmpty;
+    final tagLabel = hasService
+        ? ProgrammeLabels.forServiceKind(serviceKind)
+        : HouseholdListStrings.enrolledTag;
+    final serviceProgramme =
+        hasService ? Programme.fromString(serviceKind) : null;
+    final (badgeBg, badgeFg) = hasService &&
+            serviceProgramme != null &&
+            serviceProgramme != Programme.unknown
+        ? programmeBadgeColors(serviceProgramme)
+        : (lc.statusSuccessSurface, lc.statusSuccessAction);
 
     final row = InkWell(
       onTap: onTap,
@@ -1119,15 +1205,15 @@ class _OtherMemberRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                color: lc.statusSuccessSurface,
+                color: badgeBg,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                HouseholdListStrings.enrolledTag,
+                tagLabel,
                 style: TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
-                  color: lc.statusSuccessAction,
+                  color: badgeFg,
                 ),
               ),
             ),
@@ -1318,6 +1404,7 @@ class _HouseholdMember {
     this.programmes = const {},
     this.ancVisitCount = 0,
     this.pncVisitCount = 0,
+    this.recentService,
   });
 
   final String? id;
@@ -1344,6 +1431,10 @@ class _HouseholdMember {
   /// label ("ANC Visit 3 due"), identical to the dashboard's real badge.
   final int ancVisitCount;
   final int pncVisitCount;
+
+  /// Most recent assessment `kind` / `serviceProvided` — shown on expanded
+  /// "other member" rows when visit history exists.
+  final String? recentService;
 
   static _HouseholdMember fromJson(Map json) {
     String? str(String k) {
@@ -1386,6 +1477,7 @@ class _HouseholdMember {
     Set<Programme> programmes = const {},
     int ancVisitCount = 0,
     int pncVisitCount = 0,
+    String? recentService,
   }) {
     return _HouseholdMember(
       id: e.id,
@@ -1404,6 +1496,7 @@ class _HouseholdMember {
       programmes: programmes,
       ancVisitCount: ancVisitCount,
       pncVisitCount: pncVisitCount,
+      recentService: recentService,
     );
   }
 }

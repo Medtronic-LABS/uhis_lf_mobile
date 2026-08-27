@@ -140,6 +140,7 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
       'householdFhirId': hh.fhirId ?? hh.id,
       'householdName': hh.name ?? '',
       'householdNo': hh.householdNo ?? '',
+      'headPhoneNumber': hh.headPhoneNumber?.trim(),
       'villageId': hh.villageId ?? '',
       'villageName': hh.village ?? '',
       'subVillageId': hh.subVillageId ?? '',
