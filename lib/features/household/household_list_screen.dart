@@ -685,6 +685,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
             _MemberInfo.fromMember(other, item),
           ),
           onTap: () => _navigateToDetail(context, item),
+          onAddMember: () => _addMemberToHousehold(item),
         );
       },
     );
@@ -896,6 +897,7 @@ class _HouseholdCard extends StatelessWidget {
     required this.onToggleExpanded,
     required this.onMemberTap,
     this.onTap,
+    this.onAddMember,
   });
 
   final _HouseholdItem item;
@@ -917,6 +919,7 @@ class _HouseholdCard extends StatelessWidget {
   final VoidCallback? onToggleExpanded;
   final void Function(_HouseholdMember other) onMemberTap;
   final VoidCallback? onTap;
+  final VoidCallback? onAddMember;
 
   @override
   Widget build(BuildContext context) {
@@ -951,60 +954,65 @@ class _HouseholdCard extends StatelessWidget {
         children: [
           Material(
             color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: lc.cardSurfaceMuted,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: lc.surfaceTrack,
-                      width: 1,
-                    ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: lc.cardSurfaceMuted,
+                border: Border(
+                  bottom: BorderSide(
+                    color: lc.surfaceTrack,
+                    width: 1,
                   ),
                 ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    const Text('🏠', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              child: Row(
+                children: [
+                  const Text('🏠', style: TextStyle(fontSize: 14)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: onTap,
+                      borderRadius: BorderRadius.circular(6),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontFamily: AppFonts.display,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              color: AppColors.navy,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (villageDisplayName != null &&
-                              villageDisplayName!.isNotEmpty) ...[
-                            const SizedBox(height: 1),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              villageDisplayName!,
+                              title,
                               style: const TextStyle(
-                                fontSize: 9.5,
-                                color: AppColors.textMuted,
+                                fontFamily: AppFonts.display,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                color: AppColors.navy,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (villageDisplayName != null &&
+                                villageDisplayName!.isNotEmpty) ...[
+                              const SizedBox(height: 1),
+                              Text(
+                                villageDisplayName!,
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  color: AppColors.textMuted,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
+                    if (onAddMember != null) ...[
+                      const SizedBox(width: 8),
+                      _HouseholdAddMemberButton(onPressed: onAddMember!),
+                    ],
                   ],
                 ),
               ),
             ),
-          ),
           if (primaryRelation != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
@@ -1091,6 +1099,37 @@ class _HouseholdCard extends StatelessWidget {
               );
             }),
         ],
+      ),
+    );
+  }
+}
+
+/// Circular "+" on a household card header — opens add-member for that household.
+class _HouseholdAddMemberButton extends StatelessWidget {
+  const _HouseholdAddMemberButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: HouseholdDetailStrings.addMember,
+      child: Material(
+        color: AppColors.navy.withValues(alpha: 0.08),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: const SizedBox(
+            width: 28,
+            height: 28,
+            child: Icon(
+              Icons.add_rounded,
+              size: 18,
+              color: AppColors.navy,
+            ),
+          ),
+        ),
       ),
     );
   }
