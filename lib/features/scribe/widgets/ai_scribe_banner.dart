@@ -554,17 +554,25 @@ class AiScribeLiveAsrPanel extends StatelessWidget {
               ),
             )
           else ...[
-            Text(
-              controller.segments.isEmpty
-                  ? RealtimeAsrStrings.transcriptEmpty
-                  : controller.fullTranscript,
-              style: TextStyle(
-                color: AppColors.textOnNavy.withValues(alpha: 0.9),
-                fontSize: 12,
-                fontStyle: controller.segments.isEmpty ? FontStyle.italic : null,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 120),
+              child: Scrollbar(
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.zero,
+                  child: Text(
+                    controller.segments.isEmpty
+                        ? RealtimeAsrStrings.transcriptEmpty
+                        : controller.fullTranscript,
+                    style: TextStyle(
+                      color: AppColors.textOnNavy.withValues(alpha: 0.9),
+                      fontSize: 12,
+                      fontStyle:
+                          controller.segments.isEmpty ? FontStyle.italic : null,
+                    ),
+                  ),
+                ),
               ),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 8),
             Row(
