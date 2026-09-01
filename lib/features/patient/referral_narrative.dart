@@ -34,7 +34,7 @@ List<String> parseReferralReasonTokens(Object? reasons) {
 
   return trimmed
       .replaceAll(RegExp(r'^\[|\]$'), '')
-      .split(RegExp(r'[,;]'))
+      .split(RegExp(r'[,;]|\s+·\s+|\s+and\s+', caseSensitive: false))
       .map((r) => r.trim().replaceAll(RegExp(r'''^["']+|["']+$'''), ''))
       .where((r) => r.isNotEmpty)
       .toList(growable: false);
@@ -100,6 +100,9 @@ String shortReasonLabel(String reason) {
   }
   if (compact.contains('overdue') || compact.contains('missedvisit')) {
     return ReferralStrings.shortReasonVisitOverdue;
+  }
+  if (compact == 'symptoms' || compact == 'reportedsymptoms') {
+    return ReferralStrings.shortReasonSymptoms;
   }
   if (compact.contains('symptom')) return ReferralStrings.shortReasonClinicalSymptoms;
   final t = reason.trim();

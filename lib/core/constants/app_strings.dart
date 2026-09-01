@@ -1669,6 +1669,9 @@ abstract final class ReferralStrings {
       getTranslatedString('Referral.shortReasonSupplementGap', 'Supplement gap');
   static String get shortReasonVisitOverdue =>
       getTranslatedString('Referral.shortReasonVisitOverdue', 'Visit overdue');
+  /// Spice NCD wire reason `Symptoms`.
+  static String get shortReasonSymptoms =>
+      getTranslatedString('Referral.shortReasonSymptoms', 'Symptoms');
   static String get shortReasonClinicalSymptoms =>
       getTranslatedString('Referral.shortReasonClinicalSymptoms', 'Clinical symptoms');
 
@@ -5983,6 +5986,37 @@ abstract final class ProgrammeLabels {
         return getTranslatedString(
             'Worklist.programmeUnknown', 'Scheduled Visit');
     }
+  }
+
+  /// Localized label for a raw assessment `kind` / `serviceProvided` value —
+  /// used on household member rows (latest service tag). Mirrors Spice
+  /// `AssessmentUtil.mapServiceToServiceName`.
+  static String forServiceKind(String? kind) {
+    if (kind == null || kind.trim().isEmpty) return '';
+    final compact =
+        kind.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+    if (compact == 'ENROLLMENT' || compact == 'MENUREGISTRATION') {
+      return PatientProfileStrings.ncdEnrollment;
+    }
+    if (compact == 'PWPROFILE') {
+      return PatientProfileStrings.pregnancyRegistered;
+    }
+    if (compact.contains('NCDMEDICALREVIEW') || compact == 'MEDICALREVIEW') {
+      return PatientProfileStrings.ncdFollowUp;
+    }
+    if (compact == 'PREGNANCYOUTCOME' || compact == 'OUTCOME') {
+      return getTranslatedString('pregnancyOutcome', 'Pregnancy Outcome');
+    }
+    final prog = Programme.fromString(kind);
+    if (prog != Programme.unknown) return of(prog);
+    return kind
+        .trim()
+        .replaceAll('_', ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) =>
+            w.length == 1 ? w.toUpperCase() : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+        .join(' ');
   }
 }
 

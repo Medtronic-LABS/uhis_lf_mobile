@@ -12228,7 +12228,7 @@
     "en": "BP is rising across recent visits — referral recommended."
   },
   "Referral.shortReasonHighBg": {
-    "bn": "উচ্চ (বিজি)",
+    "bn": "উচ্চ রক্তে শর্করা",
     "en": "High BG"
   },
   "Referral.shortReasonBloodGlucoseElevated": {
@@ -12270,6 +12270,10 @@
   "Referral.shortReasonVisitOverdue": {
     "bn": "ভিজিটের সময় পার হয়ে গেছে",
     "en": "Visit overdue"
+  },
+  "Referral.shortReasonSymptoms": {
+    "bn": "উপসর্গ",
+    "en": "Symptoms"
   },
   "Referral.shortReasonClinicalSymptoms": {
     "bn": "ক্লিনিক্যাল উপসর্গ",

@@ -69,6 +69,9 @@ class AddHouseholdMemberScreen extends StatefulWidget {
     this.scannedName,
     this.scannedDateOfBirth,
     this.initialMemberNames = const [],
+    this.existingHouseholdName,
+    this.existingHeadName,
+    this.existingHeadPhoneNumber,
   });
 
   /// When non-null, the screen operates in standalone mode: submits the member
@@ -93,6 +96,11 @@ class AddHouseholdMemberScreen extends StatefulWidget {
   /// Pre-populated member names from the caller (e.g. household detail screen).
   /// When non-empty, skips the DB query in [_loadHouseholdMembers].
   final List<String> initialMemberNames;
+
+  /// Shown under the AppBar title — e.g. `Nasrin Begum's`.
+  final String? existingHouseholdName;
+  final String? existingHeadName;
+  final String? existingHeadPhoneNumber;
 
   bool get isStandalone => existingHouseholdId != null;
 
@@ -256,6 +264,33 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   /// server — surfaces a de-duplication banner and loads authoritative details.
   Patient? _existingPatient;
 
+  /// AppBar context for standalone link-member (batch flow reads controller).
+  String _headerHouseholdLabel = '';
+  String _headerPhoneRaw = '';
+
+  static String _possessiveHouseholdLabel({
+    String? headName,
+    String? householdName,
+  }) {
+    const suffix = ' Household';
+    final raw = (headName?.trim().isNotEmpty == true
+            ? headName!.trim()
+            : householdName?.trim()) ??
+        '';
+    if (raw.isEmpty) return '';
+    if (raw.endsWith(suffix)) return raw;
+    final possessive = raw.endsWith("'s") ? raw : "$raw's";
+    return '$possessive$suffix';
+  }
+
+  void _seedStandaloneHeader() {
+    _headerHouseholdLabel = _possessiveHouseholdLabel(
+      headName: widget.existingHeadName,
+      householdName: widget.existingHouseholdName,
+    );
+    _headerPhoneRaw = widget.existingHeadPhoneNumber?.trim() ?? '';
+  }
+
   @override
   void initState() {
     debugPrint('[_AddHouseholdMemberScreenState] initState standalone=${widget.isStandalone}');
@@ -281,6 +316,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     // Seed guardian candidates + resolve the household head's mobile so the
     // "Head of Household" phone-category option can autofill it.
     if (widget.isStandalone) {
+      _seedStandaloneHeader();
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadHouseholdMembers());
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -332,6 +368,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
     final options = <_GuardianOption>[];
     String? headMobile;
+    String? headName;
     for (final e in entities) {
       if (!e.isActive) continue;
       final name = e.name?.trim() ?? '';
@@ -346,14 +383,34 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         fhirId: e.fhirId,
       ));
       if (e.isHouseholdHead) {
+        headName = name;
         final phone = e.phone?.trim();
         if (phone != null && phone.isNotEmpty) headMobile = phone;
+      }
+    }
+
+    if (_headerPhoneRaw.isEmpty) {
+      final hhDao = context.read<HouseholdDao>();
+      final hhRef = widget.existingHouseholdReferenceId;
+      final hhEntity = (hhRef != null && hhRef.isNotEmpty
+              ? await hhDao.getById(hhRef)
+              : null) ??
+          await hhDao.getByFhirId(hhId);
+      final stored = hhEntity?.headPhoneNumber?.trim();
+      if (stored != null && stored.isNotEmpty) {
+        headMobile ??= stored;
       }
     }
 
     setState(() {
       _guardianOptions = options;
       if (headMobile != null) _headMobileNumber = headMobile;
+      if (_headerHouseholdLabel.isEmpty && headName != null) {
+        _headerHouseholdLabel = _possessiveHouseholdLabel(headName: headName);
+      }
+      if (_headerPhoneRaw.isEmpty && headMobile != null) {
+        _headerPhoneRaw = headMobile;
+      }
     });
   }
 
@@ -959,7 +1016,14 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   Widget build(BuildContext context) {
     return Consumer<EnrollmentController>(
       builder: (context, controller, child) {
-        final hhNumber = controller.household?.householdNumber ?? '';
+        final householdLabel = widget.isStandalone
+            ? _headerHouseholdLabel
+            : _possessiveHouseholdLabel(
+                headName: controller.householdHead?.name,
+              );
+        final phoneRaw = widget.isStandalone
+            ? _headerPhoneRaw
+            : controller.householdHead?.mobileNumber?.trim() ?? '';
 
         return Scaffold(
           backgroundColor: AppColors.pageBackground,
@@ -970,27 +1034,13 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
               icon: const Icon(Icons.arrow_back, color: Colors.white),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  EnrollmentStrings.addMemberAppBar,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-                if (hhNumber.isNotEmpty)
-                  Text(
-                    '${EnrollmentStrings.addMemberSubtitle} $hhNumber',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.7),
-                    ),
-                  ),
-              ],
+            title: Text(
+              EnrollmentStrings.addMemberAppBar,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
             ),
           ),
           body: SafeArea(
@@ -1004,6 +1054,11 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     AppSpacing.stickyBarClearance,
                   ),
                   children: [
+                    if (householdLabel.isNotEmpty || phoneRaw.isNotEmpty)
+                      _HouseholdContextBanner(
+                        householdLabel: householdLabel,
+                        phoneNumber: phoneRaw,
+                      ),
                     // ── Q1: Name — hidden when NID scanned (card has it) ──
                     if (!_nidScanned) ...[
                       SizedBox(key: _key('name'), height: 0),
@@ -1551,6 +1606,56 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Household name + head mobile shown at the top of the form body.
+class _HouseholdContextBanner extends StatelessWidget {
+  const _HouseholdContextBanner({
+    required this.householdLabel,
+    required this.phoneNumber,
+  });
+
+  final String householdLabel;
+  final String phoneNumber;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (householdLabel.isNotEmpty)
+            Text(
+              householdLabel,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          if (phoneNumber.isNotEmpty) ...[
+            if (householdLabel.isNotEmpty) const SizedBox(height: 4),
+            Text(
+              phoneNumber,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

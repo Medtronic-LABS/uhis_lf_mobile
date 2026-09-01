@@ -1,3 +1,5 @@
+import '../../../core/models/programme.dart';
+import '../naba/naba_models.dart';
 import 'childhood_visit.dart';
 
 /// Builds Spice-shaped assessment `summary` / `otherDetails` patches from
@@ -14,6 +16,213 @@ abstract final class VisitSummaryDetails {
   /// [ChildhoodVisit.formatNextVisitDate] / [NcdStatus.referredSummary].
   static String formatNextVisitDate(DateTime date) =>
       ChildhoodVisit.formatNextVisitDate(date);
+
+  /// Spice `AssessmentFamilyPlanningSummaryFragment` — no follow-up date row.
+  static bool isFamilyPlanningWireType(String? tag) {
+    if (tag == null || tag.isEmpty) return false;
+    final n = tag.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+    return n == 'FP' || n == 'FAMILYPLANNING';
+  }
+
+  /// Spice `AssessmentPregnantWomenRegistrationSummaryFragment` — no follow-up
+  /// date row; `updatePregnantWomanAssessmentDetails()` does not stamp summary.
+  static bool isPwProfileWireType(String? tag) {
+    if (tag == null || tag.isEmpty) return false;
+    final n = tag.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+    return n == 'PWPROFILE' ||
+        n == 'PW' ||
+        n == 'PREGNANTWOMENPROFILE' ||
+        n == 'PREGNANTWOMENREGISTRATION';
+  }
+
+  /// PW registration-only visit — no Step 3 follow-up date (Spice parity).
+  static bool isPwRegistrationOnlyVisit({
+    required Set<Programme> programmes,
+    Programme primaryProgramme = Programme.unknown,
+  }) {
+    final effective = _effectiveProgrammes(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+    );
+    return effective.length == 1 && effective.contains(Programme.pw);
+  }
+
+  static bool isEyeCareWireType(String? tag) {
+    if (tag == null || tag.isEmpty) return false;
+    final n = tag.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+    return n == 'EYECARE' || n == 'EYE';
+  }
+
+  static bool isCataractWireType(String? tag) {
+    if (tag == null || tag.isEmpty) return false;
+    final n = tag.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+    return n == 'CATARACT';
+  }
+
+  /// Spice `BDEyeCareAssessmentSummaryFragment` — never stamps nextVisitDate.
+  static bool isEyeCareOnlyVisit({
+    required Set<Programme> programmes,
+    Programme primaryProgramme = Programme.unknown,
+    Iterable<String>? assessmentTypes,
+  }) {
+    if (_isEyeCareOnlyFromAssessments(assessmentTypes)) return true;
+    final effective = _effectiveProgrammes(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+    );
+    return effective.length == 1 && effective.contains(Programme.eyeCare);
+  }
+
+  static bool _isEyeCareOnlyFromAssessments(Iterable<String>? types) {
+    if (types == null) return false;
+    final normalized = types
+        .map((t) => t.trim().toUpperCase())
+        .where((t) => t.isNotEmpty)
+        .toSet();
+    return normalized.length == 1 && normalized.contains('EYE_CARE');
+  }
+
+  /// Cataract-only visit (no combined NCD/ANC/etc. on this encounter).
+  static bool isCataractOnlyVisit({
+    required Set<Programme> programmes,
+    Programme primaryProgramme = Programme.unknown,
+  }) {
+    final effective = _effectiveProgrammes(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+    );
+    return effective.length == 1 && effective.contains(Programme.cataract);
+  }
+
+  /// Whether Step 3 should schedule local follow-up / stamp next_due_at.
+  ///
+  /// Eye care: never (Spice only stamps `referredSite` at submit).
+  /// Cataract: only when referred (+5 day wire stamp); not when cleared.
+  static bool shouldScheduleStep3FollowUp({
+    required Set<Programme> programmes,
+    Programme primaryProgramme = Programme.unknown,
+    required bool isReferred,
+    Iterable<String>? assessmentTypes,
+  }) {
+    if (isPwRegistrationOnlyVisit(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+    )) {
+      return false;
+    }
+    if (isEyeCareOnlyVisit(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+      assessmentTypes: assessmentTypes,
+    )) {
+      return false;
+    }
+    if (isCataractOnlyVisit(
+          programmes: programmes,
+          primaryProgramme: primaryProgramme,
+        ) &&
+        !isReferred) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Resolves the Step 3 follow-up date after programme-aware Spice rules.
+  static DateTime? resolveStep3FollowUpDate({
+    required Set<Programme> programmes,
+    Programme primaryProgramme = Programme.unknown,
+    required bool isReferred,
+    DateTime? skSelected,
+    DateTime? firstTimelineDate,
+    DateTime? programmeDefault,
+    Iterable<String>? assessmentTypes,
+  }) {
+    if (!shouldScheduleStep3FollowUp(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+      isReferred: isReferred,
+      assessmentTypes: assessmentTypes,
+    )) {
+      return null;
+    }
+    return skSelected ?? firstTimelineDate ?? programmeDefault;
+  }
+
+  static Set<Programme> _effectiveProgrammes({
+    required Set<Programme> programmes,
+    Programme primaryProgramme = Programme.unknown,
+  }) {
+    if (programmes.isNotEmpty) return programmes;
+    if (primaryProgramme != Programme.unknown) return {primaryProgramme};
+    return programmes;
+  }
+
+  /// Step 3 timeline rows — drop programmes Spice never dates on summary.
+  ///
+  /// When [programmes] / [primaryProgramme] indicate a visit that never gets a
+  /// summary follow-up date (eye-care-only, PW-only, non-referred cataract),
+  /// returns an empty list even if NABA sent generic untagged rows.
+  static List<NabaFollowUpItem> followUpItemsForSummary(
+    List<NabaFollowUpItem> items, {
+    Set<Programme> programmes = const {},
+    Programme primaryProgramme = Programme.unknown,
+    bool isReferred = false,
+    Iterable<String>? assessmentTypes,
+  }) {
+    if (!shouldScheduleStep3FollowUp(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+      isReferred: isReferred,
+      assessmentTypes: assessmentTypes,
+    )) {
+      return const [];
+    }
+    return items
+        .where(
+          (i) =>
+              !isFamilyPlanningWireType(i.programme) &&
+              !isPwProfileWireType(i.programme) &&
+              !isEyeCareWireType(i.programme) &&
+              !isCataractWireType(i.programme),
+        )
+        .toList();
+  }
+
+  /// Rule-based fallback must not invent a generic follow-up on visits Spice
+  /// never dates on summary (FP/PW/Eye) or where a programme default applies
+  /// (referred Cataract → +5 days, not a generic 4-week row).
+  static bool shouldAddGenericFollowUpFallback({
+    required Set<Programme> programmes,
+    Programme primaryProgramme = Programme.unknown,
+  }) {
+    if (isPwRegistrationOnlyVisit(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+    )) {
+      return false;
+    }
+    if (isEyeCareOnlyVisit(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+    )) {
+      return false;
+    }
+    if (isCataractOnlyVisit(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+    )) {
+      return false;
+    }
+    final effective = _effectiveProgrammes(
+      programmes: programmes,
+      primaryProgramme: primaryProgramme,
+    );
+    if (effective.length == 1 &&
+        effective.contains(Programme.familyPlanning)) {
+      return false;
+    }
+    return true;
+  }
 
   /// Per-assessment-type patch for keys that belong in wire `summary`.
   ///

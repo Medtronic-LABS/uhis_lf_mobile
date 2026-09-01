@@ -11,6 +11,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
@@ -28,6 +29,7 @@ import 'enrollment/nid_ocr_service.dart';
 import 'enrollment/widgets/enrollment_sticky_bar.dart';
 import '../visit/widgets/mission_queue_card.dart';
 import '../../core/i18n/app_date_format.dart';
+import 'member_assessment_lookup.dart';
 
 /// Full details of a household member for display.
 class HouseholdMemberData {
@@ -530,6 +532,8 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       final assessmentDao = context.read<AssessmentDao>();
       final patientDao = context.read<PatientDao>();
       final programmesDao = PatientProgrammesDao(context.read<AppDatabase>());
+      final localAssessmentDao =
+          LocalAssessmentDao(context.read<AppDatabase>());
       final hierarchy = context.read<UserHierarchyService>();
       final repo = context.read<DashboardRepository>();
       await hierarchy.prefetch();
@@ -555,6 +559,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
           assessmentDao,
           patientDao,
           programmesDao,
+          localAssessmentDao,
         );
         final ssName = _resolveSsName(
             localMembers.first.shasthyaShebikaId, hierarchy);
@@ -602,6 +607,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
           assessmentDao,
           patientDao,
           programmesDao,
+          localAssessmentDao,
         );
         final ssName = enriched.isNotEmpty
             ? _resolveSsName(
@@ -666,40 +672,89 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     AssessmentDao assessmentDao,
     PatientDao patientDao,
     PatientProgrammesDao programmesDao,
+    LocalAssessmentDao localAssessmentDao,
   ) async {
-    final patientIds =
-        members.map((m) => m.patientId).whereType<String>().toList();
-    if (patientIds.isEmpty) return members;
+    if (members.isEmpty) return members;
+
+    final lookupKeys = <String>{
+      for (final m in members)
+        ...memberAssessmentLookupKeys(
+          id: m.id,
+          patientId: m.patientId,
+          referenceId: m.referenceId,
+        ),
+    }.toList();
+    if (lookupKeys.isEmpty) return members;
+
+    final tableKeys = members
+        .map((m) => m.id?.trim().isNotEmpty == true
+            ? m.id!
+            : (m.patientId?.trim().isNotEmpty == true ? m.patientId! : null))
+        .whereType<String>()
+        .toList();
 
     final results = await Future.wait([
-      assessmentDao.forMany(patientIds),
-      patientDao.lastVisitAtForPatients(patientIds),
-      programmesDao.programmesForMany(patientIds),
-      assessmentDao.visitCountsByPatients(patientIds, ancVisitKinds),
-      assessmentDao.visitCountsByPatients(patientIds, pncVisitKinds),
+      assessmentDao.forMany(lookupKeys),
+      patientDao.lastVisitAtForPatients(tableKeys),
+      programmesDao.programmesForMany(tableKeys),
+      assessmentDao.visitCountsByPatients(tableKeys, ancVisitKinds),
+      assessmentDao.visitCountsByPatients(tableKeys, pncVisitKinds),
+      localAssessmentDao.latestLocalServiceForMany(lookupKeys),
     ]);
     final assessments = results[0] as Map<String, List<AssessmentRow>>;
     final lastVisits = results[1] as Map<String, int>;
     final programmesByPatient = results[2] as Map<String, Set<Programme>>;
     final ancCounts = results[3] as Map<String, int>;
     final pncCounts = results[4] as Map<String, int>;
+    final localServices =
+        results[5] as Map<String, ({String type, int at})>;
 
     return members.map((m) {
-      final pid = m.patientId;
-      if (pid == null) return m;
-      final latestAssessment = assessments[pid]?.first;
-      final lastVisitMs = lastVisits[pid];
-      final serviceAt = latestAssessment?.occurredAt != null
-          ? DateTime.fromMillisecondsSinceEpoch(latestAssessment!.occurredAt!)
-          : (lastVisitMs != null
-              ? DateTime.fromMillisecondsSinceEpoch(lastVisitMs)
-              : null);
+      final keys = memberAssessmentLookupKeys(
+        id: m.id,
+        patientId: m.patientId,
+        referenceId: m.referenceId,
+      );
+      if (keys.isEmpty) return m;
+      final tableKey = m.id?.trim().isNotEmpty == true
+          ? m.id!
+          : (m.patientId?.trim().isNotEmpty == true ? m.patientId : null);
+      final recentService = resolveRecentServiceKind(
+        lookupKeys: keys,
+        syncedByKey: assessments,
+        localLatestByPatientId: localServices,
+      );
+      final synced = latestSyncedAssessmentForKeys(keys, assessments);
+      ({String type, int at})? localLatest;
+      for (final key in keys) {
+        final candidate = localServices[key];
+        if (candidate == null) continue;
+        if (localLatest == null || candidate.at > localLatest.at) {
+          localLatest = candidate;
+        }
+      }
+      final syncedAt = synced?.occurredAt ?? 0;
+      final localAt = localLatest?.at ?? 0;
+      final lastVisitMs = tableKey != null ? lastVisits[tableKey] : null;
+      final DateTime? serviceAt;
+      if (localAt > syncedAt && localAt > 0) {
+        serviceAt = DateTime.fromMillisecondsSinceEpoch(localAt);
+      } else if (synced?.occurredAt != null) {
+        serviceAt =
+            DateTime.fromMillisecondsSinceEpoch(synced!.occurredAt!);
+      } else if (lastVisitMs != null) {
+        serviceAt = DateTime.fromMillisecondsSinceEpoch(lastVisitMs);
+      } else {
+        serviceAt = null;
+      }
       return m.withEnrichment(
-        recentService: latestAssessment?.kind,
+        recentService: recentService,
         recentServiceAt: serviceAt,
-        programmes: programmesByPatient[pid] ?? const {},
-        ancVisitCount: ancCounts[pid] ?? 0,
-        pncVisitCount: pncCounts[pid] ?? 0,
+        programmes: tableKey != null
+            ? (programmesByPatient[tableKey] ?? const {})
+            : const {},
+        ancVisitCount: tableKey != null ? (ancCounts[tableKey] ?? 0) : 0,
+        pncVisitCount: tableKey != null ? (pncCounts[tableKey] ?? 0) : 0,
       );
     }).toList();
   }
@@ -751,11 +806,23 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         .whereType<String>()
         .where((n) => n.isNotEmpty)
         .toList();
+    HouseholdMemberData? head;
+    for (final m in _household.members) {
+      if (m.isHead) {
+        head = m;
+        break;
+      }
+    }
+    head ??= _household.members.isNotEmpty ? _household.members.first : null;
     final extra = <String, dynamic>{
       'householdId': serverHouseholdId,
       'householdReferenceId': localId,
       'householdName': _household.name ?? '',
       'householdNo': _household.householdNo ?? '',
+      'headName': head?.name ?? '',
+      'headPhoneNumber': head?.phoneNumber?.trim().isNotEmpty == true
+          ? head!.phoneNumber!.trim()
+          : householdEntity?.headPhoneNumber?.trim(),
       'villageId': villageId,
       'villageName': _household.village ?? '',
       'subVillageId': subVillageId,

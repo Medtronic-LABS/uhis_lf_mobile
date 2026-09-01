@@ -1589,6 +1589,11 @@ String? _pncVisitNumberFrom(MemberAssessment a, Map<String, dynamic> raw) {
   return null;
 }
 
+/// RMNCH and family-planning services omit referral status from history
+/// summaries — mirrors Spice `MemberAssessmentHistoryAdapterUtil.shouldShowReferralStatus`.
+bool _shouldShowReferralStatus(Programme prog) =>
+    prog != Programme.familyPlanning;
+
 _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = true}) {
   final raw = _normalizeRaw(a.rawJson);
   final prog = Programme.fromString(a.type);
@@ -1978,13 +1983,17 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
   // the clinical decision in referralStatus + referralReason.
   // showAsReferral is false for older referred assessments — only the most
   // recent referral entry gets the badge and narrative (see _buildTimelineEntries).
-  if (showAsReferral && rawStatus == 'referred') {
+  if (showAsReferral &&
+      _shouldShowReferralStatus(prog) &&
+      rawStatus == 'referred') {
     dotColor = _kDotCritical;
     badge = PatientContextStrings.referredBadge;
     badgeColor = _kBadgeCriticalBg;
     badgeFgColor = _kBadgeCriticalFg;
     description = _buildReferralNarrative(referralReasons, raw);
-  } else if (showAsReferral && rawStatus == 'ontreatment') {
+  } else if (showAsReferral &&
+      _shouldShowReferralStatus(prog) &&
+      rawStatus == 'ontreatment') {
     dotColor = _kDotHigh;
     badge = PatientContextStrings.onTreatmentBadge;
     badgeColor = _kBadgeHighBg;
@@ -4948,21 +4957,23 @@ class _TimelineEventSheet extends StatelessWidget {
       PatientDetailStrings.desireForChildren,
     );
 
-    // ── Referral (all programmes) ─────────────────────────────────────────
-    addIfPresent('referralStatus', PatientDetailStrings.referralStatus,
-        valueMapper: ClinicalStatusStrings.label);
-    // Humanize referral reason codes (JSON array or comma list → readable labels)
-    final reasonRaw = raw['referralReason'] ??
-        raw['referredReasons'] ??
-        assessment.notes;
-    final reasonTokens = parseReferralReasonTokens(reasonRaw);
-    if (reasonTokens.isNotEmpty) {
-      final humanized = reasonTokens
-          .map(_shortReasonLabel)
-          .where((r) => r.isNotEmpty)
-          .join(', ');
-      if (humanized.isNotEmpty) {
-        entries.add(MapEntry(PatientDetailStrings.referralReason, humanized));
+    // ── Referral (programmes that surface referral status in history) ─────
+    if (_shouldShowReferralStatus(prog)) {
+      addIfPresent('referralStatus', PatientDetailStrings.referralStatus,
+          valueMapper: ClinicalStatusStrings.label);
+      // Humanize referral reason codes (JSON array or comma list → readable labels)
+      final reasonRaw = raw['referralReason'] ??
+          raw['referredReasons'] ??
+          assessment.notes;
+      final reasonTokens = parseReferralReasonTokens(reasonRaw);
+      if (reasonTokens.isNotEmpty) {
+        final humanized = reasonTokens
+            .map(_shortReasonLabel)
+            .where((r) => r.isNotEmpty)
+            .join(', ');
+        if (humanized.isNotEmpty) {
+          entries.add(MapEntry(PatientDetailStrings.referralReason, humanized));
+        }
       }
     }
 
@@ -5024,7 +5035,8 @@ class _TimelineEventSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (assessment.status != null) _StatusChip(status: assessment.status!),
+                if (assessment.status != null && _shouldShowReferralStatus(prog))
+                  _StatusChip(status: assessment.status!),
               ],
             ),
           ),

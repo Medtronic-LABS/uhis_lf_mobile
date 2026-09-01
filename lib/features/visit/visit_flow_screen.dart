@@ -57,6 +57,7 @@ import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../worklist/worklist_repository.dart';
 import 'forms/childhood_visit.dart';
+import 'forms/visit_summary_details.dart';
 import 'forms/rmnch_referral_facility.dart';
 import 'immunisation/epi_visit_summary.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
@@ -1908,10 +1909,15 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         urgency: 'Today',
       ));
       counselling.add(VisitFlowStrings.noActionsCounselling);
-      followUp.add(NabaFollowUpItem(
-        activity: VisitFlowStrings.noActionsFollowUpActivity,
-        timeline: VisitFlowStrings.followUpTimelineFourWeeks,
-      ));
+      if (VisitSummaryDetails.shouldAddGenericFollowUpFallback(
+        programmes: progs,
+        primaryProgramme: widget.primaryProgramme,
+      )) {
+        followUp.add(NabaFollowUpItem(
+          activity: VisitFlowStrings.noActionsFollowUpActivity,
+          timeline: VisitFlowStrings.followUpTimelineFourWeeks,
+        ));
+      }
     }
 
     return NabaResponse(
@@ -2318,14 +2324,35 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     // Soonest follow-up wins — same order as the Step 3 timeline UI — so the
     // stamped nextVisitDate matches the date shown next to "Follow-up".
     final isReferred = _isUiReferred;
-    final followUps = _FollowUpTimeline.sortedBySoonest(naba.followUp);
-    final followUpDate = _selectedFollowUpDate ??
-        (followUps.isNotEmpty
-            ? _FollowUpDateRowState.resolveDate(followUps.first)
-            : _defaultSummaryFollowUpDate(
-                widget.primaryProgramme,
-                referred: isReferred,
-              ));
+    final followUps = _FollowUpTimeline.sortedBySoonest(
+      VisitSummaryDetails.followUpItemsForSummary(
+        naba.followUp,
+        programmes: widget.confirmedProgrammes,
+        primaryProgramme: widget.primaryProgramme,
+        isReferred: isReferred,
+        assessmentTypes: _submittedAssessmentTypes,
+      ),
+    );
+    final followUpDate = VisitSummaryDetails.resolveStep3FollowUpDate(
+      programmes: widget.confirmedProgrammes,
+      primaryProgramme: widget.primaryProgramme,
+      isReferred: isReferred,
+      skSelected: _selectedFollowUpDate,
+      firstTimelineDate: followUps.isNotEmpty
+          ? _FollowUpDateRowState.resolveDate(followUps.first)
+          : null,
+      programmeDefault: _defaultSummaryFollowUpDate(
+        widget.primaryProgramme,
+        referred: isReferred,
+      ),
+      assessmentTypes: _submittedAssessmentTypes,
+    );
+    final scheduleFollowUp = VisitSummaryDetails.shouldScheduleStep3FollowUp(
+      programmes: widget.confirmedProgrammes,
+      primaryProgramme: widget.primaryProgramme,
+      isReferred: isReferred,
+      assessmentTypes: _submittedAssessmentTypes,
+    );
 
     final assessmentRepo = context.read<AssessmentRepository>();
     final followUpSvc = context.read<FollowUpCallService>();
@@ -2371,25 +2398,30 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       debugPrint('[Step3] applyStep3Summary failed (non-blocking): $e');
     }
 
-    // Local follow-up ticket (separate from assessment summary) — keep even
-    // when summary has no nextVisitDate so Tasks still shows an open item.
-    final scheduleDate =
-        followUpDate ?? DateTime.now().add(const Duration(days: 14));
-    try {
-      await followUpSvc.scheduleLocal(
-        patientId: widget.patientId,
-        dueDate: scheduleDate,
-        type: 'MEDICAL_REVIEW',
-      );
-      debugPrint('[Step3] follow-up scheduled: $scheduleDate');
-    } catch (e) {
-      debugPrint('[Step3] follow-up schedule failed (non-blocking): $e');
+    // Local follow-up ticket (separate from assessment summary). Programmes
+    // without a Spice summary follow-up date are excluded above.
+    if (scheduleFollowUp &&
+        (followUpDate != null || followUps.isNotEmpty)) {
+      final scheduleDate =
+          followUpDate ?? DateTime.now().add(const Duration(days: 14));
+      try {
+        await followUpSvc.scheduleLocal(
+          patientId: widget.patientId,
+          dueDate: scheduleDate,
+          type: 'MEDICAL_REVIEW',
+        );
+        debugPrint('[Step3] follow-up scheduled: $scheduleDate');
+      } catch (e) {
+        debugPrint('[Step3] follow-up schedule failed (non-blocking): $e');
+      }
     }
 
     // Summary follow-up date wins over the Step 2 fallback written at form
     // submit (kept when Step 3 is skipped). Stamp patients.next_due_at so Home
     // matches the date the SK saw on this screen.
-    if (followUpDate != null && widget.patientId.isNotEmpty) {
+    if (scheduleFollowUp &&
+        followUpDate != null &&
+        widget.patientId.isNotEmpty) {
       try {
         final local = await patientDao.byAnyId(widget.patientId);
         if (!mounted) return;
@@ -2634,6 +2666,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   /// red card on — including PW, where online `required` used to override.
   bool get _isUiReferred => widget.referralRecommended;
 
+  List<String> get _submittedAssessmentTypes => widget.nabaReferralAssessments
+      .map((a) => a.assessmentType)
+      .toList(growable: false);
+
   bool _isNabaOffline(NabaResponse naba) =>
       naba.modelVersion == 'rule-based-fallback';
 
@@ -2784,14 +2820,24 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           ],
 
           // ── 5. Follow-up timeline ──────────────────────────────────
-          if (naba.followUp.isNotEmpty) ...[
-            _FollowUpTimeline(
-              items: naba.followUp,
-              programme: widget.primaryProgramme,
-              onDateChanged: (d) => setState(() => _selectedFollowUpDate = d),
-            ),
-            const SizedBox(height: 16),
-          ],
+          ...() {
+            final followUpItems = VisitSummaryDetails.followUpItemsForSummary(
+              naba.followUp,
+              programmes: widget.confirmedProgrammes,
+              primaryProgramme: widget.primaryProgramme,
+              isReferred: _isUiReferred,
+              assessmentTypes: _submittedAssessmentTypes,
+            );
+            if (followUpItems.isEmpty) return <Widget>[];
+            return [
+              _FollowUpTimeline(
+                items: followUpItems,
+                programme: widget.primaryProgramme,
+                onDateChanged: (d) => setState(() => _selectedFollowUpDate = d),
+              ),
+              const SizedBox(height: 16),
+            ];
+          }(),
 
           // Spice AssessmentRMNCHSummaryFragment: facility after follow-up date.
           if (showRmnchFacility && rmnchFacilityId != null) ...[

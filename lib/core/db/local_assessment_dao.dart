@@ -1174,6 +1174,37 @@ class LocalAssessmentDao {
     return out;
   }
 
+  /// Latest local assessment type per patient key (`members.id`), for roster
+  /// tags when synced history is missing or older than an on-device visit.
+  Future<Map<String, ({String type, int at})>> latestLocalServiceForMany(
+    List<String> patientIds,
+  ) async {
+    if (patientIds.isEmpty) return const {};
+    final placeholders = List.filled(patientIds.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      '''
+      SELECT patient_id, assessment_type, created_at
+      FROM $tableName
+      WHERE patient_id IN ($placeholders)
+        AND patient_id IS NOT NULL
+        AND created_at IS NOT NULL
+      ORDER BY created_at DESC
+      ''',
+      patientIds,
+    );
+    final out = <String, ({String type, int at})>{};
+    for (final r in rows) {
+      final pid = r['patient_id'] as String?;
+      if (pid == null || out.containsKey(pid)) continue;
+      final type = r['assessment_type'] as String?;
+      final at = r['created_at'];
+      if (type == null || type.isEmpty || at == null) continue;
+      final ms = (at is int) ? at : int.tryParse(at.toString()) ?? 0;
+      out[pid] = (type: type, at: ms);
+    }
+    return out;
+  }
+
   /// Latest local assessment visit per patient → follow-up stamp from
   /// `other_details` (`nextVisitDate` / `nextFollowUpDate` / `dueDate`).
   ///
