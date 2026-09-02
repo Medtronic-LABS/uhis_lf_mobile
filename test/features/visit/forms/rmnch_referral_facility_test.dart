@@ -94,6 +94,28 @@ void main() {
     });
   });
 
+  group('RmnchReferralFacility.labelForWireValue', () {
+    tearDown(() {
+      AppLocale.current = AppLanguage.bangla;
+    });
+
+    test('maps ANC referralFacility id to locale label', () {
+      AppLocale.current = AppLanguage.english;
+      expect(
+        RmnchReferralFacility.labelForWireValue('uhfwc'),
+        'UHFWC (Union health and family welfare center)',
+      );
+    });
+
+    test('resolveReferredToLabel falls back to NCD facility aliases', () {
+      AppLocale.current = AppLanguage.english;
+      expect(
+        RmnchReferralFacility.resolveReferredToLabel('communityClinic'),
+        isNot('communityClinic'),
+      );
+    });
+  });
+
   group('RmnchReferralFacility.initialSelection', () {
     test('defaults to first Spice option (uhfwc)', () {
       expect(RmnchReferralFacility.initialSelection(), 'uhfwc');

@@ -40,6 +40,8 @@ import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/widgets/gestational_age_card.dart';
 import '../../core/widgets/skeleton.dart';
 import '../household/enrollment/enrollment_dob.dart';
+import '../visit/forms/form_config.dart';
+import '../visit/forms/rmnch_referral_facility.dart';
 import '../visit/triage/patient_context_builder.dart';
 import '../visit/forms/anc_existing_illness.dart';
 import '../visit/forms/delivery_facility_type.dart';
@@ -2668,7 +2670,9 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       textColor: AppColors.pncText,
       stats: {
         if (pncVisit != null) PatientDetailStrings.pncVisits: pncVisit,
-        if (deliveryMode != null) PatientDetailStrings.delivery: deliveryMode,
+        if (deliveryMode != null)
+          PatientDetailStrings.delivery:
+              fieldOptionDisplayLabel('modeOfDelivery', deliveryMode),
         if (complications?.toLowerCase() == 'yes')
           PatientDetailStrings.complications: PatientDetailStrings.yes,
         if (livingChildren != null)
@@ -4730,7 +4734,7 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent(
       'referralFacilityType',
       PatientDetailStrings.referredTo,
-      valueMapper: ReferralFacilityLabels.labelOf,
+      valueMapper: RmnchReferralFacility.resolveReferredToLabel,
     );
 
     // ── ANC / PW obstetric ─────────────────────────────────────────────────
@@ -4782,7 +4786,7 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent(
       'referralFacility',
       PatientDetailStrings.referredTo,
-      valueMapper: ReferralFacilityLabels.labelOf,
+      valueMapper: RmnchReferralFacility.resolveReferredToLabel,
     );
     addIfPresent('followUpVisit', PatientDetailStrings.followUpVisit);
 
@@ -4794,14 +4798,22 @@ class _TimelineEventSheet extends StatelessWidget {
         snap?.pncVisitNo,
       );
     }
-    addIfPresent('modeOfDelivery', PatientDetailStrings.modeOfDelivery);
+    addIfPresent(
+      'modeOfDelivery',
+      PatientDetailStrings.modeOfDelivery,
+      valueMapper: (v) => fieldOptionDisplayLabel('modeOfDelivery', v),
+    );
     addIfPresent(
       'anyComplicationsDuringDelivery',
       PatientDetailStrings.complications,
+      valueMapper: (v) =>
+          fieldOptionDisplayLabel('anyComplicationsDuringDelivery', v),
     );
     addIfPresent(
       'complicationsDuringDelivery',
       PatientDetailStrings.complicationDetails,
+      valueMapper: (v) =>
+          fieldOptionDisplayLabel('complicationsDuringDelivery', v),
     );
     addIfPresent(
       'numberOfLivingChildren',

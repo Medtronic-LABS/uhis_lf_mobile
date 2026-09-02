@@ -88,4 +88,22 @@ abstract final class RmnchReferralFacility {
 
   /// Spice Done fallback when nothing was selected.
   static const String unsetWireValue = '-1';
+
+  /// Maps a stored wire id (e.g. `uhfwc`) to the locale-aware Step 3 label.
+  /// Unknown ids are returned unchanged so NCD/display-name values still pass through.
+  static String labelForWireValue(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return raw;
+    for (final o in options) {
+      if (o.id == t) return labelOf(o);
+    }
+    return raw;
+  }
+
+  /// RMNCH spinner id first, then NCD/community-clinic aliases.
+  static String resolveReferredToLabel(String raw) {
+    final rmnch = labelForWireValue(raw);
+    if (rmnch != raw.trim()) return rmnch;
+    return PatientDetailStrings.ncdFacilityType(raw);
+  }
 }
