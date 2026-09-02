@@ -15,6 +15,7 @@ import '../../core/db/member_dao.dart';
 import '../../core/db/pregnancy_episode_dao.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
+import '../../core/risk/anc_status.dart';
 import '../../core/sync/offline_push_service.dart';
 import '../../core/sync/sync_activity.dart';
 import '../patient/followup_call_service.dart';
@@ -712,33 +713,27 @@ class AssessmentRepository extends ChangeNotifier {
     return out;
   }
 
-  /// Latest ANC visit date + scheduled next-visit date for Eligible Services /
-  /// revisit lock. Prefers the chronologically newest ANC row across local
-  /// assessments and synced history. [nextDueAt] comes from summary /
-  /// `nextVisitDate` / `nextFollowUpDate` when present (null if not stamped).
-  Future<({DateTime lastVisitAt, DateTime? nextDueAt})?> latestAncVisitSchedule(
+  /// Latest ANC visit + high-risk flag for Step 1 revisit lock — mirrors
+  /// Android Spice `isAncMenuDisabledByLastVisit` /
+  /// `AssessmentUtil.getAncMenuRevisitDays(lastAncHistory.customStatus)`.
+  ///
+  /// [highRiskPw] is true when the newest ANC row's `customStatus` contains
+  /// `HIGH_RISK_PW`. Does not use stamped `nextVisitDate` for locking.
+  Future<({DateTime lastVisitAt, bool highRiskPw})?> latestAncRevisitContext(
     String patientId, {
     String? alsoId,
+    Iterable<String>? extraIds,
   }) async {
-    final ids = _idsFor(patientId, alsoId);
+    final ids = _idsFor(patientId, alsoId, extraIds: extraIds);
     if (ids.isEmpty) return null;
 
     DateTime? bestVisit;
-    DateTime? bestNextDue;
+    var bestHighRisk = false;
 
-    void consider(DateTime visitAt, DateTime? nextDue) {
+    void consider(DateTime visitAt, bool highRisk) {
       if (bestVisit == null || visitAt.isAfter(bestVisit!)) {
         bestVisit = visitAt;
-        bestNextDue = nextDue;
-        return;
-      }
-      // Same visit moment: keep a stamped next-due if the earlier pick lacked one.
-      if (bestVisit != null &&
-          !visitAt.isBefore(bestVisit!) &&
-          !visitAt.isAfter(bestVisit!) &&
-          bestNextDue == null &&
-          nextDue != null) {
-        bestNextDue = nextDue;
+        bestHighRisk = highRisk;
       }
     }
 
@@ -746,7 +741,7 @@ class AssessmentRepository extends ChangeNotifier {
       if (!_isAncVisitKind(row.assessmentType.toUpperCase())) continue;
       final visitAt = row.createdAt;
       if (visitAt == null) continue;
-      consider(visitAt, _nextVisitFromOtherDetails(row.otherDetails));
+      consider(visitAt, _customStatusHighRiskPw(row.customStatus));
     }
 
     for (final row in await _historyRows(ids)) {
@@ -756,50 +751,61 @@ class AssessmentRepository extends ChangeNotifier {
       if (occurred == null) continue;
       consider(
         DateTime.fromMillisecondsSinceEpoch(occurred),
-        _nextVisitFromHistoryRaw(row.rawJson),
+        _customStatusHighRiskPwFromHistoryRaw(row.rawJson),
       );
     }
 
     final visit = bestVisit;
     if (visit == null) return null;
-    return (lastVisitAt: visit, nextDueAt: bestNextDue);
+    return (lastVisitAt: visit, highRiskPw: bestHighRisk);
   }
 
-  static DateTime? _nextVisitFromOtherDetails(String? otherDetails) {
-    if (otherDetails == null || otherDetails.isEmpty) return null;
-    try {
-      final decoded = jsonDecode(otherDetails);
-      if (decoded is! Map) return null;
-      return _nextVisitFromMap(Map<String, dynamic>.from(decoded));
-    } catch (_) {
-      return null;
-    }
+  static bool _customStatusHighRiskPw(String? encoded) {
+    if (encoded == null || encoded.trim().isEmpty) return false;
+    return _customStatusListContainsHighRisk(_decodeCustomStatus(encoded));
   }
 
-  static DateTime? _nextVisitFromHistoryRaw(String rawJson) {
-    if (rawJson.isEmpty) return null;
+  static bool _customStatusHighRiskPwFromHistoryRaw(String rawJson) {
+    if (rawJson.isEmpty) return false;
     try {
       final decoded = jsonDecode(rawJson);
-      if (decoded is! Map) return null;
+      if (decoded is! Map) return false;
       final map = Map<String, dynamic>.from(decoded);
-      final top = _nextVisitFromMap(map);
-      if (top != null) return top;
-      final summary = map['summary'];
-      if (summary is Map) {
-        return _nextVisitFromMap(Map<String, dynamic>.from(summary));
+      final direct = map['customStatus'];
+      if (_customStatusListContainsHighRisk(_decodeCustomStatus(direct))) {
+        return true;
       }
-      return null;
-    } catch (_) {
-      return null;
-    }
+      final encounter = map['encounter'];
+      if (encounter is Map) {
+        return _customStatusListContainsHighRisk(
+          _decodeCustomStatus(encounter['customStatus']),
+        );
+      }
+    } catch (_) {}
+    return false;
   }
 
-  static DateTime? _nextVisitFromMap(Map<String, dynamic> map) =>
-      JsonRead.firstDateTime(map, const [
-        'nextVisitDate',
-        'nextFollowUpDate',
-        'dueDate',
-      ]);
+  static List<String> _decodeCustomStatus(dynamic raw) {
+    if (raw == null) return const [];
+    if (raw is List) {
+      return raw.map((e) => e.toString()).toList();
+    }
+    if (raw is String) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) return const [];
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List) {
+          return decoded.map((e) => e.toString()).toList();
+        }
+      } catch (_) {}
+      return [trimmed];
+    }
+    return [raw.toString()];
+  }
+
+  static bool _customStatusListContainsHighRisk(List<String> tokens) =>
+      tokens.contains(AncStatus.highRiskPw);
 
   /// Number of ANC visits already recorded for [patientId], across this
   /// device's rows and synced history.

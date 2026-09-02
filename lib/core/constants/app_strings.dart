@@ -99,6 +99,7 @@ abstract final class AppStrings {
   static String get ancBlockedPostpartumMessage => getTranslatedString('ancBlockedPostpartumMessage', 'This patient has completed a delivery or PNC visit. ANC assessments cannot be started after delivery.');
   static String get ancBlockedDuplicateTitle => getTranslatedString('ancBlockedDuplicateTitle', 'ANC Already Recorded Today');
   static String get ancBlockedDuplicateMessage => getTranslatedString('ancBlockedDuplicateMessage', 'An ANC assessment has already been recorded for this patient today. Only one ANC visit is allowed per day.');
+  static String get ancBlockedRevisitTitle => getTranslatedString('ancBlockedRevisitTitle', 'ANC visit not due yet');
 
   // ── PW registration blocking ──────────────────────────────────────────────
   static String get pwAlreadyEnrolledTitle => getTranslatedString('pwAlreadyEnrolledTitle', 'Already Registered');
@@ -2717,6 +2718,9 @@ abstract final class TriageStrings {
   static String get eligibleServicesTag => getTranslatedString('Triage.eligibleServicesTag', 'Age & gender based');
   static String get enrolledBadge => getTranslatedString('enrolledBadge', 'Enrolled');
   static String get pwHint => getTranslatedString('Triage.pwHint', '⚠ Select \'PW\' first to unlock ANC');
+
+  static String get pncPoHint => getTranslatedString(
+      'Triage.pncPoHint', '⚠ Select \'Pregnancy Outcome\' first to unlock PNC');
   /// Chip label — Android "Pregnancy Outcome" menu (not mother PNC).
   static String get pregnancyOutcomeChip => getTranslatedString('pregnancyOutcomeChip', 'Pregnancy Outcome');
   static String get deliveryHint => getTranslatedString('deliveryHint', 'Pregnancy Outcome documents the birth this visit and clears ANC');
@@ -2729,7 +2733,9 @@ abstract final class TriageStrings {
   static String pwEpisodeSubtitle({required String lmp, required String edd}) => getTranslatedString('Triage.pwEpisodeSubtitle', 'LMP: {lmp} · EDD: {edd}', params: {'lmp': lmp, 'edd': edd});
   static String get ancVisitedTodayMessage => getTranslatedString('Triage.ancVisitedTodayMessage', 'ANC already recorded today');
   static String ancRevisitMessageNormal({required String lastVisit, required String nextDue}) => getTranslatedString('Triage.ancRevisitMessageNormal', 'Last visit: {lastVisit} · next due {nextDue}', params: {'lastVisit': lastVisit, 'nextDue': nextDue});
-  static String ancRevisitMessageHighRisk({required String lastVisit}) => getTranslatedString('Triage.ancRevisitMessageHighRisk', 'Last visit: {lastVisit} (high-risk — 1-day interval)', params: {'lastVisit': lastVisit});
+  static String ancRevisitMessageScheduledHighRisk({required String lastVisit, required String nextDue}) => getTranslatedString('Triage.ancRevisitMessageScheduledHighRisk', 'Last visit: {lastVisit} · next due {nextDue} (high-risk)', params: {'lastVisit': lastVisit, 'nextDue': nextDue});
+  static String ancRevisitMessageNormalInterval({required String lastVisit, required int days}) => getTranslatedString('Triage.ancRevisitMessageNormalInterval', 'Last visit: {lastVisit} · revisit in {days} days', params: {'lastVisit': lastVisit, 'days': '$days'});
+  static String ancRevisitMessageHighRisk({required String lastVisit}) => getTranslatedString('Triage.ancRevisitMessageHighRisk', 'Last visit: {lastVisit} (high-risk — revisit in 1 day)', params: {'lastVisit': lastVisit});
 
   static String selectProgrammeA11y(String label) => getTranslatedString('selectProgrammeA11y', 'Select {label}', params: {'label': '$label'});
   static String deselectProgrammeA11y(String label) => getTranslatedString('deselectProgrammeA11y', 'Deselect {label}', params: {'label': '$label'});

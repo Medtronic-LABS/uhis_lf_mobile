@@ -143,13 +143,79 @@ void main() {
   });
 
   group('ProgrammeGridSync.applyDeliverySelected', () {
-    test('clears only ANC and PW; keeps NCD and ensures PNC', () {
+    test('clears only ANC and PW; keeps NCD and optional PNC', () {
       final next = ProgrammeGridSync.applyDeliverySelected(
-        selected: {Programme.anc, Programme.pw, Programme.ncd},
+        selected: {Programme.anc, Programme.pw, Programme.ncd, Programme.pnc},
         dismissedBySk: const {},
       );
       expect(next.selected, {Programme.ncd, Programme.pnc});
       expect(next.dismissedBySk, {Programme.anc, Programme.pw});
+    });
+  });
+
+  group('ProgrammeGridSync.withoutPncUnlessPostpartum', () {
+    test('keeps PNC when postpartum', () {
+      expect(
+        ProgrammeGridSync.withoutPncUnlessPostpartum(
+          {Programme.pnc, Programme.ncd},
+          isPostpartum: true,
+        ),
+        {Programme.pnc, Programme.ncd},
+      );
+    });
+
+    test('keeps PNC on a delivery visit', () {
+      expect(
+        ProgrammeGridSync.withoutPncUnlessPostpartum(
+          {Programme.pnc},
+          isPostpartum: false,
+          isDeliveryVisit: true,
+        ),
+        {Programme.pnc},
+      );
+    });
+
+    test('keeps PNC when PO can be recorded (symptom path)', () {
+      expect(
+        ProgrammeGridSync.withoutPncUnlessPostpartum(
+          {Programme.pnc, Programme.anc},
+          isPostpartum: false,
+          pncEligibleForActivation: true,
+        ),
+        {Programme.pnc, Programme.anc},
+      );
+    });
+
+    test('strips PNC when not postpartum and PO not recordable', () {
+      expect(
+        ProgrammeGridSync.withoutPncUnlessPostpartum(
+          {Programme.pnc, Programme.ncd},
+          isPostpartum: false,
+        ),
+        {Programme.ncd},
+      );
+    });
+  });
+
+  group('ProgrammeGridSync.shouldAutoEnableDeliveryForPnc', () {
+    test('true when PNC selected and not postpartum', () {
+      expect(
+        ProgrammeGridSync.shouldAutoEnableDeliveryForPnc(
+          hasPnc: true,
+          isPostpartum: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('false when postpartum (PO already on record)', () {
+      expect(
+        ProgrammeGridSync.shouldAutoEnableDeliveryForPnc(
+          hasPnc: true,
+          isPostpartum: true,
+        ),
+        isFalse,
+      );
     });
   });
 

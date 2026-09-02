@@ -23,6 +23,8 @@ import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/clinical/ai_context_fields.dart';
+import '../../core/clinical/referral_facility_labels.dart';
+import '../../core/clinical/assessment_raw_normalizer.dart';
 import '../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
 import '../../core/clinical/briefing_rules/clinical_finding.dart';
 import '../../core/models/programme.dart';
@@ -39,6 +41,8 @@ import '../../core/widgets/gestational_age_card.dart';
 import '../../core/widgets/skeleton.dart';
 import '../household/enrollment/enrollment_dob.dart';
 import '../visit/triage/patient_context_builder.dart';
+import '../visit/forms/anc_existing_illness.dart';
+import '../visit/forms/delivery_facility_type.dart';
 import '../visit/visit_controller.dart';
 import '../visit/visit_start_helper.dart';
 import 'referral_narrative.dart';
@@ -981,7 +985,7 @@ class _PatientContextScreenState
   /// Extracts key clinical fields from one assessment's rawJson for the
   /// AI assistant context — same fields [_TimelineEventSheet] renders.
   static Map<String, dynamic> _encounterSummary(MemberAssessment a) {
-    final raw = a.rawJson;
+    final raw = normalizeAssessmentRaw(a.rawJson);
     String? str(String key) {
       final v = raw[key];
       if (v == null) return null;
@@ -1533,6 +1537,28 @@ const _kBadgeGrayFg     = Color(0xFF374151);
 int _sys(String bp) => int.tryParse(bp.split('/').firstOrNull ?? '') ?? 0;
 int _dia(String bp) => int.tryParse(bp.split('/').lastOrNull ?? '') ?? 0;
 
+Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) =>
+    normalizeAssessmentRaw(rawJson);
+
+/// Routine ANC timeline vitals line — mirrors NCD detail when values are in range.
+String _ancRoutineVitalsDescription({
+  required String bp,
+  required double bg,
+  required String? bgType,
+}) {
+  final parts = <String>[];
+  if (bp.isNotEmpty) {
+    parts.add('${PatientDetailStrings.bp}: $bp mmHg');
+  }
+  if (bg > 0) {
+    final type = bgType ?? 'FBS';
+    parts.add('${PatientDetailStrings.bloodSugarWithType(type)}: $bg mg/dL');
+  }
+  return parts.isEmpty
+      ? PatientContextStrings.timelineRoutineAnc
+      : parts.join(' · ');
+}
+
 /// Convert a single [MemberAssessment] into a display [_TimelineEntry].
 /// Builds a clinical narrative that combines referral reason tokens WITH actual
 /// vitals from [raw]. Each condition is checked from two directions:
@@ -1673,8 +1699,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       final diaANC = _dia(bpANC);
       final hbRaw = raw['hemoglobin']?.toString() ?? '';
       final hbANC = double.tryParse(hbRaw) ?? 0;
+      final bgANC = double.tryParse(raw['bg']?.toString() ?? '') ?? 0;
+      final bgTypeANC = normalizeGlucoseTypeLabel(raw['bgType']?.toString());
+      final bpHighANC = sysANC >= 140 || diaANC >= 90;
+      final bpCriticalANC = sysANC >= 160 || diaANC >= 110;
+      final bgHighANC = isGlucoseElevated(bgANC, bgTypeANC, anc: true);
 
-      if (sysANC >= 160 || diaANC >= 110) {
+      if (bpCriticalANC) {
         dotColor = _kDotCritical;
         badge = PatientContextStrings.dangerHighBpBadge;
         badgeColor = _kBadgeCriticalBg;
@@ -1686,7 +1717,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
         description = PatientContextStrings.timelineHbSevereAnemia(hbANC);
-      } else if (sysANC >= 140 || diaANC >= 90) {
+      } else if (bpHighANC && bgHighANC) {
+        dotColor = _kDotCritical;
+        badge = PatientContextStrings.ncdHighRiskBadge;
+        badgeColor = _kBadgeCriticalBg;
+        badgeFgColor = _kBadgeCriticalFg;
+        description = ClinicalFindingStrings.ncdBpAndGlucoseCombined;
+      } else if (bpHighANC) {
         dotColor = _kDotHigh;
         badge = CareThreadStrings.highrisk;
         badgeColor = _kBadgeHighBg;
@@ -1701,6 +1738,17 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         description = dp.isEmpty
             ? PatientContextStrings.timelineHighBpDetected
             : dp.join(' · ');
+      } else if (bgHighANC) {
+        dotColor = _kDotModerate;
+        badge = PatientContextStrings.highBloodSugarBadge;
+        badgeColor = _kBadgeAmberBg;
+        badgeFgColor = _kBadgeAmberFg;
+        description = bgTypeANC != null
+            ? ReferralStrings.bloodSugarElevated(
+                bgANC.toStringAsFixed(1),
+                bgTypeANC,
+              )
+            : ClinicalFindingStrings.ncdBloodSugarElevated;
       } else if (hbANC > 0 && hbANC < 10) {
         dotColor = _kDotModerate;
         badge = PatientContextStrings.anemiaBadge;
@@ -1715,7 +1763,11 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         description = PatientContextStrings.timelineHbMildAnemia(hbANC);
       } else {
         dotColor = _kDotAnc;
-        description = PatientContextStrings.timelineRoutineAnc;
+        description = _ancRoutineVitalsDescription(
+          bp: bpANC,
+          bg: bgANC,
+          bgType: bgTypeANC,
+        );
       }
 
     // ─── PNC / Delivery ───────────────────────────────────────────────────
@@ -1850,10 +1902,9 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       final sysNCD = _sys(bpNCD);
       final diaNCD = _dia(bpNCD);
       final bgNCD = double.tryParse(raw['bg']?.toString() ?? '') ?? 0;
-      final bgTypeNCD = raw['bgType']?.toString() ?? 'RBS';
+      final bgTypeNCD = normalizeGlucoseTypeLabel(raw['bgType']?.toString()) ?? 'RBS';
       final bpHighNCD = sysNCD >= 140 || diaNCD >= 90;
-      final bgThreshold = bgTypeNCD.toUpperCase() == 'FBS' ? 7.0 : 11.1;
-      final bgHighNCD = bgNCD > 0 && bgNCD >= bgThreshold;
+      final bgHighNCD = isGlucoseElevated(bgNCD, bgTypeNCD, anc: false);
 
       if (bpHighNCD && bgHighNCD) {
         dotColor = _kDotCritical;
@@ -2454,25 +2505,6 @@ List<_TimelineEntry> _sortTimelineDay(List<_TimelineEntry> dayEntries) {
   return [for (final f in flows) ...f.value];
 }
 
-/// Unpacks the `{kind, raw}` envelope written by AssessmentDao so that
-/// clinical fields (bp, bg, ancVisitNumber, …) are accessible at the top level.
-Map<String, dynamic> _unpackRaw(Map<String, dynamic> rawJson) {
-  final r = rawJson['raw'];
-  if (r is String) return jsonDecode(r) as Map<String, dynamic>;
-  if (r is Map) return Map<String, dynamic>.from(r);
-  return rawJson;
-}
-
-/// Normalises a rawJson map so clinical fields are accessible at the top level,
-/// regardless of which of three storage formats the assessment used:
-///
-/// 1. API format (AssessmentDao / member-assessment-history): the unpacked map
-///    is the full API response object; clinical fields live under the nested
-///    `observations` key — e.g. `raw['observations']['bp']` = "148/90".
-/// 2. Local-form format (LocalEncounterDao): vitals spread flat at the top level
-///    but under form-specific keys: `systolic`, `diastolic`, `glucoseValue`.
-/// 3. NCD bpLog format: `bpLog.avgSystolic` / `glucoseLog.glucose`.
-///
 /// Safely coerce a dynamic map value to String?.
 /// JSON-parsed numbers (int/double) are converted via toString(); null stays null.
 String? _rawStr(dynamic v) {
@@ -2511,122 +2543,6 @@ DateTime? _parseFlexibleDate(dynamic v) {
   }
   return DateTime.tryParse(s);
 }
-
-///
-/// After normalisation, callers read `out['bp']`, `out['bg']`, `out['bgType']`
-/// regardless of origin. The merge uses putIfAbsent so explicit top-level keys
-/// always win over sub-map values.
-Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) {
-  final raw = _unpackRaw(rawJson);
-  final out = Map<String, dynamic>.from(raw);
-
-  // Step 1 — flatten 'observations' and 'assessmentDetails' sub-maps (API format).
-  for (final subKey in const ['observations', 'assessmentDetails']) {
-    final sub = raw[subKey];
-    if (sub is Map) {
-      for (final e in sub.entries) {
-        out.putIfAbsent(e.key.toString(), () => e.value);
-      }
-    }
-  }
-
-  // Step 1b — programme wrappers sit one level inside 'assessmentDetails'
-  // (FAMILY_PLANNING sends { familyPlanning: { … } }), so flatten them now that
-  // step 1 has lifted the wrapper to the top level.
-  for (final subKey in const ['familyPlanning', 'family_planning']) {
-    final sub = out[subKey];
-    if (sub is Map) {
-      for (final e in sub.entries) {
-        out.putIfAbsent(e.key.toString(), () => e.value);
-      }
-    }
-  }
-
-  // Step 1c — PWPROFILE nests as pwProfile → pregnancyDetailsAndHistory → fields
-  // (lmp, gravida, parity, …). Lift both levels so the timeline sheet can read
-  // LMP/EDD without knowing the wire shape.
-  for (var depth = 0; depth < 2; depth++) {
-    var lifted = false;
-    for (final subKey in const [
-      'pwProfile',
-      'pregnancyDetailsAndHistory',
-      'pregnancyDetails',
-      'pregnancyProfile',
-      'obstetricHistory',
-    ]) {
-      final sub = out[subKey];
-      if (sub is! Map) continue;
-      for (final e in sub.entries) {
-        out.putIfAbsent(e.key.toString(), () => e.value);
-        lifted = true;
-      }
-    }
-    if (!lifted) break;
-  }
-
-  // Step 2 — map NCD bpLog / glucoseLog nested keys (local-form format).
-  final bpLog = raw['bpLog'];
-  if (bpLog is Map) {
-    out.putIfAbsent('avgSystolic', () => bpLog['avgSystolic']);
-    out.putIfAbsent('avgDiastolic', () => bpLog['avgDiastolic']);
-  }
-  final gLog = raw['glucoseLog'];
-  if (gLog is Map) {
-    out.putIfAbsent('glucoseValue', () => gLog['glucose']);
-    out.putIfAbsent('glucoseType', () => gLog['glucoseType']);
-  }
-
-  // Step 3 — synthesise canonical 'bp' ("sys/dia" string) if missing.
-  if (_rawStr(out['bp']) == null) {
-    int? sys;
-    int? dia;
-    for (final k in const ['systolic', 'bloodPressureSystolic', 'avgSystolic']) {
-      final v = out[k];
-      if (v is num) { sys = v.toInt(); break; }
-      if (v is String) { sys = int.tryParse(v); if (sys != null) break; }
-    }
-    if (sys == null) {
-      // bpLogDetails: [{systolic: x, diastolic: y}]
-      final log = out['bpLogDetails'];
-      if (log is List && log.isNotEmpty && log.first is Map) {
-        final first = log.first as Map;
-        final s = first['systolic'];
-        sys = s is num ? s.toInt() : (s is String ? int.tryParse(s) : null);
-        final d = first['diastolic'];
-        dia = d is num ? d.toInt() : (d is String ? int.tryParse(d) : null);
-      }
-    }
-    if (dia == null) {
-      for (final k in const ['diastolic', 'bloodPressureDiastolic', 'avgDiastolic']) {
-        final v = out[k];
-        if (v is num) { dia = v.toInt(); break; }
-        if (v is String) { dia = int.tryParse(v); if (dia != null) break; }
-      }
-    }
-    if (sys != null && dia != null) out['bp'] = '$sys/$dia';
-  }
-
-  // Step 4 — synthesise canonical 'bg' (value string) + 'bgType' if missing.
-  if ((out['bg'] as String?) == null) {
-    final glu = out['glucoseValue'] ?? out['glucose'] ?? out['bloodGlucose'];
-    if (glu != null) {
-      out['bg'] = glu.toString();
-      if (out['bgType'] == null) {
-        final gt = (out['glucoseType'] as String?)?.toLowerCase();
-        out['bgType'] = gt == 'fasting'
-            ? 'FBS'
-            : gt == 'random'
-                ? 'RBS'
-                : gt == 'postprandial'
-                    ? 'PPBS'
-                    : gt?.toUpperCase();
-      }
-    }
-  }
-
-  return out;
-}
-
 
 /// Derives the ordered list of active care threads from local data.
 /// Reads only what is already in [data] — no async calls, no new endpoints.
@@ -2679,6 +2595,22 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       stats: stats,
       checkupDate: latest?.date,
     ));
+
+    final ancBg = _rawStr(raw['bg']);
+    if (ancBg != null && ancBg.isNotEmpty) {
+      final bgType = normalizeGlucoseTypeLabel(_rawStr(raw['bgType']));
+      final bgLabel = bgType != null
+          ? PatientDetailStrings.bloodSugarWithType(bgType)
+          : PatientDetailStrings.bloodSugar;
+      threads.add(_CareThread(
+        programme: Programme.anc,
+        label: CareThreadStrings.sugar,
+        icon: '🩸',
+        bg: AppColors.statusInfoSurface,
+        textColor: AppColors.threadInfoText,
+        stats: {bgLabel: '$ancBg mg/dL'},
+      ));
+    }
   }
 
   // NCD — HTN + optional blood-sugar thread
@@ -2705,8 +2637,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
 
     final bg = _rawStr(raw['bg']);
     if (bg != null && bg.isNotEmpty) {
-      final bgType = _rawStr(raw['bgType'])?.trim();
-      final bgLabel = (bgType != null && bgType.isNotEmpty)
+      final bgType = normalizeGlucoseTypeLabel(_rawStr(raw['bgType']));
+      final bgLabel = bgType != null
           ? PatientDetailStrings.bloodSugarWithType(bgType)
           : PatientDetailStrings.bloodSugar;
       threads.add(_CareThread(
@@ -4655,7 +4587,7 @@ Future<void> _openVisitDayDetail(
 // ─── Timeline Event Sheet ──────────────────────────────────────────────────
 
 /// Bottom sheet expanding a care-thread timeline event into full clinical detail.
-/// Unpacks the rawJson envelope via [_unpackRaw] to surface clinical fields.
+/// Unpacks the rawJson envelope via [normalizeAssessmentRaw] to surface clinical fields.
 class _TimelineEventSheet extends StatelessWidget {
   const _TimelineEventSheet({
     required this.assessment,
@@ -4798,7 +4730,7 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent(
       'referralFacilityType',
       PatientDetailStrings.referredTo,
-      valueMapper: PatientDetailStrings.ncdFacilityType,
+      valueMapper: ReferralFacilityLabels.labelOf,
     );
 
     // ── ANC / PW obstetric ─────────────────────────────────────────────────
@@ -4847,7 +4779,11 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('highRiskPregnantWoman', PatientDetailStrings.highRisk);
     addIfPresent('gapsInAnc', PatientDetailStrings.ancGaps);
     addIfPresent('dangerSignsDuringPregnancy', PatientDetailStrings.dangerSigns);
-    addIfPresent('referralFacility', PatientDetailStrings.referredTo);
+    addIfPresent(
+      'referralFacility',
+      PatientDetailStrings.referredTo,
+      valueMapper: ReferralFacilityLabels.labelOf,
+    );
     addIfPresent('followUpVisit', PatientDetailStrings.followUpVisit);
 
     // ── PNC ────────────────────────────────────────────────────────────────
@@ -4883,8 +4819,18 @@ class _TimelineEventSheet extends StatelessWidget {
         snap.previousPregnancyComplications,
         PatientDetailStrings.previousComplications,
       );
-      addSnapshotList(snap.existingIllness, PatientDetailStrings.existingIllness);
-      addSnapshotList(snap.onTreatment, PatientDetailStrings.onTreatment);
+      final existingIllness =
+          AncExistingIllness.formatExistingIllnessList(snap.existingIllness);
+      if (existingIllness.isNotEmpty) {
+        entries.add(
+          MapEntry(PatientDetailStrings.existingIllness, existingIllness),
+        );
+      }
+      final onTreatment =
+          AncExistingIllness.formatOnTreatmentList(snap.onTreatment);
+      if (onTreatment.isNotEmpty) {
+        entries.add(MapEntry(PatientDetailStrings.onTreatment, onTreatment));
+      }
       if (snap.ttTdCompleted?.isNotEmpty == true) {
         entries.add(
           MapEntry(PatientDetailStrings.ttTdCompleted, snap.ttTdCompleted!),
@@ -4893,7 +4839,7 @@ class _TimelineEventSheet extends StatelessWidget {
       if (snap.facilityIdentifiedForDelivery?.isNotEmpty == true) {
         entries.add(MapEntry(
           PatientDetailStrings.deliveryFacility,
-          snap.facilityIdentifiedForDelivery!,
+          DeliveryFacilityType.labelOfId(snap.facilityIdentifiedForDelivery!),
         ));
       }
       if (snap.ancWeight != null) {

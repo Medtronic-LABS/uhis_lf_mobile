@@ -1242,6 +1242,8 @@ class _MemberCard extends StatelessWidget {
               programmes: member.programmes,
               ancVisitCount: member.ancVisitCount,
               pncVisitCount: member.pncVisitCount,
+              useLatestServiceBadge: true,
+              recentServiceKind: member.recentService,
               onTap: onTap,
             ),
     );

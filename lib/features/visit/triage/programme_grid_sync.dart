@@ -109,10 +109,38 @@ abstract final class ProgrammeGridSync {
     return withoutMaternalIfMale(withoutChild, isMale: isMale);
   }
 
+  /// Drops [Programme.pnc] unless the patient is postpartum, on a PO visit,
+  /// or [pncEligibleForActivation] (PO can be recorded this session).
+  static Set<Programme> withoutPncUnlessPostpartum(
+    Set<Programme> programmes, {
+    required bool isPostpartum,
+    bool isDeliveryVisit = false,
+    bool pncEligibleForActivation = false,
+  }) {
+    if (isPostpartum && !isDeliveryVisit) return programmes;
+    if (isDeliveryVisit || pncEligibleForActivation) return programmes;
+    return programmes.difference({Programme.pnc});
+  }
+
+  /// True when [Programme.pnc] is selected but delivery is not yet on record
+  /// — the visit must capture PO this session (PW+ANC parity at Continue).
+  static bool shouldAutoEnableDeliveryForPnc({
+    required bool hasPnc,
+    required bool isPostpartum,
+  }) =>
+      hasPnc && !isPostpartum;
+
+  /// Clears ANC/PW when a delivery visit is required for PNC (Continue backfill).
+  static Set<Programme> applyPncRequiresDelivery(Set<Programme> programmes) {
+    return programmes
+      ..remove(Programme.anc)
+      ..remove(Programme.pw);
+  }
+
   /// Apply Pregnancy Outcome (delivery) selection to the service grid.
   ///
-  /// Clears **only** ANC and PW. Other selected programmes stay on; PNC is
-  /// ensured so pregnancy-outcome / mother / child forms can open.
+  /// Clears **only** ANC and PW. PNC stays optional — the SK may combine PO +
+  /// PNC on the same visit. Other selected programmes (NCD, etc.) stay on.
   static ({Set<Programme> selected, Set<Programme> dismissedBySk})
       applyDeliverySelected({
     required Set<Programme> selected,
@@ -120,12 +148,10 @@ abstract final class ProgrammeGridSync {
   }) {
     final nextSelected = Set<Programme>.from(selected)
       ..remove(Programme.anc)
-      ..remove(Programme.pw)
-      ..add(Programme.pnc);
+      ..remove(Programme.pw);
     final nextDismissed = Set<Programme>.from(dismissedBySk)
       ..add(Programme.anc)
-      ..add(Programme.pw)
-      ..remove(Programme.pnc);
+      ..add(Programme.pw);
     return (selected: nextSelected, dismissedBySk: nextDismissed);
   }
 

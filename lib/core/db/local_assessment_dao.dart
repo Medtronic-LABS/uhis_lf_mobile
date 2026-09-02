@@ -1121,14 +1121,25 @@ class LocalAssessmentDao {
   /// Returns true when an ANC assessment already exists today for [patientId].
   /// Used to block duplicate same-day ANC visits.
   Future<bool> hasAncAssessmentTodayForPatient(String patientId) async {
+    if (patientId.isEmpty) return false;
+    return hasAncAssessmentTodayForPatients([patientId]);
+  }
+
+  /// Same as [hasAncAssessmentTodayForPatient] but matches any alias id.
+  Future<bool> hasAncAssessmentTodayForPatients(
+    Iterable<String> patientIds,
+  ) async {
+    final ids = patientIds.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+    if (ids.isEmpty) return false;
     final todayStart = DateTime.now()
         .copyWith(hour: 0, minute: 0, second: 0, millisecond: 0);
+    final placeholders = List.filled(ids.length, '?').join(',');
     final result = await _db.db.rawQuery(
       "SELECT COUNT(*) as count FROM $tableName "
-      "WHERE patient_id = ? "
+      "WHERE patient_id IN ($placeholders) "
       "AND assessment_type IN ('ANC', 'anc') "
       "AND created_at >= ?",
-      [patientId, todayStart.millisecondsSinceEpoch],
+      [...ids, todayStart.millisecondsSinceEpoch],
     );
     return (result.first['count'] as int) > 0;
   }

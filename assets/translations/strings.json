@@ -3072,12 +3072,20 @@
     "en": "Training Hub"
   },
   "Triage.ancRevisitMessageHighRisk": {
-    "bn": "সর্বশেষ ভিজিট: {lastVisit} (উচ্চ ঝুঁকি — ১ দিনের ব্যবধান)",
-    "en": "Last visit: {lastVisit} (high-risk — 1-day interval)"
+    "bn": "সর্বশেষ ভিজিট: {lastVisit} (উচ্চ ঝুঁকি — ১ দিন পর পুনরায় দেখা)",
+    "en": "Last visit: {lastVisit} (high-risk — revisit in 1 day)"
+  },
+  "Triage.ancRevisitMessageScheduledHighRisk": {
+    "bn": "সর্বশেষ ভিজিট: {lastVisit} · পরবর্তী নির্ধারিত {nextDue} (উচ্চ ঝুঁকি)",
+    "en": "Last visit: {lastVisit} · next due {nextDue} (high-risk)"
   },
   "Triage.ancRevisitMessageNormal": {
     "bn": "সর্বশেষ ভিজিট: {lastVisit} · পরবর্তী নির্ধারিত {nextDue}",
     "en": "Last visit: {lastVisit} · next due {nextDue}"
+  },
+  "Triage.ancRevisitMessageNormalInterval": {
+    "bn": "সর্বশেষ ভিজিট: {lastVisit} · {days} দিন পর পুনরায় দেখা",
+    "en": "Last visit: {lastVisit} · revisit in {days} days"
   },
   "Triage.ancVisitedTodayMessage": {
     "bn": "আজ প্রসবপূর্ব সেবা ইতিমধ্যে রেকর্ড করা হয়েছে",
@@ -3794,6 +3802,78 @@
   "VisitFlow.rmnchReferralFacility.uhfwc": {
     "bn": "ইউনিয়ন স্বাস্থ্য ও পরিবার কল্যাণ কেন্দ্র",
     "en": "UHFWC (Union health and family welfare center)"
+  },
+  "VisitFlow.deliveryFacilityType.districtHospital": {
+    "bn": "জেলা হাসপাতাল",
+    "en": "District Hospital"
+  },
+  "VisitFlow.deliveryFacilityType.homeDelivery": {
+    "bn": "ঘরে প্রসবের পরিকল্পনা করা হয়েছে",
+    "en": "Planned for home delivery"
+  },
+  "VisitFlow.deliveryFacilityType.mcwc": {
+    "bn": "মা ও শিশু কল্যাণ কেন্দ্র",
+    "en": "MCWC (Mother and Child Welfare Center)"
+  },
+  "VisitFlow.deliveryFacilityType.medicalCollegeHospital": {
+    "bn": "মেডিকেল কলেজ হাসপাতাল",
+    "en": "Medical College Hospital"
+  },
+  "VisitFlow.deliveryFacilityType.ngoFacility": {
+    "bn": "এনজিও স্বাস্থ্যসেবা কেন্দ্র",
+    "en": "NGO facility"
+  },
+  "VisitFlow.deliveryFacilityType.notIdentified": {
+    "bn": "এখনও ঠিক হয়নি",
+    "en": "Not identified yet"
+  },
+  "VisitFlow.deliveryFacilityType.privateFacility": {
+    "bn": "প্রাইভেট হাসপাতাল",
+    "en": "Private Facility"
+  },
+  "VisitFlow.deliveryFacilityType.uhc": {
+    "bn": "উপজেলা স্বাস্থ্য কমপ্লেক্স",
+    "en": "UHC (Upazila Health complex)"
+  },
+  "VisitFlow.deliveryFacilityType.uhfwc": {
+    "bn": "ইউনিয়ন স্বাস্থ্য ও পরিবার কল্যাণ কেন্দ্র",
+    "en": "UHFWC (Union health and family welfare center)"
+  },
+  "VisitFlow.ancExistingIllness.asthma": {
+    "bn": "হাঁপানি",
+    "en": "Asthma"
+  },
+  "VisitFlow.ancExistingIllness.dm": {
+    "bn": "ডায়াবেটিস",
+    "en": "DM"
+  },
+  "VisitFlow.ancExistingIllness.heartDisease": {
+    "bn": "হৃদরোগ",
+    "en": "Heart Disease"
+  },
+  "VisitFlow.ancExistingIllness.htn": {
+    "bn": "উচ্চ রক্তচাপ",
+    "en": "HTN"
+  },
+  "VisitFlow.ancExistingIllness.kidneyDisease": {
+    "bn": "কিডনি রোগ",
+    "en": "Kidney Disease"
+  },
+  "VisitFlow.ancExistingIllness.none": {
+    "bn": "কোনো রোগ নাই",
+    "en": "None"
+  },
+  "VisitFlow.ancExistingIllness.thyroidDisease": {
+    "bn": "থাইরয়েড রোগ",
+    "en": "Thyroid disease"
+  },
+  "VisitFlow.ancExistingIllness.tuberculosis": {
+    "bn": "যক্ষ্মা",
+    "en": "Tuberculosis"
+  },
+  "VisitFlow.ancOnTreatment.none": {
+    "bn": "কোনো চিকিৎসা গ্রহণ করছেন না",
+    "en": "Not taking any treatment"
   },
   "VisitFlow.step1Label": {
     "bn": "লক্ষণসমূহ",
@@ -4550,6 +4630,10 @@
   "ancBlockedDuplicateTitle": {
     "bn": "আজকের এএনসি ইতিমধ্যে রেকর্ড হয়েছে",
     "en": "ANC Already Recorded Today"
+  },
+  "ancBlockedRevisitTitle": {
+    "bn": "এএনসি ভিজিট এখনো নির্ধারিত হয়নি",
+    "en": "ANC visit not due yet"
   },
   "ancBlockedPostpartumMessage": {
     "bn": "এই রোগী একটি প্রসব বা পিএনসি ভিজিট সম্পন্ন করেছেন। প্রসবের পরে এএনসি সেবা শুরু করা যাবে না।",
