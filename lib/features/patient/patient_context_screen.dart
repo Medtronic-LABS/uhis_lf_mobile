@@ -298,6 +298,8 @@ Future<PatientContext?> resolvePatientContext(
     programmesDao: context.read<PatientProgrammesDao>(),
     pregnancyDao: context.read<PregnancySnapshotDao>(),
     immunisationDao: context.read<ImmunisationDao>(),
+    assessmentDao: context.read<AssessmentDao>(),
+    localAssessmentDao: context.read<LocalAssessmentDao>(),
   );
   final patientCtx = await builder.build(patientId);
   return patientCtx ?? _fallbackPatientContextFor(patientId, data);

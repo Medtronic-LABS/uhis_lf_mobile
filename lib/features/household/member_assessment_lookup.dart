@@ -80,3 +80,30 @@ String? resolveRecentServiceKind({
   if (localAt > syncedAt) return local!.type;
   return synced?.kind;
 }
+
+/// Highest per-key visit count for a member — synced history may be keyed by
+/// local `members.id` or server FHIR id depending on when the row was written.
+int memberVisitCountAcrossKeys(
+  Map<String, int> countsByPatientId,
+  List<String> keys,
+) {
+  var best = 0;
+  for (final key in keys) {
+    final count = countsByPatientId[key] ?? 0;
+    if (count > best) best = count;
+  }
+  return best;
+}
+
+/// Synced assessment-history count plus on-device visits not yet reflected in
+/// [AssessmentDao] (local rows whose `sync_status` is still pending). Matches
+/// the visit counter used inside visits (`AssessmentRepository.priorAncVisitCount`)
+/// so roster badges update immediately after submit, without waiting for sync.
+int combinedVisitCount({
+  required List<String> lookupKeys,
+  required Map<String, int> syncedCounts,
+  required Map<String, int> localPendingCounts,
+}) {
+  return memberVisitCountAcrossKeys(syncedCounts, lookupKeys) +
+      memberVisitCountAcrossKeys(localPendingCounts, lookupKeys);
+}

@@ -1216,6 +1216,32 @@ class LocalAssessmentDao {
     return out;
   }
 
+  /// Completed visit count per patient from local assessments not yet fully
+  /// reflected in synced [AssessmentDao] history. Excludes
+  /// [AssessmentSyncStatus.success] so a visit already pulled from the server
+  /// is not double-counted alongside its synced row.
+  Future<Map<String, int>> visitCountsByPatients(
+    List<String> patientIds,
+    List<String> kinds,
+  ) async {
+    if (patientIds.isEmpty || kinds.isEmpty) return const {};
+    final pp = List.filled(patientIds.length, '?').join(',');
+    final upperKinds = kinds.map((k) => k.toUpperCase()).toList();
+    final kp = List.filled(upperKinds.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      'SELECT patient_id, COUNT(*) AS cnt FROM $tableName '
+      'WHERE patient_id IN ($pp) '
+      'AND UPPER(assessment_type) IN ($kp) '
+      'AND sync_status != ? '
+      'GROUP BY patient_id',
+      [...patientIds, ...upperKinds, AssessmentSyncStatus.success.name],
+    );
+    return {
+      for (final r in rows)
+        if (r['patient_id'] is String) r['patient_id'] as String: r['cnt'] as int,
+    };
+  }
+
   /// Latest local assessment visit per patient → follow-up stamp from
   /// `other_details` (`nextVisitDate` / `nextFollowUpDate` / `dueDate`).
   ///

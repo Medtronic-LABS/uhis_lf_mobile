@@ -4643,6 +4643,10 @@
     "bn": "এএনসি সেবা দেওয়া যাবে না",
     "en": "ANC Not Available"
   },
+  "ancLockedPostpartumHint": {
+    "bn": "⚠ প্রসবের পর এএনসি সেবা দেওয়া যাবে না — পোস্টন্যাটাল যত্নের জন্য পিএনসি ব্যবহার করুন",
+    "en": "⚠ ANC is not available after delivery — use PNC for postnatal care"
+  },
   "ancCheckupTitle": {
     "bn": "ANC চেকআপ",
     "en": "ANC Checkup"

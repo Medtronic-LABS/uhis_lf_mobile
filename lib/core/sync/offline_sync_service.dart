@@ -36,6 +36,7 @@ import '../models/programme.dart';
 import '../models/referral.dart';
 import '../referral/referral_ingest_mapper.dart';
 import 'latest_visit_follow_up.dart';
+import 'pregnancy_delivery_sync.dart';
 import 'sync_activity.dart';
 import 'sync_progress.dart';
 import 'sync_report.dart';
@@ -912,12 +913,17 @@ class OfflineSyncService extends ChangeNotifier {
           'wire=${flat['lastMenstrualPeriod']}',
         );
       }
+      final deliveryDateMs = JsonRead.epochMillis(flat, const [
+        'dateOfDelivery',
+        'deliveryDate',
+      ]);
       pregnancyRows.add(PregnancySnapshotRow(
         patientId: patientId,
         facts: facts,
         updatedAt: nowMs,
         eddDate: eddMs,
         lmpDate: lmpMs,
+        deliveryDateMillis: deliveryDateMs,
         // Spice PregnancyDetails.ancVisitNo / pncVisitNo.
         ancVisitNo: JsonRead.firstInt(flat, const [
           'ancVisitNo',
@@ -1081,18 +1087,10 @@ class OfflineSyncService extends ChangeNotifier {
     if (_pregnancyEpisode != null) {
       final coalesced = PregnancySnapshotDao.coalesceByPatient(pregnancyRows);
       for (final row in coalesced) {
-        final open = await _pregnancyEpisode.openEpisodeFor(row.patientId);
-        if (open != null) {
-          await _pregnancyEpisode.updateOpenEpisode(
-            patientId: row.patientId,
-            patch: row,
-          );
-        } else {
-          await _pregnancyEpisode.startNewEpisode(
-            patientId: row.patientId,
-            obstetric: row,
-          );
-        }
+        await _pregnancyEpisode.applyIncomingSyncRow(
+          patientId: row.patientId,
+          row: row,
+        );
       }
       final coalescedWithLmp =
           coalesced.where((r) => r.lmpDate != null).length;
@@ -1584,6 +1582,8 @@ class OfflineSyncService extends ChangeNotifier {
       final newProgrammes = <String, Set<Programme>>{};
       final latestVisitMs = <String, int>{};   // patientId → ms of last visit
       final lastAncVisitMs = <String, int>{};  // patientId → ms of last ANC visit
+      final latestPoDeliveryMs = <String, int>{}; // patientId → delivery from PO
+      final latestPoVisitMs = <String, int>{}; // patientId → visit ms for PO row
       final followUpRows = <LatestVisitFollowUpRow>[];
 
       for (final item in items) {
@@ -1622,6 +1622,19 @@ class OfflineSyncService extends ChangeNotifier {
           final prevAnc = lastAncVisitMs[patientId];
           if (prevAnc == null || visitMs > prevAnc) {
             lastAncVisitMs[patientId] = visitMs;
+          }
+        }
+
+        if (PregnancyDeliverySync.isPregnancyOutcomeType(item.serviceProvided)) {
+          final deliveryMs =
+              PregnancyDeliverySync.deliveryDateMillisFromMap(item.rawJson);
+          if (deliveryMs != null &&
+              PregnancyDeliverySync.isWithinPostpartumWindow(deliveryMs)) {
+            final prevVisit = latestPoVisitMs[patientId];
+            if (prevVisit == null || visitMs >= prevVisit) {
+              latestPoVisitMs[patientId] = visitMs;
+              latestPoDeliveryMs[patientId] = deliveryMs;
+            }
           }
         }
 
@@ -1709,6 +1722,23 @@ class OfflineSyncService extends ChangeNotifier {
         if (ancDateSeeded > 0) {
           debugPrint(
             '[OfflineSyncService] seeded lastAncVisitDateMs for $ancDateSeeded patient(s) from assessment history',
+          );
+        }
+      }
+
+      int poDeliverySeeded = 0;
+      if (_pregnancyEpisode != null) {
+        for (final entry in latestPoDeliveryMs.entries) {
+          await _pregnancyEpisode.applyDeliveryFromAssessmentHistory(
+            patientId: entry.key,
+            deliveryDateMillis: entry.value,
+          );
+          poDeliverySeeded++;
+        }
+        if (poDeliverySeeded > 0) {
+          debugPrint(
+            '[OfflineSyncService] closed/refreshed postpartum episode for '
+            '$poDeliverySeeded patient(s) from PO assessment history',
           );
         }
       }

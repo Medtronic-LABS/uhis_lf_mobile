@@ -23,7 +23,7 @@ import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
-import '../visit/widgets/mission_queue_card.dart' show programmeBadgeColors;
+import '../visit/widgets/mission_queue_card.dart' show PatientBadgeRow, programmeBadgeColors;
 import 'member_assessment_lookup.dart';
 import 'enrollment/enrollment_dob.dart';
 import 'enrollment/enrollment_entry_sheet.dart';
@@ -227,13 +227,21 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
         // same DAO/kind-lists WorklistRepository uses (programme_reason.dart).
         final assessmentDao = AssessmentDao(appDb);
         final localAssessmentDao = LocalAssessmentDao(appDb);
-        final ancCounts = await assessmentDao.visitCountsByPatients(
+        final ancSyncedCounts = await assessmentDao.visitCountsByPatients(
           allLookupKeys,
           ancVisitKinds,
         );
-        final pncCounts = await assessmentDao.visitCountsByPatients(
+        final pncSyncedCounts = await assessmentDao.visitCountsByPatients(
           allLookupKeys,
           pncVisitKinds,
+        );
+        final ancLocalCounts = await localAssessmentDao.visitCountsByPatients(
+          allLookupKeys,
+          ancVisitKinds,
+        );
+        final pncLocalCounts = await localAssessmentDao.visitCountsByPatients(
+          allLookupKeys,
+          pncLocalVisitKinds,
         );
         final assessmentsByPatient = await assessmentDao.forMany(allLookupKeys);
         final localServices =
@@ -259,12 +267,16 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
             return _HouseholdMember.fromEntity(
               e,
               programmes: progs,
-              ancVisitCount: tableKey != null
-                  ? (ancCounts[tableKey] ?? 0)
-                  : 0,
-              pncVisitCount: tableKey != null
-                  ? (pncCounts[tableKey] ?? 0)
-                  : 0,
+              ancVisitCount: combinedVisitCount(
+                lookupKeys: lookupKeys,
+                syncedCounts: ancSyncedCounts,
+                localPendingCounts: ancLocalCounts,
+              ),
+              pncVisitCount: combinedVisitCount(
+                lookupKeys: lookupKeys,
+                syncedCounts: pncSyncedCounts,
+                localPendingCounts: pncLocalCounts,
+              ),
               recentService: recentService,
             );
           }).toList();
@@ -802,25 +814,37 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     );
   }
 
-  /// Member row matching the v14 wireframe: always uses [_WireframeMemberRow]
-  /// so the layout is consistent regardless of whether the member has a queue
-  /// entry. The status dot (Today / Overdue / This week) is derived from the
-  /// queue item's tier when one exists.
+  /// Member row matching the v14 wireframe — uses [PatientBadgeRow] with the
+  /// same latest-service badge as the household detail screen, plus a
+  /// [_TierStatusPill] when the member has an active queue entry.
   Widget _buildMemberRow(BuildContext context, _MemberInfo member) {
     final pid = member.patientId ?? member.id;
     final queueItem = pid != null ? _queueItems[pid] : null;
-    return _WireframeMemberRow(
-      name: member.name,
-      ageLabel: member.ageLabel,
-      gender: member.gender,
-      phoneNumber: member.phoneNumber,
-      programmes: member.programmes,
-      ancVisitCount: member.ancVisitCount,
-      pncVisitCount: member.pncVisitCount,
-      householdNo: member.householdNo,
-      householdName: member.householdName,
-      tier: queueItem?.tier,
-      onTap: () => _navigateToMemberDetail(context, member),
+    final tier = queueItem?.tier;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: PatientBadgeRow(
+            name: member.name,
+            ageLabel: member.ageLabel,
+            gender: member.gender,
+            phoneNumber: member.phoneNumber,
+            programmes: member.programmes,
+            ancVisitCount: member.ancVisitCount,
+            pncVisitCount: member.pncVisitCount,
+            householdNo: member.householdNo,
+            householdName: member.householdName,
+            useLatestServiceBadge: true,
+            recentServiceKind: member.recentService,
+            onTap: () => _navigateToMemberDetail(context, member),
+          ),
+        ),
+        if (tier != null && tier != DashboardTier.upcoming) ...[
+          const SizedBox(width: 8),
+          _TierStatusPill(tier: tier),
+        ],
+      ],
     );
   }
 
@@ -1561,6 +1585,7 @@ class _MemberInfo {
     this.programmes = const {},
     this.ancVisitCount = 0,
     this.pncVisitCount = 0,
+    this.recentService,
   });
 
   final String? id;
@@ -1588,6 +1613,7 @@ class _MemberInfo {
   final Set<Programme> programmes;
   final int ancVisitCount;
   final int pncVisitCount;
+  final String? recentService;
 
   /// Whole years from DOB (0 for infants) — kept for navigation extras.
   static int? _calculateAge(String? dateOfBirth) {
@@ -1639,6 +1665,7 @@ class _MemberInfo {
       programmes: member.programmes,
       ancVisitCount: member.ancVisitCount,
       pncVisitCount: member.pncVisitCount,
+      recentService: member.recentService,
     );
   }
 }
@@ -1657,137 +1684,6 @@ class _SearchMatchHighlight extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: child,
-    );
-  }
-}
-
-/// Member row that matches the v14 wireframe `renderHouseholds` member item:
-/// name + age/gender + programme badge baseline-aligned (Wrap), address on the
-/// next line, phone below that, and a [_TierStatusPill] on the right when the
-/// member has an active queue entry.
-class _WireframeMemberRow extends StatelessWidget {
-  const _WireframeMemberRow({
-    required this.name,
-    required this.onTap,
-    this.ageLabel,
-    this.gender,
-    this.phoneNumber,
-    this.programmes = const {},
-    this.ancVisitCount = 0,
-    this.pncVisitCount = 0,
-    this.householdNo,
-    this.householdName,
-    this.tier,
-  });
-
-  final String? name;
-  final String? ageLabel;
-  final String? gender;
-  final String? phoneNumber;
-  final Set<Programme> programmes;
-  final int ancVisitCount;
-  final int pncVisitCount;
-  final String? householdNo;
-  final String? householdName;
-  final DashboardTier? tier;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final badgeLabel = programmeReason(
-      programmes: programmes,
-      ancVisitCount: ancVisitCount,
-      pncVisitCount: pncVisitCount,
-    );
-    final (badgeBg, badgeFg) = programmeBadgeColors(primaryProgrammeOf(programmes));
-
-    final address = [
-      householdNo != null ? '#$householdNo' : null,
-      householdName,
-    ].whereType<String>().join(', ');
-
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 6,
-                    runSpacing: 3,
-                    children: [
-                      Text(
-                        name ?? CommonStrings.unnamed,
-                        style: AppTextStyles.worklistPatientName,
-                      ),
-                      if (ageLabel != null || gender != null)
-                        Text(
-                          [
-                            if (ageLabel != null) ageLabel!,
-                            if (gender != null && gender!.isNotEmpty)
-                              gender![0].toUpperCase(),
-                          ].join('/'),
-                          style: AppTextStyles.worklistPatientMeta,
-                        ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: badgeBg,
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          badgeLabel,
-                          style: TextStyle(
-                            fontFamily: AppFonts.body,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: badgeFg,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (address.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        address,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.worklistAddress.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  if (phoneNumber != null && phoneNumber!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        phoneNumber!,
-                        style: AppTextStyles.worklistPhone.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (tier != null && tier != DashboardTier.upcoming) ...[
-              const SizedBox(width: 8),
-              _TierStatusPill(tier: tier!),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

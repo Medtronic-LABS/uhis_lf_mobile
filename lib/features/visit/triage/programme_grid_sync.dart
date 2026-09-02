@@ -186,4 +186,19 @@ abstract final class ProgrammeGridSync {
     if (hasOpenPregnancyEpisode) return !isPregnant;
     return false;
   }
+
+  /// Whether the Step 1 ANC card should be locked (disabled).
+  ///
+  /// Mirrors [ServiceSelectionResolver]'s postpartum ANC strip and Spice's
+  /// single-RMNCH-tile switch to PNC after delivery — postpartum blocks ANC
+  /// regardless of historical PW/ANC enrolment ([isPwGateOpen]).
+  static bool isAncGridLocked({
+    required bool isPostpartum,
+    required bool isPwGateOpen,
+    required bool isDeliveryVisit,
+    required bool ancRevisitTooSoon,
+  }) {
+    if (isPostpartum) return true;
+    return !isPwGateOpen || isDeliveryVisit || ancRevisitTooSoon;
+  }
 }

@@ -212,4 +212,96 @@ void main() {
       expect(projected?.deliveryDateMillis, 12345);
     });
   });
+
+  group('PregnancyEpisodeDao.applyIncomingSyncRow', () {
+    test('does not startNewEpisode when closed postpartum episode exists',
+        () async {
+      final (_, snapshotDao, episodeDao) = await openTestDb();
+      const patientId = 'sync-preserve-postpartum';
+      await episodeDao.startNewEpisode(
+        patientId: patientId,
+        obstetric: PregnancySnapshotRow(
+          patientId: patientId,
+          facts: PregnancyFacts.empty,
+          lmpDate: 1000,
+        ),
+      );
+      final recentDelivery =
+          DateTime.now().subtract(const Duration(days: 5)).millisecondsSinceEpoch;
+      await episodeDao.closeEpisode(
+        patientId: patientId,
+        deliveryDateMillis: recentDelivery,
+      );
+
+      await episodeDao.applyIncomingSyncRow(
+        patientId: patientId,
+        row: PregnancySnapshotRow(
+          patientId: patientId,
+          facts: PregnancyFacts.empty,
+          lmpDate: 5000,
+        ),
+      );
+
+      expect(await episodeDao.openEpisodeFor(patientId), isNull);
+      final projected = await snapshotDao.byPatient(patientId);
+      expect(projected?.deliveryDateMillis, recentDelivery);
+      expect(projected?.lmpDate, 5000,
+          reason: 'incoming LMP merges onto closed episode projection');
+    });
+
+    test('closes open episode when incoming row carries deliveryDateMillis',
+        () async {
+      final (_, snapshotDao, episodeDao) = await openTestDb();
+      const patientId = 'sync-close-from-dod';
+      await episodeDao.startNewEpisode(
+        patientId: patientId,
+        obstetric: PregnancySnapshotRow(
+          patientId: patientId,
+          facts: PregnancyFacts.empty,
+          lmpDate: 1000,
+        ),
+      );
+      final deliveryMs =
+          DateTime.now().subtract(const Duration(days: 3)).millisecondsSinceEpoch;
+
+      await episodeDao.applyIncomingSyncRow(
+        patientId: patientId,
+        row: PregnancySnapshotRow(
+          patientId: patientId,
+          facts: const PregnancyFacts(isPostpartumWindow: true),
+          deliveryDateMillis: deliveryMs,
+        ),
+      );
+
+      expect(await episodeDao.openEpisodeFor(patientId), isNull);
+      expect((await snapshotDao.byPatient(patientId))?.deliveryDateMillis,
+          deliveryMs);
+    });
+  });
+
+  group('PregnancyEpisodeDao.applyDeliveryFromAssessmentHistory', () {
+    test('closes open episode from PO assessment delivery date', () async {
+      final (_, snapshotDao, episodeDao) = await openTestDb();
+      const patientId = 'history-po-close';
+      await episodeDao.startNewEpisode(
+        patientId: patientId,
+        obstetric: PregnancySnapshotRow(
+          patientId: patientId,
+          facts: PregnancyFacts.empty,
+          lmpDate: 1000,
+        ),
+      );
+      final deliveryMs =
+          DateTime.now().subtract(const Duration(days: 2)).millisecondsSinceEpoch;
+
+      await episodeDao.applyDeliveryFromAssessmentHistory(
+        patientId: patientId,
+        deliveryDateMillis: deliveryMs,
+      );
+
+      expect(await episodeDao.openEpisodeFor(patientId), isNull);
+      expect((await snapshotDao.byPatient(patientId))?.deliveryDateMillis,
+          deliveryMs);
+    });
+  });
 }

@@ -284,6 +284,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         programmesDao: programmesDao,
         pregnancyDao: pregnancyDao,
         immunisationDao: immunisationDao,
+        assessmentDao: context.read<AssessmentDao>(),
+        localAssessmentDao: context.read<LocalAssessmentDao>(),
       );
 
       final ctx = await builder.build(patientId);
@@ -382,10 +384,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           // separately and must stay unlocked for an already-pregnant woman.
           _selectedProgrammes.remove(Programme.pw);
         }
-        if (ancRevisitStatus.tooSoon) {
-          // Within the revisit interval — ANC is locked in the grid (see
-          // _InlineServiceSelector._isLocked), keeps _selectedProgrammes
-          // honest if enrolledSeed pre-ticked it.
+        if (ancRevisitStatus.tooSoon || ctx.isPostpartum) {
+          // Within the revisit interval or postpartum — ANC is locked in the
+          // grid (see ProgrammeGridSync.isAncGridLocked), keeps
+          // _selectedProgrammes honest if enrolledSeed/pathways pre-ticked it.
           _selectedProgrammes.remove(Programme.anc);
         }
         _pathwayActivatedProgrammes
@@ -749,7 +751,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       selected: _selectedProgrammes,
       dismissedBySk: _skDismissedProgrammes,
     ).where((p) {
-      if (p == Programme.anc && _ancRevisitStatus.tooSoon) return false;
+      if (p == Programme.anc &&
+          (_ancRevisitStatus.tooSoon ||
+              (_patientContext?.isPostpartum ?? false))) {
+        return false;
+      }
       if (p == Programme.pw && _openPregnancyEpisode != null) return false;
       // On a PO visit, PNC is manual-only — symptoms must not auto-add it.
       if (p == Programme.pnc && _isDelivery) return false;
@@ -2488,10 +2494,12 @@ class _InlineServiceSelector extends StatelessWidget {
       return isDelivery || ctx.isPostpartum || openPregnancyEpisode != null;
     }
     if (card.programme == Programme.anc) {
-      // ANC requires PW selection first; also blocked within the risk-based
-      // revisit interval (1 day if high-risk, 15 days otherwise).
-      // !pregnant removed: SK may start ANC for a new pregnancy (no prior PW record).
-      return !isPW || isDelivery || ancRevisitStatus.tooSoon;
+      return ProgrammeGridSync.isAncGridLocked(
+        isPostpartum: ctx.isPostpartum,
+        isPwGateOpen: isPW,
+        isDeliveryVisit: isDelivery,
+        ancRevisitTooSoon: ancRevisitStatus.tooSoon,
+      );
     }
     if (card.isDelivery) {
       return ProgrammeGridSync.isPregnancyOutcomeLocked(
@@ -2532,7 +2540,8 @@ class _InlineServiceSelector extends StatelessWidget {
     // visit — mirrors the PW-episode treatment above.
     if (card.programme == Programme.anc) {
       return selectedProgrammes.contains(Programme.anc) &&
-          !ancRevisitStatus.tooSoon;
+          !ancRevisitStatus.tooSoon &&
+          !patientContext.isPostpartum;
     }
     if (card.isDelivery) return isDelivery;
     if (card.isRMNCH) {
@@ -2559,6 +2568,7 @@ class _InlineServiceSelector extends StatelessWidget {
       if (ctx.isPostpartum) return TriageStrings.pwLockedPostpartumHint;
     }
     if (card.programme == Programme.anc) {
+      if (ctx.isPostpartum) return TriageStrings.ancLockedPostpartumHint;
       if (isDelivery) return TriageStrings.ancDeliveryConflictHint;
       if (ancRevisitStatus.tooSoon) {
         return ancRevisitLockMessage(_ancRevisitLockInput(ancRevisitStatus));

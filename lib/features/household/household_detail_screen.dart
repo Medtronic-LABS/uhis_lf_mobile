@@ -697,17 +697,21 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       assessmentDao.forMany(lookupKeys),
       patientDao.lastVisitAtForPatients(tableKeys),
       programmesDao.programmesForMany(tableKeys),
-      assessmentDao.visitCountsByPatients(tableKeys, ancVisitKinds),
-      assessmentDao.visitCountsByPatients(tableKeys, pncVisitKinds),
+      assessmentDao.visitCountsByPatients(lookupKeys, ancVisitKinds),
+      assessmentDao.visitCountsByPatients(lookupKeys, pncVisitKinds),
+      localAssessmentDao.visitCountsByPatients(lookupKeys, ancVisitKinds),
+      localAssessmentDao.visitCountsByPatients(lookupKeys, pncLocalVisitKinds),
       localAssessmentDao.latestLocalServiceForMany(lookupKeys),
     ]);
     final assessments = results[0] as Map<String, List<AssessmentRow>>;
     final lastVisits = results[1] as Map<String, int>;
     final programmesByPatient = results[2] as Map<String, Set<Programme>>;
-    final ancCounts = results[3] as Map<String, int>;
-    final pncCounts = results[4] as Map<String, int>;
+    final ancSyncedCounts = results[3] as Map<String, int>;
+    final pncSyncedCounts = results[4] as Map<String, int>;
+    final ancLocalCounts = results[5] as Map<String, int>;
+    final pncLocalCounts = results[6] as Map<String, int>;
     final localServices =
-        results[5] as Map<String, ({String type, int at})>;
+        results[7] as Map<String, ({String type, int at})>;
 
     return members.map((m) {
       final keys = memberAssessmentLookupKeys(
@@ -753,8 +757,16 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         programmes: tableKey != null
             ? (programmesByPatient[tableKey] ?? const {})
             : const {},
-        ancVisitCount: tableKey != null ? (ancCounts[tableKey] ?? 0) : 0,
-        pncVisitCount: tableKey != null ? (pncCounts[tableKey] ?? 0) : 0,
+        ancVisitCount: combinedVisitCount(
+          lookupKeys: keys,
+          syncedCounts: ancSyncedCounts,
+          localPendingCounts: ancLocalCounts,
+        ),
+        pncVisitCount: combinedVisitCount(
+          lookupKeys: keys,
+          syncedCounts: pncSyncedCounts,
+          localPendingCounts: pncLocalCounts,
+        ),
       );
     }).toList();
   }

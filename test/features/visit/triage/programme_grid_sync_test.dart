@@ -299,4 +299,63 @@ void main() {
               'itself unlock the card either.');
     });
   });
+
+  group('ProgrammeGridSync.isAncGridLocked', () {
+    test('locked when postpartum regardless of PW gate or revisit', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: true,
+          isPwGateOpen: true,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('unlocked when pregnant, PW gate open, and revisit elapsed', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: true,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('locked when PW gate not open', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: false,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('locked on delivery visit or within revisit interval', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: true,
+          isDeliveryVisit: true,
+          ancRevisitTooSoon: false,
+        ),
+        isTrue,
+      );
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: true,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: true,
+        ),
+        isTrue,
+      );
+    });
+  });
 }

@@ -2725,6 +2725,7 @@ abstract final class TriageStrings {
   static String get pregnancyOutcomeChip => getTranslatedString('pregnancyOutcomeChip', 'Pregnancy Outcome');
   static String get deliveryHint => getTranslatedString('deliveryHint', 'Pregnancy Outcome documents the birth this visit and clears ANC');
   static String get ancDeliveryConflictHint => getTranslatedString('ancDeliveryConflictHint', '⚠ Unavailable on a pregnancy-outcome visit — deselect Pregnancy Outcome first');
+  static String get ancLockedPostpartumHint => getTranslatedString('ancLockedPostpartumHint', '⚠ ANC is not available after delivery — use PNC for postnatal care');
   static String get pncOnlyPostpartumHint => getTranslatedString('pncOnlyPostpartumHint', '⚠ Mother PNC is available after delivery — use Pregnancy Outcome now');
   static String get pwLockedPostpartumHint => getTranslatedString('pwLockedPostpartumHint', '⚠ This pregnancy has already ended — PW registration is only for a new pregnancy');
   static String get pregnancyOutcomeLockedHint => getTranslatedString('pregnancyOutcomeLockedHint', '⚠ Pregnancy Outcome is not available for this patient right now');
