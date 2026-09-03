@@ -517,15 +517,24 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               );
             }
             if (patientId != null) {
-              // Fallback schedule when Step 3 is skipped; Step 3 Accept
-              // overwrites next_due_at with the summary follow-up date.
-              await patientDao.updateVisitSchedule(
-                patientId: patientId,
-                lastVisitAt: now.millisecondsSinceEpoch,
-                nextDueAt: _nextDueForProgramme(primaryProgramme, now),
-                missedVisitCount: 0,
-              );
-              debugPrint('[VisitForm] schedule updated');
+              // PO-only (Spice pregnancy-outcome summary) has no follow-up;
+              // defer next_due_at until a PNC visit or Step 3 PNC accept.
+              final poOnly = hasPregnancyOutcome &&
+                  !(_notifierFormTypes?.contains('pncMother') ?? false);
+              if (!poOnly) {
+                // Fallback schedule when Step 3 is skipped; Step 3 Accept
+                // overwrites next_due_at with the summary follow-up date.
+                await patientDao.updateVisitSchedule(
+                  patientId: patientId,
+                  lastVisitAt: now.millisecondsSinceEpoch,
+                  nextDueAt: _nextDueForProgramme(primaryProgramme, now),
+                  missedVisitCount: 0,
+                );
+                debugPrint('[VisitForm] schedule updated');
+              } else {
+                debugPrint(
+                    '[VisitForm] PO-only — skipped next_due_at fallback');
+              }
               await worklistRepo.recomputeAllAfterSync();
               debugPrint('[VisitForm] worklist recomputed');
             }

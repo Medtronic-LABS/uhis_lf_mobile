@@ -94,6 +94,58 @@ abstract final class VisitSummaryDetails {
     return effective.length == 1 && effective.contains(Programme.cataract);
   }
 
+  /// Spice `AssessmentPregnancyOutcomeSummaryFragment` — no next follow-up row.
+  static bool isPregnancyOutcomeWireType(String? tag) {
+    if (tag == null || tag.isEmpty) return false;
+    final n = tag.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+    return n == 'PREGNANCYOUTCOME';
+  }
+
+  /// RMNCH mother PNC assessment (combined PO+PNC or standalone PNC visit).
+  static bool isPncMotherWireType(String? tag) {
+    if (tag == null || tag.isEmpty) return false;
+    final n = tag.toUpperCase().replaceAll('_', '').replaceAll(' ', '');
+    return n == 'PNCMOTHER' || n == 'PNC';
+  }
+
+  static bool isAncWireType(String? tag) {
+    if (tag == null || tag.isEmpty) return false;
+    return tag.toUpperCase().replaceAll('_', '').replaceAll(' ', '') == 'ANC';
+  }
+
+  static Set<String> normalizedAssessmentTypes(Iterable<String>? types) {
+    if (types == null) return {};
+    return types
+        .map((t) => t.trim().toUpperCase().replaceAll('_', '').replaceAll(' ', ''))
+        .where((t) => t.isNotEmpty)
+        .toSet();
+  }
+
+  static bool includesPregnancyOutcomeAssessment({
+    Iterable<String>? assessmentTypes,
+  }) {
+    return normalizedAssessmentTypes(assessmentTypes)
+        .contains('PREGNANCYOUTCOME');
+  }
+
+  static bool includesPncMotherAssessment({
+    Iterable<String>? assessmentTypes,
+  }) {
+    final types = normalizedAssessmentTypes(assessmentTypes);
+    return types.contains('PNCMOTHER') || types.contains('PNC');
+  }
+
+  /// PO saved without a [PNC_MOTHER] assessment on this encounter — Spice
+  /// pregnancy-outcome summary has no follow-up date picker.
+  static bool isPregnancyOutcomeOnlyVisit({
+    Iterable<String>? assessmentTypes,
+  }) {
+    if (!includesPregnancyOutcomeAssessment(assessmentTypes: assessmentTypes)) {
+      return false;
+    }
+    return !includesPncMotherAssessment(assessmentTypes: assessmentTypes);
+  }
+
   /// Whether Step 3 should schedule local follow-up / stamp next_due_at.
   ///
   /// Eye care: never (Spice only stamps `referredSite` at submit).
@@ -122,6 +174,9 @@ abstract final class VisitSummaryDetails {
           primaryProgramme: primaryProgramme,
         ) &&
         !isReferred) {
+      return false;
+    }
+    if (isPregnancyOutcomeOnlyVisit(assessmentTypes: assessmentTypes)) {
       return false;
     }
     return true;
@@ -177,7 +232,7 @@ abstract final class VisitSummaryDetails {
     )) {
       return const [];
     }
-    return items
+    var filtered = items
         .where(
           (i) =>
               !isFamilyPlanningWireType(i.programme) &&
@@ -186,6 +241,14 @@ abstract final class VisitSummaryDetails {
               !isCataractWireType(i.programme),
         )
         .toList();
+    // PO+PNC: PNC summary dates the next visit — drop ANC rows while the
+    // patient may still be ANC-enrolled until postpartum projection lands.
+    if (includesPncMotherAssessment(assessmentTypes: assessmentTypes)) {
+      filtered = filtered
+          .where((i) => !isAncWireType(i.programme))
+          .toList(growable: false);
+    }
+    return filtered;
   }
 
   /// Rule-based fallback must not invent a generic follow-up on visits Spice
@@ -194,7 +257,11 @@ abstract final class VisitSummaryDetails {
   static bool shouldAddGenericFollowUpFallback({
     required Set<Programme> programmes,
     Programme primaryProgramme = Programme.unknown,
+    Iterable<String>? assessmentTypes,
   }) {
+    if (isPregnancyOutcomeOnlyVisit(assessmentTypes: assessmentTypes)) {
+      return false;
+    }
     if (isPwRegistrationOnlyVisit(
       programmes: programmes,
       primaryProgramme: primaryProgramme,
