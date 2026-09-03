@@ -178,6 +178,7 @@ class PregnancyEpisodeDao {
     required String patientId,
     required int deliveryDateMillis,
     PregnancyFacts? facts,
+    PregnancySnapshotRow? obstetricPatch,
   }) async {
     final existing =
         await openEpisodeFor(patientId) ?? await mostRecentFor(patientId);
@@ -192,12 +193,20 @@ class PregnancyEpisodeDao {
             facts: PregnancyFacts.empty,
           ),
         );
+    final patch = obstetricPatch ??
+        PregnancySnapshotRow(
+          patientId: patientId,
+          facts: facts ?? const PregnancyFacts(isPostpartumWindow: true),
+        );
     final closed = base.copyWith(
       closedAt: nowMs,
-      obstetric: base.obstetric.copyWith(
-        deliveryDateMillis: deliveryDateMillis,
-        facts: facts ?? base.obstetric.facts,
-        updatedAt: nowMs,
+      obstetric: base.obstetric.mergedWith(
+        patch.copyWith(
+          patientId: patientId,
+          deliveryDateMillis: deliveryDateMillis,
+          facts: facts ?? patch.facts,
+          updatedAt: nowMs,
+        ),
       ),
     );
     if (existing == null) {

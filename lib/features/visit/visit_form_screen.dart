@@ -15,7 +15,7 @@ import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/pregnancy_episode_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
-import '../../core/mission/mission_pregnancy_facts.dart';
+import 'forms/pregnancy_outcome_snapshot_mapper.dart';
 import '../../core/models/programme.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../scribe/scribe_controller.dart';
@@ -452,28 +452,27 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         // otherwise syncPendingAssessments can run with householdMembers[] empty.
         if (hasPregnancyOutcome) {
           if (patientId != null) {
-            final deliveryRaw = fieldValues['dateOfDelivery']
-                ?? fieldValues['deliveryDate'];
-            final deliveryMs = deliveryRaw is String
-                ? DateTime.tryParse(deliveryRaw)?.millisecondsSinceEpoch
-                : null;
             final local = await patientDao.byAnyId(patientId);
             final localId = local?.id ?? patientId;
+            final poData = CanonicalVisitData(fieldValues);
+            final existingEpisode =
+                await pregnancyEpisodeDao.openEpisodeFor(localId) ??
+                    await pregnancyEpisodeDao.mostRecentFor(localId);
+            final poSnapshot = PregnancyOutcomeSnapshotMapper.fromPoData(
+              patientId: localId,
+              data: poData,
+              existing: existingEpisode?.obstetric,
+            );
+            final deliveryMs = poSnapshot.deliveryDateMillis ??
+                DateTime.now().millisecondsSinceEpoch;
             await pregnancyEpisodeDao.closeEpisode(
               patientId: localId,
-              deliveryDateMillis:
-                  deliveryMs ?? DateTime.now().millisecondsSinceEpoch,
-              facts: const PregnancyFacts(
-                isPostpartumWindow: true,
-                highRiskPregnantWoman: false,
-                hasGapsInAnc: false,
-                isNearTermAnc: false,
-                hadDeliveryComplications: false,
-                hasPncIllness: false,
-              ),
+              deliveryDateMillis: deliveryMs,
+              obstetricPatch: poSnapshot,
             );
             debugPrint('[VisitForm] pregnancy episode closed → postpartum '
-                'deliveryMs=$deliveryMs patientId=$localId');
+                'deliveryMs=$deliveryMs patientId=$localId '
+                'postpartum=${poSnapshot.facts.isPostpartumWindow}');
           }
 
           try {

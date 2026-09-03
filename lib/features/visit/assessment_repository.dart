@@ -570,13 +570,30 @@ class AssessmentRepository extends ChangeNotifier {
           }
           if (pushedMemberIds.isNotEmpty && _memberDao != null) {
             try {
-              await _memberDao.markSynced(pushedMemberIds);
+              var stamped = 0;
+              for (final memberId in pushedMemberIds) {
+                final reported = poll.memberStatusByReference[memberId];
+                if (reported == null) {
+                  debugPrint(
+                      '[AssessmentSync] household member $memberId absent '
+                      'from status poll — leaving NotSynced for retry');
+                  continue;
+                }
+                await _memberDao.updateFhirId(
+                  localId: memberId,
+                  fhirId: reported == 'Success'
+                      ? poll.memberFhirIdByReference[memberId]
+                      : null,
+                  syncStatus: reported,
+                );
+                stamped++;
+              }
               debugPrint(
-                  '[AssessmentSync] Marked ${pushedMemberIds.length} '
-                  'household member(s) as synced');
+                  '[AssessmentSync] Stamped $stamped/${pushedMemberIds.length} '
+                  'household member(s) from status poll');
             } catch (e) {
               debugPrint(
-                  '[AssessmentSync] household-member markSynced skipped: $e');
+                  '[AssessmentSync] household-member updateFhirId skipped: $e');
             }
           }
           return ids.length;
@@ -1844,6 +1861,8 @@ class AssessmentRepository extends ChangeNotifier {
     var sawFailed = false;
     final statusByReference = <int, String>{};
     final fhirIdByReference = <int, String>{};
+    final memberStatusByReference = <String, String>{};
+    final memberFhirIdByReference = <String, String>{};
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
@@ -1878,16 +1897,29 @@ class AssessmentRepository extends ChangeNotifier {
         for (final raw in entities) {
           if (raw is! Map) continue;
           final entityStatus = raw['status']?.toString() ?? '';
-          final reference = int.tryParse(raw['referenceId']?.toString() ?? '');
+          final entityType = raw['type']?.toString() ?? '';
+          final referenceId = raw['referenceId']?.toString();
+          final reference = int.tryParse(referenceId ?? '');
+          final fhirId = raw['fhirId']?.toString();
           debugPrint(
-              '[AssessmentSync] status entity type=${raw['type']} '
-              'ref=${raw['referenceId']} status=$entityStatus '
+              '[AssessmentSync] status entity type=$entityType '
+              'ref=$referenceId status=$entityStatus '
               'err=${raw['errorMessage']}');
-          if (raw['type']?.toString() == 'Assessment' && reference != null) {
+          if (entityType == 'Assessment' && reference != null) {
             statusByReference[reference] = entityStatus;
-            final fhirId = raw['fhirId']?.toString();
             if (fhirId != null && fhirId.isNotEmpty && fhirId != 'null') {
               fhirIdByReference[reference] = fhirId;
+            }
+          } else if (entityType == 'HouseholdMember' &&
+              referenceId != null &&
+              referenceId.isNotEmpty &&
+              (entityStatus == 'Success' || entityStatus == 'Failed')) {
+            memberStatusByReference[referenceId] = entityStatus;
+            if (entityStatus == 'Success' &&
+                fhirId != null &&
+                fhirId.isNotEmpty &&
+                fhirId != 'null') {
+              memberFhirIdByReference[referenceId] = fhirId;
             }
           }
           if (entityStatus == 'InProgress') {
@@ -1903,6 +1935,8 @@ class AssessmentRepository extends ChangeNotifier {
               : _OfflineSyncPollResult.success,
           assessmentStatusByReference: statusByReference,
           assessmentFhirIdByReference: fhirIdByReference,
+          memberStatusByReference: memberStatusByReference,
+          memberFhirIdByReference: memberFhirIdByReference,
         );
       } on DioException catch (e) {
         debugPrint(
@@ -1917,6 +1951,8 @@ class AssessmentRepository extends ChangeNotifier {
           : _OfflineSyncPollResult.inProgress,
       assessmentStatusByReference: statusByReference,
       assessmentFhirIdByReference: fhirIdByReference,
+      memberStatusByReference: memberStatusByReference,
+      memberFhirIdByReference: memberFhirIdByReference,
     );
   }
 }
@@ -1930,11 +1966,15 @@ class _OfflineSyncPollOutcome {
     required this.overall,
     required this.assessmentStatusByReference,
     required this.assessmentFhirIdByReference,
+    required this.memberStatusByReference,
+    required this.memberFhirIdByReference,
   });
 
   final _OfflineSyncPollResult overall;
   final Map<int, String> assessmentStatusByReference;
   final Map<int, String> assessmentFhirIdByReference;
+  final Map<String, String> memberStatusByReference;
+  final Map<String, String> memberFhirIdByReference;
 }
 
 enum _BiometricKind { height, weight }
