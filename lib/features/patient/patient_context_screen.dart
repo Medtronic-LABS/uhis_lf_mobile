@@ -42,6 +42,7 @@ import '../../core/widgets/skeleton.dart';
 import '../household/enrollment/enrollment_dob.dart';
 import '../visit/forms/form_config.dart';
 import '../visit/forms/rmnch_referral_facility.dart';
+import '../household/member_assessment_lookup.dart';
 import '../visit/triage/patient_context_builder.dart';
 import '../visit/forms/anc_existing_illness.dart';
 import '../visit/forms/delivery_facility_type.dart';
@@ -429,24 +430,51 @@ class _PatientContextScreenState
     }
   }
 
+  /// Derives enrolled programmes from locally-cached assessment rows.
+  Set<Programme> _programmesFromAssessments(List<MemberAssessment> assessments) {
+    final progs = <Programme>{};
+    for (final a in assessments) {
+      final p = Programme.fromString(a.type);
+      if (p != Programme.unknown) progs.add(p);
+    }
+    return progs;
+  }
+
+  /// All patient/member id keys that may have synced assessment rows in SQLite.
+  Future<Set<String>> _assessmentLookupKeys(String patientId) async {
+    try {
+      return await assessmentLookupKeysForRoute(
+        routePatientId: patientId,
+        memberDao: context.read<MemberDao>(),
+        patientDao: context.read<PatientDao>(),
+        navigationExtra: widget.memberData,
+      );
+    } on Object catch (e) {
+      // ignore: avoid_print
+      print('[PatientContextScreen] assessment lookup keys failed: $e');
+      return {stripPatientRouteId(patientId)};
+    }
+  }
+
   /// Build the local-first Recent Visits feed from three on-device sources.
   /// Spec: dashboard-prioritization-impl §Patient Detail; matches the
   /// offline-first contract (architecture.md §3.1). Returns deduped list
   /// sorted DESC by date.
   Future<List<MemberAssessment>> _localAssessmentsFor(String patientId) async {
-    final stripped = patientId.contains('/')
-        ? patientId.substring(patientId.lastIndexOf('/') + 1)
-        : patientId;
+    final lookupKeys = await _assessmentLookupKeys(patientId);
     final assessments = context.read<AssessmentDao>();
     final localDrafts = context.read<LocalAssessmentDao>();
 
     final out = <MemberAssessment>[];
+    final seenSyncedIds = <String>{};
 
     // Source 1: server-synced records from member-assessment-history.
     // These are the canonical care history entries after a sync completes.
     try {
-      final asMap = await assessments.forMany([stripped]);
-      for (final row in asMap[stripped] ?? const []) {
+      final asMap = await assessments.forMany(lookupKeys.toList());
+      for (final key in lookupKeys) {
+        for (final row in asMap[key] ?? const []) {
+        if (!seenSyncedIds.add(row.id)) continue;
         final date = row.occurredAt == null
             ? DateTime.now()
             : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
@@ -465,6 +493,7 @@ class _PatientContextScreenState
           date: date,
           rawJson: <String, dynamic>{'kind': row.kind, 'raw': row.rawJson},
         ));
+        }
       }
     } on Object catch (e) {
       // ignore: avoid_print
@@ -478,9 +507,15 @@ class _PatientContextScreenState
     // [PatientOrMemberData.assessments], so that it also covers records that
     // only came back over the network.
     try {
-      final drafts = await localDrafts.getByPatientId(stripped);
+      final draftsById = <String, LocalAssessmentEntity>{};
+      for (final key in lookupKeys) {
+        for (final d in await localDrafts.getByPatientId(key)) {
+          draftsById[d.id] = d;
+        }
+      }
+      final drafts = draftsById.values.toList();
       // ignore: avoid_print
-      print('[PatientContextScreen] localDrafts for patientId=$stripped count=${drafts.length}');
+      print('[PatientContextScreen] localDrafts lookupKeys=$lookupKeys count=${drafts.length}');
       for (final d in drafts) {
         // ignore: avoid_print
         print('[PatientContextScreen]   draft id=${d.id} type=${d.assessmentType} syncStatus=${d.syncStatus.name} storedPatientId=${d.patientId}');
@@ -514,7 +549,7 @@ class _PatientContextScreenState
         };
 
         out.add(MemberAssessment(
-          id: d.id.toString(),
+          id: d.id,
           type: d.assessmentType.toUpperCase(),
           date: d.createdAt ?? DateTime.now(),
           status: d.syncStatus.name,
@@ -644,16 +679,9 @@ class _PatientContextScreenState
     debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
         ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
-    // Skip remote assessment fetch only when a sync completed recently AND the
-    // local DB already has assessment rows for this patient. When local is empty
-    // (e.g. member-to-patient mapping failed during the sync pull), fall back to
-    // the remote API so the Recent Visit section doesn't silently go blank.
-    final skipRemote = syncAge != null &&
-        syncAge.inMinutes < 30 &&
-        localAssessments.isNotEmpty;
     ConsoleLog.banner('[PatientCtx] phase1 local=${t0.elapsedMilliseconds}ms'
         ' localPatient=${localPatient != null} localAssessments=${localAssessments.length}'
-        ' syncAge=${syncAge?.inMinutes ?? '?'}min skipRemote=$skipRemote');
+        ' syncAge=${syncAge?.inMinutes ?? '?'}min (local-only — no per-patient API)');
 
     if (localPatient != null) {
       // ignore: avoid_print
@@ -701,8 +729,8 @@ class _PatientContextScreenState
         return true;
       }());
 
-      // Build local-only snapshot and surface it immediately so the screen
-      // renders with cached data while the remote enrichment runs.
+      // Local-only: assessment history is populated by login / warmSync; the
+      // cloud icon on this screen triggers warmSync before re-reading SQLite.
       final localOnly = PatientOrMemberData(
         localPatient: localPatient,
         programmes: localPatient.programmes,
@@ -712,85 +740,33 @@ class _PatientContextScreenState
         pregnancySnapshot: pregnancySnapshot,
         enrolledAt: enrolledAt,
       );
-      if (mounted) {
-        setState(() {
-          _localSnapshot = localOnly;
-          _remoteLoading = true;
-        });
-      }
-
-      // Phase 2: householdName (always local) + remote assessments (skipped
-      // when sync is fresh — avoids a ~900ms round-trip for data already in DB).
-      final tPhase2 = Stopwatch()..start();
-      List<MemberAssessment> remoteAssessments = const [];
-      if (skipRemote) {
-        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
-        final info = await _householdInfo(localPatient.patient.householdId);
-        if (mounted) setState(() => _remoteLoading = false);
-        ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
-            ' remoteSkipped=true total=${t0.elapsedMilliseconds}ms');
-        return localOnly.copyWith(householdName: info.name, householdHeadPhone: info.headPhone);
-      }
-
-      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdInfo');
-      final phase2Results = await Future.wait([
-        memberRepo
-            .getMemberAssessments(
-              widget.patientId,
-              villageId: localPatient.patient.villageId,
-              patientAge: localPatient.patient.age,
-              patientGender: localPatient.patient.gender,
-            )
-            .catchError((_) => <MemberAssessment>[]),
-        _householdInfo(localPatient.patient.householdId),
-      ]);
-      remoteAssessments = phase2Results[0] as List<MemberAssessment>;
-      final householdInfo = phase2Results[1] as ({String? name, String? headPhone});
-      // ignore: avoid_print
-      print('[PatientContextScreen] Found ${remoteAssessments.length} remote assessments');
-
-      if (mounted) setState(() => _remoteLoading = false);
-
+      final info = await _householdInfo(localPatient.patient.householdId);
+      ConsoleLog.banner('[PatientCtx] load done=${t0.elapsedMilliseconds}ms'
+          ' localAssessments=${localAssessments.length}');
       return localOnly.copyWith(
-        remoteAssessments: remoteAssessments,
-        householdName: householdInfo.name,
-        householdHeadPhone: householdInfo.headPhone,
+        householdName: info.name,
+        householdHeadPhone: info.headPhone,
       );
     }
 
     // ignore: avoid_print
-    print('[PatientContextScreen] No local patient, trying remote member API');
-    
-    // If not found locally, try fetching member from remote API
-    final member = await memberRepo.getMemberWithAssessments(widget.patientId);
+    print('[PatientContextScreen] No local patient, trying local member lookup');
+
+    // If not found locally as a patient, try the member row from SQLite.
+    final member = await memberRepo.getMemberById(widget.patientId);
     if (member != null) {
       // ignore: avoid_print
-      print('[PatientContextScreen] Found remote member: ${member.name} with ${member.assessments.length} assessments');
-      // Determine programmes from assessments
-      final progs = <Programme>{};
-      for (final a in member.assessments) {
-        switch (a.type) {
-          case 'ANC':
-            progs.add(Programme.anc);
-            break;
-          case 'IMCI':
-            progs.add(Programme.imci);
-            break;
-          case 'NCD':
-            progs.add(Programme.ncd);
-            break;
-          case 'TB':
-            progs.add(Programme.tb);
-            break;
-        }
-      }
-      
-      final localAssessments = await _localAssessmentsFor(widget.patientId);
+      print('[PatientContextScreen] Found local member: ${member.name}');
+      final memberLocalAssessments =
+          await _localAssessmentsFor(widget.patientId);
+      final patientWithProgs = await patientRepo.byId(widget.patientId);
+      final progs = patientWithProgs?.programmes ??
+          _programmesFromAssessments(memberLocalAssessments);
       final memberHouseholdInfo = await _householdInfo(member.householdId);
       return PatientOrMemberData(
         remoteMember: member,
         programmes: progs,
-        localAssessments: localAssessments,
+        localAssessments: memberLocalAssessments,
         memberId: resolvedMemberId,
         householdName: memberHouseholdInfo.name,
         householdHeadPhone: memberHouseholdInfo.headPhone,
@@ -805,53 +781,16 @@ class _PatientContextScreenState
       // ignore: avoid_print
       print('[PatientContextScreen] Using pre-passed member data from household');
       final data = widget.memberData!;
-      // Extract patient profile for filtering
-      final age = data['age'] as int?;
-      final gender = data['gender'] as String?;
-      final isPregnant = data['isPregnant'] as bool? ?? false;
       // Use the FHIR ID (member.id) only for resource references, not for encounter.memberId.
       final memberId = data['id']?.toString() ?? widget.patientId;
-      
-      // Try to fetch assessments but don't fail if API is unavailable.
-      // Pass villageId: null so the call falls back to all assigned villages
-      // rather than only the first one (which would miss patients in other villages).
-      List<MemberAssessment> assessments = [];
-      try {
-        assessments = await memberRepo.getMemberAssessments(
-          widget.patientId,
-          patientAge: age,
-          patientGender: gender,
-          isPregnant: isPregnant,
-        );
-        // ignore: avoid_print
-        print('[PatientContextScreen] Found ${assessments.length} assessments for pre-passed member');
-      } catch (e) {
-        // ignore: avoid_print
-        print('[PatientContextScreen] Failed to fetch assessments: $e (continuing with basic info)');
-      }
-      
-      // Determine programmes from assessments
-      final progs = <Programme>{};
-      for (final a in assessments) {
-        switch (a.type) {
-          case 'ANC':
-            progs.add(Programme.anc);
-            break;
-          case 'IMCI':
-            progs.add(Programme.imci);
-            break;
-          case 'NCD':
-            progs.add(Programme.ncd);
-            break;
-          case 'TB':
-            progs.add(Programme.tb);
-            break;
-        }
-      }
-      
+
       final localAssessmentsList =
           await _localAssessmentsFor(widget.patientId);
-      final prePassedHouseholdInfo = await _householdInfo(data['householdId']?.toString());
+      final patientWithProgs = await patientRepo.byId(widget.patientId);
+      final progs = patientWithProgs?.programmes ??
+          _programmesFromAssessments(localAssessmentsList);
+      final prePassedHouseholdInfo =
+          await _householdInfo(data['householdId']?.toString());
       return PatientOrMemberData(
         remoteMember: MemberHealthDetails(
           id: memberId,
@@ -863,10 +802,8 @@ class _PatientContextScreenState
           householdId: data['householdId']?.toString(),
           isPregnant: data['isPregnant'] as bool? ?? false,
           patientId: data['patientId'] as String?,
-          assessments: assessments,
         ),
         programmes: progs,
-        remoteAssessments: assessments,
         localAssessments: localAssessmentsList,
         memberId: resolvedMemberId,
         householdName: prePassedHouseholdInfo.name,
@@ -885,11 +822,18 @@ class _PatientContextScreenState
   Future<void> _refresh() async {
     setState(() {
       _refreshing = true;
-      // Keep _localSnapshot so the existing content stays visible
-      // during the pull-to-refresh; skeleton only shows on cold load.
       _remoteLoading = false;
     });
     try {
+      final syncSvc = context.read<OfflineSyncService>();
+      final report = await syncSvc.warmSync();
+      if (!mounted) return;
+      if (report.errors.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(PatientContextStrings.refreshFailed)),
+        );
+        return;
+      }
       final data = await _fetchData();
       if (!mounted) return;
       setState(() {

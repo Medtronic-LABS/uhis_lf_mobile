@@ -21,10 +21,14 @@ class PatientRepository {
 
   /// Returns the patient from local cache. Patient data comes from
   /// offline-sync/fetch-synced-data; there is no granular remote refresh.
+  ///
+  /// [id] may be any alias the calling screen carries — local `patients.id`,
+  /// server `patients.patient_id`, or a member FHIR / reference id. Side
+  /// tables (programmes, assessments) are keyed by the resolved local id.
   Future<PatientWithProgrammes?> byId(String id) async {
-    final p = await _patients.byId(id);
+    final p = await _patients.byAnyId(id);
     if (p == null) return null;
-    final progs = await _programmes.programmesFor(id);
+    final progs = await _programmes.programmesFor(p.id);
     return PatientWithProgrammes(p, progs);
   }
 

@@ -1,5 +1,6 @@
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/member_dao.dart';
+import '../../core/db/patient_dao.dart';
 
 /// Keys under which synced assessment history may be stored for a member.
 ///
@@ -31,6 +32,55 @@ List<String> memberAssessmentLookupKeysFromEntity(HouseholdMemberEntity m) =>
       patientId: m.patientId,
       referenceId: m.referenceId,
     );
+
+/// Strips FHIR-style prefixes from a route or reference id.
+String stripPatientRouteId(String patientId) {
+  if (!patientId.contains('/')) return patientId;
+  return patientId.substring(patientId.lastIndexOf('/') + 1);
+}
+
+/// Every SQLite key that may hold synced assessment rows for [routePatientId].
+///
+/// Assessment history is persisted under the local member PK (`members.id` /
+/// `patients.id`). Screens often route with the server `patients.patient_id`
+/// (e.g. `646733`) while `members.patient_id` still holds the local key — bridge
+/// through [PatientDao.byAnyId] before querying [AssessmentDao].
+Future<Set<String>> assessmentLookupKeysForRoute({
+  required String routePatientId,
+  required MemberDao memberDao,
+  required PatientDao patientDao,
+  Map<String, dynamic>? navigationExtra,
+}) async {
+  final stripped = stripPatientRouteId(routePatientId.trim());
+  final keys = <String>{};
+  if (stripped.isNotEmpty) keys.add(stripped);
+
+  final patient = await patientDao.byAnyId(stripped);
+  if (patient != null) {
+    keys.add(patient.id);
+    final serverId = patient.patientId?.trim();
+    if (serverId != null && serverId.isNotEmpty) keys.add(serverId);
+  }
+
+  try {
+    final entity = await memberDao.getById(stripped) ??
+        await memberDao.getByPatientId(stripped);
+    if (entity != null) {
+      keys.addAll(memberAssessmentLookupKeysFromEntity(entity));
+    }
+  } on Object {
+    // Non-fatal — caller still has route + patients-table aliases above.
+  }
+
+  if (navigationExtra != null) {
+    for (final field in const ['id', 'patientId']) {
+      final v = navigationExtra[field]?.toString().trim();
+      if (v != null && v.isNotEmpty) keys.add(v);
+    }
+  }
+
+  return keys;
+}
 
 /// Canonical patient key for joined side tables (programmes, follow-ups).
 String? memberSideTableKey(HouseholdMemberEntity m) {
