@@ -25,10 +25,16 @@ class AssessmentRow {
         'raw_json': rawJson,
       };
 
+  static String? _cellAsString(Object? value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    return s.isEmpty ? null : s;
+  }
+
   static AssessmentRow fromDb(Map<String, Object?> row) => AssessmentRow(
-        id: row['id'] as String,
-        patientId: row['patient_id'] as String,
-        kind: row['kind'] as String?,
+        id: _cellAsString(row['id'])!,
+        patientId: _cellAsString(row['patient_id'])!,
+        kind: _cellAsString(row['kind']),
         occurredAt: row['occurred_at'] as int?,
         rawJson: row['raw_json'] as String? ?? '{}',
       );
@@ -68,9 +74,13 @@ class AssessmentDao {
       'GROUP BY patient_id',
       [...patientIds, ...kinds.map((k) => k.toUpperCase())],
     );
-    return {
-      for (final r in rows) r['patient_id'] as String: r['cnt'] as int,
-    };
+    final out = <String, int>{};
+    for (final r in rows) {
+      final pid = AssessmentRow._cellAsString(r['patient_id']);
+      if (pid == null) continue;
+      out[pid] = r['cnt'] as int;
+    }
+    return out;
   }
 
   Future<Map<String, List<AssessmentRow>>> forMany(
@@ -85,7 +95,7 @@ class AssessmentDao {
     );
     final out = <String, List<AssessmentRow>>{};
     for (final r in rows) {
-      final pid = r['patient_id'] as String?;
+      final pid = AssessmentRow._cellAsString(r['patient_id']);
       if (pid == null) continue;
       (out[pid] ??= <AssessmentRow>[]).add(AssessmentRow.fromDb(r));
     }
