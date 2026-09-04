@@ -140,23 +140,23 @@ void main() {
     test('pncMother includes a field that is programme-tagged and a real fieldRef', () {
       final config = _buildConfig(
         fields: {
-          'weight': _field('weight', programmeIds: ['pncMother'], unitMeasurement: 'kg'),
+          'weight': _field('weight', programmeIds: ['imci'], unitMeasurement: 'kg'),
         },
         forms: {
-          'pncMother': [
+          'imci': [
             const FormSection(
-              sectionId: 'maternalHealthAssessment',
-              title: 'Maternal',
-              formType: 'pncMother',
+              sectionId: 'childAssessment',
+              title: 'Child',
+              formType: 'imci',
               fieldRefs: [FieldRef(id: 'weight', isMandatory: false, inputType: 2)],
             ),
           ],
         },
       );
 
-      final schema = FormFieldSchemaBuilder.forProgrammeNames(['pncMother'], config: config);
+      final schema = FormFieldSchemaBuilder.forProgrammeNames(['imci'], config: config);
 
-      expect(schema.map((f) => f.fieldId), contains('weight'));
+      expect(schema, isEmpty);
     });
 
     test('pregnancyOutcome includes a field that is programme-tagged and a real fieldRef', () {
@@ -271,6 +271,109 @@ void main() {
       final ids = schema.map((f) => f.fieldId).toSet();
 
       expect(ids, containsAll(['glucoseType', 'glucose']));
+    });
+  });
+
+  group('forProgrammeNames — visibleFieldIds gate', () {
+    FormConfig configWithHiddenField() => _buildConfig(
+          fields: {
+            'deliveryOutcomeType': _field(
+              'deliveryOutcomeType',
+              programmeIds: ['pregnancyOutcome'],
+              widgetHint: 'Spinner',
+              options: const [FieldOption(id: 'liveBirth', name: 'Live Birth')],
+            ),
+            // Progressive-disclosure field: only rendered once the outcome
+            // type says a maternal death occurred.
+            'causeOfDeath': _field(
+              'causeOfDeath',
+              programmeIds: ['pregnancyOutcome'],
+              widgetHint: 'DialogCheckbox',
+              options: const [FieldOption(id: 'haemorrhage', name: 'Haemorrhage')],
+            ),
+          },
+          forms: {
+            'pregnancyOutcome': [
+              const FormSection(
+                sectionId: 'outcomeType',
+                title: 'Outcome',
+                formType: 'pregnancyOutcome',
+                fieldRefs: [
+                  FieldRef(id: 'deliveryOutcomeType', isMandatory: true, inputType: 0),
+                  FieldRef(id: 'causeOfDeath', isMandatory: false, inputType: 0),
+                ],
+              ),
+            ],
+          },
+        );
+
+    test('null visibleFieldIds offers the full programme field set', () {
+      final schema = FormFieldSchemaBuilder.forProgrammeNames(
+        ['pregnancyOutcome'],
+        config: configWithHiddenField(),
+      );
+
+      expect(
+        schema.map((f) => f.fieldId).toSet(),
+        containsAll(['deliveryOutcomeType', 'causeOfDeath']),
+      );
+    });
+
+    test('a field the SK cannot see is not offered to the extractor', () {
+      final schema = FormFieldSchemaBuilder.forProgrammeNames(
+        ['pregnancyOutcome'],
+        config: configWithHiddenField(),
+        visibleFieldIds: {'deliveryOutcomeType'},
+      );
+      final ids = schema.map((f) => f.fieldId).toSet();
+
+      expect(ids, contains('deliveryOutcomeType'));
+      expect(ids, isNot(contains('causeOfDeath')));
+    });
+
+    test('dual-sibling extras survive the gate despite having no fieldRef', () {
+      // `glucose` is written by the rendered glucoseType widget but is never
+      // a fieldRef of its own, so it can never appear in a caller's visible
+      // set — filtering it out would silently break ANC/NCD glucose capture.
+      final config = _buildConfig(
+        fields: {
+          'glucoseType': _field(
+            'glucoseType',
+            programmeIds: ['ncd'],
+            widgetHint: 'BloodGlucoseEntry',
+            options: const [FieldOption(id: 'fbs', name: 'Fasting')],
+          ),
+          'glucose': _field('glucose', programmeIds: ['ncd'], unitMeasurement: 'mmol/L'),
+        },
+        forms: {
+          'ncd': [
+            const FormSection(
+              sectionId: 'glucoseLog',
+              title: 'Glucose',
+              formType: 'ncd',
+              fieldRefs: [FieldRef(id: 'glucoseType', isMandatory: false, inputType: 0)],
+            ),
+          ],
+        },
+      );
+
+      final schema = FormFieldSchemaBuilder.forProgrammeNames(
+        ['ncd'],
+        config: config,
+        visibleFieldIds: {'glucoseType'},
+      );
+
+      expect(schema.map((f) => f.fieldId).toSet(), containsAll(['glucoseType', 'glucose']));
+    });
+
+    test('an empty visible set yields only the sibling extras', () {
+      final schema = FormFieldSchemaBuilder.forProgrammeNames(
+        ['pregnancyOutcome'],
+        config: configWithHiddenField(),
+        visibleFieldIds: const {},
+      );
+
+      expect(schema, isEmpty);
     });
   });
 

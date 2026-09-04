@@ -143,9 +143,23 @@ abstract final class FormFieldSchemaBuilder {
   /// Deduplicates fields that appear in multiple programmes (e.g. `systolic`
   /// shared by ANC and NCD). [config] defaults to the loaded [FormConfig]
   /// singleton; overridable for unit tests that don't load real assets.
+  ///
+  /// [visibleFieldIds] — when supplied, restricts the schema to fields the SK
+  /// can currently see. Progressive-disclosure fields (declared `gone` until
+  /// a gate field is answered) would otherwise be offered to the extractor
+  /// and could be filled with a value the SK never has a chance to review —
+  /// on a form that records a stillbirth or a maternal death, an unreviewable
+  /// auto-filled value is not acceptable. The caller passes the ids it is
+  /// actually rendering; the schema is re-sent on every extract, so a field
+  /// revealed mid-visit joins the next extraction on its own.
+  ///
+  /// [_knownDualSiblingExtras] entries are always retained: they have no
+  /// layout `fieldRef` of their own, so they can never appear in a caller's
+  /// rendered-field set even though the widget that writes them is on screen.
   static List<FormFieldSchema> forProgrammeNames(
     List<String> names, {
     FormConfig? config,
+    Set<String>? visibleFieldIds,
   }) {
     final resolvedConfig = config ?? FormConfig.instance;
     final seen = <String>{};
@@ -155,7 +169,14 @@ abstract final class FormFieldSchemaBuilder {
         if (seen.add(field.fieldId)) result.add(field);
       }
     }
-    return result;
+    if (visibleFieldIds == null) return result;
+    final extras = <String>{
+      for (final name in names) ...?_knownDualSiblingExtras[name],
+    };
+    return result
+        .where((f) =>
+            visibleFieldIds.contains(f.fieldId) || extras.contains(f.fieldId))
+        .toList();
   }
 
   /// Fields that are extractable despite not being their own literal
@@ -188,17 +209,14 @@ abstract final class FormFieldSchemaBuilder {
 
   /// Build schema for a single formType string (e.g. `'ncd'`, `'anc'`).
   ///
-  /// Allow-list mirrors [assessmentTypeFor]: NCD, ANC, PNC mother, and
-  /// pregnancy outcome. Every other formType (pncChild, imci, tb, ...)
-  /// returns an empty list even though `config.forms` may have real
-  /// layout data for them.
+  /// Gated on [_serverTypeOrder] — the same allow-list [assessmentTypeFor]
+  /// emits from, read directly rather than restated, so the two can never
+  /// drift. Every other formType (pncChild, imci, tb, ...) returns an empty
+  /// list even though `config.forms` may have real layout data for them, so
+  /// a future caller passing one directly cannot silently enable a form the
+  /// server has no prompt for.
   static List<FormFieldSchema> _forProgramme(String formType, FormConfig config) {
-    if (formType != 'ncd' &&
-        formType != 'anc' &&
-        formType != 'pncMother' &&
-        formType != 'pregnancyOutcome') {
-      return const [];
-    }
+    if (!_serverTypeOrder.contains(formType)) return const [];
 
     final sections = config.forms[formType] ?? const [];
     final inputTypeById = <String, int>{

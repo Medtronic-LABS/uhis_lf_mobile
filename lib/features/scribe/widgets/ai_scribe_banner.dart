@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -51,6 +52,7 @@ class AiScribeBanner extends StatefulWidget {
     this.onFormFill,
     this.symptomVocab,
     this.onLiveSymptomCodes,
+    this.visibleFieldIds,
   });
 
   final String encounterId;
@@ -94,6 +96,12 @@ class AiScribeBanner extends StatefulWidget {
   final void Function(RealtimeSymptomCodes codes, String fullTranscript)?
       onLiveSymptomCodes;
 
+  /// Field ids currently rendered on the assessment form. When set, the
+  /// extraction schema is restricted to them so a progressive-disclosure
+  /// field cannot be auto-filled while the SK has no way to see or confirm
+  /// it. Pass null to offer the programme's full field set.
+  final Set<String>? visibleFieldIds;
+
   @override
   State<AiScribeBanner> createState() => _AiScribeBannerState();
 }
@@ -125,14 +133,36 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       audioSettings: context.read<ScribeAudioSettingsNotifier>(),
     );
     _liveCtrl.addListener(_onLiveChanged);
-    final assessmentType = widget.assessmentType;
-    if (assessmentType != null) {
-      _liveCtrl.setFormSchema(
-        FormFieldSchemaBuilder.forProgrammeNames(
-          assessmentType.split(',').map((s) => s.trim()).toList(),
-        ),
-      );
+    _applyFormSchema();
+  }
+
+  @override
+  void didUpdateWidget(AiScribeBanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Progressive disclosure: answering a gate question reveals new fields
+    // mid-visit. The controller re-sends the schema on every extract, so
+    // refreshing it here is enough for the next extraction to pick them up.
+    if (oldWidget.assessmentType != widget.assessmentType ||
+        !setEquals(oldWidget.visibleFieldIds, widget.visibleFieldIds)) {
+      _applyFormSchema();
     }
+  }
+
+  /// Builds the live-ASR extraction schema from the current assessment type
+  /// and rendered-field set. Null assessment type (Step 1) clears it, which
+  /// keeps the generic symptom-extraction path.
+  void _applyFormSchema() {
+    final assessmentType = widget.assessmentType;
+    if (assessmentType == null) {
+      _liveCtrl.setFormSchema(null);
+      return;
+    }
+    _liveCtrl.setFormSchema(
+      FormFieldSchemaBuilder.forProgrammeNames(
+        assessmentType.split(',').map((s) => s.trim()).toList(),
+        visibleFieldIds: widget.visibleFieldIds,
+      ),
+    );
   }
 
   @override
