@@ -54,6 +54,9 @@ class PostSyncRefresher {
   /// dropped request would be pure waste.
   bool _dirty = false;
 
+  /// True while [refreshNow] is recomputing worklist / mission queue data.
+  final isRefreshing = ValueNotifier<bool>(false);
+
   void attach() {
     debugPrint('[PostSync] attached — listening for sync completion');
     _sub = _progress.listen((p) {
@@ -74,13 +77,14 @@ class PostSyncRefresher {
   Future<void> dispose() async {
     await _sub?.cancel();
     _sub = null;
+    isRefreshing.dispose();
   }
 
   /// Recompute, then refresh the dashboard.
   ///
-  /// Public so `SyncProgressScreen` can call it directly for the post-login
-  /// path instead of keeping a second copy of this sequence — the two must not
-  /// drift, and running both would recompute twice per login.
+  /// On login, [attach] hears the same completion event as `SyncProgressScreen`
+  /// — that screen navigates home and does not call this method, so login gets
+  /// exactly one pass. Manual / connectivity-triggered callers use this API.
   Future<void> refreshNow({String trigger = 'manual'}) async {
     if (_running) {
       _dirty = true;
@@ -89,6 +93,7 @@ class PostSyncRefresher {
       return;
     }
     _running = true;
+    isRefreshing.value = true;
     // Logged on ENTRY, not just completion: the recompute walks every patient
     // and can run for tens of seconds, so an end-only log is indistinguishable
     // from never having started.
@@ -121,6 +126,8 @@ class PostSyncRefresher {
       _dirty = false;
       debugPrint('[PostSync] re-running for a sync that landed mid-refresh');
       await refreshNow(trigger: 'coalesced');
+    } else {
+      isRefreshing.value = false;
     }
   }
 }

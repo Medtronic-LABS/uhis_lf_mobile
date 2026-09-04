@@ -10,8 +10,6 @@ import '../../core/db/immunisation_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
-import '../../core/debug/console_log.dart';
-import '../../core/models/dashboard_tier.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
@@ -150,12 +148,6 @@ class WorklistRepository {
   }) {
     final now = DateTime.now();
 
-    String tierLabel(WorklistEntry e) {
-      final due = e.nextDueAt;
-      if (due == null) return 'upcoming';
-      return DashboardTier.fromDueAt(due, now: now).name;
-    }
-
     int bandRank(Band b) => switch (b) {
           Band.band1 => 1,
           Band.band2 => 2,
@@ -189,28 +181,6 @@ class WorklistRepository {
       }
       return a.displayName.compareTo(b.displayName);
     });
-
-    assert(() {
-      final codes = entries.map((e) => e.priorityCode);
-      ConsoleLog.step('[Worklist sort] ${entries.length} patients:');
-      ConsoleLog.step('  spec:     $kPrioritySortSpecLegend');
-      ConsoleLog.step('  chain:    ${prioritySortChain(codes)}');
-      ConsoleLog.step('  compact:  ${prioritySortChainCompact(codes)}');
-      for (var i = 0; i < entries.length; i++) {
-        final e = entries[i];
-        final progs = e.programmes.map((p) => p.name).join(',');
-        final overdue = overdueDays(e);
-        final tier = tierLabel(e);
-        ConsoleLog.step(
-          '  ${i + 1}. [${e.priorityCode}] ${e.displayName}'
-          ' | prog: $progs | tier: $tier'
-          '${e.isPregnant ? " | pregnant" : ""}'
-          '${overdue > 0 ? " | overdue: ${overdue}d" : ""}'
-          '${e.reasons.isNotEmpty ? " | why: ${e.reasons.first}" : ""}',
-        );
-      }
-      return true;
-    }());
   }
 
   /// Iterate cached patients, derive [PatientFacts] from joined follow-ups +
@@ -230,17 +200,8 @@ class WorklistRepository {
     final historyVitals = await _vitalsFromAssessmentHistory(ids);
     final now = DateTime.now();
 
-    assert(() {
-      ConsoleLog.banner(
-        '[Risk recompute] scoring ${patients.length} patients '
-        '(localVitals=${localVitals.length}, historyVitals=${historyVitals.length})',
-      );
-      return true;
-    }());
-
-    // Collect debug rows for a ranked summary after scoring.
-    final debugRows = <_ScoreDebugRow>[];
     final clearHistFuPatientIds = <String>[];
+    final riskUpdates = <PatientRiskUpdate>[];
 
     for (final p in patients) {
       final follows = followMap[p.id] ?? const <FollowUpRow>[];
@@ -265,8 +226,6 @@ class WorklistRepository {
       final nextDue = nextDueMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(nextDueMs);
-      final hasLocal = localVitals.containsKey(p.id);
-      final hasHistory = historyVitals.containsKey(p.id);
       final vitals = ClinicalVitalsFromHistory.merge(
         localVitals[p.id],
         historyVitals[p.id],
@@ -292,7 +251,7 @@ class WorklistRepository {
           .fold<int?>(null, (best, v) => best == null || v > best ? v : best);
       final clearNextDue = localIsLatest && nextDueMs == null;
       if (localIsLatest) clearHistFuPatientIds.add(p.id);
-      await _patients.updateRisk(
+      riskUpdates.add(PatientRiskUpdate(
         patientId: p.id,
         sortRank: assessment.sortRank,
         bandWireTag: assessment.band.wireTag,
@@ -303,65 +262,10 @@ class WorklistRepository {
         missedVisitCount: facts.missedVisitsLast90d,
         redFlag: facts.redFlag,
         clearNextDueAt: clearNextDue,
-      );
-
-      assert(() {
-        final progs = facts.programmes.map((x) => x.name).join(',');
-        final overdueDays = nextDue != null
-            ? CalendarDay.daysBetween(nextDue, now).clamp(0, 999)
-            : 0;
-        final vitalsSrc = hasLocal && hasHistory
-            ? 'local+history'
-            : hasLocal
-                ? 'local'
-                : hasHistory
-                    ? 'history'
-                    : 'none';
-        final drivers =
-            assessment.rationale?.drivers.join(', ') ?? '(no drivers)';
-        ConsoleLog.step(
-          '[Risk score] ${p.name ?? p.id} → ${assessment.priorityCode}'
-          ' | prog: $progs | vitals: $vitalsSrc'
-          '${_vitalsBrief(vitals)}'
-          '${overdueDays > 0 ? " | overdue: ${overdueDays}d" : ""}'
-          ' | drivers: $drivers',
-        );
-        debugRows.add(_ScoreDebugRow(
-          name: p.name ?? p.id,
-          code: assessment.priorityCode,
-          sortRank: assessment.sortRank,
-          pregnant: facts.isPregnant,
-          overdueDays: overdueDays,
-        ));
-        return true;
-      }());
+      ));
     }
 
-    assert(() {
-      debugRows.sort((a, b) {
-        final byRank = b.sortRank.compareTo(a.sortRank);
-        if (byRank != 0) return byRank;
-        final byPreg = (a.pregnant ? 0 : 1).compareTo(b.pregnant ? 0 : 1);
-        if (byPreg != 0) return byPreg;
-        return b.overdueDays.compareTo(a.overdueDays);
-      });
-      ConsoleLog.banner(
-        '[Risk recompute] priority order (band+mod, then preg, then overdue):',
-      );
-      final codes = debugRows.map((r) => r.code);
-      ConsoleLog.banner('  spec:     $kPrioritySortSpecLegend');
-      ConsoleLog.banner('  chain:    ${prioritySortChain(codes)}');
-      ConsoleLog.banner('  compact:  ${prioritySortChainCompact(codes)}');
-      for (var i = 0; i < debugRows.length; i++) {
-        final r = debugRows[i];
-        ConsoleLog.banner(
-          '  ${i + 1}. [${r.code}] ${r.name}'
-          '${r.pregnant ? " | pregnant" : ""}'
-          '${r.overdueDays > 0 ? " | overdue: ${r.overdueDays}d" : ""}',
-        );
-      }
-      return true;
-    }());
+    await _patients.updateRiskMany(riskUpdates);
 
     if (clearHistFuPatientIds.isNotEmpty) {
       await _followUps.deleteHistorySeededForPatients(clearHistFuPatientIds);
@@ -372,29 +276,6 @@ class WorklistRepository {
     // risk recompute.
     _changes.value++;
     return patients.length;
-  }
-
-  static String _vitalsBrief(ClinicalVitals? v) {
-    if (v == null) return '';
-    final parts = <String>[];
-    if (v.hemoglobin != null) {
-      parts.add('Hb ${v.hemoglobin!.toStringAsFixed(1)}');
-    }
-    if (v.systolicBp != null || v.diastolicBp != null) {
-      parts.add('BP ${v.systolicBp ?? '-'}/${v.diastolicBp ?? '-'}');
-    }
-    if (v.fastingGlucoseMmolL != null) {
-      parts.add('glu ${v.fastingGlucoseMmolL!.toStringAsFixed(1)}');
-    }
-    if (v.gestationalAgeWeeks != null) parts.add('GA ${v.gestationalAgeWeeks}');
-    if (v.parity != null) parts.add('parity ${v.parity}');
-    if (v.hasDangerSign) parts.add('danger');
-    if (v.hasStrokeSign) parts.add('stroke');
-    if (v.hasEclampsia) parts.add('eclampsia');
-    if (v.hasAbnormalUrine) parts.add('urine+');
-    if (v.hasDiabetes) parts.add('DM');
-    if (parts.isEmpty) return '';
-    return ' [${parts.join(', ')}]';
   }
 
   /// Parse synced assessment-history rows into ClinicalVitals.
@@ -619,20 +500,4 @@ class WorklistRepository {
     return now.difference(DateTime.fromMillisecondsSinceEpoch(last)).inDays;
   }
 
-}
-
-class _ScoreDebugRow {
-  const _ScoreDebugRow({
-    required this.name,
-    required this.code,
-    required this.sortRank,
-    required this.pregnant,
-    required this.overdueDays,
-  });
-
-  final String name;
-  final String code;
-  final int sortRank;
-  final bool pregnant;
-  final int overdueDays;
 }

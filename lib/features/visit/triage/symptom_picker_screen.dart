@@ -17,6 +17,7 @@ import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/db/assessment_dao.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/immunisation_dao.dart';
+import '../../../core/db/member_dao.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/models/programme.dart';
@@ -451,6 +452,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         followUpRepo: followUpRepo,
         patientDao: context.read<PatientDao>(),
         immunisationDao: context.read<ImmunisationDao>(),
+        memberDao: context.read<MemberDao>(),
       );
 
       final lastVisit = visitsByVisit.isNotEmpty ? visitsByVisit.first : null;

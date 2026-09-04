@@ -1001,6 +1001,7 @@ class _PatientContextScreenState
         followUpRepo: followUpRepo,
         patientDao: context.read<PatientDao>(),
         immunisationDao: context.read<ImmunisationDao>(),
+        memberDao: context.read<MemberDao>(),
         remoteAssessments: data.assessments,
       );
 
@@ -2840,6 +2841,7 @@ class _AiInsightCardState extends State<_AiInsightCard> {
         followUpRepo: context.read<FollowUpRepository>(),
         patientDao: context.read<PatientDao>(),
         immunisationDao: context.read<ImmunisationDao>(),
+        memberDao: context.read<MemberDao>(),
         remoteAssessments: widget.data.assessments,
       );
       return _AiInsightResult(

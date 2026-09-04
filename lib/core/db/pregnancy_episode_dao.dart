@@ -99,6 +99,117 @@ class PregnancyEpisodeDao {
   final AppDatabase _db;
   final PregnancySnapshotDao _snapshotDao;
 
+  /// Open episodes for many patients — one query, most recent open per patient.
+  Future<Map<String, PregnancyEpisodeRow>> openEpisodesForMany(
+    List<String> patientIds,
+  ) async {
+    if (patientIds.isEmpty) return const {};
+    final unique = patientIds.toSet().toList(growable: false);
+    final out = <String, PregnancyEpisodeRow>{};
+    const chunkSize = 500;
+    for (var i = 0; i < unique.length; i += chunkSize) {
+      final chunk = unique.sublist(
+        i,
+        i + chunkSize > unique.length ? unique.length : i + chunkSize,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.db.rawQuery(
+        'SELECT * FROM ${AppDatabase.tablePregnancyEpisodes} '
+        'WHERE closed_at IS NULL AND patient_id IN ($placeholders) '
+        'ORDER BY started_at DESC',
+        chunk,
+      );
+      for (final row in rows) {
+        final episode = PregnancyEpisodeRow.fromDb(row);
+        out.putIfAbsent(episode.patientId, () => episode);
+      }
+    }
+    return out;
+  }
+
+  /// Batch sync from coalesced bundle snapshots — one open-episode lookup,
+  /// one transaction for writes, one projection batch.
+  Future<void> syncCoalescedSnapshots(
+    List<PregnancySnapshotRow> coalesced,
+  ) async {
+    if (coalesced.isEmpty) return;
+    final patientIds = coalesced.map((r) => r.patientId).toList(growable: false);
+    final openByPatient = await openEpisodesForMany(patientIds);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final projections = <PregnancySnapshotRow>[];
+
+    await _db.db.transaction((tx) async {
+      for (final row in coalesced) {
+        final open = openByPatient[row.patientId];
+        if (open != null) {
+          final mergedObstetric = open.obstetric.mergedWith(
+            row.copyWith(patientId: row.patientId),
+          );
+          final updated = open.copyWith(obstetric: mergedObstetric);
+          await tx.update(
+            AppDatabase.tablePregnancyEpisodes,
+            updated.toDb(),
+            where: 'id = ?',
+            whereArgs: [updated.id],
+          );
+          projections.add(mergedObstetric.copyWith(patientId: row.patientId));
+        } else {
+          final episode = PregnancyEpisodeRow(
+            id: const Uuid().v4(),
+            patientId: row.patientId,
+            startedAt: nowMs,
+            obstetric: row.copyWith(patientId: row.patientId),
+          );
+          await tx.insert(AppDatabase.tablePregnancyEpisodes, episode.toDb());
+          projections.add(episode.obstetric);
+        }
+      }
+    });
+
+    if (projections.isNotEmpty) {
+      await _snapshotDao.upsertMany(projections);
+    }
+  }
+
+  /// Seeds [lastAncVisitDateMs] on open episodes without regressing newer local
+  /// values. Returns the number of episodes updated.
+  Future<int> seedLastAncVisitDates(Map<String, int> lastAncVisitMs) async {
+    if (lastAncVisitMs.isEmpty) return 0;
+    final openByPatient =
+        await openEpisodesForMany(lastAncVisitMs.keys.toList(growable: false));
+    final toUpdate = <PregnancyEpisodeRow>[];
+    final projections = <PregnancySnapshotRow>[];
+
+    for (final entry in lastAncVisitMs.entries) {
+      final open = openByPatient[entry.key];
+      if (open == null) continue;
+      final existingMs = open.obstetric.lastAncVisitDateMs;
+      if (existingMs != null && existingMs >= entry.value) continue;
+      final mergedObstetric = open.obstetric.copyWith(
+        lastAncVisitDateMs: entry.value,
+      );
+      toUpdate.add(open.copyWith(obstetric: mergedObstetric));
+      projections.add(
+        mergedObstetric.copyWith(patientId: entry.key),
+      );
+    }
+
+    if (toUpdate.isEmpty) return 0;
+
+    await _db.db.transaction((tx) async {
+      for (final episode in toUpdate) {
+        await tx.update(
+          AppDatabase.tablePregnancyEpisodes,
+          episode.toDb(),
+          where: 'id = ?',
+          whereArgs: [episode.id],
+        );
+      }
+    });
+    await _snapshotDao.upsertMany(projections);
+    return toUpdate.length;
+  }
+
   /// The currently open (not yet delivered) episode for this patient, if any.
   Future<PregnancyEpisodeRow?> openEpisodeFor(String patientId) async {
     final rows = await _db.db.query(

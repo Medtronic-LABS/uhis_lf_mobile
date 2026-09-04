@@ -302,6 +302,32 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     );
   }
 
+  /// Ids of the fields actually on screen right now — the already-filtered
+  /// [annotated] sections crossed with each field's own visibility.
+  ///
+  /// Handed to [AiScribeBanner] so live ASR can only fill what the SK can
+  /// see and confirm. Derived from the same `activeSections` result the form
+  /// renders from, so the two cannot drift apart.
+  Set<String> _visibleFieldIds(
+    List<AnnotatedFormSection> annotated,
+    UnifiedFormNotifier notifier,
+  ) {
+    final ids = <String>{};
+    for (final a in annotated) {
+      for (final ref in a.section.fieldRefs) {
+        final libraryDef = _config!.fields[ref.id];
+        if (libraryDef == null) continue;
+        final def = ref.options != null
+            ? libraryDef.withOptions(ref.options!)
+            : libraryDef;
+        if (_isFieldVisible(def, notifier, formType: a.section.formType)) {
+          ids.add(ref.id);
+        }
+      }
+    }
+    return ids;
+  }
+
   void _reloadPregnancyIfSeeded() {
     if (!(widget.activeFormTypes.contains('anc') ||
         widget.enrolledFormTypes.contains('anc'))) {
@@ -556,6 +582,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   tapStartsLiveAsr: true,
                   assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
                       widget.activeFormTypes),
+                  visibleFieldIds: _visibleFieldIds(annotated, notifier),
                   onFormFill: (fill) {
                     final rejected = notifier.applyAiPrefill(
                       fill.fields.where((f) => f.value != null).toList(),

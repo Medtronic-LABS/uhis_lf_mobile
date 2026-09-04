@@ -1022,6 +1022,41 @@ class LocalAssessmentDao {
     return rows.map(LocalAssessmentEntity.fromDb).toList();
   }
 
+  /// Get assessments stored under ANY of [patientIds], newest-first.
+  ///
+  /// A member's assessments are not all keyed the same way: [AssessmentRepository]
+  /// writes `members.patient_id` when the server has issued one and the local
+  /// PK otherwise, while screens route with whichever id they had on hand. A
+  /// single-key read therefore misses rows that exist — see
+  /// `memberAssessmentLookupKeys` / [assessmentLookupKeysForRoute], which build
+  /// the candidate key set this takes.
+  ///
+  /// Rows are de-duplicated by primary key, so overlapping keys resolving to
+  /// the same member cannot double-count a visit.
+  Future<List<LocalAssessmentEntity>> getByPatientIds(
+      List<String> patientIds) async {
+    final keys = patientIds
+        .map((k) => k.trim())
+        .where((k) => k.isNotEmpty)
+        .toSet()
+        .toList();
+    if (keys.isEmpty) return const [];
+    final placeholders = List.filled(keys.length, '?').join(',');
+    final rows = await _db.db.query(
+      tableName,
+      where: 'patient_id IN ($placeholders)',
+      whereArgs: keys,
+      orderBy: 'created_at DESC',
+    );
+    final seen = <String>{};
+    final out = <LocalAssessmentEntity>[];
+    for (final row in rows) {
+      final entity = LocalAssessmentEntity.fromDb(row);
+      if (seen.add(entity.id)) out.add(entity);
+    }
+    return out;
+  }
+
   /// Get assessments by patient ID.
   Future<List<LocalAssessmentEntity>> getByPatientId(String patientId) async {
     final rows = await _db.db.query(
