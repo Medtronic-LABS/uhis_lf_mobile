@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
-import '../../app/post_sync_refresher.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
@@ -37,20 +36,13 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
   SyncProgress _progress = SyncProgress.initial;
   SyncReport? _report;
   bool _syncStarted = false;
-  bool _preparingDashboard = false;
-  /// Which prepare step is running. An enum, not a localized string: a string
-  /// stored here is frozen in the language it was built in, and the SK can
-  /// switch language mid-sync.
-  _PreparePhase? _preparePhase;
-
-  String get _preparingMessage => switch (_preparePhase) {
-        _PreparePhase.visits => SyncStrings.preparingVisits,
-        _PreparePhase.dashboard => SyncStrings.preparingDashboard,
-        null => '',
-      };
   /// True when sync stopped because the session has no auth credentials —
   /// user must re-login; do not offer "continue offline".
   bool _blockedNoAuth = false;
+
+  /// Guards against double navigation when both the progress stream and
+  /// [_startSync]'s await path observe the same completion event.
+  bool _finishHandled = false;
 
   @override
   void initState() {
@@ -88,9 +80,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       setState(() => _progress = progress);
       // Background-started sync: handle completion via stream events.
       if (progress.isComplete && _report == null) {
-        _prepareDashboardData().then((_) {
-          if (mounted) _navigateAfterSync();
-        });
+        _finishSyncAndGoHome();
       }
     });
 
@@ -102,9 +92,8 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
 
     // Sync was already completed in the background (e.g. finished during PIN setup).
     if (sync.progress.isComplete) {
-      debugPrint('[_SyncProgressScreenState] background sync already done → prep + navigate');
-      await _prepareDashboardData();
-      if (mounted) _navigateAfterSync();
+      debugPrint('[_SyncProgressScreenState] background sync already done → navigate');
+      _finishSyncAndGoHome();
       return;
     }
 
@@ -182,55 +171,38 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     debugPrint('[_SyncProgressScreenState] sync done: households=${report.households} members=${report.members} patients=${report.patients} errors=${report.errors}');
 
     if (report.errors.isEmpty) {
-      await _prepareDashboardData();
-      if (mounted) _navigateAfterSync();
+      _finishSyncAndGoHome();
     }
+  }
+
+  /// Navigate home immediately after sync.
+  ///
+  /// Worklist recompute + mission refresh are owned by [PostSyncRefresher]
+  /// (listening on the same progress stream). Calling refresh here too caused
+  /// a second full pass on every login via the `_dirty` coalesce path.
+  void _finishSyncAndGoHome() {
+    if (_finishHandled) return;
+    _finishHandled = true;
+    _warmEncounterCacheInBackground();
+    if (mounted) _navigateAfterSync();
+  }
+
+  /// Prefetch today's completed-visit ids so Home's first queue build is warm.
+  /// Recompute / dashboard refresh is handled by [PostSyncRefresher.attach].
+  void _warmEncounterCacheInBackground() {
+    final encounters = context.read<EncounterDao>();
+    unawaited(() async {
+      try {
+        await encounters.completedTodayPatientIds();
+        debugPrint('[Sync] encounter cache warmed (background)');
+      } catch (e) {
+        debugPrint('[Sync] Failed to warm encounter cache (background): $e');
+      }
+    }());
   }
 
   void _navigateAfterSync() {
     context.go('/home');
-  }
-
-  /// Prepare dashboard data after sync so the dashboard loads instantly.
-  Future<void> _prepareDashboardData() async {
-    if (!mounted) return;
-    
-    setState(() {
-      _preparingDashboard = true;
-      _preparePhase = _PreparePhase.visits;
-    });
-    
-    try {
-      // Delegates to PostSyncRefresher rather than repeating the recompute
-      // sequence: it also runs on connectivity-triggered syncs that never show
-      // this screen, and its guard means the two paths cannot recompute twice
-      // for the same login.
-      await context.read<PostSyncRefresher>().refreshNow(trigger: 'syncScreen');
-
-      if (!mounted) return;
-      setState(() => _preparePhase = _PreparePhase.dashboard);
-      
-      // Pre-load mission queue and referral summary. DashboardScreen lives
-      // inside a StatefulShellRoute.indexedStack, so its State (and the
-      // `changes` listener it attached the first time it was built) survives
-      // every subsequent logout/login in the same app session — its
-      // `initState()` never runs again. `refresh()` (not a plain `loadQueue`
-      // pre-warm) is what actually notifies that listener, so the dashboard
-      // re-renders with this session's data instead of whatever it last
-      // showed before this login.
-      // refreshNow() above already refreshed the mission repo; only the
-      // encounter pre-warm is left to do here.
-      await context.read<EncounterDao>().completedTodayPatientIds();
-      
-      debugPrint('[Sync] Dashboard data prepared');
-    } catch (e) {
-      debugPrint('[Sync] Failed to prepare dashboard data: $e');
-      // Non-fatal - dashboard will load the data itself
-    }
-    
-    if (mounted) {
-      setState(() => _preparingDashboard = false);
-    }
   }
 
   Future<void> _retry() async {
@@ -238,6 +210,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       _progress = SyncProgress.initial;
       _report = null;
       _syncStarted = false;
+      _finishHandled = false;
       _blockedNoAuth = false;
     });
     await _startSync();
@@ -321,7 +294,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                       color: scheme.error,
                     );
                   }
-                  if (_progress.isComplete && !_preparingDashboard) {
+                  if (_progress.isComplete) {
                     return Icon(
                       Icons.check_circle_rounded,
                       size: 80,
@@ -330,9 +303,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                   }
                   return Transform.scale(
                     scale: _pulseAnimation.value,
-                    child: _preparingDashboard 
-                        ? _buildPreparingRing(scheme)
-                        : _buildProgressRing(scheme),
+                    child: _buildProgressRing(scheme),
                   );
                 },
               ),
@@ -343,11 +314,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               Text(
                 hasError
                     ? SyncStrings.syncFailed
-                    : _preparingDashboard
-                        ? SyncStrings.almostReady
-                        : _progress.isComplete
-                            ? SyncStrings.done
-                            : SyncStrings.title,
+                    : _progress.isComplete
+                        ? SyncStrings.done
+                        : SyncStrings.title,
                 style: textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -361,14 +330,6 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                 Text(
                   _friendlyError(_progress.error ?? _report?.errors.firstOrNull),
                   style: textTheme.bodyLarge?.copyWith(color: scheme.error),
-                  textAlign: TextAlign.center,
-                )
-              else if (_preparingDashboard)
-                Text(
-                  _preparingMessage,
-                  style: textTheme.bodyLarge?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
                   textAlign: TextAlign.center,
                 )
               else if (_progress.isComplete)
@@ -399,18 +360,16 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               ],
               
               // Linear progress indicator (show during sync or preparing)
-              if (!hasError && (!_progress.isComplete || _preparingDashboard)) ...[
+              if (!hasError && !_progress.isComplete) ...[
                 const SizedBox(height: 24),
                 SizedBox(
                   width: 200,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
-                      value: _preparingDashboard 
-                          ? null // Indeterminate during preparing
-                          : _progress.overallProgress > 0
-                              ? _progress.overallProgress
-                              : null,
+                      value: _progress.overallProgress > 0
+                          ? _progress.overallProgress
+                          : null,
                       minHeight: 6,
                       backgroundColor: scheme.surfaceContainerHighest,
                       valueColor: AlwaysStoppedAnimation(scheme.primary),
@@ -477,31 +436,6 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                         : _progress.currentStep == SyncStep.fetchingReferrals
                             ? Icons.swap_horiz_rounded
                             : Icons.storage_rounded,
-            size: 32,
-            color: scheme.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPreparingRing(ColorScheme scheme) {
-    return SizedBox(
-      width: 80,
-      height: 80,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            width: 80,
-            height: 80,
-            child: CircularProgressIndicator(
-              strokeWidth: 4,
-              valueColor: AlwaysStoppedAnimation(scheme.primary),
-            ),
-          ),
-          Icon(
-            Icons.dashboard_customize_rounded,
             size: 32,
             color: scheme.primary,
           ),
@@ -602,7 +536,3 @@ class _SyncStatChip extends StatelessWidget {
     );
   }
 }
-
-/// Post-sync preparation steps. Kept as an enum so the visible message is
-/// localized at build time and follows a mid-sync language switch.
-enum _PreparePhase { visits, dashboard }

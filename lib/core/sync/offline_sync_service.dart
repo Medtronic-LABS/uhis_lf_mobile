@@ -167,6 +167,7 @@ class OfflineSyncService extends ChangeNotifier {
     // look identical in logcat.
     debugPrint(
       '[SyncProgress] step=${p.currentStep.name} '
+      'phase=${p.persistPhase?.name ?? '-'} '
       'complete=${p.isComplete} error=${p.hasError} '
       'items=${p.itemsDone}/${p.itemsTotal}'
       '${p.isRetrying ? ' retry=${p.retryAttempt}/${p.retryMaxAttempts}' : ''}',
@@ -573,17 +574,11 @@ class OfflineSyncService extends ChangeNotifier {
     // measure where the time actually goes rather than inferring it from log
     // timestamps. Emits one line per phase plus a total.
     final persistWatch = Stopwatch()..start();
-    var lastMark = 0;
     void mark(String phase, [int rows = -1]) {
-      final now = persistWatch.elapsedMilliseconds;
-      final took = now - lastMark;
-      lastMark = now;
-      final count = rows >= 0 ? ' rows=$rows' : '';
-      debugPrint('[PersistTiming] $phase ${took}ms$count (cumulative ${now}ms)');
+      if (rows >= 0) {
+        debugPrint('[SyncPersist] $phase=$rows');
+      }
     }
-
-    // Log bundle keys for debugging
-    debugPrint('[OfflineSyncService] Bundle keys: ${bundle.keys.toList()}');
 
     // ── Households (Android: ResponseInitialDownload.households) ──────────
     final householdNodes = _listFromAny(bundle, const [
@@ -777,30 +772,47 @@ class OfflineSyncService extends ChangeNotifier {
     var persistedMembers = 0;
     var orphanMembers = 0;
     if (members.isNotEmpty && _members != null) {
+      if (_households != null) {
+        final missingHhFhirIds = <String>{
+          for (final m in members)
+            if (m.householdFhirId != null &&
+                m.householdFhirId!.isNotEmpty &&
+                !hhFhirToLocal.containsKey(m.householdFhirId!))
+              m.householdFhirId!,
+        };
+        if (missingHhFhirIds.isNotEmpty) {
+          hhFhirToLocal.addAll(
+            await _households.fhirToLocalIds(missingHhFhirIds),
+          );
+        }
+      }
+      final linkedMembers = <HouseholdMemberEntity>[];
       for (final m in members) {
         String? localHhId = m.householdFhirId != null
             ? hhFhirToLocal[m.householdFhirId!]
             : null;
-        if (localHhId == null &&
-            m.householdFhirId != null &&
-            _households != null) {
-          final existing = await _households.getByFhirId(m.householdFhirId!);
-          localHhId = existing?.id;
-        }
-        // A member that names a household we cannot resolve — neither in this
-        // bundle nor already local — would be unreachable from every household
-        // screen, so drop it rather than orphan it. Members with no household
-        // at all are kept; the enrolment flow assigns one later.
         if (localHhId == null && m.householdFhirId != null) {
           orphanMembers++;
           continue;
         }
-        final linked = m.copyWith(householdId: localHhId);
-        _emitPersistProgress(
-            SyncPersistPhase.members, persistedMembers, members.length);
-        final localId = await _members.insertOrUpdateFromBE(linked);
-        memberFhirToLocal[m.fhirId!] = localId;
-        persistedMembers++;
+        linkedMembers.add(m.copyWith(householdId: localHhId));
+      }
+      memberFhirToLocal.addAll(
+        await _members.upsertManyFromBE(
+          linkedMembers,
+          onProgress: (done) => _emitPersistProgress(
+            SyncPersistPhase.members,
+            done,
+            linkedMembers.length,
+          ),
+        ),
+      );
+      persistedMembers = linkedMembers.length;
+      for (final linked in linkedMembers) {
+        final fhir = linked.fhirId;
+        if (fhir == null || fhir.isEmpty) continue;
+        final localId = memberFhirToLocal[fhir];
+        if (localId == null) continue;
         final p = _memberToPatient(linked.copyWith(id: localId));
         if (p != null) bridgedPatients.add(p);
       }
@@ -897,21 +909,6 @@ class OfflineSyncService extends ChangeNotifier {
         'menstrualDate',
         'lastPeriodDate',
       ]);
-      if (lmpMs == null) {
-        final wire = flat['lastMenstrualPeriod'] ?? flat['lmpDate'];
-        // Key present with null is normal for multi-episode rows — not a parse error.
-        if (wire != null && '$wire'.trim().isNotEmpty && '$wire' != 'null') {
-          debugPrint(
-            '[LMP] sync parse FAIL patient=$patientId raw=$wire',
-          );
-        }
-      } else {
-        debugPrint(
-          '[LMP] sync parse OK patient=$patientId member=$memberKey '
-          'lmpMs=$lmpMs eddMs=$eddMs '
-          'wire=${flat['lastMenstrualPeriod']}',
-        );
-      }
       pregnancyRows.add(PregnancySnapshotRow(
         patientId: patientId,
         facts: facts,
@@ -946,12 +943,7 @@ class OfflineSyncService extends ChangeNotifier {
         ]),
       ));
     }
-    final withLmp =
-        pregnancyRows.where((r) => r.lmpDate != null).map((r) => r.patientId);
-    debugPrint(
-      '[LMP] sync pregnancyInfos n=${pregnancyRows.length} '
-      'withLmp=${withLmp.length} ids=${withLmp.toSet().take(8).toList()}',
-    );
+    mark('pregnancyInfos', pregnancyRows.length);
 
     // Bundle `treatmentDetails[]` → presence-only set (clinical specifics
     // live elsewhere). Drives the `ncd-drift` OVERDUE-min driver and the
@@ -996,12 +988,20 @@ class OfflineSyncService extends ChangeNotifier {
         force: true);
     await _patients.upsertMany(patients);
     mark('patients', patients.length);
-    var programmesDone = 0;
-    for (final entry in programmes.entries) {
+    if (programmes.isNotEmpty) {
       _emitPersistProgress(
-          SyncPersistPhase.programmes, programmesDone, programmes.length);
-      await _programmes.replaceFor(entry.key, entry.value);
-      programmesDone++;
+        SyncPersistPhase.programmes,
+        0,
+        programmes.length,
+        force: true,
+      );
+      await _programmes.replaceForMany(programmes);
+      _emitPersistProgress(
+        SyncPersistPhase.programmes,
+        programmes.length,
+        programmes.length,
+        force: true,
+      );
     }
     mark('programmes', programmes.length);
     // Remap follow-up patientIds through the member→BRN translation built above
@@ -1080,26 +1080,8 @@ class OfflineSyncService extends ChangeNotifier {
     // open episode per patient."
     if (_pregnancyEpisode != null) {
       final coalesced = PregnancySnapshotDao.coalesceByPatient(pregnancyRows);
-      for (final row in coalesced) {
-        final open = await _pregnancyEpisode.openEpisodeFor(row.patientId);
-        if (open != null) {
-          await _pregnancyEpisode.updateOpenEpisode(
-            patientId: row.patientId,
-            patch: row,
-          );
-        } else {
-          await _pregnancyEpisode.startNewEpisode(
-            patientId: row.patientId,
-            obstetric: row,
-          );
-        }
-      }
-      final coalescedWithLmp =
-          coalesced.where((r) => r.lmpDate != null).length;
-      debugPrint(
-        '[LMP] pregnancy episode sync — incoming=${pregnancyRows.length} '
-        'patientsTouched=${coalesced.length} withLmp=$coalescedWithLmp',
-      );
+      await _pregnancyEpisode.syncCoalescedSnapshots(coalesced);
+      mark('pregnancyEpisodes', coalesced.length);
     } else if (_pregnancySnapshot != null) {
       // No PregnancyEpisodeDao injected (e.g. a test harness that only wires
       // the snapshot dao) — fall back to the pre-episode direct-write path.
@@ -1143,7 +1125,15 @@ class OfflineSyncService extends ChangeNotifier {
     }
 
     mark('tail(referrals/pregnancy/treatment)');
-    debugPrint('[PersistTiming] TOTAL ${persistWatch.elapsedMilliseconds}ms');
+    debugPrint(
+      '[SyncPersist] complete '
+      'households=${households.length} members=$persistedMembers '
+      'patients=${patients.length} programmes=${programmes.length} '
+      'followUps=${remappedFollowUps.length} immunisations=${immunisations.length} '
+      'assessments=${assessments.length} referrals=$referralCount '
+      'pregnancy=${pregnancyRows.length} '
+      'totalMs=${persistWatch.elapsedMilliseconds}',
+    );
 
     return _PersistTotals(
       patients: patients.length,
@@ -1645,30 +1635,34 @@ class OfflineSyncService extends ChangeNotifier {
       };
 
       // Merge programmes into patient_programmes — add, never remove.
-      int progUpdated = 0;
+      final existingProgrammes =
+          await _programmes.programmesForMany(newProgrammes.keys.toList());
+      final programmesToWrite = <String, Set<Programme>>{};
       for (final entry in newProgrammes.entries) {
-        final existing = await _programmes.programmesFor(entry.key);
+        final existing = existingProgrammes[entry.key] ?? const <Programme>{};
         final merged = {...existing, ...entry.value};
         if (merged.length > existing.length) {
-          await _programmes.replaceFor(entry.key, merged);
-          progUpdated++;
+          programmesToWrite[entry.key] = merged;
         }
       }
+      await _programmes.replaceForMany(programmesToWrite);
+      final progUpdated = programmesToWrite.length;
 
       // Seed last_visit_at / next_due_at from assessment history. When the
       // latest visit has no follow-up date, explicitly clear next_due_at —
       // patchVisitTiming otherwise leaves the prior value unchanged.
-      int schedUpdated = 0;
-      for (final pid in latestVisitMs.keys) {
-        final clearDue = clearNextDueIds.contains(pid);
-        await _patients.patchVisitTiming(
-          patientId: pid,
-          lastVisitAt: latestVisitMs[pid],
-          nextDueAt: clearDue ? null : nextFollowUpMs[pid],
-          clearNextDueAt: clearDue,
-        );
-        schedUpdated++;
-      }
+      final timingPatches = <PatientVisitTimingPatch>[
+        for (final pid in latestVisitMs.keys)
+          PatientVisitTimingPatch(
+            patientId: pid,
+            lastVisitAt: latestVisitMs[pid],
+            nextDueAt:
+                clearNextDueIds.contains(pid) ? null : nextFollowUpMs[pid],
+            clearNextDueAt: clearNextDueIds.contains(pid),
+          ),
+      ];
+      await _patients.patchVisitTimingMany(timingPatches);
+      final schedUpdated = timingPatches.length;
 
       if (clearNextDueIds.isNotEmpty) {
         final removed = await _followUps
@@ -1690,22 +1684,9 @@ class OfflineSyncService extends ChangeNotifier {
       // Never regresses an already-newer local value (e.g. a visit submitted
       // today, ahead of what a delta assessment-history pull returns).
       int ancDateSeeded = 0;
-      if (_pregnancyEpisode != null) {
-        for (final entry in lastAncVisitMs.entries) {
-          final open = await _pregnancyEpisode.openEpisodeFor(entry.key);
-          if (open == null) continue;
-          final existingMs = open.obstetric.lastAncVisitDateMs;
-          if (existingMs != null && existingMs >= entry.value) continue;
-          await _pregnancyEpisode.updateOpenEpisode(
-            patientId: entry.key,
-            patch: PregnancySnapshotRow(
-              patientId: entry.key,
-              facts: open.obstetric.facts,
-              lastAncVisitDateMs: entry.value,
-            ),
-          );
-          ancDateSeeded++;
-        }
+      if (_pregnancyEpisode != null && lastAncVisitMs.isNotEmpty) {
+        ancDateSeeded =
+            await _pregnancyEpisode.seedLastAncVisitDates(lastAncVisitMs);
         if (ancDateSeeded > 0) {
           debugPrint(
             '[OfflineSyncService] seeded lastAncVisitDateMs for $ancDateSeeded patient(s) from assessment history',
@@ -1745,12 +1726,13 @@ class OfflineSyncService extends ChangeNotifier {
       // encounter row; rows with no vitals content are skipped.
       int vitalsWritten = 0;
       if (_encounterDao != null) {
+        final encounterRows = <EncounterRow>[];
         for (final item in items) {
           final patientId = memberToPatient[item.householdMemberId];
           if (patientId == null || patientId.isEmpty) continue;
           final vitals = _vitalsFromAssessmentRaw(item.rawJson);
           if (vitals == null) continue;
-          final enc = EncounterRow(
+          encounterRows.add(EncounterRow(
             id: item.encounterId,
             patientId: patientId,
             programme: (item.serviceProvided ?? 'assessment').toLowerCase(),
@@ -1759,9 +1741,11 @@ class OfflineSyncService extends ChangeNotifier {
             status: EncounterStatus.synced,
             syncStatus: SyncStatus.synced,
             vitalsJson: jsonEncode(vitals),
-          );
-          await _encounterDao.upsert(enc);
-          vitalsWritten++;
+          ));
+        }
+        if (encounterRows.isNotEmpty) {
+          await _encounterDao.upsertMany(encounterRows);
+          vitalsWritten = encounterRows.length;
         }
       }
 
@@ -1811,11 +1795,10 @@ class OfflineSyncService extends ChangeNotifier {
       }
 
       debugPrint(
-        '[OfflineSyncService] assessment-history sync: '
-        '${items.length} rows → $progUpdated programme updates, '
-        '$schedUpdated visit-schedule updates, $vitalsWritten encounter rows with vitals, '
-        '${assessmentRows.length} assessment rows, '
-        '$referralCount CCE referrals',
+        '[SyncPersist] assessmentHistory=${items.length} '
+        'programmes=$progUpdated visitSchedule=$schedUpdated '
+        'encounters=$vitalsWritten assessments=${assessmentRows.length} '
+        'referrals=$referralCount',
       );
       return referralCount;
     } catch (e) {
