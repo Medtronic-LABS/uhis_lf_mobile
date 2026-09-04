@@ -8,11 +8,15 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
+
 import '../../db/assessment_dao.dart';
 import '../../db/immunisation_dao.dart';
 import '../../db/local_assessment_dao.dart';
+import '../../db/member_dao.dart';
 import '../../db/patient_dao.dart';
 import '../../models/programme.dart';
+import '../../../features/household/member_assessment_lookup.dart';
 import '../../../features/patient/followup_repository.dart';
 import '../../../features/patient/member_detail_repository.dart';
 import '../../../features/visit/immunisation/epi_schedule_engine.dart';
@@ -37,6 +41,13 @@ class BriefingFindingsAggregator {
     required FollowUpRepository followUpRepo,
     required PatientDao patientDao,
     required ImmunisationDao immunisationDao,
+    // Resolves every id a member's assessment rows may be keyed under (route
+    // id, `patients.id`, `patients.patient_id`, member fhir/patient/reference
+    // ids). Optional: without it this falls back to the route id plus the
+    // remapped `patientCtx.patientId`, which is strictly better than the
+    // single route id but still misses rows stored under a server patient id
+    // the route didn't carry.
+    MemberDao? memberDao,
     // Third fallback tier — `PatientOrMemberData.assessments` (merged
     // local-cache + live-fetched history) for a patient this device hasn't
     // locally synced yet. Only consulted when local rows AND
@@ -45,15 +56,34 @@ class BriefingFindingsAggregator {
   }) async {
     final findings = <ClinicalFinding>[];
 
-    final allRows = await assessmentDao.getByPatientId(patientId);
+    // Assessment rows are not all keyed by the id a screen routes with, so a
+    // single-key read silently reports "no visits" for a patient who has
+    // several — which surfaced as a routine finding announcing "Visit 1" for a
+    // woman on her third ANC. Resolve the full candidate key set once and use
+    // it for every read below.
+    final lookupKeys = await _lookupKeysFor(
+      routePatientId: patientId,
+      contextPatientId: patientCtx.patientId,
+      patientDao: patientDao,
+      memberDao: memberDao,
+    );
+
+    final allRows = await assessmentDao.getByPatientIds(lookupKeys);
     final followUps = await followUpRepo.openForPatientLocal(patientId);
     // Only fetched lazily (see _historyRows) — most patients with real local
     // history never need this second query at all.
     List<AssessmentRow>? historyRows;
     Future<List<AssessmentRow>> loadHistoryRows() async {
       if (historyRows != null) return historyRows!;
-      final byPatient = await historyAssessmentDao.forMany([patientId]);
-      historyRows = byPatient[patientId] ?? const <AssessmentRow>[];
+      final byKey = await historyAssessmentDao.forMany(lookupKeys);
+      final merged = <String, AssessmentRow>{};
+      for (final key in lookupKeys) {
+        for (final row in byKey[key] ?? const <AssessmentRow>[]) {
+          merged[row.id] = row;   // de-dup: keys may resolve to one member
+        }
+      }
+      historyRows = merged.values.toList()
+        ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
       return historyRows!;
     }
 
@@ -62,20 +92,31 @@ class BriefingFindingsAggregator {
       final missedDays = _daysOverdueFor(followUps, 'ANC');
       var latest = _detailsAt(ancRows, 0);
       var previous = _detailsAt(ancRows, 1);
+      // Counted from whichever tier actually supplied [latest] — never from a
+      // different one. Local rows are the only tier `ancRows` sees, so a
+      // history- or remote-derived latest previously always reported 0.
+      var visitCount = ancRows.length;
       if (latest == null) {
-        final vitals = vitalsHistoryFor(await loadHistoryRows(), 'ANC');
-        if (vitals.isNotEmpty) latest = ancMapFromVitals(vitals[0]);
+        final rows = await loadHistoryRows();
+        final vitals = vitalsHistoryFor(rows, 'ANC');
+        if (vitals.isNotEmpty) {
+          latest = ancMapFromVitals(vitals[0]);
+          visitCount = _historyCountOfKind(rows, 'ANC');
+        }
         if (vitals.length > 1) previous = ancMapFromVitals(vitals[1]);
       }
       if (latest == null) {
         final vitals = vitalsFromMemberAssessments(remoteAssessments, 'ANC');
-        if (vitals.isNotEmpty) latest = ancMapFromVitals(vitals[0]);
+        if (vitals.isNotEmpty) {
+          latest = ancMapFromVitals(vitals[0]);
+          visitCount = _remoteCountOfType(remoteAssessments, 'ANC');
+        }
         if (vitals.length > 1) previous = ancMapFromVitals(vitals[1]);
       }
       findings.addAll(evaluateAncFindings(
         latest: latest,
         previous: previous,
-        ancVisitCount: ancRows.length,
+        ancVisitCount: visitCount,
         hasKnownHypertension: patientCtx.hasKnownHypertension,
         missedVisitDaysOverdue: missedDays,
       ));
@@ -85,17 +126,25 @@ class BriefingFindingsAggregator {
       final pncRows = _rowsOfType(allRows, 'PNC_MOTHER');
       final overdueDays = _daysOverdueFor(followUps, 'PNC');
       var latest = _detailsAt(pncRows, 0);
+      var visitCount = pncRows.length;   // see the ANC branch's note above
       if (latest == null) {
-        final vitals = vitalsHistoryFor(await loadHistoryRows(), 'PNC');
-        if (vitals.isNotEmpty) latest = pncMapFromVitals(vitals[0]);
+        final rows = await loadHistoryRows();
+        final vitals = vitalsHistoryFor(rows, 'PNC');
+        if (vitals.isNotEmpty) {
+          latest = pncMapFromVitals(vitals[0]);
+          visitCount = _historyCountOfKind(rows, 'PNC');
+        }
       }
       if (latest == null) {
         final vitals = vitalsFromMemberAssessments(remoteAssessments, 'PNC');
-        if (vitals.isNotEmpty) latest = pncMapFromVitals(vitals[0]);
+        if (vitals.isNotEmpty) {
+          latest = pncMapFromVitals(vitals[0]);
+          visitCount = _remoteCountOfType(remoteAssessments, 'PNC');
+        }
       }
       findings.addAll(evaluatePncFindings(
         latest: latest,
-        pncVisitCount: pncRows.length,
+        pncVisitCount: visitCount,
         overdueDaysOverdue: overdueDays,
       ));
     }
@@ -149,9 +198,10 @@ class BriefingFindingsAggregator {
       // under the local id while `patientId` is still the FHIR id, `allRows`
       // won't contain them. Re-fetch under patientCtx.patientId whenever the
       // two ids differ instead of reusing allRows as-is.
-      final childRows = patientCtx.patientId == patientId
-          ? allRows
-          : await assessmentDao.getByPatientId(patientCtx.patientId);
+      // `allRows` is now read across the full key set (which includes
+      // patientCtx.patientId), so the separate re-fetch this branch used to
+      // need is redundant.
+      final childRows = allRows;
       findings.addAll(await _evaluateChildImmunization(
         patientId: patientCtx.patientId,
         allRows: childRows,
@@ -199,6 +249,63 @@ class BriefingFindingsAggregator {
       latestWeightKg: weights.isNotEmpty ? weights[0] : null,
       previousWeightKg: weights.length > 1 ? weights[1] : null,
     );
+  }
+
+  /// Every id under which this member's assessment rows may be stored.
+  ///
+  /// Delegates to [assessmentLookupKeysForRoute] when a [MemberDao] is
+  /// available so the set matches what the rest of the patient screen already
+  /// resolves; otherwise falls back to the two ids this aggregator can derive
+  /// on its own.
+  static Future<List<String>> _lookupKeysFor({
+    required String routePatientId,
+    required String contextPatientId,
+    required PatientDao patientDao,
+    required MemberDao? memberDao,
+  }) async {
+    if (memberDao != null) {
+      try {
+        final keys = await assessmentLookupKeysForRoute(
+          routePatientId: routePatientId,
+          memberDao: memberDao,
+          patientDao: patientDao,
+        );
+        if (keys.isNotEmpty) return keys.toList();
+      } on Object catch (e) {
+        // Non-fatal — fall through to the derivable pair below rather than
+        // losing every finding to a lookup failure.
+        debugPrint('[BriefingFindings] lookup-key resolution failed: $e');
+      }
+    }
+    return <String>{routePatientId, contextPatientId}
+        .map((k) => k.trim())
+        .where((k) => k.isNotEmpty)
+        .toList();
+  }
+
+  /// Synced history rows for [assessmentType], matched the same lenient way
+  /// [vitalsHistoryFor] matches them (substring, case-insensitive) so the
+  /// count and the vitals always describe the same set of visits.
+  static int _historyCountOfKind(
+    List<AssessmentRow> rows,
+    String assessmentType,
+  ) {
+    final needle = assessmentType.toUpperCase();
+    return rows
+        .where((r) => (r.kind ?? '').toUpperCase().contains(needle))
+        .length;
+  }
+
+  /// [MemberAssessment] counterpart of [_historyCountOfKind] — mirrors
+  /// [vitalsFromMemberAssessments]'s matching.
+  static int _remoteCountOfType(
+    List<MemberAssessment> assessments,
+    String assessmentType,
+  ) {
+    final needle = assessmentType.toUpperCase();
+    return assessments
+        .where((a) => a.type.toUpperCase().contains(needle))
+        .length;
   }
 
   static List<LocalAssessmentEntity> _rowsOfType(
