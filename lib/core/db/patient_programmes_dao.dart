@@ -10,6 +10,38 @@ class PatientProgrammesDao {
 
   final AppDatabase _db;
 
+  /// Replace programme sets for many patients in one transaction.
+  Future<void> replaceForMany(Map<String, Set<Programme>> byPatient) async {
+    if (byPatient.isEmpty) return;
+    await _db.db.transaction((tx) async {
+      final patientIds = byPatient.keys.toList(growable: false);
+      const chunkSize = 500;
+      for (var i = 0; i < patientIds.length; i += chunkSize) {
+        final chunk = patientIds.sublist(
+          i,
+          i + chunkSize > patientIds.length ? patientIds.length : i + chunkSize,
+        );
+        final placeholders = List.filled(chunk.length, '?').join(',');
+        await tx.rawDelete(
+          'DELETE FROM ${AppDatabase.tablePatientProgrammes} '
+          'WHERE patient_id IN ($placeholders)',
+          chunk,
+        );
+      }
+      final batch = tx.batch();
+      for (final entry in byPatient.entries) {
+        for (final p in entry.value) {
+          batch.insert(
+            AppDatabase.tablePatientProgrammes,
+            {'patient_id': entry.key, 'programme': p.wireTag},
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
   /// Replace the programme set for [patientId] in a single statement.
   /// Idempotent — safe to call after every patient sync.
   Future<void> replaceFor(

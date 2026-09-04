@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/locale_provider.dart';
+import '../../app/post_sync_refresher.dart';
 import '../../app/theme.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
@@ -18,11 +19,9 @@ import '../../core/db/assessment_dao.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
-import '../../core/debug/console_log.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/models/programme.dart';
-import '../../core/models/risk.dart';
 import '../search/member_search_repository.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import 'widgets/dashboard_search_field.dart';
@@ -70,6 +69,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Cached reference to mission repository for change listening.
   MissionDashboardRepository? _missionRepo;
   bool _missionListenerAdded = false;
+  PostSyncRefresher? _postSyncRefresher;
+  bool _postSyncListenerAdded = false;
+  bool _postSyncRefreshing = false;
   
   // Flag to track if data needs refresh when widget becomes visible.
   bool _pendingRefresh = false;
@@ -138,7 +140,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _missionListenerAdded = true;
       _missionRepo!.changes.addListener(_onMissionChanges);
     }
+    final postSync = context.read<PostSyncRefresher>();
+    if (!_postSyncListenerAdded) {
+      _postSyncListenerAdded = true;
+      _postSyncRefresher = postSync;
+      _postSyncRefreshing = postSync.isRefreshing.value;
+      postSync.isRefreshing.addListener(_onPostSyncRefreshingChanged);
+    }
     _refreshNotificationCount();
+  }
+
+  void _onPostSyncRefreshingChanged() {
+    if (!mounted) return;
+    final refreshing = _postSyncRefresher?.isRefreshing.value ?? false;
+    if (_postSyncRefreshing == refreshing) return;
+    setState(() => _postSyncRefreshing = refreshing);
   }
 
   Future<void> _refreshNotificationCount() async {
@@ -169,6 +185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     debugPrint('[_DashboardScreenState] dispose');
     _globalSearchDebounce?.cancel();
     _missionRepo?.changes.removeListener(_onMissionChanges);
+    _postSyncRefresher?.isRefreshing.removeListener(_onPostSyncRefreshingChanged);
     super.dispose();
   }
 
@@ -287,56 +304,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // drops them inside filterMissionQueue().
     final queue = rawQueue;
 
-    assert(() {
-      final villages = <String, int>{};
-      for (final i in rawQueue) {
-        final v = i.village?.trim().isNotEmpty == true
-            ? i.village!.trim()
-            : '(null)';
-        villages[v] = (villages[v] ?? 0) + 1;
-      }
-      debugPrint(
-        '[Dashboard filter] baseLoad raw=${rawQueue.length} '
-        'completedToday=${completedIds.length}',
-      );
-      debugPrint(
-        '[Dashboard filter] baseLoad villages: '
-        '${villages.entries.map((e) => "${e.key}=${e.value}").join(", ")}',
-      );
-      for (final probe in const [
-        'Yasmeen',
-        'Raaajasri',
-        'Teena',
-        'Nazmeen',
-        'Jakir',
-      ]) {
-        MissionQueueItem? hit;
-        for (final i in rawQueue) {
-          if (i.patientName == probe) {
-            hit = i;
-            break;
-          }
-        }
-        if (hit == null) {
-          debugPrint(
-            '[Dashboard filter] baseLoad probe $probe → ABSENT from loadQueue',
-          );
-          continue;
-        }
-        final done = hit.patientId != null &&
-            completedIds.contains(hit.patientId);
-        final sched = DashboardTier.fromDueAt(hit.dueAt);
-        debugPrint(
-          '[Dashboard filter] baseLoad probe $probe → '
-          '[${hit.priorityCode}] v=${hit.village} '
-          'prog=${hit.programmes.map((p) => p.name).join("+")} '
-          'tier=${hit.tier.name} due=${hit.dueAt} sched=${sched.name} '
-          '${done ? "COMPLETED-today(kept-in-base)" : "actionable"}',
-        );
-      }
-      return true;
-    }());
-
     // Cache full queue so filters can be re-applied synchronously
     // without a repository round-trip on every chip tap.
     final todayCount = _countTodaysActionable(queue, completedIds);
@@ -361,18 +328,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _todayCountLoading = false;
       });
     }
-
-    assert(() {
-      debugPrint(
-        '[Dashboard filter] todayBadge=$todayCount '
-        '(base=${queue.length}, excl. upcoming; '
-        'activeFilters '
-        'village=${_selectedVillageChipName ?? "(all)"} '
-        'needs=[${_selectedNeeds.map((n) => n.name).join(",")}] '
-        '— badge ignores these)',
-      );
-      return true;
-    }());
 
     return _buildFilteredList(queue);
   }
@@ -526,32 +481,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Falls back to opening the patient detail when the visit can't start.
   Future<void> _startVisitFromQueue(MissionQueueItem item) async {
     debugPrint('[_DashboardScreenState] _startVisitFromQueue patientId=${item.patientId} patientName=${item.patientName}');
-    assert(() {
-      final code = '${item.band.wireTag.replaceFirst('band', '')}'
-          '${item.modifier == Modifier.none ? '' : item.modifier.wireTag}';
-      final progs = item.programmes.map((p) => p.name).join(',');
-      final overdueTag = (item.daysOverdue != null && item.daysOverdue! > 0)
-          ? ' | overdue: ${item.daysOverdue}d'
-          : '';
-      final driversTag =
-          item.drivers.isNotEmpty ? ' | drivers: ${item.drivers.join(",")}' : '';
-      ConsoleLog.banner(
-        '[Patient selected] [$code] ${item.patientName}'
-        ' | prog: $progs | tier: ${item.tier.name}'
-        '${item.isPregnant ? " | pregnant" : ""}'
-        '$overdueTag$driversTag'
-        ' | sortRank: ${item.priorityScore}',
-      );
-      if (item.clinicalReasons.isNotEmpty) {
-        ConsoleLog.banner('  Why $code:');
-        for (final r in item.clinicalReasons) {
-          ConsoleLog.banner('    • $r');
-        }
-      } else {
-        ConsoleLog.banner('  Why $code: (no clinical reasons stored)');
-      }
-      return true;
-    }());
     final patientId = item.patientId;
     if (patientId != null && _completedIds.contains(patientId)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -725,6 +654,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _runGlobalSearch(q);
               },
             ),
+            if (_postSyncRefreshing)
+              Material(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          SyncStrings.refreshing,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             // Referral alert strip — sits between header/search and village tabs
             // so it reads as a system-level alert before the worklist.
             _ReferralAlertBanner(
@@ -743,38 +699,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         snap.connectionState == ConnectionState.waiting &&
                             _baseQueue.isEmpty;
                     final queue = snap.data ?? const <MissionQueueItem>[];
-
-                    assert(() {
-                      if (waiting || queue.isEmpty) return true;
-                      final codes = queue.map((q) => q.priorityCode);
-                      ConsoleLog.banner(
-                        '[Dashboard UI] ${queue.length} visits (spec §2.8 lazy):',
-                      );
-                      ConsoleLog.banner(
-                        '  spec:     $kPrioritySortSpecLegend',
-                      );
-                      ConsoleLog.banner(
-                        '  chain:    ${prioritySortChain(codes)}',
-                      );
-                      ConsoleLog.banner(
-                        '  compact:  ${prioritySortChainCompact(codes)}',
-                      );
-                      final preview = queue.length > 12 ? 12 : queue.length;
-                      for (var i = 0; i < preview; i++) {
-                        final q = queue[i];
-                        ConsoleLog.banner(
-                          '  ${i + 1}. [${q.priorityCode}] ${q.patientName}'
-                          ' | tier: ${q.tier.name}'
-                          '${q.isPregnant ? " | pregnant" : ""}',
-                        );
-                      }
-                      if (queue.length > preview) {
-                        ConsoleLog.banner(
-                          '  … +${queue.length - preview} more (scroll)',
-                        );
-                      }
-                      return true;
-                    }());
 
                     // Headers: filter panel, spacer, visits title, spacer.
                     // Then empty-state OR a reveal-window of queue cards.
@@ -828,10 +752,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   .toList(),
                               selectedVillageValue: _selectedVillageChipName,
                               onVillageSelected: (name) {
-                                debugPrint(
-                                  '[Dashboard filter] village tap → '
-                                  '${name ?? "(all)"}',
-                                );
                                 _filterState.setVillage(name);
                                 setState(() {
                                   _queueRevealCount = _kQueuePageSize;
@@ -851,11 +771,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 _filterState.setNeeds(updated);
                                 setState(() {
                                   _queueRevealCount = _kQueuePageSize;
-                                  debugPrint(
-                                    '[Dashboard filter] need tap → '
-                                    '${need.name} '
-                                    'now=[${updated.map((n) => n.name).join(",")}]',
-                                  );
                                 });
                                 _applyFilters();
                               },
