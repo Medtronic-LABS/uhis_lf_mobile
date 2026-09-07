@@ -1041,6 +1041,9 @@ class _SettingsMenu extends StatelessWidget {
             case 'offline_sync':
               ctx.push('/offline-sync');
               break;
+            case 'local_models':
+              ctx.push('/local-models');
+              break;
             case 'logout':
               final confirmLogout = await showDialog<bool>(
                 context: ctx,
@@ -1157,6 +1160,15 @@ class _SettingsMenu extends StatelessWidget {
               chipColor: AppColors.ancSurface,
               title: SettingsStrings.offlineSync,
               subtitle: SettingsStrings.offlineSyncSubtitle,
+            ),
+          ),
+          PopupMenuItem(
+            value: 'local_models',
+            child: SettingsRow(
+              emoji: '🤖',
+              chipColor: AppColors.aiSurfaceStart,
+              title: 'Local AI Models',
+              subtitle: 'Download ASR + LLM for offline voice form fill',
             ),
           ),
           PopupMenuItem(
