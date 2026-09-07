@@ -330,55 +330,18 @@ class HouseholdDao {
   /// Also matches [referenceId] → local id so a pull that races status stamp
   /// cannot insert a second row for the same enrollment.
   Future<String> insertOrUpdateFromBE(HouseholdEntity entity) async {
-    final fhir = entity.fhirId;
-    HouseholdEntity? existing = (fhir != null && fhir.isNotEmpty)
-        ? await getByFhirId(fhir)
-        : null;
-
-    // Race-safe: status may not have stamped fhir_id yet; bundle still echoes
-    // our local PK as referenceId.
-    if (existing == null &&
-        entity.referenceId != null &&
-        entity.referenceId!.isNotEmpty) {
-      existing = await getUnstampedByReferenceId(entity.referenceId!);
-    }
-
-    // A row we created and haven't had confirmed yet: stamp it, never let the
-    // server echo overwrite the form data the health worker just entered.
-    final existingUnstamped =
-        existing != null && (existing.fhirId == null || existing.fhirId!.isEmpty);
-    if (existing?.syncStatus == 'NotSynced' || existingUnstamped) {
-      if (fhir != null && fhir.isNotEmpty) {
-        await updateFhirId(
-          localId: existing!.id,
-          fhirId: fhir,
-          syncStatus: 'Success',
-        );
-      }
-      return existing!.id;
-    }
-
-    if (existing != null) {
-      final merged = entity.copyWith(
-        id: existing.id,
-        syncStatus: entity.syncStatus.isNotEmpty ? entity.syncStatus : 'Success',
-        fhirId: fhir ?? existing.fhirId,
-        referenceId: entity.referenceId ?? existing.referenceId,
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    late String localId;
+    await _db.db.transaction((tx) async {
+      final index = await _loadHouseholdMergeIndex(tx);
+      localId = await _mergeHouseholdInTransaction(
+        tx,
+        entity: entity,
+        index: index,
+        nowMs: nowMs,
       );
-      await _db.db.update(
-        AppDatabase.tableHouseholds,
-        merged.toDb(includeId: false),
-        where: 'id = ?',
-        whereArgs: [int.tryParse(existing.id) ?? existing.id],
-      );
-      return existing.id;
-    }
-
-    final id = await _db.db.insert(
-      AppDatabase.tableHouseholds,
-      entity.copyWith(syncStatus: 'Success').toDb(includeId: false),
-    );
-    return id.toString();
+    });
+    return localId;
   }
 
   /// Stamp FHIR id after offline-sync/status Success (Spice `updateFhirId`).
@@ -432,25 +395,168 @@ class HouseholdDao {
     );
   }
 
-  /// Bulk merge from sync pull — each row goes through [insertOrUpdateFromBE].
+  /// Resolve many server FHIR ids → local PKs in one query (member sync link).
+  Future<Map<String, String>> fhirToLocalIds(Iterable<String> fhirIds) async {
+    final ids = fhirIds.where((id) => id.isNotEmpty).toSet().toList();
+    if (ids.isEmpty) return const {};
+    final out = <String, String>{};
+    const chunkSize = 500;
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final chunk = ids.sublist(
+        i,
+        i + chunkSize > ids.length ? ids.length : i + chunkSize,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.db.rawQuery(
+        'SELECT id, fhir_id FROM ${AppDatabase.tableHouseholds} '
+        'WHERE fhir_id IN ($placeholders)',
+        chunk,
+      );
+      for (final row in rows) {
+        final fhir = row['fhir_id']?.toString();
+        final localId = row['id']?.toString();
+        if (fhir != null && fhir.isNotEmpty && localId != null) {
+          out[fhir] = localId;
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Bulk merge from sync pull — one transaction, in-memory FHIR index.
+  ///
   /// Returns map of fhirId → localId for member FK resolution.
-  /// [onProgress] receives the number written so far. Optional so existing
-  /// callers are unaffected; the sync passes it to drive the progress bar.
   Future<Map<String, String>> upsertManyFromBE(
     List<HouseholdEntity> households, {
     void Function(int done)? onProgress,
   }) async {
+    if (households.isEmpty) return const {};
+
     final fhirToLocal = <String, String>{};
-    var done = 0;
-    for (final h in households) {
-      final localId = await insertOrUpdateFromBE(h);
-      onProgress?.call(++done);
-      final fhir = h.fhirId;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    await _db.db.transaction((tx) async {
+      final index = await _loadHouseholdMergeIndex(tx);
+      var done = 0;
+      for (final entity in households) {
+        final localId = await _mergeHouseholdInTransaction(
+          tx,
+          entity: entity,
+          index: index,
+          nowMs: nowMs,
+        );
+        final fhir = entity.fhirId;
+        if (fhir != null && fhir.isNotEmpty) {
+          fhirToLocal[fhir] = localId;
+        }
+        onProgress?.call(++done);
+      }
+    });
+
+    return fhirToLocal;
+  }
+
+  Future<_HouseholdMergeIndex> _loadHouseholdMergeIndex(dynamic tx) async {
+    final rows = await tx.query(AppDatabase.tableHouseholds);
+    final byFhir = <String, HouseholdEntity>{};
+    final unstampedByRef = <String, HouseholdEntity>{};
+
+    for (final row in rows) {
+      final entity = HouseholdEntity.fromDb(row);
+      final fhir = entity.fhirId;
       if (fhir != null && fhir.isNotEmpty) {
-        fhirToLocal[fhir] = localId;
+        byFhir[fhir] = entity;
+      }
+      final ref = entity.referenceId;
+      if (ref != null &&
+          ref.isNotEmpty &&
+          (entity.fhirId == null || entity.fhirId!.isEmpty)) {
+        unstampedByRef[ref] = entity;
       }
     }
-    return fhirToLocal;
+
+    return _HouseholdMergeIndex(byFhir: byFhir, unstampedByRef: unstampedByRef);
+  }
+
+  Future<String> _mergeHouseholdInTransaction(
+    dynamic tx, {
+    required HouseholdEntity entity,
+    required _HouseholdMergeIndex index,
+    required int nowMs,
+  }) async {
+    final fhir = entity.fhirId;
+    var existing =
+        (fhir != null && fhir.isNotEmpty) ? index.byFhir[fhir] : null;
+
+    if (existing == null &&
+        entity.referenceId != null &&
+        entity.referenceId!.isNotEmpty) {
+      existing = index.unstampedByRef[entity.referenceId!];
+    }
+
+    final existingUnstamped = existing != null &&
+        (existing.fhirId == null || existing.fhirId!.isEmpty);
+
+    if (existing != null &&
+        (existing.syncStatus == 'NotSynced' || existingUnstamped)) {
+      if (fhir != null && fhir.isNotEmpty) {
+        await tx.rawUpdate(
+          '''
+          UPDATE ${AppDatabase.tableHouseholds}
+          SET fhir_id = ?,
+              sync_status = CASE
+                WHEN sync_status IN ('InProgress', 'NetworkError', 'NotSynced', 'Pending')
+                THEN ?
+                ELSE sync_status
+              END,
+              updated_at = ?
+          WHERE id = ?
+          ''',
+          [
+            fhir,
+            'Success',
+            nowMs,
+            int.tryParse(existing.id) ?? existing.id,
+          ],
+        );
+        final stamped = existing.copyWith(fhirId: fhir, syncStatus: 'Success');
+        index.byFhir[fhir] = stamped;
+        if (entity.referenceId != null && entity.referenceId!.isNotEmpty) {
+          index.unstampedByRef.remove(entity.referenceId);
+        }
+      }
+      return existing.id;
+    }
+
+    if (existing != null) {
+      final merged = entity.copyWith(
+        id: existing.id,
+        syncStatus: entity.syncStatus.isNotEmpty ? entity.syncStatus : 'Success',
+        fhirId: fhir ?? existing.fhirId,
+        referenceId: entity.referenceId ?? existing.referenceId,
+      );
+      await tx.update(
+        AppDatabase.tableHouseholds,
+        merged.toDb(includeId: false),
+        where: 'id = ?',
+        whereArgs: [int.tryParse(existing.id) ?? existing.id],
+      );
+      if (fhir != null && fhir.isNotEmpty) {
+        index.byFhir[fhir] = merged;
+      }
+      return existing.id;
+    }
+
+    final id = await tx.insert(
+      AppDatabase.tableHouseholds,
+      entity.copyWith(syncStatus: 'Success').toDb(includeId: false),
+    );
+    final localId = id.toString();
+    final inserted = entity.copyWith(id: localId, syncStatus: 'Success');
+    if (fhir != null && fhir.isNotEmpty) {
+      index.byFhir[fhir] = inserted;
+    }
+    return localId;
   }
 
   /// Legacy bulk upsert — prefer [upsertManyFromBE] for sync.
@@ -603,4 +709,14 @@ class HouseholdDao {
       [DateTime.now().millisecondsSinceEpoch, cutoff],
     );
   }
+}
+
+class _HouseholdMergeIndex {
+  _HouseholdMergeIndex({
+    required this.byFhir,
+    required this.unstampedByRef,
+  });
+
+  final Map<String, HouseholdEntity> byFhir;
+  final Map<String, HouseholdEntity> unstampedByRef;
 }

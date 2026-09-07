@@ -5,6 +5,48 @@ import '../models/patient.dart';
 import '../models/programme.dart';
 import 'app_database.dart';
 
+/// Risk + scheduling columns written by the worklist recompute pass.
+class PatientRiskUpdate {
+  const PatientRiskUpdate({
+    required this.patientId,
+    required this.sortRank,
+    required this.bandWireTag,
+    required this.modifierWireTag,
+    required this.reasonsJson,
+    this.nextDueAt,
+    this.lastVisitAt,
+    this.missedVisitCount,
+    this.redFlag,
+    this.clearNextDueAt = false,
+  });
+
+  final String patientId;
+  final int sortRank;
+  final String bandWireTag;
+  final String modifierWireTag;
+  final String reasonsJson;
+  final int? nextDueAt;
+  final int? lastVisitAt;
+  final int? missedVisitCount;
+  final bool? redFlag;
+  final bool clearNextDueAt;
+}
+
+/// Visit timing patch for assessment-history seeding.
+class PatientVisitTimingPatch {
+  const PatientVisitTimingPatch({
+    required this.patientId,
+    this.lastVisitAt,
+    this.nextDueAt,
+    this.clearNextDueAt = false,
+  });
+
+  final String patientId;
+  final int? lastVisitAt;
+  final int? nextDueAt;
+  final bool clearNextDueAt;
+}
+
 /// Data-access for the `patients` table and the joined
 /// `patient_programmes` row. The single home for worklist SQL — callers
 /// never compose raw queries against patient storage.
@@ -48,22 +90,47 @@ class PatientDao {
     bool? redFlag,
     bool clearNextDueAt = false,
   }) async {
-    await _db.db.update(
-      AppDatabase.tablePatients,
-      {
-        'risk_score': sortRank,
-        'risk_band': bandWireTag,
-        'risk_modifier': modifierWireTag,
-        'risk_reasons': reasonsJson,
-        if (clearNextDueAt) 'next_due_at': null,
-        if (!clearNextDueAt) 'next_due_at': ?nextDueAt,
-        'last_visit_at': ?lastVisitAt,
-        'missed_visit_count': ?missedVisitCount,
-        if (redFlag != null) 'red_flag': redFlag ? 1 : 0,
-      },
-      where: 'id = ?',
-      whereArgs: [patientId],
-    );
+    await updateRiskMany([
+      PatientRiskUpdate(
+        patientId: patientId,
+        sortRank: sortRank,
+        bandWireTag: bandWireTag,
+        modifierWireTag: modifierWireTag,
+        reasonsJson: reasonsJson,
+        nextDueAt: nextDueAt,
+        lastVisitAt: lastVisitAt,
+        missedVisitCount: missedVisitCount,
+        redFlag: redFlag,
+        clearNextDueAt: clearNextDueAt,
+      ),
+    ]);
+  }
+
+  /// Batch version of [updateRisk] — one transaction for the whole recompute pass.
+  Future<void> updateRiskMany(List<PatientRiskUpdate> updates) async {
+    if (updates.isEmpty) return;
+    await _db.db.transaction((tx) async {
+      final batch = tx.batch();
+      for (final u in updates) {
+        batch.update(
+          AppDatabase.tablePatients,
+          {
+            'risk_score': u.sortRank,
+            'risk_band': u.bandWireTag,
+            'risk_modifier': u.modifierWireTag,
+            'risk_reasons': u.reasonsJson,
+            if (u.clearNextDueAt) 'next_due_at': null,
+            if (!u.clearNextDueAt) 'next_due_at': u.nextDueAt,
+            'last_visit_at': u.lastVisitAt,
+            'missed_visit_count': u.missedVisitCount,
+            if (u.redFlag != null) 'red_flag': u.redFlag! ? 1 : 0,
+          },
+          where: 'id = ?',
+          whereArgs: [u.patientId],
+        );
+      }
+      await batch.commit(noResult: true);
+    });
   }
 
   /// Update only visit scheduling fields after an assessment is completed.
@@ -325,18 +392,36 @@ class PatientDao {
     int? nextDueAt,
     bool clearNextDueAt = false,
   }) async {
-    final values = <String, dynamic>{
-      'last_visit_at': ?lastVisitAt,
-      if (clearNextDueAt) 'next_due_at': null,
-      if (!clearNextDueAt) 'next_due_at': ?nextDueAt,
-    };
-    if (values.isEmpty) return;
-    await _db.db.update(
-      AppDatabase.tablePatients,
-      values,
-      where: 'id = ?',
-      whereArgs: [patientId],
-    );
+    await patchVisitTimingMany([
+      PatientVisitTimingPatch(
+        patientId: patientId,
+        lastVisitAt: lastVisitAt,
+        nextDueAt: nextDueAt,
+        clearNextDueAt: clearNextDueAt,
+      ),
+    ]);
+  }
+
+  /// Batch version of [patchVisitTiming] for assessment-history seeding.
+  Future<void> patchVisitTimingMany(List<PatientVisitTimingPatch> patches) async {
+    if (patches.isEmpty) return;
+    await _db.db.transaction((tx) async {
+      final batch = tx.batch();
+      for (final p in patches) {
+        final values = <String, dynamic>{
+          'last_visit_at': p.lastVisitAt,
+          if (p.clearNextDueAt) 'next_due_at': null,
+          if (!p.clearNextDueAt) 'next_due_at': p.nextDueAt,
+        };
+        batch.update(
+          AppDatabase.tablePatients,
+          values,
+          where: 'id = ?',
+          whereArgs: [p.patientId],
+        );
+      }
+      await batch.commit(noResult: true);
+    });
   }
 
   /// Clear all patients from the local database.

@@ -166,11 +166,21 @@ class EncounterDao {
 
   /// Insert or update an encounter.
   Future<void> upsert(EncounterRow row) async {
-    await _db.db.insert(
-      AppDatabase.tableEncounters,
-      row.toDb(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await upsertMany([row]);
+  }
+
+  /// Batch insert/replace — used by assessment-history vitals seeding.
+  Future<void> upsertMany(List<EncounterRow> rows) async {
+    if (rows.isEmpty) return;
+    final batch = _db.db.batch();
+    for (final row in rows) {
+      batch.insert(
+        AppDatabase.tableEncounters,
+        row.toDb(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   /// Get an encounter by ID.

@@ -212,4 +212,62 @@ void main() {
       expect(projected?.deliveryDateMillis, 12345);
     });
   });
+
+  group('PregnancyEpisodeDao batch sync', () {
+    test('syncCoalescedSnapshots creates and updates in one pass', () async {
+      final (_, snapshotDao, episodeDao) = await openTestDb();
+      const existingId = 'batch-existing';
+      await episodeDao.startNewEpisode(
+        patientId: existingId,
+        obstetric: PregnancySnapshotRow(
+          patientId: existingId,
+          facts: PregnancyFacts.empty,
+          lmpDate: 1000,
+        ),
+      );
+
+      await episodeDao.syncCoalescedSnapshots([
+        PregnancySnapshotRow(
+          patientId: existingId,
+          facts: PregnancyFacts.empty,
+          lmpDate: 1000,
+          gravida: 2,
+        ),
+        PregnancySnapshotRow(
+          patientId: 'batch-new',
+          facts: PregnancyFacts.empty,
+          lmpDate: 2000,
+        ),
+      ]);
+
+      expect(await episodeDao.openEpisodeFor(existingId), isNotNull);
+      expect(await episodeDao.openEpisodeFor('batch-new'), isNotNull);
+      expect((await snapshotDao.byPatient(existingId))?.gravida, 2);
+      expect((await snapshotDao.byPatient('batch-new'))?.lmpDate, 2000);
+    });
+
+    test('seedLastAncVisitDates updates only when newer', () async {
+      final (_, snapshotDao, episodeDao) = await openTestDb();
+      const patientId = 'anc-seed';
+      await episodeDao.startNewEpisode(
+        patientId: patientId,
+        obstetric: PregnancySnapshotRow(
+          patientId: patientId,
+          facts: PregnancyFacts.empty,
+          lastAncVisitDateMs: 5000,
+        ),
+      );
+
+      final updated = await episodeDao.seedLastAncVisitDates({
+        patientId: 6000,
+        'other': 1000,
+      });
+      expect(updated, 1);
+      expect((await snapshotDao.byPatient(patientId))?.lastAncVisitDateMs, 6000);
+
+      final skipped = await episodeDao.seedLastAncVisitDates({patientId: 4000});
+      expect(skipped, 0);
+      expect((await snapshotDao.byPatient(patientId))?.lastAncVisitDateMs, 6000);
+    });
+  });
 }
