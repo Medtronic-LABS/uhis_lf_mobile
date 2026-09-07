@@ -9,6 +9,8 @@ import '../../../core/i18n/app_locale.dart';
 import '../../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../../core/preferences/vad_tuning_notifier.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../local_asr/local_scribe_controller.dart';
+import '../../local_asr/widgets/local_model_badge.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
 import '../../realtime_asr/models/realtime_symptom_codes.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
@@ -51,6 +53,7 @@ class AiScribeBanner extends StatefulWidget {
     this.onFormFill,
     this.symptomVocab,
     this.onLiveSymptomCodes,
+    this.localController,
   });
 
   final String encounterId;
@@ -94,6 +97,12 @@ class AiScribeBanner extends StatefulWidget {
   final void Function(RealtimeSymptomCodes codes, String fullTranscript)?
       onLiveSymptomCodes;
 
+  /// Optional local on-device scribe controller. When provided and its state
+  /// is [LocalScribeState.transcribing], [LocalScribeState.inferring], or
+  /// [LocalScribeState.done], a [LocalModelBadge] is shown inside the banner
+  /// displaying "LOCAL MODEL" + ASR/LLM timing.
+  final LocalScribeController? localController;
+
   @override
   State<AiScribeBanner> createState() => _AiScribeBannerState();
 }
@@ -109,6 +118,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
   bool _showDone = false;
   bool _resultConsumed = false;
   ScribeController? _scribe;
+  LocalScribeController? _localCtrl;
 
   late final RealtimeAsrController _liveCtrl;
   RealtimeClinicalFields? _lastAppliedLiveFields;
@@ -125,6 +135,8 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       audioSettings: context.read<ScribeAudioSettingsNotifier>(),
     );
     _liveCtrl.addListener(_onLiveChanged);
+    _localCtrl = widget.localController;
+    _localCtrl?.addListener(_onLocalChanged);
     final assessmentType = widget.assessmentType;
     if (assessmentType != null) {
       _liveCtrl.setFormSchema(
@@ -152,6 +164,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
   void dispose() {
     _scribe?.removeListener(_onScribeChanged);
     _liveCtrl.removeListener(_onLiveChanged);
+    _localCtrl?.removeListener(_onLocalChanged);
     // Leaving mid-session (e.g. advancing Step 1 -> Step 2, or backing out)
     // must not abandon the live session with a raw socket close: stop() runs
     // the flush/extract/wait/stop handshake so the last few seconds of
@@ -212,6 +225,11 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       symptomVocab: widget.symptomVocab,
       encounterId: widget.encounterId,
     );
+  }
+
+  void _onLocalChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   void _onScribeChanged() {
@@ -430,6 +448,11 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                   const SizedBox(height: 10),
                   AiScribeLiveAsrPanel(controller: _liveCtrl),
                 ],
+                if (_localCtrl != null &&
+                    (_localCtrl!.state == LocalScribeState.transcribing ||
+                        _localCtrl!.state == LocalScribeState.inferring ||
+                        _localCtrl!.state == LocalScribeState.done))
+                  LocalModelBadge(controller: _localCtrl!),
               ],
             ),
           ),

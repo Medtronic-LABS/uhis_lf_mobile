@@ -45,6 +45,9 @@ dependencies:
   geolocator: ^13.0.2
   google_mlkit_barcode_scanning: ^0.14.2
   package_info_plus: ^9.0.1
+  sherpa_onnx: ^1.13.4
+  llama_cpp_dart:
+    path: local_plugins/llama_cpp_dart
 
 dev_dependencies:
   flutter_test:
