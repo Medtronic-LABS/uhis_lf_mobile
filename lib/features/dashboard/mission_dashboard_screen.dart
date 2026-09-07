@@ -1032,12 +1032,13 @@ class _SettingsMenu extends StatelessWidget {
                     debugPrint('[logout] user cancelled offline sign-out — aborting logout');
                     break;
                   }
-                  debugPrint('[logout] user confirmed sign-out anyway while offline — proceeding to wipe');
+                  debugPrint('[logout] user confirmed sign-out anyway while offline — proceeding');
                 }
               }
 
               if (!ctx.mounted) break;
-              await auth.logout();
+              final offline = await auth.isDeviceOffline();
+              await auth.logout(online: !offline);
               if (ctx.mounted) ctx.go('/login');
               break;
           }

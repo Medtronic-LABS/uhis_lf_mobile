@@ -1,13 +1,4 @@
-/// Integration test for the truncate-on-logout wiring — GitHub issue #37.
-///
-/// [auth_state_logout_wipe_test.dart] proves `AuthState.logout()` invokes
-/// whatever `onWipeLocalData` callback it's given, using a fake callback.
-/// [app_database_wipe_test.dart] proves `AppDatabase.wipeAllData()` truncates
-/// every table, calling it directly. Neither exercises the two together the
-/// way `main.dart` actually wires them
-/// (`onWipeLocalData: appDb.wipeAllData`) — this test closes that gap by
-/// driving a real in-memory [AppDatabase] through the real
-/// [AuthState.logout] path.
+/// Integration test: logout keeps the local offline DB (UHIS parity).
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -19,14 +10,20 @@ import 'package:uhis_next/core/auth/auth_state.dart';
 import 'package:uhis_next/core/auth/biometric_service.dart';
 import 'package:uhis_next/core/db/app_database.dart';
 
-/// Bypasses the real network/secure-storage logout implementation so this
-/// test can isolate the DB-wipe wiring, mirroring the fake used in
-/// auth_state_logout_wipe_test.dart.
 class _FakeAuthRepository extends AuthRepository {
   _FakeAuthRepository(super.api);
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout({bool online = true}) async {}
+
+  @override
+  Future<String?> lastUsername() async => null;
+
+  @override
+  Future<bool> isBiometricEnabled() async => false;
+
+  @override
+  Future<bool> isPinSet() async => false;
 }
 
 Future<AppDatabase> _openInMemoryDb() async {
@@ -55,28 +52,21 @@ void main() {
     db = await _openInMemoryDb();
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    // Seed rows across a representative spread of tables — household/member
-    // data, sync bookkeeping, and a visit-capture table — so the assertion
-    // below proves a real cross-table wipe, not a single-table coincidence.
-    await db.db.insert(AppDatabase.tableHouseholds, {'id': 'hh-1'});
-    await db.db.insert(AppDatabase.tablePatients, {'id': 'pt-1'});
+    // sync_meta.lastSyncTime is the cursor used for delta re-sync after logout.
     await db.db.insert(AppDatabase.tableSyncMeta, {
       'entity': 'worklist',
       'last_sync_time': now,
       'last_full_sync_at': now,
     });
-    await db.db.insert(AppDatabase.tableEncounters, {
-      'id': 'enc-1',
-      'patient_id': 'pt-1',
-      'programme': 'anc',
-      'started_at': now,
+    await db.db.insert(AppDatabase.tableSyncMeta, {
+      'entity': 'assessment_history',
+      'last_sync_time': now,
+      'last_full_sync_at': now,
     });
 
-    final repo = _FakeAuthRepository(await ApiClient.create());
     authState = AuthState(
-      repo,
+      _FakeAuthRepository(await ApiClient.create()),
       BiometricService(),
-      onWipeLocalData: db.wipeAllData,
     );
   });
 
@@ -84,25 +74,15 @@ void main() {
     await db.close();
   });
 
-  test(
-      'AuthState.logout() drives a real AppDatabase.wipeAllData() and '
-      'truncates every table', () async {
-    for (final table in [
-      AppDatabase.tableHouseholds,
-      AppDatabase.tablePatients,
-      AppDatabase.tableSyncMeta,
-      AppDatabase.tableEncounters,
-    ]) {
-      final rows = await db.db.query(table);
-      expect(rows, isNotEmpty, reason: '$table should be seeded before logout');
-    }
+  test('AuthState.logout() does not truncate local offline data', () async {
+    final before = await db.db.query(AppDatabase.tableSyncMeta);
+    expect(before, isNotEmpty);
 
     await authState.logout();
 
-    for (final table in AppDatabase.allTablesForTesting) {
-      final rows = await db.db.query(table);
-      expect(rows, isEmpty, reason: '$table must be empty after logout()');
-    }
+    final after = await db.db.query(AppDatabase.tableSyncMeta);
+    expect(after, equals(before),
+        reason: 'sync_meta must survive logout for UHIS-parity delta sync');
     expect(authState.status, AuthStatus.signedOut);
   });
 }

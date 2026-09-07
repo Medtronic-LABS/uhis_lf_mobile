@@ -1881,8 +1881,8 @@ class AppDatabase {
 
   /// Truncates every table, keeping the schema and the existing connection
   /// intact (no file delete/reopen — that would orphan every DAO's shared
-  /// [Database] handle). Used on logout and after a successful online login,
-  /// before the subsequent full sync repopulates local data.
+  /// [Database] handle). Used when a different SK signs into a shared device
+  /// (login sync) — not on logout (UHIS parity keeps local data).
   Future<void> wipeAllData() async {
     var totalRows = 0;
     await db.transaction((tx) async {
