@@ -1156,14 +1156,25 @@ class LocalAssessmentDao {
   /// Returns true when an ANC assessment already exists today for [patientId].
   /// Used to block duplicate same-day ANC visits.
   Future<bool> hasAncAssessmentTodayForPatient(String patientId) async {
+    if (patientId.isEmpty) return false;
+    return hasAncAssessmentTodayForPatients([patientId]);
+  }
+
+  /// Same as [hasAncAssessmentTodayForPatient] but matches any alias id.
+  Future<bool> hasAncAssessmentTodayForPatients(
+    Iterable<String> patientIds,
+  ) async {
+    final ids = patientIds.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+    if (ids.isEmpty) return false;
     final todayStart = DateTime.now()
         .copyWith(hour: 0, minute: 0, second: 0, millisecond: 0);
+    final placeholders = List.filled(ids.length, '?').join(',');
     final result = await _db.db.rawQuery(
       "SELECT COUNT(*) as count FROM $tableName "
-      "WHERE patient_id = ? "
+      "WHERE patient_id IN ($placeholders) "
       "AND assessment_type IN ('ANC', 'anc') "
       "AND created_at >= ?",
-      [patientId, todayStart.millisecondsSinceEpoch],
+      [...ids, todayStart.millisecondsSinceEpoch],
     );
     return (result.first['count'] as int) > 0;
   }
@@ -1238,6 +1249,32 @@ class LocalAssessmentDao {
       out[pid] = (type: type, at: ms);
     }
     return out;
+  }
+
+  /// Completed visit count per patient from local assessments not yet fully
+  /// reflected in synced [AssessmentDao] history. Excludes
+  /// [AssessmentSyncStatus.success] so a visit already pulled from the server
+  /// is not double-counted alongside its synced row.
+  Future<Map<String, int>> visitCountsByPatients(
+    List<String> patientIds,
+    List<String> kinds,
+  ) async {
+    if (patientIds.isEmpty || kinds.isEmpty) return const {};
+    final pp = List.filled(patientIds.length, '?').join(',');
+    final upperKinds = kinds.map((k) => k.toUpperCase()).toList();
+    final kp = List.filled(upperKinds.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      'SELECT patient_id, COUNT(*) AS cnt FROM $tableName '
+      'WHERE patient_id IN ($pp) '
+      'AND UPPER(assessment_type) IN ($kp) '
+      'AND sync_status != ? '
+      'GROUP BY patient_id',
+      [...patientIds, ...upperKinds, AssessmentSyncStatus.success.name],
+    );
+    return {
+      for (final r in rows)
+        if (r['patient_id'] is String) r['patient_id'] as String: r['cnt'] as int,
+    };
   }
 
   /// Latest local assessment visit per patient → follow-up stamp from

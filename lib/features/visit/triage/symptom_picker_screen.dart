@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/clinical/ai_context_fields.dart';
 import '../../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
+import '../../../core/clinical/patient_assessment_aliases.dart';
 import '../../../core/clinical/service_eligibility.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
@@ -21,11 +22,11 @@ import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/models/programme.dart';
 import '../../../core/risk/pregnancy_cohort_rules.dart';
+import '../../../core/time/calendar_day.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
-import '../../../core/time/calendar_day.dart';
 import '../../patient/followup_repository.dart';
 import '../../patient/vitals_repository.dart';
 import '../../scribe/models/ai_extracted_field.dart';
@@ -36,6 +37,7 @@ import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'ai_scribe_triage_vocab.dart';
+import 'anc_revisit_lock_message.dart';
 import 'programme_grid_sync.dart';
 import 'service_selection_resolver.dart';
 import 'symptom_catalog.dart';
@@ -128,7 +130,6 @@ class _AncRevisitStatus {
   const _AncRevisitStatus({
     required this.tooSoon,
     this.lastVisitMs,
-    this.nextDueMs,
     this.highRisk = false,
     this.revisitDays,
   });
@@ -141,17 +142,21 @@ class _AncRevisitStatus {
   /// Epoch ms of the last ANC visit, when known.
   final int? lastVisitMs;
 
-  /// Epoch ms of next ANC due — from latest assessment `nextVisitDate` when
-  /// stamped, otherwise computed as last visit + [revisitDays].
-  final int? nextDueMs;
-
-  /// Whether that last visit was flagged high-risk.
+  /// Whether that last visit was flagged high-risk (`HIGH_RISK_PW` on
+  /// `customStatus`, Spice `getAncMenuRevisitDays`).
   final bool highRisk;
 
   /// The interval applied — 1 day (high-risk) or 15 days (normal), null when
   /// [lastVisitMs] is unavailable and this fell back to [_ancVisitedToday].
   final int? revisitDays;
 }
+
+AncRevisitLockInput _ancRevisitLockInput(_AncRevisitStatus status) =>
+    AncRevisitLockInput(
+      lastVisitMs: status.lastVisitMs,
+      highRisk: status.highRisk,
+      revisitDays: status.revisitDays,
+    );
 
 class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   TriageViewModel? _viewModel;
@@ -163,6 +168,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// the server-assigned `members.patient_id`, which [PatientContextBuilder]
   /// remaps onto the local key every other table is keyed by. Falls back to
   /// the routed id until the context has loaded.
+
+  /// Every id local assessments may be keyed under for this patient.
+  List<String> _patientAliasIds = const [];
+
   String get _patientId => _patientContext?.patientId ?? widget.patientId;
 
   VisitBriefingResponse? _briefingData;
@@ -276,6 +285,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         programmesDao: programmesDao,
         pregnancyDao: pregnancyDao,
         immunisationDao: immunisationDao,
+        assessmentDao: context.read<AssessmentDao>(),
+        localAssessmentDao: context.read<LocalAssessmentDao>(),
       );
 
       final ctx = await builder.build(patientId);
@@ -305,10 +316,19 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       // the SK must explicitly select PW first before ANC becomes available.
       final isPw = ctx.activeProgrammes.contains(Programme.pw) ||
           ctx.activeProgrammes.contains(Programme.anc);
-      // Block a second ANC visit on the same calendar day.
+      final aliasIds = {
+        ...await patientAssessmentAliasIds(
+          patientDao,
+          patientId: widget.patientId.isNotEmpty ? widget.patientId : patientId,
+          memberId: widget.memberId,
+        ),
+        ctx.patientId,
+      }.where((id) => id.isNotEmpty).toList(growable: false);
+      _patientAliasIds = aliasIds;
+      // Block a second ANC visit on the same calendar day (any patient id alias).
       final ancToday = await context
           .read<LocalAssessmentDao>()
-          .hasAncAssessmentTodayForPatient(ctx.patientId);
+          .hasAncAssessmentTodayForPatients(aliasIds);
       // Whether this patient currently has an open pregnancy episode — locks
       // the PW card (see _InlineServiceSelector._isLocked) so the SK can't
       // select a re-registration that ServiceSelectionResolver would only
@@ -331,7 +351,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       // _ancVisitedToday field.
       final ancRevisitStatus = await _computeAncRevisitStatus(
         patientId: ctx.patientId,
+        aliasIds: aliasIds,
         fallbackTooSoon: ancToday,
+        openEpisodeLastAncMs: openEpisode?.obstetric.lastAncVisitDateMs,
       );
       // Pregnancy Outcome is an explicit SK choice — never auto-on.
       // Postpartum mothers get PNC via [enrolledSeed], not this flag.
@@ -363,10 +385,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           // separately and must stay unlocked for an already-pregnant woman.
           _selectedProgrammes.remove(Programme.pw);
         }
-        if (ancRevisitStatus.tooSoon) {
-          // Within the revisit interval — ANC is locked in the grid (see
-          // _InlineServiceSelector._isLocked), keeps _selectedProgrammes
-          // honest if enrolledSeed pre-ticked it.
+        if (ancRevisitStatus.tooSoon || ctx.isPostpartum) {
+          // Within the revisit interval or postpartum — ANC is locked in the
+          // grid (see ProgrammeGridSync.isAncGridLocked), keeps
+          // _selectedProgrammes honest if enrolledSeed/pathways pre-ticked it.
           _selectedProgrammes.remove(Programme.anc);
         }
         _pathwayActivatedProgrammes
@@ -566,10 +588,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           }
         }
       } else {
-        // Delivery / pregnancy-outcome visit: clear only ANC + PW. Other
-        // selected programmes (NCD, TB, etc.) stay open alongside PNC /
-        // pregnancy-outcome forms.
+        // Delivery / pregnancy-outcome visit: clear only ANC + PW. PNC stays
+        // optional — SK may combine PO + PNC on the same visit.
         _isPW = false;
+        _skDismissedProgrammes.remove(Programme.pnc);
         final next = ProgrammeGridSync.applyDeliverySelected(
           selected: _selectedProgrammes,
           dismissedBySk: _skDismissedProgrammes,
@@ -586,6 +608,76 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         'programmes=${_selectedProgrammes.map((p) => p.name).join(", ")} '
         'isPW=$_isPW');
     _fireProgrammesLive();
+  }
+
+  /// Builds the programme set leaving Step 1, then runs
+  /// [ServiceSelectionResolver.finalize] (PW backfill for ANC, PO backfill
+  /// for PNC, revisit/postpartum gates). Symptom sync only surfaces chips;
+  /// prerequisite pairing happens here at Continue.
+  Future<ServiceSelectionResult?> _finalizeStep1Selection(
+    Set<Programme> programmes,
+  ) async {
+    final needsPwCheck = programmes.contains(Programme.pw) ||
+        programmes.contains(Programme.anc);
+    final pwBlocked =
+        needsPwCheck ? await _isPwRegistrationBlocked() : false;
+    final ancRevisitBlocked = programmes.contains(Programme.anc)
+        ? await _isAncRevisitTooSoon()
+        : false;
+    if (!mounted) return null;
+
+    return ServiceSelectionResolver.finalize(
+      selected: programmes,
+      pwRegistrationBlocked: pwBlocked,
+      isPostpartum: _patientContext?.isPostpartum ?? false,
+      ancRevisitBlocked: ancRevisitBlocked,
+      isDeliveryVisit: _isDelivery,
+      isMale: _patientContext?.sex == Sex.male,
+    );
+  }
+
+  /// Handles a [ServiceSelectionResult] from [_finalizeStep1Selection].
+  /// Returns true when the caller should proceed to Step 2.
+  Future<bool> _handleFinalizeResult(ServiceSelectionResult result) async {
+    if (result.blockedReason != null) {
+      await _showAncBlockedDialog(result.blockedReason!);
+      if (!mounted) return false;
+      setState(() {
+        _selectedProgrammes
+          ..clear()
+          ..addAll(result.programmes);
+        _skDismissedProgrammes.add(Programme.anc);
+        _isDelivery = result.isDeliveryVisit;
+      });
+      _fireProgrammesLive();
+      return false;
+    }
+
+    if (result.silentlyEmptied) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(AppStrings.pwAlreadyEnrolledMessage),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ));
+      setState(() {
+        _selectedProgrammes.clear();
+        _skDismissedProgrammes.add(Programme.pw);
+        _isDelivery = result.isDeliveryVisit;
+      });
+      _fireProgrammesLive();
+      return false;
+    }
+
+    setState(() {
+      _selectedProgrammes
+        ..clear()
+        ..addAll(result.programmes);
+      _isDelivery = result.isDeliveryVisit;
+    });
+    _fireProgrammesLive();
+    return true;
   }
 
   /// Keeps [_selectedProgrammes] and [_pathwayActivatedProgrammes] in sync
@@ -644,16 +736,31 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     final gatedActivated =
         ProgrammeGridSync.withoutMaternalIfMale(activated, isMale: isMale);
 
+    // Symptom → PNC mapping mirrors ANC: catalogue may tick PNC even when the
+    // manual chip is locked; Continue backfills PO when needed.
+    final eligibleActivated = ProgrammeGridSync.withoutPncUnlessPostpartum(
+      gatedActivated,
+      isPostpartum: _patientContext?.isPostpartum ?? false,
+      isDeliveryVisit: _isDelivery,
+      pncEligibleForActivation: true,
+    );
+
     // Exclude programmes currently locked in the grid — a newly-selected
     // symptom must not silently resurrect ANC (within its revisit interval)
     // or PW (already registered) after they were stripped/locked at load.
     final unseen = ProgrammeGridSync.additionsFromPathways(
-      activated: gatedActivated,
+      activated: eligibleActivated,
       selected: _selectedProgrammes,
       dismissedBySk: _skDismissedProgrammes,
     ).where((p) {
-      if (p == Programme.anc && _ancRevisitStatus.tooSoon) return false;
+      if (p == Programme.anc &&
+          (_ancRevisitStatus.tooSoon ||
+              (_patientContext?.isPostpartum ?? false))) {
+        return false;
+      }
       if (p == Programme.pw && _openPregnancyEpisode != null) return false;
+      // On a PO visit, PNC is manual-only — symptoms must not auto-add it.
+      if (p == Programme.pnc && _isDelivery) return false;
       return true;
     }).toSet();
     if (unseen.isNotEmpty) {
@@ -812,69 +919,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         programmes = base;
       }
 
-      // Finalize the selection through the single service-selection choke
-      // point — all business-rule gating (PW-once-only, ANC-blocked-
-      // postpartum/revisit-too-soon, PW-auto-add) runs here, before the SK
-      // ever leaves Step 1. Short-circuit the extra DAO reads unless the
-      // selection actually touches PW/ANC.
-      final needsPwCheck = programmes.contains(Programme.pw) ||
-          programmes.contains(Programme.anc);
-      final pwBlocked =
-          needsPwCheck ? await _isPwRegistrationBlocked() : false;
-      final ancRevisitBlocked = programmes.contains(Programme.anc)
-          ? await _isAncRevisitTooSoon()
-          : false;
-      if (!mounted) return;
-
-      final result = ServiceSelectionResolver.finalize(
-        selected: programmes,
-        pwRegistrationBlocked: pwBlocked,
-        isPostpartum: _patientContext?.isPostpartum ?? false,
-        ancRevisitBlocked: ancRevisitBlocked,
-        isDeliveryVisit: _isDelivery,
-        pncDismissedBySk: _skDismissedProgrammes.contains(Programme.pnc),
-        isMale: _patientContext?.sex == Sex.male,
-      );
-
-      if (result.blockedReason != null) {
-        await _showAncBlockedDialog(result.blockedReason!);
-        if (!mounted) return;
-        // Stay on Step 1 with the corrected selection applied — the SK's
-        // symptom picks and other selected services survive; they can
-        // review/adjust and tap Continue again.
-        setState(() {
-          _selectedProgrammes
-            ..clear()
-            ..addAll(result.programmes);
-          _skDismissedProgrammes.add(Programme.anc);
-        });
-        _fireProgrammesLive();
-        return;
-      }
-
-      if (result.silentlyEmptied) {
-        // PW (or an excluded programme) was the only selection and got
-        // dropped — hint instead of a dialog, stay on Step 1.
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(
-            content: Text(AppStrings.pwAlreadyEnrolledMessage),
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-          ));
-        setState(() {
-          _selectedProgrammes.clear();
-          _skDismissedProgrammes.add(Programme.pw);
-        });
-        _fireProgrammesLive();
-        return;
-      }
+      final result = await _finalizeStep1Selection(programmes);
+      if (result == null || !mounted) return;
+      if (!await _handleFinalizeResult(result)) return;
 
       widget.onProgrammesSelected?.call(Set.unmodifiable(result.programmes));
       widget.onEnrolledProgrammesResolved?.call(
         Set.unmodifiable(_patientContext?.activeProgrammes ?? const {}),
       );
-      widget.onDeliverySelected?.call(_isDelivery);
+      widget.onDeliverySelected?.call(result.isDeliveryVisit);
       widget.onSymptomsConfirmed?.call(
         vm.selectedSymptoms,
         vm.sicknessDuration,
@@ -885,8 +938,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       return;
     }
 
-    // Bypass the triage-result interstitial and go straight to the form.
-    _navigateToForm(pathways);
+    // Standalone route — same finalize choke point before opening the form.
+    final programmes = Set<Programme>.from(_selectedProgrammes);
+    final result = await _finalizeStep1Selection(programmes);
+    if (result == null || !mounted) return;
+    if (!await _handleFinalizeResult(result)) return;
+
+    _navigateToForm(
+      pathways,
+      programmeNames: result.programmes.map((p) => p.name).toList(),
+      isDeliveryVisit: result.isDeliveryVisit,
+    );
   }
 
   /// Whether starting a new PW registration should be blocked because this
@@ -917,73 +979,66 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   /// Whether a new ANC visit is too soon after the last one, and the
   /// context behind that decision (last visit date, risk level, the
-  /// interval applied) — a risk-based revisit interval (1 day if the last
-  /// visit was high-risk, else 15 days), ported from Android Spice's
-  /// `isAncMenuDisabledByLastVisit` / `getAncMenuRevisitDays`. Falls back to
-  /// [fallbackTooSoon] (the same-calendar-day check) when no dated snapshot
-  /// is available yet (e.g. sync hasn't landed a `PregnancySnapshotDao` row).
-  ///
-  /// Shared by the Continue-time gate ([_isAncRevisitTooSoon]) and the
-  /// Eligible Services grid (locks the ANC card, shows why) so the two can
-  /// never drift from each other. [patientId] and [fallbackTooSoon] are
-  /// explicit parameters rather than reading [_patientId]/[_ancVisitedToday]
-  /// internally, since the grid calls this *during* `_loadPatientContext`,
-  /// before those fields are updated for the current load.
+  /// interval applied) — ported from Android Spice's
+  /// `isAncMenuDisabledByLastVisit` / `getAncMenuRevisitDays`. Uses the
+  /// last ANC visit date + 1-day (high-risk) or 15-day (normal) interval;
+  /// does not block on stamped `nextVisitDate`. Falls back to
+  /// [fallbackTooSoon] (same-calendar-day check) when no dated ANC row exists.
   Future<_AncRevisitStatus> _computeAncRevisitStatus({
     required String patientId,
+    required List<String> aliasIds,
     required bool fallbackTooSoon,
+    int? openEpisodeLastAncMs,
   }) async {
     try {
-      // Prefer latest ANC assessment (local + synced history) for last visit
-      // and stamped nextVisitDate — same source as Care History / summary.
-      final schedule = await context
+      final ancContext = await this.context
           .read<AssessmentRepository>()
-          .latestAncVisitSchedule(patientId, alsoId: widget.memberId);
+          .latestAncRevisitContext(
+            patientId,
+            alsoId: widget.memberId,
+            extraIds: aliasIds,
+          );
 
-      final snapshots = context.read<PregnancySnapshotDao>();
+      final snapshots = this.context.read<PregnancySnapshotDao>();
       final snapshot = await snapshots.byPatientOrMember(
         patientId,
         memberId: widget.memberId,
       );
-      final lastVisitMs = schedule?.lastVisitAt.millisecondsSinceEpoch ??
-          snapshot?.lastAncVisitDateMs;
-      if (lastVisitMs == null) {
-        debugPrint(
-          '[AncRevisitDebug] READ patientId=$patientId memberId=${widget.memberId} '
-          'scheduleFound=${schedule != null} snapshotFound=${snapshot != null} '
-          'lastAncVisitDateMs=null → fallbackTooSoon=$fallbackTooSoon',
-        );
-        return _AncRevisitStatus(tooSoon: fallbackTooSoon);
+      int? lastVisitMs = ancContext?.lastVisitAt.millisecondsSinceEpoch;
+      void bump(int? ms) {
+        if (ms == null) return;
+        if (lastVisitMs == null || ms > lastVisitMs!) lastVisitMs = ms;
       }
-      final highRisk = snapshot?.facts.highRiskPregnantWoman ?? false;
-      final revisitDays = highRisk ? 1 : 15;
-      final stampedNext = schedule?.nextDueAt;
-      final int nextDueMs;
-      final bool tooSoon;
-      if (stampedNext != null) {
-        nextDueMs = CalendarDay.startOf(stampedNext).millisecondsSinceEpoch;
-        // Locked until the calendar due day arrives (daysToDue > 0).
-        tooSoon = CalendarDay.daysBetween(DateTime.now(), stampedNext) > 0;
-      } else {
-        nextDueMs =
-            lastVisitMs + Duration(days: revisitDays).inMilliseconds;
-        final daysSince = DateTime.now()
-            .difference(DateTime.fromMillisecondsSinceEpoch(lastVisitMs))
-            .inDays;
-        tooSoon = daysSince < revisitDays;
-      }
+
+      bump(snapshot?.lastAncVisitDateMs);
+      bump(openEpisodeLastAncMs);
+
+      final highRisk = ancContext?.highRiskPw ??
+          snapshot?.facts.highRiskPregnantWoman ??
+          false;
+      final lock = computeAncRevisitLock(
+        lastVisitMs: lastVisitMs,
+        highRisk: highRisk,
+        ancAssessmentToday: fallbackTooSoon,
+      );
+      final daysSince = lastVisitMs == null
+          ? null
+          : CalendarDay.daysBetween(
+              DateTime.fromMillisecondsSinceEpoch(lastVisitMs!),
+              DateTime.now(),
+            );
       debugPrint(
         '[AncRevisitDebug] READ patientId=$patientId memberId=${widget.memberId} '
-        'lastVisitMs=$lastVisitMs nextDueMs=$nextDueMs '
-        'stampedNext=${stampedNext != null} highRisk=$highRisk '
-        'revisitDays=$revisitDays → tooSoon=$tooSoon',
+        'aliasIds=$aliasIds contextFound=${ancContext != null} '
+        'snapshotFound=${snapshot != null} openEpisodeLastAncMs=$openEpisodeLastAncMs '
+        'lastVisitMs=$lastVisitMs highRisk=$highRisk ancToday=$fallbackTooSoon '
+        'revisitDays=${lock.revisitDays} daysSince=$daysSince → tooSoon=${lock.tooSoon}',
       );
       return _AncRevisitStatus(
-        tooSoon: tooSoon,
-        lastVisitMs: lastVisitMs,
-        nextDueMs: nextDueMs,
-        highRisk: highRisk,
-        revisitDays: revisitDays,
+        tooSoon: lock.tooSoon,
+        lastVisitMs: lock.lastVisitMs,
+        highRisk: lock.highRisk,
+        revisitDays: lock.revisitDays,
       );
     } catch (e) {
       debugPrint('[SymptomPicker] ANC revisit-interval lookup failed: $e');
@@ -993,7 +1048,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   Future<bool> _isAncRevisitTooSoon() async => (await _computeAncRevisitStatus(
         patientId: _patientId,
+        aliasIds: _patientAliasIds.isEmpty
+            ? [
+                widget.patientId,
+                if (widget.memberId != null) widget.memberId!,
+                _patientId,
+              ].where((id) => id.isNotEmpty).toList()
+            : _patientAliasIds,
         fallbackTooSoon: _ancVisitedToday,
+        openEpisodeLastAncMs: _openPregnancyEpisode?.obstetric.lastAncVisitDateMs,
       ))
           .tooSoon;
 
@@ -1009,8 +1072,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         title = AppStrings.ancBlockedPostpartumTitle;
         message = AppStrings.ancBlockedPostpartumMessage;
       case ServiceSelectionBlockReason.ancBlockedRevisit:
-        title = AppStrings.ancBlockedDuplicateTitle;
-        message = AppStrings.ancBlockedDuplicateMessage;
+        if (_ancRevisitStatus.lastVisitMs == null) {
+          title = AppStrings.ancBlockedDuplicateTitle;
+          message = AppStrings.ancBlockedDuplicateMessage;
+        } else {
+          title = AppStrings.ancBlockedRevisitTitle;
+          message = ancRevisitLockMessage(_ancRevisitLockInput(_ancRevisitStatus));
+        }
     }
     return showDialog<void>(
       context: context,
@@ -1028,8 +1096,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     );
   }
 
-  void _navigateToForm(List<ActivatedPathway> pathways) {
-    debugPrint('[_SymptomPickerScreenState] _navigateToForm pathways=${pathways}');
+  void _navigateToForm(
+    List<ActivatedPathway> pathways, {
+    required List<String> programmeNames,
+    required bool isDeliveryVisit,
+  }) {
+    debugPrint('[_SymptomPickerScreenState] _navigateToForm pathways=$pathways '
+        'programmes=$programmeNames isDelivery=$isDeliveryVisit');
     final origin = widget.origin;
     final originParam = origin != null ? '?origin=$origin' : '';
 
@@ -1040,7 +1113,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         'memberId': widget.memberId,
         'householdId': widget.householdId,
         'patientAge': widget.patientAge,
-        'activatedPathways': pathways.map((p) => p.programme.name).toList(),
+        'activatedPathways': programmeNames,
+        'isDeliveryVisit': isDeliveryVisit,
       },
     );
   }
@@ -2422,10 +2496,12 @@ class _InlineServiceSelector extends StatelessWidget {
       return isDelivery || ctx.isPostpartum || openPregnancyEpisode != null;
     }
     if (card.programme == Programme.anc) {
-      // ANC requires PW selection first; also blocked within the risk-based
-      // revisit interval (1 day if high-risk, 15 days otherwise).
-      // !pregnant removed: SK may start ANC for a new pregnancy (no prior PW record).
-      return !isPW || isDelivery || ancRevisitStatus.tooSoon;
+      return ProgrammeGridSync.isAncGridLocked(
+        isPostpartum: ctx.isPostpartum,
+        isPwGateOpen: isPW,
+        isDeliveryVisit: isDelivery,
+        ancRevisitTooSoon: ancRevisitStatus.tooSoon,
+      );
     }
     if (card.isDelivery) {
       return ProgrammeGridSync.isPregnancyOutcomeLocked(
@@ -2434,13 +2510,13 @@ class _InlineServiceSelector extends StatelessWidget {
         hasOpenPregnancyEpisode: openPregnancyEpisode != null,
       );
     }
-    // PNC's normal rule ("available once postpartum") can't fire during the
-    // very visit that records the delivery — isPostpartum isn't true until
-    // that submission lands. Carved out here so PNC is a genuinely optional,
-    // freely-toggleable card specifically on a delivery visit (default
-    // selected via ProgrammeGridSync.applyDeliverySelected, but the SK can
-    // untick it — see ServiceSelectionResolver.finalize's pncDismissedBySk).
-    if (card.programme == Programme.pnc) return !ctx.isPostpartum && !isDelivery;
+    // PNC requires PO first (PW+ANC parity): PO visit selected, or postpartum
+    // (delivery already on record). Prerequisite PO for new pregnancies is
+    // backfilled at Continue when symptoms surface PNC alone.
+    if (card.programme == Programme.pnc) {
+      if (ctx.isPostpartum) return false;
+      return !isDelivery;
+    }
     // FP is contraindicated during active pregnancy; available post-delivery.
     if (card.programme == Programme.familyPlanning) return pregnant;
     return false;
@@ -2466,7 +2542,8 @@ class _InlineServiceSelector extends StatelessWidget {
     // visit — mirrors the PW-episode treatment above.
     if (card.programme == Programme.anc) {
       return selectedProgrammes.contains(Programme.anc) &&
-          !ancRevisitStatus.tooSoon;
+          !ancRevisitStatus.tooSoon &&
+          !patientContext.isPostpartum;
     }
     if (card.isDelivery) return isDelivery;
     if (card.isRMNCH) {
@@ -2493,12 +2570,15 @@ class _InlineServiceSelector extends StatelessWidget {
       if (ctx.isPostpartum) return TriageStrings.pwLockedPostpartumHint;
     }
     if (card.programme == Programme.anc) {
+      if (ctx.isPostpartum) return TriageStrings.ancLockedPostpartumHint;
       if (isDelivery) return TriageStrings.ancDeliveryConflictHint;
-      if (ancRevisitStatus.tooSoon) return _ancRevisitMessage(ancRevisitStatus);
+      if (ancRevisitStatus.tooSoon) {
+        return ancRevisitLockMessage(_ancRevisitLockInput(ancRevisitStatus));
+      }
       return TriageStrings.pwHint; // locked because PW isn't selected yet
     }
     if (card.isDelivery) return TriageStrings.pregnancyOutcomeLockedHint;
-    if (card.programme == Programme.pnc) return TriageStrings.pncOnlyPostpartumHint;
+    if (card.programme == Programme.pnc) return TriageStrings.pncPoHint;
     if (card.programme == Programme.familyPlanning) {
       return TriageStrings.fpLockedPregnantHint;
     }
@@ -2604,10 +2684,7 @@ class _InlineServiceSelector extends StatelessWidget {
                         pathwayProgrammes.contains(c.programme),
                     subtitle: (c.isPW && openPregnancyEpisode != null)
                         ? _pwEpisodeSubtitle(openPregnancyEpisode!)
-                        : (c.programme == Programme.anc &&
-                                ancRevisitStatus.tooSoon)
-                            ? _ancRevisitMessage(ancRevisitStatus)
-                            : null,
+                        : null,
                     onTap: () => _handleTap(context, c),
                   ))
               .toList(),
@@ -2631,25 +2708,6 @@ class _InlineServiceSelector extends StatelessWidget {
     );
   }
 
-  /// Message shown both on the locked ANC card's subtitle and its tap toast
-  /// — deliberately the same string in both places (unlike the PW fix).
-  String _ancRevisitMessage(_AncRevisitStatus status) {
-    final lastVisitMs = status.lastVisitMs;
-    if (lastVisitMs == null) return TriageStrings.ancVisitedTodayMessage;
-    final fmt = AppDateFormat.dayMonthYearFmt;
-    final lastVisitStr =
-        fmt.format(DateTime.fromMillisecondsSinceEpoch(lastVisitMs));
-    if (status.highRisk) {
-      return TriageStrings.ancRevisitMessageHighRisk(lastVisit: lastVisitStr);
-    }
-    final revisitDays = status.revisitDays ?? 15;
-    final nextDueMs = status.nextDueMs ??
-        lastVisitMs + Duration(days: revisitDays).inMilliseconds;
-    return TriageStrings.ancRevisitMessageNormal(
-      lastVisit: lastVisitStr,
-      nextDue: fmt.format(DateTime.fromMillisecondsSinceEpoch(nextDueMs)),
-    );
-  }
 }
 
 class _ServiceTile extends StatelessWidget {

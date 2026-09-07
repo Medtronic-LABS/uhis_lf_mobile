@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../mission/mission_pregnancy_facts.dart';
+import '../sync/pregnancy_delivery_sync.dart';
 import 'app_database.dart';
 import 'pregnancy_snapshot_dao.dart';
 
@@ -287,6 +289,7 @@ class PregnancyEpisodeDao {
     required String patientId,
     required int deliveryDateMillis,
     PregnancyFacts? facts,
+    PregnancySnapshotRow? obstetricPatch,
   }) async {
     final existing =
         await openEpisodeFor(patientId) ?? await mostRecentFor(patientId);
@@ -301,12 +304,20 @@ class PregnancyEpisodeDao {
             facts: PregnancyFacts.empty,
           ),
         );
+    final patch = obstetricPatch ??
+        PregnancySnapshotRow(
+          patientId: patientId,
+          facts: facts ?? const PregnancyFacts(isPostpartumWindow: true),
+        );
     final closed = base.copyWith(
       closedAt: nowMs,
-      obstetric: base.obstetric.copyWith(
-        deliveryDateMillis: deliveryDateMillis,
-        facts: facts ?? base.obstetric.facts,
-        updatedAt: nowMs,
+      obstetric: base.obstetric.mergedWith(
+        patch.copyWith(
+          patientId: patientId,
+          deliveryDateMillis: deliveryDateMillis,
+          facts: facts ?? patch.facts,
+          updatedAt: nowMs,
+        ),
       ),
     );
     if (existing == null) {
@@ -327,5 +338,120 @@ class PregnancyEpisodeDao {
     await _snapshotDao.upsertOne(
       episode.obstetric.copyWith(patientId: episode.patientId),
     );
+  }
+
+  /// Applies one coalesced `pregnancyInfos[]` row from offline sync without
+  /// reopening a pregnancy that was already closed locally after PO.
+  Future<void> applyIncomingSyncRow({
+    required String patientId,
+    required PregnancySnapshotRow row,
+  }) async {
+    final open = await openEpisodeFor(patientId);
+    final recent = await mostRecentFor(patientId);
+    final recentDelivery = recent?.obstetric.deliveryDateMillis;
+    final effectiveDelivery = row.deliveryDateMillis ?? recentDelivery;
+
+    if (effectiveDelivery != null &&
+        PregnancyDeliverySync.isWithinPostpartumWindow(effectiveDelivery)) {
+      final postpartumFacts = row.facts.isPostpartumWindow
+          ? row.facts
+          : const PregnancyFacts(isPostpartumWindow: true);
+
+      if (open != null) {
+        await closeEpisode(
+          patientId: patientId,
+          deliveryDateMillis: effectiveDelivery,
+          facts: postpartumFacts,
+        );
+        return;
+      }
+
+      if (recent != null && !recent.isOpen) {
+        await _upsertClosedEpisodeObstetric(
+          recent,
+          recent.obstetric.mergedWith(row).copyWith(
+                patientId: patientId,
+                deliveryDateMillis: effectiveDelivery,
+                facts: postpartumFacts,
+              ),
+        );
+        return;
+      }
+
+      await closeEpisode(
+        patientId: patientId,
+        deliveryDateMillis: effectiveDelivery,
+        facts: postpartumFacts,
+      );
+      return;
+    }
+
+    if (open != null) {
+      await updateOpenEpisode(patientId: patientId, patch: row);
+      return;
+    }
+
+    if (recent != null &&
+        !recent.isOpen &&
+        recentDelivery != null &&
+        PregnancyDeliverySync.isWithinPostpartumWindow(recentDelivery)) {
+      await _upsertClosedEpisodeObstetric(
+        recent,
+        recent.obstetric.mergedWith(row).copyWith(
+              patientId: patientId,
+              deliveryDateMillis: recentDelivery,
+            ),
+      );
+      debugPrint(
+        '[PregnancyEpisodeDao] sync preserved postpartum closed episode '
+        'for $patientId (deliveryMs=$recentDelivery)',
+      );
+      return;
+    }
+
+    await startNewEpisode(patientId: patientId, obstetric: row);
+  }
+
+  /// Closes or refreshes postpartum state from a synced/local PO assessment
+  /// when `pregnancyInfos[]` has not yet caught up.
+  Future<void> applyDeliveryFromAssessmentHistory({
+    required String patientId,
+    required int deliveryDateMillis,
+  }) async {
+    if (!PregnancyDeliverySync.isWithinPostpartumWindow(deliveryDateMillis)) {
+      return;
+    }
+
+    final open = await openEpisodeFor(patientId);
+    final recent = await mostRecentFor(patientId);
+    final recentDelivery = recent?.obstetric.deliveryDateMillis;
+
+    if (open == null &&
+        recent != null &&
+        !recent.isOpen &&
+        recentDelivery != null &&
+        recentDelivery >= deliveryDateMillis) {
+      return;
+    }
+
+    await closeEpisode(
+      patientId: patientId,
+      deliveryDateMillis: deliveryDateMillis,
+      facts: const PregnancyFacts(isPostpartumWindow: true),
+    );
+  }
+
+  Future<void> _upsertClosedEpisodeObstetric(
+    PregnancyEpisodeRow episode,
+    PregnancySnapshotRow mergedObstetric,
+  ) async {
+    final updated = episode.copyWith(obstetric: mergedObstetric);
+    await _db.db.update(
+      AppDatabase.tablePregnancyEpisodes,
+      updated.toDb(),
+      where: 'id = ?',
+      whereArgs: [updated.id],
+    );
+    await _refreshProjection(updated);
   }
 }

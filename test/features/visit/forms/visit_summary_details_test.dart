@@ -290,5 +290,70 @@ void main() {
         defaultDate,
       );
     });
+
+    test('PO-only visit hides Step 3 follow-up (Spice PO summary parity)', () {
+      const poOnly = ['PREGNANCY_OUTCOME'];
+      expect(
+        VisitSummaryDetails.shouldScheduleStep3FollowUp(
+          programmes: {Programme.anc},
+          isReferred: false,
+          assessmentTypes: poOnly,
+        ),
+        isFalse,
+      );
+      expect(
+        VisitSummaryDetails.followUpItemsForSummary(
+          const [
+            NabaFollowUpItem(
+              activity: 'ANC visit',
+              timeline: 'In 4 weeks',
+              programme: 'ANC',
+            ),
+          ],
+          programmes: {Programme.anc},
+          assessmentTypes: poOnly,
+        ),
+        isEmpty,
+      );
+      expect(
+        VisitSummaryDetails.resolveStep3FollowUpDate(
+          programmes: {Programme.anc},
+          isReferred: false,
+          programmeDefault: DateTime.utc(2026, 9, 1),
+          assessmentTypes: poOnly,
+        ),
+        isNull,
+      );
+    });
+
+    test('PO+PNC keeps PNC follow-up and drops ANC rows', () {
+      const poPnc = ['PREGNANCY_OUTCOME', 'PNC_MOTHER'];
+      expect(
+        VisitSummaryDetails.shouldScheduleStep3FollowUp(
+          programmes: {Programme.anc, Programme.pnc},
+          isReferred: false,
+          assessmentTypes: poPnc,
+        ),
+        isTrue,
+      );
+      final filtered = VisitSummaryDetails.followUpItemsForSummary(
+        const [
+          NabaFollowUpItem(
+            activity: 'ANC visit',
+            timeline: 'In 4 weeks',
+            programme: 'ANC',
+          ),
+          NabaFollowUpItem(
+            activity: 'PNC visit',
+            timeline: 'In 7 days',
+            programme: 'PNC',
+          ),
+        ],
+        programmes: {Programme.anc, Programme.pnc},
+        assessmentTypes: poPnc,
+      );
+      expect(filtered, hasLength(1));
+      expect(filtered.first.programme, 'PNC');
+    });
   });
 }

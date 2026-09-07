@@ -17,6 +17,14 @@ import '../models/programme.dart';
 const List<String> ancVisitKinds = ['ANC', 'PREGNANCY', 'PREGNANT', 'EMTCT'];
 const List<String> pncVisitKinds = ['PNC', 'POSTNATAL'];
 
+/// Local-assessment `assessment_type` values for PNC visits — the unified
+/// form writes `PNC_MOTHER`; synced history uses the [pncVisitKinds] tags.
+const List<String> pncLocalVisitKinds = [
+  ...pncVisitKinds,
+  'PNC_MOTHER',
+  'PNCMOTHER',
+];
+
 /// Picks the one programme to key a badge off of, by clinical priority.
 Programme primaryProgrammeOf(Set<Programme> programmes) {
   if (programmes.contains(Programme.imci)) return Programme.imci;

@@ -28,6 +28,7 @@ import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
 import 'core/constants/app_strings.dart';
+import 'features/visit/forms/form_config.dart';
 import 'core/db/ai_response_cache_dao.dart';
 import 'core/db/app_database.dart';
 import 'core/db/assessment_dao.dart';
@@ -100,6 +101,7 @@ Future<void> main() async {
   // Bengali date symbols. Without this every DateFormat falls back to English
   // month names regardless of app language.
   await AppDateFormat.ensureInitialised();
+  await FormConfig.loadAndCache(rootBundle);
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();

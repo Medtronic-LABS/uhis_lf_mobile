@@ -16,6 +16,42 @@ void main() {
     });
   });
 
+  group('combinedVisitCount', () {
+    test('adds synced and pending local counts across lookup keys', () {
+      expect(
+        combinedVisitCount(
+          lookupKeys: const ['279', '823260'],
+          syncedCounts: const {'823260': 1},
+          localPendingCounts: const {'279': 1},
+        ),
+        2,
+      );
+    });
+
+    test('uses highest per-key count when history is keyed by FHIR id', () {
+      expect(
+        combinedVisitCount(
+          lookupKeys: const ['279', '823260'],
+          syncedCounts: const {'823260': 1},
+          localPendingCounts: const {},
+        ),
+        1,
+      );
+    });
+
+    test('counts pending local visit before sync populates assessments table',
+        () {
+      expect(
+        combinedVisitCount(
+          lookupKeys: const ['279'],
+          syncedCounts: const {},
+          localPendingCounts: const {'279': 1},
+        ),
+        1,
+      );
+    });
+  });
+
   group('resolveRecentServiceKind', () {
     test('prefers synced row keyed by local member id', () {
       final synced = {

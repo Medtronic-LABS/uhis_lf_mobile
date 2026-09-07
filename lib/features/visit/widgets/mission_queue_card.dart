@@ -346,6 +346,8 @@ class PatientBadgeRow extends StatelessWidget {
     this.pncVisitCount = 0,
     this.householdNo,
     this.householdName,
+    this.useLatestServiceBadge = false,
+    this.recentServiceKind,
   });
 
   final String? name;
@@ -366,20 +368,44 @@ class PatientBadgeRow extends StatelessWidget {
   final String? householdNo;
   final String? householdName;
 
+  /// When true, badge follows household "other members" logic: latest
+  /// assessment kind via [recentServiceKind], or "Registered" when absent.
+  final bool useLatestServiceBadge;
+  final String? recentServiceKind;
+
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    // Same shared logic the dashboard's real MissionQueueCard badge uses —
-    // visit-count-aware, not an approximation of it.
-    final badgeLabel = programmeReason(
-      programmes: programmes,
-      ancVisitCount: ancVisitCount,
-      pncVisitCount: pncVisitCount,
-    );
-    final (badgeBg, badgeFg) = programmeBadgeColors(
-      primaryProgrammeOf(programmes),
-    );
+    final String badgeLabel;
+    final Color badgeBg;
+    final Color badgeFg;
+    if (useLatestServiceBadge) {
+      final serviceKind = recentServiceKind?.trim();
+      final hasService = serviceKind != null && serviceKind.isNotEmpty;
+      badgeLabel = hasService
+          ? ProgrammeLabels.forServiceKind(serviceKind)
+          : HouseholdListStrings.enrolledTag;
+      final serviceProgramme =
+          hasService ? Programme.fromString(serviceKind) : null;
+      if (hasService &&
+          serviceProgramme != null &&
+          serviceProgramme != Programme.unknown) {
+        (badgeBg, badgeFg) = programmeBadgeColors(serviceProgramme);
+      } else {
+        badgeBg = AppColors.statusSuccessSurface;
+        badgeFg = AppColors.statusSuccessAction;
+      }
+    } else {
+      badgeLabel = programmeReason(
+        programmes: programmes,
+        ancVisitCount: ancVisitCount,
+        pncVisitCount: pncVisitCount,
+      );
+      (badgeBg, badgeFg) = programmeBadgeColors(
+        primaryProgrammeOf(programmes),
+      );
+    }
 
     final address = [
       householdNo != null ? '#$householdNo' : null,

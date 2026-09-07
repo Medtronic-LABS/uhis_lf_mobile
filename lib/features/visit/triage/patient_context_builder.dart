@@ -3,12 +3,15 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/db/immunisation_dao.dart';
+import '../../../core/db/local_assessment_dao.dart';
+import '../../../core/db/assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/mission/mission_pregnancy_facts.dart';
 import '../../../core/models/json_read.dart';
 import '../../../core/models/programme.dart';
+import '../../../core/sync/pregnancy_delivery_sync.dart';
 import '../immunisation/epi_schedule_engine.dart';
 
 /// Sex of the patient for pathway gating.
@@ -193,15 +196,21 @@ class PatientContextBuilder {
     required PatientProgrammesDao programmesDao,
     required PregnancySnapshotDao pregnancyDao,
     ImmunisationDao? immunisationDao,
+    AssessmentDao? assessmentDao,
+    LocalAssessmentDao? localAssessmentDao,
   })  : _patientDao = patientDao,
         _programmesDao = programmesDao,
         _pregnancyDao = pregnancyDao,
-        _immunisationDao = immunisationDao;
+        _immunisationDao = immunisationDao,
+        _assessmentDao = assessmentDao,
+        _localAssessmentDao = localAssessmentDao;
 
   final PatientDao _patientDao;
   final PatientProgrammesDao _programmesDao;
   final PregnancySnapshotDao _pregnancyDao;
   final ImmunisationDao? _immunisationDao;
+  final AssessmentDao? _assessmentDao;
+  final LocalAssessmentDao? _localAssessmentDao;
 
   /// Build patient context from local cache.
   ///
@@ -256,8 +265,12 @@ class PatientContextBuilder {
     // Extract delivery date: prefer locally-written snapshot value (set after
     // PREGNANCY_OUTCOME submission) over rawJson field — local write is immediate,
     // rawJson only updates after a full server re-sync.
-    final deliveryDateMillis = pregnancyRow?.deliveryDateMillis
+    var deliveryDateMillis = pregnancyRow?.deliveryDateMillis
         ?? _extractDeliveryDate(patient.rawJson);
+    deliveryDateMillis ??= await _deliveryDateFromAssessments(
+      patientId: patientId,
+      wirePatientId: patient.patientId,
+    );
     final hasDelivered = deliveryDateMillis != null;
 
     // Determine pregnancy status (three sources minus delivery gate).
@@ -440,16 +453,80 @@ class PatientContextBuilder {
   int? _extractDeliveryDate(String rawJson) {
     try {
       final json = jsonDecode(rawJson) as Map<String, dynamic>;
-      if (json['deliveryDate'] != null) {
-        final date = DateTime.tryParse(json['deliveryDate'] as String);
-        if (date != null) return date.millisecondsSinceEpoch;
-      }
-      if (json['dateOfDelivery'] != null) {
-        final date = DateTime.tryParse(json['dateOfDelivery'] as String);
-        if (date != null) return date.millisecondsSinceEpoch;
-      }
+      return PregnancyDeliverySync.deliveryDateMillisFromMap(json);
     } catch (_) {}
     return null;
+  }
+
+  /// When the snapshot projection is stale (sync reopened an episode), fall
+  /// back to the latest local/synced PO assessment carrying `dateOfDelivery`.
+  Future<int?> _deliveryDateFromAssessments({
+    required String patientId,
+    String? wirePatientId,
+  }) async {
+    int? bestDelivery;
+    int bestVisitMs = -1;
+
+    void consider({
+      required String? type,
+      required Map<String, dynamic> json,
+      required int visitMs,
+    }) {
+      if (!PregnancyDeliverySync.isPregnancyOutcomeType(type)) return;
+      final deliveryMs = PregnancyDeliverySync.deliveryDateMillisFromMap(json);
+      if (deliveryMs == null ||
+          !PregnancyDeliverySync.isWithinPostpartumWindow(deliveryMs)) {
+        return;
+      }
+      if (visitMs >= bestVisitMs) {
+        bestVisitMs = visitMs;
+        bestDelivery = deliveryMs;
+      }
+    }
+
+    final patientKeys = {
+      patientId,
+      if (wirePatientId != null && wirePatientId.isNotEmpty) wirePatientId,
+    };
+
+    if (_localAssessmentDao != null) {
+      for (final key in patientKeys) {
+        final drafts = await _localAssessmentDao.getByPatientId(key);
+        for (final draft in drafts) {
+          try {
+            final details =
+                jsonDecode(draft.assessmentDetails) as Map<String, dynamic>;
+            consider(
+              type: draft.assessmentType,
+              json: details,
+              visitMs: draft.createdAt?.millisecondsSinceEpoch ?? 0,
+            );
+          } on Object {
+            // skip malformed draft
+          }
+        }
+      }
+    }
+
+    if (_assessmentDao != null) {
+      final byPatient = await _assessmentDao.forMany(patientKeys.toList());
+      for (final rows in byPatient.values) {
+        for (final row in rows) {
+          consider(
+            type: row.kind,
+            json: jsonDecode(row.rawJson) as Map<String, dynamic>,
+            visitMs: row.occurredAt ?? 0,
+          );
+        }
+      }
+    }
+
+    if (bestDelivery != null) {
+      debugPrint(
+        '[PatientCtx] deliveryDate from PO assessment fallback=$bestDelivery',
+      );
+    }
+    return bestDelivery;
   }
 
   (int?, int?) _extractLastBp(String rawJson) {

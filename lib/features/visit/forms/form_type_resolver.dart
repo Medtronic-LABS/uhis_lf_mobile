@@ -4,8 +4,8 @@ abstract final class FormTypeResolver {
   FormTypeResolver._();
 
   /// Rules:
-  /// - Delivery visit → `pregnancyOutcome` first, then `pncMother`/`pncChild`,
-  ///   then any other selected programmes (ANC/PW excluded — cleared at triage).
+  /// - Delivery visit → `pregnancyOutcome` first; `pncMother` only when
+  ///   `pnc` is in the programme list (PO+PNC optional on same visit).
   /// - `pnc`  → `pncMother` (Spice mother PNC; childhood is a separate menu)
   /// - `pw`   → `pwProfile`
   /// - `imci` → `pncChild` (Spice Childhood Visit / Child Health card)
@@ -16,15 +16,14 @@ abstract final class FormTypeResolver {
   }) {
     final out = <String>[];
     if (isDelivery) {
-      // Birth documentation before mother/child PNC (Android parity).
-      out.addAll(['pregnancyOutcome', 'pncMother', 'pncChild']);
+      out.add('pregnancyOutcome');
     }
 
     for (final p in programmeNames) {
-      // Delivery visit already seeds pregnancy-outcome + PNC; ANC/PW must not
+      // Delivery visit already seeds pregnancy-outcome; ANC/PW must not
       // reopen after the triage gate cleared them.
       if (isDelivery &&
-          (p == 'pnc' || p == 'anc' || p == 'pw' || p == 'pregnancyOutcome')) {
+          (p == 'anc' || p == 'pw' || p == 'pregnancyOutcome')) {
         continue;
       }
       switch (p) {

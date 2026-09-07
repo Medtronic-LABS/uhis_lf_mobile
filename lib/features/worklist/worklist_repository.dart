@@ -74,16 +74,22 @@ class WorklistRepository {
         .whereType<String>()
         .toList(growable: false);
     final progMap = await _programmes.programmesForMany(ids);
-    final ancCounts = await _assessments.visitCountsByPatients(ids, _ancKinds);
-    final pncCounts = await _assessments.visitCountsByPatients(ids, _pncKinds);
+    final ancSynced = await _assessments.visitCountsByPatients(ids, _ancKinds);
+    final pncSynced = await _assessments.visitCountsByPatients(ids, _pncKinds);
+    final ancLocal =
+        await _localAssessments.visitCountsByPatients(ids, _ancKinds);
+    final pncLocal = await _localAssessments.visitCountsByPatients(
+      ids,
+      programme_reason.pncLocalVisitKinds,
+    );
     final out = <WorklistEntry>[];
     for (final r in rows) {
       final p = Patient.fromDb(r);
       out.add(_toEntry(
         p,
         progMap[p.id] ?? const <Programme>{},
-        ancVisitCount: ancCounts[p.id] ?? 0,
-        pncVisitCount: pncCounts[p.id] ?? 0,
+        ancVisitCount: (ancSynced[p.id] ?? 0) + (ancLocal[p.id] ?? 0),
+        pncVisitCount: (pncSynced[p.id] ?? 0) + (pncLocal[p.id] ?? 0),
       ));
     }
     _applySpecSort(out, selectedVillageId: selectedVillageId);
