@@ -72,6 +72,11 @@ class AuthRepository {
 
   static const _kTenantId = 'tenantId';
   static const _kUsername = 'lastUsername';
+  /// Username whose offline caseload lives in the local DB. Survives explicit
+  /// logout (UHIS parity — DB + lastSyncTime are kept) so the next login can
+  /// delta-sync instead of a full re-download. Cleared only when a different
+  /// user signs in and their login sync wipes the previous caseload.
+  static const _kLocalDataOwner = 'localDataOwner';
   static const _kBioEnabled = 'biometric_enabled';
   static const _kBioJSession = 'bio_jsessionid';
   static const _kBioAuthCookie = 'bio_authcookie';
@@ -120,15 +125,28 @@ class AuthRepository {
 
   Future<String?> lastUsername() => _storage.read(key: _kUsername);
 
-  /// True if [username] matches the last cached username on this device —
-  /// i.e. the same SK re-authenticating (e.g. after a forced session-expiry
-  /// sign-out), not a first-time setup or a different SK signing into a
-  /// shared device. Callers must check this BEFORE [login] runs, since
-  /// [login] overwrites the cached username as part of a successful attempt.
+  /// True if [username] owns the offline data already on this device —
+  /// i.e. the same SK re-authenticating after logout or session expiry, not a
+  /// first-time setup or a different SK signing into a shared device.
+  /// Checks [_kLocalDataOwner] (survives logout) rather than [_kUsername]
+  /// (cleared on logout so the login field stays editable for a new SK).
+  /// Callers must check this BEFORE [login] runs.
   Future<bool> isReturningUser(String username) async {
+    final owner = await _storage.read(key: _kLocalDataOwner);
+    if (owner != null) return owner == username;
+    // Legacy devices upgraded before localDataOwner existed: fall back to the
+    // cached login username (still present after session expiry, cleared on
+    // explicit logout).
     final previous = await lastUsername();
     return previous != null && previous == username;
   }
+
+  Future<void> _markLocalDataOwner(String username) =>
+      _storage.write(key: _kLocalDataOwner, value: username);
+
+  /// Username that owns the offline caseload on this device, if any.
+  Future<String?> localDataOwnerUsername() =>
+      _storage.read(key: _kLocalDataOwner);
 
   Future<String?> firstName() => _storage.read(key: _kFirstName);
 
@@ -226,6 +244,7 @@ class AuthRepository {
       throw AuthException(extractLoginErrorMessage(resp.data) ?? AuthStrings.invalidCredentials);
     }
     await _storage.write(key: _kUsername, value: username);
+    await _markLocalDataOwner(username);
     // Persist hash for offline password verification (Spice Android parity).
     await _storage.write(key: _kOfflinePasswordHash, value: hashedPwd);
     // Extract profile directly from login response — no separate profile call.
@@ -411,32 +430,24 @@ class AuthRepository {
     }
   }
 
-  Future<void> logout() async {
-    // Best-effort server-side logout; local re-entry is fully cleared so a
-    // logged-out device has no silent re-entry (biometric or PIN).
-    try {
-      await _api.dio.get(Endpoints.logout);
-    } on DioException catch (e) {
-      debugPrint('[auth] server logout failed (network): ${e.type}');
-    } catch (e) {
-      debugPrint('[auth] server logout failed: $e');
+  /// Ends the live server session. UHIS parity: keeps username, password hash,
+  /// PIN/biometric enrolment, profile IDs, hierarchy cache, local DB, and
+  /// sync cursor — only auth tokens / re-entry session are cleared.
+  ///
+  /// When [online] is false (UHIS offline sign-out), skips the server logout
+  /// call — same as Android `SecuredPreference.logout(false)`.
+  Future<void> logout({required bool online}) async {
+    if (online) {
+      try {
+        await _api.dio.get(Endpoints.logout);
+      } on DioException catch (e) {
+        debugPrint('[auth] server logout failed (network): ${e.type}');
+      } catch (e) {
+        debugPrint('[auth] server logout failed: $e');
+      }
     }
     await _api.clearSession();
-    await _storage.delete(key: _kTenantId);
-    await _storage.delete(key: _kOrganizationFhirId);
-    await _storage.delete(key: _kUserFhirId);
-    await clearUserHierarchyCache();
     await _clearReentrySession();
-    await _storage.delete(key: _kBioEnabled);
-    await _storage.delete(key: _kBioUsername);
-    await _storage.delete(key: _kOfflinePasswordHash);
-    // Only an explicit logout clears this — session expiry deliberately
-    // keeps it so the login screen can lock the field to the same user on
-    // relogin (see LoginScreen). Clearing it here is what lets a genuinely
-    // different SK sign into a shared device: the next login screen shows
-    // an empty, editable username field.
-    await _storage.delete(key: _kUsername);
-    await clearPin();
   }
 
   /// Clears the shared persisted re-entry session (cookies + token + tenant)

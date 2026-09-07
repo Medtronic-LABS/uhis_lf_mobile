@@ -1,8 +1,4 @@
-/// Unit tests for [AuthRepository.isReturningUser] — distinguishes a
-/// same-user re-login (e.g. after a forced session-expiry sign-out, where
-/// local offline data must be preserved) from a different user signing into
-/// a shared device (where the previous user's stale caseload should be
-/// cleared).
+/// UHIS parity: explicit logout ends the session but keeps offline credentials.
 library;
 
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
@@ -10,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:uhis_next/core/api/api_client.dart';
 import 'package:uhis_next/core/auth/auth_repository.dart';
+import 'package:uhis_next/core/config/app_config.dart';
 
 class _InMemorySecureStorage extends FlutterSecureStoragePlatform {
   final Map<String, String> _values = {};
@@ -58,36 +55,31 @@ class _InMemorySecureStorage extends FlutterSecureStoragePlatform {
 }
 
 void main() {
-  late _InMemorySecureStorage fakeStorage;
+  late _InMemorySecureStorage storage;
   late AuthRepository repo;
 
   setUp(() async {
-    fakeStorage = _InMemorySecureStorage();
-    FlutterSecureStoragePlatform.instance = fakeStorage;
+    storage = _InMemorySecureStorage();
+    FlutterSecureStoragePlatform.instance = storage;
     repo = AuthRepository(await ApiClient.create());
+    storage._values['lastUsername'] = 'sk_one';
+    storage._values['offline_pwd_hash'] = 'abc123';
+    storage._values['localDataOwner'] = 'sk_one';
+    storage._values['pin_enabled'] = 'true';
+    storage._values['pin_hash'] = 'hash';
+    storage._values['pin_length'] = '${AppConfig.pinLength}';
+    storage._values['tenantId'] = '1';
+    storage._values['firstName'] = 'Test';
   });
 
-  test('same username as the local data owner is a returning user',
-      () async {
-    fakeStorage._values['localDataOwner'] = 'sk_one';
+  test('logout(online: true) keeps username, password hash, and PIN', () async {
+    await repo.logout(online: false);
 
-    expect(await repo.isReturningUser('sk_one'), isTrue);
-  });
-
-  test('a different username is not a returning user', () async {
-    fakeStorage._values['localDataOwner'] = 'sk_one';
-
-    expect(await repo.isReturningUser('sk_two'), isFalse);
-  });
-
-  test('no local data owner falls back to lastUsername (legacy)', () async {
-    fakeStorage._values['lastUsername'] = 'sk_one';
-
-    expect(await repo.isReturningUser('sk_one'), isTrue);
-  });
-
-  test('no cached owner at all (fresh device) is not a returning user',
-      () async {
-    expect(await repo.isReturningUser('sk_one'), isFalse);
+    expect(await repo.lastUsername(), 'sk_one');
+    expect(await repo.localDataOwnerUsername(), 'sk_one');
+    expect(await repo.isPinSet(), isTrue);
+    expect(storage._values['offline_pwd_hash'], 'abc123');
+    expect(storage._values['tenantId'], '1');
+    expect(storage._values['firstName'], 'Test');
   });
 }

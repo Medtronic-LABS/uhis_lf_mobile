@@ -541,8 +541,7 @@ class UserHierarchyService extends ChangeNotifier {
     _error = null;
     _ready = false;
     _inflightFetch = null;
-    // Disk clear is awaited in AuthRepository.logout(); this is a safety net
-    // if invalidate is called without a full logout.
+    // Disk cache survives logout (UHIS parity); [invalidate] clears memory only.
     _auth.clearUserHierarchyCache().ignore();
     notifyListeners();
   }

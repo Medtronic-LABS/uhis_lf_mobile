@@ -154,6 +154,23 @@ abstract final class LoginStrings {
   static String get emailLabel => getTranslatedString('emailLabel', 'Email');
   static String get showPasswordTooltip => getTranslatedString('Login.showPasswordTooltip', 'Show password');
   static String get hidePasswordTooltip => getTranslatedString('Login.hidePasswordTooltip', 'Hide password');
+
+  /// Shown when a different SK tries to sign in while unsynced data from
+  /// the previous account is still on device.
+  static String get differentUserPendingTitle => getTranslatedString(
+        'Login.differentUserPendingTitle',
+        'Unsynced data on this device',
+      );
+  static String differentUserPendingBody(int count, String owner) =>
+      getTranslatedString(
+        'Login.differentUserPendingBody',
+        'This device has {count} unsynced record(s) from {owner}. '
+            'Sign in as {owner} and sync your data before another account '
+            'can use this device.',
+        params: {'count': '$count', 'owner': owner},
+      );
+  static String get differentUserPendingOk =>
+      getTranslatedString('Login.differentUserPendingOk', 'OK');
 }
 
 /// Lock / unlock screen + mid-session lock barrier.
@@ -306,7 +323,7 @@ abstract final class DashboardStrings {
   static String get signOutOfflineWarningTitle => getTranslatedString('signOutOfflineWarningTitle', 'You\'re offline');
   static String signOutOfflineWarningBody(int count) => getTranslatedString(
         'signOutOfflineWarningBody',
-        'You have {count} unsynced record(s). Signing out now will permanently delete them from this device. Continue?',
+        'You have {count} unsynced record(s). They will stay on this device and sync when you sign in online. Continue?',
         params: {'count': '$count'},
       );
   static String get signOutAnyway => getTranslatedString('signOutAnyway', 'Sign out anyway');

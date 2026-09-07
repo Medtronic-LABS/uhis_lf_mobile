@@ -103,11 +103,10 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       return;
     }
 
-    // Normal path: /sync reached directly from a returning-user login.
-    // A first-time login or a different user signing into a shared device has
-    // no local data worth protecting — wipe before pulling. A same-user
-    // re-login must NOT wipe: push pending offline work first (households,
-    // members, assessments, follow-ups) before the inbound cold pull.
+    // Normal path: /sync reached when first-time setup needs a full pull.
+    // UHIS parity: when sync_meta.lastSyncTime exists (same as
+    // SERVER_LAST_SYNCED), ResourceLoadingScreen skips download — local data
+    // is already on device and background sync handles deltas later.
     final auth = context.read<AuthState>();
     final authRepo = context.read<AuthRepository>();
 
@@ -131,6 +130,14 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
 
     SyncReport report;
     if (auth.sameUserRelogin) {
+      final hasSyncCursor = await sync.lastSyncedAt() != null;
+      if (hasSyncCursor) {
+        debugPrint(
+          '[Sync] UHIS parity — sync cursor present, skipping login pull',
+        );
+        _finishSyncAndGoHome();
+        return;
+      }
       try {
         final pushResult = await context
             .read<OfflinePushService>()
@@ -139,7 +146,6 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
           '[Sync] login push before coldSync: success=${pushResult.success} '
           'hadWork=${pushResult.hadWork} msg=${pushResult.message}',
         );
-        // Push explicitly rejected for missing auth (race) — stop here.
         if (!pushResult.success &&
             (pushResult.message ?? '')
                 .toLowerCase()
@@ -157,12 +163,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       } catch (e) {
         debugPrint('[Sync] login push before coldSync failed: $e');
       }
-      // Push before pull is still required: `since` is read from SyncMetaDao
-      // at the top of _runSync and syncPendingAssessments doesn't touch it,
-      // so ordering here is unaffected by the fullSync→delta switch below.
-      report = await sync.reloginSync();
+      report = await sync.coldSync(wipeBeforeSync: false);
     } else {
-      report = await sync.coldSync(wipeBeforeSync: true);
+      report = await sync.coldSync(wipeBeforeSync: false);
     }
 
     if (!mounted) return;
