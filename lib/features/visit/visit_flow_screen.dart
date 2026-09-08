@@ -2702,6 +2702,20 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   bool _showPwSummaryFor(NabaResponse naba) =>
       _isPwVisit && _pwSummaryBody(naba).isNotEmpty;
 
+  Programme _rmnchReferralProgramme() {
+    if (widget.confirmedProgrammes.contains(Programme.anc)) {
+      return Programme.anc;
+    }
+    if (widget.confirmedProgrammes.contains(Programme.pnc)) {
+      return Programme.pnc;
+    }
+    if (widget.primaryProgramme == Programme.anc ||
+        widget.primaryProgramme == Programme.pnc) {
+      return widget.primaryProgramme;
+    }
+    return Programme.anc;
+  }
+
   /// Offline Step 3 referral-card body from Step 2 `referredReasons`.
   ///
   /// Per programme (when clinically referred):
@@ -2769,6 +2783,11 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         ncdSiteId = def?.fhirId ?? ncdSites.firstOrNull?.fhirId;
       }
     }
+    final showRmnchPicker = showRmnchFacility && rmnchFacilityId != null;
+    final showNcdPicker =
+        showNcdFacility && ncdSites.isNotEmpty && ncdSiteId != null;
+    final disambiguateReferralLabels =
+        (showRmnchPicker ? 1 : 0) + (showNcdPicker ? 1 : 0) > 1;
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 40),
@@ -2848,8 +2867,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           }(),
 
           // Spice AssessmentRMNCHSummaryFragment: facility after follow-up date.
-          if (showRmnchFacility && rmnchFacilityId != null) ...[
+          if (showRmnchPicker) ...[
             _RmnchReferralFacilityPicker(
+              label: VisitFlowStrings.referralFacilityLabelFor(
+                programme: _rmnchReferralProgramme(),
+                disambiguate: disambiguateReferralLabels,
+              ),
               selectedId: rmnchFacilityId,
               onChanged: (id) =>
                   setState(() => _selectedRmnchFacilityId = id),
@@ -2858,10 +2881,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           ],
 
           // Android BDNCDAssessmentSummaryFragment PHU site spinner.
-          if (showNcdFacility &&
-              ncdSites.isNotEmpty &&
-              ncdSiteId != null) ...[
+          if (showNcdPicker) ...[
             _NcdReferralFacilityPicker(
+              label: VisitFlowStrings.referralFacilityLabelFor(
+                programme: Programme.ncd,
+                disambiguate: disambiguateReferralLabels,
+              ),
               facilities: ncdSites,
               selectedFhirId: ncdSiteId,
               onChanged: (id) => setState(() => _selectedNcdSiteId = id),
@@ -2972,11 +2997,13 @@ class _PwProfileSummaryBlock extends StatelessWidget {
 /// Selection fhirId → `summary.referredSiteId`.
 class _NcdReferralFacilityPicker extends StatelessWidget {
   const _NcdReferralFacilityPicker({
+    required this.label,
     required this.facilities,
     required this.selectedFhirId,
     required this.onChanged,
   });
 
+  final String label;
   final List<HealthFacilityRow> facilities;
   final String selectedFhirId;
   final ValueChanged<String> onChanged;
@@ -2991,7 +3018,7 @@ class _NcdReferralFacilityPicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          EpiStrings.referralFacilityLabel,
+          label,
           style: theme.textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
@@ -3048,10 +3075,12 @@ class _NcdReferralFacilityPicker extends StatelessWidget {
 /// `summary.referralFacilityType` on Accept (Spice Done remap).
 class _RmnchReferralFacilityPicker extends StatelessWidget {
   const _RmnchReferralFacilityPicker({
+    required this.label,
     required this.selectedId,
     required this.onChanged,
   });
 
+  final String label;
   final String selectedId;
   final ValueChanged<String> onChanged;
 
@@ -3076,7 +3105,7 @@ class _RmnchReferralFacilityPicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          EpiStrings.referralFacilityLabel,
+          label,
           style: theme.textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,

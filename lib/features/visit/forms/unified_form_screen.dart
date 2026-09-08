@@ -501,7 +501,17 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         }
 
         String? lastFormType;
+        var vitalsDividerShown = false;
         for (final annotatedSection in annotated) {
+          if (annotatedSection.group == SectionGroup.vitals &&
+              !vitalsDividerShown) {
+            vitalsDividerShown = true;
+            items.add(_ProgrammeDivider(
+              label: UnifiedFormStrings.programmeBadgeLabel('commonVitals') ??
+                  'Vitals',
+              formType: 'commonVitals',
+            ));
+          }
           final ft = annotatedSection.section.formType;
           final isNew = ft.isNotEmpty &&
               annotatedSection.group != SectionGroup.vitals &&
