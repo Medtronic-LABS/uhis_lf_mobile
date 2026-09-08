@@ -13,27 +13,27 @@ import 'package:record/record.dart';
 ///
 /// ## The [rawMicCapture] switch
 ///
-/// * `false` (default) — each path keeps the source it shipped with:
-///   [AndroidAudioSource.defaultSource] for batch capture,
-///   [AndroidAudioSource.mic] for the realtime stream. `defaultSource`
-///   routes the signal through the handset's acoustic echo cancellation
-///   (AEC), noise suppression and automatic gain control chain.
-/// * `true` — both paths use [AndroidAudioSource.voiceRecognition], the
-///   source Android documents as "tuned for voice recognition": supported
-///   on every device since API 7, and not subject to the AEC that
-///   `defaultSource` and `voiceCommunication` apply, while still keeping
-///   the gain control that helps a distant or quiet speaker register.
-///
-/// Turn it on when the mic input is **audio being played back through a
-/// loudspeaker** — a recorded test clip played at the handset, or a second
-/// phone on speaker. AEC exists precisely to subtract speaker output from
-/// mic input, so with the processed chain such a clip is cancelled down to
-/// near-silence and the transcript comes back empty with no error. Some
-/// emulator audio HALs also return constantly-saturated samples through
-/// the processed chain.
-///
-/// Default is off: real field use is a person speaking directly at the
-/// handset, where the processed chain is the better choice.
+/// * `false` (default, field use) — each path uses the best source for a
+///   person speaking directly at the handset:
+///   [AndroidAudioSource.defaultSource] (AEC + NS + AGC) for batch capture,
+///   [AndroidAudioSource.voiceRecognition] (AGC, no AEC) for the realtime
+///   stream. `voiceRecognition` is Android's documented speech-recognition
+///   source (API 7+) and normalises gain across OEM hardware differences —
+///   some handsets (observed: Motorola) ship such low native mic gain on
+///   [AndroidAudioSource.mic] that captured peaks sit around 10% of full
+///   scale, too quiet for server-side VAD to ever trigger, so realtime ASR
+///   silently produces zero transcripts. `voiceRecognition`'s AGC brings
+///   those handsets back in range without imposing AEC — AEC is tuned for
+///   phone-call echo, not voice-form-fill, and would suppress a distant
+///   speaker.
+/// * `true` (emulator / diagnostic mode) — batch uses the truly raw
+///   [AndroidAudioSource.mic] source (bypasses all on-device processing,
+///   including AGC); realtime uses [AndroidAudioSource.defaultSource].
+///   Reach for this when the emulator's audio HAL returns
+///   constantly-saturated samples through the normal chain (every sample
+///   pinned at the Int16 min/max), or when you need unprocessed PCM for
+///   diagnostic purposes. On real devices, leaving this off gives the more
+///   reliable recognition across OEM hardware variants.
 abstract final class ScribeRecordConfig {
   ScribeRecordConfig._();
 
@@ -57,7 +57,7 @@ abstract final class ScribeRecordConfig {
         bitRate: batchBitRate,
         androidConfig: AndroidRecordConfig(
           audioSource: rawMicCapture
-              ? AndroidAudioSource.voiceRecognition
+              ? AndroidAudioSource.mic
               : AndroidAudioSource.defaultSource,
           manageBluetooth: _manageBluetooth,
         ),
@@ -71,13 +71,17 @@ abstract final class ScribeRecordConfig {
         sampleRate: sampleRate,
         numChannels: numChannels,
         androidConfig: AndroidRecordConfig(
+          // voiceRecognition: Android's speech-recognition source (API 7+).
+          // AGC enabled, AEC disabled — normalises gain across OEM hardware
+          // (fixes low-gain Motorola-class mics) without the phone-call echo
+          // cancellation that would suppress a distant speaker.
+          // rawMicCapture=true uses defaultSource (inputSource 0) as the
+          // emulator escape hatch — emulator audio HALs that saturate with
+          // voiceRecognition/mic (inputSource 6/1) typically work fine with
+          // DEFAULT, which is what other Android apps use.
           audioSource: rawMicCapture
-              ? AndroidAudioSource.voiceRecognition
-              // defaultSource routes through Android's AGC/NS/AEC processing
-              // chain, which has been observed to return constantly-saturated
-              // garbage (every sample pinned at the Int16 minimum) on some
-              // emulator audio HALs. Raw mic source skips that chain.
-              : AndroidAudioSource.mic,
+              ? AndroidAudioSource.defaultSource
+              : AndroidAudioSource.voiceRecognition,
           manageBluetooth: _manageBluetooth,
         ),
       );
