@@ -3515,6 +3515,10 @@
     "bn": "ফলো-আপ",
     "en": "Follow-up"
   },
+  "VisitFlow.referralFacilityForProgramme": {
+    "bn": "{programme} রেফারেল স্বাস্থ্যকেন্দ্র",
+    "en": "{programme} Referral Facility"
+  },
   "VisitFlow.followUpTimelineFourWeeks": {
     "bn": "৪ সপ্তাহ পর",
     "en": "In 4 weeks"

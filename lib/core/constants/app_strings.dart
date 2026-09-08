@@ -3785,6 +3785,22 @@ abstract final class VisitFlowStrings {
   static String get followUpLabel => getTranslatedString('VisitFlow.followUpLabel', 'Follow-up');
   static String get followUpAutoScheduledNote => getTranslatedString('VisitFlow.followUpAutoScheduledNote', 'Auto-scheduled · already saved');
 
+  /// Step 3 referral facility dropdown label. Prefixes the programme name
+  /// when multiple facility pickers are shown on the same summary screen.
+  static String referralFacilityLabelFor({
+    Programme? programme,
+    required bool disambiguate,
+  }) {
+    if (!disambiguate || programme == null) {
+      return EpiStrings.referralFacilityLabel;
+    }
+    return getTranslatedString(
+      'VisitFlow.referralFacilityForProgramme',
+      '{programme} Referral Facility',
+      params: {'programme': ProgrammeLabels.of(programme)},
+    );
+  }
+
   // ── Referral banner (Step 3) — raw API/legacy reason code → display label.
   // Map keys themselves (Spice ReferredReason / ANC LABEL_* / camelCase) are
   // never translated — only the mapped display value is user-facing.
