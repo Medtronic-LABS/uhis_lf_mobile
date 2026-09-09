@@ -446,30 +446,44 @@ class MemberDao {
   }
 
   /// Stamp FHIR id after offline-sync/status Success.
+  ///
+  /// Also mirrors the server id into [AppDatabase.tablePatients].patient_id
+  /// (keyed by the same local member PK as [AppDatabase.tablePatients].id).
+  /// Enrollment creates that row without patient_id; until this runs, only
+  /// members.fhir_id is populated after the status poll.
   Future<void> updateFhirId({
     required String localId,
     required String? fhirId,
     required String syncStatus,
   }) async {
-    await _db.db.rawUpdate(
-      '''
-      UPDATE ${AppDatabase.tableMembers}
-      SET fhir_id = ?,
-          sync_status = CASE
-            WHEN sync_status IN ('InProgress', 'NetworkError', 'NotSynced', 'Pending')
-            THEN ?
-            ELSE sync_status
-          END,
-          updated_at = ?
-      WHERE id = ?
-      ''',
-      [
-        fhirId,
-        syncStatus,
-        DateTime.now().millisecondsSinceEpoch,
-        int.tryParse(localId) ?? localId,
-      ],
-    );
+    final pk = int.tryParse(localId) ?? localId;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await _db.db.transaction((tx) async {
+      await tx.rawUpdate(
+        '''
+        UPDATE ${AppDatabase.tableMembers}
+        SET fhir_id = ?,
+            sync_status = CASE
+              WHEN sync_status IN ('InProgress', 'NetworkError', 'NotSynced', 'Pending')
+              THEN ?
+              ELSE sync_status
+            END,
+            updated_at = ?
+        WHERE id = ?
+        ''',
+        [fhirId, syncStatus, nowMs, pk],
+      );
+      if (fhirId != null && fhirId.isNotEmpty) {
+        await tx.rawUpdate(
+          '''
+          UPDATE ${AppDatabase.tablePatients}
+          SET patient_id = ?, updated_at = ?
+          WHERE id = ?
+          ''',
+          [fhirId, nowMs, pk],
+        );
+      }
+    });
   }
 
   /// Points `reference_id` (what the push echoes) at the local PK after insert.

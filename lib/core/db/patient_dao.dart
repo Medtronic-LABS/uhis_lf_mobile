@@ -70,6 +70,26 @@ class PatientDao {
     await batch.commit(noResult: true);
   }
 
+  /// Copies [members.fhir_id] into [patients.patient_id] when the patient row
+  /// was created locally before the server id was known (enrollment path).
+  Future<int> syncServerPatientIdsFromMembers() async {
+    return _db.db.rawUpdate('''
+      UPDATE ${AppDatabase.tablePatients}
+      SET patient_id = (
+        SELECT m.fhir_id FROM ${AppDatabase.tableMembers} m
+        WHERE m.id = ${AppDatabase.tablePatients}.id
+          AND m.fhir_id IS NOT NULL AND m.fhir_id != ''
+      ),
+      updated_at = ?
+      WHERE (patient_id IS NULL OR patient_id = '')
+        AND EXISTS (
+          SELECT 1 FROM ${AppDatabase.tableMembers} m
+          WHERE m.id = ${AppDatabase.tablePatients}.id
+            AND m.fhir_id IS NOT NULL AND m.fhir_id != ''
+        )
+      ''', [DateTime.now().millisecondsSinceEpoch]);
+  }
+
   /// Update only the risk + scheduling fields on an existing patient row.
   /// Used by the worklist recompute pass — leaves the demographic columns
   /// untouched so they aren't accidentally wiped if a stale Patient instance
