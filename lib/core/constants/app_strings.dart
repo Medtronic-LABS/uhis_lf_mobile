@@ -4088,6 +4088,7 @@ abstract final class NabaStrings {
   static String get callDoctorNow => getTranslatedString('callDoctorNow', 'Call a doctor now');
   static String get callDoctorNowBn => getTranslatedString('Naba.callDoctorNowBn', 'ডাক্তারকে ফোন করন');
   static String get callDoctorOfflineHint => getTranslatedString('callDoctorOfflineHint', 'Available when online');
+  static String get callDoctorUnavailableHint => getTranslatedString('callDoctorUnavailableHint', 'Teleconsult is not available in this region yet');
 
   static String get fallbackNotice => getTranslatedString('fallbackNotice', 'AI service was unavailable. Care plan is based on clinical guidelines. Review and adjust based on your assessment.');
 }
@@ -4105,17 +4106,66 @@ abstract final class TeleconsultStrings {
   static String get connectingHint => getTranslatedString('Teleconsult.connectingHint', 'Please wait while we set up your consultation.');
 
   // ── Connected (call) state ─────────────────────────────────────────────────
+  static String get callTitle => getTranslatedString('Teleconsult.callTitle', 'Doctor video call');
   static String get statusConnected => getTranslatedString('Teleconsult.statusConnected', 'Connected · Encrypted');
   static String get viaSukhee => getTranslatedString('Teleconsult.viaSukhee', 'via Sukhee · Secure call');
+  static String viaSukheeWithPatient(String patientLabel) => getTranslatedString(
+        'Teleconsult.viaSukheeWithPatient',
+        'via Sukhee · {patientLabel}',
+        params: {'patientLabel': patientLabel},
+      );
+  static String weeksPregnantSuffix(int weeks) => getTranslatedString(
+        'Teleconsult.weeksPregnantSuffix',
+        ' · {weeks} weeks pregnant',
+        params: {'weeks': '$weeks'},
+      );
   static String get leaveCallTitle => getTranslatedString('Teleconsult.leaveCallTitle', 'Leave this call?');
   static String get leaveCallBody => getTranslatedString('Teleconsult.leaveCallBody', "The consultation hasn't ended yet.");
   static String get leaveCallConfirm => getTranslatedString('Teleconsult.leaveCallConfirm', 'Leave call');
   static String get cancel => getTranslatedString('Teleconsult.cancel', 'Cancel');
+  static String get liveLabel => getTranslatedString('Teleconsult.liveLabel', 'LIVE');
+  static String get expandTooltip => getTranslatedString('Teleconsult.expandTooltip', 'Expand to fullscreen');
+  static String get collapseTooltip => getTranslatedString('Teleconsult.collapseTooltip', 'Exit fullscreen');
+
+  // ── Doctor identity (real Shukhee data, once assigned) ──────────────────────
+  static String get connectingToDoctor => getTranslatedString('Teleconsult.connectingToDoctor', 'Connecting you to a doctor…');
+  static String doctorNameOnly(String name) => getTranslatedString(
+        'Teleconsult.doctorNameOnly',
+        'Dr. {name}',
+        params: {'name': name},
+      );
+  static String doctorNameSpecialityFacility(String name, String speciality, String facility) =>
+      getTranslatedString(
+        'Teleconsult.doctorNameSpecialityFacility',
+        'Dr. {name} · {speciality} · {facility}',
+        params: {'name': name, 'speciality': speciality, 'facility': facility},
+      );
+  static String doctorNameSpeciality(String name, String speciality) => getTranslatedString(
+        'Teleconsult.doctorNameSpeciality',
+        'Dr. {name} · {speciality}',
+        params: {'name': name, 'speciality': speciality},
+      );
+
+  // ── Record-shared banner ─────────────────────────────────────────────────────
+  static String get dataSharedTitle => getTranslatedString('Teleconsult.dataSharedTitle', 'Apon Sushashthya shared the full record with Sukhee');
+  static String get dataSharedGenericBody => getTranslatedString('Teleconsult.dataSharedGenericBody', 'Your visit reason was shared with the doctor before the call.');
+  static String get thisVisitLabel => getTranslatedString('Teleconsult.thisVisitLabel', 'This visit');
+  static String ancRecordSharedBody(String visitLabel, String summary) => getTranslatedString(
+        'Teleconsult.ancRecordSharedBody',
+        '{visitLabel} notes · {summary} — doctor saw it before the call',
+        params: {'visitLabel': visitLabel, 'summary': summary},
+      );
 
   // ── Wrap-up (completed) state ───────────────────────────────────────────────
   static String get prescriptionTitle => getTranslatedString('Teleconsult.prescriptionTitle', 'Prescription — from Sukhee');
   static String get viewPrescription => getTranslatedString('Teleconsult.viewPrescription', 'View Prescription');
   static String get viewInvoice => getTranslatedString('Teleconsult.viewInvoice', 'View Invoice');
+  static String get viewFullDocument => getTranslatedString('Teleconsult.viewFullDocument', 'View full document');
+  static String get loadingPreview => getTranslatedString('Teleconsult.loadingPreview', 'Loading preview…');
+  static String get previewUnavailable => getTranslatedString('Teleconsult.previewUnavailable', 'Preview unavailable');
+  static String get documentOpenFailed => getTranslatedString('Teleconsult.documentOpenFailed', 'Could not open the document. Please try again.');
+  static String get sendCounsellingToFamily => getTranslatedString('Teleconsult.sendCounsellingToFamily', 'Send counselling to family');
+  static String get sendCounsellingToFamilyBn => getTranslatedString('Teleconsult.sendCounsellingToFamilyBn', 'পরিবারকে পরামর্শ পাঠান');
 
   // ── Not-completed state ─────────────────────────────────────────────────────
   static String get notCompletedTitle => getTranslatedString('Teleconsult.notCompletedTitle', 'Doctor not available');

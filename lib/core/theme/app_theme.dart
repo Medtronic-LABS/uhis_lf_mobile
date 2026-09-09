@@ -156,11 +156,11 @@ abstract final class AppColors {
 
   // ─── Programme screen header colours (v10) ─────────────────
   // Dark background for programme-specific visit screen headers.
-  static const Color ancHeader    = Color(0xFF831843); // s11/s13/s14/s18 ANC visit headers
+  static const Color ancHeader    = Color(0xFF831843); // s11/s13/s14/s17/s18 ANC visit + teleconsult headers
   static const Color ncdHeader    = Color(0xFF854F0B); // s10/s12/s15 NCD visit headers
   static const Color imciHeader   = Color(0xFF991B1B); // s4/s5/s16 IMCI/Child visit headers
   static const Color tbHeader     = Color(0xFF085041); // TB visit completion headers
-  static const Color sukheeHeader = Color(0xFF0F766E); // s17 Sukhee teleconsult header
+  static const Color sukheeHeader = Color(0xFF0F766E); // s6 generic (non-ANC) Sukhee teleconsult header
   static const Color waHeader     = Color(0xFF064E3B); // s7/s18 WhatsApp counselling header
 
   // ─── SLA status text ───────────────────────────────────────
@@ -279,6 +279,17 @@ abstract final class AppColors {
   static const Color partnerSukheeCardEndDark     = partnerSukheeCardEnd;
   static const Color partnerSukheeCardShimmer     = Color(0xFF1A3F6F);
   static const Color partnerSukheeCardShimmerDark = partnerSukheeCardShimmer;
+
+  // ─── v16 addition — ANC teleconsult (s17: maroon-header variant) ─────
+  // The video-call card's own dark teal gradient (distinct from the navy
+  // partnerSukheeCard* tokens above, which belong to the older generic s6
+  // Sukhee screen) and the "record shared with Sukhee" banner.
+  static const Color ancTeleVideoStart   = Color(0xFF134E4A);
+  static const Color ancTeleVideoEnd     = Color(0xFF0F2C29);
+  static const Color ancTeleBannerBg     = Color(0xFFF0FDFA);
+  static const Color ancTeleBannerBorder = Color(0xFF99F6E4);
+  static const Color ancTeleBannerTitle  = Color(0xFF134E4A);
+  static const Color ancTeleBannerBody   = Color(0xFF0F766E);
 
   // ─── v11 addition — Field-kind legend (form_gallery_screen.dart) ──
   // Distinct hues for the dev-only FieldKind catalog legend; #047857
@@ -1546,6 +1557,12 @@ class PartnerColors extends ThemeExtension<PartnerColors> {
     required this.sukheeCardShimmer,
     required this.waHeader,
     required this.sukheeHeader,
+    required this.ancTeleVideoStart,
+    required this.ancTeleVideoEnd,
+    required this.ancTeleBannerBg,
+    required this.ancTeleBannerBorder,
+    required this.ancTeleBannerTitle,
+    required this.ancTeleBannerBody,
   });
 
   final Color whatsapp;
@@ -1559,6 +1576,12 @@ class PartnerColors extends ThemeExtension<PartnerColors> {
   final Color sukheeCardShimmer;
   final Color waHeader;
   final Color sukheeHeader;
+  final Color ancTeleVideoStart;
+  final Color ancTeleVideoEnd;
+  final Color ancTeleBannerBg;
+  final Color ancTeleBannerBorder;
+  final Color ancTeleBannerTitle;
+  final Color ancTeleBannerBody;
 
   static const PartnerColors light = PartnerColors(
     whatsapp: AppColors.whatsapp,
@@ -1572,6 +1595,12 @@ class PartnerColors extends ThemeExtension<PartnerColors> {
     sukheeCardShimmer: AppColors.partnerSukheeCardShimmer,
     waHeader: AppColors.waHeader,
     sukheeHeader: AppColors.sukheeHeader,
+    ancTeleVideoStart: AppColors.ancTeleVideoStart,
+    ancTeleVideoEnd: AppColors.ancTeleVideoEnd,
+    ancTeleBannerBg: AppColors.ancTeleBannerBg,
+    ancTeleBannerBorder: AppColors.ancTeleBannerBorder,
+    ancTeleBannerTitle: AppColors.ancTeleBannerTitle,
+    ancTeleBannerBody: AppColors.ancTeleBannerBody,
   );
 
   // Partner chrome is a fixed dark-card treatment in both themes today —
@@ -1585,6 +1614,9 @@ class PartnerColors extends ThemeExtension<PartnerColors> {
     Color? sukheeStart, Color? sukheeEnd, Color? sukheeBar,
     Color? sukheeCardStart, Color? sukheeCardEnd, Color? sukheeCardShimmer,
     Color? waHeader, Color? sukheeHeader,
+    Color? ancTeleVideoStart, Color? ancTeleVideoEnd,
+    Color? ancTeleBannerBg, Color? ancTeleBannerBorder,
+    Color? ancTeleBannerTitle, Color? ancTeleBannerBody,
   }) => PartnerColors(
     whatsapp: whatsapp ?? this.whatsapp,
     whatsappSurface: whatsappSurface ?? this.whatsappSurface,
@@ -1597,6 +1629,12 @@ class PartnerColors extends ThemeExtension<PartnerColors> {
     sukheeCardShimmer: sukheeCardShimmer ?? this.sukheeCardShimmer,
     waHeader: waHeader ?? this.waHeader,
     sukheeHeader: sukheeHeader ?? this.sukheeHeader,
+    ancTeleVideoStart: ancTeleVideoStart ?? this.ancTeleVideoStart,
+    ancTeleVideoEnd: ancTeleVideoEnd ?? this.ancTeleVideoEnd,
+    ancTeleBannerBg: ancTeleBannerBg ?? this.ancTeleBannerBg,
+    ancTeleBannerBorder: ancTeleBannerBorder ?? this.ancTeleBannerBorder,
+    ancTeleBannerTitle: ancTeleBannerTitle ?? this.ancTeleBannerTitle,
+    ancTeleBannerBody: ancTeleBannerBody ?? this.ancTeleBannerBody,
   );
 
   @override
@@ -1614,6 +1652,12 @@ class PartnerColors extends ThemeExtension<PartnerColors> {
       sukheeCardShimmer: Color.lerp(sukheeCardShimmer, other.sukheeCardShimmer, t)!,
       waHeader: Color.lerp(waHeader, other.waHeader, t)!,
       sukheeHeader: Color.lerp(sukheeHeader, other.sukheeHeader, t)!,
+      ancTeleVideoStart: Color.lerp(ancTeleVideoStart, other.ancTeleVideoStart, t)!,
+      ancTeleVideoEnd: Color.lerp(ancTeleVideoEnd, other.ancTeleVideoEnd, t)!,
+      ancTeleBannerBg: Color.lerp(ancTeleBannerBg, other.ancTeleBannerBg, t)!,
+      ancTeleBannerBorder: Color.lerp(ancTeleBannerBorder, other.ancTeleBannerBorder, t)!,
+      ancTeleBannerTitle: Color.lerp(ancTeleBannerTitle, other.ancTeleBannerTitle, t)!,
+      ancTeleBannerBody: Color.lerp(ancTeleBannerBody, other.ancTeleBannerBody, t)!,
     );
   }
 }

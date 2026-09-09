@@ -489,6 +489,10 @@ GoRouter buildRouter(AuthState auth) {
               reason: extra['reason'] as String?,
               patientDob: extra['patientDob'] as String?,
               patientGender: extra['patientGender'] as String?,
+              visitNumber: extra['visitNumber'] as int?,
+              gestationalWeeks: extra['gestationalWeeks'] as int?,
+              clinicalContextSummary: extra['clinicalContextSummary'] as String?,
+              whatsappMessage: extra['whatsappMessage'] as String?,
             ),
           );
         },

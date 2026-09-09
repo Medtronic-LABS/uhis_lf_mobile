@@ -375,4 +375,16 @@ class AppConfig {
 
   static int get teleconsultPollDelaySeconds =>
       int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_DELAY_SECONDS')) ?? 4;
+
+  /// Fallback contact number offered (pre-filled, not silently applied) when
+  /// a patient/household has no phone number on file. The SK facilitates the
+  /// teleconsult call on the patient's behalf -- Shukhee's booking API still
+  /// requires *some* valid contact number on the request even though the SK's
+  /// own device is what actually joins the call, so this exists to unblock
+  /// that case rather than dead-end the flow. Empty by default outside dev --
+  /// blank means the phone-prompt sheet shows no pre-fill, same as before.
+  static const String teleconsultDefaultPhone = String.fromEnvironment(
+    'TELECONSULT_DEFAULT_PHONE',
+    defaultValue: '',
+  );
 }
