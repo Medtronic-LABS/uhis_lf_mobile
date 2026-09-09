@@ -13,6 +13,9 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/telemetry/share_telemetry.dart';
+import '../../core/telemetry/telemetry_service.dart';
+import '../../core/telemetry/telemetry_event.dart';
 import '../../core/theme/app_theme.dart';
 
 /// WhatsApp brand green header — mimics the real WhatsApp app chrome,
@@ -53,6 +56,21 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
   bool get _hasMessage =>
       widget.whatsappMessage != null && widget.whatsappMessage!.isNotEmpty;
 
+  /// Records a share tap through the one shared helper — see
+  /// [recordShareTap] for why this is not a per-screen implementation.
+  void _recordShare(
+    TelemetryService? telemetry,
+    String channel, {
+    required bool launched,
+  }) =>
+      recordShareTap(
+        telemetry,
+        channel: channel,
+        surface: TelemetryShareSurface.counselling,
+        hasMessage: _hasMessage,
+        launched: launched,
+      );
+
   Future<void> _copy() async {
     if (!_hasMessage) return;
     await Clipboard.setData(ClipboardData(text: widget.whatsappMessage!));
@@ -63,7 +81,12 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
   }
 
   Future<void> _sendWhatsApp() async {
-    if (!_hasMessage) return;
+    // Resolved before the awaits below — see share_telemetry.dart.
+    final telemetry = shareTelemetryOf(context);
+    if (!_hasMessage) {
+      _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: false);
+      return;
+    }
     final encoded = Uri.encodeComponent(widget.whatsappMessage!);
     final rawPhone =
         widget.patientPhone?.replaceAll(RegExp(r'[^\d]'), '') ?? '';
@@ -72,6 +95,7 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
         Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
     if (await canLaunchUrl(nativeUri)) {
       await launchUrl(nativeUri);
+      _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: true);
       return;
     }
     // Fallback: wa.me universal link.
@@ -79,8 +103,10 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
         'https://wa.me/${rawPhone.isNotEmpty ? rawPhone : ''}?text=$encoded');
     if (await canLaunchUrl(webUri)) {
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: true);
       return;
     }
+    _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -90,11 +116,16 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
   }
 
   Future<void> _sendSms() async {
-    if (!_hasMessage) return;
+    final telemetry = shareTelemetryOf(context);
+    if (!_hasMessage) {
+      _recordShare(telemetry, TelemetryShareChannel.sms, launched: false);
+      return;
+    }
     final encoded = Uri.encodeComponent(widget.whatsappMessage!);
     final phone = widget.patientPhone ?? '';
     final uri = Uri.parse('sms:$phone?body=$encoded');
     if (!await canLaunchUrl(uri)) {
+      _recordShare(telemetry, TelemetryShareChannel.sms, launched: false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(CounsellingStrings.smsNotAvailable)),
@@ -103,6 +134,7 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
       return;
     }
     await launchUrl(uri);
+    _recordShare(telemetry, TelemetryShareChannel.sms, launched: true);
   }
 
   @override

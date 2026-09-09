@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 41;
+  static const int schemaVersion = 42;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -57,6 +57,7 @@ class AppDatabase {
   static const String tableTreatmentDetails = 'treatment_details';
   static const String tableRxBuddyCheckins = 'rx_buddy_checkins';
   static const String tableHealthFacilities = 'health_facilities';
+  static const String tableTelemetryEvents = 'telemetry_events';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -737,6 +738,33 @@ class AppDatabase {
     await db.execute(
         'CREATE INDEX idx_health_facilities_default '
         'ON $tableHealthFacilities(is_default DESC)');
+
+    // v42 — AI Scribe / counselling telemetry. Deliberately absent from
+    // [_allTables]: see the comment on that list, and the "why this data is
+    // not patient-linked" doc on lib/core/telemetry/telemetry_event.dart.
+    await db.execute('''
+      CREATE TABLE $tableTelemetryEvents (
+        id TEXT PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        occurred_at INTEGER NOT NULL,
+        visit_uuid TEXT,
+        sk_user_id TEXT,
+        app_version TEXT NOT NULL DEFAULT '',
+        app_build INTEGER NOT NULL DEFAULT 0,
+        payload_version INTEGER NOT NULL DEFAULT 1,
+        payload TEXT NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_telemetry_occurred '
+        'ON $tableTelemetryEvents(occurred_at DESC)');
+    await db.execute(
+        'CREATE INDEX idx_telemetry_upload '
+        'ON $tableTelemetryEvents(upload_status)');
+    await db.execute(
+        'CREATE INDEX idx_telemetry_type '
+        'ON $tableTelemetryEvents(event_type)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -1856,10 +1884,49 @@ class AppDatabase {
         'from $tablePregnancySnapshot',
       );
     }
+    if (from < 42) {
+      // v42 — AI Scribe / counselling telemetry. Additive and non-PHI; see
+      // lib/core/telemetry/telemetry_event.dart for why these rows carry no
+      // patient/member/encounter id and are excluded from [_allTables].
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableTelemetryEvents (
+          id TEXT PRIMARY KEY,
+          event_type TEXT NOT NULL,
+          occurred_at INTEGER NOT NULL,
+          visit_uuid TEXT,
+          sk_user_id TEXT,
+          app_version TEXT NOT NULL DEFAULT '',
+          app_build INTEGER NOT NULL DEFAULT 0,
+          payload_version INTEGER NOT NULL DEFAULT 1,
+          payload TEXT NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_telemetry_occurred '
+          'ON $tableTelemetryEvents(occurred_at DESC)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_telemetry_upload '
+          'ON $tableTelemetryEvents(upload_status)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_telemetry_type '
+          'ON $tableTelemetryEvents(event_type)');
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
   // future new table can't be silently missed from a logout/login wipe.
+  //
+  // ONE DELIBERATE OMISSION: $tableTelemetryEvents. wipeAllData() fires when a
+  // different SK signs into a shared device (see the doc on that method), and
+  // a telemetry row kept here would be destroyed with the outgoing SK's
+  // data — including events queued but not yet uploaded, which is exactly the
+  // backlog the flush exists to drain. It would also make a report for any
+  // past date range impossible. Those rows are non-PHI by construction
+  // (no patient/member/encounter id, counts and form field ids only — see
+  // lib/core/telemetry/telemetry_event.dart), which is what makes surviving
+  // the wipe defensible. Asserted by telemetry_wipe_exclusion_test.dart.
+  // Any OTHER new table belongs in this list.
   static const List<String> _allTables = [
     tableHouseholds, tableMembers, tablePatients, tableSyncMeta,
     tablePatientProgrammes, tableFollowUps, tableFollowUpCalls,

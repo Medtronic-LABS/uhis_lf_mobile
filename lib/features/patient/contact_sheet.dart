@@ -4,6 +4,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/db/member_dao.dart';
+import '../../core/telemetry/share_telemetry.dart';
+import '../../core/telemetry/telemetry_service.dart';
+import '../../core/telemetry/telemetry_event.dart';
 import 'patient_context_screen.dart' show PatientOrMemberData;
 
 // ── Resolution model ──────────────────────────────────────────────────────────
@@ -97,29 +100,51 @@ Future<void> _call(BuildContext ctx, String phone) async {
   }
 }
 
+/// Direct patient contact — recorded with the `contactSheet` surface so it is
+/// never counted as a counselling share.
+void _shareTap(
+  TelemetryService? telemetry,
+  String channel, {
+  required bool launched,
+}) =>
+    recordShareTap(
+      telemetry,
+      channel: channel,
+      surface: TelemetryShareSurface.contactSheet,
+      hasMessage: true,
+      launched: launched,
+    );
+
 Future<void> _whatsApp(
     BuildContext ctx, String phone, String patientName) async {
+  final telemetry = shareTelemetryOf(ctx);
   final e164 = _toE164(phone);
   final msg = Uri.encodeComponent(_prefilledMessage(patientName));
   final uri = Uri.parse('https://wa.me/$e164?text=$msg');
   try {
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
-        ctx.mounted) {
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    _shareTap(telemetry, TelemetryShareChannel.whatsapp, launched: ok);
+    if (!ok && ctx.mounted) {
       _snack(ctx, ContactSheetStrings.whatsAppFailed);
     }
   } catch (_) {
+    _shareTap(telemetry, TelemetryShareChannel.whatsapp, launched: false);
     if (ctx.mounted) _snack(ctx, ContactSheetStrings.whatsAppFailed);
   }
 }
 
 Future<void> _sms(BuildContext ctx, String phone, String patientName) async {
+  final telemetry = shareTelemetryOf(ctx);
   final msg = Uri.encodeComponent(_prefilledMessage(patientName));
   final uri = Uri.parse('sms:$phone?body=$msg');
   try {
-    if (!await launchUrl(uri) && ctx.mounted) {
+    final ok = await launchUrl(uri);
+    _shareTap(telemetry, TelemetryShareChannel.sms, launched: ok);
+    if (!ok && ctx.mounted) {
       _snack(ctx, ContactSheetStrings.smsFailed);
     }
   } catch (_) {
+    _shareTap(telemetry, TelemetryShareChannel.sms, launched: false);
     if (ctx.mounted) _snack(ctx, ContactSheetStrings.smsFailed);
   }
 }

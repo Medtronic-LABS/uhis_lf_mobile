@@ -221,6 +221,12 @@ class Endpoints {
   // ── AI Assistant: conversational Q&A ────────────────────────────────────
   static const String assistantAsk = '/ai-scribe/assistant/ask';
 
+  // ── Telemetry: AI Scribe adoption / accuracy reporting ───────────────────
+  /// Batch-ingest of `telemetry_events` rows queued on device. Idempotent on
+  /// each event's client-generated id, so a retry after a lost response
+  /// cannot double-count. Server: ai-scribe-service `app/api/telemetry.py`.
+  static const String telemetryEvents = '/ai-scribe/telemetry/events';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>

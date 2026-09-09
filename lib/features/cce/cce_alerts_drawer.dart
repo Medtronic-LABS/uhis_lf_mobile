@@ -10,6 +10,9 @@ import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/sync/offline_push_service.dart';
 import '../../core/widgets/empty_state_card.dart';
+import '../../core/telemetry/share_telemetry.dart';
+import '../../core/telemetry/telemetry_service.dart';
+import '../../core/telemetry/telemetry_event.dart';
 import 'cce_alert.dart';
 import 'cce_repository.dart';
 import 'widgets/cce_alert_card.dart';
@@ -294,7 +297,23 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer>
     }
   }
 
+  /// Direct patient contact about a referral — recorded with the `cceDrawer`
+  /// surface so it never inflates the counselling-share metric.
+  void _share(
+    TelemetryService? telemetry,
+    String channel, {
+    required bool launched,
+  }) =>
+      recordShareTap(
+        telemetry,
+        channel: channel,
+        surface: TelemetryShareSurface.cceDrawer,
+        hasMessage: true,
+        launched: launched,
+      );
+
   Future<void> _onWhatsapp(CceAlert alert) async {
+    final telemetry = shareTelemetryOf(context);
     final phone = alert.patientPhone;
     if (phone == null || phone.trim().isEmpty) {
       _snack(CceStrings.noPhone);
@@ -304,13 +323,16 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer>
     final uri = Uri.parse('https://wa.me/$cleaned');
     try {
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      _share(telemetry, TelemetryShareChannel.whatsapp, launched: ok);
       if (!ok && mounted) _snack(CceStrings.dialFailed);
     } catch (_) {
+      _share(telemetry, TelemetryShareChannel.whatsapp, launched: false);
       if (mounted) _snack(CceStrings.dialFailed);
     }
   }
 
   Future<void> _onSms(CceAlert alert) async {
+    final telemetry = shareTelemetryOf(context);
     final phone = alert.patientPhone;
     if (phone == null || phone.trim().isEmpty) {
       _snack(CceStrings.noPhone);
@@ -319,8 +341,10 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer>
     final uri = Uri.parse('sms:${phone.trim()}');
     try {
       final ok = await launchUrl(uri);
+      _share(telemetry, TelemetryShareChannel.sms, launched: ok);
       if (!ok && mounted) _snack(CceStrings.smsFailed);
     } catch (_) {
+      _share(telemetry, TelemetryShareChannel.sms, launched: false);
       if (mounted) _snack(CceStrings.smsFailed);
     }
   }

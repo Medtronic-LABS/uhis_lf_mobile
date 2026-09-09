@@ -336,6 +336,20 @@ class AppConfig {
   static int get vadPreRollMs =>
       int.tryParse(const String.fromEnvironment('VAD_PREROLL_MS')) ?? 350;
 
+  /// Exposes the on-device AI Scribe telemetry report (Settings -> debug row,
+  /// and the `/dev/telemetry` route) in a **release** build.
+  ///
+  /// Normally the screen is `kDebugMode`-only. This flag exists because debug
+  /// builds cannot always be produced on a restricted network — the `sqlite3`
+  /// package downloads a prebuilt library from GitHub release assets at build
+  /// time, which some corporate networks block — and field verification of
+  /// the telemetry numbers still has to happen on a real handset.
+  ///
+  /// Off by default, so a normal release ships without it. Mirrors the
+  /// server's `ENABLE_TELEMETRY_DASHBOARD`: the report is opt-in at both ends.
+  static bool get telemetryScreenEnabled =>
+      const bool.fromEnvironment('TELEMETRY_SCREEN', defaultValue: false);
+
   /// Feature flag: use the uhis_form JSON-driven renderer instead of the
   /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
   static const bool useDynamicForms = bool.fromEnvironment(

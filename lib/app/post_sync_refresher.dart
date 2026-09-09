@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/sync/sync_progress.dart';
+import '../core/telemetry/telemetry_uploader.dart';
 import '../features/dashboard/mission_dashboard_repository.dart';
 import '../features/referral/referral_repository.dart';
 import '../features/worklist/worklist_repository.dart';
@@ -24,17 +25,29 @@ class PostSyncRefresher {
     required WorklistRepository worklist,
     required ReferralRepository referrals,
     required MissionDashboardRepository mission,
+    TelemetryUploader? telemetry,
   })  : _progress = progress,
         _worklist = worklist,
         _referrals = referrals,
-        _mission = mission;
+        _mission = mission,
+        _telemetry = telemetry;
 
   final Stream<SyncProgress> _progress;
   final WorklistRepository _worklist;
   final ReferralRepository _referrals;
   final MissionDashboardRepository _mission;
 
+  /// Optional so existing constructions and tests are unaffected. A completed
+  /// sync is the app's most reliable proof of connectivity, which makes it the
+  /// natural moment to drain the telemetry queue.
+  final TelemetryUploader? _telemetry;
+
   StreamSubscription<SyncProgress>? _sub;
+
+  /// Guards overlapping flushes — two in flight would POST the same pending
+  /// rows twice. Harmless server-side (ingest is idempotent) but wasteful on
+  /// a rural link.
+  bool _flushing = false;
 
   /// Guards against overlapping passes. A recompute walks every patient, so
   /// two in flight would duplicate the work and interleave their writes.
@@ -61,6 +74,11 @@ class PostSyncRefresher {
     debugPrint('[PostSync] attached — listening for sync completion');
     _sub = _progress.listen((p) {
       if (!p.isComplete) return;
+      // Deliberately BEFORE the hasChanges gate below: telemetry rows are
+      // queued by visits, not by what a pull wrote, so a no-op sync still
+      // needs to flush them. Gating this the same way as the recompute would
+      // leave the queue stuck whenever nothing changed server-side.
+      unawaited(_flushTelemetry());
       // A sync that wrote nothing cannot have changed anything derived from it.
       // Measured: the recompute walks every patient and took 19 s for 3566
       // patients after a 1.3 s no-op warm pull. Connectivity changes fire a
@@ -72,6 +90,22 @@ class PostSyncRefresher {
       }
       unawaited(refreshNow(trigger: 'syncCompleted'));
     });
+  }
+
+  /// Drains the telemetry queue. Never throws and never blocks the recompute
+  /// — a lost metric must not be able to disturb clinical data flow.
+  Future<void> _flushTelemetry() async {
+    final uploader = _telemetry;
+    if (uploader == null || _flushing) return;
+    _flushing = true;
+    try {
+      final sent = await uploader.uploadPending();
+      if (sent > 0) debugPrint('[PostSync] telemetry uploaded $sent event(s)');
+    } on Object catch (e) {
+      debugPrint('[PostSync] telemetry flush failed: $e');
+    } finally {
+      _flushing = false;
+    }
   }
 
   Future<void> dispose() async {

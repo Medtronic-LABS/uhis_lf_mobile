@@ -18,6 +18,7 @@ import '../../core/db/pregnancy_snapshot_dao.dart';
 import 'forms/pregnancy_outcome_snapshot_mapper.dart';
 import '../../core/models/programme.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
+import '../../core/telemetry/telemetry_service.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
@@ -344,6 +345,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         householdMemberLocalId: widget.householdMemberLocalId ?? 0,
         defaultReferralSiteId: ctx.read<ApiClient>().organizationFhirId,
         referralRepo: ctx.read<ReferralRepository>(),
+        telemetryService: ctx.read<TelemetryService>(),
+        encounterDao: ctx.read<EncounterDao>(),
       );
       _formNotifier = notifier;
       _notifierFormTypes = List<String>.from(formTypes);
