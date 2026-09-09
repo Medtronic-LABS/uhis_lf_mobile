@@ -838,6 +838,42 @@ class OfflineSyncService extends ChangeNotifier {
       final existingIds = patients.map((p) => p.id).toSet();
       var added = 0;
       for (final p in bridgedPatients) {
+        final existingIdx = patients.indexWhere((e) => e.id == p.id);
+        if (existingIdx >= 0) {
+          final cur = patients[existingIdx];
+          if ((cur.patientId == null || cur.patientId!.isEmpty) &&
+              p.patientId != null &&
+              p.patientId!.isNotEmpty) {
+            patients[existingIdx] = Patient(
+              id: cur.id,
+              patientId: p.patientId,
+              name: cur.name ?? p.name,
+              gender: cur.gender ?? p.gender,
+              dob: cur.dob ?? p.dob,
+              phone: cur.phone ?? p.phone,
+              nationalId: cur.nationalId ?? p.nationalId,
+              householdId: cur.householdId ?? p.householdId,
+              villageId: cur.villageId ?? p.villageId,
+              villageName: cur.villageName ?? p.villageName,
+              isActive: cur.isActive ?? p.isActive,
+              updatedAt: p.updatedAt ?? cur.updatedAt,
+              rawJson: cur.rawJson,
+              age: cur.age ?? p.age,
+              riskScore: cur.riskScore,
+              riskBand: cur.riskBand,
+              riskModifier: cur.riskModifier,
+              riskReasons: cur.riskReasons,
+              riskHintLevel: cur.riskHintLevel,
+              riskHintColor: cur.riskHintColor,
+              redFlag: cur.redFlag,
+              lastVisitAt: cur.lastVisitAt,
+              nextDueAt: cur.nextDueAt,
+              missedVisitCount: cur.missedVisitCount,
+            );
+            added++;
+          }
+          continue;
+        }
         if (existingIds.add(p.id)) {
           patients.add(p);
           added++;
@@ -1008,6 +1044,14 @@ class OfflineSyncService extends ChangeNotifier {
     _emitPersistProgress(SyncPersistPhase.patients, 0, patients.length,
         force: true);
     await _patients.upsertMany(patients);
+    final backfilledServerIds =
+        await _patients.syncServerPatientIdsFromMembers();
+    if (backfilledServerIds > 0) {
+      debugPrint(
+        '[OfflineSyncService] Backfilled patient_id on $backfilledServerIds '
+        'patient row(s) from members.fhir_id',
+      );
+    }
     mark('patients', patients.length);
     if (programmes.isNotEmpty) {
       _emitPersistProgress(

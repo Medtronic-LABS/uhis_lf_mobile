@@ -67,6 +67,7 @@ class PatientOrMemberData {
     this.vitalHistory = const [],
     this.pregnancySnapshot,
     this.enrolledAt,
+    this.householdMemberLocalId,
   });
 
   final PatientWithProgrammes? localPatient;
@@ -97,6 +98,9 @@ class PatientOrMemberData {
   final String? memberId;
   /// When the member was first enrolled in the app (from local DB `created_at`).
   final DateTime? enrolledAt;
+
+  /// Local autoincrement PK for visit/assessment identity (`members.id`).
+  final int? householdMemberLocalId;
 
   bool get hasData => localPatient != null || remoteMember != null;
 
@@ -266,6 +270,7 @@ class PatientOrMemberData {
     String? householdHeadPhone,
     List<VisitVitals>? vitalHistory,
     PregnancySnapshotRow? pregnancySnapshot,
+    int? householdMemberLocalId,
   }) {
     return PatientOrMemberData(
       localPatient: localPatient,
@@ -280,6 +285,8 @@ class PatientOrMemberData {
       vitalHistory: vitalHistory ?? this.vitalHistory,
       pregnancySnapshot: pregnancySnapshot ?? this.pregnancySnapshot,
       enrolledAt: enrolledAt,
+      householdMemberLocalId:
+          householdMemberLocalId ?? this.householdMemberLocalId,
     );
   }
 }
@@ -507,12 +514,36 @@ class _PatientContextScreenState
     // [PatientOrMemberData.assessments], so that it also covers records that
     // only came back over the network.
     try {
+      await localDrafts.syncPatientIdsFromMemberLinks();
+
       final draftsById = <String, LocalAssessmentEntity>{};
-      for (final key in lookupKeys) {
-        for (final d in await localDrafts.getByPatientId(key)) {
+      void absorb(Iterable<LocalAssessmentEntity> rows) {
+        for (final d in rows) {
           draftsById[d.id] = d;
         }
       }
+
+      absorb(await localDrafts.getByPatientIds(lookupKeys.toList()));
+
+      // PW/ANC saves after member sync: visit flow passes FHIR memberId, so
+      // householdMemberLocalId was 0 and patient_id could be null/wrong until
+      // identity resolution is fixed — still find rows by local member PK.
+      final memberDao = context.read<MemberDao>();
+      for (final key in lookupKeys) {
+        final member = await memberDao.getById(key) ??
+            await memberDao.getByPatientId(key) ??
+            await memberDao.getByFhirId(key);
+        if (member == null) continue;
+        final localPk = int.tryParse(member.id);
+        if (localPk != null && localPk > 0) {
+          absorb(await localDrafts.getByHouseholdMemberId(localPk));
+        }
+        final fhir = member.fhirId?.trim();
+        if (fhir != null && fhir.isNotEmpty) {
+          absorb(await localDrafts.getByMemberId(fhir));
+        }
+      }
+
       final drafts = draftsById.values.toList();
       // ignore: avoid_print
       print('[PatientContextScreen] localDrafts lookupKeys=$lookupKeys count=${drafts.length}');
@@ -582,7 +613,8 @@ class _PatientContextScreenState
   Future<String> _resolveEncounterMemberId() async {
     final memberDao = context.read<MemberDao>();
     final entity = await memberDao.getById(widget.patientId) ??
-        await memberDao.getByPatientId(widget.patientId);
+        await memberDao.getByPatientId(widget.patientId) ??
+        await memberDao.getByFhirId(widget.patientId);
 
     if (entity != null) {
       if (entity.fhirId?.isNotEmpty == true) {
@@ -609,6 +641,22 @@ class _PatientContextScreenState
     final fallback = widget.memberData?['id'] as String? ?? widget.patientId;
     debugPrint('[PatientContext] memberId fallback: $fallback');
     return fallback;
+  }
+
+  /// Local autoincrement PK for [LocalAssessmentEntity.householdMemberLocalId].
+  Future<int?> _resolveHouseholdMemberLocalId() async {
+    final memberDao = context.read<MemberDao>();
+    final entity = await memberDao.getById(widget.patientId) ??
+        await memberDao.getByPatientId(widget.patientId) ??
+        await memberDao.getByFhirId(widget.patientId);
+    if (entity == null) {
+      final fromExtras = widget.memberData?['id']?.toString();
+      if (fromExtras != null) {
+        return int.tryParse(fromExtras);
+      }
+      return int.tryParse(widget.patientId);
+    }
+    return int.tryParse(entity.id);
   }
 
   /// Pregnancy snapshots are stored under the local member PK — see
@@ -664,6 +712,7 @@ class _PatientContextScreenState
     // Phase 1: all local reads in parallel — returns instantly from SQLite.
     final phase1 = await Future.wait([
       _resolveEncounterMemberId(),
+      _resolveHouseholdMemberLocalId(),
       patientRepo.byId(widget.patientId),
       _localAssessmentsFor(widget.patientId),
       syncSvc.lastSyncedAt(),
@@ -672,12 +721,13 @@ class _PatientContextScreenState
       memberRepo.enrolledAtFor(widget.patientId).catchError((_) => null),
     ]);
     final resolvedMemberId = phase1[0] as String?;
-    final localPatient = phase1[1] as PatientWithProgrammes?;
-    final localAssessments = phase1[2] as List<MemberAssessment>;
-    final lastSync = phase1[3] as DateTime?;
-    final vitalHistory = phase1[4] as List<VisitVitals>;
-    final pregnancySnapshot = phase1[5] as PregnancySnapshotRow?;
-    final enrolledAt = phase1[6] as DateTime?;
+    final resolvedHouseholdMemberLocalId = phase1[1] as int?;
+    final localPatient = phase1[2] as PatientWithProgrammes?;
+    final localAssessments = phase1[3] as List<MemberAssessment>;
+    final lastSync = phase1[4] as DateTime?;
+    final vitalHistory = phase1[5] as List<VisitVitals>;
+    final pregnancySnapshot = phase1[6] as PregnancySnapshotRow?;
+    final enrolledAt = phase1[7] as DateTime?;
     debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
         ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
@@ -741,6 +791,7 @@ class _PatientContextScreenState
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
         enrolledAt: enrolledAt,
+        householdMemberLocalId: resolvedHouseholdMemberLocalId,
       );
       final info = await _householdInfo(localPatient.patient.householdId);
       ConsoleLog.banner('[PatientCtx] load done=${t0.elapsedMilliseconds}ms'
@@ -775,6 +826,7 @@ class _PatientContextScreenState
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
         enrolledAt: enrolledAt,
+        householdMemberLocalId: resolvedHouseholdMemberLocalId,
       );
     }
 
@@ -813,6 +865,7 @@ class _PatientContextScreenState
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
         enrolledAt: enrolledAt,
+        householdMemberLocalId: resolvedHouseholdMemberLocalId,
       );
     }
 
@@ -1338,6 +1391,7 @@ class _PatientContextScreenState
                       householdId: data.householdId,
                       villageId: data.villageId,
                       memberId: data.memberId,
+                      householdMemberLocalId: data.householdMemberLocalId,
                       programmes: data.programmes,
                       origin: widget.origin,
                     ),
@@ -5299,6 +5353,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             householdId: d.householdId,
             villageId: d.villageId,
             memberId: d.memberId,
+            householdMemberLocalId: int.tryParse(d.localPatient?.patient.id ?? ''),
           )
         else
           Container(
@@ -6085,6 +6140,7 @@ class _NoServicesCard extends StatefulWidget {
     this.householdId,
     this.villageId,
     this.memberId,
+    this.householdMemberLocalId,
     this.origin,
   });
 
@@ -6095,6 +6151,7 @@ class _NoServicesCard extends StatefulWidget {
   final String? householdId;
   final String? villageId;
   final String? memberId;
+  final int? householdMemberLocalId;
   final String? origin;
 
   @override
@@ -6135,6 +6192,8 @@ class _NoServicesCardState extends State<_NoServicesCard> {
           'householdId': widget.householdId,
           'villageId': widget.villageId,
           'memberId': widget.memberId,
+          if (widget.householdMemberLocalId != null)
+            'householdMemberLocalId': widget.householdMemberLocalId,
         },
       );
     } else {

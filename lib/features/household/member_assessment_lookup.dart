@@ -64,7 +64,8 @@ Future<Set<String>> assessmentLookupKeysForRoute({
 
   try {
     final entity = await memberDao.getById(stripped) ??
-        await memberDao.getByPatientId(stripped);
+        await memberDao.getByPatientId(stripped) ??
+        await memberDao.getByFhirId(stripped);
     if (entity != null) {
       keys.addAll(memberAssessmentLookupKeysFromEntity(entity));
     }
@@ -73,7 +74,7 @@ Future<Set<String>> assessmentLookupKeysForRoute({
   }
 
   if (navigationExtra != null) {
-    for (final field in const ['id', 'patientId']) {
+    for (final field in const ['id', 'patientId', 'fhirId', 'memberId']) {
       final v = navigationExtra[field]?.toString().trim();
       if (v != null && v.isNotEmpty) keys.add(v);
     }
