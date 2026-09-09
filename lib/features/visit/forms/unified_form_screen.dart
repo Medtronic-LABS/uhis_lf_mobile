@@ -608,6 +608,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
                       widget.activeFormTypes),
                   visibleFieldIds: _visibleFieldIds(annotated, notifier),
+                  onScribeSpan: (startedAtMs, endedAtMs) =>
+                      notifier.markScribeSpan(
+                    startedAtMs: startedAtMs,
+                    endedAtMs: endedAtMs,
+                  ),
                   onFormFill: (fill) {
                     final rejected = notifier.applyAiPrefill(
                       fill.fields.where((f) => f.value != null).toList(),

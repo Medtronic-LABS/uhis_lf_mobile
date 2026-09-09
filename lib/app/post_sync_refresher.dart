@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/sync/sync_progress.dart';
 import '../core/telemetry/telemetry_uploader.dart';
+import '../core/telemetry/value_audit_uploader.dart';
 import '../features/dashboard/mission_dashboard_repository.dart';
 import '../features/referral/referral_repository.dart';
 import '../features/worklist/worklist_repository.dart';
@@ -26,11 +27,13 @@ class PostSyncRefresher {
     required ReferralRepository referrals,
     required MissionDashboardRepository mission,
     TelemetryUploader? telemetry,
+    ValueAuditUploader? valueAudit,
   })  : _progress = progress,
         _worklist = worklist,
         _referrals = referrals,
         _mission = mission,
-        _telemetry = telemetry;
+        _telemetry = telemetry,
+        _valueAudit = valueAudit;
 
   final Stream<SyncProgress> _progress;
   final WorklistRepository _worklist;
@@ -41,6 +44,11 @@ class PostSyncRefresher {
   /// sync is the app's most reliable proof of connectivity, which makes it the
   /// natural moment to drain the telemetry queue.
   final TelemetryUploader? _telemetry;
+
+  /// The PHI value-audit queue. Drained on the same trigger as telemetry but
+  /// through its own uploader, so a deployment with values switched off simply
+  /// never sends any.
+  final ValueAuditUploader? _valueAudit;
 
   StreamSubscription<SyncProgress>? _sub;
 
@@ -79,6 +87,7 @@ class PostSyncRefresher {
       // needs to flush them. Gating this the same way as the recompute would
       // leave the queue stuck whenever nothing changed server-side.
       unawaited(_flushTelemetry());
+      unawaited(_flushValueAudit());
       // A sync that wrote nothing cannot have changed anything derived from it.
       // Measured: the recompute walks every patient and took 19 s for 3566
       // patients after a 1.3 s no-op warm pull. Connectivity changes fire a
@@ -90,6 +99,19 @@ class PostSyncRefresher {
       }
       unawaited(refreshNow(trigger: 'syncCompleted'));
     });
+  }
+
+  /// Drains the value-audit queue. Same contract as [_flushTelemetry]: never
+  /// throws, never blocks the recompute.
+  Future<void> _flushValueAudit() async {
+    final uploader = _valueAudit;
+    if (uploader == null) return;
+    try {
+      final sent = await uploader.uploadPending();
+      if (sent > 0) debugPrint('[PostSync] value audit uploaded $sent pair(s)');
+    } on Object catch (e) {
+      debugPrint('[PostSync] value audit flush failed: $e');
+    }
   }
 
   /// Drains the telemetry queue. Never throws and never blocks the recompute

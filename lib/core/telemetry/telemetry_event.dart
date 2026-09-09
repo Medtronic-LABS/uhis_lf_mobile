@@ -83,6 +83,7 @@ class TelemetryEvent {
     required this.payload,
     this.visitUuid,
     this.skUserId,
+    this.capturedTenantId,
     this.uploadStatus = TelemetryUploadStatus.pending,
     this.uploadedAt,
   });
@@ -106,6 +107,20 @@ class TelemetryEvent {
   /// `provenance.spiceUserId`. Needed because metric 1 counts *users*, which a
   /// single device can never answer on its own.
   final String? skUserId;
+
+  /// Tenant of the SK who was signed in when this event was *captured*.
+  ///
+  /// Needed because the queue outlives a session: a shared device wipes local
+  /// data when a different SK signs in, but telemetry is deliberately kept
+  /// (see AppDatabase._allTables), so a backlog can be uploaded during a
+  /// later SK's session. The server stamps its own trusted tenant from that
+  /// uploading session; without this field an event captured by tenant A and
+  /// uploaded by tenant B would be credited to B. Reports attribute by this
+  /// value and fall back to the session tenant when it is absent (rows
+  /// captured before this field existed). Envelope field, not part of
+  /// [payload] — so [kTelemetryPayloadVersion] is unchanged; a reader keys
+  /// off the field being null, not off a version number.
+  final int? capturedTenantId;
 
   /// Build identity, so a shift in a metric can be attributed to a release
   /// rather than mistaken for a change in behaviour.
@@ -132,6 +147,7 @@ class TelemetryEvent {
         'occurred_at': occurredAt,
         'visit_uuid': visitUuid,
         'sk_user_id': skUserId,
+        'captured_tenant_id': capturedTenantId,
         'app_version': appVersion,
         'app_build': appBuild,
         'payload_version': payloadVersion,
@@ -146,6 +162,7 @@ class TelemetryEvent {
         occurredAt: row['occurred_at'] as int,
         visitUuid: row['visit_uuid'] as String?,
         skUserId: row['sk_user_id'] as String?,
+        capturedTenantId: row['captured_tenant_id'] as int?,
         appVersion: row['app_version'] as String? ?? '',
         appBuild: row['app_build'] as int? ?? 0,
         payloadVersion: row['payload_version'] as int? ?? 1,
@@ -173,7 +190,12 @@ class TelemetryEvent {
 /// `aiOverridden` were added, and `manual` narrowed to mean "the SK typed it".
 /// A v1 row has none of those keys — readers must default them to empty rather
 /// than present a zero as a finding.
-const int kTelemetryPayloadVersion = 2;
+const int kTelemetryPayloadVersion = 3;
+
+/// The AI feature these events belong to, matching the server's feature
+/// registry key. A constant rather than a literal at the send site so adding a
+/// second feature is a new constant, not a search for string duplicates.
+const String kTelemetryAiFeatureScribe = 'scribe';
 
 /// Body of a [TelemetryEventType.visitCompleted] event — report metrics 1-4.
 class VisitCompletedPayload {
@@ -188,6 +210,11 @@ class VisitCompletedPayload {
     this.prefilled = const [],
     this.derived = const [],
     this.aiOverridden = const [],
+    this.scribeStartedAtMs,
+    this.scribeEndedAtMs,
+    this.manualEditingMs,
+    this.outcome,
+    this.failureReasons,
     required this.libraryTotal,
     required this.renderedTotal,
     required this.extractableVisible,
@@ -235,6 +262,27 @@ class VisitCompletedPayload {
 
   final List<String> empty;
 
+  /// Wall-clock bounds of the scribe session(s), epoch ms, or null when AI
+  /// Scribe never ran on this visit. Not derived from when fields landed:
+  /// fills arrive after upload and processing, so a fill time would overstate
+  /// when the SK stopped talking.
+  final int? scribeStartedAtMs;
+  final int? scribeEndedAtMs;
+
+  /// Wall-clock from scribe end to submit. A proxy for editing effort, not
+  /// keystroke timing — it includes any pause the SK took. Null when no
+  /// scribe session ran.
+  final int? manualEditingMs;
+
+  /// `success` | `partial` | `failed`, or null when AI Scribe never ran.
+  /// Three states because "ran and everything was rejected" and "filled the
+  /// form cleanly" are both non-events under a success flag.
+  final String? outcome;
+
+  /// Why proposals were dropped, by category. Categories only — never a field
+  /// id or a value.
+  final Map<String, int>? failureReasons;
+
   /// Three candidate denominators for the capture rate, all emitted so the
   /// definition can change later without re-instrumenting:
   /// every field the programme declares; every field the layout rendered; and
@@ -262,6 +310,14 @@ class VisitCompletedPayload {
           'renderedTotal': renderedTotal,
           'extractableVisible': extractableVisible,
         },
+        // Omitted rather than sent as null: a reader distinguishes "not
+        // measured" from "measured as zero" by the key's absence, and older
+        // rows have no key either.
+        if (scribeStartedAtMs != null) 'scribeStartedAt': scribeStartedAtMs,
+        if (scribeEndedAtMs != null) 'scribeEndedAt': scribeEndedAtMs,
+        if (manualEditingMs != null) 'manualEditingMs': manualEditingMs,
+        if (outcome != null) 'outcome': outcome,
+        if (failureReasons != null) 'failureReasons': failureReasons,
       };
 
   static VisitCompletedPayload fromJson(Map<String, dynamic> json) {
@@ -272,6 +328,13 @@ class VisitCompletedPayload {
       programmes: _strings(json['programmes']),
       scribeUsed: json['scribeUsed'] == true,
       durationMs: (json['durationMs'] as num?)?.toInt(),
+      scribeStartedAtMs: (json['scribeStartedAt'] as num?)?.toInt(),
+      scribeEndedAtMs: (json['scribeEndedAt'] as num?)?.toInt(),
+      manualEditingMs: (json['manualEditingMs'] as num?)?.toInt(),
+      outcome: json['outcome'] as String?,
+      failureReasons: (json['failureReasons'] as Map?)
+          ?.cast<String, dynamic>()
+          .map((k, v) => MapEntry(k, (v as num).toInt())),
       aiFilled: _strings(fields['aiFilled']),
       aiCorrected: _strings(fields['aiCorrected']),
       aiAcceptedUnchanged: _strings(fields['aiAcceptedUnchanged']),

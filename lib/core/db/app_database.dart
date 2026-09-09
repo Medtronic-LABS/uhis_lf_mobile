@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 42;
+  static const int schemaVersion = 44;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -58,6 +58,15 @@ class AppDatabase {
   static const String tableRxBuddyCheckins = 'rx_buddy_checkins';
   static const String tableHealthFacilities = 'health_facilities';
   static const String tableTelemetryEvents = 'telemetry_events';
+
+  /// Before/after values of AI-filled fields the SK edited.
+  ///
+  /// **PHI, unlike [tableTelemetryEvents]** — and therefore listed in
+  /// [_allTables] so a different-SK login clears it. That is the opposite
+  /// treatment to telemetry, deliberately: clinical values must not outlive
+  /// the health worker's session on a shared device, even at the cost of
+  /// losing rows that had not uploaded yet.
+  static const String tableAiValueAudit = 'ai_value_audit';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -749,6 +758,7 @@ class AppDatabase {
         occurred_at INTEGER NOT NULL,
         visit_uuid TEXT,
         sk_user_id TEXT,
+        captured_tenant_id INTEGER,
         app_version TEXT NOT NULL DEFAULT '',
         app_build INTEGER NOT NULL DEFAULT 0,
         payload_version INTEGER NOT NULL DEFAULT 1,
@@ -765,6 +775,25 @@ class AppDatabase {
     await db.execute(
         'CREATE INDEX idx_telemetry_type '
         'ON $tableTelemetryEvents(event_type)');
+
+    await db.execute('''
+      CREATE TABLE $tableAiValueAudit (
+        id TEXT PRIMARY KEY,
+        visit_uuid TEXT NOT NULL,
+        ai_feature TEXT NOT NULL DEFAULT 'scribe',
+        field_id TEXT NOT NULL,
+        ai_value TEXT,
+        final_value TEXT,
+        occurred_at INTEGER NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_value_audit_upload '
+        'ON $tableAiValueAudit(upload_status)');
+    await db.execute(
+        'CREATE INDEX idx_value_audit_visit '
+        'ON $tableAiValueAudit(visit_uuid)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -1895,6 +1924,7 @@ class AppDatabase {
           occurred_at INTEGER NOT NULL,
           visit_uuid TEXT,
           sk_user_id TEXT,
+          captured_tenant_id INTEGER,
           app_version TEXT NOT NULL DEFAULT '',
           app_build INTEGER NOT NULL DEFAULT 0,
           payload_version INTEGER NOT NULL DEFAULT 1,
@@ -1911,6 +1941,46 @@ class AppDatabase {
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_telemetry_type '
           'ON $tableTelemetryEvents(event_type)');
+    }
+    if (from < 44) {
+      // v44 — the PHI value-audit stream. Separate table from telemetry
+      // because it is the only part that holds clinical values, and it IS in
+      // [_allTables] so a different-SK login wipes it.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableAiValueAudit (
+          id TEXT PRIMARY KEY,
+          visit_uuid TEXT NOT NULL,
+          ai_feature TEXT NOT NULL DEFAULT 'scribe',
+          field_id TEXT NOT NULL,
+          ai_value TEXT,
+          final_value TEXT,
+          occurred_at INTEGER NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_value_audit_upload '
+          'ON $tableAiValueAudit(upload_status)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_value_audit_visit '
+          'ON $tableAiValueAudit(visit_uuid)');
+    }
+    if (from < 43) {
+      // v43 — captured_tenant_id. A device that reached v42 may already hold
+      // a queue; those rows keep a NULL here and the server falls back to the
+      // uploading session's tenant for them, which is the pre-v43 behaviour.
+      // Guarded because the v42 block above now creates the column outright,
+      // so a device arriving at 43 in one step already has it.
+      final cols = await db.rawQuery(
+        'PRAGMA table_info($tableTelemetryEvents)',
+      );
+      final hasColumn =
+          cols.any((c) => c['name'] == 'captured_tenant_id');
+      if (!hasColumn) {
+        await db.execute(
+          'ALTER TABLE $tableTelemetryEvents ADD COLUMN captured_tenant_id INTEGER',
+        );
+      }
     }
   }
 
@@ -1940,6 +2010,9 @@ class AppDatabase {
     tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
     tableTreatmentDetails, tableRxBuddyCheckins,
     tableHealthFacilities,
+    // PHI, so it is wiped — the opposite of $tableTelemetryEvents above.
+    // See the doc on that constant for why the two differ.
+    tableAiValueAudit,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

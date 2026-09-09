@@ -22,9 +22,11 @@ class TelemetryService {
   TelemetryService({
     required TelemetryDao dao,
     required Future<int?> Function() userIdResolver,
+    Future<int?> Function()? tenantIdResolver,
     Uuid uuid = const Uuid(),
   })  : _dao = dao,
         _userIdResolver = userIdResolver,
+        _tenantIdResolver = tenantIdResolver,
         _uuid = uuid;
 
   final TelemetryDao _dao;
@@ -33,6 +35,14 @@ class TelemetryService {
   /// out of the auth layer's dependency graph and makes the service trivially
   /// testable. Wire it to `AuthRepository.userId` at construction.
   final Future<int?> Function() _userIdResolver;
+
+  /// Tenant of the SK signed in when an event is captured, stamped onto the
+  /// row so a backlog uploaded during a *different* tenant's session is still
+  /// credited to the tenant that produced it — see
+  /// [TelemetryEvent.capturedTenantId]. Optional: when absent the row carries
+  /// null and the server falls back to the uploading session's tenant, which
+  /// is the behaviour every row had before this existed.
+  final Future<int?> Function()? _tenantIdResolver;
 
   final Uuid _uuid;
 
@@ -61,6 +71,11 @@ class TelemetryService {
     required int renderedTotal,
     required int extractableVisible,
     int? durationMs,
+    int? scribeStartedAtMs,
+    int? scribeEndedAtMs,
+    int? manualEditingMs,
+    String? outcome,
+    Map<String, int>? failureReasons,
     DateTime? occurredAt,
   }) async {
     final payload = VisitCompletedPayload(
@@ -79,6 +94,11 @@ class TelemetryService {
       libraryTotal: libraryTotal,
       renderedTotal: renderedTotal,
       extractableVisible: extractableVisible,
+      scribeStartedAtMs: scribeStartedAtMs,
+      scribeEndedAtMs: scribeEndedAtMs,
+      manualEditingMs: manualEditingMs,
+      outcome: outcome,
+      failureReasons: failureReasons,
     );
     await _insert(
       eventType: TelemetryEventType.visitCompleted,
@@ -121,6 +141,7 @@ class TelemetryService {
   }) async {
     try {
       final userId = await _userIdResolver();
+      final tenantId = await _tenantIdResolver?.call();
       await _dao.insert(TelemetryEvent(
         id: _uuid.v4(),
         eventType: eventType,
@@ -128,6 +149,7 @@ class TelemetryService {
             (occurredAt ?? DateTime.now()).toUtc().millisecondsSinceEpoch,
         visitUuid: visitUuid,
         skUserId: userId?.toString(),
+        capturedTenantId: tenantId,
         appVersion: AppConfig.appVersionName,
         appBuild: AppConfig.appVersionCode,
         payloadVersion: kTelemetryPayloadVersion,

@@ -11,6 +11,10 @@ import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/telemetry/telemetry_service.dart';
+import 'package:uuid/uuid.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/telemetry/value_audit_dao.dart';
+import '../../../core/telemetry/value_audit_entry.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import 'pregnancy_outcome_snapshot_mapper.dart';
@@ -65,6 +69,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     ReferralRepository? referralRepo,
     TelemetryService? telemetryService,
     EncounterDao? encounterDao,
+    ValueAuditDao? valueAuditDao,
   })  : _encounterId = encounterId,
         _patientId = patientId,
         _activeFormTypes = activeFormTypes,
@@ -81,7 +86,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _defaultReferralSiteId = defaultReferralSiteId,
         _referralRepo = referralRepo,
         _telemetryService = telemetryService,
-        _encounterDao = encounterDao;
+        _encounterDao = encounterDao,
+        _valueAuditDao = valueAuditDao;
 
   final String _encounterId;
   final String _patientId;
@@ -171,6 +177,42 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// the proposal was rejected. Visit-scoped; see the `sk_owned` branch in
   /// [applyAiPrefill].
   final Set<String> _aiOverriddenFieldIds = {};
+
+  /// Wall-clock bounds of the scribe session(s) that touched this form, epoch
+  /// ms. Reported to telemetry as "AI Scribe Start/End Time".
+  ///
+  /// Earliest start and latest end across every session on the form: an SK can
+  /// dictate, review, then dictate again, and the report means "when was AI
+  /// listening for this visit", not "the last time it was".
+  int? _scribeStartedAtMs;
+  int? _scribeEndedAtMs;
+
+  /// Rejection categories accumulated across every fill on this form.
+  ///
+  /// [applyAiPrefill] already computes these per call and hands them to
+  /// AsrDiagnostics; accumulating them here is what lets the visit report an
+  /// overall success/failure status instead of nothing at all.
+  final Map<String, int> _asrRejectionCounts = {};
+
+  /// What AI put in a field, captured the instant before the SK's first edit
+  /// overwrote it. Field id -> AI's value as a string.
+  ///
+  /// **Clinical values.** Held only in memory during the visit and written to
+  /// the PHI value-audit table at submit; never added to the telemetry
+  /// payload, which stays ids-and-counts. Empty unless
+  /// [AppConfig.valueAuditEnabled] — a build without that flag captures
+  /// nothing at all.
+  ///
+  /// First edit only: an SK may edit the same field repeatedly, and AI's
+  /// proposal is whatever was there before the *first* of those.
+  final Map<String, String?> _aiProposedValues = {};
+
+  /// Null in tests and in any build without the value-audit flag wired.
+  final ValueAuditDao? _valueAuditDao;
+
+  /// True once any fill applied at least one field — the difference between
+  /// "AI ran and produced nothing" and "AI never ran".
+  bool _anyAiFillApplied = false;
 
   /// When true, height was taken from a prior visit and must not be edited /
   /// re-shown — mirrors Spice readonly prefill; Flutter also hides the field.
@@ -889,6 +931,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
     } else {
       ConsoleLog.step('[FormField] $fieldId ($valueType) = $value');
     }
+    // Before the write: the value still in the field IS AI's proposal, and
+    // this is the only moment it can be read.
+    _captureAiValueBeforeFirstEdit(fieldId);
     _data = _data.setValue(fieldId, value);
     // SK edit of an AI-filled value → aiModified (audit trail keeps the AI
     // origin); any other SK entry → manual. Either way the field is now
@@ -1776,6 +1821,14 @@ class UnifiedFormNotifier extends ChangeNotifier {
       'rejectedByCategory': rejectedByCategory,
     });
 
+    // Keep the same counts for the visit-level report. Categories only — this
+    // never holds a field id or a value.
+    rejectedByCategory.forEach((category, count) {
+      _asrRejectionCounts[category] =
+          (_asrRejectionCounts[category] ?? 0) + count;
+    });
+    if (appliedCount > 0) _anyAiFillApplied = true;
+
     if (appliedAny) {
       notifyListeners();
       _saveDraft();
@@ -2315,8 +2368,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (telemetry == null) return;
     try {
       final b = classifyFieldProvenance();
+      // Minted once and shared: the audit rows join to this visit's telemetry
+      // row on it, so a second call here would silently orphan them.
+      final visitUuid = telemetry.newVisitUuid();
       await telemetry.recordVisitCompleted(
-        visitUuid: telemetry.newVisitUuid(),
+        visitUuid: visitUuid,
         programmes: List<String>.from(_activeFormTypes),
         scribeUsed: b.aiCorrected.isNotEmpty ||
             b.aiAcceptedUnchanged.isNotEmpty ||
@@ -2327,6 +2383,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
         prefilled: b.prefilled.toList(),
         derived: b.derived.toList(),
         aiOverridden: _aiOverriddenFieldIds.toList(),
+        scribeStartedAtMs: _scribeStartedAtMs,
+        scribeEndedAtMs: _scribeEndedAtMs,
+        manualEditingMs: _manualEditingMs(),
+        outcome: asrOutcome,
+        failureReasons: asrFailureReasons,
         empty: b.empty.toList(),
         libraryTotal: b.libraryTotal,
         renderedTotal: _renderedFieldCount,
@@ -2334,6 +2395,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
             b.targetIds.where(_visibleFieldIds.contains).length,
         durationMs: await _visitDurationMs(),
       );
+      await _writeValueAudit(visitUuid);
     } on Object catch (e) {
       debugPrint('[Telemetry] visit_completed not emitted: $e');
     }
@@ -2479,6 +2541,127 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Field ids where AI proposed a value the SK had already filled.
   @visibleForTesting
   Set<String> get aiOverriddenFieldIds => _aiOverriddenFieldIds;
+
+  /// Records the wall-clock bounds of a scribe session that filled this form.
+  ///
+  /// Called by the screen from the scribe banner's fill callback, which is the
+  /// only place that knows whether the batch or the live path ran. Widens the
+  /// stored span rather than replacing it, so several sessions on one form
+  /// report as one interval.
+  ///
+  /// Nulls are ignored: a fill that arrives without timing (an older banner, a
+  /// path that never recorded) must not clear a span already captured.
+  void markScribeSpan({int? startedAtMs, int? endedAtMs}) {
+    if (startedAtMs != null &&
+        (_scribeStartedAtMs == null || startedAtMs < _scribeStartedAtMs!)) {
+      _scribeStartedAtMs = startedAtMs;
+    }
+    if (endedAtMs != null &&
+        (_scribeEndedAtMs == null || endedAtMs > _scribeEndedAtMs!)) {
+      _scribeEndedAtMs = endedAtMs;
+    }
+  }
+
+  /// The in-memory AI-value capture map. Empty unless
+  /// [AppConfig.valueAuditEnabled] — which is what the tests pin.
+  @visibleForTesting
+  Map<String, String?> get aiProposedValuesForTesting =>
+      Map.unmodifiable(_aiProposedValues);
+
+  @visibleForTesting
+  int? get scribeStartedAtMsForTesting => _scribeStartedAtMs;
+
+  @visibleForTesting
+  int? get scribeEndedAtMsForTesting => _scribeEndedAtMs;
+
+  /// Remembers AI's value for [fieldId] if this is the SK's first edit of it.
+  ///
+  /// Gated on [AppConfig.valueAuditEnabled], so a build without the flag never
+  /// holds a clinical value even in memory. Only `aiPending` qualifies: an
+  /// `aiModified` source means the SK has already edited this field, so what
+  /// is in it now is the SK's value, not AI's.
+  void _captureAiValueBeforeFirstEdit(String fieldId) {
+    if (!AppConfig.valueAuditEnabled) return;
+    if (_aiProposedValues.containsKey(fieldId)) return;
+    if (_groupSourceFor(fieldId) != FieldSource.aiPending) return;
+    _aiProposedValues[fieldId] = _stringifyValue(_data.getValue(fieldId));
+  }
+
+  /// The form's own rendering of a value, not a re-formatted one.
+  ///
+  /// A report that shows a clinician what AI proposed has to show what it
+  /// actually proposed, so this does not round, parse or infer units.
+  static String? _stringifyValue(dynamic raw) => raw?.toString();
+
+  /// Writes the before/after pairs for this visit to the PHI audit table.
+  ///
+  /// Final values are read HERE, at submit, not when the edit happened: the SK
+  /// may edit the same field several times and only the last value reached the
+  /// record. [visitUuid] is the same correlator the visit's telemetry event
+  /// carries, which is what lets a report join the two streams.
+  ///
+  /// Never throws — a lost audit row is not worth failing a visit over, the
+  /// same stance the telemetry emit takes.
+  Future<void> _writeValueAudit(String visitUuid) async {
+    if (!AppConfig.valueAuditEnabled) return;
+    final dao = _valueAuditDao;
+    if (dao == null || _aiProposedValues.isEmpty) return;
+    try {
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+      await dao.insertAll([
+        for (final entry in _aiProposedValues.entries)
+          ValueAuditEntry(
+            id: const Uuid().v4(),
+            visitUuid: visitUuid,
+            fieldId: entry.key,
+            aiValue: entry.value,
+            finalValue: _stringifyValue(_data.getValue(entry.key)),
+            occurredAt: now,
+          ),
+      ]);
+      debugPrint('[ValueAudit] wrote ${_aiProposedValues.length} pair(s)');
+    } on Object catch (e, st) {
+      debugPrint('[ValueAudit] write failed: $e');
+      debugPrint('[ValueAudit] $st');
+    }
+  }
+
+  /// Overall status of AI Scribe on this form, or null when it never ran.
+  ///
+  /// `success` — fills applied and nothing was rejected.
+  /// `partial` — fills applied but some proposals were dropped.
+  /// `failed`  — AI proposed things and none of them stuck.
+  ///
+  /// Deliberately three states rather than a bool: "AI ran and every value was
+  /// rejected" and "AI filled the form cleanly" are both non-events under a
+  /// success flag, and the difference is the whole point of the metric.
+  @visibleForTesting
+  String? get asrOutcome {
+    final rejected = _asrRejectionCounts.values.fold<int>(0, (a, b) => a + b);
+    if (!_anyAiFillApplied && rejected == 0) return null;
+    if (!_anyAiFillApplied) return 'failed';
+    return rejected == 0 ? 'success' : 'partial';
+  }
+
+  /// Why proposals were dropped, by category, or null when none were.
+  /// Categories only — never a field id or a value.
+  @visibleForTesting
+  Map<String, int>? get asrFailureReasons =>
+      _asrRejectionCounts.isEmpty ? null : Map.unmodifiable(_asrRejectionCounts);
+
+  /// Wall-clock from the scribe session ending to now, in ms, or null when no
+  /// session ran.
+  ///
+  /// A proxy for editing effort, not keystroke timing: it includes any pause
+  /// the SK took between finishing dictation and submitting. Called at submit,
+  /// so "now" is the submit instant. Negative spans (clock adjustment) return
+  /// null rather than a nonsense duration.
+  int? _manualEditingMs() {
+    final ended = _scribeEndedAtMs;
+    if (ended == null) return null;
+    final elapsed = DateTime.now().millisecondsSinceEpoch - ended;
+    return elapsed >= 0 ? elapsed : null;
+  }
 
   /// Test seam for the clear path that drops values along with their
   /// provenance — exercised so a cleared field cannot keep reporting as an

@@ -85,6 +85,11 @@ class CapturingTelemetryService extends TelemetryService {
     List<String> derived = const [],
     List<String> aiOverridden = const [],
     int? durationMs,
+    int? scribeStartedAtMs,
+    int? scribeEndedAtMs,
+    int? manualEditingMs,
+    String? outcome,
+    Map<String, int>? failureReasons,
     DateTime? occurredAt,
   }) async {
     captured = VisitCompletedPayload(
@@ -102,6 +107,11 @@ class CapturingTelemetryService extends TelemetryService {
       libraryTotal: libraryTotal,
       renderedTotal: renderedTotal,
       extractableVisible: extractableVisible,
+      scribeStartedAtMs: scribeStartedAtMs,
+      scribeEndedAtMs: scribeEndedAtMs,
+      manualEditingMs: manualEditingMs,
+      outcome: outcome,
+      failureReasons: failureReasons,
     );
   }
 }

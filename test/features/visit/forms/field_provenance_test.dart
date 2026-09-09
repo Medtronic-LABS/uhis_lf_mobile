@@ -366,4 +366,154 @@ void _draftRoundTripTests() {
     expect(n.aiOverriddenFieldIds, isNot(contains('weight')));
     expect(n.classifyFieldProvenance().manual, isNot(contains('weight')));
   });
+
+  group('scribe span and outcome', () {
+    test('widens the span across several sessions rather than replacing it',
+        () {
+      // An SK can dictate, review, then dictate again. The report means "when
+      // was AI listening for this visit", not "the last time it was".
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      n.markScribeSpan(startedAtMs: 3000, endedAtMs: 4000);
+      n.markScribeSpan(startedAtMs: 1000, endedAtMs: 2000);
+      n.markScribeSpan(startedAtMs: 5000, endedAtMs: 6000);
+
+      expect(n.scribeStartedAtMsForTesting, 1000, reason: 'earliest start');
+      expect(n.scribeEndedAtMsForTesting, 6000, reason: 'latest end');
+    });
+
+    test('a fill without timing cannot clear a span already captured', () {
+      // An older banner, or a path that never recorded, reports nulls. Those
+      // must not erase a real measurement.
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      n.markScribeSpan(startedAtMs: 1000, endedAtMs: 2000);
+      n.markScribeSpan(startedAtMs: null, endedAtMs: null);
+
+      expect(n.scribeStartedAtMsForTesting, 1000);
+      expect(n.scribeEndedAtMsForTesting, 2000);
+    });
+
+    test('outcome is null when AI Scribe never ran', () {
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      expect(n.asrOutcome, isNull);
+      expect(n.asrFailureReasons, isNull);
+    });
+
+    test('outcome is success when every proposal applied', () {
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      final defs = _defs(['weight']);
+      n.fieldDefs = defs;
+      n.applyAiPrefill([
+        AIExtractedField(
+          fieldId: 'weight',
+          value: 60,
+          confidence: 1.0,
+          source: FieldSource.aiPending,
+        )
+      ], fieldDefs: defs);
+
+      expect(n.asrOutcome, 'success');
+      expect(n.asrFailureReasons, isNull);
+    });
+
+    test('outcome is partial when some proposals were dropped', () {
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      final defs = _defs(['weight']);
+      n.fieldDefs = defs;
+      n.applyAiPrefill([
+        AIExtractedField(
+          fieldId: 'weight',
+          value: 60,
+          confidence: 1.0,
+          source: FieldSource.aiPending,
+        ),
+        // Not in fieldDefs — rejected as an unsupported field.
+        AIExtractedField(
+          fieldId: 'notAField',
+          value: 1,
+          confidence: 1.0,
+          source: FieldSource.aiPending,
+        ),
+      ], fieldDefs: defs);
+
+      expect(n.asrOutcome, 'partial');
+      expect(n.asrFailureReasons, contains('unsupported_field'));
+    });
+
+    test('outcome is failed when AI ran and nothing stuck', () {
+      // Distinct from success-with-nothing-proposed: a bool flag would report
+      // both as the same non-event, which is the whole point of the metric.
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      final defs = _defs(['weight']);
+      n.fieldDefs = defs;
+      n.applyAiPrefill([
+        AIExtractedField(
+          fieldId: 'notAField',
+          value: 1,
+          confidence: 1.0,
+          source: FieldSource.aiPending,
+        ),
+      ], fieldDefs: defs);
+
+      expect(n.asrOutcome, 'failed');
+    });
+
+    test('failure reasons carry categories only, never field ids', () {
+      // These travel to a server and into a report; a field id here would be
+      // a quiet widening of what telemetry holds.
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      final defs = _defs(['weight']);
+      n.fieldDefs = defs;
+      n.applyAiPrefill([
+        AIExtractedField(
+          fieldId: 'secretFieldName',
+          value: 1,
+          confidence: 1.0,
+          source: FieldSource.aiPending,
+        ),
+      ], fieldDefs: defs);
+
+      expect(n.asrFailureReasons!.keys, isNot(contains('secretFieldName')));
+      expect(n.asrFailureReasons!.keys, everyElement(isNot(contains('Field'))));
+    });
+  });
+
+  group('value-audit capture is gated off by default', () {
+    // AppConfig.valueAuditEnabled is a compile-time --dart-define and cannot
+    // be toggled at runtime, so what these tests pin is the DEFAULT: a build
+    // without the flag never holds a clinical value, not even in memory. That
+    // is the property the PHI argument rests on — if capture ran by default,
+    // every build would be collecting values.
+    test('editing an AI-filled value captures nothing without the flag', () {
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      final defs = _defs(['systolic']);
+      n.fieldDefs = defs;
+
+      n.applyAiPrefill([
+        AIExtractedField(
+          fieldId: 'systolic',
+          value: 160,
+          confidence: 1.0,
+          source: FieldSource.aiPending,
+        )
+      ], fieldDefs: defs);
+      n.updateField('systolic', 140);
+
+      expect(n.aiProposedValuesForTesting, isEmpty,
+          reason: 'a build without VALUE_AUDIT must capture no values');
+      // The non-PHI provenance record still works — the correction is counted,
+      // only the values are absent.
+      expect(n.classifyFieldProvenance().aiCorrected, contains('systolic'));
+    });
+
+    test('the capture map is never populated with a manual entry', () {
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      final defs = _defs(['systolic']);
+      n.fieldDefs = defs;
+
+      n.updateField('systolic', 140);
+
+      expect(n.aiProposedValuesForTesting, isEmpty,
+          reason: 'nothing to audit when AI never proposed a value');
+    });
+  });
 }

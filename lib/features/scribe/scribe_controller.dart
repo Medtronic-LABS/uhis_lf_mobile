@@ -117,7 +117,10 @@ class ScribeController extends ChangeNotifier {
       _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
       await _audioRecorder.start(_captureConfig, path: _recordingPath!);
 
-      _session = const ScribeSession(state: ScribeState.recording);
+      _session = ScribeSession(
+        state: ScribeState.recording,
+        startedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
       notifyListeners();
 
       _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -184,7 +187,11 @@ class ScribeController extends ChangeNotifier {
       _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
       await _audioRecorder.start(_captureConfig, path: _recordingPath!);
 
-      _session = ScribeSession(state: ScribeState.recording, mode: mode);
+      _session = ScribeSession(
+        state: ScribeState.recording,
+        mode: mode,
+        startedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
       notifyListeners();
 
       _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -215,6 +222,11 @@ class ScribeController extends ChangeNotifier {
     _session = _session.copyWith(
       state: ScribeState.uploading,
       uploadProgressPercent: 0,
+      // Stamped here rather than after the native recorder returns: this is
+      // the instant the SK stopped talking, which is what the report means by
+      // "AI Scribe End Time". Upload and processing follow and are not part
+      // of the session the SK experienced.
+      endedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
     notifyListeners();
 

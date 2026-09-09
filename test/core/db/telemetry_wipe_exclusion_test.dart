@@ -18,6 +18,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:uhis_next/core/db/app_database.dart';
 import 'package:uhis_next/core/telemetry/telemetry_dao.dart';
+import 'package:uhis_next/core/telemetry/value_audit_dao.dart';
+import 'package:uhis_next/core/telemetry/value_audit_entry.dart';
 import 'package:uhis_next/core/telemetry/telemetry_event.dart';
 
 Future<AppDatabase> _openInMemoryDb() async {
@@ -149,6 +151,43 @@ void main() {
       await AppDatabase.onUpgrade(db.db, 41, AppDatabase.schemaVersion);
 
       expect((await dao.counts()).total, 1);
+    });
+  });
+
+  group('value audit is the opposite case — PHI, so it IS wiped', () {
+    test('the value-audit table is in the wipe list', () async {
+      // The pair of assertions in this file IS the privacy boundary: telemetry
+      // holds ids and counts and survives, value audit holds clinical values
+      // and does not. Asserting only the exclusion would let the PHI table
+      // quietly join it.
+      expect(
+        AppDatabase.allTablesForTesting,
+        contains(AppDatabase.tableAiValueAudit),
+        reason: 'clinical values must not outlive an SK handover',
+      );
+    });
+
+    test('value-audit rows are destroyed by a wipe', () async {
+      final db = await _openInMemoryDb();
+      addTearDown(db.close);
+      final dao = ValueAuditDao(db);
+
+      await dao.insertAll([
+        const ValueAuditEntry(
+          id: 'a1',
+          visitUuid: 'v1',
+          fieldId: 'systolic',
+          aiValue: '160',
+          finalValue: '140',
+          occurredAt: 1788940800000,
+        ),
+      ]);
+      expect((await dao.counts()).total, 1);
+
+      await db.wipeAllData();
+
+      expect((await dao.counts()).total, 0,
+          reason: 'a different SK signing in must not inherit these values');
     });
   });
 }

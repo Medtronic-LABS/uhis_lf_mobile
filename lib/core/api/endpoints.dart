@@ -227,6 +227,14 @@ class Endpoints {
   /// cannot double-count. Server: ai-scribe-service `app/api/telemetry.py`.
   static const String telemetryEvents = '/ai-scribe/telemetry/events';
 
+  /// Batch-ingest of the PHI value-audit stream — the before/after values of
+  /// AI-filled fields the SK edited. A separate path from [telemetryEvents]
+  /// because it is separately gated at both ends: a deployment can accept
+  /// telemetry and refuse values. Server: ai-scribe-service
+  /// `app/api/value_audit.py`.
+  static const String telemetryValueAudit =
+      '/ai-scribe/telemetry/value-audit';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>

@@ -59,6 +59,16 @@ class TelemetryUploader {
   Future<int> uploadPending() async {
     var accepted = 0;
     try {
+      // Log the backlog on the way in and what is left on the way out. A queue
+      // that never drains is otherwise invisible: pending rows are the ones
+      // that never reach the server, so the dashboard cannot show them, and
+      // the on-device count renders only on the TELEMETRY_SCREEN-gated
+      // viewer. Both lines are guarded on >0 so a healthy device stays quiet.
+      final before = await _dao.counts();
+      if (before.pending > 0) {
+        debugPrint('[Telemetry] flush starting — ${before.pending} pending '
+            '(${before.total} rows held)');
+      }
       while (true) {
         final batch = await _dao.pending(limit: kTelemetryBatchSize);
         if (batch.isEmpty) break;
@@ -72,6 +82,13 @@ class TelemetryUploader {
         if (batch.length < kTelemetryBatchSize) break;
       }
       if (accepted > 0) await purgeUploaded();
+      final after = await _dao.counts();
+      if (after.pending > 0) {
+        debugPrint('[Telemetry] ${after.pending} event(s) STILL pending after '
+            'flush (accepted $accepted this pass)');
+      } else if (accepted > 0) {
+        debugPrint('[Telemetry] queue drained — $accepted event(s) accepted');
+      }
     } on Object catch (e) {
       debugPrint('[Telemetry] upload aborted: $e');
     }
@@ -99,6 +116,12 @@ class TelemetryUploader {
               ).toIso8601String(),
               if (e.visitUuid != null) 'visitUuid': e.visitUuid,
               if (e.skUserId != null) 'skUserId': e.skUserId,
+              if (e.capturedTenantId != null)
+                'capturedTenantId': e.capturedTenantId,
+              // Which AI feature produced the row. Sent explicitly rather
+              // than left to the server's default so a future feature needs
+              // no server change to be attributed correctly.
+              'aiFeature': kTelemetryAiFeatureScribe,
               'appVersion': e.appVersion,
               'appBuild': e.appBuild,
               'payloadVersion': e.payloadVersion,

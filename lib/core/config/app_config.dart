@@ -350,6 +350,22 @@ class AppConfig {
   static bool get telemetryScreenEnabled =>
       const bool.fromEnvironment('TELEMETRY_SCREEN', defaultValue: false);
 
+  /// Feature flag: record the before/after **values** of fields the SK edited
+  /// after AI filled them. Set via `--dart-define=VALUE_AUDIT=true`.
+  ///
+  /// Off by default, and deliberately a separate flag from
+  /// [telemetryScreenEnabled], because this is the one part of telemetry that
+  /// holds clinical data. Ordinary telemetry stores field *ids* and counts and
+  /// is non-PHI by construction; these rows store what was measured, so they
+  /// live in their own table, are wiped with the rest of the patient data when
+  /// a different SK signs in, and are gated at both ends (mirrors the server's
+  /// `ENABLE_VALUE_AUDIT`).
+  ///
+  /// A build without this flag captures nothing, so turning it on later cannot
+  /// retroactively expose values that were never recorded.
+  static bool get valueAuditEnabled =>
+      const bool.fromEnvironment('VALUE_AUDIT', defaultValue: false);
+
   /// Feature flag: use the uhis_form JSON-driven renderer instead of the
   /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
   static const bool useDynamicForms = bool.fromEnvironment(

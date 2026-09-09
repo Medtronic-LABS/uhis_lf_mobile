@@ -38,7 +38,11 @@ void main() {
   setUp(() async {
     db = await _openInMemoryDb();
     dao = TelemetryDao(db);
-    service = TelemetryService(dao: dao, userIdResolver: () async => 4242);
+    service = TelemetryService(
+      dao: dao,
+      userIdResolver: () async => 4242,
+      tenantIdResolver: () async => 77,
+    );
   });
 
   tearDown(() async {
@@ -227,5 +231,131 @@ void main() {
 
   test('newVisitUuid returns a distinct id each call', () {
     expect(service.newVisitUuid(), isNot(service.newVisitUuid()));
+  });
+
+  test('stamps the capturing tenant so a cross-tenant upload still credits it',
+      () async {
+    // A shared device keeps its telemetry queue across a different-SK login
+    // (the wipe exclusion), so the row must remember which tenant produced
+    // it; the server stamps only the *uploading* session's tenant.
+    await service.recordCounsellingShare(
+      channel: TelemetryShareChannel.sms,
+      surface: TelemetryShareSurface.counselling,
+      hasMessage: true,
+      launched: true,
+    );
+    final rows = await dao.pending();
+    expect(rows.single.capturedTenantId, 77);
+  });
+
+  test('a missing tenant leaves the row null rather than guessing', () async {
+    final noTenant = TelemetryService(
+      dao: dao,
+      userIdResolver: () async => 1,
+      tenantIdResolver: () async => null,
+    );
+    await noTenant.recordCounsellingShare(
+      channel: TelemetryShareChannel.sms,
+      surface: TelemetryShareSurface.counselling,
+      hasMessage: true,
+      launched: true,
+    );
+    final rows = await dao.pending();
+    expect(rows.single.capturedTenantId, isNull,
+        reason: 'null degrades to the server crediting the uploading session');
+  });
+
+  group('payload v3 — scribe span, editing time, outcome', () {
+    test('omits the new keys entirely when nothing was measured', () async {
+      // Absence, not null and not zero: a reader tells "not measured" from
+      // "measured as zero" by the key being missing, and v1/v2 rows have no
+      // key either.
+      await service.recordVisitCompleted(
+        visitUuid: 'v1',
+        programmes: const ['anc'],
+        scribeUsed: false,
+        aiCorrected: const [],
+        aiAcceptedUnchanged: const [],
+        manual: const ['systolic'],
+        empty: const [],
+        libraryTotal: 60,
+        renderedTotal: 20,
+        extractableVisible: 8,
+      );
+      final payload = (await dao.pending()).single.payload;
+      for (final key in const [
+        'scribeStartedAt',
+        'scribeEndedAt',
+        'manualEditingMs',
+        'outcome',
+        'failureReasons',
+      ]) {
+        expect(payload.containsKey(key), isFalse, reason: key);
+      }
+    });
+
+    test('carries the span, editing time and outcome when measured',
+        () async {
+      await service.recordVisitCompleted(
+        visitUuid: 'v2',
+        programmes: const ['anc'],
+        scribeUsed: true,
+        aiCorrected: const ['systolic'],
+        aiAcceptedUnchanged: const ['pulse'],
+        manual: const [],
+        empty: const [],
+        libraryTotal: 60,
+        renderedTotal: 20,
+        extractableVisible: 8,
+        scribeStartedAtMs: 1788940800000,
+        scribeEndedAtMs: 1788941040000,
+        manualEditingMs: 90000,
+        outcome: 'partial',
+        failureReasons: const {'validation_failed': 2},
+      );
+      final payload = (await dao.pending()).single.payload;
+      expect(payload['scribeStartedAt'], 1788940800000);
+      expect(payload['scribeEndedAt'], 1788941040000);
+      expect(payload['manualEditingMs'], 90000);
+      expect(payload['outcome'], 'partial');
+      expect(payload['failureReasons'], {'validation_failed': 2});
+    });
+
+    test('the payload version is 3', () async {
+      await service.recordCounsellingShare(
+        channel: TelemetryShareChannel.sms,
+        surface: TelemetryShareSurface.counselling,
+        hasMessage: true,
+        launched: true,
+      );
+      expect((await dao.pending()).single.payloadVersion, 3);
+    });
+
+    test('round-trips the new fields through fromJson', () {
+      // The uploader sends toJson; a reader must get the same values back.
+      const original = VisitCompletedPayload(
+        programmes: ['ncd'],
+        scribeUsed: true,
+        aiFilled: ['systolic'],
+        aiCorrected: ['systolic'],
+        aiAcceptedUnchanged: [],
+        manual: [],
+        empty: [],
+        libraryTotal: 60,
+        renderedTotal: 20,
+        extractableVisible: 8,
+        scribeStartedAtMs: 1788940800000,
+        scribeEndedAtMs: 1788941040000,
+        manualEditingMs: 90000,
+        outcome: 'success',
+        failureReasons: {'sk_owned': 1},
+      );
+      final back = VisitCompletedPayload.fromJson(original.toJson());
+      expect(back.scribeStartedAtMs, original.scribeStartedAtMs);
+      expect(back.scribeEndedAtMs, original.scribeEndedAtMs);
+      expect(back.manualEditingMs, original.manualEditingMs);
+      expect(back.outcome, original.outcome);
+      expect(back.failureReasons, original.failureReasons);
+    });
   });
 }
