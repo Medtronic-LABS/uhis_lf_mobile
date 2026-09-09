@@ -1,8 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/core/constants/app_strings.dart';
 import 'package:uhis_next/core/i18n/app_locale.dart';
 import 'package:uhis_next/features/patient/referral_narrative.dart';
 
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    await loadTranslations();
+  });
+
   // AppLocale.current is a global static flag (the app's context-free
   // localization seam) shared across the whole test process; it defaults to
   // bangla, so pin english here and restore it in tearDown so this file
@@ -143,6 +149,31 @@ void main() {
       expect(
         text,
         'Pulse 50 bpm is below normal — needs urgent attention.',
+      );
+    });
+  });
+
+  group('localizeReferralReasonPhrase', () {
+    test('localizes Spice ANC referral with visit suffix', () {
+      AppLocale.current = AppLanguage.bangla;
+      final label = parseReferralReasonTokens(
+        'High risk pregnant woman, Gaps in ANC - ANC Visit 2',
+      ).map(localizeReferralReasonPhrase).join(', ');
+      expect(label, contains('উচ্চ ঝুঁকিপূর্ণ'));
+      expect(label, isNot(contains('High risk pregnant woman')));
+    });
+
+    test('localizes suspected pre-eclampsia and diabetes phrases', () {
+      AppLocale.current = AppLanguage.bangla;
+      expect(
+        localizeReferralReasonPhrase('Suspected pre-eclampsia'),
+        isNot('Suspected pre-eclampsia'),
+      );
+      expect(
+        localizeReferralReasonPhrase(
+          'Suspected diabetes (FBS≥5.1 or RBS≥8.5)',
+        ),
+        isNot(contains('Suspected diabetes')),
       );
     });
   });

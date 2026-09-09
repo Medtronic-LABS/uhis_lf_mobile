@@ -48,6 +48,78 @@ bool _isRisingBpTrendReason(String compact) =>
     compact.contains('trend') &&
     (compact.contains('bloodpressure') || compact.contains('bptrend'));
 
+Map<String, String> _knownReferralReasonPhrases() => {
+      'High risk pregnant woman': VisitFlowStrings.reasonHighRiskPregnantWoman,
+      'Gaps in ANC': VisitFlowStrings.reasonGapsInAntenatalCare,
+      'High risk mother': VisitFlowStrings.reasonHighRiskMother,
+      'Gaps in PNC': VisitFlowStrings.reasonGapsInPnc,
+      'Child illness referral': VisitFlowStrings.reasonChildIllnessReferral,
+      'High BP': VisitFlowStrings.reasonHighBloodPressure,
+      'High BG': VisitFlowStrings.reasonHighBloodGlucose,
+      'Symptoms': VisitFlowStrings.reasonReportedSymptoms,
+    };
+
+String? _displayVisitLabelFromRaw(String raw) {
+  final trimmed = raw.trim();
+  final anc =
+      RegExp(r'^ANC Visit(?:\s+(.+))?$', caseSensitive: false).firstMatch(trimmed);
+  if (anc != null) return VisitFlowStrings.ancVisitLabel(anc.group(1));
+  final pnc =
+      RegExp(r'^PNC Visit(?:\s+(.+))?$', caseSensitive: false).firstMatch(trimmed);
+  if (pnc != null) return VisitFlowStrings.pncVisitLabel(pnc.group(1));
+  return null;
+}
+
+String? _exactReferralReasonPhrase(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return null;
+  for (final entry in _knownReferralReasonPhrases().entries) {
+    if (trimmed.toLowerCase() == entry.key.toLowerCase()) {
+      return entry.value;
+    }
+  }
+  final lower = trimmed.toLowerCase();
+  if (lower.contains('suspected pre-eclampsia') ||
+      lower.contains('suspected preeclampsia')) {
+    return ReferralStrings.suspectedPreEclampsia;
+  }
+  if (lower.contains('suspected diabetes')) {
+    if (lower.contains('fbs') ||
+        lower.contains('rbs') ||
+        lower.contains('≥') ||
+        lower.contains('>=')) {
+      return ReferralStrings.suspectedDiabetesWithThreshold;
+    }
+    return ReferralStrings.suspectedDiabetes;
+  }
+  return null;
+}
+
+/// Localizes a single referral-reason phrase, including Spice RMNCH labels
+/// (`High risk pregnant woman - ANC Visit 2`) and clinical finding sentences.
+String localizeReferralReasonPhrase(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return '';
+
+  final visitOnly = _displayVisitLabelFromRaw(trimmed);
+  if (visitOnly != null) return visitOnly;
+
+  final exact = _exactReferralReasonPhrase(trimmed);
+  if (exact != null) return exact;
+
+  for (final entry in _knownReferralReasonPhrases().entries) {
+    final prefix = '${entry.key} - ';
+    if (trimmed.startsWith(prefix)) {
+      final suffix = trimmed.substring(prefix.length);
+      final visit = _displayVisitLabelFromRaw(suffix);
+      if (visit != null) return '${entry.value} - $visit';
+      return '${entry.value} - $suffix';
+    }
+  }
+
+  return shortReasonLabel(trimmed);
+}
+
 /// Short human-readable label for a single referral reason token.
 String shortReasonLabel(String reason) {
   final k = reason.toLowerCase().replaceAll(RegExp(r'[\s_]+'), ' ').trim();
@@ -105,6 +177,8 @@ String shortReasonLabel(String reason) {
     return ReferralStrings.shortReasonSymptoms;
   }
   if (compact.contains('symptom')) return ReferralStrings.shortReasonClinicalSymptoms;
+  final exactPhrase = _exactReferralReasonPhrase(reason);
+  if (exactPhrase != null) return exactPhrase;
   final t = reason.trim();
   if (t.isEmpty) return '';
   // camelCase / snake_case → spaced words for unknown codes

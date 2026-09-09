@@ -552,7 +552,9 @@ class _PatientContextScreenState
           id: d.id,
           type: d.assessmentType.toUpperCase(),
           date: d.createdAt ?? DateTime.now(),
-          status: d.syncStatus.name,
+          status: d.referralStatus?.trim().isNotEmpty == true
+              ? d.referralStatus
+              : null,
           notes: d.referredReasons,
           rawJson: localRaw,
         ));
@@ -1520,7 +1522,20 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) =>
 
 /// Short human-readable label for a single referral reason token.
 /// Used in the detail sheet where space is tighter than the full narrative.
-String _shortReasonLabel(String reason) => shortReasonLabel(reason);
+String _shortReasonLabel(String reason) => localizeReferralReasonPhrase(reason);
+
+bool _isClinicalReferralStatus(String? status) {
+  if (status == null || status.trim().isEmpty) return false;
+  final key = status.toLowerCase().replaceAll(RegExp(r'[\s_]+'), '');
+  const syncOrInternal = {
+    'pending',
+    'synced',
+    'networkerror',
+    'inprogress',
+    'failed',
+  };
+  return !syncOrInternal.contains(key);
+}
 
 /// True when [type] is a delivery / pregnancy-outcome assessment (not a PNC visit).
 bool _isPregnancyOutcomeType(String type) {
@@ -4792,9 +4807,10 @@ class _TimelineEventSheet extends StatelessWidget {
         entries.add(MapEntry(PatientDetailStrings.onTreatment, onTreatment));
       }
       if (snap.ttTdCompleted?.isNotEmpty == true) {
-        entries.add(
-          MapEntry(PatientDetailStrings.ttTdCompleted, snap.ttTdCompleted!),
-        );
+        entries.add(MapEntry(
+          PatientDetailStrings.ttTdCompleted,
+          ClinicalStatusStrings.label(snap.ttTdCompleted!),
+        ));
       }
       if (snap.facilityIdentifiedForDelivery?.isNotEmpty == true) {
         entries.add(MapEntry(
@@ -4900,7 +4916,7 @@ class _TimelineEventSheet extends StatelessWidget {
 
     final sheetTitle = prog == Programme.pw
         ? PatientProfileStrings.pregnancyRegistrationCategory
-        : assessment.type;
+        : ProgrammeLabels.forServiceKind(assessment.type);
     final sheetHeading = assessment.visitNumber != null
         ? '$sheetTitle — ${PatientContextStrings.visitNumberLabel(assessment.visitNumber!)}'
         : sheetTitle;
@@ -4941,7 +4957,9 @@ class _TimelineEventSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (assessment.status != null && _shouldShowReferralStatus(prog))
+                if (assessment.status != null &&
+                    _shouldShowReferralStatus(prog) &&
+                    _isClinicalReferralStatus(assessment.status))
                   _StatusChip(status: assessment.status!),
               ],
             ),
@@ -5010,7 +5028,7 @@ class _TimelineEventSheet extends StatelessWidget {
                   Text(
                     () {
                       final localized = parseReferralReasonTokens(assessment.notes)
-                          .map(shortReasonLabel)
+                          .map(localizeReferralReasonPhrase)
                           .where((s) => s.isNotEmpty)
                           .join(', ');
                       return localized.isNotEmpty

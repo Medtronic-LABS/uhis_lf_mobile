@@ -1692,6 +1692,18 @@ abstract final class ReferralStrings {
       getTranslatedString('Referral.shortReasonSymptoms', 'Symptoms');
   static String get shortReasonClinicalSymptoms =>
       getTranslatedString('Referral.shortReasonClinicalSymptoms', 'Clinical symptoms');
+  static String get suspectedPreEclampsia => getTranslatedString(
+        'Referral.suspectedPreEclampsia',
+        'Suspected pre-eclampsia',
+      );
+  static String get suspectedDiabetes => getTranslatedString(
+        'Referral.suspectedDiabetes',
+        'Suspected diabetes',
+      );
+  static String get suspectedDiabetesWithThreshold => getTranslatedString(
+        'Referral.suspectedDiabetesWithThreshold',
+        'Suspected diabetes (FBS≥5.1 or RBS≥8.5)',
+      );
 
   // ── Narrative — findings sentences (referral_narrative.buildReferralNarrative)
   static String dangerSignReported(String dSign) => getTranslatedString(
@@ -6045,7 +6057,10 @@ abstract final class ProgrammeLabels {
       return PatientProfileStrings.ncdFollowUp;
     }
     if (compact == 'PREGNANCYOUTCOME' || compact == 'OUTCOME') {
-      return getTranslatedString('pregnancyOutcome', 'Pregnancy Outcome');
+      return getTranslatedString('pregnancyOutcomeTitle', 'Pregnancy Outcome');
+    }
+    if (compact == 'PNCMOTHER') {
+      return getTranslatedString('Worklist.programmePnc', 'PNC');
     }
     final prog = Programme.fromString(kind);
     if (prog != Programme.unknown) return of(prog);
@@ -6202,12 +6217,25 @@ abstract final class ClinicalStatusStrings {
   /// `Some new code`), never the raw enum — a new backend value should read as
   /// awkward English, not as a database identifier.
   static String label(String raw) {
+    final phrase = _knownEnglishPhrase(raw);
+    if (phrase != null) return phrase;
+
     final key = raw.trim().toUpperCase().replaceAll(' ', '_');
     return switch (key) {
       'HIGH_RISK_PW' => getTranslatedString(
           'ClinicalStatus.highRiskPw', 'High-risk pregnancy'),
+      'GAPS_IN_ANC' => getTranslatedString(
+          'ClinicalStatus.gapsInAnc', 'Gaps in antenatal care'),
+      'GAPS_IN_PNC' => getTranslatedString(
+          'ClinicalStatus.gapsInPnc', 'Gaps in postnatal care'),
       'NORMAL_PREGNANCY' => getTranslatedString(
           'ClinicalStatus.normalPregnancy', 'Normal pregnancy'),
+      'NORMAL_DELIVERY' => getTranslatedString(
+          'ClinicalStatus.normalDelivery', 'Normal delivery'),
+      'STILL_BIRTH' || 'STILLBIRTH' => getTranslatedString(
+          'ClinicalStatus.stillBirth', 'Stillbirth'),
+      'LIVE_BIRTH' || 'LIVEBIRTH' => getTranslatedString(
+          'ClinicalStatus.liveBirth', 'Live birth'),
       'UNCONTROLLED_BP' => getTranslatedString(
           'ClinicalStatus.uncontrolledBp', 'Uncontrolled blood pressure'),
       'CONTROLLED_BP' => getTranslatedString(
@@ -6233,6 +6261,26 @@ abstract final class ClinicalStatusStrings {
   /// Maps a comma/JSON list of codes through [label].
   static String labelAll(Iterable<String> codes) =>
       codes.map(label).where((s) => s.isNotEmpty).join(', ');
+
+  static String? _knownEnglishPhrase(String raw) {
+    final k = raw.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    if (k.isEmpty) return null;
+    return switch (k) {
+      'normal delivery' => getTranslatedString(
+          'ClinicalStatus.normalDelivery', 'Normal delivery'),
+      'still birth' || 'stillbirth' => getTranslatedString(
+          'ClinicalStatus.stillBirth', 'Stillbirth'),
+      'live birth' || 'livebirth' => getTranslatedString(
+          'ClinicalStatus.liveBirth', 'Live birth'),
+      'gaps in anc' => getTranslatedString(
+          'ClinicalStatus.gapsInAnc', 'Gaps in antenatal care'),
+      'gaps in pnc' => getTranslatedString(
+          'ClinicalStatus.gapsInPnc', 'Gaps in postnatal care'),
+      'yes' => PatientDetailStrings.yes,
+      'no' => PatientContextStrings.no,
+      _ => null,
+    };
+  }
 
   static String _humanize(String raw) {
     final cleaned = raw.trim().replaceAll('_', ' ').toLowerCase();

@@ -12003,6 +12003,38 @@
     "bn": "অনিয়ন্ত্রিত রক্তচাপ",
     "en": "Uncontrolled blood pressure"
   },
+  "ClinicalStatus.gapsInAnc": {
+    "bn": "প্রসবপূর্ব সেবায় ঘাটতি",
+    "en": "Gaps in antenatal care"
+  },
+  "ClinicalStatus.gapsInPnc": {
+    "bn": "প্রসবোত্তর সেবায় ঘাটতি",
+    "en": "Gaps in postnatal care"
+  },
+  "ClinicalStatus.normalDelivery": {
+    "bn": "স্বাভাবিক প্রসব",
+    "en": "Normal delivery"
+  },
+  "ClinicalStatus.stillBirth": {
+    "bn": "মৃত প্রসব",
+    "en": "Stillbirth"
+  },
+  "ClinicalStatus.liveBirth": {
+    "bn": "জীবিত শিশু জন্ম",
+    "en": "Live birth"
+  },
+  "Referral.suspectedPreEclampsia": {
+    "bn": "প্রি-ইক্লাম্পসিয়ার সন্দেহ",
+    "en": "Suspected pre-eclampsia"
+  },
+  "Referral.suspectedDiabetes": {
+    "bn": "ডায়াবেটিস সন্দেহ",
+    "en": "Suspected diabetes"
+  },
+  "Referral.suspectedDiabetesWithThreshold": {
+    "bn": "ডায়াবেটিস সন্দেহ (FBS≥5.1 বা RBS≥8.5)",
+    "en": "Suspected diabetes (FBS≥5.1 or RBS≥8.5)"
+  },
   "PatientDetail.gaOneWeek": {
     "bn": "{weeks} সপ্তাহ",
     "en": "{weeks} week"

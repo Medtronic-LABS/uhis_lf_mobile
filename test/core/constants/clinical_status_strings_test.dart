@@ -18,11 +18,16 @@ void main() {
       AppLocale.current = AppLanguage.bangla;
       for (final code in [
         'HIGH_RISK_PW',
+        'GAPS_IN_ANC',
         'NORMAL_PREGNANCY',
         'UNCONTROLLED_BP',
         'UNCONTROLLED_BG',
         'Referred',
         'rbs',
+        'Normal delivery',
+        'Still birth',
+        'Live birth',
+        'yes',
       ]) {
         final label = ClinicalStatusStrings.label(code);
         expect(label, isNot(code), reason: '$code was not localized');
