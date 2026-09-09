@@ -484,6 +484,15 @@ GoRouter buildRouter(AuthState auth) {
             child: TeleconsultScreen(
               patientLabel: extra['patientLabel'] as String? ?? '',
               patientId: extra['patientId'] as String? ?? '',
+              visitId: extra['visitId'] as String?,
+              patientPhone: extra['patientPhone'] as String?,
+              reason: extra['reason'] as String?,
+              patientDob: extra['patientDob'] as String?,
+              patientGender: extra['patientGender'] as String?,
+              visitNumber: extra['visitNumber'] as int?,
+              gestationalWeeks: extra['gestationalWeeks'] as int?,
+              clinicalContextSummary: extra['clinicalContextSummary'] as String?,
+              whatsappMessage: extra['whatsappMessage'] as String?,
             ),
           );
         },

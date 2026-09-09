@@ -1126,6 +1126,15 @@ class AssessmentRepository extends ChangeNotifier {
     );
   }
 
+  /// Builds a [VisitVitals] snapshot from one ANC assessment's raw
+  /// `assessment_details` JSON — the same shape [ancVitalsHistory] parses for
+  /// prior visits. Public entry point for describing *today's* in-progress
+  /// vitals (e.g. Step 3's teleconsult clinical-context summary) without
+  /// re-deriving the systolic/diastolic/weight/urinaryAlbumin extraction a
+  /// second time.
+  static VisitVitals vitalsFromAncAssessmentJson(String detailsJson, {DateTime? date}) =>
+      _snapshotFromAnc(detailsJson, date);
+
   /// Merge synced `assessments` + `local_assessments` by calendar day.
   /// Same-day collision: local wins (fresher device write).
   static List<VisitVitals> _mergeAncVitalsByVisitDay({

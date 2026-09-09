@@ -342,4 +342,49 @@ class AppConfig {
     'USE_DYNAMIC_FORMS',
     defaultValue: true,
   );
+
+  // ── Shukhee teleconsult ────────────────────────────────────────────────
+
+  /// Base URL of the backend exposing the Shukhee consultation endpoints
+  /// (`frappe-uhis-next`'s `shukhee_integration` app locally; a dedicated
+  /// microservice once "uhis-next" is split out behind the platform gateway
+  /// remotely). Empty by default -- forces explicit per-environment
+  /// configuration rather than silently pointing at [apiBaseUrl], which is
+  /// a different backend entirely (the old platform's gateway, not
+  /// frappe-uhis-next).
+  static const String shukheeApiBaseUrl = String.fromEnvironment(
+    'SHUKHEE_API_BASE_URL',
+    defaultValue: '',
+  );
+
+  /// Feature flag: whether the real Shukhee teleconsult flow is wired up.
+  /// Default off -- this integrates against a real third-party vendor with
+  /// per-SK provisioning requirements on the backend (an Active `UHIS
+  /// Shukhee User` record) that may not be set up for every environment's
+  /// user base yet; flip per-environment once confirmed.
+  static const bool teleconsultEnabled = bool.fromEnvironment(
+    'TELECONSULT_ENABLED',
+    defaultValue: false,
+  );
+
+  /// Max attempts / delay for polling consultation status after booking.
+  /// Mirrors the desk-side admin UI's own polling cadence for the same
+  /// backend endpoint (4s), proven against the live Shukhee sandbox.
+  static int get teleconsultPollMaxAttempts =>
+      int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_MAX_ATTEMPTS')) ?? 30;
+
+  static int get teleconsultPollDelaySeconds =>
+      int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_DELAY_SECONDS')) ?? 4;
+
+  /// Fallback contact number offered (pre-filled, not silently applied) when
+  /// a patient/household has no phone number on file. The SK facilitates the
+  /// teleconsult call on the patient's behalf -- Shukhee's booking API still
+  /// requires *some* valid contact number on the request even though the SK's
+  /// own device is what actually joins the call, so this exists to unblock
+  /// that case rather than dead-end the flow. Empty by default outside dev --
+  /// blank means the phone-prompt sheet shows no pre-fill, same as before.
+  static const String teleconsultDefaultPhone = String.fromEnvironment(
+    'TELECONSULT_DEFAULT_PHONE',
+    defaultValue: '',
+  );
 }

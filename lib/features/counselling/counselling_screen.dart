@@ -10,10 +10,10 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/counselling_launcher.dart';
 
 /// WhatsApp brand green header — mimics the real WhatsApp app chrome,
 /// deliberately distinct from AppColors.whatsapp/waHeader (the in-app accent).
@@ -64,45 +64,22 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
 
   Future<void> _sendWhatsApp() async {
     if (!_hasMessage) return;
-    final encoded = Uri.encodeComponent(widget.whatsappMessage!);
-    final rawPhone =
-        widget.patientPhone?.replaceAll(RegExp(r'[^\d]'), '') ?? '';
-    final phoneParam = rawPhone.isNotEmpty ? 'phone=$rawPhone&' : '';
-    final nativeUri =
-        Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
-    if (await canLaunchUrl(nativeUri)) {
-      await launchUrl(nativeUri);
-      return;
-    }
-    // Fallback: wa.me universal link.
-    final webUri = Uri.parse(
-        'https://wa.me/${rawPhone.isNotEmpty ? rawPhone : ''}?text=$encoded');
-    if (await canLaunchUrl(webUri)) {
-      await launchUrl(webUri, mode: LaunchMode.externalApplication);
-      return;
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(CounsellingStrings.whatsAppNotInstalled)),
-      );
-    }
+    await sendCounsellingWhatsApp(
+      context: context,
+      message: widget.whatsappMessage!,
+      phone: widget.patientPhone,
+      notInstalledMessage: CounsellingStrings.whatsAppNotInstalled,
+    );
   }
 
   Future<void> _sendSms() async {
     if (!_hasMessage) return;
-    final encoded = Uri.encodeComponent(widget.whatsappMessage!);
-    final phone = widget.patientPhone ?? '';
-    final uri = Uri.parse('sms:$phone?body=$encoded');
-    if (!await canLaunchUrl(uri)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(CounsellingStrings.smsNotAvailable)),
-        );
-      }
-      return;
-    }
-    await launchUrl(uri);
+    await sendCounsellingSms(
+      context: context,
+      message: widget.whatsappMessage!,
+      phone: widget.patientPhone,
+      notAvailableMessage: CounsellingStrings.smsNotAvailable,
+    );
   }
 
   @override
