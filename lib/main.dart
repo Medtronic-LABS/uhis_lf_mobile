@@ -28,6 +28,7 @@ import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
 import 'core/constants/app_strings.dart';
+import 'features/visit/forms/form_config.dart';
 import 'core/db/ai_response_cache_dao.dart';
 import 'core/db/app_database.dart';
 import 'core/db/assessment_dao.dart';
@@ -100,6 +101,7 @@ Future<void> main() async {
   // Bengali date symbols. Without this every DateFormat falls back to English
   // month names regardless of app language.
   await AppDateFormat.ensureInitialised();
+  await FormConfig.loadAndCache(rootBundle);
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();
@@ -113,7 +115,6 @@ Future<void> main() async {
   final authState = AuthState(
     authRepo,
     biometric,
-    onWipeLocalData: appDb.wipeAllData,
   );
   authState.bootstrap(); // fire-and-forget — splash shows while bootstrap runs async
   runApp(UhisNextApp(
@@ -318,10 +319,10 @@ class _UhisNextAppState extends State<UhisNextApp>
     // These repositories/services are single long-lived instances for the
     // app's whole process (see the `late final` fields above — none are
     // recreated per login), so each caches session data in memory that
-    // AppDatabase.wipeAllData() cannot reach. Without these hooks, the next
-    // user to log in on the same device would briefly see the previous
-    // user's dashboard snapshot, hierarchy/village assignment, or training
-    // progress until something else happened to refresh it.
+    // survives logout (UHIS parity — local DB is kept). Without these hooks,
+    // the next user to log in on the same device would briefly see the
+    // previous user's dashboard snapshot, hierarchy/village assignment, or
+    // training progress until something else happened to refresh it.
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
     widget.authState.addListener(_onAuthStateChanged);
@@ -329,11 +330,9 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Reset sync progress so the next user's /sync screen does not see
     // isComplete=true from the previous session and skip their cold sync.
     widget.authState.registerLogoutHook(_sync.resetProgress);
-    // Best-effort flush of any still-pending assessment writes before the
-    // DB wipe below destroys their local row — without this, an outcome
-    // recorded shortly before logout (or while offline) that hasn't reached
-    // the backend yet is lost permanently: gone locally, never pushed.
-    // Bounded so a slow/offline network can't hang logout.
+    // Best-effort flush of any still-pending assessment writes before sign-out
+    // completes — without this, an outcome recorded shortly before logout (or
+    // while offline) may not reach the backend until the next login sync.
     widget.authState.registerPreWipeHook(
       () => _assessmentRepo
           .syncPendingAssessments()

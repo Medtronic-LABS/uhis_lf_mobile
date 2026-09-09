@@ -11,6 +11,7 @@ import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import 'pregnancy_outcome_snapshot_mapper.dart';
 import '../../../core/debug/asr_diagnostics.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/mission/mission_pregnancy_facts.dart';
@@ -2120,14 +2121,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final isOutcome = types.contains('PREGNANCY_OUTCOME') ||
           types.contains('PREGNANCYOUTCOME');
       if (!isOutcome) return null;
-      final deliveryRaw =
-          _data.getValue('dateOfDelivery') ?? _data.getValue('deliveryDate');
-      final deliveryMs = deliveryRaw is String
-          ? DateTime.tryParse(deliveryRaw)?.millisecondsSinceEpoch
-          : null;
+      final poSnapshot = PregnancyOutcomeSnapshotMapper.fromPoData(
+        patientId: localId,
+        data: _data,
+        existing: (await _pregnancyEpisodeDao.openEpisodeFor(localId) ??
+                await _pregnancyEpisodeDao.mostRecentFor(localId))
+            ?.obstetric,
+      );
+      final deliveryMs = poSnapshot.deliveryDateMillis ??
+          DateTime.now().millisecondsSinceEpoch;
       final created = await _pregnancyEpisodeDao.closeEpisode(
         patientId: localId,
-        deliveryDateMillis: deliveryMs ?? DateTime.now().millisecondsSinceEpoch,
+        deliveryDateMillis: deliveryMs,
+        obstetricPatch: poSnapshot,
       );
       return created.id;
     }

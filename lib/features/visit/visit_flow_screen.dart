@@ -1737,9 +1737,16 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
   NabaResponse _ruleBasedNaba() {
     final progs = widget.confirmedProgrammes;
-    final hasAnc = progs.contains(Programme.anc);
+    final assessmentTypes = _submittedAssessmentTypes;
+    final poOnly = VisitSummaryDetails.isPregnancyOutcomeOnlyVisit(
+      assessmentTypes: assessmentTypes,
+    );
+    final poWithPnc = VisitSummaryDetails.includesPncMotherAssessment(
+      assessmentTypes: assessmentTypes,
+    );
+    final hasAnc = progs.contains(Programme.anc) && !poOnly && !poWithPnc;
     final hasNcd = progs.contains(Programme.ncd);
-    final hasPnc = progs.contains(Programme.pnc);
+    final hasPnc = progs.contains(Programme.pnc) || poWithPnc;
     final hasImci = progs.contains(Programme.imci);
     final hasTb = progs.contains(Programme.tb);
     // confirmedProgrammes is deliberately emptied for a vaccination-only tap
@@ -1912,6 +1919,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       if (VisitSummaryDetails.shouldAddGenericFollowUpFallback(
         programmes: progs,
         primaryProgramme: widget.primaryProgramme,
+        assessmentTypes: assessmentTypes,
       )) {
         followUp.add(NabaFollowUpItem(
           activity: VisitFlowStrings.noActionsFollowUpActivity,

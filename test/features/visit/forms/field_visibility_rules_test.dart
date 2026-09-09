@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:uhis_next/features/visit/forms/canonical_visit_data.dart';
+import 'package:uhis_next/core/i18n/app_locale.dart';
 import 'package:uhis_next/features/visit/forms/form_config.dart';
 import 'package:uhis_next/features/visit/forms/unified_section_rules.dart';
 
@@ -1103,6 +1104,31 @@ void main() {
           formType: 'pncMother',
         ),
         isTrue,
+      );
+    });
+  });
+
+  group('fieldOptionDisplayLabel', () {
+    setUpAll(() async {
+      AppLocale.current = AppLanguage.english;
+      await FormConfig.loadAndCache(rootBundle);
+    });
+
+    test('maps pregnancy outcome delivery and complication ids', () {
+      expect(
+        fieldOptionDisplayLabel('modeOfDelivery', 'normalDelivery'),
+        'Normal Delivery',
+      );
+      expect(
+        fieldOptionDisplayLabel('anyComplicationsDuringDelivery', 'yes'),
+        'Yes',
+      );
+      expect(
+        fieldOptionDisplayLabel(
+          'complicationsDuringDelivery',
+          'excessiveBleeding,convulsions',
+        ),
+        'Excessive bleeding, Convulsions',
       );
     });
   });

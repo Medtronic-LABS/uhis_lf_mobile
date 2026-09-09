@@ -15,6 +15,7 @@ import '../../core/db/member_dao.dart';
 import '../../core/db/pregnancy_episode_dao.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
+import '../../core/risk/anc_status.dart';
 import '../../core/sync/offline_push_service.dart';
 import '../../core/sync/sync_activity.dart';
 import '../patient/followup_call_service.dart';
@@ -569,13 +570,30 @@ class AssessmentRepository extends ChangeNotifier {
           }
           if (pushedMemberIds.isNotEmpty && _memberDao != null) {
             try {
-              await _memberDao.markSynced(pushedMemberIds);
+              var stamped = 0;
+              for (final memberId in pushedMemberIds) {
+                final reported = poll.memberStatusByReference[memberId];
+                if (reported == null) {
+                  debugPrint(
+                      '[AssessmentSync] household member $memberId absent '
+                      'from status poll — leaving NotSynced for retry');
+                  continue;
+                }
+                await _memberDao.updateFhirId(
+                  localId: memberId,
+                  fhirId: reported == 'Success'
+                      ? poll.memberFhirIdByReference[memberId]
+                      : null,
+                  syncStatus: reported,
+                );
+                stamped++;
+              }
               debugPrint(
-                  '[AssessmentSync] Marked ${pushedMemberIds.length} '
-                  'household member(s) as synced');
+                  '[AssessmentSync] Stamped $stamped/${pushedMemberIds.length} '
+                  'household member(s) from status poll');
             } catch (e) {
               debugPrint(
-                  '[AssessmentSync] household-member markSynced skipped: $e');
+                  '[AssessmentSync] household-member updateFhirId skipped: $e');
             }
           }
           return ids.length;
@@ -712,33 +730,27 @@ class AssessmentRepository extends ChangeNotifier {
     return out;
   }
 
-  /// Latest ANC visit date + scheduled next-visit date for Eligible Services /
-  /// revisit lock. Prefers the chronologically newest ANC row across local
-  /// assessments and synced history. [nextDueAt] comes from summary /
-  /// `nextVisitDate` / `nextFollowUpDate` when present (null if not stamped).
-  Future<({DateTime lastVisitAt, DateTime? nextDueAt})?> latestAncVisitSchedule(
+  /// Latest ANC visit + high-risk flag for Step 1 revisit lock — mirrors
+  /// Android Spice `isAncMenuDisabledByLastVisit` /
+  /// `AssessmentUtil.getAncMenuRevisitDays(lastAncHistory.customStatus)`.
+  ///
+  /// [highRiskPw] is true when the newest ANC row's `customStatus` contains
+  /// `HIGH_RISK_PW`. Does not use stamped `nextVisitDate` for locking.
+  Future<({DateTime lastVisitAt, bool highRiskPw})?> latestAncRevisitContext(
     String patientId, {
     String? alsoId,
+    Iterable<String>? extraIds,
   }) async {
-    final ids = _idsFor(patientId, alsoId);
+    final ids = _idsFor(patientId, alsoId, extraIds: extraIds);
     if (ids.isEmpty) return null;
 
     DateTime? bestVisit;
-    DateTime? bestNextDue;
+    var bestHighRisk = false;
 
-    void consider(DateTime visitAt, DateTime? nextDue) {
+    void consider(DateTime visitAt, bool highRisk) {
       if (bestVisit == null || visitAt.isAfter(bestVisit!)) {
         bestVisit = visitAt;
-        bestNextDue = nextDue;
-        return;
-      }
-      // Same visit moment: keep a stamped next-due if the earlier pick lacked one.
-      if (bestVisit != null &&
-          !visitAt.isBefore(bestVisit!) &&
-          !visitAt.isAfter(bestVisit!) &&
-          bestNextDue == null &&
-          nextDue != null) {
-        bestNextDue = nextDue;
+        bestHighRisk = highRisk;
       }
     }
 
@@ -746,7 +758,7 @@ class AssessmentRepository extends ChangeNotifier {
       if (!_isAncVisitKind(row.assessmentType.toUpperCase())) continue;
       final visitAt = row.createdAt;
       if (visitAt == null) continue;
-      consider(visitAt, _nextVisitFromOtherDetails(row.otherDetails));
+      consider(visitAt, _customStatusHighRiskPw(row.customStatus));
     }
 
     for (final row in await _historyRows(ids)) {
@@ -756,50 +768,61 @@ class AssessmentRepository extends ChangeNotifier {
       if (occurred == null) continue;
       consider(
         DateTime.fromMillisecondsSinceEpoch(occurred),
-        _nextVisitFromHistoryRaw(row.rawJson),
+        _customStatusHighRiskPwFromHistoryRaw(row.rawJson),
       );
     }
 
     final visit = bestVisit;
     if (visit == null) return null;
-    return (lastVisitAt: visit, nextDueAt: bestNextDue);
+    return (lastVisitAt: visit, highRiskPw: bestHighRisk);
   }
 
-  static DateTime? _nextVisitFromOtherDetails(String? otherDetails) {
-    if (otherDetails == null || otherDetails.isEmpty) return null;
-    try {
-      final decoded = jsonDecode(otherDetails);
-      if (decoded is! Map) return null;
-      return _nextVisitFromMap(Map<String, dynamic>.from(decoded));
-    } catch (_) {
-      return null;
-    }
+  static bool _customStatusHighRiskPw(String? encoded) {
+    if (encoded == null || encoded.trim().isEmpty) return false;
+    return _customStatusListContainsHighRisk(_decodeCustomStatus(encoded));
   }
 
-  static DateTime? _nextVisitFromHistoryRaw(String rawJson) {
-    if (rawJson.isEmpty) return null;
+  static bool _customStatusHighRiskPwFromHistoryRaw(String rawJson) {
+    if (rawJson.isEmpty) return false;
     try {
       final decoded = jsonDecode(rawJson);
-      if (decoded is! Map) return null;
+      if (decoded is! Map) return false;
       final map = Map<String, dynamic>.from(decoded);
-      final top = _nextVisitFromMap(map);
-      if (top != null) return top;
-      final summary = map['summary'];
-      if (summary is Map) {
-        return _nextVisitFromMap(Map<String, dynamic>.from(summary));
+      final direct = map['customStatus'];
+      if (_customStatusListContainsHighRisk(_decodeCustomStatus(direct))) {
+        return true;
       }
-      return null;
-    } catch (_) {
-      return null;
-    }
+      final encounter = map['encounter'];
+      if (encounter is Map) {
+        return _customStatusListContainsHighRisk(
+          _decodeCustomStatus(encounter['customStatus']),
+        );
+      }
+    } catch (_) {}
+    return false;
   }
 
-  static DateTime? _nextVisitFromMap(Map<String, dynamic> map) =>
-      JsonRead.firstDateTime(map, const [
-        'nextVisitDate',
-        'nextFollowUpDate',
-        'dueDate',
-      ]);
+  static List<String> _decodeCustomStatus(dynamic raw) {
+    if (raw == null) return const [];
+    if (raw is List) {
+      return raw.map((e) => e.toString()).toList();
+    }
+    if (raw is String) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) return const [];
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List) {
+          return decoded.map((e) => e.toString()).toList();
+        }
+      } catch (_) {}
+      return [trimmed];
+    }
+    return [raw.toString()];
+  }
+
+  static bool _customStatusListContainsHighRisk(List<String> tokens) =>
+      tokens.contains(AncStatus.highRiskPw);
 
   /// Number of ANC visits already recorded for [patientId], across this
   /// device's rows and synced history.
@@ -1838,6 +1861,8 @@ class AssessmentRepository extends ChangeNotifier {
     var sawFailed = false;
     final statusByReference = <int, String>{};
     final fhirIdByReference = <int, String>{};
+    final memberStatusByReference = <String, String>{};
+    final memberFhirIdByReference = <String, String>{};
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
@@ -1872,16 +1897,29 @@ class AssessmentRepository extends ChangeNotifier {
         for (final raw in entities) {
           if (raw is! Map) continue;
           final entityStatus = raw['status']?.toString() ?? '';
-          final reference = int.tryParse(raw['referenceId']?.toString() ?? '');
+          final entityType = raw['type']?.toString() ?? '';
+          final referenceId = raw['referenceId']?.toString();
+          final reference = int.tryParse(referenceId ?? '');
+          final fhirId = raw['fhirId']?.toString();
           debugPrint(
-              '[AssessmentSync] status entity type=${raw['type']} '
-              'ref=${raw['referenceId']} status=$entityStatus '
+              '[AssessmentSync] status entity type=$entityType '
+              'ref=$referenceId status=$entityStatus '
               'err=${raw['errorMessage']}');
-          if (raw['type']?.toString() == 'Assessment' && reference != null) {
+          if (entityType == 'Assessment' && reference != null) {
             statusByReference[reference] = entityStatus;
-            final fhirId = raw['fhirId']?.toString();
             if (fhirId != null && fhirId.isNotEmpty && fhirId != 'null') {
               fhirIdByReference[reference] = fhirId;
+            }
+          } else if (entityType == 'HouseholdMember' &&
+              referenceId != null &&
+              referenceId.isNotEmpty &&
+              (entityStatus == 'Success' || entityStatus == 'Failed')) {
+            memberStatusByReference[referenceId] = entityStatus;
+            if (entityStatus == 'Success' &&
+                fhirId != null &&
+                fhirId.isNotEmpty &&
+                fhirId != 'null') {
+              memberFhirIdByReference[referenceId] = fhirId;
             }
           }
           if (entityStatus == 'InProgress') {
@@ -1897,6 +1935,8 @@ class AssessmentRepository extends ChangeNotifier {
               : _OfflineSyncPollResult.success,
           assessmentStatusByReference: statusByReference,
           assessmentFhirIdByReference: fhirIdByReference,
+          memberStatusByReference: memberStatusByReference,
+          memberFhirIdByReference: memberFhirIdByReference,
         );
       } on DioException catch (e) {
         debugPrint(
@@ -1911,6 +1951,8 @@ class AssessmentRepository extends ChangeNotifier {
           : _OfflineSyncPollResult.inProgress,
       assessmentStatusByReference: statusByReference,
       assessmentFhirIdByReference: fhirIdByReference,
+      memberStatusByReference: memberStatusByReference,
+      memberFhirIdByReference: memberFhirIdByReference,
     );
   }
 }
@@ -1924,11 +1966,15 @@ class _OfflineSyncPollOutcome {
     required this.overall,
     required this.assessmentStatusByReference,
     required this.assessmentFhirIdByReference,
+    required this.memberStatusByReference,
+    required this.memberFhirIdByReference,
   });
 
   final _OfflineSyncPollResult overall;
   final Map<int, String> assessmentStatusByReference;
   final Map<int, String> assessmentFhirIdByReference;
+  final Map<String, String> memberStatusByReference;
+  final Map<String, String> memberFhirIdByReference;
 }
 
 enum _BiometricKind { height, weight }

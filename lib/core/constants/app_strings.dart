@@ -99,6 +99,7 @@ abstract final class AppStrings {
   static String get ancBlockedPostpartumMessage => getTranslatedString('ancBlockedPostpartumMessage', 'This patient has completed a delivery or PNC visit. ANC assessments cannot be started after delivery.');
   static String get ancBlockedDuplicateTitle => getTranslatedString('ancBlockedDuplicateTitle', 'ANC Already Recorded Today');
   static String get ancBlockedDuplicateMessage => getTranslatedString('ancBlockedDuplicateMessage', 'An ANC assessment has already been recorded for this patient today. Only one ANC visit is allowed per day.');
+  static String get ancBlockedRevisitTitle => getTranslatedString('ancBlockedRevisitTitle', 'ANC visit not due yet');
 
   // ── PW registration blocking ──────────────────────────────────────────────
   static String get pwAlreadyEnrolledTitle => getTranslatedString('pwAlreadyEnrolledTitle', 'Already Registered');
@@ -153,6 +154,23 @@ abstract final class LoginStrings {
   static String get emailLabel => getTranslatedString('emailLabel', 'Email');
   static String get showPasswordTooltip => getTranslatedString('Login.showPasswordTooltip', 'Show password');
   static String get hidePasswordTooltip => getTranslatedString('Login.hidePasswordTooltip', 'Hide password');
+
+  /// Shown when a different SK tries to sign in while unsynced data from
+  /// the previous account is still on device.
+  static String get differentUserPendingTitle => getTranslatedString(
+        'Login.differentUserPendingTitle',
+        'Unsynced data on this device',
+      );
+  static String differentUserPendingBody(int count, String owner) =>
+      getTranslatedString(
+        'Login.differentUserPendingBody',
+        'This device has {count} unsynced record(s) from {owner}. '
+            'Sign in as {owner} and sync your data before another account '
+            'can use this device.',
+        params: {'count': '$count', 'owner': owner},
+      );
+  static String get differentUserPendingOk =>
+      getTranslatedString('Login.differentUserPendingOk', 'OK');
 }
 
 /// Lock / unlock screen + mid-session lock barrier.
@@ -305,7 +323,7 @@ abstract final class DashboardStrings {
   static String get signOutOfflineWarningTitle => getTranslatedString('signOutOfflineWarningTitle', 'You\'re offline');
   static String signOutOfflineWarningBody(int count) => getTranslatedString(
         'signOutOfflineWarningBody',
-        'You have {count} unsynced record(s). Signing out now will permanently delete them from this device. Continue?',
+        'You have {count} unsynced record(s). They will stay on this device and sync when you sign in online. Continue?',
         params: {'count': '$count'},
       );
   static String get signOutAnyway => getTranslatedString('signOutAnyway', 'Sign out anyway');
@@ -2717,10 +2735,14 @@ abstract final class TriageStrings {
   static String get eligibleServicesTag => getTranslatedString('Triage.eligibleServicesTag', 'Age & gender based');
   static String get enrolledBadge => getTranslatedString('enrolledBadge', 'Enrolled');
   static String get pwHint => getTranslatedString('Triage.pwHint', '⚠ Select \'PW\' first to unlock ANC');
+
+  static String get pncPoHint => getTranslatedString(
+      'Triage.pncPoHint', '⚠ Select \'Pregnancy Outcome\' first to unlock PNC');
   /// Chip label — Android "Pregnancy Outcome" menu (not mother PNC).
   static String get pregnancyOutcomeChip => getTranslatedString('pregnancyOutcomeChip', 'Pregnancy Outcome');
   static String get deliveryHint => getTranslatedString('deliveryHint', 'Pregnancy Outcome documents the birth this visit and clears ANC');
   static String get ancDeliveryConflictHint => getTranslatedString('ancDeliveryConflictHint', '⚠ Unavailable on a pregnancy-outcome visit — deselect Pregnancy Outcome first');
+  static String get ancLockedPostpartumHint => getTranslatedString('ancLockedPostpartumHint', '⚠ ANC is not available after delivery — use PNC for postnatal care');
   static String get pncOnlyPostpartumHint => getTranslatedString('pncOnlyPostpartumHint', '⚠ Mother PNC is available after delivery — use Pregnancy Outcome now');
   static String get pwLockedPostpartumHint => getTranslatedString('pwLockedPostpartumHint', '⚠ This pregnancy has already ended — PW registration is only for a new pregnancy');
   static String get pregnancyOutcomeLockedHint => getTranslatedString('pregnancyOutcomeLockedHint', '⚠ Pregnancy Outcome is not available for this patient right now');
@@ -2729,7 +2751,9 @@ abstract final class TriageStrings {
   static String pwEpisodeSubtitle({required String lmp, required String edd}) => getTranslatedString('Triage.pwEpisodeSubtitle', 'LMP: {lmp} · EDD: {edd}', params: {'lmp': lmp, 'edd': edd});
   static String get ancVisitedTodayMessage => getTranslatedString('Triage.ancVisitedTodayMessage', 'ANC already recorded today');
   static String ancRevisitMessageNormal({required String lastVisit, required String nextDue}) => getTranslatedString('Triage.ancRevisitMessageNormal', 'Last visit: {lastVisit} · next due {nextDue}', params: {'lastVisit': lastVisit, 'nextDue': nextDue});
-  static String ancRevisitMessageHighRisk({required String lastVisit}) => getTranslatedString('Triage.ancRevisitMessageHighRisk', 'Last visit: {lastVisit} (high-risk — 1-day interval)', params: {'lastVisit': lastVisit});
+  static String ancRevisitMessageScheduledHighRisk({required String lastVisit, required String nextDue}) => getTranslatedString('Triage.ancRevisitMessageScheduledHighRisk', 'Last visit: {lastVisit} · next due {nextDue} (high-risk)', params: {'lastVisit': lastVisit, 'nextDue': nextDue});
+  static String ancRevisitMessageNormalInterval({required String lastVisit, required int days}) => getTranslatedString('Triage.ancRevisitMessageNormalInterval', 'Last visit: {lastVisit} · revisit in {days} days', params: {'lastVisit': lastVisit, 'days': '$days'});
+  static String ancRevisitMessageHighRisk({required String lastVisit}) => getTranslatedString('Triage.ancRevisitMessageHighRisk', 'Last visit: {lastVisit} (high-risk — revisit in 1 day)', params: {'lastVisit': lastVisit});
 
   static String selectProgrammeA11y(String label) => getTranslatedString('selectProgrammeA11y', 'Select {label}', params: {'label': '$label'});
   static String deselectProgrammeA11y(String label) => getTranslatedString('deselectProgrammeA11y', 'Deselect {label}', params: {'label': '$label'});
