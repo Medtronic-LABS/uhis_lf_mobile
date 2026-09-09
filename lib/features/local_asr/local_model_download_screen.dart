@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'local_model_manager.dart';
@@ -6,7 +10,7 @@ import 'local_model_manager.dart';
 /// Download screen for on-device AI models (ASR + LLM).
 ///
 /// Accessible via the dashboard settings menu → "Local AI Models".
-/// Shows install status, download progress, and storage estimates.
+/// Shows install status, download progress, storage estimates, and live RAM.
 class LocalModelDownloadScreen extends StatefulWidget {
   const LocalModelDownloadScreen({super.key});
 
@@ -16,30 +20,27 @@ class LocalModelDownloadScreen extends StatefulWidget {
 }
 
 class _LocalModelDownloadScreenState extends State<LocalModelDownloadScreen> {
-  late final LocalModelManager _manager;
-  bool _initialized = false;
+  Timer? _ramTimer;
+  int _rssBytes = 0;
 
   @override
   void initState() {
     super.initState();
-    _manager = LocalModelManager();
-    _manager.addListener(_onChanged);
-    _manager.init().then((_) => setState(() => _initialized = true));
+    _rssBytes = ProcessInfo.currentRss;
+    _ramTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted) setState(() => _rssBytes = ProcessInfo.currentRss);
+    });
   }
 
   @override
   void dispose() {
-    _manager.removeListener(_onChanged);
-    _manager.dispose();
+    _ramTimer?.cancel();
     super.dispose();
-  }
-
-  void _onChanged() {
-    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
+    final manager = context.watch<LocalModelManager>();
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
       appBar: AppBar(
@@ -55,35 +56,39 @@ class _LocalModelDownloadScreenState extends State<LocalModelDownloadScreen> {
         ),
         elevation: 0,
       ),
-      body: !_initialized
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _InfoBanner(bothInstalled: _manager.bothInstalled),
-                  const SizedBox(height: 20),
-                  _ModelCard(
-                    icon: Icons.mic_rounded,
-                    iconColor: AppColors.aiPurple,
-                    title: kAsrModel.label,
-                    subtitle: kAsrModel.description,
-                    size: '${kAsrModel.sizeMb} MB',
-                    isInstalled: _manager.asrInstalled,
-                    isDownloading: _manager.asrDownloading,
-                    progress: _manager.asrProgress,
-                    error: _manager.asrError,
-                    onDownload: _manager.downloadAsr,
-                    onDelete: _manager.deleteAsr,
-                  ),
-                  const SizedBox(height: 12),
-                  _LlmCard(manager: _manager),
-                  const SizedBox(height: 24),
-                  if (_manager.bothInstalled) _DoneCard(),
-                ],
-              ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _InfoBanner(bothInstalled: manager.bothInstalled),
+            const SizedBox(height: 12),
+            _RuntimeStatusBar(
+              asrInstalled: manager.asrInstalled,
+              llmInstalled: manager.llmInstalled,
+              rssBytes: _rssBytes,
             ),
+            const SizedBox(height: 12),
+            _ModelCard(
+              icon: Icons.mic_rounded,
+              iconColor: AppColors.aiPurple,
+              title: kAsrModel.label,
+              subtitle: kAsrModel.description,
+              size: '${kAsrModel.sizeMb} MB',
+              isInstalled: manager.asrInstalled,
+              isDownloading: manager.asrDownloading,
+              progress: manager.asrProgress,
+              error: manager.asrError,
+              onDownload: manager.downloadAsr,
+              onDelete: manager.deleteAsr,
+            ),
+            const SizedBox(height: 12),
+            _LlmCard(manager: manager),
+            const SizedBox(height: 24),
+            if (manager.bothInstalled) _DoneCard(),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -419,6 +424,15 @@ class _LlmCard extends StatelessWidget {
             Row(
               children: [
                 _SizeOption(
+                  spec: kLlmModelTiny,
+                  isSelected:
+                      manager.activeLlm.id == kLlmModelTiny.id,
+                  onTap: () =>
+                      manager.downloadLlm(spec: kLlmModelTiny),
+                  recommended: true,
+                ),
+                const SizedBox(width: 8),
+                _SizeOption(
                   spec: kLlmModelSmall,
                   isSelected:
                       manager.activeLlm.id == kLlmModelSmall.id,
@@ -432,7 +446,6 @@ class _LlmCard extends StatelessWidget {
                       manager.activeLlm.id == kLlmModelLarge.id,
                   onTap: () =>
                       manager.downloadLlm(spec: kLlmModelLarge),
-                  recommended: true,
                 ),
               ],
             ),
@@ -563,7 +576,7 @@ class _SizeOption extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '${spec.sizeMb < 1000 ? '${spec.sizeMb} MB' : '${(spec.sizeMb / 1000).toStringAsFixed(1)} GB'}',
+                spec.sizeMb < 1000 ? '${spec.sizeMb} MB' : '${(spec.sizeMb / 1000).toStringAsFixed(1)} GB',
                 style: const TextStyle(
                   fontSize: 10,
                   color: AppColors.textMuted,
@@ -690,6 +703,86 @@ class _DoneCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RuntimeStatusBar extends StatelessWidget {
+  const _RuntimeStatusBar({
+    required this.asrInstalled,
+    required this.llmInstalled,
+    required this.rssBytes,
+  });
+
+  final bool asrInstalled;
+  final bool llmInstalled;
+  final int rssBytes;
+
+  String get _ramLabel {
+    final mb = rssBytes / (1024 * 1024);
+    return mb >= 1024
+        ? '${(mb / 1024).toStringAsFixed(1)} GB'
+        : '${mb.toStringAsFixed(0)} MB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.memory_rounded, size: 15, color: AppColors.textMuted),
+          const SizedBox(width: 6),
+          Text(
+            'RAM: $_ramLabel',
+            style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 16),
+          _Dot(active: asrInstalled),
+          const SizedBox(width: 4),
+          Text(
+            'ASR ${asrInstalled ? "loaded" : "not loaded"}',
+            style: TextStyle(
+              fontSize: 11,
+              color: asrInstalled ? AppColors.statusSuccess : AppColors.textMuted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 16),
+          _Dot(active: llmInstalled),
+          const SizedBox(width: 4),
+          Text(
+            'LLM ${llmInstalled ? "loaded" : "not loaded"}',
+            style: TextStyle(
+              fontSize: 11,
+              color: llmInstalled ? AppColors.statusSuccess : AppColors.textMuted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot({required this.active});
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 7,
+      height: 7,
+      decoration: BoxDecoration(
+        color: active ? AppColors.statusSuccess : AppColors.textMuted,
+        shape: BoxShape.circle,
       ),
     );
   }

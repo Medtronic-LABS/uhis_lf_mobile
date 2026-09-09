@@ -25,6 +25,7 @@ import 'core/preferences/vad_tuning_notifier.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/api/scribe_api_service.dart';
 import 'core/auth/auth_repository.dart';
+import 'features/local_asr/local_model_manager.dart';
 import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
 import 'core/constants/app_strings.dart';
@@ -539,6 +540,11 @@ class _UhisNextAppState extends State<UhisNextApp>
         ChangeNotifierProvider<ScribeAudioSettingsNotifier>(
           create: (_) =>
               ScribeAudioSettingsNotifier(const FlutterSecureStorage())..load(),
+        ),
+        // Singleton LocalModelManager — lives for the app lifetime so downloads
+        // survive screen close/reopen without losing progress or installed state.
+        ChangeNotifierProvider<LocalModelManager>(
+          create: (_) => LocalModelManager()..init(),
         ),
         // SK → SS → sub-village hierarchy (memory + disk cache; cleared on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(

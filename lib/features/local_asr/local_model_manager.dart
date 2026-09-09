@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -11,76 +12,89 @@ class LocalModelSpec {
     required this.label,
     required this.description,
     required this.sizeMb,
-    required this.hfRepo,
     required this.files,
     required this.subDir,
-  });
+    this.hfRepo,
+    this.archiveUrl,
+  }) : assert(
+          hfRepo != null || archiveUrl != null,
+          'Either hfRepo or archiveUrl must be provided',
+        );
 
   final String id;
   final String label;
   final String description;
   final int sizeMb;
-  final String hfRepo;
 
-  /// Relative paths within the HF repo → downloaded to [subDir]/filename.
+  /// HuggingFace repo — individual file downloads. Null when [archiveUrl] set.
+  final String? hfRepo;
+
+  /// Direct download URL for a tar.bz2 archive. Null when [hfRepo] set.
+  final String? archiveUrl;
+
+  /// File names to verify after download (relative to [subDir]).
   final List<String> files;
 
   /// Sub-directory under the models root where this model lives.
   final String subDir;
 }
 
+/// Official sherpa-onnx Bengali zipformer model — compatible with the
+/// sherpa_onnx OnlineRecognizer zipformer2 decoder.
 const kAsrModel = LocalModelSpec(
-  id: 'sherpa-bn-streaming',
+  id: 'sherpa-bn-zipformer',
   label: 'Bengali ASR Model',
-  description: 'alphacep/vosk streaming transducer fine-tuned on Bengali. '
+  description: 'Sherpa-onnx Bengali Zipformer streaming transducer. '
       'Used for on-device speech recognition.',
   sizeMb: 92,
-  hfRepo: 'alphacep/vosk-model-small-streaming-bn',
-  files: [
-    'am-onnx/encoder.onnx',
-    'am-onnx/decoder.onnx',
-    'am-onnx/joiner.onnx',
-    'lang/bpe.model',
-    'lang/tokens.txt',
-  ],
-  subDir: 'sherpa_bn_streaming',
+  archiveUrl: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/'
+      'asr-models/sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09.tar.bz2',
+  files: ['encoder.onnx', 'decoder.onnx', 'joiner.onnx', 'tokens.txt'],
+  subDir: 'sherpa_bn_zipformer',
+);
+
+const kLlmModelTiny = LocalModelSpec(
+  id: 'smollm2-135m',
+  label: 'SmolLM2 135M LLM (fastest)',
+  description: 'SmolLM2-135M Q4_K_M — ~80MB, ~300ms inference. '
+      'Best for real-time symptom and field extraction.',
+  sizeMb: 82,
+  hfRepo: 'bartowski/SmolLM2-135M-Instruct-GGUF',
+  files: ['SmolLM2-135M-Instruct-Q4_K_M.gguf'],
+  subDir: 'llm_models',
 );
 
 const kLlmModelSmall = LocalModelSpec(
-  id: 'qwen3-0.6b',
-  label: 'Qwen3 0.6B LLM (faster)',
-  description: 'Qwen3-0.6B Q4_K_M — 100+ languages including Bengali. '
-      'Used for form field extraction from transcript.',
-  sizeMb: 397,
-  hfRepo: 'unsloth/Qwen3-0.6B-GGUF',
-  files: ['Qwen3-0.6B-Q4_K_M.gguf'],
+  id: 'qwen2.5-0.5b',
+  label: 'Qwen2.5 0.5B LLM (fast)',
+  description: 'Qwen2.5-0.5B Q4_K_M — no thinking mode, Bengali + 100+ languages. '
+      '~3-8s inference. Recommended for symptom extraction.',
+  sizeMb: 320,
+  hfRepo: 'bartowski/Qwen2.5-0.5B-Instruct-GGUF',
+  files: ['Qwen2.5-0.5B-Instruct-Q4_K_M.gguf'],
   subDir: 'llm_models',
 );
 
 const kLlmModelLarge = LocalModelSpec(
-  id: 'qwen3-1.7b',
-  label: 'Qwen3 1.7B LLM (better accuracy)',
-  description: 'Qwen3-1.7B Q4_K_M — recommended for reliable form fill. '
-      'Requires ~1.1GB storage and more RAM.',
-  sizeMb: 1100,
-  hfRepo: 'unsloth/Qwen3-1.7B-GGUF',
-  files: ['Qwen3-1.7B-Q4_K_M.gguf'],
+  id: 'qwen2.5-1.5b',
+  label: 'Qwen2.5 1.5B LLM (accurate)',
+  description: 'Qwen2.5-1.5B Q4_K_M — no thinking mode, higher accuracy. '
+      'Requires ~1GB storage.',
+  sizeMb: 986,
+  hfRepo: 'bartowski/Qwen2.5-1.5B-Instruct-GGUF',
+  files: ['Qwen2.5-1.5B-Instruct-Q4_K_M.gguf'],
   subDir: 'llm_models',
 );
 
 enum _DownloadTarget { asr, llm }
 
 /// Manages download, storage, and status of local AI model files.
-///
-/// Provides progress and installed state for [LocalModelDownloadScreen].
-/// After download, [asrModelDir] and [llmModelPath] supply paths to
-/// [LocalScribeController].
 class LocalModelManager extends ChangeNotifier {
   LocalModelManager();
 
+  bool _isDisposed = false;
   String? _modelsRoot;
 
-  /// Progress 0.0–1.0 for each active download. Null = not downloading.
   double? _asrProgress;
   double? _llmProgress;
 
@@ -105,12 +119,26 @@ class LocalModelManager extends ChangeNotifier {
 
   bool get bothInstalled => _asrInstalled && _llmInstalled;
 
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
+
+  void _notify() {
+    if (!_isDisposed) notifyListeners();
+  }
+
   Future<void> init() async {
     final root = await _getRoot();
     _modelsRoot = root;
-    _asrInstalled = _checkAsrInstalled(root);
-    _llmInstalled = _checkLlmInstalled(root, _activeLlm);
-    notifyListeners();
+    _asrInstalled = _checkInstalled(root, kAsrModel);
+    _llmInstalled = _checkInstalled(root, _activeLlm);
+    debugPrint(
+      '[LocalModelManager] root=$root '
+      'asrInstalled=$_asrInstalled llmInstalled=$_llmInstalled',
+    );
+    _notify();
   }
 
   String get asrModelDir => '${_modelsRoot ?? ''}/${kAsrModel.subDir}';
@@ -127,26 +155,17 @@ class LocalModelManager extends ChangeNotifier {
     return root;
   }
 
-  bool _checkAsrInstalled(String root) {
-    for (final f in kAsrModel.files) {
-      final name = f.split('/').last;
-      if (!File('$root/${kAsrModel.subDir}/$name').existsSync()) return false;
+  bool _checkInstalled(String root, LocalModelSpec spec) {
+    for (final f in spec.files) {
+      if (!File('$root/${spec.subDir}/$f').existsSync()) return false;
     }
     return true;
-  }
-
-  bool _checkLlmInstalled(String root, LocalModelSpec spec) {
-    final file = spec.files.first;
-    return File('$root/${spec.subDir}/$file').existsSync();
   }
 
   Future<void> downloadAsr() async {
     if (asrDownloading || _asrInstalled) return;
     _asrError = null;
-    await _download(
-      spec: kAsrModel,
-      target: _DownloadTarget.asr,
-    );
+    await _download(spec: kAsrModel, target: _DownloadTarget.asr);
   }
 
   Future<void> downloadLlm({LocalModelSpec? spec}) async {
@@ -154,10 +173,7 @@ class LocalModelManager extends ChangeNotifier {
     _activeLlm = spec ?? _activeLlm;
     _llmError = null;
     _llmInstalled = false;
-    await _download(
-      spec: _activeLlm,
-      target: _DownloadTarget.llm,
-    );
+    await _download(spec: _activeLlm, target: _DownloadTarget.llm);
   }
 
   Future<void> deleteAsr() async {
@@ -166,17 +182,16 @@ class LocalModelManager extends ChangeNotifier {
     final dir = Directory('$root/${kAsrModel.subDir}');
     if (dir.existsSync()) await dir.delete(recursive: true);
     _asrInstalled = false;
-    notifyListeners();
+    _notify();
   }
 
   Future<void> deleteLlm() async {
     final root = _modelsRoot;
     if (root == null) return;
-    final path = llmModelPath;
-    final f = File(path);
+    final f = File(llmModelPath);
     if (f.existsSync()) await f.delete();
     _llmInstalled = false;
-    notifyListeners();
+    _notify();
   }
 
   Future<void> _download({
@@ -185,68 +200,32 @@ class LocalModelManager extends ChangeNotifier {
   }) async {
     final root = _modelsRoot ?? await _getRoot();
     _modelsRoot = root;
-
     final destDir = Directory('$root/${spec.subDir}');
     await destDir.create(recursive: true);
 
-    final totalFiles = spec.files.length;
-    var completedFiles = 0;
-
     void setProgress(double p) {
-      final overall = (completedFiles + p) / totalFiles;
       if (target == _DownloadTarget.asr) {
-        _asrProgress = overall;
+        _asrProgress = p;
       } else {
-        _llmProgress = overall;
+        _llmProgress = p;
       }
-      notifyListeners();
+      _notify();
     }
 
     try {
-      for (final hfPath in spec.files) {
-        final fileName = hfPath.split('/').last;
-        final destFile = File('$destDir/$fileName');
-        if (destFile.existsSync()) {
-          completedFiles++;
-          setProgress(0);
-          continue;
-        }
-
-        const hfToken = String.fromEnvironment('HF_TOKEN');
-        final url =
-            'https://huggingface.co/${spec.hfRepo}/resolve/main/$hfPath?download=true';
-
-        final client = http.Client();
-        try {
-          final req = http.Request('GET', Uri.parse(url));
-          if (hfToken.isNotEmpty) {
-            req.headers['Authorization'] = 'Bearer $hfToken';
-          }
-          final response = await client.send(req);
-          if (response.statusCode >= 400) {
-            throw Exception('HTTP ${response.statusCode} for $hfPath');
-          }
-
-          final total = response.contentLength ?? 0;
-          var received = 0;
-          final sink = destFile.openWrite();
-          await for (final chunk in response.stream) {
-            sink.add(chunk);
-            received += chunk.length;
-            if (total > 0) setProgress(received / total);
-          }
-          await sink.flush();
-          await sink.close();
-        } catch (e) {
-          // Clean up partial file on error
-          if (destFile.existsSync()) await destFile.delete();
-          rethrow;
-        } finally {
-          client.close();
-        }
-
-        completedFiles++;
-        setProgress(0);
+      if (spec.archiveUrl != null) {
+        await _downloadArchive(
+          url: spec.archiveUrl!,
+          destDir: destDir,
+          sizeMb: spec.sizeMb,
+          onProgress: setProgress,
+        );
+      } else {
+        await _downloadFiles(
+          spec: spec,
+          destDir: destDir,
+          onProgress: setProgress,
+        );
       }
 
       if (target == _DownloadTarget.asr) {
@@ -256,7 +235,7 @@ class LocalModelManager extends ChangeNotifier {
         _llmInstalled = true;
         _llmProgress = null;
       }
-      notifyListeners();
+      _notify();
     } catch (e, st) {
       debugPrint('[LocalModelManager] download error: $e\n$st');
       if (target == _DownloadTarget.asr) {
@@ -266,7 +245,121 @@ class LocalModelManager extends ChangeNotifier {
         _llmError = e.toString();
         _llmProgress = null;
       }
-      notifyListeners();
+      _notify();
+    }
+  }
+
+  Future<void> _downloadArchive({
+    required String url,
+    required Directory destDir,
+    required int sizeMb,
+    required void Function(double) onProgress,
+  }) async {
+    final archivePath = '${destDir.path}/_archive.tar.bz2';
+    final archiveFile = File(archivePath);
+
+    final totalEstimatedBytes = sizeMb * 1024 * 1024;
+    var received = 0;
+
+    final client = http.Client();
+    try {
+      final req = http.Request('GET', Uri.parse(url));
+      final response = await client.send(req);
+      if (response.statusCode >= 400) {
+        throw Exception('HTTP ${response.statusCode} downloading archive');
+      }
+
+      final contentLength = response.contentLength ?? 0;
+      final denominator =
+          contentLength > 0 ? contentLength : totalEstimatedBytes;
+
+      final sink = archiveFile.openWrite();
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress((received / denominator).clamp(0.0, 0.8));
+      }
+      await sink.flush();
+      await sink.close();
+    } finally {
+      client.close();
+    }
+
+    debugPrint('[LocalModelManager] download done, extracting…');
+    onProgress(0.85);
+
+    final archiveBytes = await archiveFile.readAsBytes();
+    final tarBytes = BZip2Decoder().decodeBytes(archiveBytes);
+    final archive = TarDecoder().decodeBytes(tarBytes);
+
+    for (final file in archive) {
+      if (!file.isFile) continue;
+      // Strip leading directory (e.g. sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09/encoder.onnx → encoder.onnx)
+      final name = file.name.contains('/')
+          ? file.name.substring(file.name.lastIndexOf('/') + 1)
+          : file.name;
+      if (name.isEmpty || name.startsWith('.')) continue;
+      final outFile = File('${destDir.path}/$name');
+      await outFile.parent.create(recursive: true);
+      final content = file.readBytes();
+      if (content != null) await outFile.writeAsBytes(content);
+    }
+
+    await archiveFile.delete().catchError((_) => archiveFile);
+    onProgress(0.99);
+    debugPrint('[LocalModelManager] extraction done: ${destDir.path}');
+  }
+
+  Future<void> _downloadFiles({
+    required LocalModelSpec spec,
+    required Directory destDir,
+    required void Function(double) onProgress,
+  }) async {
+    final totalEstimatedBytes = spec.sizeMb * 1024 * 1024;
+    var totalReceived = 0;
+
+    for (final hfPath in spec.files) {
+      final fileName = hfPath.split('/').last;
+      final destFile = File('${destDir.path}/$fileName');
+      if (destFile.existsSync()) {
+        totalReceived += destFile.lengthSync();
+        onProgress((totalReceived / totalEstimatedBytes).clamp(0.0, 0.99));
+        continue;
+      }
+
+      const hfToken = String.fromEnvironment('HF_TOKEN');
+      final url =
+          'https://huggingface.co/${spec.hfRepo}/resolve/main/$hfPath?download=true';
+
+      final client = http.Client();
+      try {
+        final req = http.Request('GET', Uri.parse(url));
+        if (hfToken.isNotEmpty) {
+          req.headers['Authorization'] = 'Bearer $hfToken';
+        }
+        final response = await client.send(req);
+        if (response.statusCode >= 400) {
+          throw Exception('HTTP ${response.statusCode} for $hfPath');
+        }
+
+        final sink = destFile.openWrite();
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          totalReceived += chunk.length;
+          onProgress((totalReceived / totalEstimatedBytes).clamp(0.0, 0.99));
+        }
+        await sink.flush();
+        await sink.close();
+      } catch (e) {
+        if (destFile.existsSync()) await destFile.delete();
+        rethrow;
+      } finally {
+        client.close();
+      }
+
+      debugPrint(
+        '[LocalModelManager] saved: ${destFile.path} (${destFile.lengthSync()} bytes)',
+      );
     }
   }
 }

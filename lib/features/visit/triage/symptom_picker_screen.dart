@@ -1191,6 +1191,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                             ),
                           );
                         },
+                        onFormFill: (fill) {
+                          // Local on-device scribe: boolean fields extracted
+                          // from symptomVocab schema → select matching chips.
+                          final codes = fill.fields
+                              .where((f) =>
+                                  f.value?.toString().toLowerCase() == 'yes')
+                              .map((f) => f.fieldId)
+                              .toSet();
+                          if (codes.isNotEmpty) vm.selectSymptoms(codes);
+                        },
                       ),
                     ),
                   ),

@@ -9,6 +9,7 @@ import '../../../core/i18n/app_locale.dart';
 import '../../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../../core/preferences/vad_tuning_notifier.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../local_asr/local_model_manager.dart';
 import '../../local_asr/local_scribe_controller.dart';
 import '../../local_asr/widgets/local_model_badge.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
@@ -119,6 +120,8 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
   bool _resultConsumed = false;
   ScribeController? _scribe;
   LocalScribeController? _localCtrl;
+  // true when _localCtrl was created by this state (not passed via widget)
+  bool _ownsLocalCtrl = false;
 
   late final RealtimeAsrController _liveCtrl;
   RealtimeClinicalFields? _lastAppliedLiveFields;
@@ -158,6 +161,22 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       _onScribeChanged();
     }
     _liveCtrl.bindContext(context);
+
+    // Auto-wire local on-device scribe when models are installed and no
+    // external controller was supplied by the parent. Use watch so this
+    // re-runs when LocalModelManager.init() completes asynchronously.
+    if (widget.localController == null && _localCtrl == null) {
+      final modelManager = context.watch<LocalModelManager>();
+      if (modelManager.bothInstalled) {
+        _localCtrl = LocalScribeController(
+          sherpaModelDir: modelManager.asrModelDir,
+          llmModelPath: modelManager.llmModelPath,
+          activeLlmId: modelManager.activeLlm.id,
+        );
+        _localCtrl!.addListener(_onLocalChanged);
+        _ownsLocalCtrl = true;
+      }
+    }
   }
 
   @override
@@ -165,6 +184,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     _scribe?.removeListener(_onScribeChanged);
     _liveCtrl.removeListener(_onLiveChanged);
     _localCtrl?.removeListener(_onLocalChanged);
+    if (_ownsLocalCtrl) _localCtrl?.dispose();
     // Leaving mid-session (e.g. advancing Step 1 -> Step 2, or backing out)
     // must not abandon the live session with a raw socket close: stop() runs
     // the flush/extract/wait/stop handshake so the last few seconds of
@@ -208,6 +228,36 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     setState(() {});
   }
 
+  List<FormFieldSchema> get _localSchema {
+    if (widget.assessmentType != null) {
+      return FormFieldSchemaBuilder.forProgrammeNames(
+        widget.assessmentType!.split(',').map((s) => s.trim()).toList(),
+      );
+    }
+    // Triage (Step 1): build a boolean schema from symptom vocab so the local
+    // LLM can detect which symptoms are mentioned in the transcript.
+    final vocab = widget.symptomVocab;
+    if (vocab != null && vocab.isNotEmpty) {
+      return vocab
+          .map((code) => FormFieldSchema(
+                fieldId: code,
+                type: FieldType.boolean,
+                label: code.replaceAll('_', ' '),
+              ))
+          .toList();
+    }
+    return const [];
+  }
+
+  void _startLocalRecording() {
+    if (_showDone) setState(() { _showDone = false; _resultConsumed = false; });
+    _localCtrl!.startRecording(_localSchema);
+  }
+
+  void _stopLocalRecording() {
+    _localCtrl!.stopRecording(_localSchema);
+  }
+
   void _startAsr() {
     if (_showDone) {
       setState(() {
@@ -229,7 +279,39 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
   void _onLocalChanged() {
     if (!mounted) return;
-    setState(() {});
+    final ctrl = _localCtrl;
+    if (ctrl == null) return;
+
+    // Live extraction during recording — fire onFormFill immediately so
+    // triage symptom picker and form fields update in real-time.
+    if (ctrl.state == LocalScribeState.recording &&
+        ctrl.liveFields.isNotEmpty) {
+      widget.onFormFill?.call(FormPrefillResult(
+        fields: ctrl.liveFields,
+        unmappedFindings: const [],
+        transcriptText: ctrl.transcript,
+      ));
+      setState(() {});
+      return;
+    }
+
+    if (ctrl.state == LocalScribeState.done &&
+        ctrl.result != null &&
+        !_showDone) {
+      final result = ctrl.result!;
+      // Always fire onFormFill when transcript is present — callers use
+      // transcriptText even when no fields were extracted.
+      if (result.transcript.isNotEmpty || result.fields.isNotEmpty) {
+        widget.onFormFill?.call(FormPrefillResult(
+          fields: result.fields,
+          unmappedFindings: const [],
+          transcriptText: result.transcript,
+        ));
+      }
+      setState(() => _showDone = true);
+    } else {
+      setState(() {});
+    }
   }
 
   void _onScribeChanged() {
@@ -261,16 +343,34 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     // bug that made every realtime ASR error structurally invisible.
     final liveErrored = _liveCtrl.state == RealtimeAsrState.error;
     final showLivePanel = liveActive || liveErrored;
-    final isRecording = !liveActive && session.state == ScribeState.recording;
-    final isError =
-        !liveActive && !_showDone && session.state == ScribeState.error;
+    final isLocalRecording = !liveActive &&
+        (_localCtrl?.state == LocalScribeState.recording ||
+            _localCtrl?.state == LocalScribeState.requestingPermission);
+    final isLocalProcessing = !liveActive &&
+        (_localCtrl?.state == LocalScribeState.transcribing ||
+            _localCtrl?.state == LocalScribeState.inferring);
+    final isRecording = !liveActive &&
+        !isLocalRecording &&
+        !isLocalProcessing &&
+        session.state == ScribeState.recording;
+    final isError = !liveActive &&
+        !_showDone &&
+        !isLocalRecording &&
+        !isLocalProcessing &&
+        session.state == ScribeState.error;
     final isProcessing = !liveActive &&
         !_showDone &&
         !isError &&
-        (session.state == ScribeState.uploading ||
+        !isLocalRecording &&
+        (isLocalProcessing ||
+            session.state == ScribeState.uploading ||
             session.state == ScribeState.processing);
-    final idleChoice =
-        !liveActive && !isRecording && !isError && !isProcessing;
+    final idleChoice = !liveActive &&
+        !isLocalRecording &&
+        !isLocalProcessing &&
+        !isRecording &&
+        !isError &&
+        !isProcessing;
 
     final title = showLivePanel
         ? (liveErrored ? RealtimeAsrStrings.errorTitle : RealtimeAsrStrings.title)
@@ -278,13 +378,15 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
             ? SymptomPickerStrings.scribeBannerDone
             : isError
                 ? SymptomPickerStrings.scribeBannerError
-                : isRecording
+                : isLocalRecording
                     ? SymptomPickerStrings.scribeBannerRecording
-                    : isProcessing
-                        ? SymptomPickerStrings.scribeBannerProcessing
-                        : SymptomPickerStrings.scribeBannerTitleFor(
-                            isFemale: widget.isFemale,
-                          );
+                    : isRecording
+                        ? SymptomPickerStrings.scribeBannerRecording
+                        : isProcessing
+                            ? SymptomPickerStrings.scribeBannerProcessing
+                            : SymptomPickerStrings.scribeBannerTitleFor(
+                                isFemale: widget.isFemale,
+                              );
 
     final subtitle = showLivePanel
         ? (liveErrored
@@ -295,25 +397,35 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                 _ => RealtimeAsrStrings.listening,
               })
         : _showDone
-            ? SymptomPickerStrings.scribeBannerDoneSubtitle
+            ? (_localCtrl?.result?.transcript.isNotEmpty == true
+                ? _localCtrl!.result!.transcript
+                : SymptomPickerStrings.scribeBannerDoneSubtitle)
             : isError
                 ? SymptomPickerStrings.scribeBannerErrorSubtitle
-                : isRecording
-                    ? SymptomPickerStrings.scribeBannerRecordingSubtitle
-                    : idleChoice
-                        ? ScribeBannerStrings.idleSub
-                        : SymptomPickerStrings.scribeBannerSubtitle;
+                : isLocalRecording
+                    ? (_localCtrl!.transcript.isNotEmpty
+                        ? _localCtrl!.transcript
+                        : SymptomPickerStrings.scribeBannerRecordingSubtitle)
+                    : isRecording
+                        ? SymptomPickerStrings.scribeBannerRecordingSubtitle
+                        : idleChoice
+                            ? ScribeBannerStrings.idleSub
+                            : SymptomPickerStrings.scribeBannerSubtitle;
 
     void onTap() {
       controller.bindContext(context);
       if (idleChoice) {
-        if (widget.tapStartsLiveAsr) {
+        if (_localCtrl != null) {
+          _startLocalRecording();
+        } else if (widget.tapStartsLiveAsr) {
           _startAsr();
         } else {
           controller.startRecording();
         }
       } else if (liveActive) {
         _liveCtrl.stop();
+      } else if (isLocalRecording) {
+        _stopLocalRecording();
       } else if (isRecording) {
         controller.stopRecording(
           patientId: widget.patientId,
@@ -395,7 +507,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                       child: Center(
                         child: _buildCircleContent(
                           controller: controller,
-                          isRecording: isRecording,
+                          isRecording: isRecording || isLocalRecording,
                           isProcessing: isProcessing,
                           isError: isError,
                           showDone: _showDone,
@@ -411,7 +523,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                         children: [
                           Row(
                             children: [
-                              if (isRecording) ...[
+                              if (isRecording || isLocalRecording) ...[
                                 const ScribeRecordingLiveDot(),
                                 const SizedBox(width: 8),
                               ],
