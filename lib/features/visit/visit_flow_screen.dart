@@ -2877,6 +2877,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             accepted: _accepted,
             patientLabel: widget.patientLabel,
             memberId: widget.memberId,
+            visitId: widget.visitId,
+            patientPhone: _patientPhone,
+            teleconsultReason: _deriveTeleconsultReason(naba, widget.patientLabel ?? ''),
+            patientGender: widget.patientGender,
             onAccepted: () => _onAccepted(naba),
           ),
         ],
@@ -3925,18 +3929,56 @@ class _SkeletonCard extends StatelessWidget {
 }
 
 
+/// Derives the Shukhee booking `reason` text from the visit's AI
+/// recommendation, so the teleconsult flow never needs a manual reason
+/// field. Prefers the referral reason when a referral is actually
+/// recommended (the clinically urgent path), then the doctor-handover note,
+/// then the general visit summary; falls back to a generic string built
+/// from the patient label if NABA returned none of those.
+String _deriveTeleconsultReason(NabaResponse naba, String patientLabel) {
+  final referral = naba.referralRecommendation;
+  if (referral != null && referral.required_ && (referral.reason?.trim().isNotEmpty ?? false)) {
+    return referral.reason!.trim();
+  }
+  if (naba.doctorHandover?.trim().isNotEmpty ?? false) {
+    return naba.doctorHandover!.trim();
+  }
+  if (naba.visitSummary.summary.trim().isNotEmpty) {
+    return naba.visitSummary.summary.trim();
+  }
+  return 'Teleconsult requested for $patientLabel';
+}
+
 /// Pink "Call a doctor now" button for Step 3.
 ///
 /// Enabled when the device has network connectivity; greyed + tooltip shown
-/// when offline. Taps navigate to [TeleconsultScreen] (feature placeholder).
+/// when offline. Taps navigate to [TeleconsultScreen] for the real Shukhee
+/// booking + call flow.
 class _TeleconsultButton extends StatefulWidget {
   const _TeleconsultButton({
     required this.patientLabel,
     required this.patientId,
+    this.visitId,
+    this.patientPhone,
+    this.reason,
+    this.patientGender,
   });
 
   final String patientLabel;
   final String patientId;
+
+  /// Threaded through as `encounter_id` when the real Shukhee booking fires.
+  final String? visitId;
+
+  /// The patient's contact number, if already known — avoids the teleconsult
+  /// screen's own phone-entry fallback sheet.
+  final String? patientPhone;
+
+  /// Pre-derived reason text for the booking (from the visit's AI
+  /// recommendation) — see [_deriveTeleconsultReason].
+  final String? reason;
+
+  final String? patientGender;
 
   @override
   State<_TeleconsultButton> createState() => _TeleconsultButtonState();
@@ -3975,6 +4017,10 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
         extra: {
           'patientLabel': widget.patientLabel,
           'patientId': widget.patientId,
+          if (widget.visitId != null) 'visitId': widget.visitId,
+          if (widget.patientPhone != null) 'patientPhone': widget.patientPhone,
+          if (widget.reason != null) 'reason': widget.reason,
+          if (widget.patientGender != null) 'patientGender': widget.patientGender,
         },
       );
 
@@ -4034,11 +4080,19 @@ class _BottomCtaBar extends StatelessWidget {
     required this.onAccepted,
     this.patientLabel,
     this.memberId,
+    this.visitId,
+    this.patientPhone,
+    this.teleconsultReason,
+    this.patientGender,
   });
   final bool accepted;
   final VoidCallback onAccepted;
   final String? patientLabel;
   final String? memberId;
+  final String? visitId;
+  final String? patientPhone;
+  final String? teleconsultReason;
+  final String? patientGender;
 
   @override
   Widget build(BuildContext context) {
@@ -4055,6 +4109,10 @@ class _BottomCtaBar extends StatelessWidget {
               _TeleconsultButton(
                 patientLabel: patientLabel ?? '',
                 patientId: memberId ?? '',
+                visitId: visitId,
+                patientPhone: patientPhone,
+                reason: teleconsultReason,
+                patientGender: patientGender,
               ),
               const SizedBox(height: 8),
               // Accept / save — secondary (outlined navy)

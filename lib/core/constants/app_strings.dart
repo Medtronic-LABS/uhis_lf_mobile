@@ -4098,11 +4098,39 @@ abstract final class TeleconsultStrings {
   TeleconsultStrings._();
 
   static String get title => getTranslatedString('Teleconsult.title', 'Teleconsult');
-  static String get comingSoon => getTranslatedString('Teleconsult.comingSoon', 'Coming soon');
-  static String get placeholder => getTranslatedString('placeholder', 'Video consultation with a doctor will be available here.\nThe SK can initiate a call directly from a completed visit.');
-  static String get callAction => getTranslatedString('callAction', 'Start Video Call');
-  static String get smsAction => getTranslatedString('smsAction', 'Send SMS to Doctor');
   static String get doneButton => getTranslatedString('Teleconsult.doneButton', 'Done');
+
+  // ── Booking (transitional) state ──────────────────────────────────────────
+  static String get connecting => getTranslatedString('Teleconsult.connecting', 'Connecting your call…');
+  static String get connectingHint => getTranslatedString('Teleconsult.connectingHint', 'Please wait while we set up your consultation.');
+
+  // ── Connected (call) state ─────────────────────────────────────────────────
+  static String get statusConnected => getTranslatedString('Teleconsult.statusConnected', 'Connected · Encrypted');
+  static String get viaSukhee => getTranslatedString('Teleconsult.viaSukhee', 'via Sukhee · Secure call');
+  static String get leaveCallTitle => getTranslatedString('Teleconsult.leaveCallTitle', 'Leave this call?');
+  static String get leaveCallBody => getTranslatedString('Teleconsult.leaveCallBody', "The consultation hasn't ended yet.");
+  static String get leaveCallConfirm => getTranslatedString('Teleconsult.leaveCallConfirm', 'Leave call');
+  static String get cancel => getTranslatedString('Teleconsult.cancel', 'Cancel');
+
+  // ── Wrap-up (completed) state ───────────────────────────────────────────────
+  static String get prescriptionTitle => getTranslatedString('Teleconsult.prescriptionTitle', 'Prescription — from Sukhee');
+  static String get viewPrescription => getTranslatedString('Teleconsult.viewPrescription', 'View Prescription');
+  static String get viewInvoice => getTranslatedString('Teleconsult.viewInvoice', 'View Invoice');
+
+  // ── Not-completed state ─────────────────────────────────────────────────────
+  static String get notCompletedTitle => getTranslatedString('Teleconsult.notCompletedTitle', 'Doctor not available');
+  static String get notCompletedBody => getTranslatedString('Teleconsult.notCompletedBody', 'The doctor was not able to join this call. You can try again, or continue the visit without a teleconsult.');
+  static String get tryAgain => getTranslatedString('Teleconsult.tryAgain', 'Try again');
+  static String get continueWithoutCall => getTranslatedString('Teleconsult.continueWithoutCall', 'Continue without teleconsult');
+
+  // ── Not-provisioned state ───────────────────────────────────────────────────
+  static String get notProvisionedTitle => getTranslatedString('Teleconsult.notProvisionedTitle', 'Teleconsult not set up');
+  static String get notProvisionedBody => getTranslatedString('Teleconsult.notProvisionedBody', "Teleconsult isn't set up for your account yet. Contact your supervisor.");
+
+  // ── Phone-prompt fallback sheet ─────────────────────────────────────────────
+  static String get phonePromptTitle => getTranslatedString('Teleconsult.phonePromptTitle', 'Patient phone number needed');
+  static String get phonePromptHint => getTranslatedString('Teleconsult.phonePromptHint', 'Enter the patient\'s phone number to start the call.');
+  static String get phonePromptSubmit => getTranslatedString('Teleconsult.phonePromptSubmit', 'Continue');
 }
 
 /// Counselling messages placeholder screen strings.

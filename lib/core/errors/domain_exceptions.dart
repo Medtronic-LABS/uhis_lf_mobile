@@ -144,6 +144,32 @@ class CdssUnavailableException extends DomainException {
   const CdssUnavailableException([super.localizedMessage]);
 }
 
+// ── Teleconsult (Shukhee) ────────────────────────────────────────────────────
+//
+// These map 1:1 from `shukhee_sdk`'s own `ShukheeException` subclasses --
+// that package has no dependency on this app's error hierarchy, so
+// TeleconsultScreen is the one place that catches its exceptions and
+// re-throws these instead, keeping the SDK's vocabulary out of the rest of
+// the app.
+
+/// Booking, status-poll, or prescription-fetch call failed for a reason
+/// other than the two more specific cases below.
+class TeleconsultBookingException extends DomainException {
+  const TeleconsultBookingException([super.localizedMessage]);
+}
+
+/// The calling SK's account has no active Provider + Shukhee credential
+/// record configured server-side -- a provisioning gap, not a transient
+/// failure. Do not offer an automatic retry for this one.
+class TeleconsultNotProvisionedException extends DomainException {
+  const TeleconsultNotProvisionedException([super.localizedMessage]);
+}
+
+/// No mobile auth token was available to attach to the Shukhee call.
+class TeleconsultUnauthorizedException extends DomainException {
+  const TeleconsultUnauthorizedException([super.localizedMessage]);
+}
+
 // ── Local DB ─────────────────────────────────────────────────────────────────
 
 /// Drift/SQLite write or read failure.

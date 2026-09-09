@@ -1,7 +1,7 @@
 name: uhis_next
 description: "LEAPWELL (Apon Sushashthya) — Powered by Medtronic Labs for frontline health workers"
 publish_to: 'none'
-version: 1.0.6+6
+version: 1.0.11+11
 
 environment:
   sdk: ^3.12.0
@@ -45,6 +45,10 @@ dependencies:
   geolocator: ^13.0.2
   google_mlkit_barcode_scanning: ^0.14.2
   package_info_plus: ^9.0.1
+  shukhee_sdk:
+    git:
+      url: git@github.com:Medtronic-LABS/shukhee_sdk.git
+      ref: main
 
 dev_dependencies:
   flutter_test:
