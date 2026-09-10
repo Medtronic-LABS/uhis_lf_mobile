@@ -1008,6 +1008,62 @@ abstract final class HouseholdDetailStrings {
   static String memberDataNotLoaded(int count) => getTranslatedString('memberDataNotLoaded', 'This household has {count} members.\nDetailed member information will be available once data is synced.', params: {'count': '$count'});
 
   static String get addMember => getTranslatedString('HouseholdDetail.addMember', 'Add Member');
+  static String get memberDeceasedMenu =>
+      getTranslatedString('HouseholdDetail.memberDeceased', 'Member Deceased');
+}
+
+/// Member deceased dialog + visit guards (Spice `MemberDeceasedDialogFragment`).
+abstract final class MemberDeceasedStrings {
+  MemberDeceasedStrings._();
+
+  static String get title =>
+      getTranslatedString('MemberDeceased.title', 'Member Deceased');
+  static String get selectMember => getTranslatedString(
+        'MemberDeceased.selectMember',
+        'Select Member Deceased',
+      );
+  static String get pleaseSelect =>
+      getTranslatedString('pleaseSelect', 'Please select');
+  static String get typeOfDeath =>
+      getTranslatedString('MemberDeceased.typeOfDeath', 'Type of death');
+  static String get causeOfDeath =>
+      getTranslatedString('MemberDeceased.causeOfDeath', 'Cause of death');
+  static String get causeHint => getTranslatedString(
+        'MemberDeceased.causeHint',
+        'Select one or more causes',
+      );
+  static String get reason =>
+      getTranslatedString('MemberDeceased.reason', 'Reason');
+  static String get reasonHint => getTranslatedString(
+        'MemberDeceased.reasonHint',
+        'Enter reason for death',
+      );
+  static String get submit =>
+      getTranslatedString('MemberDeceased.submit', 'Submit');
+  static String get deceased =>
+      getTranslatedString('deceased', 'Deceased');
+  static String get reasonForDeath => getTranslatedString(
+        'MemberDeceased.reasonForDeath',
+        'Reason for death',
+      );
+  static String get noActiveMembers => getTranslatedString(
+        'MemberDeceased.noActiveMembers',
+        'No active members in this household',
+      );
+  static String get submitFailed => getTranslatedString(
+        'MemberDeceased.submitFailed',
+        'Could not mark member deceased',
+      );
+  static String get cannotStartVisit => getTranslatedString(
+        'MemberDeceased.cannotStartVisit',
+        'This member is deceased — new visits are not allowed',
+      );
+  static String get deceasedBanner => getTranslatedString(
+        'MemberDeceased.banner',
+        'Deceased — further assessments are not allowed',
+      );
+  static String get unnamed =>
+      getTranslatedString('unnamed', '(Unnamed)');
 }
 
 /// AI Worklist (Screen 2): chip filter labels, programme tags, urgent banner,

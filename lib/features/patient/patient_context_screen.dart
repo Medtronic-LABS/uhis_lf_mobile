@@ -6166,7 +6166,7 @@ class _NoServicesCardState extends State<_NoServicesCard> {
     setState(() => _starting = true);
 
     final controller = context.read<VisitController>();
-    final encounterId = await startOrResumeVisit(
+    final result = await startOrResumeVisit(
       context,
       controller: controller,
       patientId: widget.patientId,
@@ -6179,7 +6179,8 @@ class _NoServicesCardState extends State<_NoServicesCard> {
 
     if (!mounted) return;
 
-    if (encounterId != null) {
+    if (result.succeeded) {
+      final encounterId = result.encounterId!;
       final originParam =
           widget.origin != null ? '?origin=${widget.origin}' : '';
       context.go(
@@ -6198,7 +6199,7 @@ class _NoServicesCardState extends State<_NoServicesCard> {
       );
     } else {
       setState(() => _starting = false);
-      if (mounted) {
+      if (mounted && !result.messageAlreadyShown) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

@@ -14,6 +14,8 @@ class MemberHit {
     this.householdId,
     this.householdName,
     this.householdNo,
+    this.isActive = true,
+    this.deceasedReason,
   });
 
   /// Route / display id — prefers server `members.patient_id`, else local PK.
@@ -29,6 +31,8 @@ class MemberHit {
   final String? householdId;
   final String? householdName;
   final String? householdNo;
+  final bool isActive;
+  final String? deceasedReason;
 
   static MemberHit fromJson(Map json) {
     String? str(dynamic keys) {
@@ -115,6 +119,8 @@ class MemberSearchRepository extends ApiRepository {
           gender: m.gender,
           phone: m.phone,
           householdId: m.householdId,
+          isActive: m.isActive,
+          deceasedReason: m.deceasedReason,
         )).toList();
 
     onProgress?.call(MemberSearchProgress(matches.length, displayCap));

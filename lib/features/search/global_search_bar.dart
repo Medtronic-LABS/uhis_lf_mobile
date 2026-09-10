@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/rmnch/deceased_reason.dart';
 import '../../core/theme/app_theme.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
 import '../household/household_detail_screen.dart';
@@ -303,7 +304,7 @@ class _SearchViewState extends State<_SearchView> {
           else
             ...hits.members.map((m) => _MemberTile(
               hit: m,
-              onTap: () => _navigateToMember(m),
+              onTap: m.isActive ? () => _navigateToMember(m) : null,
             )),
           if (hits.membersTruncated)
             ListTile(
@@ -412,20 +413,35 @@ class _EmptyRow extends StatelessWidget {
 }
 
 class _MemberTile extends StatelessWidget {
-  const _MemberTile({required this.hit, required this.onTap});
+  const _MemberTile({required this.hit, this.onTap});
   final MemberHit hit;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
+    final deceased = !hit.isActive;
     return ListTile(
-      leading: const CircleAvatar(child: Icon(Icons.person)),
-      title: Text(hit.name ?? CommonStrings.unnamed),
-      subtitle: Text([
-        if (hit.age != null) SearchStrings.age(hit.age!),
-        if (hit.phone != null) hit.phone!,
-        if (hit.nid != null) SearchStrings.nid(hit.nid!),
-        if (hit.householdName != null) hit.householdName!,
-      ].join(' · ')),
+      enabled: onTap != null,
+      tileColor: deceased ? Colors.grey.shade200 : null,
+      leading: CircleAvatar(
+        backgroundColor: deceased ? Colors.grey.shade400 : null,
+        child: const Icon(Icons.person),
+      ),
+      title: Text(
+        deceased
+            ? '${hit.name ?? CommonStrings.unnamed} (${MemberDeceasedStrings.deceased})'
+            : (hit.name ?? CommonStrings.unnamed),
+        style: TextStyle(color: deceased ? Colors.grey.shade700 : null),
+      ),
+      subtitle: Text(
+        deceased
+            ? DeceasedReason.formatForDisplay(hit.deceasedReason)
+            : [
+                if (hit.age != null) SearchStrings.age(hit.age!),
+                if (hit.phone != null) hit.phone!,
+                if (hit.nid != null) SearchStrings.nid(hit.nid!),
+                if (hit.householdName != null) hit.householdName!,
+              ].join(' · '),
+      ),
       onTap: onTap,
     );
   }

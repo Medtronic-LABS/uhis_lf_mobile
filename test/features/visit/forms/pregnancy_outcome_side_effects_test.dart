@@ -84,6 +84,25 @@ void main() {
       expect(patient!.name, 'Baby 1 of Test Mother');
     });
 
+    test('maternal death marks mother NotSynced for member push', () async {
+      await PregnancyOutcomeSideEffects(
+        memberDao: memberDao,
+        patientDao: patientDao,
+      ).apply(
+        data: CanonicalVisitData({
+          'timeOfDeath': '2026-09-22T10:00:00',
+        }),
+        motherMemberId: motherLocalId,
+        motherPatientId: null,
+        householdId: '10',
+      );
+
+      final mother = await memberDao.getById(motherLocalId);
+      expect(mother, isNotNull);
+      expect(mother!.isActive, isFalse);
+      expect(mother.syncStatus, 'NotSynced');
+    });
+
     test('skips stillborn entries — only live babies are registered', () async {
       await PregnancyOutcomeSideEffects(
         memberDao: memberDao,

@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 44;
+  static const int schemaVersion = 45;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -203,6 +203,7 @@ class AppDatabase {
         created_at INTEGER,
         updated_at INTEGER,
         sync_status TEXT DEFAULT 'Success',
+        deceased_reason TEXT,
         raw_json TEXT
       )''');
     await db.execute(
@@ -1733,6 +1734,7 @@ class AppDatabase {
           created_at INTEGER,
           updated_at INTEGER,
           sync_status TEXT DEFAULT 'Success',
+          deceased_reason TEXT,
           raw_json TEXT
         )''');
       await db.execute(
@@ -1941,6 +1943,13 @@ class AppDatabase {
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_telemetry_type '
           'ON $tableTelemetryEvents(event_type)');
+    }
+    if (from < 45) {
+      // v45 — member deceased reason (Spice HouseholdMember.deceasedReason).
+      try {
+        await db.execute(
+            'ALTER TABLE $tableMembers ADD COLUMN deceased_reason TEXT');
+      } catch (_) {/* column already present — no-op */}
     }
     if (from < 44) {
       // v44 — the PHI value-audit stream. Separate table from telemetry

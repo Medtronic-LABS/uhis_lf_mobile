@@ -333,7 +333,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     final controller = context.read<VisitController>();
     final programme =
         c.programmes.isNotEmpty ? c.programmes.first : Programme.unknown;
-    final encounterId = await startOrResumeVisit(
+    final result = await startOrResumeVisit(
       context,
       controller: controller,
       patientId: c.patientId,
@@ -344,7 +344,8 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
       householdId: c.householdId,
     );
     if (!mounted) return;
-    if (encounterId != null) {
+    if (result.succeeded) {
+      final encounterId = result.encounterId!;
       Navigator.of(context).pop(); // close the AI sheet before navigating
       context.go('/patients/visit/$encounterId/flow?origin=patient', extra: {
         'patientId': c.patientId,
@@ -355,7 +356,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
         'villageId': c.villageId,
         'memberId': c.memberId,
       });
-    } else {
+    } else if (!result.messageAlreadyShown) {
       _snack(controller.error ?? PatientContextStrings.startVisitFailed);
     }
   }

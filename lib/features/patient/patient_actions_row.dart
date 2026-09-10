@@ -70,7 +70,7 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
     final programme = widget.programmes.isNotEmpty
         ? widget.programmes.first
         : Programme.unknown;
-    final encounterId = await startOrResumeVisit(
+    final result = await startOrResumeVisit(
       context,
       controller: controller,
       patientId: widget.patientId,
@@ -83,7 +83,8 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
 
     if (!mounted) return;
 
-    if (encounterId != null) {
+    if (result.succeeded) {
+      final encounterId = result.encounterId!;
       final originParam = widget.origin != null ? '?origin=${widget.origin}' : '';
       context.go(
         '/patients/visit/$encounterId/flow$originParam',
@@ -101,7 +102,7 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
       );
     } else {
       setState(() => _starting = false);
-      if (mounted) {
+      if (mounted && !result.messageAlreadyShown) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(controller.error ?? PatientContextStrings.startVisitFailed)),
         );
