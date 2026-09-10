@@ -574,7 +574,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'villageId=$villageId → householdMemberLocalId=$householdMemberLocalId',
     );
     if (!mounted) return;
-    final encounterId = await startOrResumeVisit(
+    final result = await startOrResumeVisit(
       context,
       controller: controller,
       patientId: patientId,
@@ -584,7 +584,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       householdId: householdId,
     );
     if (!mounted) return;
-    if (encounterId != null) {
+    if (result.succeeded) {
+      final encounterId = result.encounterId!;
       debugPrint('$logPrefix visit started, navigating with origin=dashboard');
       context.go(
         '/patients/visit/$encounterId/flow?origin=dashboard',
@@ -601,6 +602,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
       return;
     }
+    if (result.messageAlreadyShown) return;
     debugPrint('$logPrefix visit start failed: ${controller.error}');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

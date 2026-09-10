@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/models/programme.dart';
 import 'visit_controller.dart';
 
@@ -20,10 +22,24 @@ const bool _resumeFeatureEnabled = false;
 /// any earlier day is discarded silently (see
 /// [EncounterRepository.findTodayDraft]) and a fresh visit starts as normal.
 ///
-/// Returns the same contract as [VisitController.startVisit] — the
-/// encounter ID to navigate to, or null (error, or the SK dismissed the
-/// resume prompt without choosing).
-Future<String?> startOrResumeVisit(
+/// Outcome of [startOrResumeVisit]. When [messageAlreadyShown] is true
+/// (e.g. deceased member), callers must not show a generic failure snackbar.
+class VisitStartResult {
+  const VisitStartResult({
+    this.encounterId,
+    this.messageAlreadyShown = false,
+  });
+
+  final String? encounterId;
+  final bool messageAlreadyShown;
+
+  bool get succeeded => encounterId != null;
+}
+
+/// Returns a [VisitStartResult] — navigate when [VisitStartResult.encounterId]
+/// is set; on failure, show an error snackbar only if
+/// [VisitStartResult.messageAlreadyShown] is false.
+Future<VisitStartResult> startOrResumeVisit(
   BuildContext context, {
   required VisitController controller,
   required String patientId,
@@ -33,10 +49,22 @@ Future<String?> startOrResumeVisit(
   String? patientGender,
   String? householdId,
 }) async {
+  final memberDao = context.read<MemberDao>();
+  var member = await memberDao.getByPatientId(patientId);
+  member ??= await memberDao.getById(patientId);
+  if (member != null && !member.isActive) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(MemberDeceasedStrings.cannotStartVisit)),
+      );
+    }
+    return const VisitStartResult(messageAlreadyShown: true);
+  }
+
   final draft = _resumeFeatureEnabled
       ? await controller.checkTodayDraft(patientId)
       : null;
-  if (!context.mounted) return null;
+  if (!context.mounted) return const VisitStartResult();
 
   if (draft != null) {
     final resume = await showDialog<bool>(
@@ -56,13 +84,15 @@ Future<String?> startOrResumeVisit(
         ],
       ),
     );
-    if (!context.mounted || resume == null) return null;
-    if (resume) return draft.encounterId;
+    if (!context.mounted || resume == null) return const VisitStartResult();
+    if (resume) {
+      return VisitStartResult(encounterId: draft.encounterId);
+    }
     await controller.discardDraft(draft.encounterId);
-    if (!context.mounted) return null;
+    if (!context.mounted) return const VisitStartResult();
   }
 
-  return controller.startVisit(
+  final encounterId = await controller.startVisit(
     patientId: patientId,
     programme: programme,
     patientName: patientName,
@@ -70,4 +100,5 @@ Future<String?> startOrResumeVisit(
     patientGender: patientGender,
     householdId: householdId,
   );
+  return VisitStartResult(encounterId: encounterId);
 }

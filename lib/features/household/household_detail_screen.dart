@@ -29,7 +29,9 @@ import 'enrollment/nid_ocr_service.dart';
 import 'enrollment/widgets/enrollment_sticky_bar.dart';
 import '../visit/widgets/mission_queue_card.dart';
 import '../../core/i18n/app_date_format.dart';
+import '../../core/rmnch/deceased_reason.dart';
 import 'member_assessment_lookup.dart';
+import 'member_deceased_dialog.dart';
 
 /// Full details of a household member for display.
 class HouseholdMemberData {
@@ -45,6 +47,8 @@ class HouseholdMemberData {
     this.dateOfBirth,
     this.isHead = false,
     this.isPregnant = false,
+    this.isActive = true,
+    this.deceasedReason,
     this.householdId,
     this.villageId,
     this.recentService,
@@ -68,6 +72,8 @@ class HouseholdMemberData {
   final String? dateOfBirth;
   final bool isHead;
   final bool isPregnant;
+  final bool isActive;
+  final String? deceasedReason;
   final String? householdId;
   final String? villageId;
   final String? recentService;
@@ -136,6 +142,8 @@ class HouseholdMemberData {
       dateOfBirth: str('dateOfBirth'),
       isHead: isHead,
       isPregnant: isPregnant,
+      isActive: json['isActive'] != false,
+      deceasedReason: str('deceasedReason') ?? str('deceased_reason'),
       householdId: str('householdId'),
       // Mirror Android AssessmentEntity: prefer sub-village ID over parent village
       // so assessments get tagged with the same granularity the Android SK's pull
@@ -166,6 +174,8 @@ class HouseholdMemberData {
         dateOfBirth: dateOfBirth,
         isHead: isHead,
         isPregnant: isPregnant,
+        isActive: isActive,
+        deceasedReason: deceasedReason,
         householdId: householdId,
         villageId: villageId,
         recentService: recentService ?? this.recentService,
@@ -200,6 +210,8 @@ class HouseholdMemberData {
       dateOfBirth: e.dob,
       isHead: e.isHouseholdHead,
       isPregnant: e.isPregnant,
+      isActive: e.isActive,
+      deceasedReason: e.deceasedReason,
       householdId: e.householdId,
       // Mirror Android AssessmentEntity: prefer sub-village ID so assessment
       // payloads scope to the same level used by getAllSubVillageIds() pull.
@@ -793,6 +805,23 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   /// Opens the NID scanner (same modal as during enrollment add-member flow).
   /// On scan success or skip → navigate to LinkMemberScreen pre-filled with
   /// this household's data.
+  Future<void> _showMemberDeceasedDialog() async {
+    final householdId = _household.id;
+    if (householdId == null) return;
+    final memberDao = context.read<MemberDao>();
+    var localMembers = await memberDao.getByHouseholdId(householdId);
+    if (localMembers.isEmpty) {
+      localMembers = await memberDao.getByHouseholdFhirId(householdId);
+    }
+    final active = localMembers.where((m) => m.isActive).toList();
+    if (!mounted) return;
+    final saved = await showMemberDeceasedDialog(context, activeMembers: active);
+    if (saved == true && mounted) {
+      await _fetchMembers();
+      await _loadQueueItems();
+    }
+  }
+
   Future<void> _addMember() async {
     final result = await showNidScannerForMember(context);
     if (!mounted) return;
@@ -945,6 +974,22 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
                 ],
               ],
             ),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            color: Colors.white,
+            onSelected: (value) {
+              if (value == 'deceased') _showMemberDeceasedDialog();
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'deceased',
+                child: Text(
+                  HouseholdDetailStrings.memberDeceasedMenu,
+                  style: AppTextStyles.body.copyWith(fontSize: 14),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1113,7 +1158,9 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
             queueItem: (m.patientId ?? m.id) != null
                 ? _queueItems[m.patientId ?? m.id]
                 : null,
-            onTap: () => _navigateToPatientDetails(context, m),
+            onTap: m.isActive
+                ? () => _navigateToPatientDetails(context, m)
+                : null,
           ),
       ],
     );
@@ -1221,43 +1268,66 @@ class _MemberCard extends StatelessWidget {
 
   final HouseholdMemberData member;
   final MissionQueueItem? queueItem;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final item = queueItem;
+    final deceased = !member.isActive;
+    final displayName = deceased
+        ? '${member.name ?? MemberDeceasedStrings.unnamed} (${MemberDeceasedStrings.deceased})'
+        : member.name;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: AppColors.cardSurface,
+        color: deceased ? AppColors.progressTrack : AppColors.cardSurface,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: AppShadows.householdCard,
+        boxShadow: deceased ? null : AppShadows.householdCard,
       ),
       clipBehavior: Clip.antiAlias,
-      child: item != null
-          ? MissionQueueCard(
-              item: item,
-              compact: true,
-              embedded: true,
-              onTap: onTap,
-            )
-          : PatientBadgeRow(
-              name: member.name,
-              age: member.age,
-              ageLabel: EnrollmentAge.compactChipLabel(
-                member.dateOfBirth,
-                fallbackYears: member.age,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          item != null
+              ? MissionQueueCard(
+                  item: item,
+                  compact: true,
+                  embedded: true,
+                  onTap: onTap,
+                )
+              : PatientBadgeRow(
+                  name: displayName,
+                  age: member.age,
+                  ageLabel: EnrollmentAge.compactChipLabel(
+                    member.dateOfBirth,
+                    fallbackYears: member.age,
+                  ),
+                  gender: member.gender,
+                  phoneNumber: member.phoneNumber,
+                  programmes: member.programmes,
+                  ancVisitCount: member.ancVisitCount,
+                  pncVisitCount: member.pncVisitCount,
+                  useLatestServiceBadge: true,
+                  recentServiceKind: member.recentService,
+                  onTap: onTap ?? () {},
+                ),
+          if (deceased) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
+              child: Text(
+                '${MemberDeceasedStrings.reasonForDeath}: '
+                '${DeceasedReason.formatForDisplay(member.deceasedReason)}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
               ),
-              gender: member.gender,
-              phoneNumber: member.phoneNumber,
-              programmes: member.programmes,
-              ancVisitCount: member.ancVisitCount,
-              pncVisitCount: member.pncVisitCount,
-              useLatestServiceBadge: true,
-              recentServiceKind: member.recentService,
-              onTap: onTap,
             ),
+          ],
+        ],
+      ),
     );
   }
 }

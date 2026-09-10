@@ -25,6 +25,7 @@ class HouseholdMemberEntity {
     this.subVillageName,
     this.shasthyaShebikaId,
     this.isActive = true,
+    this.deceasedReason,
     this.isHouseholdHead = false,
     this.isPregnant = false,
     this.relation,
@@ -71,6 +72,7 @@ class HouseholdMemberEntity {
   final String? subVillageName;
   final String? shasthyaShebikaId;
   final bool isActive;
+  final String? deceasedReason;
   final bool isHouseholdHead;
   final bool isPregnant;
   final String? relation;
@@ -114,6 +116,7 @@ class HouseholdMemberEntity {
       'sub_village_name': subVillageName,
       'shasthya_shebika_id': shasthyaShebikaId,
       'is_active': isActive ? 1 : 0,
+      'deceased_reason': deceasedReason,
       'is_household_head': isHouseholdHead ? 1 : 0,
       'is_pregnant': isPregnant ? 1 : 0,
       'relation': relation,
@@ -162,6 +165,7 @@ class HouseholdMemberEntity {
     String? subVillageName,
     String? shasthyaShebikaId,
     bool? isActive,
+    String? deceasedReason,
     bool? isHouseholdHead,
     bool? isPregnant,
     String? relation,
@@ -204,6 +208,7 @@ class HouseholdMemberEntity {
       subVillageName: subVillageName ?? this.subVillageName,
       shasthyaShebikaId: shasthyaShebikaId ?? this.shasthyaShebikaId,
       isActive: isActive ?? this.isActive,
+      deceasedReason: deceasedReason ?? this.deceasedReason,
       isHouseholdHead: isHouseholdHead ?? this.isHouseholdHead,
       isPregnant: isPregnant ?? this.isPregnant,
       relation: relation ?? this.relation,
@@ -262,6 +267,7 @@ class HouseholdMemberEntity {
       subVillageName: row['sub_village_name'] as String?,
       shasthyaShebikaId: row['shasthya_shebika_id'] as String?,
       isActive: (row['is_active'] as int?) == 1,
+      deceasedReason: row['deceased_reason'] as String?,
       isHouseholdHead: (row['is_household_head'] as int?) == 1,
       isPregnant: (row['is_pregnant'] as int?) == 1,
       relation: row['relation'] as String?,
@@ -352,6 +358,7 @@ class HouseholdMemberEntity {
       shasthyaShebikaId:
           str('shasthyaShebikaId') ?? str('shasthya_shebika_id'),
       isActive: json['isActive'] != false,
+      deceasedReason: str('deceasedReason') ?? str('deceased_reason'),
       isHouseholdHead: isHead,
       isPregnant: parseBool(json['isPregnant']),
       relation: relation,
@@ -666,6 +673,27 @@ class MemberDao {
       AppDatabase.tableMembers,
       {
         'is_active': isActive ? 1 : 0,
+        'sync_status': syncStatus,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [int.tryParse(id) ?? id],
+    );
+  }
+
+  /// Mark member deceased with reason — mirrors Android
+  /// `updateMemberDeceasedReason` (isActive=false, NotSynced).
+  Future<void> updateMemberDeceasedReason(
+    String id, {
+    required bool isActive,
+    String? deceasedReason,
+    String syncStatus = 'NotSynced',
+  }) async {
+    await _db.db.update(
+      AppDatabase.tableMembers,
+      {
+        'is_active': isActive ? 1 : 0,
+        'deceased_reason': deceasedReason,
         'sync_status': syncStatus,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
