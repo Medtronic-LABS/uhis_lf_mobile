@@ -1,0 +1,29 @@
+// Vendored copy of flutter_tesseract_ocr 0.4.31 — Android build script modernised
+// for AGP 9 / Gradle 9. Upstream shipped its own buildscript{} with jcenter() and
+// an AGP 7.1.2 classpath, which fails on this project's toolchain. AGP is now
+// supplied by the app's root project; this file only configures the library.
+group 'io.paratoner.flutter_tesseract_ocr'
+version '1.0'
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace "io.paratoner.flutter_tesseract_ocr"
+    compileSdk 35
+
+    defaultConfig {
+        minSdkVersion 21
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    lint {
+        disable 'InvalidPackage'
+    }
+}
+
+dependencies {
+    // tesseract4android was an .aar; AGP forbids a local .aar inside a library
+    // module, so it's unpacked: Java classes as a plain jar (allowed) and the
+    // native .so under src/main/jniLibs/<abi>/ (packaged into the app APK).
+    api files("${projectDir}/libs/tesseract4android-classes.jar")
+}

@@ -16,6 +16,7 @@ import '../assessment_repository.dart';
 import '../forms/childhood_visit.dart';
 import '../triage/child_assessment_section.dart';
 import 'child_immunization_dto.dart';
+import 'epi_card_scan_screen.dart';
 import 'epi_card_scanner.dart';
 import 'epi_schedule_engine.dart';
 import 'epi_visit_summary.dart';
@@ -503,10 +504,16 @@ class _ImmunisationTimelineScreenState
               // Overdue banner
               if (overdueCount > 0) _OverdueBanner(count: overdueCount),
 
-              if (_scanResult != null && _scanResult!.anyMatched)
+              // Only surface the result banner for vaccines that still need
+              // recording — matched doses already completed are dropped by
+              // _matchedVaccineNames, so an all-completed scan shows nothing.
+              if (_scanResult != null &&
+                  _matchedVaccineNames(milestones).isNotEmpty)
                 _ScanTimelineBanner(
-                  matchCount: _scanResult!.matchedCodes.length,
+                  vaccineNames: _matchedVaccineNames(milestones),
                   datePrefilled: _scanResult!.extractedDate != null,
+                  onReview: () =>
+                      _reviewMatchedMilestones(milestones, patientName),
                   onDismiss: () => setState(() {
                     _scanResult = null;
                     _scanError = null;
@@ -727,43 +734,77 @@ class _ImmunisationTimelineScreenState
     );
   }
 
+  /// Friendly display labels for the vaccines the scan matched, in schedule
+  /// order and de-duplicated (a Bengali row label can match every dose of a
+  /// vaccine, so the same milestone's codes collapse to distinct labels).
+  List<String> _matchedVaccineNames(List<VaccineMilestone> milestones) {
+    final result = _scanResult;
+    if (result == null) return const [];
+    final matched = result.matchedCodes.toSet();
+    final names = <String>[];
+    for (final v in milestones.expand((m) => m.vaccines)) {
+      if (!matched.contains(v.code)) continue;
+      // Skip doses already recorded — the scan confirms them but there's
+      // nothing to update; re-listing them reads as "do this again".
+      if (v.status == VaccineStatus.completed) continue;
+      final label = EpiVaccineStrings.display(v.code, v.display);
+      if (!names.contains(label)) names.add(label);
+    }
+    return names;
+  }
+
+  /// Opens the review sheet for each milestone the scan matched, in schedule
+  /// order, one after another — the SK confirms and saves each (dates entered
+  /// manually) without hunting for the rows. Nothing is auto-saved.
+  Future<void> _reviewMatchedMilestones(
+      List<VaccineMilestone> milestones, String patientName) async {
+    final result = _scanResult;
+    if (result == null) return;
+    final matched = result.matchedCodes.toSet();
+    // Only milestones that still have a matched, not-yet-recorded dose — a
+    // fully-completed milestone has nothing to update.
+    final toReview = milestones
+        .where((m) => m.vaccines.any((v) =>
+            matched.contains(v.code) && v.status != VaccineStatus.completed))
+        .toList();
+    for (final milestone in toReview) {
+      if (!mounted) return;
+      await _showUpdateSheet(milestone, patientName);
+    }
+  }
+
   Future<void> _scanWholeCard() async {
     final milestones = _milestones;
     if (milestones == null) return;
-    setState(() {
-      _scanning = true;
-      _scanError = null;
-      _scanResult = null;
-    });
-    try {
-      final allCodes =
-          milestones.expand((m) => m.vaccines).map((v) => v.code).toList();
-      final result = await EpiCardScanner.pickAndScan(allCodes);
-      if (!mounted) return;
-      if (result == null) {
-        setState(() => _scanning = false);
-        return;
-      }
-      if (!result.anyMatched) {
-        setState(() {
-          _scanning = false;
-          _scanError = EpiStrings.scanFailed;
-        });
-        return;
-      }
+    // Full-screen UPI-style scanner: live camera + in-frame gallery upload;
+    // it shows the captured image with a scan-line sweep while dual-engine OCR
+    // runs on-device, then returns the result.
+    final allCodes =
+        milestones.expand((m) => m.vaccines).map((v) => v.code).toList();
+    final codeLabels = <String, String>{
+      for (final v in milestones.expand((m) => m.vaccines))
+        v.code: EpiVaccineStrings.display(v.code, v.display),
+    };
+    final result = await Navigator.of(context).push<EpiScanResult>(
+      MaterialPageRoute(
+        builder: (_) => EpiCardScanScreen(
+          targetCodes: allCodes,
+          codeLabels: codeLabels,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    if (!result.anyMatched) {
       setState(() {
-        _scanning = false;
-        _scanResult = result;
+        _scanError = EpiStrings.scanFailed;
+        _scanResult = null;
       });
-    } on Object catch (e) {
-      debugPrint('[EpiCardScanner] timeline scan error: $e');
-      if (mounted) {
-        setState(() {
-          _scanning = false;
-          _scanError = EpiStrings.scanFailed;
-        });
-      }
+      return;
     }
+    setState(() {
+      _scanError = null;
+      _scanResult = result;
+    });
   }
 }
 
@@ -2182,13 +2223,15 @@ class _ScanInlineButton extends StatelessWidget {
 /// successful whole-card scan. Tapping × clears the result.
 class _ScanTimelineBanner extends StatelessWidget {
   const _ScanTimelineBanner({
-    required this.matchCount,
+    required this.vaccineNames,
     required this.datePrefilled,
+    required this.onReview,
     required this.onDismiss,
   });
 
-  final int matchCount;
+  final List<String> vaccineNames;
   final bool datePrefilled;
+  final VoidCallback onReview;
   final VoidCallback onDismiss;
 
   @override
@@ -2203,28 +2246,68 @@ class _ScanTimelineBanner extends StatelessWidget {
           border: Border.all(color: _kGreen, width: 1),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.check_circle_outline_rounded,
-                size: 18, color: _kGreen),
+            const Padding(
+              padding: EdgeInsets.only(top: 1),
+              child: Icon(Icons.check_circle_outline_rounded,
+                  size: 18, color: _kGreen),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    EpiStrings.scanResultBanner(matchCount),
+                    EpiStrings.scanResultBanner(vaccineNames.length),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: _kGreen,
                     ),
                   ),
-                  if (datePrefilled)
-                    Text(
-                      EpiStrings.scanDatePrefilled,
-                      style:
-                          const TextStyle(fontSize: 11, color: _kGreen),
+                  if (vaccineNames.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final name in vaccineNames) _VaccineChip(name),
+                      ],
                     ),
+                  ],
+                  if (datePrefilled)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        EpiStrings.scanDatePrefilled,
+                        style:
+                            const TextStyle(fontSize: 11, color: _kGreen),
+                      ),
+                    ),
+                  if (vaccineNames.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: onReview,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: _kGreen,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          EpiStrings.scanReviewCta,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -2236,6 +2319,33 @@ class _ScanTimelineBanner extends StatelessWidget {
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact pill naming a single scanned-and-matched vaccine.
+class _VaccineChip extends StatelessWidget {
+  const _VaccineChip(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _kGreen, width: 1),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: _kGreen,
         ),
       ),
     );

@@ -5321,7 +5321,7 @@ abstract final class EpiStrings {
       getTranslatedString('Epi.scanCardCta', 'Scan EPI card');
   static String get scanCardSubtitle => getTranslatedString(
         'Epi.scanCardSubtitle',
-        'Point camera at vaccination booklet to auto-fill',
+        'Photograph the booklet to detect which vaccines were given · enter dates manually',
       );
   static String scanResultBanner(int count) => getTranslatedString(
         'Epi.scanResultBanner',
@@ -5338,6 +5338,23 @@ abstract final class EpiStrings {
       );
   static String get scanning =>
       getTranslatedString('Epi.scanning', 'Scanning…');
+  static String get scanReviewCta =>
+      getTranslatedString('Epi.scanReviewCta', 'Review & update →');
+  static String get scanFrameHint => getTranslatedString(
+        'Epi.scanFrameHint', 'Align the vaccination card in the frame');
+  static String get scanUploadLabel =>
+      getTranslatedString('Epi.scanUploadLabel', 'Upload');
+  static String get scanReadingCard =>
+      getTranslatedString('Epi.scanReadingCard', 'Reading card…');
+  static String scanVaccineFound(String name) => getTranslatedString(
+        'Epi.scanVaccineFound',
+        '$name found',
+        params: {'name': name},
+      );
+  static String get scanCameraUnavailable => getTranslatedString(
+        'Epi.scanCameraUnavailable',
+        'Camera unavailable — grant permission or upload an image',
+      );
 }
 
 /// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral

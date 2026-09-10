@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -25,31 +27,68 @@ class EpiScanResult {
   bool get anyMatched => matchedCodes.isNotEmpty || extractedDate != null;
 }
 
+/// Where the card image comes from — keeps the `image_picker` transport type
+/// out of the UI layer, which only chooses one of these.
+enum EpiScanSource { camera, gallery }
+
 /// Scans a photo of a child's EPI vaccination booklet and extracts which
 /// vaccines were given and on what date.
 ///
-/// Matching is offline-only — ML Kit text recognition runs on-device and
-/// the vaccine alias table is a compile-time constant. No network call is made.
+/// The Bangladesh EPI booklet is printed in Bengali (বাংলা), with vaccine
+/// names and handwritten dates in Bengali script/numerals. ML Kit ships no
+/// Bengali recognizer, so scanning runs two on-device engines (dual-pass = A+B):
+///
+///   A. ML Kit Latin OCR — fast, already bundled; reads Latin vaccine tokens
+///      and Latin-numeral dates.
+///   B. Tesseract `ben` OCR — bundled `assets/tessdata/ben.traineddata`;
+///      reads Bengali vaccine names and Bengali-numeral dates. Runs only when
+///      pass A alone yields no usable match, so English cards stay fast.
+///
+/// Both passes feed [_match], which also carries Bengali vaccine-name aliases
+/// and normalises Bengali numerals (০–৯ → 0–9) before date extraction.
+///
+/// Matching is offline-only — both engines run on-device and the alias table
+/// is a compile-time constant. No network call is made.
 abstract final class EpiCardScanner {
   EpiCardScanner._();
 
-  // Alias lists are lowercase; matching is case-insensitive.
+  /// Tesseract language pack bundled under `assets/tessdata/`.
+  static const String _tessLanguage = 'ben';
+
+  // Alias lists match case-insensitively via `contains`. Latin aliases are
+  // lowercase; Bengali aliases have no case so appear verbatim. Bengali card
+  // names carry no dose number (the dose is the column position), so a Bengali
+  // row label such as পেন্টা maps to every dose of that vaccine — the single
+  // extracted date is applied to each matched milestone for SK review.
   static const Map<String, List<String>> _aliases = {
-    'BCG': ['bcg', 'bacille calmette', 'bacillus calmette'],
-    'PENTA1': ['penta-1', 'penta 1', 'pentavalent-1', 'pentavalent 1', 'penta1'],
-    'PENTA2': ['penta-2', 'penta 2', 'pentavalent-2', 'pentavalent 2', 'penta2'],
-    'PENTA3': ['penta-3', 'penta 3', 'pentavalent-3', 'pentavalent 3', 'penta3'],
-    'PCV1': ['pcv-1', 'pcv 1', 'pcv1', 'pneumococcal-1', 'pneumococcal 1'],
-    'PCV2': ['pcv-2', 'pcv 2', 'pcv2', 'pneumococcal-2', 'pneumococcal 2'],
-    'PCV3': ['pcv-3', 'pcv 3', 'pcv3', 'pneumococcal-3', 'pneumococcal 3'],
-    'OPV1': ['opv-1', 'opv 1', 'opv1', 'polio-1', 'polio 1'],
-    'OPV2': ['opv-2', 'opv 2', 'opv2', 'polio-2', 'polio 2'],
-    'OPV3': ['opv-3', 'opv 3', 'opv3', 'polio-3', 'polio 3'],
-    'FIPV1': ['fipv-1', 'fipv 1', 'fipv1', 'ipv-1', 'ipv 1', 'ipv1'],
-    'FIPV2': ['fipv-2', 'fipv 2', 'fipv2', 'ipv-2', 'ipv 2', 'ipv2'],
-    'MR1': ['mr-1', 'mr 1', 'mr1', 'measles-rubella 1', 'measles rubella 1'],
-    'MR2': ['mr-2', 'mr 2', 'mr2', 'measles-rubella 2', 'measles rubella 2'],
-    'TCV': ['tcv', 'typhoid conjugate', 'typhoid'],
+    'BCG': ['bcg', 'bacille calmette', 'bacillus calmette', 'বিসিজি'],
+    'PENTA1': [
+      'penta-1', 'penta 1', 'pentavalent-1', 'pentavalent 1', 'penta1', 'পেন্টা',
+    ],
+    'PENTA2': [
+      'penta-2', 'penta 2', 'pentavalent-2', 'pentavalent 2', 'penta2', 'পেন্টা',
+    ],
+    'PENTA3': [
+      'penta-3', 'penta 3', 'pentavalent-3', 'pentavalent 3', 'penta3', 'পেন্টা',
+    ],
+    'PCV1': ['pcv-1', 'pcv 1', 'pcv1', 'pneumococcal-1', 'pneumococcal 1', 'পিসিভি'],
+    'PCV2': ['pcv-2', 'pcv 2', 'pcv2', 'pneumococcal-2', 'pneumococcal 2', 'পিসিভি'],
+    'PCV3': ['pcv-3', 'pcv 3', 'pcv3', 'pneumococcal-3', 'pneumococcal 3', 'পিসিভি'],
+    'OPV1': ['opv-1', 'opv 1', 'opv1', 'polio-1', 'polio 1', 'ওপিভি', 'পোলিও'],
+    'OPV2': ['opv-2', 'opv 2', 'opv2', 'polio-2', 'polio 2', 'ওপিভি', 'পোলিও'],
+    'OPV3': ['opv-3', 'opv 3', 'opv3', 'polio-3', 'polio 3', 'ওপিভি', 'পোলিও'],
+    'FIPV1': ['fipv-1', 'fipv 1', 'fipv1', 'ipv-1', 'ipv 1', 'ipv1', 'আইপিভি'],
+    'FIPV2': ['fipv-2', 'fipv 2', 'fipv2', 'ipv-2', 'ipv 2', 'ipv2', 'আইপিভি'],
+    'MR1': ['mr-1', 'mr 1', 'mr1', 'measles-rubella 1', 'measles rubella 1', 'এমআর'],
+    'MR2': ['mr-2', 'mr 2', 'mr2', 'measles-rubella 2', 'measles rubella 2', 'এমআর'],
+    'TCV': ['tcv', 'typhoid conjugate', 'typhoid', 'টিসিভি'],
+  };
+
+  // Bengali (Bangla) digit → ASCII digit. Applied before date parsing so the
+  // date regex — which matches ASCII \d — sees normalised numerals.
+  static const Map<String, String> _bengaliDigits = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
   };
 
   // Matches DD/MM/YYYY, DD-MM-YYYY, D/M/YY (EPI card date formats).
@@ -60,14 +99,20 @@ abstract final class EpiCardScanner {
   // Public API
   // ---------------------------------------------------------------------------
 
-  /// Opens the device camera via [image_picker], runs OCR, and returns matched
-  /// codes + extracted date for [targetCodes] (a milestone's vaccine codes).
+  /// Acquires a card image from [source] (camera or gallery) via [image_picker],
+  /// runs OCR, and returns matched codes + extracted date for [targetCodes]
+  /// (a milestone's vaccine codes).
   ///
-  /// Returns null if the user cancelled the camera without capturing.
-  static Future<EpiScanResult?> pickAndScan(List<String> targetCodes) async {
+  /// Returns null if the user dismissed the picker without choosing an image.
+  static Future<EpiScanResult?> pickAndScan(
+    List<String> targetCodes, {
+    EpiScanSource source = EpiScanSource.camera,
+  }) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
-      source: ImageSource.camera,
+      source: source == EpiScanSource.gallery
+          ? ImageSource.gallery
+          : ImageSource.camera,
       preferredCameraDevice: CameraDevice.rear,
       imageQuality: 85,
     );
@@ -75,9 +120,25 @@ abstract final class EpiCardScanner {
     return _scanFile(File(picked.path), targetCodes);
   }
 
+  /// Runs OCR on an already-acquired [image] (captured or uploaded by the
+  /// scan screen) and returns matched codes + extracted date for [targetCodes].
+  static Future<EpiScanResult> scanImage(
+          File image, List<String> targetCodes) =>
+      _scanFile(image, targetCodes);
+
   /// Pure text-matching path — exposed for unit tests (no camera/ML Kit needed).
   static EpiScanResult matchText(String ocrText, List<String> targetCodes) =>
       _match(ocrText, targetCodes);
+
+  /// Normalises Bengali numerals (০–৯) to ASCII (0–9). Exposed for tests.
+  static String normalizeBengaliDigits(String s) {
+    final buffer = StringBuffer();
+    for (final rune in s.runes) {
+      final ch = String.fromCharCode(rune);
+      buffer.write(_bengaliDigits[ch] ?? ch);
+    }
+    return buffer.toString();
+  }
 
   // ---------------------------------------------------------------------------
   // Internals
@@ -85,18 +146,60 @@ abstract final class EpiCardScanner {
 
   static Future<EpiScanResult> _scanFile(
       File imageFile, List<String> targetCodes) async {
+    // Pass A — ML Kit Latin (fast, always bundled).
+    final latinText = await _recogniseLatin(imageFile);
+    final latinResult = _match(latinText, targetCodes);
+
+    // English/Latin card fully read — skip the slower Bengali pass.
+    if (latinResult.matchedCodes.isNotEmpty &&
+        latinResult.extractedDate != null) {
+      return latinResult;
+    }
+
+    // Pass B — Tesseract Bengali (reads Bengali names + numerals). Combine both
+    // transcripts so a card mixing scripts still matches on either engine.
+    final bengaliText = await _recogniseBengali(imageFile);
+    if (bengaliText.isEmpty) return latinResult;
+    return _match('$latinText\n$bengaliText', targetCodes);
+  }
+
+  /// Runs ML Kit Latin OCR. Degrades to empty text on failure (e.g. a very
+  /// large device capture, decode error) so the Bengali pass still runs rather
+  /// than the whole scan throwing.
+  static Future<String> _recogniseLatin(File imageFile) async {
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
     try {
       final recognised =
           await recognizer.processImage(InputImage.fromFile(imageFile));
-      return _match(recognised.text, targetCodes);
+      return recognised.text;
+    } on Object catch (e) {
+      debugPrint('[EpiCardScanner] ML Kit Latin OCR failed: $e');
+      return '';
     } finally {
       recognizer.close();
     }
   }
 
+  /// Runs Tesseract `ben`. Degrades to empty text if the engine is unavailable
+  /// (e.g. traineddata missing, platform unsupported) so the ML Kit result
+  /// still stands rather than failing the whole scan.
+  static Future<String> _recogniseBengali(File imageFile) async {
+    try {
+      return await FlutterTesseractOcr.extractText(
+        imageFile.path,
+        language: _tessLanguage,
+        args: const {'preserve_interword_spaces': '1'},
+      );
+    } on Object catch (e) {
+      debugPrint('[EpiCardScanner] Tesseract ben OCR unavailable: $e');
+      return '';
+    }
+  }
+
   static EpiScanResult _match(String ocrText, List<String> targetCodes) {
-    final lower = ocrText.toLowerCase();
+    // Normalise Bengali numerals once for both alias-matching and date parsing.
+    final normalized = normalizeBengaliDigits(ocrText);
+    final lower = normalized.toLowerCase();
     final matched = <String>[];
     for (final code in targetCodes) {
       final aliases = _aliases[code];
@@ -110,7 +213,7 @@ abstract final class EpiCardScanner {
     }
     return EpiScanResult(
       matchedCodes: matched,
-      extractedDate: _extractDate(ocrText),
+      extractedDate: _extractDate(normalized),
       rawText: ocrText,
     );
   }
