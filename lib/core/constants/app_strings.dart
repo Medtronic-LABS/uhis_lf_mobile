@@ -5316,6 +5316,45 @@ abstract final class EpiStrings {
           'unit': monthsUntil == 1 ? 'month' : 'months',
         },
       );
+
+  static String get scanCardCta =>
+      getTranslatedString('Epi.scanCardCta', 'Scan EPI card');
+  static String get scanCardSubtitle => getTranslatedString(
+        'Epi.scanCardSubtitle',
+        'Photograph the booklet to detect which vaccines were given · enter dates manually',
+      );
+  static String scanResultBanner(int count) => getTranslatedString(
+        'Epi.scanResultBanner',
+        '${count == 1 ? '1 vaccine' : '$count vaccines'} found · Review and save',
+        params: {'count': '$count'},
+      );
+  static String get scanDatePrefilled => getTranslatedString(
+        'Epi.scanDatePrefilled',
+        'Date pre-filled from card · Edit if needed',
+      );
+  static String get scanFailed => getTranslatedString(
+        'Epi.scanFailed',
+        "Couldn't read card — please enter manually",
+      );
+  static String get scanning =>
+      getTranslatedString('Epi.scanning', 'Scanning…');
+  static String get scanReviewCta =>
+      getTranslatedString('Epi.scanReviewCta', 'Review & update →');
+  static String get scanFrameHint => getTranslatedString(
+        'Epi.scanFrameHint', 'Align the vaccination card in the frame');
+  static String get scanUploadLabel =>
+      getTranslatedString('Epi.scanUploadLabel', 'Upload');
+  static String get scanReadingCard =>
+      getTranslatedString('Epi.scanReadingCard', 'Reading card…');
+  static String scanVaccineFound(String name) => getTranslatedString(
+        'Epi.scanVaccineFound',
+        '$name found',
+        params: {'name': name},
+      );
+  static String get scanCameraUnavailable => getTranslatedString(
+        'Epi.scanCameraUnavailable',
+        'Camera unavailable — grant permission or upload an image',
+      );
 }
 
 /// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral
