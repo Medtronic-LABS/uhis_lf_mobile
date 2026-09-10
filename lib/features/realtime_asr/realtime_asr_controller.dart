@@ -157,6 +157,16 @@ class RealtimeAsrController extends ChangeNotifier {
   bool _extracting = false;
   bool get isExtracting => _extracting;
 
+  /// Wall-clock bounds of the live listening session, epoch ms.
+  ///
+  /// The live path fills form fields just as the batch path does, so telemetry
+  /// needs its span too — otherwise a visit driven entirely by live ASR would
+  /// report no scribe session at all. Mirrors ScribeSession.startedAtMs.
+  int? _startedAtMs;
+  int? _endedAtMs;
+  int? get startedAtMs => _startedAtMs;
+  int? get endedAtMs => _endedAtMs;
+
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
@@ -271,6 +281,8 @@ class RealtimeAsrController extends ChangeNotifier {
     String? encounterId,
   }) async {
     if (isActive) return;
+    _startedAtMs = DateTime.now().millisecondsSinceEpoch;
+    _endedAtMs = null;
 
     // Set before any early return so even a same-session immediate failure
     // (unsupported platform, unmounted context) has a correlation id ready —
@@ -492,6 +504,9 @@ class RealtimeAsrController extends ChangeNotifier {
       return;
     }
     _manualStopInProgress = true;
+    // The instant the SK stopped talking. The flush and final extraction below
+    // can take seconds; those are processing, not part of the listening span.
+    _endedAtMs = DateTime.now().millisecondsSinceEpoch;
     // Surface "stopping" immediately — the flush + final-extraction wait below
     // can take several seconds, during which the banner would otherwise look
     // unchanged and the Stop tap would appear to do nothing.

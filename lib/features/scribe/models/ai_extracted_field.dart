@@ -22,6 +22,21 @@ enum FieldSource {
 
   /// Value was extracted by AI and rejected by the user.
   aiRejected,
+
+  /// Value was loaded from the patient's history / chronic record / a prior
+  /// visit, not entered by the SK and not proposed by AI.
+  ///
+  /// Distinct from [manual] because counting a preloaded height as something
+  /// the SK typed overstates manual effort — the defect a hand ground-truth
+  /// run surfaced (16 "manual" fields reported for 10 actually typed).
+  /// Not SK-owned: AI may still fill over a prefilled value, matching the
+  /// behaviour these writes had when they carried no source at all.
+  prefilled,
+
+  /// Value was computed from other fields rather than captured — BMI from
+  /// height/weight, a follow-up date from `daysSinceDelivery`, EDD from LMP.
+  /// Also not SK-owned.
+  derived,
 }
 
 /// A single field extracted by the AI scribe service.

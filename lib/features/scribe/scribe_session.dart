@@ -36,6 +36,8 @@ class ScribeSession {
     this.triageExtractionResult,
     this.errorMessage,
     this.fieldsJustPopulated = false,
+    this.startedAtMs,
+    this.endedAtMs,
   });
 
   final ScribeState state;
@@ -56,6 +58,17 @@ class ScribeSession {
 
   /// True when fields were just populated - triggers notification.
   final bool fieldsJustPopulated;
+
+  /// Wall-clock bounds of the recording, epoch ms, or null before one has run.
+  ///
+  /// [elapsedSeconds] already counts the recording, but only while it is in
+  /// flight and only as a duration — telemetry reports the actual start and
+  /// end instants, so an SK's scribe session can be placed against the visit
+  /// it belongs to. Set on the recording transitions in ScribeController, not
+  /// derived from the fill: fields land after upload and processing, so a
+  /// fill timestamp would overstate when the SK stopped talking.
+  final int? startedAtMs;
+  final int? endedAtMs;
 
   bool get isActive =>
       state == ScribeState.recording ||
@@ -98,6 +111,8 @@ class ScribeSession {
     TriageExtractionResult? triageExtractionResult,
     String? errorMessage,
     bool? fieldsJustPopulated,
+    int? startedAtMs,
+    int? endedAtMs,
   }) => ScribeSession(
     state: state ?? this.state,
     mode: mode ?? this.mode,
@@ -114,5 +129,7 @@ class ScribeSession {
         triageExtractionResult ?? this.triageExtractionResult,
     errorMessage: errorMessage ?? this.errorMessage,
     fieldsJustPopulated: fieldsJustPopulated ?? this.fieldsJustPopulated,
+    startedAtMs: startedAtMs ?? this.startedAtMs,
+    endedAtMs: endedAtMs ?? this.endedAtMs,
   );
 }

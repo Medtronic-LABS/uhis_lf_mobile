@@ -410,6 +410,21 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           enrolledFormTypes: widget.enrolledFormTypes,
           ageInMonths: widget.ageInMonths,
         );
+        // Hand the notifier what the SK can actually see, for the telemetry
+        // report's capture-rate denominators. Pushed here rather than at the
+        // AiScribeBanner call site below, which sits behind a scribeEnabled
+        // guard — a manual visit needs these numbers too. Plain assignment,
+        // no listener notification, so calling it from build is safe.
+        notifier.setRenderedFieldStats(
+          visibleFieldIds: _visibleFieldIds(annotated, notifier),
+          renderedTotal: annotated.fold<int>(
+              0, (sum, a) => sum + a.section.fieldRefs.length),
+          renderedFormTypes: {
+            for (final a in annotated)
+              if (a.section.formType.isNotEmpty) a.section.formType,
+          },
+        );
+
         final outcomeValue = notifier.data.getValue('deliveryOutcomeType');
         if (widget.activeFormTypes.contains('pregnancyOutcome')) {
           debugPrint('[DeliveryOutcome] rebuild sections=${annotated.length} '
@@ -593,6 +608,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
                       widget.activeFormTypes),
                   visibleFieldIds: _visibleFieldIds(annotated, notifier),
+                  onScribeSpan: (startedAtMs, endedAtMs) =>
+                      notifier.markScribeSpan(
+                    startedAtMs: startedAtMs,
+                    endedAtMs: endedAtMs,
+                  ),
                   onFormFill: (fill) {
                     final rejected = notifier.applyAiPrefill(
                       fill.fields.where((f) => f.value != null).toList(),

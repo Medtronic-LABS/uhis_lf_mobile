@@ -336,6 +336,36 @@ class AppConfig {
   static int get vadPreRollMs =>
       int.tryParse(const String.fromEnvironment('VAD_PREROLL_MS')) ?? 350;
 
+  /// Exposes the on-device AI Scribe telemetry report (Settings -> debug row,
+  /// and the `/dev/telemetry` route) in a **release** build.
+  ///
+  /// Normally the screen is `kDebugMode`-only. This flag exists because debug
+  /// builds cannot always be produced on a restricted network — the `sqlite3`
+  /// package downloads a prebuilt library from GitHub release assets at build
+  /// time, which some corporate networks block — and field verification of
+  /// the telemetry numbers still has to happen on a real handset.
+  ///
+  /// Off by default, so a normal release ships without it. Mirrors the
+  /// server's `ENABLE_TELEMETRY_DASHBOARD`: the report is opt-in at both ends.
+  static bool get telemetryScreenEnabled =>
+      const bool.fromEnvironment('TELEMETRY_SCREEN', defaultValue: false);
+
+  /// Feature flag: record the before/after **values** of fields the SK edited
+  /// after AI filled them. Set via `--dart-define=VALUE_AUDIT=true`.
+  ///
+  /// Off by default, and deliberately a separate flag from
+  /// [telemetryScreenEnabled], because this is the one part of telemetry that
+  /// holds clinical data. Ordinary telemetry stores field *ids* and counts and
+  /// is non-PHI by construction; these rows store what was measured, so they
+  /// live in their own table, are wiped with the rest of the patient data when
+  /// a different SK signs in, and are gated at both ends (mirrors the server's
+  /// `ENABLE_VALUE_AUDIT`).
+  ///
+  /// A build without this flag captures nothing, so turning it on later cannot
+  /// retroactively expose values that were never recorded.
+  static bool get valueAuditEnabled =>
+      const bool.fromEnvironment('VALUE_AUDIT', defaultValue: false);
+
   /// Feature flag: use the uhis_form JSON-driven renderer instead of the
   /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
   static const bool useDynamicForms = bool.fromEnvironment(

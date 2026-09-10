@@ -452,6 +452,8 @@ abstract final class SettingsStrings {
   // ── Offline DB browser row (kDebugMode only) ──────────────────────────
   static String get debugDbViewer => getTranslatedString('Settings.debugDbViewer', 'Offline Database');
   static String get debugDbViewerSubtitle => getTranslatedString('Settings.debugDbViewerSubtitle', 'Browse local SQLCipher tables');
+  static String get debugTelemetry => getTranslatedString('Settings.debugTelemetry', 'AI Scribe Report');
+  static String get debugTelemetrySubtitle => getTranslatedString('Settings.debugTelemetrySubtitle', 'Adoption, capture and correction rates by date');
 
   // ── Offline Sync (Spice parity) ───────────────────────────────────────
   static String get offlineSync =>
@@ -6515,4 +6517,133 @@ abstract final class DebugDbStrings {
   static String pageLabel(int from, int to, int total) => getTranslatedString(
       'DebugDb.pageLabel', 'Showing {from}–{to} of {total}',
       params: {'from': '$from', 'to': '$to', 'total': '$total'});
+}
+
+/// AI Scribe / counselling telemetry report (dev screen at `/dev/telemetry`).
+///
+/// Wording here is load-bearing, not decorative: two of these labels exist to
+/// stop a number being read as something it isn't. "Compose opened" must never
+/// become "sent" (we hand off to the OS and never learn the outcome), and the
+/// correction-rate caveat must stay visible (the live scribe path has no
+/// explicit accept, so "not corrected" includes fields nobody reviewed).
+abstract final class TelemetryStrings {
+  TelemetryStrings._();
+
+  static String get title =>
+      getTranslatedString('Telemetry.title', 'AI Scribe Report');
+  static String get from => getTranslatedString('Telemetry.from', 'From');
+  static String get to => getTranslatedString('Telemetry.to', 'To');
+  static String get generate =>
+      getTranslatedString('Telemetry.generate', 'Generate');
+  static String get download =>
+      getTranslatedString('Telemetry.download', 'Download');
+  static String get copyJson =>
+      getTranslatedString('Telemetry.copyJson', 'Copy JSON');
+  static String get noData => getTranslatedString('Telemetry.noData',
+      'No visits recorded in this date range.');
+  static String get notAvailable =>
+      getTranslatedString('Telemetry.notAvailable', '—');
+
+  // ── Section headings ──────────────────────────────────────────────────────
+  static String get adoption =>
+      getTranslatedString('Telemetry.adoption', 'Adoption');
+  static String get timeToComplete =>
+      getTranslatedString('Telemetry.timeToComplete', 'Time to complete');
+  static String get fieldsCaptured =>
+      getTranslatedString('Telemetry.fieldsCaptured', 'Fields captured');
+  static String get accuracy =>
+      getTranslatedString('Telemetry.accuracy', 'Correction rate');
+  static String get counselling =>
+      getTranslatedString('Telemetry.counselling', 'Counselling share');
+  static String get worstFields =>
+      getTranslatedString('Telemetry.worstFields', 'Most-corrected fields');
+
+  // ── Metric labels ─────────────────────────────────────────────────────────
+  static String get scribeUsers =>
+      getTranslatedString('Telemetry.scribeUsers', 'SKs using AI Scribe');
+  static String get manualUsers =>
+      getTranslatedString('Telemetry.manualUsers', 'SKs manual only');
+  static String get scribeVisits =>
+      getTranslatedString('Telemetry.scribeVisits', 'AI Scribe visits');
+  static String get manualVisits =>
+      getTranslatedString('Telemetry.manualVisits', 'Manual visits');
+  static String get medianWithScribe => getTranslatedString(
+      'Telemetry.medianWithScribe', 'Median with AI Scribe');
+  static String get medianManual =>
+      getTranslatedString('Telemetry.medianManual', 'Median manual');
+  static String get totalAiFields =>
+      getTranslatedString('Telemetry.totalAiFields', 'Total AI-filled fields');
+  static String get avgAiFields => getTranslatedString(
+      'Telemetry.avgAiFields', 'Average per AI Scribe visit');
+  static String get captureRate =>
+      getTranslatedString('Telemetry.captureRate', 'Capture rate');
+  static String get fieldsVisible => getTranslatedString(
+      'Telemetry.fieldsVisible', 'Fields visible to the SK');
+  static String get fieldsRendered =>
+      getTranslatedString('Telemetry.fieldsRendered', 'Fields rendered');
+  static String get fieldsInForm =>
+      getTranslatedString('Telemetry.fieldsInForm', 'Fields in form');
+  static String get aiFilled =>
+      getTranslatedString('Telemetry.aiFilled', 'AI-filled');
+  static String get aiCorrected =>
+      getTranslatedString('Telemetry.aiCorrected', 'Corrected by SK');
+  static String get aiUnchanged =>
+      getTranslatedString('Telemetry.aiUnchanged', 'Left unchanged');
+  static String get manualFields => getTranslatedString(
+      'Telemetry.manualFields', 'Manually entered');
+  static String get prefilledFields => getTranslatedString(
+      'Telemetry.prefilledFields', 'Prefilled from history');
+  static String get derivedFields => getTranslatedString(
+      'Telemetry.derivedFields', 'Computed from other fields');
+  static String get aiOverridden => getTranslatedString(
+      'Telemetry.aiOverridden', 'AI overridden (SK had filled it)');
+  static String get disagreementRate => getTranslatedString(
+      'Telemetry.disagreementRate', 'Disagreement rate');
+  static String get provenance =>
+      getTranslatedString('Telemetry.provenance', 'Where values came from');
+  static String get disagreementCaveat => getTranslatedString(
+      'Telemetry.disagreementCaveat',
+      'Corrections plus proposals rejected because the SK had already filled '
+      'the field — a truer disagreement measure than correction rate alone.');
+  static String get provenanceCaveat => getTranslatedString(
+      'Telemetry.provenanceCaveat',
+      'Prefilled and computed values are neither AI nor SK effort, so they are '
+      'counted separately from what the SK manually entered.');
+  static String get correctionRate =>
+      getTranslatedString('Telemetry.correctionRate', 'Manual correction rate');
+  static String get smsOpened => getTranslatedString(
+      'Telemetry.smsOpened', 'SMS compose opened');
+  static String get whatsappOpened => getTranslatedString(
+      'Telemetry.whatsappOpened', 'WhatsApp compose opened');
+  static String get contactShares => getTranslatedString(
+      'Telemetry.contactShares', 'Direct patient contact');
+  static String get contactSms =>
+      getTranslatedString('Telemetry.contactSms', 'SMS to patient');
+  static String get contactWhatsapp => getTranslatedString(
+      'Telemetry.contactWhatsapp', 'WhatsApp to patient');
+  static String get contactCaveat => getTranslatedString(
+      'Telemetry.contactCaveat',
+      'From the CCE drawer and contact sheet — not counselling shares.');
+  static String get eventCount =>
+      getTranslatedString('Telemetry.eventCount', 'Events stored');
+  static String get pendingUpload =>
+      getTranslatedString('Telemetry.pendingUpload', 'Awaiting upload');
+
+  // ── Caveats the report must always carry ──────────────────────────────────
+  static String get correctionCaveat => getTranslatedString(
+      'Telemetry.correctionCaveat',
+      'Lower bound: fields the SK never reviewed count as unchanged, so real '
+      'error may be higher.');
+  static String get composeCaveat => getTranslatedString(
+      'Telemetry.composeCaveat',
+      'Counts compose sheets opened, not messages delivered.');
+  static String get durationCaveat => getTranslatedString(
+      'Telemetry.durationCaveat',
+      'Wall-clock median; includes time the app spent in the background.');
+
+  static String savedTo(String path) => getTranslatedString(
+      'Telemetry.savedTo', 'Saved to {path}',
+      params: {'path': path}, localizeDigits: false);
+  static String visitsInRange(int count) => getTranslatedString(
+      'Telemetry.visitsInRange', '{count} visits', params: {'count': '$count'});
 }

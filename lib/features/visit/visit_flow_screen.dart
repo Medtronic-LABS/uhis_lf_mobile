@@ -34,6 +34,9 @@ import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/telemetry/share_telemetry.dart';
+import '../../core/telemetry/telemetry_service.dart';
+import '../../core/telemetry/telemetry_event.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
@@ -3383,7 +3386,25 @@ class _AiCounsellingCard extends StatelessWidget {
       ? const Color(0xFFFFFBEB)
       : const Color(0xFFF0FDF4);
 
+  /// Records a Step-3 share tap. Same helper the counselling screen uses —
+  /// this surface was missed on the first pass, so a real SK tapping
+  /// "Send SMS" at the end of a visit recorded nothing.
+  void _recordShare(
+    TelemetryService? telemetry,
+    String channel, {
+    required bool launched,
+  }) =>
+      recordShareTap(
+        telemetry,
+        channel: channel,
+        surface: TelemetryShareSurface.visitFlow,
+        hasMessage: true,
+        launched: launched,
+      );
+
   Future<void> _sendWhatsApp(BuildContext context) async {
+    // Resolved before the awaits below — see share_telemetry.dart.
+    final telemetry = shareTelemetryOf(context);
     final encoded = Uri.encodeComponent(text);
     final rawPhone =
         patientPhone?.replaceAll(RegExp(r'[^\d]'), '') ?? '';
@@ -3392,14 +3413,17 @@ class _AiCounsellingCard extends StatelessWidget {
         Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
     if (await canLaunchUrl(nativeUri)) {
       await launchUrl(nativeUri);
+      _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: true);
       return;
     }
     final webUri = Uri.parse(
         'https://wa.me/${rawPhone.isNotEmpty ? rawPhone : ''}?text=$encoded');
     if (await canLaunchUrl(webUri)) {
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: true);
       return;
     }
+    _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: false);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -3409,10 +3433,12 @@ class _AiCounsellingCard extends StatelessWidget {
   }
 
   Future<void> _sendSms(BuildContext context) async {
+    final telemetry = shareTelemetryOf(context);
     final encoded = Uri.encodeComponent(text);
     final phone = patientPhone ?? '';
     final uri = Uri.parse('sms:$phone?body=$encoded');
     if (!await canLaunchUrl(uri)) {
+      _recordShare(telemetry, TelemetryShareChannel.sms, launched: false);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(NabaStrings.smsNotAvailable)),
@@ -3421,6 +3447,7 @@ class _AiCounsellingCard extends StatelessWidget {
       return;
     }
     await launchUrl(uri);
+    _recordShare(telemetry, TelemetryShareChannel.sms, launched: true);
   }
 
   Widget _sendChip({

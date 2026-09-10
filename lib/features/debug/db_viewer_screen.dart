@@ -42,7 +42,13 @@ class _DebugDbViewerScreenState extends State<DebugDbViewerScreen> {
 
     try {
       final db = context.read<AppDatabase>().db;
-      final names = List<String>.from(AppDatabase.allTablesForTesting)
+      // allTablesForTesting is the WIPE list, which deliberately omits
+      // telemetry_events (see the comment on _allTables) — add it back so the
+      // viewer still shows every table that exists.
+      final names = <String>{
+        ...AppDatabase.allTablesForTesting,
+        AppDatabase.tableTelemetryEvents,
+      }.toList()
         ..sort();
 
       // Seed list immediately so the screen isn't blank while COUNTs run.

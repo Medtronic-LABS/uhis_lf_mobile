@@ -52,6 +52,11 @@ import 'core/risk/risk_scoring_service.dart';
 import 'core/sla/priority_scorer.dart';
 import 'core/sla/sla_evaluator.dart';
 import 'core/auth/user_hierarchy_service.dart';
+import 'core/telemetry/telemetry_dao.dart';
+import 'core/telemetry/telemetry_uploader.dart';
+import 'core/telemetry/telemetry_service.dart';
+import 'core/telemetry/value_audit_dao.dart';
+import 'core/telemetry/value_audit_uploader.dart';
 import 'core/sync/offline_sync_service.dart';
 import 'app/post_sync_refresher.dart';
 import 'core/sync/sync_foreground_controller.dart';
@@ -170,6 +175,26 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
   late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
+  late final TelemetryDao _telemetryDao = TelemetryDao(widget.appDb);
+  late final TelemetryService _telemetryService = TelemetryService(
+    dao: _telemetryDao,
+    userIdResolver: widget.authRepo.userId,
+    // Parsed to int because the column and the server column are integers;
+    // a non-numeric tenant yields null, which degrades to the pre-existing
+    // "credit the uploading session" behaviour rather than writing garbage.
+    tenantIdResolver: () async {
+      final raw = await widget.authRepo.currentTenantId();
+      return raw == null ? null : int.tryParse(raw);
+    },
+  );
+  late final TelemetryUploader _telemetryUploader =
+      TelemetryUploader(_telemetryDao, widget.api);
+  // PHI stream, separate from telemetry all the way down — own dao, own
+  // uploader, own flag (AppConfig.valueAuditEnabled), and its table is wiped
+  // on SK handover.
+  late final ValueAuditDao _valueAuditDao = ValueAuditDao(widget.appDb);
+  late final ValueAuditUploader _valueAuditUploader =
+      ValueAuditUploader(_valueAuditDao, widget.api);
   late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
     households: _householdDao,
     members: _memberDao,
@@ -281,6 +306,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     worklist: _worklist,
     referrals: _referrals,
     mission: _missionDashboard,
+    telemetry: _telemetryUploader,
+    valueAudit: _valueAuditUploader,
   );
   late final SyncForegroundController _syncForeground = SyncForegroundController(
     progress: _sync.progressStream,
@@ -471,6 +498,11 @@ class _UhisNextAppState extends State<UhisNextApp>
                 )),
         // Visit flow providers
         Provider<EncounterDao>.value(value: _encounterDao),
+        Provider<TelemetryDao>.value(value: _telemetryDao),
+        Provider<TelemetryService>.value(value: _telemetryService),
+        Provider<TelemetryUploader>.value(value: _telemetryUploader),
+        Provider<ValueAuditDao>.value(value: _valueAuditDao),
+        Provider<ValueAuditUploader>.value(value: _valueAuditUploader),
         Provider<EncounterRepository>(
             create: (ctx) => EncounterRepository(
                   widget.api,
