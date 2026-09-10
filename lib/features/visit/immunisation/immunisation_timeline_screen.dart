@@ -490,6 +490,16 @@ class _ImmunisationTimelineScreenState
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 16),
             children: [
+              // Scan EPI card — inline row so it's reachable in both standalone
+              // (AppBar button) and embedded (visit-flow, no AppBar) contexts.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: _ScanInlineButton(
+                  scanning: _scanning,
+                  onTap: _scanning ? null : _scanWholeCard,
+                ),
+              ),
+
               // Overdue banner
               if (overdueCount > 0) _OverdueBanner(count: overdueCount),
 
@@ -2114,6 +2124,59 @@ class _DateField extends StatelessWidget {
 }
 
 // ── EPI card scan widgets ────────────────────────────────────────────────────
+
+/// Compact inline "Scan EPI card" button shown at the top of the timeline
+/// list in both standalone and embedded (visit-flow) contexts.
+class _ScanInlineButton extends StatelessWidget {
+  const _ScanInlineButton({required this.scanning, this.onTap});
+
+  final bool scanning;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0F4FF),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFBFCCF5), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            if (scanning)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.navy),
+              )
+            else
+              const Icon(Icons.document_scanner_outlined,
+                  size: 18, color: AppColors.navy),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                scanning ? EpiStrings.scanning : EpiStrings.scanCardCta,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: AppColors.navy,
+                ),
+              ),
+            ),
+            if (!scanning)
+              const Icon(Icons.chevron_right_rounded,
+                  size: 16, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// Dismissible green banner shown at the top of the timeline after a
 /// successful whole-card scan. Tapping × clears the result.
