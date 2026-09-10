@@ -16,6 +16,7 @@ import '../assessment_repository.dart';
 import '../forms/childhood_visit.dart';
 import '../triage/child_assessment_section.dart';
 import 'child_immunization_dto.dart';
+import 'epi_card_scanner.dart';
 import 'epi_schedule_engine.dart';
 import 'epi_visit_summary.dart';
 import 'immunisation_repository.dart';
@@ -95,6 +96,10 @@ class _ImmunisationTimelineScreenState
   bool _loading = true;
   String? _error;
   ChildAssessmentData _childAssessmentData = ChildAssessmentData();
+
+  EpiScanResult? _scanResult;
+  bool _scanning = false;
+  String? _scanError;
 
   /// Local `patients.id` after [PatientDao.byAnyId] resolution. Household /
   /// Start Visit often pass server `patient_id` or `members.id`; immunisation
@@ -440,6 +445,26 @@ class _ImmunisationTimelineScreenState
                   ),
                 ],
               ),
+              actions: [
+                if (!_loading && _error == null && _milestones != null)
+                  _scanning
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            ),
+                          ),
+                        )
+                      : IconButton(
+                          tooltip: EpiStrings.scanCardCta,
+                          icon: const Icon(Icons.document_scanner_outlined),
+                          onPressed: _scanWholeCard,
+                        ),
+              ],
             ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -467,6 +492,18 @@ class _ImmunisationTimelineScreenState
             children: [
               // Overdue banner
               if (overdueCount > 0) _OverdueBanner(count: overdueCount),
+
+              if (_scanResult != null && _scanResult!.anyMatched)
+                _ScanTimelineBanner(
+                  matchCount: _scanResult!.matchedCodes.length,
+                  datePrefilled: _scanResult!.extractedDate != null,
+                  onDismiss: () => setState(() {
+                    _scanResult = null;
+                    _scanError = null;
+                  }),
+                )
+              else if (_scanError != null)
+                _ScanErrorBanner(message: _scanError!),
 
               // Timeline
               _Timeline(
@@ -654,6 +691,10 @@ class _ImmunisationTimelineScreenState
         if (dobStr != null && dobStr.isNotEmpty) {
           patientDob = DateTime.tryParse(dobStr);
         }
+        // Pre-fill date from card scan if scan matched any vaccine in this milestone.
+        final milestoneCodes = milestone.vaccines.map((v) => v.code).toSet();
+        final scanMatched = _scanResult != null &&
+            _scanResult!.matchedCodes.any(milestoneCodes.contains);
         return _UpdateStatusSheet(
           milestone: milestone,
           patientId: _patientKey,
@@ -666,6 +707,7 @@ class _ImmunisationTimelineScreenState
           householdId: _patient?.householdId,
           householdMemberLocalId: widget.householdMemberLocalId,
           dob: patientDob,
+          prefilledDate: scanMatched ? _scanResult!.extractedDate : null,
           onRecorded: () {
             setState(() => _loading = true);
             _load();
@@ -673,6 +715,45 @@ class _ImmunisationTimelineScreenState
         );
       },
     );
+  }
+
+  Future<void> _scanWholeCard() async {
+    final milestones = _milestones;
+    if (milestones == null) return;
+    setState(() {
+      _scanning = true;
+      _scanError = null;
+      _scanResult = null;
+    });
+    try {
+      final allCodes =
+          milestones.expand((m) => m.vaccines).map((v) => v.code).toList();
+      final result = await EpiCardScanner.pickAndScan(allCodes);
+      if (!mounted) return;
+      if (result == null) {
+        setState(() => _scanning = false);
+        return;
+      }
+      if (!result.anyMatched) {
+        setState(() {
+          _scanning = false;
+          _scanError = EpiStrings.scanFailed;
+        });
+        return;
+      }
+      setState(() {
+        _scanning = false;
+        _scanResult = result;
+      });
+    } on Object catch (e) {
+      debugPrint('[EpiCardScanner] timeline scan error: $e');
+      if (mounted) {
+        setState(() {
+          _scanning = false;
+          _scanError = EpiStrings.scanFailed;
+        });
+      }
+    }
   }
 }
 
@@ -1375,6 +1456,7 @@ class _UpdateStatusSheet extends StatefulWidget {
     this.householdId,
     this.householdMemberLocalId,
     this.dob,
+    this.prefilledDate,
   });
 
   final VaccineMilestone milestone;
@@ -1401,6 +1483,11 @@ class _UpdateStatusSheet extends StatefulWidget {
   /// Patient date of birth — used as the earliest selectable date administered.
   final DateTime? dob;
 
+  /// Date pre-filled from an EPI card scan at the timeline level. When set,
+  /// the sheet opens with this date in the Date Administered field and shows
+  /// a small "from card scan" hint so the SK knows why it's pre-populated.
+  final DateTime? prefilledDate;
+
   @override
   State<_UpdateStatusSheet> createState() => _UpdateStatusSheetState();
 }
@@ -1410,7 +1497,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   /// reason) instead of the default vaccinated flow (date + notes).
   bool _referring = false;
 
-  DateTime _givenDate = DateTime.now();
+  late DateTime _givenDate;
   final TextEditingController _notesCtrl = TextEditingController();
 
   final TextEditingController _reasonCtrl = TextEditingController();
@@ -1419,6 +1506,12 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   String? _facilityError;
 
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _givenDate = widget.prefilledDate ?? DateTime.now();
+  }
 
   @override
   void dispose() {
@@ -1697,6 +1790,19 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
                         }
                       },
                     ),
+                    if (widget.prefilledDate != null) ...[
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Text(
+                          EpiStrings.scanDatePrefilled,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: _kGreen,
+                          ),
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 16),
 
@@ -2002,6 +2108,110 @@ class _DateField extends StatelessWidget {
                 size: 18, color: AppColors.textMuted),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── EPI card scan widgets ────────────────────────────────────────────────────
+
+/// Dismissible green banner shown at the top of the timeline after a
+/// successful whole-card scan. Tapping × clears the result.
+class _ScanTimelineBanner extends StatelessWidget {
+  const _ScanTimelineBanner({
+    required this.matchCount,
+    required this.datePrefilled,
+    required this.onDismiss,
+  });
+
+  final int matchCount;
+  final bool datePrefilled;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _kGreen, width: 1),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_outline_rounded,
+                size: 18, color: _kGreen),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    EpiStrings.scanResultBanner(matchCount),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _kGreen,
+                    ),
+                  ),
+                  if (datePrefilled)
+                    Text(
+                      EpiStrings.scanDatePrefilled,
+                      style:
+                          const TextStyle(fontSize: 11, color: _kGreen),
+                    ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded,
+                  size: 18, color: _kGreen),
+              onPressed: onDismiss,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Amber warning banner shown when OCR could not match any vaccine or date.
+class _ScanErrorBanner extends StatelessWidget {
+  const _ScanErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(10),
+          bottomRight: Radius.circular(10),
+        ),
+        border: const Border(left: BorderSide(color: _kAmber, width: 3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, size: 16, color: _kAmber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _kAmber,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -5316,6 +5316,28 @@ abstract final class EpiStrings {
           'unit': monthsUntil == 1 ? 'month' : 'months',
         },
       );
+
+  static String get scanCardCta =>
+      getTranslatedString('Epi.scanCardCta', 'Scan EPI card');
+  static String get scanCardSubtitle => getTranslatedString(
+        'Epi.scanCardSubtitle',
+        'Point camera at vaccination booklet to auto-fill',
+      );
+  static String scanResultBanner(int count) => getTranslatedString(
+        'Epi.scanResultBanner',
+        '${count == 1 ? '1 vaccine' : '$count vaccines'} found · Review and save',
+        params: {'count': '$count'},
+      );
+  static String get scanDatePrefilled => getTranslatedString(
+        'Epi.scanDatePrefilled',
+        'Date pre-filled from card · Edit if needed',
+      );
+  static String get scanFailed => getTranslatedString(
+        'Epi.scanFailed',
+        "Couldn't read card — please enter manually",
+      );
+  static String get scanning =>
+      getTranslatedString('Epi.scanning', 'Scanning…');
 }
 
 /// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral
