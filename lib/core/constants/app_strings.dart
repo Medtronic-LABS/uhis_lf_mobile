@@ -6290,10 +6290,18 @@ abstract final class ClinicalStatusStrings {
           'ClinicalStatus.normalPregnancy', 'Normal pregnancy'),
       'NORMAL_DELIVERY' => getTranslatedString(
           'ClinicalStatus.normalDelivery', 'Normal delivery'),
+      'C_SECTION' || 'CSECTION' => getTranslatedString(
+          'ClinicalStatus.cSection', 'C-section'),
+      'ASSISTED_DELIVERY' => getTranslatedString(
+          'ClinicalStatus.assistedDelivery', 'Assisted delivery'),
       'STILL_BIRTH' || 'STILLBIRTH' => getTranslatedString(
           'ClinicalStatus.stillBirth', 'Stillbirth'),
       'LIVE_BIRTH' || 'LIVEBIRTH' => getTranslatedString(
           'ClinicalStatus.liveBirth', 'Live birth'),
+      'NEONATAL_DEATH' => getTranslatedString(
+          'ClinicalStatus.neonatalDeath', 'Neonatal death'),
+      'ABORTION' => getTranslatedString(
+          'ClinicalStatus.abortion', 'Abortion'),
       'UNCONTROLLED_BP' => getTranslatedString(
           'ClinicalStatus.uncontrolledBp', 'Uncontrolled blood pressure'),
       'CONTROLLED_BP' => getTranslatedString(
@@ -6326,10 +6334,18 @@ abstract final class ClinicalStatusStrings {
     return switch (k) {
       'normal delivery' => getTranslatedString(
           'ClinicalStatus.normalDelivery', 'Normal delivery'),
+      'c section' || 'c-section' || 'csection' => getTranslatedString(
+          'ClinicalStatus.cSection', 'C-section'),
+      'assisted delivery' => getTranslatedString(
+          'ClinicalStatus.assistedDelivery', 'Assisted delivery'),
       'still birth' || 'stillbirth' => getTranslatedString(
           'ClinicalStatus.stillBirth', 'Stillbirth'),
       'live birth' || 'livebirth' => getTranslatedString(
           'ClinicalStatus.liveBirth', 'Live birth'),
+      'neonatal death' => getTranslatedString(
+          'ClinicalStatus.neonatalDeath', 'Neonatal death'),
+      'abortion' => getTranslatedString(
+          'ClinicalStatus.abortion', 'Abortion'),
       'gaps in anc' => getTranslatedString(
           'ClinicalStatus.gapsInAnc', 'Gaps in antenatal care'),
       'gaps in pnc' => getTranslatedString(

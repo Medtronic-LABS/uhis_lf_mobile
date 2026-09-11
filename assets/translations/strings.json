@@ -12015,6 +12015,22 @@
     "bn": "স্বাভাবিক প্রসব",
     "en": "Normal delivery"
   },
+  "ClinicalStatus.cSection": {
+    "bn": "সিজারিয়ান",
+    "en": "C-section"
+  },
+  "ClinicalStatus.assistedDelivery": {
+    "bn": "প্রসবে সহায়তা নিয়ে প্রসব করাতে হয়েছে (ভ্যাকুয়াম কাপ বা ফোরসেপ ব্যবহার করে প্রসব)",
+    "en": "Assisted delivery"
+  },
+  "ClinicalStatus.abortion": {
+    "bn": "গর্ভপাত",
+    "en": "Abortion"
+  },
+  "ClinicalStatus.neonatalDeath": {
+    "bn": "নবজাতক মৃত্যু",
+    "en": "Neonatal death"
+  },
   "ClinicalStatus.stillBirth": {
     "bn": "মৃত প্রসব",
     "en": "Stillbirth"
