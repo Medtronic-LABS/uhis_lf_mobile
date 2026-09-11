@@ -35,6 +35,7 @@ import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/config/app_config.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/telemetry/share_telemetry.dart';
 import '../../core/telemetry/telemetry_service.dart';
 import '../../core/telemetry/telemetry_event.dart';
@@ -2473,6 +2474,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     }
 
     if (!mounted) return;
+    // Kick push + warm pull so PostSyncRefresher recomputes the mission queue
+    // soon after landing on Home — assessment push alone does not flush it.
+    context.read<SyncConnectivityService>().syncIfSessionReady();
     context.go(_returnPath);
   }
 
