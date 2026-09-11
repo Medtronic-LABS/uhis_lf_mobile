@@ -235,6 +235,10 @@ class Endpoints {
   static const String telemetryValueAudit =
       '/ai-scribe/telemetry/value-audit';
 
+  /// Batch-ingest of visit-scoped AI content (transcript + summary text).
+  static const String telemetryVisitContent =
+      '/ai-scribe/telemetry/visit-content';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>

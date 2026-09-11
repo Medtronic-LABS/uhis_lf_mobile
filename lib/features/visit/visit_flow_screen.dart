@@ -34,9 +34,11 @@ import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/config/app_config.dart';
 import '../../core/telemetry/share_telemetry.dart';
 import '../../core/telemetry/telemetry_service.dart';
 import '../../core/telemetry/telemetry_event.dart';
+import '../../core/telemetry/visit_content_service.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
@@ -1346,6 +1348,19 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     _loadPatientPhone();
     _loadHouseholdMembers();
     _loadNcdFacilities();
+    unawaited(_recordSummaryStarted());
+  }
+
+  Future<void> _recordSummaryStarted() async {
+    if (!AppConfig.visitContentTelemetryEnabled || !mounted) return;
+    try {
+      await context.read<VisitContentService>().recordSummaryStarted(
+            visitUuid: widget.visitId,
+            patientId: widget.patientId,
+          );
+    } on Object catch (e) {
+      debugPrint('[VisitContent] summary start not recorded: $e');
+    }
   }
 
   Future<void> _loadNcdFacilities() async {
@@ -2329,6 +2344,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     setState(() => _accepted = true);
     if (!mounted) return;
 
+    unawaited(_recordSummaryCompleted(naba));
+
     // Prefer the SK-picked date, then the first timeline item's resolved date,
     // then a programme-aware Spice default. Null when this programme's summary
     // does not stamp nextVisitDate (e.g. childhood keeps its age-band stamp).
@@ -2740,6 +2757,21 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       );
     }
     return VisitFlowStrings.referralRecommendedFallback;
+  }
+
+  Future<void> _recordSummaryCompleted(NabaResponse naba) async {
+    if (!AppConfig.visitContentTelemetryEnabled || !mounted) return;
+    try {
+      final effective = _effectiveNaba(naba);
+      await context.read<VisitContentService>().recordSummaryCompleted(
+            visitUuid: widget.visitId,
+            patientId: widget.patientId,
+            whatsappSummary: effective.whatsappSummary,
+            referralRecommendation: _referralCardReason(effective),
+          );
+    } on Object catch (e) {
+      debugPrint('[VisitContent] summary complete not recorded: $e');
+    }
   }
 
   /// Online → NABA `referral_recommendation.reason`; offline → Step 2 reasons.

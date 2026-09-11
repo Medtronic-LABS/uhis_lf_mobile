@@ -48,6 +48,7 @@ class SyncConnectivityService {
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   Timer? _retryTimer;
   bool _wasOffline = false;
+  bool _syncInFlight = false;
 
   /// Begin listening. Safe to call multiple times (idempotent after first call).
   void start() {
@@ -126,6 +127,11 @@ class SyncConnectivityService {
           '[SyncConnectivity] Skipping auto-sync — no auth token/session credentials');
       return;
     }
+    if (_syncInFlight) {
+      debugPrint('[SyncConnectivity] Skipping auto-sync — sync already in flight');
+      return;
+    }
+    _syncInFlight = true;
 
     // Push everything pending (outbound), then pull fresh data (inbound).
     // Fire-and-forget; errors are logged.
@@ -161,6 +167,9 @@ class SyncConnectivityService {
             debugPrint('[SyncConnectivity] Retrying sync after network error');
             _triggerSync();
           });
+        })
+        .whenComplete(() {
+          _syncInFlight = false;
         });
   }
 }

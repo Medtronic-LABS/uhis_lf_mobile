@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/sync/sync_progress.dart';
+import '../core/telemetry/telemetry_upload_log.dart';
 import '../core/telemetry/telemetry_uploader.dart';
 import '../core/telemetry/value_audit_uploader.dart';
+import '../core/telemetry/visit_content_uploader.dart';
 import '../features/dashboard/mission_dashboard_repository.dart';
 import '../features/referral/referral_repository.dart';
 import '../features/worklist/worklist_repository.dart';
@@ -28,12 +30,14 @@ class PostSyncRefresher {
     required MissionDashboardRepository mission,
     TelemetryUploader? telemetry,
     ValueAuditUploader? valueAudit,
+    VisitContentUploader? visitContent,
   })  : _progress = progress,
         _worklist = worklist,
         _referrals = referrals,
         _mission = mission,
         _telemetry = telemetry,
-        _valueAudit = valueAudit;
+        _valueAudit = valueAudit,
+        _visitContent = visitContent;
 
   final Stream<SyncProgress> _progress;
   final WorklistRepository _worklist;
@@ -49,6 +53,9 @@ class PostSyncRefresher {
   /// through its own uploader, so a deployment with values switched off simply
   /// never sends any.
   final ValueAuditUploader? _valueAudit;
+
+  /// Visit-scoped AI content (transcript + summary text).
+  final VisitContentUploader? _visitContent;
 
   StreamSubscription<SyncProgress>? _sub;
 
@@ -88,6 +95,7 @@ class PostSyncRefresher {
       // leave the queue stuck whenever nothing changed server-side.
       unawaited(_flushTelemetry());
       unawaited(_flushValueAudit());
+      unawaited(_flushVisitContent());
       // A sync that wrote nothing cannot have changed anything derived from it.
       // Measured: the recompute walks every patient and took 19 s for 3566
       // patients after a 1.3 s no-op warm pull. Connectivity changes fire a
@@ -108,9 +116,24 @@ class PostSyncRefresher {
     if (uploader == null) return;
     try {
       final sent = await uploader.uploadPending();
-      if (sent > 0) debugPrint('[PostSync] value audit uploaded $sent pair(s)');
+      if (sent > 0) {
+        telemetryUploadLog('[PostSync] value audit uploaded $sent pair(s)');
+      }
     } on Object catch (e) {
-      debugPrint('[PostSync] value audit flush failed: $e');
+      telemetryUploadLog('[PostSync] value audit flush failed: $e');
+    }
+  }
+
+  Future<void> _flushVisitContent() async {
+    final uploader = _visitContent;
+    if (uploader == null) return;
+    try {
+      final sent = await uploader.uploadPending();
+      if (sent > 0) {
+        telemetryUploadLog('[PostSync] visit content uploaded $sent row(s)');
+      }
+    } on Object catch (e) {
+      telemetryUploadLog('[PostSync] visit content flush failed: $e');
     }
   }
 
@@ -122,9 +145,11 @@ class PostSyncRefresher {
     _flushing = true;
     try {
       final sent = await uploader.uploadPending();
-      if (sent > 0) debugPrint('[PostSync] telemetry uploaded $sent event(s)');
+      if (sent > 0) {
+        telemetryUploadLog('[PostSync] telemetry uploaded $sent event(s)');
+      }
     } on Object catch (e) {
-      debugPrint('[PostSync] telemetry flush failed: $e');
+      telemetryUploadLog('[PostSync] telemetry flush failed: $e');
     } finally {
       _flushing = false;
     }

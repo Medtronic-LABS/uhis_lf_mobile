@@ -353,7 +353,7 @@ class AppConfig {
   /// Feature flag: record the before/after **values** of fields the SK edited
   /// after AI filled them. Set via `--dart-define=VALUE_AUDIT=true`.
   ///
-  /// Off by default, and deliberately a separate flag from
+  /// On by default for now (product QA). Deliberately a separate flag from
   /// [telemetryScreenEnabled], because this is the one part of telemetry that
   /// holds clinical data. Ordinary telemetry stores field *ids* and counts and
   /// is non-PHI by construction; these rows store what was measured, so they
@@ -361,10 +361,19 @@ class AppConfig {
   /// a different SK signs in, and are gated at both ends (mirrors the server's
   /// `ENABLE_VALUE_AUDIT`).
   ///
-  /// A build without this flag captures nothing, so turning it on later cannot
-  /// retroactively expose values that were never recorded.
+  /// Pass `--dart-define=VALUE_AUDIT=false` to disable capture in a build.
   static bool get valueAuditEnabled =>
-      const bool.fromEnvironment('VALUE_AUDIT', defaultValue: false);
+      const bool.fromEnvironment('VALUE_AUDIT', defaultValue: true);
+
+  /// Feature flag: capture visit-scoped AI content (transcript, WhatsApp
+  /// summary, referral text) for product QA. Set via
+  /// `--dart-define=VISIT_CONTENT_TELEMETRY=true`.
+  ///
+  /// On by default for now (product QA). Rows hold PHI and are wiped on SK
+  /// handover like [valueAuditEnabled]. Pass
+  /// `--dart-define=VISIT_CONTENT_TELEMETRY=false` to disable.
+  static bool get visitContentTelemetryEnabled =>
+      const bool.fromEnvironment('VISIT_CONTENT_TELEMETRY', defaultValue: true);
 
   /// Feature flag: use the uhis_form JSON-driven renderer instead of the
   /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.

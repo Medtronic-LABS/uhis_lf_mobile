@@ -57,6 +57,9 @@ import 'core/telemetry/telemetry_uploader.dart';
 import 'core/telemetry/telemetry_service.dart';
 import 'core/telemetry/value_audit_dao.dart';
 import 'core/telemetry/value_audit_uploader.dart';
+import 'core/telemetry/visit_content_dao.dart';
+import 'core/telemetry/visit_content_service.dart';
+import 'core/telemetry/visit_content_uploader.dart';
 import 'core/sync/offline_sync_service.dart';
 import 'app/post_sync_refresher.dart';
 import 'core/sync/sync_foreground_controller.dart';
@@ -195,6 +198,18 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final ValueAuditDao _valueAuditDao = ValueAuditDao(widget.appDb);
   late final ValueAuditUploader _valueAuditUploader =
       ValueAuditUploader(_valueAuditDao, widget.api);
+  late final VisitContentDao _visitContentDao =
+      VisitContentDao(widget.appDb);
+  late final VisitContentService _visitContentService = VisitContentService(
+    dao: _visitContentDao,
+    userIdResolver: widget.authRepo.userId,
+    tenantIdResolver: () async {
+      final raw = await widget.authRepo.currentTenantId();
+      return raw == null ? null : int.tryParse(raw);
+    },
+  );
+  late final VisitContentUploader _visitContentUploader =
+      VisitContentUploader(_visitContentDao, widget.api);
   late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
     households: _householdDao,
     members: _memberDao,
@@ -308,6 +323,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     mission: _missionDashboard,
     telemetry: _telemetryUploader,
     valueAudit: _valueAuditUploader,
+    visitContent: _visitContentUploader,
   );
   late final SyncForegroundController _syncForeground = SyncForegroundController(
     progress: _sync.progressStream,
@@ -503,6 +519,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<TelemetryUploader>.value(value: _telemetryUploader),
         Provider<ValueAuditDao>.value(value: _valueAuditDao),
         Provider<ValueAuditUploader>.value(value: _valueAuditUploader),
+        Provider<VisitContentDao>.value(value: _visitContentDao),
+        Provider<VisitContentService>.value(value: _visitContentService),
+        Provider<VisitContentUploader>.value(value: _visitContentUploader),
         Provider<EncounterRepository>(
             create: (ctx) => EncounterRepository(
                   widget.api,

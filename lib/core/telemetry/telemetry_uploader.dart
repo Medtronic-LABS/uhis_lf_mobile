@@ -11,13 +11,13 @@
 library;
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../config/app_config.dart';
 import 'telemetry_dao.dart';
 import 'telemetry_event.dart';
+import 'telemetry_upload_log.dart';
 
 /// How long an uploaded row is kept on device before being purged.
 ///
@@ -59,14 +59,9 @@ class TelemetryUploader {
   Future<int> uploadPending() async {
     var accepted = 0;
     try {
-      // Log the backlog on the way in and what is left on the way out. A queue
-      // that never drains is otherwise invisible: pending rows are the ones
-      // that never reach the server, so the dashboard cannot show them, and
-      // the on-device count renders only on the TELEMETRY_SCREEN-gated
-      // viewer. Both lines are guarded on >0 so a healthy device stays quiet.
       final before = await _dao.counts();
       if (before.pending > 0) {
-        debugPrint('[Telemetry] flush starting — ${before.pending} pending '
+        telemetryUploadLog('[Telemetry] flush starting — ${before.pending} pending '
             '(${before.total} rows held)');
       }
       while (true) {
@@ -84,13 +79,13 @@ class TelemetryUploader {
       if (accepted > 0) await purgeUploaded();
       final after = await _dao.counts();
       if (after.pending > 0) {
-        debugPrint('[Telemetry] ${after.pending} event(s) STILL pending after '
+        telemetryUploadLog('[Telemetry] ${after.pending} event(s) STILL pending after '
             'flush (accepted $accepted this pass)');
       } else if (accepted > 0) {
-        debugPrint('[Telemetry] queue drained — $accepted event(s) accepted');
+        telemetryUploadLog('[Telemetry] queue drained — $accepted event(s) accepted');
       }
     } on Object catch (e) {
-      debugPrint('[Telemetry] upload aborted: $e');
+      telemetryUploadLog('[Telemetry] upload aborted: $e');
     }
     return accepted;
   }
@@ -103,6 +98,9 @@ class TelemetryUploader {
   /// device would resend those rows forever.
   Future<List<String>?> _postBatch(List<TelemetryEvent> batch) async {
     final (dio, path) = _resolve();
+    telemetryUploadLog(
+      '[Telemetry] POST $path — posting ${batch.length} event(s)',
+    );
     try {
       final res = await dio.post<dynamic>(path, data: {
         'events': [
@@ -132,23 +130,27 @@ class TelemetryUploader {
 
       final body = res.data;
       if (body is! Map<String, dynamic>) {
-        debugPrint('[Telemetry] unexpected response type ${body.runtimeType}');
+        telemetryUploadLog(
+            '[Telemetry] unexpected response type ${body.runtimeType}');
         return null;
       }
       final raw = body['acceptedIds'];
       if (raw is! List) {
-        // Without a confirmation list we cannot know what landed. Marking the
-        // batch anyway would let retention delete unsent rows, so do nothing.
-        debugPrint('[Telemetry] response carried no acceptedIds — keeping '
+        telemetryUploadLog('[Telemetry] response carried no acceptedIds — keeping '
             '${batch.length} event(s) pending');
         return null;
       }
-      debugPrint('[Telemetry] uploaded ${raw.length}/${batch.length} '
-          '(inserted=${body['inserted']} duplicates=${body['duplicates']})');
-      return raw.map((e) => e.toString()).toList();
+      final ids = raw.map((e) => e.toString()).toList();
+      telemetryUploadLog(
+        '[Telemetry] POST $path — accepted ${ids.length}/${batch.length} '
+        'record(s) (HTTP ${res.statusCode}, '
+        'inserted=${body['inserted']}, duplicates=${body['duplicates']})',
+      );
+      return ids;
     } on DioException catch (e) {
-      debugPrint('[Telemetry] upload failed (${e.response?.statusCode}): '
-          '${e.type.name}');
+      telemetryUploadLog('[Telemetry] POST $path failed '
+          '(HTTP ${e.response?.statusCode}, ${e.type.name}) — '
+          '${batch.length} event(s) left pending');
       return null;
     }
   }
@@ -158,7 +160,7 @@ class TelemetryUploader {
   Future<int> purgeUploaded({Duration retain = kTelemetryRetention}) async {
     final removed = await _dao.purgeUploadedOlderThan(retain);
     if (removed > 0) {
-      debugPrint('[Telemetry] purged $removed uploaded event(s) older than '
+      telemetryUploadLog('[Telemetry] purged $removed uploaded event(s) older than '
           '${retain.inDays}d');
     }
     return removed;

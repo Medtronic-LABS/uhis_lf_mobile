@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
@@ -7,6 +9,8 @@ import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/widgets/gestational_age_card.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/telemetry/visit_content_service.dart';
+import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/i18n/app_locale.dart';
@@ -152,6 +156,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// Weight (kg) from the patient's most-recent prior visit across ALL
   /// programme types — used for the weight-delta badge.  `null` until loaded.
   double? _lastRecordedWeight;
+
+  /// Live ASR controller owned by [AiScribeBanner] — read at submit for
+  /// visit-content telemetry.
+  RealtimeAsrController? _liveAsrCtrl;
 
   // One GlobalKey per section — used to scroll to the first error section
   // on submit so the SK doesn't have to hunt for the highlighted field.
@@ -623,6 +631,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                           '[Step2ASR] rejected: ${rejected.join(' | ')}');
                     }
                   },
+                  onLiveControllerReady: (ctrl) => _liveAsrCtrl = ctrl,
                   // VisitFormScreen watches ScribeController state and
                   // auto-opens the SOAP review sheet when reviewReady — no
                   // action needed here.
@@ -727,7 +736,19 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       // codes during submit — the mapper needs the field library to do that.
       notifier.formConfig = _config!;
       notifier.fieldDefs = _config!.fields;
+      final encounterId = notifier.encounterId;
+      final patientId = notifier.patientId;
+      final visitContent = AppConfig.visitContentTelemetryEnabled
+          ? ctx.read<VisitContentService>()
+          : null;
       await notifier.submit();
+      if (visitContent != null) {
+        unawaited(visitContent.recordTranscript(
+          visitUuid: encounterId,
+          patientId: patientId,
+          transcript: _liveAsrCtrl?.fullTranscript,
+        ));
+      }
       widget.onSubmitComplete();
     } catch (e) {
       _logSubmitBlocked(

@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../config/app_config.dart';
+import 'telemetry_upload_log.dart';
 import 'value_audit_dao.dart';
 
 /// Uploads the PHI value-audit queue.
@@ -46,7 +46,8 @@ class ValueAuditUploader {
     try {
       final before = await _dao.counts();
       if (before.pending > 0) {
-        debugPrint('[ValueAudit] flush starting — ${before.pending} pending');
+        telemetryUploadLog(
+            '[ValueAudit] flush starting — ${before.pending} pending');
       }
       while (true) {
         final batch = await _dao.pending(limit: batchSize);
@@ -61,13 +62,14 @@ class ValueAuditUploader {
       }
       final after = await _dao.counts();
       if (after.pending > 0) {
-        debugPrint('[ValueAudit] ${after.pending} pair(s) STILL pending '
+        telemetryUploadLog('[ValueAudit] ${after.pending} pair(s) STILL pending '
             '(accepted $accepted this pass)');
       } else if (accepted > 0) {
-        debugPrint('[ValueAudit] queue drained — $accepted pair(s) accepted');
+        telemetryUploadLog(
+            '[ValueAudit] queue drained — $accepted pair(s) accepted');
       }
     } on Object catch (e) {
-      debugPrint('[ValueAudit] upload aborted: $e');
+      telemetryUploadLog('[ValueAudit] upload aborted: $e');
     }
     return accepted;
   }
@@ -79,20 +81,32 @@ class ValueAuditUploader {
   /// pending and are cleared by the next SK-handover wipe.
   Future<List<String>?> _postBatch(List<Map<String, dynamic>> rows) async {
     final (dio, path) = _resolve();
+    telemetryUploadLog(
+      '[ValueAudit] POST $path — posting ${rows.length} record(s)',
+    );
     try {
       final res = await dio.post<dynamic>(path, data: {'entries': rows});
       final body = res.data;
       if (body is Map && body['acceptedIds'] is List) {
-        return (body['acceptedIds'] as List).map((e) => e.toString()).toList();
+        final ids =
+            (body['acceptedIds'] as List).map((e) => e.toString()).toList();
+        telemetryUploadLog(
+          '[ValueAudit] POST $path — accepted ${ids.length}/${rows.length} '
+          'record(s) (HTTP ${res.statusCode})',
+        );
+        return ids;
       }
-      debugPrint('[ValueAudit] unexpected response shape: $body');
+      telemetryUploadLog('[ValueAudit] unexpected response shape: $body');
       return null;
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
-        debugPrint('[ValueAudit] endpoint disabled on this deployment (404)');
+        telemetryUploadLog(
+            '[ValueAudit] POST $path — endpoint disabled (404), '
+            '${rows.length} record(s) left pending');
       } else {
-        debugPrint('[ValueAudit] upload failed '
-            '(${e.response?.statusCode}): ${e.type.name}');
+        telemetryUploadLog('[ValueAudit] POST $path failed '
+            '(HTTP ${e.response?.statusCode}, ${e.type.name}) — '
+            '${rows.length} record(s) left pending');
       }
       return null;
     }
