@@ -122,6 +122,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _filterState = context.read<DashboardFilterState>();
     _reloadStats();
+    // Start the queue load synchronously so the first paint can show a spinner
+    // (or stale cache on return from a visit) instead of "No missions for today".
+    _loadMissionData();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       // UHIS parity: LandingActivity.startSyncWorker() on every home open.
@@ -129,8 +132,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final auth = context.read<AuthState>();
       await _loadSummary(auth);
       await _loadVillagesLine();
-      // Load mission data (may already be cached from sync screen)
-      _loadMissionData();
     });
   }
 
@@ -700,10 +701,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   key: ValueKey('queue_$_refreshVersion'),
                   future: _queueFuture,
                   builder: (context, snap) {
-                    final waiting =
-                        snap.connectionState == ConnectionState.waiting &&
-                            _baseQueue.isEmpty;
-                    final queue = snap.data ?? const <MissionQueueItem>[];
+                    // While a fresh load is in flight, keep showing the last
+                    // cached queue rather than an empty list — otherwise a
+                    // reload after visit completion flashes "No missions for
+                    // today" until loadQueue finishes (~2–3 s).
+                    final queue = snap.hasData
+                        ? snap.data!
+                        : (_baseQueue.isNotEmpty
+                            ? _buildFilteredList(_baseQueue)
+                            : const <MissionQueueItem>[]);
+                    final waiting = !snap.hasData &&
+                        snap.connectionState != ConnectionState.done &&
+                        queue.isEmpty;
 
                     // Headers: filter panel, spacer, visits title, spacer.
                     // Then empty-state OR a reveal-window of queue cards.
