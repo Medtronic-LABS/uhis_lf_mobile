@@ -7,6 +7,7 @@ import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/sync/sync_report.dart';
 import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -85,9 +86,10 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('[_LoginScreenState] post-login: onboardingComplete=${auth.onboardingComplete} pinEnabled=${auth.pinEnabled} biometricEnabled=${auth.biometricEnabled} sameUserRelogin=${auth.sameUserRelogin} skipLoginSync=$skipLoginSync');
       if (skipLoginSync) {
         // UHIS parity: ResourceLoadingScreen skips download when
-        // SERVER_LAST_SYNCED exists — go straight to home; delta sync runs
-        // later via connectivity / manual offline sync.
+        // SERVER_LAST_SYNCED exists — go straight to home; LandingActivity
+        // then runs ScheduledSyncWork (push + delta fetch). Mirror that here.
         debugPrint('[_LoginScreenState] returning user with sync cursor → /home');
+        context.read<SyncConnectivityService>().syncIfSessionReady();
         context.go('/home');
       } else if (!auth.onboardingComplete && !auth.pinEnabled) {
         // New user — kick off sync in background immediately so data arrives

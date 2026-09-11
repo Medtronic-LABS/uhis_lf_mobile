@@ -11,6 +11,7 @@ import '../../app/post_sync_refresher.dart';
 import '../../app/theme.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/db/encounter_dao.dart';
@@ -123,6 +124,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _reloadStats();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      // UHIS parity: LandingActivity.startSyncWorker() on every home open.
+      context.read<SyncConnectivityService>().syncIfSessionReady();
       final auth = context.read<AuthState>();
       await _loadSummary(auth);
       await _loadVillagesLine();

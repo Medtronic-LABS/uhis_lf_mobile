@@ -477,13 +477,11 @@ void _draftRoundTripTests() {
     });
   });
 
-  group('value-audit capture is gated off by default', () {
-    // AppConfig.valueAuditEnabled is a compile-time --dart-define and cannot
-    // be toggled at runtime, so what these tests pin is the DEFAULT: a build
-    // without the flag never holds a clinical value, not even in memory. That
-    // is the property the PHI argument rests on — if capture ran by default,
-    // every build would be collecting values.
-    test('editing an AI-filled value captures nothing without the flag', () {
+  group('value-audit in-memory capture (default on)', () {
+    // AppConfig.valueAuditEnabled is compile-time; these tests pin the default
+    // build behaviour. Disable with --dart-define=VALUE_AUDIT=false.
+    test('editing an AI-filled value remembers AI proposal before first edit',
+        () {
       final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
       final defs = _defs(['systolic']);
       n.fieldDefs = defs;
@@ -498,10 +496,7 @@ void _draftRoundTripTests() {
       ], fieldDefs: defs);
       n.updateField('systolic', 140);
 
-      expect(n.aiProposedValuesForTesting, isEmpty,
-          reason: 'a build without VALUE_AUDIT must capture no values');
-      // The non-PHI provenance record still works — the correction is counted,
-      // only the values are absent.
+      expect(n.aiProposedValuesForTesting['systolic'], '160');
       expect(n.classifyFieldProvenance().aiCorrected, contains('systolic'));
     });
 

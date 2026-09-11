@@ -20,6 +20,8 @@ import 'package:uhis_next/core/db/app_database.dart';
 import 'package:uhis_next/core/telemetry/telemetry_dao.dart';
 import 'package:uhis_next/core/telemetry/value_audit_dao.dart';
 import 'package:uhis_next/core/telemetry/value_audit_entry.dart';
+import 'package:uhis_next/core/telemetry/visit_content_dao.dart';
+import 'package:uhis_next/core/telemetry/visit_content_entry.dart';
 import 'package:uhis_next/core/telemetry/telemetry_event.dart';
 
 Future<AppDatabase> _openInMemoryDb() async {
@@ -188,6 +190,95 @@ void main() {
 
       expect((await dao.counts()).total, 0,
           reason: 'a different SK signing in must not inherit these values');
+    });
+  });
+
+  group('v46 → v47 visit_content migration', () {
+    test('strips dropped metadata columns and keeps row data', () async {
+      // Fresh in-memory DB already has the v47 schema from createSchema — drop
+      // it and recreate the pre-v47 shape to simulate an in-flight device.
+      await db.db.execute(
+          'DROP TABLE IF EXISTS ${AppDatabase.tableVisitContentTelemetry}');
+      await db.db.execute('''
+        CREATE TABLE ${AppDatabase.tableVisitContentTelemetry} (
+          id TEXT PRIMARY KEY,
+          visit_uuid TEXT NOT NULL UNIQUE,
+          patient_id TEXT NOT NULL,
+          transcript TEXT,
+          transcript_captured_at INTEGER,
+          transcript_source TEXT,
+          whatsapp_summary TEXT,
+          referral_recommendation TEXT,
+          summary_started_at INTEGER,
+          summary_end_at INTEGER,
+          recommendation_source TEXT,
+          referral_recommended INTEGER,
+          sk_user_id TEXT,
+          captured_tenant_id INTEGER,
+          occurred_at INTEGER NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.db.insert(AppDatabase.tableVisitContentTelemetry, {
+        'id': 'vc1',
+        'visit_uuid': 'visit-keep',
+        'patient_id': 'patient-1',
+        'transcript': 'hello',
+        'transcript_captured_at': 1000,
+        'transcript_source': 'realtime',
+        'whatsapp_summary': 'summary text',
+        'referral_recommendation': 'refer now',
+        'summary_started_at': 2000,
+        'summary_end_at': 3000,
+        'recommendation_source': 'naba',
+        'referral_recommended': 1,
+        'occurred_at': 3000,
+        'upload_status': 'pending',
+      });
+
+      await AppDatabase.onUpgrade(db.db, 46, AppDatabase.schemaVersion);
+
+      final cols = (await db.db.rawQuery(
+        'PRAGMA table_info(${AppDatabase.tableVisitContentTelemetry})',
+      ))
+          .map((r) => r['name'] as String)
+          .toSet();
+      expect(cols, isNot(contains('transcript_source')));
+      expect(cols, isNot(contains('recommendation_source')));
+      expect(cols, isNot(contains('referral_recommended')));
+
+      final rows = await db.db.query(AppDatabase.tableVisitContentTelemetry);
+      expect(rows, hasLength(1));
+      expect(rows.single['transcript'], 'hello');
+      expect(rows.single['whatsapp_summary'], 'summary text');
+    });
+  });
+
+  group('visit content telemetry is PHI — wiped like value audit', () {
+    test('the visit-content table is in the wipe list', () {
+      expect(
+        AppDatabase.allTablesForTesting,
+        contains(AppDatabase.tableVisitContentTelemetry),
+      );
+    });
+
+    test('visit-content rows are destroyed by a wipe', () async {
+      final db = await _openInMemoryDb();
+      addTearDown(db.close);
+      final dao = VisitContentDao(db);
+
+      await dao.upsert(const VisitContentEntry(
+        id: 'vc1',
+        visitUuid: 'visit-1',
+        patientId: 'patient-1',
+        transcript: 'test transcript',
+        occurredAt: 1788940800000,
+      ));
+      expect((await dao.counts()).total, 1);
+
+      await db.wipeAllData();
+
+      expect((await dao.counts()).total, 0);
     });
   });
 }

@@ -11,6 +11,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/sync/offline_push_service.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
 
@@ -135,6 +136,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
         debugPrint(
           '[Sync] UHIS parity — sync cursor present, skipping login pull',
         );
+        context.read<SyncConnectivityService>().syncIfSessionReady();
         _finishSyncAndGoHome();
         return;
       }

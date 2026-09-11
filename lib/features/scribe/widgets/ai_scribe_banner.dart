@@ -54,6 +54,7 @@ class AiScribeBanner extends StatefulWidget {
     this.symptomVocab,
     this.onLiveSymptomCodes,
     this.visibleFieldIds,
+    this.onLiveControllerReady,
   });
 
   final String encounterId;
@@ -113,6 +114,10 @@ class AiScribeBanner extends StatefulWidget {
   /// it. Pass null to offer the programme's full field set.
   final Set<String>? visibleFieldIds;
 
+  /// Called once after the live ASR controller is created — lets the parent
+  /// read [RealtimeAsrController.fullTranscript] at submit time.
+  final void Function(RealtimeAsrController controller)? onLiveControllerReady;
+
   @override
   State<AiScribeBanner> createState() => _AiScribeBannerState();
 }
@@ -145,6 +150,12 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     );
     _liveCtrl.addListener(_onLiveChanged);
     _applyFormSchema();
+    final ready = widget.onLiveControllerReady;
+    if (ready != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ready(_liveCtrl);
+      });
+    }
   }
 
   @override

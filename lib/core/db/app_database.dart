@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 45;
+  static const int schemaVersion = 47;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -67,6 +67,9 @@ class AppDatabase {
   /// the health worker's session on a shared device, even at the cost of
   /// losing rows that had not uploaded yet.
   static const String tableAiValueAudit = 'ai_value_audit';
+
+  /// Transcript + Step 3 summary text for product QA. PHI — wiped on SK handover.
+  static const String tableVisitContentTelemetry = 'visit_content_telemetry';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -795,6 +798,30 @@ class AppDatabase {
     await db.execute(
         'CREATE INDEX idx_value_audit_visit '
         'ON $tableAiValueAudit(visit_uuid)');
+
+    await db.execute('''
+      CREATE TABLE $tableVisitContentTelemetry (
+        id TEXT PRIMARY KEY,
+        visit_uuid TEXT NOT NULL UNIQUE,
+        patient_id TEXT NOT NULL,
+        transcript TEXT,
+        transcript_captured_at INTEGER,
+        whatsapp_summary TEXT,
+        referral_recommendation TEXT,
+        summary_started_at INTEGER,
+        summary_end_at INTEGER,
+        sk_user_id TEXT,
+        captured_tenant_id INTEGER,
+        occurred_at INTEGER NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_visit_content_upload '
+        'ON $tableVisitContentTelemetry(upload_status)');
+    await db.execute(
+        'CREATE INDEX idx_visit_content_visit '
+        'ON $tableVisitContentTelemetry(visit_uuid)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -1944,6 +1971,87 @@ class AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_telemetry_type '
           'ON $tableTelemetryEvents(event_type)');
     }
+    if (from < 47) {
+      // v47 — drop transcript_source, recommendation_source, referral_recommended
+      // from visit_content_telemetry (devices that reached v46 with them).
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [tableVisitContentTelemetry],
+      );
+      if (tables.isNotEmpty) {
+        final cols = await db.rawQuery(
+          'PRAGMA table_info($tableVisitContentTelemetry)',
+        );
+        if (cols.any((c) => c['name'] == 'transcript_source')) {
+          const tmp = 'visit_content_telemetry_v47';
+          await db.execute('''
+            CREATE TABLE $tmp (
+              id TEXT PRIMARY KEY,
+              visit_uuid TEXT NOT NULL UNIQUE,
+              patient_id TEXT NOT NULL,
+              transcript TEXT,
+              transcript_captured_at INTEGER,
+              whatsapp_summary TEXT,
+              referral_recommendation TEXT,
+              summary_started_at INTEGER,
+              summary_end_at INTEGER,
+              sk_user_id TEXT,
+              captured_tenant_id INTEGER,
+              occurred_at INTEGER NOT NULL,
+              upload_status TEXT NOT NULL DEFAULT 'pending',
+              uploaded_at INTEGER
+            )''');
+          await db.execute('''
+            INSERT INTO $tmp (
+              id, visit_uuid, patient_id, transcript, transcript_captured_at,
+              whatsapp_summary, referral_recommendation, summary_started_at,
+              summary_end_at, sk_user_id, captured_tenant_id, occurred_at,
+              upload_status, uploaded_at
+            )
+            SELECT
+              id, visit_uuid, patient_id, transcript, transcript_captured_at,
+              whatsapp_summary, referral_recommendation, summary_started_at,
+              summary_end_at, sk_user_id, captured_tenant_id, occurred_at,
+              upload_status, uploaded_at
+            FROM $tableVisitContentTelemetry''');
+          await db.execute('DROP TABLE $tableVisitContentTelemetry');
+          await db.execute(
+              'ALTER TABLE $tmp RENAME TO $tableVisitContentTelemetry');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_visit_content_upload '
+              'ON $tableVisitContentTelemetry(upload_status)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_visit_content_visit '
+              'ON $tableVisitContentTelemetry(visit_uuid)');
+        }
+      }
+    }
+    if (from < 46) {
+      // v46 — visit-scoped AI content for product QA (transcript + summary).
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableVisitContentTelemetry (
+          id TEXT PRIMARY KEY,
+          visit_uuid TEXT NOT NULL UNIQUE,
+          patient_id TEXT NOT NULL,
+          transcript TEXT,
+          transcript_captured_at INTEGER,
+          whatsapp_summary TEXT,
+          referral_recommendation TEXT,
+          summary_started_at INTEGER,
+          summary_end_at INTEGER,
+          sk_user_id TEXT,
+          captured_tenant_id INTEGER,
+          occurred_at INTEGER NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_visit_content_upload '
+          'ON $tableVisitContentTelemetry(upload_status)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_visit_content_visit '
+          'ON $tableVisitContentTelemetry(visit_uuid)');
+    }
     if (from < 45) {
       // v45 — member deceased reason (Spice HouseholdMember.deceasedReason).
       try {
@@ -2022,6 +2130,7 @@ class AppDatabase {
     // PHI, so it is wiped — the opposite of $tableTelemetryEvents above.
     // See the doc on that constant for why the two differ.
     tableAiValueAudit,
+    tableVisitContentTelemetry,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the
