@@ -6275,13 +6275,27 @@ abstract final class ClinicalStatusStrings {
   /// `Some new code`), never the raw enum — a new backend value should read as
   /// awkward English, not as a database identifier.
   static String label(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.toUpperCase().startsWith('GLASS_POWER:')) {
+      final power = trimmed.substring('GLASS_POWER:'.length);
+      return getTranslatedString(
+        'ClinicalStatus.glassPower',
+        'Power - {power}',
+        params: {'power': power},
+      );
+    }
+
     final phrase = _knownEnglishPhrase(raw);
     if (phrase != null) return phrase;
 
-    final key = raw.trim().toUpperCase().replaceAll(' ', '_');
+    final key = trimmed.toUpperCase().replaceAll(' ', '_');
     return switch (key) {
       'HIGH_RISK_PW' => getTranslatedString(
           'ClinicalStatus.highRiskPw', 'High-risk pregnancy'),
+      'HIGH_RISK_PNC' => getTranslatedString(
+          'ClinicalStatus.highRiskPnc', 'High-risk PNC'),
+      'NORMAL_PNC' => getTranslatedString(
+          'ClinicalStatus.normalPnc', 'Normal PNC'),
       'GAPS_IN_ANC' => getTranslatedString(
           'ClinicalStatus.gapsInAnc', 'Gaps in antenatal care'),
       'GAPS_IN_PNC' => getTranslatedString(
@@ -6302,6 +6316,36 @@ abstract final class ClinicalStatusStrings {
           'ClinicalStatus.neonatalDeath', 'Neonatal death'),
       'ABORTION' => getTranslatedString(
           'ClinicalStatus.abortion', 'Abortion'),
+      'USING_MODERN_FP' => getTranslatedString(
+          'ClinicalStatus.usingModernFp',
+          'Using modern family planning methods'),
+      'NOT_USING_MODERN_FP' => getTranslatedString(
+          'ClinicalStatus.notUsingModernFp',
+          'Not using modern family planning methods'),
+      'NORMAL_NCD' => getTranslatedString('ClinicalStatus.normalNcd', 'Normal'),
+      'GLASSES_SOLD' => getTranslatedString(
+          'ClinicalStatus.glassesSold', 'Glasses sold'),
+      'NCD_SERVICE_IN_CATARACT_CAMP' => getTranslatedString(
+          'ClinicalStatus.ncdServiceInCataractCamp',
+          'NCD in cataract camp'),
+      'REFERRED_FOR_OPERATION' => getTranslatedString(
+          'ClinicalStatus.referredForOperation', 'Referred for operation'),
+      'CATARACTS' => getTranslatedString(
+          'ClinicalStatus.cataracts', 'Cataracts'),
+      'LECRIMAL_TEAR_DUCT_PROBLEM' => getTranslatedString(
+          'ClinicalStatus.lacrimalTearDuctProblem',
+          'Lacrimal (tear duct) problem'),
+      'PTERYGIUM' => getTranslatedString(
+          'ClinicalStatus.pterygium', 'Pterygium'),
+      'GLAUCOMA' => getTranslatedString(
+          'ClinicalStatus.glaucoma', 'Glaucoma'),
+      'MYOPIA' => getTranslatedString('ClinicalStatus.myopia', 'Myopia'),
+      'PRESBYOPIA' => getTranslatedString(
+          'ClinicalStatus.presbyopia', 'Presbyopia'),
+      'OTHER_EYE_PROBLEM' => getTranslatedString(
+          'ClinicalStatus.otherEyeProblem', 'Other problem'),
+      'NO_EYE_PROBLEM' => getTranslatedString(
+          'ClinicalStatus.noEyeProblem', 'No problem'),
       'UNCONTROLLED_BP' => getTranslatedString(
           'ClinicalStatus.uncontrolledBp', 'Uncontrolled blood pressure'),
       'CONTROLLED_BP' => getTranslatedString(
@@ -6346,6 +6390,10 @@ abstract final class ClinicalStatusStrings {
           'ClinicalStatus.neonatalDeath', 'Neonatal death'),
       'abortion' => getTranslatedString(
           'ClinicalStatus.abortion', 'Abortion'),
+      'high risk pnc' => getTranslatedString(
+          'ClinicalStatus.highRiskPnc', 'High-risk PNC'),
+      'normal pnc' => getTranslatedString(
+          'ClinicalStatus.normalPnc', 'Normal PNC'),
       'gaps in anc' => getTranslatedString(
           'ClinicalStatus.gapsInAnc', 'Gaps in antenatal care'),
       'gaps in pnc' => getTranslatedString(
