@@ -25,8 +25,13 @@ void main() {
         'Referred',
         'rbs',
         'Normal delivery',
+        'C_SECTION',
+        'C section',
+        'ASSISTED_DELIVERY',
         'Still birth',
         'Live birth',
+        'ABORTION',
+        'NEONATAL_DEATH',
         'yes',
       ]) {
         final label = ClinicalStatusStrings.label(code);
