@@ -32,6 +32,10 @@ void main() {
         'Live birth',
         'ABORTION',
         'NEONATAL_DEATH',
+        'HIGH_RISK_PNC',
+        'High risk pnc',
+        'NORMAL_PNC',
+        'GLASS_POWER:2.0',
         'yes',
       ]) {
         final label = ClinicalStatusStrings.label(code);
@@ -53,6 +57,7 @@ void main() {
     test('map to English when the app is in English', () {
       AppLocale.current = AppLanguage.english;
       expect(ClinicalStatusStrings.label('HIGH_RISK_PW'), 'High-risk pregnancy');
+      expect(ClinicalStatusStrings.label('HIGH_RISK_PNC'), 'High-risk PNC');
       expect(ClinicalStatusStrings.label('Referred'), 'Referred');
     });
   });

@@ -11971,6 +11971,14 @@
     "bn": "উচ্চ ঝুঁকিপূর্ণ গর্ভাবস্থা",
     "en": "High-risk pregnancy"
   },
+  "ClinicalStatus.highRiskPnc": {
+    "bn": "উচ্চ ঝুঁকিপূর্ণ প্রসব-পরবর্তী সেবা",
+    "en": "High-risk PNC"
+  },
+  "ClinicalStatus.normalPnc": {
+    "bn": "স্বাভাবিক প্রসব-পরবর্তী সেবা",
+    "en": "Normal PNC"
+  },
   "ClinicalStatus.normalPregnancy": {
     "bn": "স্বাভাবিক গর্ভাবস্থা",
     "en": "Normal pregnancy"
@@ -12038,6 +12046,66 @@
   "ClinicalStatus.liveBirth": {
     "bn": "জীবিত শিশু জন্ম",
     "en": "Live birth"
+  },
+  "ClinicalStatus.usingModernFp": {
+    "bn": "আধুনিক পরিবার পরিকল্পনা পদ্ধতি ব্যবহার করে",
+    "en": "Using modern family planning methods"
+  },
+  "ClinicalStatus.notUsingModernFp": {
+    "bn": "আধুনিক পরিবার পরিকল্পনা পদ্ধতি ব্যবহার না করা",
+    "en": "Not using modern family planning methods"
+  },
+  "ClinicalStatus.normalNcd": {
+    "bn": "স্বাভাবিক",
+    "en": "Normal"
+  },
+  "ClinicalStatus.glassesSold": {
+    "bn": "চশমা বিক্রয়",
+    "en": "Glasses sold"
+  },
+  "ClinicalStatus.ncdServiceInCataractCamp": {
+    "bn": "ক্যাটারেক্ট ক্যাম্পে এনসিডি সেবা",
+    "en": "NCD in cataract camp"
+  },
+  "ClinicalStatus.referredForOperation": {
+    "bn": "অপারেশনের জন্য রেফার",
+    "en": "Referred for operation"
+  },
+  "ClinicalStatus.cataracts": {
+    "bn": "ছানি",
+    "en": "Cataracts"
+  },
+  "ClinicalStatus.lacrimalTearDuctProblem": {
+    "bn": "নেত্রনালীর সমস্যা",
+    "en": "Lacrimal (tear duct) problem"
+  },
+  "ClinicalStatus.pterygium": {
+    "bn": "টেরিজিয়াম/মাংসবৃদ্ধি",
+    "en": "Pterygium"
+  },
+  "ClinicalStatus.glaucoma": {
+    "bn": "গ্লুকোমা",
+    "en": "Glaucoma"
+  },
+  "ClinicalStatus.myopia": {
+    "bn": "দূরদৃষ্টি সমস্যা",
+    "en": "Myopia"
+  },
+  "ClinicalStatus.presbyopia": {
+    "bn": "প্রেসবায়োপিয়া বা নিকট দৃষ্টি সমস্যা",
+    "en": "Presbyopia"
+  },
+  "ClinicalStatus.otherEyeProblem": {
+    "bn": "অন্যান্য সমস্যা",
+    "en": "Other problem"
+  },
+  "ClinicalStatus.noEyeProblem": {
+    "bn": "সমস্যা নেই",
+    "en": "No problem"
+  },
+  "ClinicalStatus.glassPower": {
+    "bn": "পাওয়ার - {power}",
+    "en": "Power - {power}"
   },
   "Referral.suspectedPreEclampsia": {
     "bn": "প্রি-ইক্লাম্পসিয়ার সন্দেহ",
