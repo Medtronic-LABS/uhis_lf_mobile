@@ -46,6 +46,7 @@ import 'core/db/patient_programmes_dao.dart';
 import 'core/db/pregnancy_episode_dao.dart';
 import 'core/db/pregnancy_snapshot_dao.dart';
 import 'core/db/treatment_presence_dao.dart';
+import 'core/db/teleconsult_prescription_dao.dart';
 import 'core/db/referral_dao.dart';
 import 'core/db/sync_meta_dao.dart';
 import 'core/risk/risk_scoring_service.dart';
@@ -170,6 +171,8 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
   late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
+  late final TeleconsultPrescriptionDao _teleconsultPrescriptionDao =
+      TeleconsultPrescriptionDao(widget.appDb);
   late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
     households: _householdDao,
     members: _memberDao,
@@ -471,6 +474,7 @@ class _UhisNextAppState extends State<UhisNextApp>
                 )),
         // Visit flow providers
         Provider<EncounterDao>.value(value: _encounterDao),
+        Provider<TeleconsultPrescriptionDao>.value(value: _teleconsultPrescriptionDao),
         Provider<EncounterRepository>(
             create: (ctx) => EncounterRepository(
                   widget.api,

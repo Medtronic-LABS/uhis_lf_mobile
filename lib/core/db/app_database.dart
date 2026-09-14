@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 41;
+  static const int schemaVersion = 42;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -57,6 +57,7 @@ class AppDatabase {
   static const String tableTreatmentDetails = 'treatment_details';
   static const String tableRxBuddyCheckins = 'rx_buddy_checkins';
   static const String tableHealthFacilities = 'health_facilities';
+  static const String tableTeleconsultPrescriptions = 'teleconsult_prescriptions';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -737,6 +738,21 @@ class AppDatabase {
     await db.execute(
         'CREATE INDEX idx_health_facilities_default '
         'ON $tableHealthFacilities(is_default DESC)');
+
+    // v42 — teleconsult_prescriptions: persists a completed teleconsult's
+    // prescription/invoice bytes against the visit that requested the call
+    // (encounters.id), so the patient timeline can show a "view prescription"
+    // icon on that visit's entry without a network re-fetch. See
+    // lib/core/db/teleconsult_prescription_dao.dart.
+    await db.execute('''
+      CREATE TABLE $tableTeleconsultPrescriptions (
+        visit_id TEXT PRIMARY KEY,
+        call_log TEXT NOT NULL,
+        doctor_name TEXT,
+        prescription_bytes BLOB,
+        invoice_bytes BLOB,
+        created_at INTEGER NOT NULL
+      )''');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -1856,6 +1872,18 @@ class AppDatabase {
         'from $tablePregnancySnapshot',
       );
     }
+    if (from < 42) {
+      // v42 — see createSchema's identical block for why this table exists.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableTeleconsultPrescriptions (
+          visit_id TEXT PRIMARY KEY,
+          call_log TEXT NOT NULL,
+          doctor_name TEXT,
+          prescription_bytes BLOB,
+          invoice_bytes BLOB,
+          created_at INTEGER NOT NULL
+        )''');
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -1872,7 +1900,7 @@ class AppDatabase {
     tableChatMessages, tableCoachingFaqs,
     tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
     tableTreatmentDetails, tableRxBuddyCheckins,
-    tableHealthFacilities,
+    tableHealthFacilities, tableTeleconsultPrescriptions,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

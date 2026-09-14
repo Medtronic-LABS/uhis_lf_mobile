@@ -3035,17 +3035,269 @@
     "bn": "আপনার তথ্য সেট আপ হচ্ছে",
     "en": "Setting up your data"
   },
+  "Teleconsult.ancRecordSharedBody": {
+    "bn": "{visitLabel} নোট · {summary} — ডাক্তার কলের আগে এটি দেখেছেন",
+    "en": "{visitLabel} notes · {summary} — doctor saw it before the call"
+  },
+  "Teleconsult.availableSpecialityLabel": {
+    "bn": "উপলব্ধ বিশেষত্ব",
+    "en": "Available Specialty"
+  },
+  "Teleconsult.bookingTitle": {
+    "bn": "টেলি-পরামর্শ বুক করুন",
+    "en": "Book a teleconsult"
+  },
+  "Teleconsult.callTitle": {
+    "bn": "ডাক্তার ভিডিও কল",
+    "en": "Doctor video call"
+  },
+  "Teleconsult.cameraMicRequiredBody": {
+    "bn": "ভিডিও কল শুরু করতে টেলি-পরামর্শের ক্যামেরা ও মাইক্রোফোন অ্যাক্সেস প্রয়োজন। অনুগ্রহ করে সেটিংসে অ্যাক্সেস দিন।",
+    "en": "Teleconsult needs camera and microphone access to start a video call. Please allow access in Settings."
+  },
+  "Teleconsult.cameraMicRequiredTitle": {
+    "bn": "ক্যামেরা ও মাইক্রোফোন প্রয়োজন",
+    "en": "Camera & microphone needed"
+  },
+  "Teleconsult.cancel": {
+    "bn": "বাতিল",
+    "en": "Cancel"
+  },
+  "Teleconsult.chooseFromGallery": {
+    "bn": "গ্যালারি থেকে বেছে নিন",
+    "en": "Choose from gallery"
+  },
+  "Teleconsult.collapseTooltip": {
+    "bn": "ফুলস্ক্রিন থেকে বের হন",
+    "en": "Exit fullscreen"
+  },
   "Teleconsult.comingSoon": {
     "bn": "শীঘ্রই আসছে",
     "en": "Coming soon"
+  },
+  "Teleconsult.connectedLabel": {
+    "bn": "সংযুক্ত",
+    "en": "Connected"
+  },
+  "Teleconsult.connecting": {
+    "bn": "আপনার কল সংযুক্ত হচ্ছে…",
+    "en": "Connecting your call…"
+  },
+  "Teleconsult.connectingHeaderTitle": {
+    "bn": "সংযুক্ত হচ্ছে...",
+    "en": "Connecting..."
+  },
+  "Teleconsult.connectingHint": {
+    "bn": "অনুগ্রহ করে অপেক্ষা করুন, আপনার পরামর্শ প্রস্তুত করা হচ্ছে।",
+    "en": "Please wait while we set up your consultation."
+  },
+  "Teleconsult.connectingToDoctor": {
+    "bn": "আপনাকে একজন ডাক্তারের সাথে সংযুক্ত করা হচ্ছে…",
+    "en": "Connecting you to a doctor…"
+  },
+  "Teleconsult.connectingToDoctorPill": {
+    "bn": "ডাক্তারের সাথে সংযুক্ত হচ্ছে…",
+    "en": "Connecting to doctor…"
+  },
+  "Teleconsult.contactNumberLabel": {
+    "bn": "যোগাযোগের নম্বর",
+    "en": "Contact Number"
+  },
+  "Teleconsult.contactNumberRequired": {
+    "bn": "চালিয়ে যেতে একটি যোগাযোগের নম্বর লিখুন।",
+    "en": "Enter a contact number to continue."
+  },
+  "Teleconsult.continueWithoutCall": {
+    "bn": "টেলি-পরামর্শ ছাড়াই চালিয়ে যান",
+    "en": "Continue without teleconsult"
+  },
+  "Teleconsult.dataSharedGenericBody": {
+    "bn": "কলের আগে আপনার ভিজিটের কারণ ডাক্তারের সাথে শেয়ার করা হয়েছে।",
+    "en": "Your visit reason was shared with the doctor before the call."
+  },
+  "Teleconsult.dataSharedTitle": {
+    "bn": "আপন সুস্বাস্থ্য সুখীর সাথে সম্পূর্ণ রেকর্ড শেয়ার করেছে",
+    "en": "Apon Sushashthya shared the full record with Sukhee"
+  },
+  "Teleconsult.doctorNameOnly": {
+    "bn": "ডা. {name}",
+    "en": "Dr. {name}"
+  },
+  "Teleconsult.doctorNameSpeciality": {
+    "bn": "ডা. {name} · {speciality}",
+    "en": "Dr. {name} · {speciality}"
+  },
+  "Teleconsult.doctorNameSpecialityFacility": {
+    "bn": "ডা. {name} · {speciality} · {facility}",
+    "en": "Dr. {name} · {speciality} · {facility}"
+  },
+  "Teleconsult.documentOpenFailed": {
+    "bn": "ডকুমেন্টটি খোলা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
+    "en": "Could not open the document. Please try again."
+  },
+  "Teleconsult.documentTypeLabReports": {
+    "bn": "ল্যাব রিপোর্ট",
+    "en": "Lab Reports"
+  },
+  "Teleconsult.documentTypeLabel": {
+    "bn": "ডকুমেন্টের ধরন",
+    "en": "Document Type"
+  },
+  "Teleconsult.documentTypePrescription": {
+    "bn": "প্রেসক্রিপশন",
+    "en": "Prescription"
   },
   "Teleconsult.doneButton": {
     "bn": "সম্পন্ন",
     "en": "Done"
   },
+  "Teleconsult.expandTooltip": {
+    "bn": "ফুলস্ক্রিন করুন",
+    "en": "Expand to fullscreen"
+  },
+  "Teleconsult.generatingPrescriptionBody": {
+    "bn": "সুখী থেকে স্বাক্ষরিত প্রেসক্রিপশন সিঙ্ক করা হচ্ছে",
+    "en": "Syncing signed prescription from Sukhee"
+  },
+  "Teleconsult.generatingPrescriptionTitle": {
+    "bn": "প্রেসক্রিপশন তৈরি হচ্ছে…",
+    "en": "Generating prescription…"
+  },
+  "Teleconsult.leaveCallBody": {
+    "bn": "পরামর্শ এখনও শেষ হয়নি।",
+    "en": "The consultation hasn't ended yet."
+  },
+  "Teleconsult.leaveCallConfirm": {
+    "bn": "কল ত্যাগ করুন",
+    "en": "Leave call"
+  },
+  "Teleconsult.leaveCallTitle": {
+    "bn": "এই কলটি ত্যাগ করবেন?",
+    "en": "Leave this call?"
+  },
+  "Teleconsult.liveLabel": {
+    "bn": "লাইভ",
+    "en": "LIVE"
+  },
+  "Teleconsult.loadingPreview": {
+    "bn": "প্রিভিউ লোড হচ্ছে…",
+    "en": "Loading preview…"
+  },
+  "Teleconsult.lookingForDoctor": {
+    "bn": "ডাক্তার খোঁজা হচ্ছে…",
+    "en": "Looking for a doctor…"
+  },
+  "Teleconsult.notCompletedBody": {
+    "bn": "ডাক্তার এই কলে যোগ দিতে পারেননি। আপনি আবার চেষ্টা করতে পারেন, অথবা টেলি-পরামর্শ ছাড়াই ভিজিট চালিয়ে যেতে পারেন।",
+    "en": "The doctor was not able to join this call. You can try again, or continue the visit without a teleconsult."
+  },
+  "Teleconsult.notCompletedTitle": {
+    "bn": "ডাক্তার উপলব্ধ নেই",
+    "en": "Doctor not available"
+  },
+  "Teleconsult.notProvisionedBody": {
+    "bn": "আপনার অ্যাকাউন্টের জন্য টেলি-পরামর্শ এখনও সেট আপ করা হয়নি। আপনার সুপারভাইজারের সাথে যোগাযোগ করুন।",
+    "en": "Teleconsult isn't set up for your account yet. Contact your supervisor."
+  },
+  "Teleconsult.notProvisionedTitle": {
+    "bn": "টেলি-পরামর্শ সেট আপ করা হয়নি",
+    "en": "Teleconsult not set up"
+  },
+  "Teleconsult.prescriptionHeaderTitle": {
+    "bn": "প্রেসক্রিপশন",
+    "en": "Prescription"
+  },
+  "Teleconsult.prescriptionTitle": {
+    "bn": "প্রেসক্রিপশন — সুখী থেকে",
+    "en": "Prescription — from Sukhee"
+  },
+  "Teleconsult.previewUnavailable": {
+    "bn": "প্রিভিউ উপলব্ধ নেই",
+    "en": "Preview unavailable"
+  },
+  "Teleconsult.selectDocumentsHint": {
+    "bn": "মেডিকেল ডকুমেন্ট নির্বাচন করুন (প্রেসক্রিপশন/ ল্যাব রিপোর্ট)",
+    "en": "Select Medical documents (Prescriptions/ Lab Reports)"
+  },
+  "Teleconsult.selectDocumentsLabel": {
+    "bn": "মেডিকেল ডকুমেন্ট নির্বাচন করুন",
+    "en": "Select Medical Documents"
+  },
+  "Teleconsult.selectDocumentsMax": {
+    "bn": "সর্বোচ্চ ৩টি ডকুমেন্ট",
+    "en": "Maximum 3 documents"
+  },
+  "Teleconsult.sendCounsellingToFamily": {
+    "bn": "পরিবারকে পরামর্শ পাঠান",
+    "en": "Send counselling to family"
+  },
+  "Teleconsult.sendCounsellingToFamilyBn": {
+    "bn": "পরিবারকে পরামর্শ পাঠান",
+    "en": "পরিবারকে পরামর্শ পাঠান"
+  },
+  "Teleconsult.specialityDiabeticCoach": {
+    "bn": "ডায়াবেটিস কোচ",
+    "en": "Diabetic Coach"
+  },
+  "Teleconsult.specialityGeneralPhysician": {
+    "bn": "জেনারেল ফিজিশিয়ান",
+    "en": "General Physician"
+  },
+  "Teleconsult.specialityMaternityCoach": {
+    "bn": "মাতৃত্ব কোচ",
+    "en": "Maternity Coach"
+  },
+  "Teleconsult.specialitySexualWellness": {
+    "bn": "যৌন সুস্বাস্থ্য",
+    "en": "Sexual Wellness"
+  },
+  "Teleconsult.startConsultationButton": {
+    "bn": "পরামর্শ শুরু করুন",
+    "en": "Start Consultation"
+  },
+  "Teleconsult.statusConnected": {
+    "bn": "সংযুক্ত · এনক্রিপ্টেড",
+    "en": "Connected · Encrypted"
+  },
+  "Teleconsult.takePhoto": {
+    "bn": "ছবি তুলুন",
+    "en": "Take photo"
+  },
+  "Teleconsult.thisVisitLabel": {
+    "bn": "এই ভিজিট",
+    "en": "This visit"
+  },
   "Teleconsult.title": {
     "bn": "টেলি-পরামর্শ",
     "en": "Teleconsult"
+  },
+  "Teleconsult.tryAgain": {
+    "bn": "আবার চেষ্টা করুন",
+    "en": "Try again"
+  },
+  "Teleconsult.viaSukhee": {
+    "bn": "সুখীর মাধ্যমে · নিরাপদ কল",
+    "en": "via Sukhee · Secure call"
+  },
+  "Teleconsult.viaSukheeWithPatient": {
+    "bn": "সুখীর মাধ্যমে · {patientLabel}",
+    "en": "via Sukhee · {patientLabel}"
+  },
+  "Teleconsult.viewFullDocument": {
+    "bn": "সম্পূর্ণ ডকুমেন্ট দেখুন",
+    "en": "View full document"
+  },
+  "Teleconsult.viewInvoice": {
+    "bn": "চালান দেখুন",
+    "en": "View Invoice"
+  },
+  "Teleconsult.viewPrescription": {
+    "bn": "প্রেসক্রিপশন দেখুন",
+    "en": "View Prescription"
+  },
+  "Teleconsult.weeksPregnantSuffix": {
+    "bn": " · {weeks} সপ্তাহের গর্ভবতী",
+    "en": " · {weeks} weeks pregnant"
   },
   "Training.allModulesTitle": {
     "bn": "সকল মডিউল",
