@@ -4105,6 +4105,34 @@ abstract final class TeleconsultStrings {
   static String get connecting => getTranslatedString('Teleconsult.connecting', 'Connecting your call…');
   static String get connectingHint => getTranslatedString('Teleconsult.connectingHint', 'Please wait while we set up your consultation.');
 
+  // ── Booking form ─────────────────────────────────────────────────────────
+  static String get bookingTitle => getTranslatedString('Teleconsult.bookingTitle', 'Book a teleconsult');
+  static String get availableSpecialityLabel => getTranslatedString('Teleconsult.availableSpecialityLabel', 'Available Specialty');
+  static String get specialityGeneralPhysician => getTranslatedString('Teleconsult.specialityGeneralPhysician', 'General Physician');
+  static String get specialitySexualWellness => getTranslatedString('Teleconsult.specialitySexualWellness', 'Sexual Wellness');
+  static String get specialityDiabeticCoach => getTranslatedString('Teleconsult.specialityDiabeticCoach', 'Diabetic Coach');
+  static String get specialityMaternityCoach => getTranslatedString('Teleconsult.specialityMaternityCoach', 'Maternity Coach');
+  static String get contactNumberLabel => getTranslatedString('Teleconsult.contactNumberLabel', 'Contact Number');
+  static String get contactNumberRequired => getTranslatedString('Teleconsult.contactNumberRequired', 'Enter a contact number to continue.');
+  static String get documentTypeLabel => getTranslatedString('Teleconsult.documentTypeLabel', 'Document Type');
+  static String get documentTypePrescription => getTranslatedString('Teleconsult.documentTypePrescription', 'Prescription');
+  static String get documentTypeLabReports => getTranslatedString('Teleconsult.documentTypeLabReports', 'Lab Reports');
+  static String get selectDocumentsLabel => getTranslatedString('Teleconsult.selectDocumentsLabel', 'Select Medical Documents');
+  static String get selectDocumentsHint => getTranslatedString('Teleconsult.selectDocumentsHint', 'Select Medical documents (Prescriptions/ Lab Reports)');
+  static String get selectDocumentsMax => getTranslatedString('Teleconsult.selectDocumentsMax', 'Maximum 3 documents');
+  static String get takePhoto => getTranslatedString('Teleconsult.takePhoto', 'Take photo');
+  static String get chooseFromGallery => getTranslatedString('Teleconsult.chooseFromGallery', 'Choose from gallery');
+  static String get startConsultationButton => getTranslatedString('Teleconsult.startConsultationButton', 'Start Consultation');
+
+  // ── Connecting-to-doctor state ─────────────────────────────────────────────
+  static String get connectingHeaderTitle => getTranslatedString('Teleconsult.connectingHeaderTitle', 'Connecting...');
+  static String get lookingForDoctor => getTranslatedString('Teleconsult.lookingForDoctor', 'Looking for a doctor…');
+  static String get connectingToDoctorPill => getTranslatedString('Teleconsult.connectingToDoctorPill', 'Connecting to doctor…');
+
+  // ── Camera/mic permission gate ──────────────────────────────────────────────
+  static String get cameraMicRequiredTitle => getTranslatedString('Teleconsult.cameraMicRequiredTitle', 'Camera & microphone needed');
+  static String get cameraMicRequiredBody => getTranslatedString('Teleconsult.cameraMicRequiredBody', 'Teleconsult needs camera and microphone access to start a video call. Please allow access in Settings.');
+
   // ── Connected (call) state ─────────────────────────────────────────────────
   static String get callTitle => getTranslatedString('Teleconsult.callTitle', 'Doctor video call');
   static String get statusConnected => getTranslatedString('Teleconsult.statusConnected', 'Connected · Encrypted');
@@ -4124,26 +4152,34 @@ abstract final class TeleconsultStrings {
   static String get leaveCallConfirm => getTranslatedString('Teleconsult.leaveCallConfirm', 'Leave call');
   static String get cancel => getTranslatedString('Teleconsult.cancel', 'Cancel');
   static String get liveLabel => getTranslatedString('Teleconsult.liveLabel', 'LIVE');
+  static String get connectedLabel => getTranslatedString('Teleconsult.connectedLabel', 'Connected');
   static String get expandTooltip => getTranslatedString('Teleconsult.expandTooltip', 'Expand to fullscreen');
   static String get collapseTooltip => getTranslatedString('Teleconsult.collapseTooltip', 'Exit fullscreen');
 
   // ── Doctor identity (real Shukhee data, once assigned) ──────────────────────
   static String get connectingToDoctor => getTranslatedString('Teleconsult.connectingToDoctor', 'Connecting you to a doctor…');
+
+  /// Shukhee's own `doctor.name` sometimes already carries a "Dr"/"Dr."
+  /// prefix -- strip it before the templates below add their own, so the
+  /// result is never "Dr. Dr. {name}".
+  static String _stripDoctorPrefix(String name) =>
+      name.trim().replaceFirst(RegExp(r'^dr\.?\s+', caseSensitive: false), '');
+
   static String doctorNameOnly(String name) => getTranslatedString(
         'Teleconsult.doctorNameOnly',
         'Dr. {name}',
-        params: {'name': name},
+        params: {'name': _stripDoctorPrefix(name)},
       );
   static String doctorNameSpecialityFacility(String name, String speciality, String facility) =>
       getTranslatedString(
         'Teleconsult.doctorNameSpecialityFacility',
         'Dr. {name} · {speciality} · {facility}',
-        params: {'name': name, 'speciality': speciality, 'facility': facility},
+        params: {'name': _stripDoctorPrefix(name), 'speciality': speciality, 'facility': facility},
       );
   static String doctorNameSpeciality(String name, String speciality) => getTranslatedString(
         'Teleconsult.doctorNameSpeciality',
         'Dr. {name} · {speciality}',
-        params: {'name': name, 'speciality': speciality},
+        params: {'name': _stripDoctorPrefix(name), 'speciality': speciality},
       );
 
   // ── Record-shared banner ─────────────────────────────────────────────────────
@@ -4155,6 +4191,11 @@ abstract final class TeleconsultStrings {
         '{visitLabel} notes · {summary} — doctor saw it before the call',
         params: {'visitLabel': visitLabel, 'summary': summary},
       );
+
+  // ── Generating-prescription (post-call, pre-wrap-up) state ─────────────────
+  static String get prescriptionHeaderTitle => getTranslatedString('Teleconsult.prescriptionHeaderTitle', 'Prescription');
+  static String get generatingPrescriptionTitle => getTranslatedString('Teleconsult.generatingPrescriptionTitle', 'Generating prescription…');
+  static String get generatingPrescriptionBody => getTranslatedString('Teleconsult.generatingPrescriptionBody', 'Syncing signed prescription from Sukhee');
 
   // ── Wrap-up (completed) state ───────────────────────────────────────────────
   static String get prescriptionTitle => getTranslatedString('Teleconsult.prescriptionTitle', 'Prescription — from Sukhee');
@@ -4176,11 +4217,6 @@ abstract final class TeleconsultStrings {
   // ── Not-provisioned state ───────────────────────────────────────────────────
   static String get notProvisionedTitle => getTranslatedString('Teleconsult.notProvisionedTitle', 'Teleconsult not set up');
   static String get notProvisionedBody => getTranslatedString('Teleconsult.notProvisionedBody', "Teleconsult isn't set up for your account yet. Contact your supervisor.");
-
-  // ── Phone-prompt fallback sheet ─────────────────────────────────────────────
-  static String get phonePromptTitle => getTranslatedString('Teleconsult.phonePromptTitle', 'Patient phone number needed');
-  static String get phonePromptHint => getTranslatedString('Teleconsult.phonePromptHint', 'Enter the patient\'s phone number to start the call.');
-  static String get phonePromptSubmit => getTranslatedString('Teleconsult.phonePromptSubmit', 'Continue');
 }
 
 /// Counselling messages placeholder screen strings.

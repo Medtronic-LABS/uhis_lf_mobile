@@ -170,6 +170,14 @@ class TeleconsultUnauthorizedException extends DomainException {
   const TeleconsultUnauthorizedException([super.localizedMessage]);
 }
 
+/// Camera and/or microphone permission was denied on-device -- not a
+/// shukhee_sdk error at all, since booking is never attempted in this case
+/// (the WebView auto-grants whatever the OS already allows, so it must never
+/// be the thing that first surfaces the OS permission prompt).
+class TeleconsultCameraMicRequiredException extends DomainException {
+  const TeleconsultCameraMicRequiredException([super.localizedMessage]);
+}
+
 // ── Local DB ─────────────────────────────────────────────────────────────────
 
 /// Drift/SQLite write or read failure.
