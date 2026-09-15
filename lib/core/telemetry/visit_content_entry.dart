@@ -36,7 +36,8 @@ class VisitContentEntry {
   /// Client-generated UUID — server dedup key on retry.
   final String id;
 
-  /// Encounter [visitId]; one row per visit.
+  /// Telemetry correlator — same [visitUuid] as the visit's telemetry event
+  /// and value-audit rows, not the encounter id.
   final String visitUuid;
 
   final String patientId;

@@ -85,6 +85,17 @@ class PostSyncRefresher {
   /// True while [refreshNow] is recomputing worklist / mission queue data.
   final isRefreshing = ValueNotifier<bool>(false);
 
+  /// Drain telemetry / value-audit / visit-content upload queues.
+  ///
+  /// Called on login and unlock — not only after a successful sync pull — so
+  /// metrics are not blocked when warmSync fails, returns early ("sync already
+  /// running"), or never emits a completion event.
+  void flushUploadQueues() {
+    unawaited(_flushTelemetry());
+    unawaited(_flushValueAudit());
+    unawaited(_flushVisitContent());
+  }
+
   void attach() {
     debugPrint('[PostSync] attached — listening for sync completion');
     _sub = _progress.listen((p) {
@@ -93,9 +104,7 @@ class PostSyncRefresher {
       // queued by visits, not by what a pull wrote, so a no-op sync still
       // needs to flush them. Gating this the same way as the recompute would
       // leave the queue stuck whenever nothing changed server-side.
-      unawaited(_flushTelemetry());
-      unawaited(_flushValueAudit());
-      unawaited(_flushVisitContent());
+      flushUploadQueues();
       // A sync that wrote nothing cannot have changed anything derived from it.
       // Measured: the recompute walks every patient and took 19 s for 3566
       // patients after a 1.3 s no-op warm pull. Connectivity changes fire a

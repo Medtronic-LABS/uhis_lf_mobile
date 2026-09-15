@@ -810,6 +810,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
         'householdId': member.householdId,
         'householdName': member.householdName,
         'patientId': member.patientId,
+        'isActive': member.isActive,
       },
     );
   }
@@ -837,6 +838,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
             householdName: member.householdName,
             useLatestServiceBadge: true,
             recentServiceKind: member.recentService,
+            isDeceased: !member.isActive,
             onTap: () => _navigateToMemberDetail(context, member),
           ),
         ),
@@ -1192,18 +1194,23 @@ class _OtherMemberRow extends StatelessWidget {
     final phone = member.phoneNumber?.trim();
     final hasPhone = phone != null && phone.isNotEmpty;
 
+    final deceased = !member.isActive;
     final serviceKind = member.recentService?.trim();
     final hasService = serviceKind != null && serviceKind.isNotEmpty;
-    final tagLabel = hasService
-        ? ProgrammeLabels.forServiceKind(serviceKind)
-        : HouseholdListStrings.enrolledTag;
+    final tagLabel = deceased
+        ? MemberDeceasedStrings.deceased
+        : hasService
+            ? ProgrammeLabels.forServiceKind(serviceKind)
+            : HouseholdListStrings.enrolledTag;
     final serviceProgramme =
         hasService ? Programme.fromString(serviceKind) : null;
-    final (badgeBg, badgeFg) = hasService &&
-            serviceProgramme != null &&
-            serviceProgramme != Programme.unknown
-        ? programmeBadgeColors(serviceProgramme)
-        : (lc.statusSuccessSurface, lc.statusSuccessAction);
+    final (badgeBg, badgeFg) = deceased
+        ? (AppColors.progressTrack, AppColors.textMuted)
+        : hasService &&
+                serviceProgramme != null &&
+                serviceProgramme != Programme.unknown
+            ? programmeBadgeColors(serviceProgramme)
+            : (lc.statusSuccessSurface, lc.statusSuccessAction);
 
     final row = InkWell(
       onTap: onTap,
@@ -1241,7 +1248,7 @@ class _OtherMemberRow extends StatelessWidget {
                       fontSize: 12.5,
                       fontWeight:
                           isHighlighted ? FontWeight.w800 : FontWeight.w700,
-                      color: lc.textPrimary,
+                      color: deceased ? lc.textMuted : lc.textPrimary,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1468,6 +1475,7 @@ class _HouseholdMember {
     this.ancVisitCount = 0,
     this.pncVisitCount = 0,
     this.recentService,
+    this.isActive = true,
   });
 
   final String? id;
@@ -1479,6 +1487,7 @@ class _HouseholdMember {
   final String? phoneNumber;
   final bool? isHouseholdHead;
   final bool? isPregnant;
+  final bool isActive;
   final String? householdId;
   /// Parent village id — real village level, but shown nowhere on this
   /// screen: the Patients screen's village-tab filter now matches the
@@ -1527,6 +1536,7 @@ class _HouseholdMember {
       phoneNumber: str('phoneNumber'),
       isHouseholdHead: isHead,
       isPregnant: json['isPregnant'] == true,
+      isActive: json['isActive'] != false,
       householdId: str('householdId'),
       villageId: str('villageId'),
       subVillageId: str('subVillageId'),
@@ -1552,6 +1562,7 @@ class _HouseholdMember {
       phoneNumber: e.phone,
       isHouseholdHead: e.isHouseholdHead,
       isPregnant: e.isPregnant,
+      isActive: e.isActive,
       householdId: e.householdId,
       villageId: e.villageId,
       subVillageId: e.subVillageId,
@@ -1586,6 +1597,7 @@ class _MemberInfo {
     this.ancVisitCount = 0,
     this.pncVisitCount = 0,
     this.recentService,
+    this.isActive = true,
   });
 
   final String? id;
@@ -1614,6 +1626,7 @@ class _MemberInfo {
   final int ancVisitCount;
   final int pncVisitCount;
   final String? recentService;
+  final bool isActive;
 
   /// Whole years from DOB (0 for infants) — kept for navigation extras.
   static int? _calculateAge(String? dateOfBirth) {
@@ -1666,6 +1679,7 @@ class _MemberInfo {
       ancVisitCount: member.ancVisitCount,
       pncVisitCount: member.pncVisitCount,
       recentService: member.recentService,
+      isActive: member.isActive,
     );
   }
 }

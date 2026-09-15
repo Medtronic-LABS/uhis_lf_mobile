@@ -347,6 +347,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     pushService: _offlinePush,
     authState: widget.authState,
     authRepo: widget.authRepo,
+    flushUploadQueues: _postSync.flushUploadQueues,
   );
 
   @override

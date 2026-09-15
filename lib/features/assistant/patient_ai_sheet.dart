@@ -41,6 +41,7 @@ class PatientAiContext {
     this.memberId,
     this.programmes = const <Programme>[],
     this.diagnosisLabel,
+    this.isDeceased = false,
   });
 
   final String patientId;
@@ -61,6 +62,9 @@ class PatientAiContext {
 
   /// Referral diagnosis label default when the SK opens a referral from here.
   final String? diagnosisLabel;
+
+  /// When true, start-visit actions are suppressed in the assistant UI.
+  final bool isDeceased;
 
   /// Structured context sent to the backend so it can answer from the data.
   final Map<String, dynamic> apiContext;
@@ -328,6 +332,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   }
 
   Future<void> _startVisit() async {
+    if (widget.ctx.isDeceased) return;
     debugPrint('[_PatientAiSheetState] _startVisit patientId=${widget.ctx.patientId} patientName=${widget.ctx.patientName}');
     final c = widget.ctx;
     final controller = context.read<VisitController>();
@@ -519,12 +524,18 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   }
 
   Widget _actionBar(List<AssistantAction> actions, ColorScheme scheme) {
+    final visible = widget.ctx.isDeceased
+        ? actions
+            .where((a) => a.type != AssistantActionType.startVisit)
+            .toList()
+        : actions;
+    if (visible.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: actions.map((a) {
+        children: visible.map((a) {
           return FilledButton.tonalIcon(
             onPressed: () => _runAction(a.type),
             icon: Icon(_actionIcon(a.type), size: 16),
