@@ -2368,6 +2368,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (telemetry == null) return;
     try {
       final b = classifyFieldProvenance();
+      _closeScribeSpanAtSubmit();
       // Shared with value-audit and visit-content via [ensureVisitUuid].
       final visitUuid = telemetry.ensureVisitUuid(_encounterId);
       await telemetry.recordVisitCompleted(
@@ -2561,6 +2562,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  /// Closes a scribe span left open by a session still running at submit.
+  ///
+  /// The banner reports the end from `stop()`, which completes a moment AFTER
+  /// this event is assembled — an SK who submits without first switching the
+  /// live session off would otherwise record a start and no end, and so no
+  /// manual-editing time either. Submitting IS the end of the span: the form
+  /// cannot be edited afterwards, and the near-zero editing time that follows
+  /// is the true measure for that flow.
+  void _closeScribeSpanAtSubmit() {
+    if (_scribeStartedAtMs == null || _scribeEndedAtMs != null) return;
+    markScribeSpan(endedAtMs: DateTime.now().millisecondsSinceEpoch);
+  }
+
+  @visibleForTesting
+  void closeScribeSpanAtSubmitForTesting() => _closeScribeSpanAtSubmit();
+
   /// The in-memory AI-value capture map. Empty unless
   /// [AppConfig.valueAuditEnabled] — which is what the tests pin.
   @visibleForTesting
@@ -2581,6 +2598,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// is in it now is the SK's value, not AI's.
   void _captureAiValueBeforeFirstEdit(String fieldId) {
     if (!AppConfig.valueAuditEnabled) return;
+    // A composite container is not a field the SK sees, and the report names
+    // fields the way the rest of the log does — by leaf. Editing a BP reading
+    // used to record `bpLogDetails` here while the edited-fields column named
+    // `systolic`/`diastolic`, so the two columns could not be reconciled.
+    final members = _compositeMembers[fieldId];
+    if (members != null) {
+      for (final member in members) {
+        _captureAiValueBeforeFirstEdit(member);
+      }
+      return;
+    }
     if (_aiProposedValues.containsKey(fieldId)) return;
     if (_groupSourceFor(fieldId) != FieldSource.aiPending) return;
     _aiProposedValues[fieldId] = _stringifyValue(_data.getValue(fieldId));
@@ -2590,7 +2618,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
   ///
   /// A report that shows a clinician what AI proposed has to show what it
   /// actually proposed, so this does not round, parse or infer units.
-  static String? _stringifyValue(dynamic raw) => raw?.toString();
+  static String? _stringifyValue(dynamic raw) {
+    if (raw == null) return null;
+    // Dart's own toString leaked into the report: a multi-select exported as
+    // "[fever, cough]" and a BP reading as "[{systolic: 110, diastolic: 70}]".
+    // Neither is what the form shows, which is what this is meant to capture.
+    if (raw is List) return raw.map(_stringifyValue).join(', ');
+    if (raw is Map) {
+      return raw.entries.map((e) => '${e.key}: ${e.value}').join(', ');
+    }
+    return raw.toString();
+  }
 
   /// Writes the before/after pairs for this visit to the PHI audit table.
   ///
@@ -2607,18 +2645,27 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (dao == null || _aiProposedValues.isEmpty) return;
     try {
       final now = DateTime.now().toUtc().millisecondsSinceEpoch;
-      await dao.insertAll([
+      // Only pairs where the value actually changed. The columns are labelled
+      // "(edited fields)" and exist to show where AI was wrong; a field the SK
+      // touched without changing (or a composite sibling dragged in by an edit
+      // to its neighbour) exports as "Yes -> Yes", which reads as a disagreement
+      // that never happened.
+      final changed = [
         for (final entry in _aiProposedValues.entries)
-          ValueAuditEntry(
-            id: const Uuid().v4(),
-            visitUuid: visitUuid,
-            fieldId: entry.key,
-            aiValue: entry.value,
-            finalValue: _stringifyValue(_data.getValue(entry.key)),
-            occurredAt: now,
-          ),
-      ]);
-      debugPrint('[ValueAudit] wrote ${_aiProposedValues.length} pair(s)');
+          if (_stringifyValue(_data.getValue(entry.key)) != entry.value)
+            ValueAuditEntry(
+              id: const Uuid().v4(),
+              visitUuid: visitUuid,
+              fieldId: entry.key,
+              aiValue: entry.value,
+              finalValue: _stringifyValue(_data.getValue(entry.key)),
+              occurredAt: now,
+            ),
+      ];
+      if (changed.isEmpty) return;
+      await dao.insertAll(changed);
+      debugPrint('[ValueAudit] wrote ${changed.length} pair(s) '
+          '(${_aiProposedValues.length} captured, unchanged dropped)');
     } on Object catch (e, st) {
       debugPrint('[ValueAudit] write failed: $e');
       debugPrint('[ValueAudit] $st');

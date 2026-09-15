@@ -381,6 +381,40 @@ void _draftRoundTripTests() {
       expect(n.scribeEndedAtMsForTesting, 6000, reason: 'latest end');
     });
 
+    test('a session still running at submit has its span closed', () {
+      // The banner reports the end from stop(), which finishes AFTER the
+      // event is assembled. An SK who submits without switching the live
+      // session off was recording a start, no end, and no editing time.
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      n.markScribeSpan(startedAtMs: 1000, endedAtMs: null);
+
+      n.closeScribeSpanAtSubmitForTesting();
+
+      expect(n.scribeStartedAtMsForTesting, 1000);
+      expect(n.scribeEndedAtMsForTesting, isNotNull,
+          reason: 'submit ends the span');
+    });
+
+    test('closing at submit leaves a real measured end alone', () {
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      n.markScribeSpan(startedAtMs: 1000, endedAtMs: 2000);
+
+      n.closeScribeSpanAtSubmitForTesting();
+
+      expect(n.scribeEndedAtMsForTesting, 2000);
+    });
+
+    test('no span started means submit invents nothing', () {
+      // A visit with no scribe use at all must stay empty, not report a
+      // zero-length session at submit time.
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+
+      n.closeScribeSpanAtSubmitForTesting();
+
+      expect(n.scribeStartedAtMsForTesting, isNull);
+      expect(n.scribeEndedAtMsForTesting, isNull);
+    });
+
     test('a fill without timing cannot clear a span already captured', () {
       // An older banner, or a path that never recorded, reports nulls. Those
       // must not erase a real measurement.

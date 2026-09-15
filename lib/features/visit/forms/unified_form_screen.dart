@@ -162,6 +162,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// visit-content telemetry.
   RealtimeAsrController? _liveAsrCtrl;
 
+  /// The live transcript, as the banner reports it.
+  ///
+  /// Held here rather than read off [_liveAsrCtrl] at submit: that reference
+  /// can point at a controller replaced on a rebuild, whose buffer is empty.
+  /// That is how a visit that recorded eight transcript segments still stored
+  /// no transcript at all. The banner pushes this whenever it grows.
+  String? _liveTranscript;
+
   // One GlobalKey per section — used to scroll to the first error section
   // on submit so the SK doesn't have to hunt for the highlighted field.
   final Map<String, GlobalKey> _sectionKeys = {};
@@ -633,6 +641,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                     }
                   },
                   onLiveControllerReady: (ctrl) => _liveAsrCtrl = ctrl,
+                  onLiveTranscript: (t) => _liveTranscript = t,
                   // VisitFormScreen watches ScribeController state and
                   // auto-opens the SOAP review sheet when reviewReady — no
                   // action needed here.
@@ -747,7 +756,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         unawaited(visitContent.recordTranscript(
           visitUuid: ctx.read<TelemetryService>().ensureVisitUuid(encounterId),
           patientId: patientId,
-          transcript: _liveAsrCtrl?.fullTranscript,
+          // The pushed value first; the controller only as a fallback for a
+          // path that never reported one.
+          transcript: _liveTranscript ?? _liveAsrCtrl?.fullTranscript,
         ));
       }
       widget.onSubmitComplete();
