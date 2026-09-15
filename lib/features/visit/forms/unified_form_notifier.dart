@@ -2368,9 +2368,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (telemetry == null) return;
     try {
       final b = classifyFieldProvenance();
-      // Minted once and shared: the audit rows join to this visit's telemetry
-      // row on it, so a second call here would silently orphan them.
-      final visitUuid = telemetry.newVisitUuid();
+      // Shared with value-audit and visit-content via [ensureVisitUuid].
+      final visitUuid = telemetry.ensureVisitUuid(_encounterId);
       await telemetry.recordVisitCompleted(
         visitUuid: visitUuid,
         programmes: List<String>.from(_activeFormTypes),

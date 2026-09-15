@@ -348,6 +348,7 @@ class PatientBadgeRow extends StatelessWidget {
     this.householdName,
     this.useLatestServiceBadge = false,
     this.recentServiceKind,
+    this.isDeceased = false,
   });
 
   final String? name;
@@ -373,6 +374,9 @@ class PatientBadgeRow extends StatelessWidget {
   final bool useLatestServiceBadge;
   final String? recentServiceKind;
 
+  /// When true, shows a grey "Deceased" tag instead of programme/service badges.
+  final bool isDeceased;
+
   final VoidCallback onTap;
 
   @override
@@ -380,7 +384,11 @@ class PatientBadgeRow extends StatelessWidget {
     final String badgeLabel;
     final Color badgeBg;
     final Color badgeFg;
-    if (useLatestServiceBadge) {
+    if (isDeceased) {
+      badgeLabel = MemberDeceasedStrings.deceased;
+      badgeBg = AppColors.progressTrack;
+      badgeFg = AppColors.textMuted;
+    } else if (useLatestServiceBadge) {
       final serviceKind = recentServiceKind?.trim();
       final hasService = serviceKind != null && serviceKind.isNotEmpty;
       badgeLabel = hasService
@@ -430,7 +438,11 @@ class PatientBadgeRow extends StatelessWidget {
                     children: [
                       Text(
                         name ?? CommonStrings.unnamed,
-                        style: AppTextStyles.worklistPatientName,
+                        style: isDeceased
+                            ? AppTextStyles.worklistPatientName.copyWith(
+                                color: AppColors.textMuted,
+                              )
+                            : AppTextStyles.worklistPatientName,
                       ),
                       if (ageLabel != null || age != null || gender != null)
                         Text(

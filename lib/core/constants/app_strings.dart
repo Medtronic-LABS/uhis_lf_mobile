@@ -6372,6 +6372,48 @@ abstract final class ClinicalStatusStrings {
   static String labelAll(Iterable<String> codes) =>
       codes.map(label).where((s) => s.isNotEmpty).join(', ');
 
+  /// SNOMED display terms from `confirmDiagnosis` (often comma-separated).
+  static String labelDiagnosis(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return raw;
+    if (!trimmed.contains(',')) return _labelDiagnosisTerm(trimmed);
+    return trimmed
+        .split(',')
+        .map((part) => _labelDiagnosisTerm(part.trim()))
+        .where((s) => s.isNotEmpty)
+        .join(', ');
+  }
+
+  static String _labelDiagnosisTerm(String term) {
+    final k = term.trim().toLowerCase();
+    if (k.isEmpty) return term;
+    if (k.contains('hypertension') || k.contains('high blood pressure')) {
+      return getTranslatedString('htn', 'Hypertension');
+    }
+    if (k.contains('diabetes')) {
+      return getTranslatedString('diabetesLabel', 'Diabetes');
+    }
+    if (k.contains('tuberculosis') || k == 'tb') {
+      return getTranslatedString(
+        'VisitFlow.ancExistingIllness.tuberculosis',
+        'Tuberculosis',
+      );
+    }
+    if (k.contains('copd') || k.contains('chronic obstructive')) {
+      return PatientDetailStrings.copd;
+    }
+    if (k.contains('kidney')) {
+      return PatientDetailStrings.kidneyDisease;
+    }
+    if (k.contains('cardiovascular') || k.contains('heart disease')) {
+      return getTranslatedString(
+        'VisitFlow.ancExistingIllness.heartDisease',
+        'Heart Disease',
+      );
+    }
+    return label(term);
+  }
+
   static String? _knownEnglishPhrase(String raw) {
     final k = raw.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
     if (k.isEmpty) return null;
@@ -6611,6 +6653,37 @@ abstract final class DebugDbStrings {
   static String get refresh => getTranslatedString('DebugDb.refresh', 'Refresh');
   static String get close => getTranslatedString('DebugDb.close', 'Close');
   static String get searchHint => getTranslatedString('DebugDb.searchHint', 'Search rows…');
+  static String get searchHintAdvanced => getTranslatedString(
+      'DebugDb.searchHintAdvanced',
+      'Search all columns, or col:value, col=value');
+  static String get filterTablesHint =>
+      getTranslatedString('DebugDb.filterTablesHint', 'Filter tables…');
+  static String get noTablesMatch =>
+      getTranslatedString('DebugDb.noTablesMatch', 'No tables match');
+  static String get noRowsMatch =>
+      getTranslatedString('DebugDb.noRowsMatch', 'No rows match');
+  static String get columns => getTranslatedString('DebugDb.columns', 'Columns');
+  static String get apply => getTranslatedString('DebugDb.apply', 'Apply');
+  static String get selectAll => getTranslatedString('DebugDb.selectAll', 'Select all');
+  static String get copy => getTranslatedString('DebugDb.copy', 'Copy');
+  static String get copyRow => getTranslatedString('DebugDb.copyRow', 'Copy row');
+  static String get copied => getTranslatedString('DebugDb.copied', 'Copied to clipboard');
+  static String get rawTab => getTranslatedString('DebugDb.rawTab', 'Raw');
+  static String get prettyTab => getTranslatedString('DebugDb.prettyTab', 'Pretty');
+  static String get jsonField => getTranslatedString('DebugDb.jsonField', 'JSON — tap to expand');
+  static String get searchScopeTitle =>
+      getTranslatedString('DebugDb.searchScopeTitle', 'Search columns');
+  static String get searchScopeHelp => getTranslatedString(
+      'DebugDb.searchScopeHelp',
+      'Global search uses selected columns. Or query one column: phone:017, sync_status=NotSynced');
+  static String get visibleColumnsTitle =>
+      getTranslatedString('DebugDb.visibleColumnsTitle', 'Visible columns');
+  static String searchScope(int n) => getTranslatedString(
+      'DebugDb.searchScope', '{n} cols',
+      params: {'n': '$n'});
+  static String sortedBy(String col, bool asc) => getTranslatedString(
+      'DebugDb.sortedBy', '{col} {dir}',
+      params: {'col': col, 'dir': asc ? '↑' : '↓'});
   static String get emptyTable => getTranslatedString('DebugDb.emptyTable', 'No rows');
   static String get counting => getTranslatedString('DebugDb.counting', 'Counting…');
   static String get countFailed => getTranslatedString('DebugDb.countFailed', 'Count failed');
@@ -6637,6 +6710,18 @@ abstract final class DebugDbStrings {
   static String pageLabel(int from, int to, int total) => getTranslatedString(
       'DebugDb.pageLabel', 'Showing {from}–{to} of {total}',
       params: {'from': '$from', 'to': '$to', 'total': '$total'});
+
+  static String pageLabelFiltered(int from, int to, int filtered, int total) =>
+      getTranslatedString(
+        'DebugDb.pageLabelFiltered',
+        'Showing {from}–{to} of {filtered} matches ({total} total)',
+        params: {
+          'from': '$from',
+          'to': '$to',
+          'filtered': '$filtered',
+          'total': '$total',
+        },
+      );
 }
 
 /// AI Scribe / counselling telemetry report (dev screen at `/dev/telemetry`).

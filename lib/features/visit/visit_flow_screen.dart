@@ -194,6 +194,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     super.initState();
     debugPrint('[_VisitFlowState] initState');
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Mint the per-visit telemetry correlator once so visit-content (Step 3),
+      // value-audit and visit_completed all share the same visitUuid.
+      context.read<TelemetryService>().ensureVisitUuid(widget.visitId);
       // Always load — even when patientName is supplied we still need DOB + age
       // for the smart age label (months for infants). ??-guards inside prevent
       // overwriting values already provided by the caller.
@@ -1356,7 +1359,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (!AppConfig.visitContentTelemetryEnabled || !mounted) return;
     try {
       await context.read<VisitContentService>().recordSummaryStarted(
-            visitUuid: widget.visitId,
+            visitUuid: context
+                .read<TelemetryService>()
+                .ensureVisitUuid(widget.visitId),
             patientId: widget.patientId,
           );
     } on Object catch (e) {
@@ -2768,7 +2773,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     try {
       final effective = _effectiveNaba(naba);
       await context.read<VisitContentService>().recordSummaryCompleted(
-            visitUuid: widget.visitId,
+            visitUuid: context
+                .read<TelemetryService>()
+                .ensureVisitUuid(widget.visitId),
             patientId: widget.patientId,
             whatsappSummary: effective.whatsappSummary,
             referralRecommendation: _referralCardReason(effective),

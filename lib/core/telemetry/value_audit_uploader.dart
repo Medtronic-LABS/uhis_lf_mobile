@@ -34,6 +34,7 @@ class ValueAuditUploader {
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 30),
       ));
+      _client.attachAiServiceAuth(direct);
       return (direct, '/telemetry/value-audit');
     }
     return (_client.dio, Endpoints.telemetryValueAudit);

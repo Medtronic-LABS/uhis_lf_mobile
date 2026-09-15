@@ -46,10 +46,27 @@ class TelemetryService {
 
   final Uuid _uuid;
 
+  /// One telemetry correlator per encounter for the lifetime of this service.
+  ///
+  /// The encounter id is never stored in telemetry rows — this map is the only
+  /// bridge so visit-content, value-audit and visit_completed share one uuid.
+  final Map<String, String> _visitUuidByEncounter = {};
+
   /// A fresh telemetry-only visit correlator. **Not** the encounter id: it is
   /// never used to look anything up, it exists only so several events from one
   /// visit can be tied together in the report.
+  ///
+  /// Prefer [ensureVisitUuid] when the uuid must match across telemetry,
+  /// value-audit and visit-content for the same encounter.
   String newVisitUuid() => _uuid.v4();
+
+  /// Returns the stable telemetry correlator for [encounterId], minting once.
+  String ensureVisitUuid(String encounterId) =>
+      _visitUuidByEncounter.putIfAbsent(encounterId, () => _uuid.v4());
+
+  /// The correlator minted for [encounterId], if any.
+  String? visitUuidFor(String encounterId) =>
+      _visitUuidByEncounter[encounterId];
 
   /// Records a completed visit — report metrics 1-4.
   ///
