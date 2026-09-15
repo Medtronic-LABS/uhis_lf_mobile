@@ -51,6 +51,7 @@ class AiScribeBanner extends StatefulWidget {
     this.assessmentType,
     this.onFormFill,
     this.onScribeSpan,
+    this.onLiveTranscript,
     this.symptomVocab,
     this.onLiveSymptomCodes,
     this.visibleFieldIds,
@@ -94,6 +95,16 @@ class AiScribeBanner extends StatefulWidget {
   /// receiver is expected to widen a stored span rather than replace it, so
   /// reporting both paths is safe when a visit used both.
   final void Function(int? startedAtMs, int? endedAtMs)? onScribeSpan;
+
+  /// The live transcript so far, pushed whenever it grows.
+  ///
+  /// Pushed, not pulled at submit. The caller used to read
+  /// `_liveAsrCtrl?.fullTranscript` from a reference handed over in
+  /// [onLiveControllerReady], and on a real visit that produced eight
+  /// transcript segments it came back empty — a rebuilt banner replaces that
+  /// controller with a fresh one whose buffer is empty, and the caller cannot
+  /// tell. Only this widget knows which controller is live, so it reports.
+  final void Function(String transcript)? onLiveTranscript;
 
   /// Client-authoritative symptom vocabulary for the generic scribe path —
   /// when set (and [assessmentType] is null), live extractions come back as
@@ -212,16 +223,54 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     // reach this (by-then-unmounted) widget. dispose() only runs once stop()
     // has actually finished, since ChangeNotifier forbids notifyListeners
     // after dispose() and stop() can't be awaited inside this sync method.
-    if (_liveCtrl.isActive) {
-      unawaited(_liveCtrl.stop().then((_) => _liveCtrl.dispose()));
+    // Captured before super.dispose(): `widget` must not be touched after it,
+    // and stop() completes long after this method returns.
+    final span = widget.onScribeSpan;
+    final onTranscript = widget.onLiveTranscript;
+    final ctrl = _liveCtrl;
+    if (ctrl.isActive) {
+      unawaited(ctrl.stop().then((_) {
+        // stop() is what SETS endedAtMs, and the listener was detached above —
+        // without this final report the end is written with nobody watching,
+        // which is exactly how it went missing.
+        span?.call(ctrl.startedAtMs, ctrl.endedAtMs);
+        final text = ctrl.fullTranscript;
+        if (text.isNotEmpty) onTranscript?.call(text);
+        ctrl.dispose();
+      }));
     } else {
-      _liveCtrl.dispose();
+      span?.call(ctrl.startedAtMs, ctrl.endedAtMs);
+      ctrl.dispose();
     }
     super.dispose();
   }
 
+  /// Pushes the current span and transcript to the caller.
+  ///
+  /// Safe to call repeatedly and after unmount: it only invokes the caller's
+  /// callbacks, which write to a notifier outliving this widget.
+  void _reportSpanAndTranscript() {
+    final span = widget.onScribeSpan;
+    if (span != null) {
+      span(_liveCtrl.startedAtMs, _liveCtrl.endedAtMs);
+      final batch = _scribe?.session;
+      if (batch != null) span(batch.startedAtMs, batch.endedAtMs);
+    }
+    final onTranscript = widget.onLiveTranscript;
+    if (onTranscript != null) {
+      final text = _liveCtrl.fullTranscript;
+      if (text.isNotEmpty) onTranscript(text);
+    }
+  }
+
   void _onLiveChanged() {
     if (!mounted) return;
+    // On EVERY notification, not only when a fill arrives. The span used to be
+    // sent from inside the fill branch below, and a fill happens MID-session —
+    // so endedAtMs was always null there, and the visit's "AI Scribe End Time"
+    // and "Manual Editing Time" were never recorded. markScribeSpan widens
+    // rather than replaces, so repeating costs nothing.
+    _reportSpanAndTranscript();
     final fields = _liveCtrl.fields;
     if (fields != null && !identical(fields, _lastAppliedLiveFields)) {
       _lastAppliedLiveFields = fields;
@@ -237,14 +286,9 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     if (fill != null && !identical(fill, _lastAppliedFormFill)) {
       _lastAppliedFormFill = fill;
       try {
-        // Before the fill, so a listener that reads the span while handling
-        // the fill already has it.
-        widget.onScribeSpan
-            ?.call(_liveCtrl.startedAtMs, _liveCtrl.endedAtMs);
-        final batch = _scribe?.session;
-        if (batch != null) {
-          widget.onScribeSpan?.call(batch.startedAtMs, batch.endedAtMs);
-        }
+        // The span is reported by _reportSpanAndTranscript above, on every
+        // notification — not here, where the session is still running and the
+        // end timestamp does not yet exist.
         widget.onFormFill?.call(fill);
       } catch (e, st) {
         // Surface loudly — a silent failure here means extracted values

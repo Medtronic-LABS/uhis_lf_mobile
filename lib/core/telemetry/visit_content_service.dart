@@ -35,6 +35,7 @@ class VisitContentService {
   }) async {
     if (!AppConfig.visitContentTelemetryEnabled) return;
     final trimmed = transcript?.trim();
+    final hasTranscript = trimmed != null && trimmed.isNotEmpty;
     final at = (capturedAt ?? DateTime.now()).toUtc().millisecondsSinceEpoch;
     await _upsert(
       visitUuid: visitUuid,
@@ -47,13 +48,19 @@ class VisitContentService {
         occurredAt: existing == null ? at : _maxInt(existing.occurredAt, at),
         skUserId: existing?.skUserId,
         capturedTenantId: existing?.capturedTenantId,
-        transcript: trimmed?.isEmpty == true ? null : trimmed,
-        transcriptCapturedAt: trimmed?.isEmpty == true ? null : at,
+        // Preserve rather than blank: this used to write `null` whenever it
+        // was handed an empty string, wiping a transcript already captured.
+        transcript: hasTranscript ? trimmed : existing?.transcript,
+        transcriptCapturedAt:
+            hasTranscript ? at : existing?.transcriptCapturedAt,
         whatsappSummary: existing?.whatsappSummary,
         referralRecommendation: existing?.referralRecommendation,
         summaryStartedAt: existing?.summaryStartedAt,
         summaryEndAt: existing?.summaryEndAt,
-        uploadStatus: existing?.uploadStatus ?? VisitContentUploadStatus.pending,
+        // Always pending: an upsert only happens because new content arrived,
+        // and content captured after a flush would otherwise stay on the
+        // device forever. Re-sending is safe — the server merges by visit.
+        uploadStatus: VisitContentUploadStatus.pending,
         uploadedAt: existing?.uploadedAt,
       ),
     );
@@ -84,7 +91,10 @@ class VisitContentService {
         whatsappSummary: existing?.whatsappSummary,
         referralRecommendation: existing?.referralRecommendation,
         summaryEndAt: existing?.summaryEndAt,
-        uploadStatus: existing?.uploadStatus ?? VisitContentUploadStatus.pending,
+        // Always pending: an upsert only happens because new content arrived,
+        // and content captured after a flush would otherwise stay on the
+        // device forever. Re-sending is safe — the server merges by visit.
+        uploadStatus: VisitContentUploadStatus.pending,
         uploadedAt: existing?.uploadedAt,
       ),
     );
@@ -114,20 +124,57 @@ class VisitContentService {
         transcript: existing?.transcript,
         transcriptCapturedAt: existing?.transcriptCapturedAt,
         summaryStartedAt: existing?.summaryStartedAt,
-        whatsappSummary: whatsappSummary?.trim().isEmpty == true
-            ? null
-            : whatsappSummary?.trim(),
-        referralRecommendation: referralRecommendation?.trim().isEmpty == true
-            ? null
-            : referralRecommendation?.trim(),
+        whatsappSummary: _prefer(whatsappSummary, existing?.whatsappSummary),
+        referralRecommendation: _prefer(
+            referralRecommendation, existing?.referralRecommendation),
         summaryEndAt: at,
-        uploadStatus: existing?.uploadStatus ?? VisitContentUploadStatus.pending,
+        // Always pending: an upsert only happens because new content arrived,
+        // and content captured after a flush would otherwise stay on the
+        // device forever. Re-sending is safe — the server merges by visit.
+        uploadStatus: VisitContentUploadStatus.pending,
         uploadedAt: existing?.uploadedAt,
       ),
     );
   }
 
+  /// Serializes every read-modify-write below.
+  ///
+  /// [_upsert] reads the row, merges, and writes it back, and its callers are
+  /// concurrent — `recordTranscript` is fired with `unawaited` at form submit
+  /// while Step 3 records its summary timings. Interleaved, the later writer
+  /// re-reads a row the earlier one had not yet written and restores the field
+  /// it had just set. That is how a captured 162-character transcript reached
+  /// the device and was never uploaded: Step 3 wrote the row back with the
+  /// `null` transcript it had read a moment earlier.
+  Future<void> _writes = Future<void>.value();
+
+  /// Keeps [incoming] when it carries text, otherwise [existing].
+  ///
+  /// A capture point that has nothing to say for a field must leave what is
+  /// already stored alone — every merge below only ever adds.
+  static String? _prefer(String? incoming, String? existing) {
+    final trimmed = incoming?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? existing : trimmed;
+  }
+
   Future<void> _upsert({
+    required String visitUuid,
+    required String patientId,
+    required int occurredAt,
+    required VisitContentEntry Function(VisitContentEntry? existing) merge,
+  }) {
+    final next = _writes.then((_) => _upsertNow(
+          visitUuid: visitUuid,
+          patientId: patientId,
+          occurredAt: occurredAt,
+          merge: merge,
+        ));
+    // A failed link must not break the chain for every later write.
+    _writes = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _upsertNow({
     required String visitUuid,
     required String patientId,
     required int occurredAt,

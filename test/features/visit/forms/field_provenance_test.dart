@@ -189,6 +189,27 @@ void main() {
           reason: 'the container is not a field the SK sees');
     });
 
+    test('editing a BP reading captures the leaf fields, not the container',
+        () {
+      // The report names fields by leaf everywhere else, so capturing the
+      // `bpLogDetails` container here left the edited-fields column saying
+      // "systolic; diastolic" while the value columns said "bpLogDetails" —
+      // one edit under two names, which a reader cannot reconcile.
+      useDefs(['systolic', 'diastolic']);
+      notifier.applyAiPrefill([ai('systolic', 140), ai('diastolic', 90)],
+          fieldDefs: defs);
+
+      notifier.updateField('bpLogDetails', [
+        {'systolic': 140, 'diastolic': 80},
+      ]);
+
+      final captured = notifier.aiProposedValuesForTesting;
+      expect(captured.keys, containsAll(['systolic', 'diastolic']));
+      expect(captured.keys, isNot(contains('bpLogDetails')),
+          reason: 'the container is not a field the SK sees');
+      expect(captured['diastolic'], '90', reason: "AI's value, pre-edit");
+    });
+
     test('editing systolic says nothing about diastolic', () {
       useDefs(['systolic', 'diastolic']);
       notifier.applyAiPrefill([ai('systolic', 120), ai('diastolic', 80)],
@@ -379,6 +400,40 @@ void _draftRoundTripTests() {
 
       expect(n.scribeStartedAtMsForTesting, 1000, reason: 'earliest start');
       expect(n.scribeEndedAtMsForTesting, 6000, reason: 'latest end');
+    });
+
+    test('a session still running at submit has its span closed', () {
+      // The banner reports the end from stop(), which finishes AFTER the
+      // event is assembled. An SK who submits without switching the live
+      // session off was recording a start, no end, and no editing time.
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      n.markScribeSpan(startedAtMs: 1000, endedAtMs: null);
+
+      n.closeScribeSpanAtSubmitForTesting();
+
+      expect(n.scribeStartedAtMsForTesting, 1000);
+      expect(n.scribeEndedAtMsForTesting, isNotNull,
+          reason: 'submit ends the span');
+    });
+
+    test('closing at submit leaves a real measured end alone', () {
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+      n.markScribeSpan(startedAtMs: 1000, endedAtMs: 2000);
+
+      n.closeScribeSpanAtSubmitForTesting();
+
+      expect(n.scribeEndedAtMsForTesting, 2000);
+    });
+
+    test('no span started means submit invents nothing', () {
+      // A visit with no scribe use at all must stay empty, not report a
+      // zero-length session at submit time.
+      final n = buildTestNotifier(draftDao: FakeAssessmentDraftDao());
+
+      n.closeScribeSpanAtSubmitForTesting();
+
+      expect(n.scribeStartedAtMsForTesting, isNull);
+      expect(n.scribeEndedAtMsForTesting, isNull);
     });
 
     test('a fill without timing cannot clear a span already captured', () {
