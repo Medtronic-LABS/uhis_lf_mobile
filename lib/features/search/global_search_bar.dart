@@ -304,7 +304,7 @@ class _SearchViewState extends State<_SearchView> {
           else
             ...hits.members.map((m) => _MemberTile(
               hit: m,
-              onTap: m.isActive ? () => _navigateToMember(m) : null,
+              onTap: () => _navigateToMember(m),
             )),
           if (hits.membersTruncated)
             ListTile(
@@ -355,6 +355,8 @@ class _SearchViewState extends State<_SearchView> {
       'householdId': hit.householdId,
       'householdName': hit.householdName,
       'householdNo': hit.householdNo,
+      'isActive': hit.isActive,
+      'deceasedReason': hit.deceasedReason,
     });
   }
 

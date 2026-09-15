@@ -27,6 +27,7 @@ import '../../core/clinical/referral_facility_labels.dart';
 import '../../core/clinical/assessment_raw_normalizer.dart';
 import '../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
 import '../../core/clinical/briefing_rules/clinical_finding.dart';
+import '../../core/rmnch/deceased_reason.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import '../../core/risk/clinical_vitals_from_history.dart';
@@ -68,6 +69,8 @@ class PatientOrMemberData {
     this.pregnancySnapshot,
     this.enrolledAt,
     this.householdMemberLocalId,
+    this.isActive = true,
+    this.deceasedReason,
   });
 
   final PatientWithProgrammes? localPatient;
@@ -101,6 +104,14 @@ class PatientOrMemberData {
 
   /// Local autoincrement PK for visit/assessment identity (`members.id`).
   final int? householdMemberLocalId;
+
+  /// False when the member has been marked deceased locally.
+  final bool isActive;
+
+  /// Encoded death reason from the household deceased flow, if recorded.
+  final String? deceasedReason;
+
+  bool get isDeceased => !isActive;
 
   bool get hasData => localPatient != null || remoteMember != null;
 
@@ -271,6 +282,8 @@ class PatientOrMemberData {
     List<VisitVitals>? vitalHistory,
     PregnancySnapshotRow? pregnancySnapshot,
     int? householdMemberLocalId,
+    bool? isActive,
+    String? deceasedReason,
   }) {
     return PatientOrMemberData(
       localPatient: localPatient,
@@ -287,6 +300,8 @@ class PatientOrMemberData {
       enrolledAt: enrolledAt,
       householdMemberLocalId:
           householdMemberLocalId ?? this.householdMemberLocalId,
+      isActive: isActive ?? this.isActive,
+      deceasedReason: deceasedReason ?? this.deceasedReason,
     );
   }
 }
@@ -645,10 +660,7 @@ class _PatientContextScreenState
 
   /// Local autoincrement PK for [LocalAssessmentEntity.householdMemberLocalId].
   Future<int?> _resolveHouseholdMemberLocalId() async {
-    final memberDao = context.read<MemberDao>();
-    final entity = await memberDao.getById(widget.patientId) ??
-        await memberDao.getByPatientId(widget.patientId) ??
-        await memberDao.getByFhirId(widget.patientId);
+    final entity = await _resolveMemberEntity(context.read<MemberDao>());
     if (entity == null) {
       final fromExtras = widget.memberData?['id']?.toString();
       if (fromExtras != null) {
@@ -657,6 +669,28 @@ class _PatientContextScreenState
       return int.tryParse(widget.patientId);
     }
     return int.tryParse(entity.id);
+  }
+
+  Future<HouseholdMemberEntity?> _resolveMemberEntity(MemberDao memberDao) async {
+    return await memberDao.getById(widget.patientId) ??
+        await memberDao.getByPatientId(widget.patientId) ??
+        await memberDao.getByFhirId(widget.patientId);
+  }
+
+  PatientOrMemberData _applyMemberStatus(
+    PatientOrMemberData data,
+    HouseholdMemberEntity? member,
+  ) {
+    if (member != null) {
+      return data.copyWith(
+        isActive: member.isActive,
+        deceasedReason: member.deceasedReason,
+      );
+    }
+    if (data.localPatient?.patient.isActive == false) {
+      return data.copyWith(isActive: false);
+    }
+    return data;
   }
 
   /// Pregnancy snapshots are stored under the local member PK — see
@@ -719,6 +753,7 @@ class _PatientContextScreenState
       vitalsRepo.recentByVisit(widget.patientId).catchError((_) => <VisitVitals>[]),
       _loadPregnancySnapshot(pregnancyDao, memberDao).catchError((_) => null),
       memberRepo.enrolledAtFor(widget.patientId).catchError((_) => null),
+      _resolveMemberEntity(memberDao),
     ]);
     final resolvedMemberId = phase1[0] as String?;
     final resolvedHouseholdMemberLocalId = phase1[1] as int?;
@@ -728,6 +763,7 @@ class _PatientContextScreenState
     final vitalHistory = phase1[5] as List<VisitVitals>;
     final pregnancySnapshot = phase1[6] as PregnancySnapshotRow?;
     final enrolledAt = phase1[7] as DateTime?;
+    final memberEntity = phase1[8] as HouseholdMemberEntity?;
     debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
         ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
@@ -796,9 +832,12 @@ class _PatientContextScreenState
       final info = await _householdInfo(localPatient.patient.householdId);
       ConsoleLog.banner('[PatientCtx] load done=${t0.elapsedMilliseconds}ms'
           ' localAssessments=${localAssessments.length}');
-      return localOnly.copyWith(
-        householdName: info.name,
-        householdHeadPhone: info.headPhone,
+      return _applyMemberStatus(
+        localOnly.copyWith(
+          householdName: info.name,
+          householdHeadPhone: info.headPhone,
+        ),
+        memberEntity,
       );
     }
 
@@ -816,17 +855,20 @@ class _PatientContextScreenState
       final progs = patientWithProgs?.programmes ??
           _programmesFromAssessments(memberLocalAssessments);
       final memberHouseholdInfo = await _householdInfo(member.householdId);
-      return PatientOrMemberData(
-        remoteMember: member,
-        programmes: progs,
-        localAssessments: memberLocalAssessments,
-        memberId: resolvedMemberId,
-        householdName: memberHouseholdInfo.name,
-        householdHeadPhone: memberHouseholdInfo.headPhone,
-        vitalHistory: vitalHistory,
-        pregnancySnapshot: pregnancySnapshot,
-        enrolledAt: enrolledAt,
-        householdMemberLocalId: resolvedHouseholdMemberLocalId,
+      return _applyMemberStatus(
+        PatientOrMemberData(
+          remoteMember: member,
+          programmes: progs,
+          localAssessments: memberLocalAssessments,
+          memberId: resolvedMemberId,
+          householdName: memberHouseholdInfo.name,
+          householdHeadPhone: memberHouseholdInfo.headPhone,
+          vitalHistory: vitalHistory,
+          pregnancySnapshot: pregnancySnapshot,
+          enrolledAt: enrolledAt,
+          householdMemberLocalId: resolvedHouseholdMemberLocalId,
+        ),
+        memberEntity,
       );
     }
 
@@ -845,27 +887,33 @@ class _PatientContextScreenState
           _programmesFromAssessments(localAssessmentsList);
       final prePassedHouseholdInfo =
           await _householdInfo(data['householdId']?.toString());
-      return PatientOrMemberData(
-        remoteMember: MemberHealthDetails(
-          id: memberId,
-          name: data['name'] as String? ?? PatientContextStrings.unknownMemberName,
-          gender: data['gender'] as String?,
-          age: data['age'] as int?,
-          dateOfBirth: data['dateOfBirth'] as String?,
-          phoneNumber: data['phoneNumber'] as String?,
-          householdId: data['householdId']?.toString(),
-          isPregnant: data['isPregnant'] as bool? ?? false,
-          patientId: data['patientId'] as String?,
+      return _applyMemberStatus(
+        PatientOrMemberData(
+          remoteMember: MemberHealthDetails(
+            id: memberId,
+            name: data['name'] as String? ??
+                PatientContextStrings.unknownMemberName,
+            gender: data['gender'] as String?,
+            age: data['age'] as int?,
+            dateOfBirth: data['dateOfBirth'] as String?,
+            phoneNumber: data['phoneNumber'] as String?,
+            householdId: data['householdId']?.toString(),
+            isPregnant: data['isPregnant'] as bool? ?? false,
+            patientId: data['patientId'] as String?,
+          ),
+          programmes: progs,
+          localAssessments: localAssessmentsList,
+          memberId: resolvedMemberId,
+          householdName: prePassedHouseholdInfo.name,
+          householdHeadPhone: prePassedHouseholdInfo.headPhone,
+          vitalHistory: vitalHistory,
+          pregnancySnapshot: pregnancySnapshot,
+          enrolledAt: enrolledAt,
+          householdMemberLocalId: resolvedHouseholdMemberLocalId,
+          isActive: data['isActive'] as bool? ?? true,
+          deceasedReason: data['deceasedReason'] as String?,
         ),
-        programmes: progs,
-        localAssessments: localAssessmentsList,
-        memberId: resolvedMemberId,
-        householdName: prePassedHouseholdInfo.name,
-        householdHeadPhone: prePassedHouseholdInfo.headPhone,
-        vitalHistory: vitalHistory,
-        pregnancySnapshot: pregnancySnapshot,
-        enrolledAt: enrolledAt,
-        householdMemberLocalId: resolvedHouseholdMemberLocalId,
+        memberEntity,
       );
     }
 
@@ -959,6 +1007,7 @@ class _PatientContextScreenState
       memberId: data.memberId,
       programmes: progs,
       diagnosisLabel: reasons.isNotEmpty ? reasons.first : null,
+      isDeceased: data.isDeceased,
       chipLine: chip,
       summary: summary.toString(),
       apiContext: <String, dynamic>{
@@ -971,6 +1020,7 @@ class _PatientContextScreenState
         'riskBand': bandLabel,
         'riskReasons': reasons,
         'isPregnant': data.isPregnant,
+        'isDeceased': data.isDeceased,
         'villageName': data.villageName,
         if (data.enrolledAt != null)
           'registrationDate': data.enrolledAt!.toIso8601String().split('T').first,
@@ -1305,16 +1355,16 @@ class _PatientContextScreenState
     String? statusLabel;
     Color statusBg = Colors.transparent;
     Color statusFg = Colors.white;
-    if (pendingEntry != null) {
+    if (!data.isDeceased && pendingEntry != null) {
       statusLabel = PatientDetailStrings.overdue;
       statusBg = AppColors.statusCritical;
-    } else if (data.riskBand == Band.band1) {
+    } else if (!data.isDeceased && data.riskBand == Band.band1) {
       statusLabel = PatientDetailStrings.critical;
       statusBg = AppColors.statusCritical;
-    } else if (data.riskBand == Band.band2) {
+    } else if (!data.isDeceased && data.riskBand == Band.band2) {
       statusLabel = PatientDetailStrings.highRiskBadge;
       statusBg = AppColors.statusWarning;
-    } else if (data.riskBand == Band.band3) {
+    } else if (!data.isDeceased && data.riskBand == Band.band3) {
       statusLabel = PatientDetailStrings.monitoring;
       statusBg = AppColors.navy;
     }
@@ -1341,6 +1391,10 @@ class _PatientContextScreenState
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 14, 14, AppSpacing.stickyBarClearance),
                   children: [
+                    if (data.isDeceased) ...[
+                      _DeceasedMemberBanner(deceasedReason: data.deceasedReason),
+                      const SizedBox(height: 10),
+                    ],
                     // ── AI Insight card ───────────────────────────────────
                     _AiInsightCard(
                       key: ValueKey('ai-insight-$_aiInsightRefreshGen'),
@@ -1394,6 +1448,7 @@ class _PatientContextScreenState
                       householdMemberLocalId: data.householdMemberLocalId,
                       programmes: data.programmes,
                       origin: widget.origin,
+                      isDeceased: data.isDeceased,
                     ),
                   ],
                 ),
@@ -2648,7 +2703,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       stats: {
         if (bp != null && bp.isNotEmpty) PatientDetailStrings.lastBp: '$bp mmHg',
         if (ncdTotal > 0) PatientDetailStrings.ncdVisits: '$ncdTotal',
-        if (dx != null && dx.isNotEmpty) PatientDetailStrings.diagnosis: dx,
+        if (dx != null && dx.isNotEmpty)
+          PatientDetailStrings.diagnosis: ClinicalStatusStrings.labelDiagnosis(dx),
       },
       checkupDate: latest?.date,
     ));
@@ -2739,7 +2795,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.tbSurface,
       textColor: AppColors.tbText,
       stats: {
-        if (dx != null && dx.isNotEmpty) PatientDetailStrings.diagnosis: dx,
+        if (dx != null && dx.isNotEmpty)
+          PatientDetailStrings.diagnosis: ClinicalStatusStrings.labelDiagnosis(dx),
         if (tbTotal > 0) PatientDetailStrings.tbVisits: '$tbTotal',
       },
       checkupDate: latest?.date,
@@ -3576,7 +3633,10 @@ class _StatsGrid extends StatelessWidget {
       } else {
         final v = _rawStr(raw[field]);
         if (v != null && v.isNotEmpty) {
-          result.add((a.date, '$v$suffix', a));
+          final display = field == 'confirmDiagnosis'
+              ? ClinicalStatusStrings.labelDiagnosis(v)
+              : '$v$suffix';
+          result.add((a.date, display, a));
         }
       }
     }
@@ -4741,13 +4801,41 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('height', PatientDetailStrings.heightCm);
 
     // ── NCD ────────────────────────────────────────────────────────────────
-    addIfPresent('confirmDiagnosis', PatientDetailStrings.diagnosis);
-    addIfPresent('ncdSymptoms', PatientDetailStrings.symptoms);
-    addIfPresent('ncdSymptomsMedication', PatientDetailStrings.takingMedication);
-    addIfPresent('heartAttack', PatientDetailStrings.heartAttackHistory);
-    addIfPresent('stroke', PatientDetailStrings.strokeHistory);
-    addIfPresent('kidneyDisease', PatientDetailStrings.kidneyDisease);
-    addIfPresent('copd', PatientDetailStrings.copd);
+    addIfPresent(
+      'confirmDiagnosis',
+      PatientDetailStrings.diagnosis,
+      valueMapper: ClinicalStatusStrings.labelDiagnosis,
+    );
+    addIfPresent(
+      'ncdSymptoms',
+      PatientDetailStrings.symptoms,
+      valueMapper: (v) => fieldOptionDisplayLabel('ncdSymptoms', v),
+    );
+    addIfPresent(
+      'ncdSymptomsMedication',
+      PatientDetailStrings.takingMedication,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent(
+      'heartAttack',
+      PatientDetailStrings.heartAttackHistory,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent(
+      'stroke',
+      PatientDetailStrings.strokeHistory,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent(
+      'kidneyDisease',
+      PatientDetailStrings.kidneyDisease,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent(
+      'copd',
+      PatientDetailStrings.copd,
+      valueMapper: ClinicalStatusStrings.label,
+    );
     addIfPresent(
       'referralFacilityType',
       PatientDetailStrings.referredTo,
@@ -5354,6 +5442,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             villageId: d.villageId,
             memberId: d.memberId,
             householdMemberLocalId: int.tryParse(d.localPatient?.patient.id ?? ''),
+            isDeceased: d.isDeceased,
           )
         else
           Container(
@@ -5721,6 +5810,76 @@ class _VitalsSnapshot {
 // card with bilingual prompt, AI summary card with lavender background.
 // ─────────────────────────────────────────────────────────────────────────────
 
+class _DeceasedMemberBanner extends StatelessWidget {
+  const _DeceasedMemberBanner({this.deceasedReason});
+
+  final String? deceasedReason;
+
+  @override
+  Widget build(BuildContext context) {
+    final reason = deceasedReason?.trim();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: AppColors.progressTrack,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.no_accounts_outlined,
+                  size: 18, color: Colors.grey.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  MemberDeceasedStrings.deceasedBanner,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade500,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  MemberDeceasedStrings.deceased,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (reason != null && reason.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${MemberDeceasedStrings.reasonForDeath}: '
+              '${DeceasedReason.formatForDisplay(reason)}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _PatientDetailHeader extends StatelessWidget {
   const _PatientDetailHeader({
     required this.data,
@@ -5762,6 +5921,8 @@ class _PatientDetailHeader extends StatelessWidget {
             onTap: () => _launchMaps(context, data.villageName!)),
       if (data.isPregnant)
         _HeaderChip(Icons.pregnant_woman, PatientContextStrings.pregnantChip),
+      if (data.isDeceased)
+        _HeaderChip(Icons.no_accounts_outlined, MemberDeceasedStrings.deceased),
     ];
 
     return Container(
@@ -6142,6 +6303,7 @@ class _NoServicesCard extends StatefulWidget {
     this.memberId,
     this.householdMemberLocalId,
     this.origin,
+    this.isDeceased = false,
   });
 
   final String patientId;
@@ -6153,6 +6315,7 @@ class _NoServicesCard extends StatefulWidget {
   final String? memberId;
   final int? householdMemberLocalId;
   final String? origin;
+  final bool isDeceased;
 
   @override
   State<_NoServicesCard> createState() => _NoServicesCardState();
@@ -6162,7 +6325,7 @@ class _NoServicesCardState extends State<_NoServicesCard> {
   bool _starting = false;
 
   Future<void> _startVisit() async {
-    if (_starting) return;
+    if (_starting || widget.isDeceased) return;
     setState(() => _starting = true);
 
     final controller = context.read<VisitController>();
@@ -6263,7 +6426,8 @@ class _NoServicesCardState extends State<_NoServicesCard> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: _starting ? null : _startVisit,
+                onPressed:
+                    (_starting || widget.isDeceased) ? null : _startVisit,
                 icon: _starting
                     ? const SizedBox(
                         width: 18,
@@ -6272,9 +6436,11 @@ class _NoServicesCardState extends State<_NoServicesCard> {
                       )
                     : const Icon(Icons.add, size: 18, color: Colors.white),
                 label: Text(
-                  _starting
-                      ? PatientContextStrings.startingEllipsis
-                      : EnrollStrings.addServicesCta,
+                  widget.isDeceased
+                      ? MemberDeceasedStrings.deceased
+                      : _starting
+                          ? PatientContextStrings.startingEllipsis
+                          : EnrollStrings.addServicesCta,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: Colors.white,

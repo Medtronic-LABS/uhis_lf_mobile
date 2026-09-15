@@ -83,4 +83,22 @@ void main() {
         ['UNCONTROLLED_BP', 'UNCONTROLLED_BG']);
     expect(out, 'Uncontrolled blood pressure, Uncontrolled blood sugar');
   });
+
+  group('labelDiagnosis', () {
+    test('maps SNOMED display terms to Bangla', () {
+      AppLocale.current = AppLanguage.bangla;
+      expect(ClinicalStatusStrings.labelDiagnosis('Hypertension'), 'উচ্চ রক্তচাপ');
+      expect(ClinicalStatusStrings.labelDiagnosis('Yes'), 'হ্যাঁ');
+      expect(ClinicalStatusStrings.labelDiagnosis('No'), 'না');
+    });
+
+    test('localizes comma-separated confirmDiagnosis values', () {
+      AppLocale.current = AppLanguage.bangla;
+      final out = ClinicalStatusStrings.labelDiagnosis(
+        'Hypertension, Diabetes mellitus type 2 (disorder)',
+      );
+      expect(out, contains('উচ্চ রক্তচাপ'));
+      expect(out, contains('ডায়াবেটিস'));
+    });
+  });
 }

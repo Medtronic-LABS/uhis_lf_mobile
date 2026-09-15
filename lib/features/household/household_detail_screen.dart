@@ -1158,9 +1158,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
             queueItem: (m.patientId ?? m.id) != null
                 ? _queueItems[m.patientId ?? m.id]
                 : null,
-            onTap: m.isActive
-                ? () => _navigateToPatientDetails(context, m)
-                : null,
+            onTap: () => _navigateToPatientDetails(context, m),
           ),
       ],
     );
@@ -1191,6 +1189,8 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         'householdId': member.householdId ?? household.id,
         'householdName': household.name,
         'patientId': member.patientId,
+        'isActive': member.isActive,
+        'deceasedReason': member.deceasedReason,
       },
     );
   }
@@ -1274,9 +1274,7 @@ class _MemberCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final item = queueItem;
     final deceased = !member.isActive;
-    final displayName = deceased
-        ? '${member.name ?? MemberDeceasedStrings.unnamed} (${MemberDeceasedStrings.deceased})'
-        : member.name;
+    final displayName = member.name ?? MemberDeceasedStrings.unnamed;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -1310,6 +1308,7 @@ class _MemberCard extends StatelessWidget {
                   pncVisitCount: member.pncVisitCount,
                   useLatestServiceBadge: true,
                   recentServiceKind: member.recentService,
+                  isDeceased: deceased,
                   onTap: onTap ?? () {},
                 ),
           if (deceased) ...[

@@ -334,6 +334,43 @@ class ApiClient {
     _authToken = token;
   }
 
+  /// Attach UHIS auth headers to a direct ai-scribe Dio instance.
+  ///
+  /// When [AppConfig.aiServiceBaseUrl] bypasses the main [dio] stack, callers
+  /// must replay the same credentials the gateway would forward: Bearer token
+  /// and/or session cookies plus `tenantId`. The ai-scribe service rejects
+  /// requests missing any of these with HTTP 401.
+  void attachAiServiceAuth(Dio direct) {
+    direct.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final token = _authToken;
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = token;
+          }
+          if (!kIsWeb) {
+            final cookies = await exportAuthCookies();
+            final cookiePairs = <String>[
+              if (cookies.jsession != null) 'JSESSIONID=${cookies.jsession}',
+              if (cookies.authCookie != null) 'AuthCookie=${cookies.authCookie}',
+            ];
+            if (cookiePairs.isNotEmpty) {
+              options.headers['Cookie'] = cookiePairs.join('; ');
+            }
+          }
+          final tid = _tenantId;
+          if (tid != null && tid.isNotEmpty) {
+            options.headers['tenantId'] = tid;
+          }
+          options.headers['App-Version'] = AppConfig.appVersionName;
+          options.headers['App-Version-Code'] =
+              AppConfig.appVersionCode.toString();
+          handler.next(options);
+        },
+      ),
+    );
+  }
+
   Future<({String? jsession, String? authCookie})> exportAuthCookies() async {
     if (kIsWeb) return (jsession: null, authCookie: null);
     // Return cached values captured when cookies were received.

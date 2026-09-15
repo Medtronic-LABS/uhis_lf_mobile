@@ -863,9 +863,85 @@
     "bn": "বাতিল করুন",
     "en": "Cancel"
   },
+  "DebugDb.apply": {
+    "bn": "প্রয়োগ",
+    "en": "Apply"
+  },
   "DebugDb.close": {
     "bn": "বন্ধ করুন",
     "en": "Close"
+  },
+  "DebugDb.columns": {
+    "bn": "কলাম",
+    "en": "Columns"
+  },
+  "DebugDb.copy": {
+    "bn": "কপি",
+    "en": "Copy"
+  },
+  "DebugDb.copyRow": {
+    "bn": "সারি কপি",
+    "en": "Copy row"
+  },
+  "DebugDb.copied": {
+    "bn": "ক্লিপবোর্ডে কপি হয়েছে",
+    "en": "Copied to clipboard"
+  },
+  "DebugDb.filterTablesHint": {
+    "bn": "টেবিল ফিল্টার…",
+    "en": "Filter tables…"
+  },
+  "DebugDb.jsonField": {
+    "bn": "JSON — প্রসারিত করতে ট্যাপ করুন",
+    "en": "JSON — tap to expand"
+  },
+  "DebugDb.noRowsMatch": {
+    "bn": "কোনো সারি মিলেনি",
+    "en": "No rows match"
+  },
+  "DebugDb.noTablesMatch": {
+    "bn": "কোনো টেবিল মিলেনি",
+    "en": "No tables match"
+  },
+  "DebugDb.pageLabelFiltered": {
+    "bn": "{total}টির মধ্যে {filtered}টি মিল · {from}–{to} দেখানো",
+    "en": "Showing {from}–{to} of {filtered} matches ({total} total)"
+  },
+  "DebugDb.prettyTab": {
+    "bn": "সুন্দর",
+    "en": "Pretty"
+  },
+  "DebugDb.rawTab": {
+    "bn": "কাঁচা",
+    "en": "Raw"
+  },
+  "DebugDb.searchHintAdvanced": {
+    "bn": "সব কলাম, বা col:value, col=value",
+    "en": "Search all columns, or col:value, col=value"
+  },
+  "DebugDb.searchScope": {
+    "bn": "{n} কলাম",
+    "en": "{n} cols"
+  },
+  "DebugDb.searchScopeHelp": {
+    "bn": "নির্বাচিত কলামে খোঁজ। এক কলাম: phone:017, sync_status=NotSynced",
+    "en": "Global search uses selected columns. Or query one column: phone:017, sync_status=NotSynced"
+  },
+  "DebugDb.searchScopeTitle": {
+    "bn": "খোঁজের কলাম",
+    "en": "Search columns"
+  },
+  "DebugDb.selectAll": {
+    "bn": "সব নির্বাচন",
+    "en": "Select all"
+  },
+  "DebugDb.sortedBy": {
+    "bn": "{col} {dir}",
+    "en": "{col} {dir}"
+  },
+  "DebugDb.visibleColumnsTitle": {
+    "bn": "দৃশ্যমান কলাম",
+    "en": "Visible columns"
   },
   "DebugDb.columnCount": {
     "bn": "{n} কলাম",

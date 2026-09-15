@@ -46,6 +46,7 @@ class TelemetryUploader {
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 30),
       ));
+      _client.attachAiServiceAuth(direct);
       return (direct, '/telemetry/events');
     }
     return (_client.dio, Endpoints.telemetryEvents);

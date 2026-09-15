@@ -233,6 +233,17 @@ void main() {
     expect(service.newVisitUuid(), isNot(service.newVisitUuid()));
   });
 
+  test('ensureVisitUuid is stable per encounter and distinct across encounters',
+      () {
+    final a1 = service.ensureVisitUuid('enc-1');
+    final a2 = service.ensureVisitUuid('enc-1');
+    final b = service.ensureVisitUuid('enc-2');
+    expect(a1, a2);
+    expect(a1, isNot(b));
+    expect(service.visitUuidFor('enc-1'), a1);
+    expect(service.visitUuidFor('enc-missing'), isNull);
+  });
+
   test('stamps the capturing tenant so a cross-tenant upload still credits it',
       () async {
     // A shared device keeps its telemetry queue across a different-SK login

@@ -9,6 +9,7 @@ import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/widgets/gestational_age_card.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/telemetry/telemetry_service.dart';
 import '../../../core/telemetry/visit_content_service.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../../core/constants/app_strings.dart';
@@ -744,7 +745,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       await notifier.submit();
       if (visitContent != null) {
         unawaited(visitContent.recordTranscript(
-          visitUuid: encounterId,
+          visitUuid: ctx.read<TelemetryService>().ensureVisitUuid(encounterId),
           patientId: patientId,
           transcript: _liveAsrCtrl?.fullTranscript,
         ));
