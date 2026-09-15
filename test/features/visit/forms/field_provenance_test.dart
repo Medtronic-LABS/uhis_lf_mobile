@@ -189,6 +189,27 @@ void main() {
           reason: 'the container is not a field the SK sees');
     });
 
+    test('editing a BP reading captures the leaf fields, not the container',
+        () {
+      // The report names fields by leaf everywhere else, so capturing the
+      // `bpLogDetails` container here left the edited-fields column saying
+      // "systolic; diastolic" while the value columns said "bpLogDetails" —
+      // one edit under two names, which a reader cannot reconcile.
+      useDefs(['systolic', 'diastolic']);
+      notifier.applyAiPrefill([ai('systolic', 140), ai('diastolic', 90)],
+          fieldDefs: defs);
+
+      notifier.updateField('bpLogDetails', [
+        {'systolic': 140, 'diastolic': 80},
+      ]);
+
+      final captured = notifier.aiProposedValuesForTesting;
+      expect(captured.keys, containsAll(['systolic', 'diastolic']));
+      expect(captured.keys, isNot(contains('bpLogDetails')),
+          reason: 'the container is not a field the SK sees');
+      expect(captured['diastolic'], '90', reason: "AI's value, pre-edit");
+    });
+
     test('editing systolic says nothing about diastolic', () {
       useDefs(['systolic', 'diastolic']);
       notifier.applyAiPrefill([ai('systolic', 120), ai('diastolic', 80)],
