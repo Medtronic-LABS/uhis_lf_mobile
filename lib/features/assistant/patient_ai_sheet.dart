@@ -7,6 +7,8 @@
 /// pick actions from a fixed allowlist ([AssistantActionType]).
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
+import '../../core/telemetry/telemetry_service.dart';
 import '../visit/visit_start_helper.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/referral.dart';
@@ -247,6 +250,16 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     // Snapshot prior turns before appending this question — the backend
     // gets what led up to this question, not the question itself twice.
     final history = _recentHistory();
+    // Within-session repeat: did the SK already ask this exact question (after
+    // normalisation) earlier in this chat? Computed BEFORE the current turn is
+    // appended below. The global repeat rate is recomputed server-side.
+    final askedAgain = _messages.any((m) =>
+        m.role == MessageRole.user && _normQuestion(m.text) == _normQuestion(q));
+    // Capture the telemetry service before any await — context must not be
+    // used across an async gap.
+    final telemetry = _telemetryOrNull();
+    final appLanguage = AppLocale.isBangla ? 'bn' : 'en';
+    final stopwatch = Stopwatch()..start();
     _input.clear();
     setState(() {
       _error = null;
@@ -264,6 +277,16 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
             patientContext: widget.ctx.apiContext,
             history: history,
           );
+      stopwatch.stop();
+      // Fire-and-forget, non-PHI usage telemetry (LEAP-47). No question/answer
+      // text — that is PHI and must never enter a telemetry event.
+      unawaited(telemetry
+          ?.recordAssistantAsk(
+            askedAgain: askedAgain,
+            appLanguage: appLanguage,
+            generationMs: stopwatch.elapsedMilliseconds,
+          )
+          .catchError((_) {}));
       if (!mounted) return;
       setState(() {
         _messages.add(ChatMessage(
@@ -291,6 +314,23 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
       _input.clear();
     }
     _scrollToBottom();
+  }
+
+  /// Normalised question text for within-session repeat detection: lower-cased,
+  /// trimmed, internal whitespace collapsed. Never stored or sent — used only
+  /// to compare two questions on-device.
+  String _normQuestion(String s) =>
+      s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// The telemetry service if it is in the tree, else null. Telemetry is
+  /// best-effort: a missing provider (e.g. in a test harness) must never break
+  /// the chat.
+  TelemetryService? _telemetryOrNull() {
+    try {
+      return context.read<TelemetryService>();
+    } on Object {
+      return null;
+    }
   }
 
   /// Last [_maxHistoryTurns] messages as `{role, text}` pairs for multi-turn
