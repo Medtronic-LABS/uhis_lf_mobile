@@ -7979,6 +7979,146 @@
     "bn": "নিয়মিত ওষুধ খাচ্ছেন কিনা",
     "en": "Medication adherence"
   },
+  "MemberDeceased.banner": {
+    "bn": "মৃত — আরও মূল্যায়ন করা যাবে না",
+    "en": "Deceased — further assessments are not allowed"
+  },
+  "MemberDeceased.cannotStartVisit": {
+    "bn": "এই সদস্য মৃত — নতুন ভিজিট শুরু করা যাবে না",
+    "en": "This member is deceased — new visits are not allowed"
+  },
+  "MemberDeceased.cause.abnormallyLowTemperature": {
+    "bn": "অস্বাভাবিক কম তাপমাত্রা",
+    "en": "Abnormally low temperature"
+  },
+  "MemberDeceased.cause.asphyxia": {
+    "bn": "শ্বাসরোধ",
+    "en": "Asphyxia"
+  },
+  "MemberDeceased.cause.congenitalAnomaly": {
+    "bn": "জন্মগত ত্রুটি",
+    "en": "Congenital Anomaly"
+  },
+  "MemberDeceased.cause.convulsions": {
+    "bn": "খিঁচুনি",
+    "en": "Convulsions"
+  },
+  "MemberDeceased.cause.excessiveBleeding": {
+    "bn": "অতিরিক্ত রক্তক্ষরণ",
+    "en": "Excessive bleeding"
+  },
+  "MemberDeceased.cause.hypertensiveDisorder": {
+    "bn": "উচ্চ রক্তচাপজনিত জটিলতা (ইক্ল্যাম্পসিয়া)",
+    "en": "Hypertensive disorder (Eclampsia)"
+  },
+  "MemberDeceased.cause.infection": {
+    "bn": "সংক্রমণ",
+    "en": "Infection"
+  },
+  "MemberDeceased.cause.lowBirthWeight": {
+    "bn": "কম জন্ম ওজন",
+    "en": "Low birth weight"
+  },
+  "MemberDeceased.cause.obstructedLabor": {
+    "bn": "বাধাগ্রস্থ প্রসব",
+    "en": "Obstructed labor"
+  },
+  "MemberDeceased.cause.otherMedicalComplications": {
+    "bn": "অন্যান্য চিকিৎসাজনিত জটিলতা",
+    "en": "Other medical complications"
+  },
+  "MemberDeceased.cause.pneumonia": {
+    "bn": "নিউমোনিয়া",
+    "en": "Pneumonia"
+  },
+  "MemberDeceased.cause.prematureBirth": {
+    "bn": "অপরিণত জন্ম",
+    "en": "Premature birth"
+  },
+  "MemberDeceased.cause.sepsisUmbilicalSepsis": {
+    "bn": "নাভির সংক্রমণ / সংক্রমণ",
+    "en": "Sepsis/ Umbilical sepsis"
+  },
+  "MemberDeceased.cause.severeAnemia": {
+    "bn": "মারাত্মক রক্তস্বল্পতা",
+    "en": "Severe Anemia"
+  },
+  "MemberDeceased.cause.unsafeAbortion": {
+    "bn": "অনিরাপদ গর্ভপাত",
+    "en": "Unsafe abortion"
+  },
+  "MemberDeceased.cause.unknown": {
+    "bn": "জানা নেই",
+    "en": "Unknown"
+  },
+  "MemberDeceased.cause.uterineRupture": {
+    "bn": "জরায়ু ফেটে যাওয়া",
+    "en": "Uterine rupture"
+  },
+  "MemberDeceased.causeHint": {
+    "bn": "প্রযোজ্য সবগুলি নির্বাচন করুন",
+    "en": "Select one or more causes"
+  },
+  "MemberDeceased.causeOfDeath": {
+    "bn": "মৃত্যুর কারণ",
+    "en": "Cause of death"
+  },
+  "MemberDeceased.deathType.mother": {
+    "bn": "মাতৃমৃত্যু",
+    "en": "Maternal"
+  },
+  "MemberDeceased.deathType.neonatal": {
+    "bn": "নবজাতকের মৃত্যু",
+    "en": "Neo Natal"
+  },
+  "MemberDeceased.deathType.other": {
+    "bn": "অন্যান্য",
+    "en": "Other"
+  },
+  "MemberDeceased.noActiveMembers": {
+    "bn": "এই পরিবারে কোনো সক্রিয় সদস্য নেই",
+    "en": "No active members in this household"
+  },
+  "MemberDeceased.reason": {
+    "bn": "কারণ",
+    "en": "Reason"
+  },
+  "MemberDeceased.reasonForDeath": {
+    "bn": "মৃত্যুর কারণ",
+    "en": "Reason for death"
+  },
+  "MemberDeceased.reasonHint": {
+    "bn": "মৃত্যুর কারণ লিখুন",
+    "en": "Enter reason for death"
+  },
+  "MemberDeceased.selectMember": {
+    "bn": "মৃত সদস্য নির্বাচন করুন",
+    "en": "Select Member Deceased"
+  },
+  "MemberDeceased.submit": {
+    "bn": "জমা দিন",
+    "en": "Submit"
+  },
+  "MemberDeceased.submitFailed": {
+    "bn": "সদস্যকে মৃত হিসেবে চিহ্নিত করা যায়নি",
+    "en": "Could not mark member deceased"
+  },
+  "MemberDeceased.title": {
+    "bn": "মৃত্যু নিবন্ধন",
+    "en": "Member Deceased"
+  },
+  "MemberDeceased.typeOfDeath": {
+    "bn": "মৃত্যুর ধরন",
+    "en": "Type of death"
+  },
+  "deceased": {
+    "bn": "মৃত",
+    "en": "Deceased"
+  },
+  "pleaseSelect": {
+    "bn": "--নির্বাচন করুন--",
+    "en": "Please select"
+  },
   "memberCount": {
     "bn": "{count} জন সদস্য",
     "en": "{count} members"

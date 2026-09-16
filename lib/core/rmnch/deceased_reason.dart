@@ -1,3 +1,5 @@
+import '../constants/app_strings.dart';
+
 /// Encoded deceased-reason payloads — mirrors Android `RMNCH` + household
 /// summary `MemberDeceasedDialogFragment`.
 abstract final class DeceasedReason {
@@ -14,42 +16,36 @@ abstract final class DeceasedReason {
   static const motherDeliveryDaysLimit = 50;
 
   static const neonatalDeathTypeOptions = [
-    DeathTypeOption(id: deathTypeNeonatal, label: 'Neo Natal'),
-    DeathTypeOption(id: deathTypeOther, label: 'Other'),
+    DeathTypeOption(id: deathTypeNeonatal),
+    DeathTypeOption(id: deathTypeOther),
   ];
 
   static const maternalDeathTypeOptions = [
-    DeathTypeOption(id: deathTypeMother, label: 'Maternal'),
-    DeathTypeOption(id: deathTypeOther, label: 'Other'),
+    DeathTypeOption(id: deathTypeMother),
+    DeathTypeOption(id: deathTypeOther),
   ];
 
   static const neonatalDeathCauseOptions = [
-    DeathCauseOption(id: 'asphyxia', label: 'Asphyxia'),
-    DeathCauseOption(id: 'abnormallyLowTemperature', label: 'Abnormally low temperature'),
-    DeathCauseOption(id: 'lowBirthWeight', label: 'Low birth weight'),
-    DeathCauseOption(id: 'convulsions', label: 'Convulsions'),
-    DeathCauseOption(id: 'prematureBirth', label: 'Premature birth'),
-    DeathCauseOption(id: 'sepsisUmbilicalSepsis', label: 'Sepsis/ Umbilical sepsis'),
-    DeathCauseOption(id: 'pneumonia', label: 'Pneumonia'),
-    DeathCauseOption(id: 'congenitalAnomaly', label: 'Congenital Anomaly'),
-    DeathCauseOption(id: 'unknown', label: 'Unknown'),
+    DeathCauseOption(id: 'asphyxia'),
+    DeathCauseOption(id: 'abnormallyLowTemperature'),
+    DeathCauseOption(id: 'lowBirthWeight'),
+    DeathCauseOption(id: 'convulsions'),
+    DeathCauseOption(id: 'prematureBirth'),
+    DeathCauseOption(id: 'sepsisUmbilicalSepsis'),
+    DeathCauseOption(id: 'pneumonia'),
+    DeathCauseOption(id: 'congenitalAnomaly'),
+    DeathCauseOption(id: 'unknown'),
   ];
 
   static const maternalDeathCauseOptions = [
-    DeathCauseOption(id: 'excessiveBleeding', label: 'Excessive bleeding'),
-    DeathCauseOption(id: 'infection', label: 'Infection'),
-    DeathCauseOption(
-      id: 'hypertensiveDisorder',
-      label: 'Hypertensive disorder (Eclampsia)',
-    ),
-    DeathCauseOption(id: 'obstructedLabor', label: 'Obstructed labor'),
-    DeathCauseOption(id: 'uterineRupture', label: 'Uterine rupture'),
-    DeathCauseOption(id: 'unsafeAbortion', label: 'Unsafe abortion'),
-    DeathCauseOption(id: 'severeAnemia', label: 'Severe Anemia'),
-    DeathCauseOption(
-      id: 'otherMedicalComplications',
-      label: 'Other medical complications',
-    ),
+    DeathCauseOption(id: 'excessiveBleeding'),
+    DeathCauseOption(id: 'infection'),
+    DeathCauseOption(id: 'hypertensiveDisorder'),
+    DeathCauseOption(id: 'obstructedLabor'),
+    DeathCauseOption(id: 'uterineRupture'),
+    DeathCauseOption(id: 'unsafeAbortion'),
+    DeathCauseOption(id: 'severeAnemia'),
+    DeathCauseOption(id: 'otherMedicalComplications'),
   ];
 
   /// Builds wire/local payload from dialog selections.
@@ -84,11 +80,7 @@ abstract final class DeceasedReason {
         .join(', ');
     if (labels.isEmpty) return trimmed;
 
-    final typeLabel = switch (parsed.type) {
-      deathTypeNeonatal => 'Neo Natal',
-      deathTypeMother => 'Maternal',
-      _ => parsed.type,
-    };
+    final typeLabel = MemberDeceasedStrings.deathTypeLabel(parsed.type);
     return '$typeLabel($labels)';
   }
 
@@ -131,27 +123,20 @@ abstract final class DeceasedReason {
     return _EncodedReason(type: type, causeIds: causeIds);
   }
 
-  static String _labelForCause(String type, String id) {
-    final options = type == deathTypeNeonatal
-        ? neonatalDeathCauseOptions
-        : maternalDeathCauseOptions;
-    for (final o in options) {
-      if (o.id == id) return o.label;
-    }
-    return id;
-  }
+  static String _labelForCause(String type, String id) =>
+      MemberDeceasedStrings.deathCauseLabel(id);
 }
 
 class DeathTypeOption {
-  const DeathTypeOption({required this.id, required this.label});
+  const DeathTypeOption({required this.id});
   final String id;
-  final String label;
+  String get label => MemberDeceasedStrings.deathTypeLabel(id);
 }
 
 class DeathCauseOption {
-  const DeathCauseOption({required this.id, required this.label});
+  const DeathCauseOption({required this.id});
   final String id;
-  final String label;
+  String get label => MemberDeceasedStrings.deathCauseLabel(id);
 }
 
 class _EncodedReason {

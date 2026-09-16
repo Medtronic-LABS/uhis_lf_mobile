@@ -24,6 +24,7 @@ import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/models/programme.dart';
 import '../search/member_search_repository.dart';
+import '../../core/rmnch/deceased_reason.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import 'widgets/dashboard_search_field.dart';
 import '../visit/assessment_repository.dart';
@@ -1693,9 +1694,10 @@ class _GlobalSearchResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final deceased = !hit.isActive;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: deceased ? AppColors.progressTrack : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
@@ -1704,13 +1706,17 @@ class _GlobalSearchResultCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: const Color(0xFFEFF6FF),
+            backgroundColor: deceased
+                ? AppColors.textMuted.withValues(alpha: 0.25)
+                : const Color(0xFFEFF6FF),
             child: Text(
               hit.name?.isNotEmpty == true
                   ? hit.name![0].toUpperCase()
                   : '?',
-              style: const TextStyle(
-                color: Color(0xFF1D4ED8),
+              style: TextStyle(
+                color: deceased
+                    ? AppColors.textMuted
+                    : const Color(0xFF1D4ED8),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1720,14 +1726,52 @@ class _GlobalSearchResultCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  hit.name ?? PatientContextStrings.unknownMemberName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 3,
+                  children: [
+                    Text(
+                      hit.name ?? PatientContextStrings.unknownMemberName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: deceased ? AppColors.textMuted : null,
+                      ),
+                    ),
+                    if (deceased)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.progressTrack,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                        ),
+                        child: Text(
+                          MemberDeceasedStrings.deceased,
+                          style: const TextStyle(
+                            fontFamily: AppFonts.body,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                if (hit.gender != null)
+                if (deceased)
+                  Text(
+                    '${MemberDeceasedStrings.reasonForDeath}: '
+                    '${DeceasedReason.formatForDisplay(hit.deceasedReason)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
+                  )
+                else if (hit.gender != null)
                   Text(
                     MissionDashboardStrings.genderLabel(hit.gender!),
                     style: const TextStyle(
@@ -1738,15 +1782,19 @@ class _GlobalSearchResultCard extends StatelessWidget {
               ],
             ),
           ),
-          FilledButton.tonal(
-            onPressed: onStartVisit,
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          if (!deceased)
+            FilledButton.tonal(
+              onPressed: onStartVisit,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                MissionDashboardStrings.startVisit,
+                style: const TextStyle(fontSize: 12),
+              ),
             ),
-            child: Text(MissionDashboardStrings.startVisit, style: const TextStyle(fontSize: 12)),
-          ),
         ],
       ),
     );
