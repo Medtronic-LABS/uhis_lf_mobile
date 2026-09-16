@@ -17,6 +17,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
+import 'package:uuid/uuid.dart';
+
+import '../../core/telemetry/assistant_content_service.dart';
 import '../../core/telemetry/telemetry_service.dart';
 import '../visit/visit_start_helper.dart';
 import '../../core/models/programme.dart';
@@ -255,10 +258,14 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     // appended below. The global repeat rate is recomputed server-side.
     final askedAgain = _messages.any((m) =>
         m.role == MessageRole.user && _normQuestion(m.text) == _normQuestion(q));
-    // Capture the telemetry service before any await — context must not be
-    // used across an async gap.
+    // Capture services before any await — context must not be used across an
+    // async gap.
     final telemetry = _telemetryOrNull();
+    final content = _assistantContentOrNull();
     final appLanguage = AppLocale.isBangla ? 'bn' : 'en';
+    // One correlator per question, shared by the non-PHI telemetry event and
+    // the gated question/answer content so the server can join them.
+    final correlator = const Uuid().v4();
     final stopwatch = Stopwatch()..start();
     _input.clear();
     setState(() {
@@ -285,6 +292,17 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
             askedAgain: askedAgain,
             appLanguage: appLanguage,
             generationMs: stopwatch.elapsedMilliseconds,
+            correlator: correlator,
+          )
+          .catchError((_) {}));
+      // The PHI question/answer text rides its own gated stream, joined to the
+      // event above by [correlator].
+      unawaited(content
+          ?.recordAsk(
+            correlator: correlator,
+            question: q,
+            answer: answer.text,
+            appLanguage: appLanguage,
           )
           .catchError((_) {}));
       if (!mounted) return;
@@ -328,6 +346,16 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   TelemetryService? _telemetryOrNull() {
     try {
       return context.read<TelemetryService>();
+    } on Object {
+      return null;
+    }
+  }
+
+  /// The assistant-content service if it is in the tree, else null. PHI capture
+  /// is best-effort: a missing provider must never break the chat.
+  AssistantContentService? _assistantContentOrNull() {
+    try {
+      return context.read<AssistantContentService>();
     } on Object {
       return null;
     }

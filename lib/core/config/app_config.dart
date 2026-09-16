@@ -375,6 +375,14 @@ class AppConfig {
   static bool get visitContentTelemetryEnabled =>
       const bool.fromEnvironment('VISIT_CONTENT_TELEMETRY', defaultValue: true);
 
+  /// Capture + upload the AI assistant ("Ask") question/answer PHI stream.
+  /// Gated separately from the usage telemetry so a deployment can collect
+  /// usage without the free text. Disable with
+  /// `--dart-define=ASSISTANT_CONTENT_TELEMETRY=false`.
+  static bool get assistantContentTelemetryEnabled =>
+      const bool.fromEnvironment('ASSISTANT_CONTENT_TELEMETRY',
+          defaultValue: true);
+
   /// Feature flag: use the uhis_form JSON-driven renderer instead of the
   /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
   static const bool useDynamicForms = bool.fromEnvironment(

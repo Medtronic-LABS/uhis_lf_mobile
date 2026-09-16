@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 47;
+  static const int schemaVersion = 48;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -70,6 +70,10 @@ class AppDatabase {
 
   /// Transcript + Step 3 summary text for product QA. PHI — wiped on SK handover.
   static const String tableVisitContentTelemetry = 'visit_content_telemetry';
+
+  /// AI assistant ("Ask") question/answer text. PHI — wiped on SK handover.
+  static const String tableAssistantContentTelemetry =
+      'assistant_content_telemetry';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -822,6 +826,23 @@ class AppDatabase {
     await db.execute(
         'CREATE INDEX idx_visit_content_visit '
         'ON $tableVisitContentTelemetry(visit_uuid)');
+
+    await db.execute('''
+      CREATE TABLE $tableAssistantContentTelemetry (
+        id TEXT PRIMARY KEY,
+        correlator TEXT NOT NULL UNIQUE,
+        question TEXT,
+        answer TEXT,
+        app_language TEXT,
+        sk_user_id TEXT,
+        captured_tenant_id INTEGER,
+        occurred_at INTEGER NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_assistant_content_upload '
+        'ON $tableAssistantContentTelemetry(upload_status)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -829,6 +850,28 @@ class AppDatabase {
   /// reason [createSchema] is public — [AppDatabase.open]'s real SQLCipher
   /// path isn't usable from a plain `flutter test` environment.
   static Future<void> onUpgrade(Database db, int from, int to) async {
+    if (from < 48) {
+      // v48 — the AI assistant ("Ask") PHI content stream: question + answer
+      // text, keyed by the per-ask correlator. Its own table (not on
+      // telemetry_events, which forbids free text), and IN [_allTables] so a
+      // different-SK login wipes it.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableAssistantContentTelemetry (
+          id TEXT PRIMARY KEY,
+          correlator TEXT NOT NULL UNIQUE,
+          question TEXT,
+          answer TEXT,
+          app_language TEXT,
+          sk_user_id TEXT,
+          captured_tenant_id INTEGER,
+          occurred_at INTEGER NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_assistant_content_upload '
+          'ON $tableAssistantContentTelemetry(upload_status)');
+    }
     if (from < 2) {
       // Add risk + programme columns to the existing patients row.
       // SQLite has no IF NOT EXISTS for ADD COLUMN, so each ALTER is wrapped
@@ -2131,6 +2174,7 @@ class AppDatabase {
     // See the doc on that constant for why the two differ.
     tableAiValueAudit,
     tableVisitContentTelemetry,
+    tableAssistantContentTelemetry,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

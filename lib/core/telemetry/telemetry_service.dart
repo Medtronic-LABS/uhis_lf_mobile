@@ -160,6 +160,7 @@ class TelemetryService {
     required String appLanguage,
     int? generationMs,
     String context = 'patient-scoped',
+    String? correlator,
     DateTime? occurredAt,
   }) async {
     await _insert(
@@ -170,6 +171,9 @@ class TelemetryService {
         generationMs: generationMs,
         context: context,
       ).toJson(),
+      // The per-ask correlator rides the event's visit_uuid slot — the join
+      // key the server uses to attach the gated question/answer content.
+      visitUuid: correlator,
       occurredAt: occurredAt,
     );
   }
