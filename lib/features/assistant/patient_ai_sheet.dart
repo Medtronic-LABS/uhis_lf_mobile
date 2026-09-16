@@ -302,6 +302,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
             correlator: correlator,
             question: q,
             answer: answer.text,
+            patientId: widget.ctx.patientId,
             appLanguage: appLanguage,
           )
           .catchError((_) {}));

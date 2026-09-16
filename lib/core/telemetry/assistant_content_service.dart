@@ -34,6 +34,7 @@ class AssistantContentService {
     required String correlator,
     required String question,
     required String answer,
+    String? patientId,
     String? appLanguage,
     DateTime? occurredAt,
   }) async {
@@ -45,6 +46,7 @@ class AssistantContentService {
       await _dao.upsert(AssistantContentEntry(
         id: _uuid.v4(),
         correlator: correlator,
+        patientId: patientId,
         question: question.trim().isEmpty ? null : question.trim(),
         answer: answer.trim().isEmpty ? null : answer.trim(),
         appLanguage: appLanguage,

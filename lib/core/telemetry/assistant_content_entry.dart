@@ -24,6 +24,7 @@ class AssistantContentEntry {
     required this.id,
     required this.correlator,
     required this.occurredAt,
+    this.patientId,
     this.question,
     this.answer,
     this.appLanguage,
@@ -38,6 +39,9 @@ class AssistantContentEntry {
 
   /// Per-ask correlator, shared with the assistant_ask telemetry event.
   final String correlator;
+
+  /// Which patient the question was about (patient-scoped chatbot).
+  final String? patientId;
 
   final String? question;
   final String? answer;
@@ -57,6 +61,7 @@ class AssistantContentEntry {
   Map<String, Object?> toDb() => {
         'id': id,
         'correlator': correlator,
+        'patient_id': patientId,
         'question': question,
         'answer': answer,
         'app_language': appLanguage,
@@ -71,6 +76,7 @@ class AssistantContentEntry {
       AssistantContentEntry(
         id: row['id'] as String,
         correlator: row['correlator'] as String,
+        patientId: row['patient_id'] as String?,
         question: row['question'] as String?,
         answer: row['answer'] as String?,
         appLanguage: row['app_language'] as String?,
@@ -87,6 +93,7 @@ class AssistantContentEntry {
   Map<String, dynamic> toApiJson() => {
         'id': id,
         'correlator': correlator,
+        'patientId': patientId,
         'question': question,
         'answer': answer,
         'appLanguage': appLanguage,

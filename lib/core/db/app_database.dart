@@ -831,6 +831,7 @@ class AppDatabase {
       CREATE TABLE $tableAssistantContentTelemetry (
         id TEXT PRIMARY KEY,
         correlator TEXT NOT NULL UNIQUE,
+          patient_id TEXT,
         question TEXT,
         answer TEXT,
         app_language TEXT,
@@ -859,6 +860,7 @@ class AppDatabase {
         CREATE TABLE IF NOT EXISTS $tableAssistantContentTelemetry (
           id TEXT PRIMARY KEY,
           correlator TEXT NOT NULL UNIQUE,
+          patient_id TEXT,
           question TEXT,
           answer TEXT,
           app_language TEXT,
