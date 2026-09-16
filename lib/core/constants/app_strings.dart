@@ -1064,6 +1064,44 @@ abstract final class MemberDeceasedStrings {
       );
   static String get unnamed =>
       getTranslatedString('unnamed', '(Unnamed)');
+
+  /// Localized death-type spinner label (neonatal / maternal / other).
+  static String deathTypeLabel(String id) => switch (id) {
+        'neonatal' =>
+          getTranslatedString('MemberDeceased.deathType.neonatal', 'Neo Natal'),
+        'mother' =>
+          getTranslatedString('MemberDeceased.deathType.mother', 'Maternal'),
+        'other' =>
+          getTranslatedString('MemberDeceased.deathType.other', 'Other'),
+        _ => id,
+      };
+
+  /// Localized cause-of-death checkbox label for neonatal/maternal branches.
+  static String deathCauseLabel(String id) => getTranslatedString(
+        'MemberDeceased.cause.$id',
+        _deathCauseEnglish(id),
+      );
+
+  static String _deathCauseEnglish(String id) => switch (id) {
+        'asphyxia' => 'Asphyxia',
+        'abnormallyLowTemperature' => 'Abnormally low temperature',
+        'lowBirthWeight' => 'Low birth weight',
+        'convulsions' => 'Convulsions',
+        'prematureBirth' => 'Premature birth',
+        'sepsisUmbilicalSepsis' => 'Sepsis/ Umbilical sepsis',
+        'pneumonia' => 'Pneumonia',
+        'congenitalAnomaly' => 'Congenital Anomaly',
+        'unknown' => 'Unknown',
+        'excessiveBleeding' => 'Excessive bleeding',
+        'infection' => 'Infection',
+        'hypertensiveDisorder' => 'Hypertensive disorder (Eclampsia)',
+        'obstructedLabor' => 'Obstructed labor',
+        'uterineRupture' => 'Uterine rupture',
+        'unsafeAbortion' => 'Unsafe abortion',
+        'severeAnemia' => 'Severe Anemia',
+        'otherMedicalComplications' => 'Other medical complications',
+        _ => id,
+      };
 }
 
 /// AI Worklist (Screen 2): chip filter labels, programme tags, urgent banner,
