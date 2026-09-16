@@ -218,6 +218,7 @@ class VisitCompletedPayload {
     required this.libraryTotal,
     required this.renderedTotal,
     required this.extractableVisible,
+    this.captureFieldIds = const [],
     this.durationMs,
   });
 
@@ -291,6 +292,10 @@ class VisitCompletedPayload {
   final int renderedTotal;
   final int extractableVisible;
 
+  /// Visible extraction targets — the ids [extractableVisible] counts.
+  /// Lets the report scope [aiFilled] to the same denominator.
+  final List<String> captureFieldIds;
+
   Map<String, dynamic> toJson() => {
         'programmes': programmes,
         'scribeUsed': scribeUsed,
@@ -309,6 +314,7 @@ class VisitCompletedPayload {
           'libraryTotal': libraryTotal,
           'renderedTotal': renderedTotal,
           'extractableVisible': extractableVisible,
+          if (captureFieldIds.isNotEmpty) 'captureFieldIds': captureFieldIds,
         },
         // Omitted rather than sent as null: a reader distinguishes "not
         // measured" from "measured as zero" by the key's absence, and older
@@ -348,6 +354,7 @@ class VisitCompletedPayload {
       renderedTotal: (denominators['renderedTotal'] as num?)?.toInt() ?? 0,
       extractableVisible:
           (denominators['extractableVisible'] as num?)?.toInt() ?? 0,
+      captureFieldIds: _strings(denominators['captureFieldIds']),
     );
   }
 

@@ -35,6 +35,10 @@ class VisitContentService {
   }) async {
     if (!AppConfig.visitContentTelemetryEnabled) return;
     final trimmed = transcript?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      debugPrint('[VisitContent] transcript empty at submit — not stored');
+      return;
+    }
     final at = (capturedAt ?? DateTime.now()).toUtc().millisecondsSinceEpoch;
     await _upsert(
       visitUuid: visitUuid,
@@ -53,7 +57,7 @@ class VisitContentService {
         referralRecommendation: existing?.referralRecommendation,
         summaryStartedAt: existing?.summaryStartedAt,
         summaryEndAt: existing?.summaryEndAt,
-        uploadStatus: existing?.uploadStatus ?? VisitContentUploadStatus.pending,
+        uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
         uploadedAt: existing?.uploadedAt,
       ),
     );
@@ -84,7 +88,7 @@ class VisitContentService {
         whatsappSummary: existing?.whatsappSummary,
         referralRecommendation: existing?.referralRecommendation,
         summaryEndAt: existing?.summaryEndAt,
-        uploadStatus: existing?.uploadStatus ?? VisitContentUploadStatus.pending,
+        uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
         uploadedAt: existing?.uploadedAt,
       ),
     );
@@ -121,10 +125,36 @@ class VisitContentService {
             ? null
             : referralRecommendation?.trim(),
         summaryEndAt: at,
-        uploadStatus: existing?.uploadStatus ?? VisitContentUploadStatus.pending,
+        uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
         uploadedAt: existing?.uploadedAt,
       ),
     );
+  }
+
+  /// Whether [after] carries new upload payload compared to [before].
+  ///
+  /// Used to re-queue a row that was already uploaded when a later capture
+  /// point (transcript after summary, or the reverse) adds fields.
+  static bool _payloadChanged(
+    VisitContentEntry? before,
+    VisitContentEntry after,
+  ) {
+    if (before == null) return true;
+    return before.transcript != after.transcript ||
+        before.transcriptCapturedAt != after.transcriptCapturedAt ||
+        before.whatsappSummary != after.whatsappSummary ||
+        before.referralRecommendation != after.referralRecommendation ||
+        before.summaryStartedAt != after.summaryStartedAt ||
+        before.summaryEndAt != after.summaryEndAt;
+  }
+
+  /// Keeps pending rows pending; re-queues uploaded rows when payload grows.
+  static String _uploadStatus(VisitContentEntry? before, String? prior) {
+    if (before == null) return VisitContentUploadStatus.pending;
+    if (prior != VisitContentUploadStatus.uploaded) {
+      return VisitContentUploadStatus.pending;
+    }
+    return VisitContentUploadStatus.uploaded;
   }
 
   Future<void> _upsert({
@@ -139,6 +169,11 @@ class VisitContentService {
       final tenantId =
           existing?.capturedTenantId ?? await _tenantIdResolver?.call();
       var entry = merge(existing);
+      var uploadStatus = entry.uploadStatus;
+      if (existing?.uploadStatus == VisitContentUploadStatus.uploaded &&
+          _payloadChanged(existing, entry)) {
+        uploadStatus = VisitContentUploadStatus.pending;
+      }
       entry = VisitContentEntry(
         id: entry.id,
         visitUuid: entry.visitUuid,
@@ -152,8 +187,10 @@ class VisitContentService {
         summaryEndAt: entry.summaryEndAt,
         skUserId: userId,
         capturedTenantId: tenantId,
-        uploadStatus: entry.uploadStatus,
-        uploadedAt: entry.uploadedAt,
+        uploadStatus: uploadStatus,
+        uploadedAt: uploadStatus == VisitContentUploadStatus.pending
+            ? null
+            : entry.uploadedAt,
       );
       await _dao.upsert(entry);
     } on Object catch (e, st) {
