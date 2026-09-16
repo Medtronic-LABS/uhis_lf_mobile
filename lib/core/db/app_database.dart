@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 48;
+  static const int schemaVersion = 49;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -851,6 +851,15 @@ class AppDatabase {
   /// reason [createSchema] is public — [AppDatabase.open]'s real SQLCipher
   /// path isn't usable from a plain `flutter test` environment.
   static Future<void> onUpgrade(Database db, int from, int to) async {
+    if (from < 49) {
+      // v49 — which patient the assistant question was about. Devices that
+      // reached v48 created the table without it, so ADD it here; fresh
+      // installs (and upgrades from <48) get it in the CREATE above.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableAssistantContentTelemetry ADD COLUMN patient_id TEXT');
+      } catch (_) {/* column already present — no-op */}
+    }
     if (from < 48) {
       // v48 — the AI assistant ("Ask") PHI content stream: question + answer
       // text, keyed by the per-ask correlator. Its own table (not on
