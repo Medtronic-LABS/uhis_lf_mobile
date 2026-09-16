@@ -744,11 +744,19 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           : null;
       await notifier.submit();
       if (visitContent != null) {
-        unawaited(visitContent.recordTranscript(
+        // Flush the live ASR session before reading the transcript — submit
+        // can fire while recording is still active, and dispose() stop() runs
+        // too late (after navigation) to capture the final segments.
+        final liveCtrl = _liveAsrCtrl;
+        if (liveCtrl != null && liveCtrl.isActive) {
+          await liveCtrl.stop();
+        }
+        final transcript = _liveAsrCtrl?.fullTranscript;
+        await visitContent.recordTranscript(
           visitUuid: ctx.read<TelemetryService>().ensureVisitUuid(encounterId),
           patientId: patientId,
-          transcript: _liveAsrCtrl?.fullTranscript,
-        ));
+          transcript: transcript,
+        );
       }
       widget.onSubmitComplete();
     } catch (e) {

@@ -2363,21 +2363,50 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// wrapped so a telemetry failure can never turn a saved visit into a
   /// failed one. Buckets are unioned across active programmes (a field shared
   /// by ANC and NCD is one capture opportunity, not two).
+  /// Buckets and denominators for [visit_completed], scoped to visible
+  /// capture opportunities only.
+  ///
+  /// AI fills on fields outside the extraction target set (rescued
+  /// out-of-programme edits) or not visible on screen must not inflate
+  /// [aiFilled] above [extractableVisible].
+  @visibleForTesting
+  ({
+    List<String> captureFieldIds,
+    int extractableVisible,
+    List<String> aiCorrected,
+    List<String> aiAcceptedUnchanged,
+  }) telemetryVisitCapture() {
+    final b = classifyFieldProvenance();
+    final captureIds = b.targetIds
+        .where(_visibleFieldIds.contains)
+        .toList()
+      ..sort();
+    return (
+      captureFieldIds: captureIds,
+      extractableVisible: captureIds.length,
+      aiCorrected:
+          b.aiCorrected.where(captureIds.contains).toList()..sort(),
+      aiAcceptedUnchanged:
+          b.aiAcceptedUnchanged.where(captureIds.contains).toList()..sort(),
+    );
+  }
+
   Future<void> _emitVisitTelemetry() async {
     final telemetry = _telemetryService;
     if (telemetry == null) return;
     try {
       final b = classifyFieldProvenance();
+      final capture = telemetryVisitCapture();
       // Shared with value-audit and visit-content via [ensureVisitUuid].
       final visitUuid = telemetry.ensureVisitUuid(_encounterId);
       await telemetry.recordVisitCompleted(
         visitUuid: visitUuid,
         programmes: List<String>.from(_activeFormTypes),
-        scribeUsed: b.aiCorrected.isNotEmpty ||
-            b.aiAcceptedUnchanged.isNotEmpty ||
+        scribeUsed: capture.aiCorrected.isNotEmpty ||
+            capture.aiAcceptedUnchanged.isNotEmpty ||
             _aiOverriddenFieldIds.isNotEmpty,
-        aiCorrected: b.aiCorrected.toList(),
-        aiAcceptedUnchanged: b.aiAcceptedUnchanged.toList(),
+        aiCorrected: capture.aiCorrected,
+        aiAcceptedUnchanged: capture.aiAcceptedUnchanged,
         manual: b.manual.toList(),
         prefilled: b.prefilled.toList(),
         derived: b.derived.toList(),
@@ -2390,8 +2419,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
         empty: b.empty.toList(),
         libraryTotal: b.libraryTotal,
         renderedTotal: _renderedFieldCount,
-        extractableVisible:
-            b.targetIds.where(_visibleFieldIds.contains).length,
+        extractableVisible: capture.extractableVisible,
+        captureFieldIds: capture.captureFieldIds,
         durationMs: await _visitDurationMs(),
       );
       await _writeValueAudit(visitUuid);
