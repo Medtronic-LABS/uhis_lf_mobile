@@ -31,6 +31,7 @@ class AssistantRepository {
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 30),
       ));
+      _client.attachAiServiceAuth(direct);
       return (direct, '/assistant/ask');
     }
     return (_client.dio, Endpoints.assistantAsk);
