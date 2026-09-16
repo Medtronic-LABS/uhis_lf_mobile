@@ -44,6 +44,7 @@ class VisitBriefingRepository {
         connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(minutes: 1),
       ));
+      _client.attachAiServiceAuth(direct);
       return (direct, directPath);
     }
     return (_client.dio, gatewayPath);
