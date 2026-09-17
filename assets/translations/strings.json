@@ -8115,9 +8115,17 @@
     "bn": "মৃত",
     "en": "Deceased"
   },
+  "pleaseCheckIfPlayStoreAvailable": {
+    "bn": "অনুগ্রহ করে যাচাই করুন মোবাইলে Google Play Store ইনস্টল আছে কিনা",
+    "en": "Please check if Google Play Store is installed in the device"
+  },
   "pleaseSelect": {
     "bn": "--নির্বাচন করুন--",
     "en": "Please select"
+  },
+  "pleaseUpdateTheApp": {
+    "bn": "অ্যাপের একটি নতুন সংস্করণ উপলব্ধ। চালিয়ে যেতে অনুগ্রহ করে আপডেট করুন।",
+    "en": "A new version of the app is available. Please update to continue."
   },
   "memberCount": {
     "bn": "{count} জন সদস্য",
@@ -8847,9 +8855,17 @@
     "bn": "কোচিং খুলুন",
     "en": "Open Coaching"
   },
+  "ok": {
+    "bn": "ঠিক আছে",
+    "en": "OK"
+  },
   "openReferral": {
     "bn": "রেফারেল খুলুন",
     "en": "Open Referral"
+  },
+  "openPlayStore": {
+    "bn": "প্লে স্টোর খুলুন",
+    "en": "Open Play Store"
   },
   "optimalRoute": {
     "bn": "সর্বোত্তম রুট",

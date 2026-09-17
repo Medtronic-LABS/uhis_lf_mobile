@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_state.dart';
+import '../core/version/app_version_home_gate.dart';
 import '../core/models/programme.dart';
 import '../core/constants/app_strings.dart';
 import '../core/theme/app_theme.dart';
@@ -158,7 +159,9 @@ GoRouter buildRouter(AuthState auth) {
             routes: [
               GoRoute(
                 path: '/home',
-                builder: (_, _) => const DashboardScreen(),
+                builder: (_, _) => const AppVersionHomeGate(
+                  child: DashboardScreen(),
+                ),
               ),
             ],
           ),

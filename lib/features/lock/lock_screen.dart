@@ -12,6 +12,7 @@ import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/sync_connectivity_service.dart';
+import '../../core/version/app_version_enforcer.dart';
 import '../../core/widgets/app_version_label.dart';
 import '../settings/widgets/profile_card.dart';
 import 'lock_header.dart';
@@ -82,7 +83,7 @@ class _LockScreenState extends State<LockScreen> {
     if (!mounted) return;
     if (ok) {
       context.read<SyncConnectivityService>().syncIfSessionReady();
-      context.go('/home');
+      await goHomeIfUpToDate(context);
     } else if (!auth.biometricEnabled || !auth.biometricAvailable) {
       context.go('/login?from=lock');
     } else {

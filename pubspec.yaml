@@ -45,6 +45,7 @@ dependencies:
   geolocator: ^13.0.2
   google_mlkit_barcode_scanning: ^0.14.2
   package_info_plus: ^9.0.1
+  in_app_update: ^4.2.3
 
 dev_dependencies:
   flutter_test:

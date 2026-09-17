@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth/auth_state.dart';
+import '../../core/version/app_update_flow.dart';
+import '../../core/version/app_version_enforcer.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/offline_sync_service.dart';
@@ -76,6 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final sync = context.read<OfflineSyncService>();
       final skipLoginSync =
           auth.sameUserRelogin && await sync.lastSyncedAt() != null;
+      if (!mounted) return;
 
       // Prefetch user hierarchy (saves upazila + durable SS/village cache) so
       // enrollment dropdowns work offline after process death / PIN unlock.
@@ -90,7 +93,8 @@ class _LoginScreenState extends State<LoginScreen> {
         // then runs ScheduledSyncWork (push + delta fetch). Mirror that here.
         debugPrint('[_LoginScreenState] returning user with sync cursor → /home');
         context.read<SyncConnectivityService>().syncIfSessionReady();
-        context.go('/home');
+        if (!mounted) return;
+        await goHomeIfUpToDate(context);
       } else if (!auth.onboardingComplete && !auth.pinEnabled) {
         // New user — kick off sync in background immediately so data arrives
         // while they complete PIN setup, then go to onboarding. A wiping
@@ -133,6 +137,13 @@ class _LoginScreenState extends State<LoginScreen> {
         debugPrint('[_LoginScreenState] returning user → /sync');
         context.go('/sync');
       }
+    } else if (auth.appUpdateRequired) {
+      await showAppUpdateRequiredDialog(
+        context,
+        serverMessage: auth.appUpdateMessage,
+      );
+      if (!mounted) return;
+      auth.clearAppUpdateRequired();
     } else {
       final msg = auth.error ?? LoginStrings.loginFailed;
       final isOffline = msg.contains('internet') || msg.contains('timed out');

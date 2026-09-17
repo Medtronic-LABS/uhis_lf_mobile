@@ -91,6 +91,10 @@ import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
+import 'core/version/app_update_flow.dart';
+import 'core/version/app_version_enforcer.dart';
+import 'core/version/app_version_info.dart';
+import 'core/version/app_version_service.dart';
 
 
 Future<void> main() async {
@@ -110,6 +114,7 @@ Future<void> main() async {
   // month names regardless of app language.
   await AppDateFormat.ensureInitialised();
   await FormConfig.loadAndCache(rootBundle);
+  await AppVersionInfo.ensureLoaded();
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();
@@ -349,6 +354,10 @@ class _UhisNextAppState extends State<UhisNextApp>
     authRepo: widget.authRepo,
     flushUploadQueues: _postSync.flushUploadQueues,
   );
+  late final AppVersionService _appVersionService =
+      AppVersionService(widget.api);
+  late final AppVersionEnforcer _appVersionEnforcer =
+      AppVersionEnforcer(_appVersionService);
 
   @override
   void initState() {
@@ -446,6 +455,8 @@ class _UhisNextAppState extends State<UhisNextApp>
       // first login that is the entire synced history at once, since cold sync
       // pulls referrals with past due dates that all read as SLA-breached.
       unawaited(_referrals.recomputeAllAfterSync());
+      // Play Core requires re-showing an in-progress immediate update on resume.
+      unawaited(resumeInProgressAppUpdateIfAny());
     }
   }
 
@@ -454,6 +465,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     return MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: widget.api),
+        Provider<AppVersionService>.value(value: _appVersionService),
+        Provider<AppVersionEnforcer>.value(value: _appVersionEnforcer),
         Provider<AuthRepository>.value(value: widget.authRepo),
         Provider<BiometricService>.value(value: widget.biometric),
         Provider<AppDatabase>.value(value: widget.appDb),

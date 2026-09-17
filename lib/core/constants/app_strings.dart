@@ -118,6 +118,30 @@ abstract final class CommonStrings {
   static String get remove => getTranslatedString('remove', 'Remove');
   static String versionLabel(String version) => getTranslatedString('versionLabel', 'v{version}', params: {'version': version}, localizeDigits: false);
   static String get comingSoon => getTranslatedString('Common.comingSoon', 'Coming soon');
+  /// Spice R.string.ok
+  static String get ok => getTranslatedString('ok', 'OK');
+}
+
+/// Forced app-update dialog — Spice Android `R.string.alert`,
+/// `please_update_the_app`, `open_play_store`, `please_check_if_play_store_available`.
+abstract final class AppUpdateStrings {
+  AppUpdateStrings._();
+
+  /// Spice R.string.alert
+  static String get alertTitle => getTranslatedString('alertTitle', 'Alert');
+  /// Spice R.string.please_update_the_app
+  static String get pleaseUpdateTheApp => getTranslatedString(
+        'pleaseUpdateTheApp',
+        'A new version of the app is available. Please update to continue.',
+      );
+  /// Spice R.string.open_play_store
+  static String get openPlayStore =>
+      getTranslatedString('openPlayStore', 'Open Play Store');
+  /// Spice R.string.please_check_if_play_store_available
+  static String get pleaseCheckIfPlayStoreAvailable => getTranslatedString(
+        'pleaseCheckIfPlayStoreAvailable',
+        'Please check if Google Play Store is installed in the device',
+      );
 }
 
 /// Offline-capability indicator copy — `lib/core/widgets/offline_capability_banner.dart`.
