@@ -98,14 +98,7 @@ void main() {
       'and never wipes local data', () async {
     fakeStorage._values['biometric_enabled'] = 'true';
 
-    var wipeCalled = false;
-    final authState = AuthState(
-      repo,
-      biometric,
-      onWipeLocalData: () async {
-        wipeCalled = true;
-      },
-    );
+    final authState = AuthState(repo, biometric);
     await authState.bootstrap();
     expect(authState.biometricEnabled, isTrue, reason: 'sanity check on seeded state');
 
@@ -117,8 +110,6 @@ void main() {
     expect(authState.pinEnabled, isFalse);
     expect(authState.status, AuthStatus.signedOut);
     expect(authState.locked, isFalse);
-    expect(wipeCalled, isFalse,
-        reason: 'a session-expiry forced re-login must never wipe local data');
   });
 
   test(
@@ -127,14 +118,7 @@ void main() {
     fakeStorage._values['pin_enabled'] = 'true';
     fakeStorage._values['pin_length'] = '4';
 
-    var wipeCalled = false;
-    final authState = AuthState(
-      repo,
-      biometric,
-      onWipeLocalData: () async {
-        wipeCalled = true;
-      },
-    );
+    final authState = AuthState(repo, biometric);
     await authState.bootstrap();
     expect(authState.pinEnabled, isTrue, reason: 'sanity check on seeded state');
 
@@ -146,7 +130,5 @@ void main() {
     expect(authState.pinEnabled, isFalse);
     expect(authState.status, AuthStatus.signedOut);
     expect(authState.locked, isFalse);
-    expect(wipeCalled, isFalse,
-        reason: 'a session-expiry forced re-login must never wipe local data');
   });
 }

@@ -21,36 +21,46 @@ String? _classify(VitalType type, double? value, double? systolic, double? diast
   switch (type) {
     case VitalType.bloodPressure:
       if (systolic == null || diastolic == null) return null;
-      if (systolic >= 180 || diastolic >= 110) return 'Critical';
-      if (systolic >= 140 || diastolic >= 90) return 'High';
-      if (systolic >= 120) return 'Elevated';
-      return 'Normal';
+      if (systolic >= 180 || diastolic >= 110) {
+        return VitalClassifierStrings.critical;
+      }
+      if (systolic >= 140 || diastolic >= 90) return VitalClassifierStrings.high;
+      if (systolic >= 120) return getTranslatedString('VitalClassifier.elevated', 'Elevated');
+      return VitalClassifierStrings.normal;
     case VitalType.spO2:
       if (value == null) return null;
-      if (value < 90) return 'Critical';
-      if (value < 94) return 'Low';
-      return 'Normal';
+      if (value < 90) return VitalClassifierStrings.critical;
+      if (value < 94) return VitalClassifierStrings.low;
+      return VitalClassifierStrings.normal;
     case VitalType.respiratoryRate:
       if (value == null) return null;
-      if (value < 12 || value > 25) return 'Abnormal';
-      return 'Normal';
+      if (value < 12 || value > 25) {
+        return getTranslatedString('VitalClassifier.abnormal', 'Abnormal');
+      }
+      return VitalClassifierStrings.normal;
     case VitalType.temperature:
       if (value == null) return null;
-      if (value >= 39.0) return 'High Fever';
-      if (value >= 37.5) return 'Fever';
-      if (value < 35.5) return 'Low';
-      return 'Normal';
+      if (value >= 39.0) {
+        return getTranslatedString('VitalClassifier.highFever', 'High Fever');
+      }
+      if (value >= 37.5) return getTranslatedString('VitalClassifier.fever', 'Fever');
+      if (value < 35.5) return VitalClassifierStrings.low;
+      return VitalClassifierStrings.normal;
     case VitalType.glucose:
       if (value == null) return null;
-      if (value >= 200) return 'High';
-      if (value < 70) return 'Low';
-      return 'Normal';
+      if (value >= 200) return VitalClassifierStrings.high;
+      if (value < 70) return VitalClassifierStrings.low;
+      return VitalClassifierStrings.normal;
     case VitalType.bmi:
       if (value == null) return null;
-      if (value >= 30) return 'Obese';
-      if (value >= 25) return 'Overweight';
-      if (value < 18.5) return 'Underweight';
-      return 'Normal';
+      if (value >= 30) return getTranslatedString('VitalClassifier.obese', 'Obese');
+      if (value >= 25) {
+        return getTranslatedString('VitalClassifier.overweight', 'Overweight');
+      }
+      if (value < 18.5) {
+        return getTranslatedString('VitalClassifier.underweight', 'Underweight');
+      }
+      return VitalClassifierStrings.normal;
     default:
       return null;
   }
@@ -127,7 +137,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
                   leading: const Icon(Icons.error_outline),
                   title: Text(RecentVitalsStrings.loadError),
                   trailing: IconButton(
-                    tooltip: 'Retry loading vitals',
+                    tooltip: RecentVitalsStrings.retryLoadingVitals,
                     icon: const Icon(Icons.refresh),
                     onPressed: _load,
                   ),
@@ -211,7 +221,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
                                 icon: const Icon(Icons.chevron_left),
                                 iconSize: 20,
                                 visualDensity: VisualDensity.compact,
-                                tooltip: 'Older visit',
+                                tooltip: RecentVitalsStrings.olderVisit,
                                 onPressed: page < total - 1
                                     ? () => setState(() => _page = page + 1)
                                     : null,
@@ -226,7 +236,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
                                 icon: const Icon(Icons.chevron_right),
                                 iconSize: 20,
                                 visualDensity: VisualDensity.compact,
-                                tooltip: 'Newer visit',
+                                tooltip: RecentVitalsStrings.newerVisit,
                                 onPressed: page > 0
                                     ? () => setState(() => _page = page - 1)
                                     : null,
@@ -265,7 +275,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       case VitalType.spO2:
         return _VitalRow(
           icon: Icons.air,
-          label: 'SpO₂',
+          label: RecentVitalsStrings.spo2Label,
           value: r.displayValue,
           unit: '%',
           date: r.date,
@@ -302,7 +312,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       case VitalType.weight:
         return _VitalRow(
           icon: Icons.monitor_weight,
-          label: 'Weight',
+          label: PatientContextStrings.weightLabel,
           value: r.displayValue,
           unit: 'kg',
           date: r.date,
@@ -313,7 +323,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       case VitalType.bmi:
         return _VitalRow(
           icon: Icons.person,
-          label: 'BMI',
+          label: PatientContextStrings.bmiLabel,
           value: r.displayValue,
           unit: 'kg/m²',
           date: r.date,
@@ -325,7 +335,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       case VitalType.temperature:
         return _VitalRow(
           icon: Icons.thermostat,
-          label: 'Temperature',
+          label: PatientContextStrings.temperatureLabel,
           value: r.displayValue,
           unit: '°C',
           date: r.date,
@@ -338,7 +348,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       case VitalType.height:
         return _VitalRow(
           icon: Icons.straighten,
-          label: 'Height',
+          label: PatientContextStrings.heightLabel,
           value: r.displayValue,
           unit: 'cm',
           date: r.date,
@@ -346,7 +356,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
       case VitalType.muac:
         return _VitalRow(
           icon: Icons.straighten,
-          label: 'MUAC',
+          label: PatientContextStrings.muacLabel,
           value: r.displayValue,
           unit: 'cm',
           date: r.date,

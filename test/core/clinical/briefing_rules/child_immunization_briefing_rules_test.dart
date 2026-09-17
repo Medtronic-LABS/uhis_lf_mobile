@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uhis_next/core/clinical/briefing_rules/child_immunization_briefing_rules.dart';
 import 'package:uhis_next/features/visit/immunisation/epi_schedule_engine.dart';
+import 'package:uhis_next/core/i18n/app_locale.dart';
 
 VaccineEntry _entry({
   required String code,
@@ -19,6 +20,11 @@ VaccineEntry _entry({
     );
 
 void main() {
+  // These assert English copy, so pin the language. AppLocale defaults to
+  // Bangla (BD-first), and Bangla localizes digits — '12 days' becomes
+  // '১২ days' — so an unpinned test is really asserting the default locale.
+  setUp(() => AppLocale.current = AppLanguage.english);
+
   final today = DateTime(2026, 1, 15);
 
   group('evaluateChildImmunizationFindings', () {

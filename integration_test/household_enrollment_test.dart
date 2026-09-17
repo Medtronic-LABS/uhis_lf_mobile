@@ -103,12 +103,9 @@ Future<void> _login(WidgetTester t) async {
   );
 }
 
-/// Tap the "Enroll new" FAB → tap "Create Household" in the overlay
-/// → arrive at [CreateHouseholdScreen].
+/// Tap the "Add Household" FAB → arrive at [CreateHouseholdScreen].
 Future<void> _openCreateHousehold(WidgetTester t) async {
-  await t.tap(find.text(MissionDashboardStrings.enrolNewCta));
-  await _settle(t, 3);
-  await t.tap(find.text('Create Household'));
+  await t.tap(find.text(MissionDashboardStrings.addHousehold));
   await _settle(t, 3);
   expect(
     find.text(EnrollmentStrings.householdInfoSectionHeader),
@@ -270,7 +267,7 @@ void main() {
         // ── Navigate back to dashboard ─────────────────────────────────────
         await _settle(t, 3);
         expect(
-          find.text(MissionDashboardStrings.enrolNewCta),
+          find.text(MissionDashboardStrings.addHousehold),
           findsOneWidget,
           reason: 'Dashboard must be reached after enrollment',
         );
@@ -368,7 +365,7 @@ void main() {
 
         await _settle(t, 3);
         expect(
-          find.text(MissionDashboardStrings.enrolNewCta),
+          find.text(MissionDashboardStrings.addHousehold),
           findsOneWidget,
           reason: 'Dashboard must be reached after enrollment with member',
         );
@@ -383,7 +380,7 @@ void main() {
         // in test 01/02, warmSync fetches the newly created records from the
         // server back into the local DB. We confirm this by verifying that
         // the dashboard worklist is reachable (sync completed without error)
-        // and the "Enroll new" FAB is still visible (no crash).
+        // and the "Add Household" FAB is still visible (no crash).
 
         await _login(t); // already logged in — returns immediately
 
@@ -397,7 +394,7 @@ void main() {
 
         // Dashboard is still intact — no crash from warmSync
         expect(
-          find.text(MissionDashboardStrings.enrolNewCta),
+          find.text(MissionDashboardStrings.addHousehold),
           findsOneWidget,
           reason: 'Dashboard must remain stable after warm sync',
         );

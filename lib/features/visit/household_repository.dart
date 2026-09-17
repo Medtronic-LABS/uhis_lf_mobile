@@ -1,4 +1,5 @@
 import '../../core/api/api_repository.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/immunisation_dao.dart';
 import '../../core/db/member_dao.dart';
@@ -129,7 +130,7 @@ class HouseholdRepository extends ApiRepository {
             if (imm.givenAt == null) {
               flags.add(CareFlag(
                 type: CareFlagType.overdueImmunisation,
-                label: 'Immunisation due',
+                label: MissionDashboardStrings.immunisationDue,
               ));
               break;
             }

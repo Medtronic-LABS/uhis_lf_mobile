@@ -431,56 +431,18 @@ class MemberDao {
   /// Also matches [referenceId] → local id to avoid duplicates when pull races
   /// the status stamp.
   Future<String> insertOrUpdateFromBE(HouseholdMemberEntity entity) async {
-    final fhir = entity.fhirId;
-    HouseholdMemberEntity? existing = (fhir != null && fhir.isNotEmpty)
-        ? await getByFhirId(fhir)
-        : null;
-
-    if (existing == null &&
-        entity.referenceId != null &&
-        entity.referenceId!.isNotEmpty) {
-      existing = await getUnstampedByReferenceId(entity.referenceId!);
-    }
-
-    // A row we created and haven't had confirmed yet: stamp it, never let the
-    // server echo overwrite the form data the health worker just entered.
-    final existingUnstamped =
-        existing != null && (existing.fhirId == null || existing.fhirId!.isEmpty);
-    if (existing?.syncStatus == 'NotSynced' || existingUnstamped) {
-      if (fhir != null && fhir.isNotEmpty) {
-        await updateFhirId(
-          localId: existing!.id,
-          fhirId: fhir,
-          syncStatus: 'Success',
-        );
-      }
-      return existing!.id;
-    }
-
-    if (existing != null) {
-      final merged = entity.copyWith(
-        id: existing.id,
-        syncStatus: entity.syncStatus.isNotEmpty ? entity.syncStatus : 'Success',
-        fhirId: fhir ?? existing.fhirId,
-        householdId: entity.householdId ?? existing.householdId,
-        householdFhirId: entity.householdFhirId ?? existing.householdFhirId,
-        referenceId: entity.referenceId ?? existing.referenceId,
-        isHouseholdHead: entity.isHouseholdHead || existing.isHouseholdHead,
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    late String localId;
+    await _db.db.transaction((tx) async {
+      final index = await _loadMemberMergeIndex(tx);
+      localId = await _mergeMemberInTransaction(
+        tx,
+        entity: entity,
+        index: index,
+        nowMs: nowMs,
       );
-      await _db.db.update(
-        AppDatabase.tableMembers,
-        merged.toDb(includeId: false),
-        where: 'id = ?',
-        whereArgs: [int.tryParse(existing.id) ?? existing.id],
-      );
-      return existing.id;
-    }
-
-    final id = await _db.db.insert(
-      AppDatabase.tableMembers,
-      entity.copyWith(syncStatus: 'Success').toDb(includeId: false),
-    );
-    return id.toString();
+    });
+    return localId;
   }
 
   /// Stamp FHIR id after offline-sync/status Success.
@@ -524,16 +486,153 @@ class MemberDao {
     );
   }
 
-  /// Bulk merge from sync pull.
-  Future<void> upsertManyFromBE(List<HouseholdMemberEntity> members) async {
-    for (final m in members) {
-      await insertOrUpdateFromBE(m);
-    }
+  /// Bulk merge from sync pull — one transaction, in-memory FHIR index.
+  ///
+  /// Avoids the N×SELECT pattern of calling [insertOrUpdateFromBE] in a loop
+  /// (measured at ~90–120s for 3.5k members on device). [onProgress] receives
+  /// the number written so far.
+  ///
+  /// Returns `fhirId → localId` for every merged row that had a FHIR id.
+  Future<Map<String, String>> upsertManyFromBE(
+    List<HouseholdMemberEntity> members, {
+    void Function(int done)? onProgress,
+  }) async {
+    if (members.isEmpty) return const {};
+
+    final fhirToLocal = <String, String>{};
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    await _db.db.transaction((tx) async {
+      final index = await _loadMemberMergeIndex(tx);
+      var done = 0;
+
+      for (final entity in members) {
+        final localId = await _mergeMemberInTransaction(
+          tx,
+          entity: entity,
+          index: index,
+          nowMs: nowMs,
+        );
+        final fhir = entity.fhirId;
+        if (fhir != null && fhir.isNotEmpty) {
+          fhirToLocal[fhir] = localId;
+        }
+        onProgress?.call(++done);
+      }
+    });
+
+    return fhirToLocal;
   }
 
   /// Prefer [upsertManyFromBE] for sync; kept for call-site compatibility.
   Future<void> upsertMany(List<HouseholdMemberEntity> members) async {
     await upsertManyFromBE(members);
+  }
+
+  Future<_MemberMergeIndex> _loadMemberMergeIndex(dynamic tx) async {
+    final rows = await tx.query(AppDatabase.tableMembers);
+    final byFhir = <String, HouseholdMemberEntity>{};
+    final unstampedByRef = <String, HouseholdMemberEntity>{};
+
+    for (final row in rows) {
+      final entity = HouseholdMemberEntity.fromDb(row);
+      final fhir = entity.fhirId;
+      if (fhir != null && fhir.isNotEmpty) {
+        byFhir[fhir] = entity;
+      }
+      final ref = entity.referenceId;
+      if (ref != null &&
+          ref.isNotEmpty &&
+          (entity.fhirId == null || entity.fhirId!.isEmpty)) {
+        unstampedByRef[ref] = entity;
+      }
+    }
+
+    return _MemberMergeIndex(byFhir: byFhir, unstampedByRef: unstampedByRef);
+  }
+
+  /// Spice merge logic shared by [insertOrUpdateFromBE] and [upsertManyFromBE].
+  Future<String> _mergeMemberInTransaction(
+    dynamic tx, {
+    required HouseholdMemberEntity entity,
+    required _MemberMergeIndex index,
+    required int nowMs,
+  }) async {
+    final fhir = entity.fhirId;
+    var existing = (fhir != null && fhir.isNotEmpty) ? index.byFhir[fhir] : null;
+
+    if (existing == null &&
+        entity.referenceId != null &&
+        entity.referenceId!.isNotEmpty) {
+      existing = index.unstampedByRef[entity.referenceId!];
+    }
+
+    final existingUnstamped = existing != null &&
+        (existing.fhirId == null || existing.fhirId!.isEmpty);
+
+    if (existing != null &&
+        (existing.syncStatus == 'NotSynced' || existingUnstamped)) {
+      if (fhir != null && fhir.isNotEmpty) {
+        await tx.rawUpdate(
+          '''
+          UPDATE ${AppDatabase.tableMembers}
+          SET fhir_id = ?,
+              sync_status = CASE
+                WHEN sync_status IN ('InProgress', 'NetworkError', 'NotSynced', 'Pending')
+                THEN ?
+                ELSE sync_status
+              END,
+              updated_at = ?
+          WHERE id = ?
+          ''',
+          [
+            fhir,
+            'Success',
+            nowMs,
+            int.tryParse(existing.id) ?? existing.id,
+          ],
+        );
+        final stamped = existing.copyWith(fhirId: fhir, syncStatus: 'Success');
+        index.byFhir[fhir] = stamped;
+        if (entity.referenceId != null && entity.referenceId!.isNotEmpty) {
+          index.unstampedByRef.remove(entity.referenceId);
+        }
+      }
+      return existing.id;
+    }
+
+    if (existing != null) {
+      final merged = entity.copyWith(
+        id: existing.id,
+        syncStatus: entity.syncStatus.isNotEmpty ? entity.syncStatus : 'Success',
+        fhirId: fhir ?? existing.fhirId,
+        householdId: entity.householdId ?? existing.householdId,
+        householdFhirId: entity.householdFhirId ?? existing.householdFhirId,
+        referenceId: entity.referenceId ?? existing.referenceId,
+        isHouseholdHead: entity.isHouseholdHead || existing.isHouseholdHead,
+      );
+      await tx.update(
+        AppDatabase.tableMembers,
+        merged.toDb(includeId: false),
+        where: 'id = ?',
+        whereArgs: [int.tryParse(existing.id) ?? existing.id],
+      );
+      if (fhir != null && fhir.isNotEmpty) {
+        index.byFhir[fhir] = merged;
+      }
+      return existing.id;
+    }
+
+    final id = await tx.insert(
+      AppDatabase.tableMembers,
+      entity.copyWith(syncStatus: 'Success').toDb(includeId: false),
+    );
+    final localId = id.toString();
+    final inserted = entity.copyWith(id: localId, syncStatus: 'Success');
+    if (fhir != null && fhir.isNotEmpty) {
+      index.byFhir[fhir] = inserted;
+    }
+    return localId;
   }
 
   /// No-op under Spice identity — merge keeps the local row.
@@ -1185,4 +1284,14 @@ class MemberDao {
   Future<void> deleteAll() async {
     await _db.db.delete(AppDatabase.tableMembers);
   }
+}
+
+class _MemberMergeIndex {
+  _MemberMergeIndex({
+    required this.byFhir,
+    required this.unstampedByRef,
+  });
+
+  final Map<String, HouseholdMemberEntity> byFhir;
+  final Map<String, HouseholdMemberEntity> unstampedByRef;
 }

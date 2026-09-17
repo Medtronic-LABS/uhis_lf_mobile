@@ -237,7 +237,6 @@ List<MissionQueueItem> filterMissionQueue({
   Set<String> completedPatientIds = const {},
 }) {
   var result = List<MissionQueueItem>.from(queue);
-  final stages = <String>['in=${result.length}'];
 
   final keepExpanded = selectedNeeds.any(isProgrammeNeedFilter) ||
       selectedNeeds.any(isScheduleNeedFilter);
@@ -246,7 +245,6 @@ List<MissionQueueItem> filterMissionQueue({
     result = result
         .where((i) => i.tier != DashboardTier.upcoming)
         .toList(growable: false);
-    stages.add('afterUpcomingDrop=${result.length}');
 
     if (completedPatientIds.isNotEmpty) {
       result = result
@@ -256,10 +254,7 @@ List<MissionQueueItem> filterMissionQueue({
                 !completedPatientIds.contains(i.patientId),
           )
           .toList(growable: false);
-      stages.add('afterCompletedDrop=${result.length}');
     }
-  } else {
-    stages.add('upcoming+completedKept(needChip)');
   }
 
   final chipVillage = village?.trim();
@@ -268,17 +263,12 @@ List<MissionQueueItem> filterMissionQueue({
     result = result
         .where((i) => (i.village?.trim().toLowerCase() ?? '') == needle)
         .toList();
-    stages.add('afterVillage("$chipVillage")=${result.length}');
   }
 
   if (selectedNeeds.isNotEmpty) {
     result = result
         .where((item) => selectedNeeds.any((need) => need.matches(item)))
         .toList();
-    stages.add(
-      'afterNeeds([${selectedNeeds.map((n) => n.name).join(",")}])='
-      '${result.length}',
-    );
   }
 
   final q = searchQuery.trim().toLowerCase();
@@ -291,7 +281,6 @@ List<MissionQueueItem> filterMissionQueue({
               (i.nid?.toLowerCase().contains(q) ?? false),
         )
         .toList();
-    stages.add('afterSearch="$q"=${result.length}');
   }
 
   // Open visits first (existing priority order), completed-today at bottom.
@@ -309,101 +298,8 @@ List<MissionQueueItem> filterMissionQueue({
     }
     if (done.isNotEmpty) {
       result = [...open, ...done];
-      stages.add('doneAtBottom(open=${open.length},done=${done.length})');
     }
   }
-
-  assert(() {
-    final needLabels = selectedNeeds.isEmpty
-        ? '(none)'
-        : selectedNeeds.map((n) => n.name).join(',');
-    debugPrint(
-      '[Dashboard filter] village=${chipVillage ?? "(all)"} '
-      'needs=[$needLabels] search="${searchQuery.trim()}"',
-    );
-    debugPrint('[Dashboard filter] ${stages.join(" → ")}');
-    debugPrint(
-      '[Dashboard filter] kept: '
-      '${result.take(12).map((i) {
-        final done = i.patientId != null &&
-            completedPatientIds.contains(i.patientId);
-        return '${i.patientName}[${i.priorityCode}]'
-            '/${i.programmes.map((p) => p.name).join("+")}'
-            '/v=${i.village ?? "-"}'
-            '${done ? "/DONE" : ""}';
-      }).join(" | ")}'
-      '${result.length > 12 ? " | …+${result.length - 12}" : ""}',
-    );
-
-    for (final probe in const [
-      'Yasmeen',
-      'Raaajasri',
-      'Teena',
-      'Nazmeen',
-      'Jakir',
-    ]) {
-      MissionQueueItem? item;
-      for (final i in queue) {
-        if (i.patientName == probe) {
-          item = i;
-          break;
-        }
-      }
-      if (item == null) {
-        debugPrint('[Dashboard filter] probe $probe → not in base queue');
-        continue;
-      }
-      final drop = <String>[];
-      final done = item.patientId != null &&
-          completedPatientIds.contains(item.patientId);
-      if (!keepExpanded && item.tier == DashboardTier.upcoming) {
-        drop.add('upcoming-tier');
-      }
-      if (!keepExpanded && done) {
-        drop.add('completedToday');
-      }
-      if (chipVillage != null &&
-          chipVillage.isNotEmpty &&
-          (item.village?.trim().toLowerCase() ?? '') !=
-              chipVillage.toLowerCase()) {
-        drop.add('village("${item.village}"≠"$chipVillage")');
-      }
-      if (selectedNeeds.isNotEmpty) {
-        final needHits = <String>[];
-        var any = false;
-        for (final n in selectedNeeds) {
-          final hit = n.matches(item);
-          needHits.add('${n.name}=${hit ? "Y" : "N"}');
-          if (hit) any = true;
-        }
-        if (!any) {
-          drop.add(
-            'needs(${needHits.join(",")}; '
-            'prog=${item.programmes.map((p) => p.name).join("+")})',
-          );
-        }
-      }
-      if (q.isNotEmpty &&
-          !item.patientName.toLowerCase().contains(q) &&
-          !(item.phoneNumber?.contains(q) ?? false) &&
-          !(item.nid?.toLowerCase().contains(q) ?? false)) {
-        drop.add('search');
-      }
-      if (drop.isEmpty) {
-        debugPrint(
-          '[Dashboard filter] probe $probe → KEEP '
-          '[${item.priorityCode}] v=${item.village} '
-          'prog=${item.programmes.map((p) => p.name).join("+")}'
-          '${done ? " DONE-today" : ""}',
-        );
-      } else {
-        debugPrint(
-          '[Dashboard filter] probe $probe → DROP ${drop.join("; ")}',
-        );
-      }
-    }
-    return true;
-  }());
 
   return result;
 }

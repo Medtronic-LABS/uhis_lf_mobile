@@ -63,8 +63,19 @@ class VisitFlowHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final step2Title = (primaryProgramme == Programme.anc ||
-            primaryProgramme == Programme.pnc)
+    // Prefer active visit programmes (what the SK is actually filling) over
+    // pathway ranking — pathways.first can still be ANC/PNC while the form
+    // is NCD-only, which wrongly showed "Pregnancy checks".
+    final activeProgrammes = activeFormTypes
+        .map(Programme.fromTag)
+        .whereType<Programme>()
+        .where((p) => p != Programme.unknown);
+    final isPregnancyChecks = activeProgrammes.isNotEmpty
+        ? activeProgrammes
+            .any((p) => p == Programme.anc || p == Programme.pnc)
+        : (primaryProgramme == Programme.anc ||
+            primaryProgramme == Programme.pnc);
+    final step2Title = isPregnancyChecks
         ? VisitFlowStrings.step2TitlePregnancyChecks
         : VisitFlowStrings.step2Title;
     final stepLabels = <String>[

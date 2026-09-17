@@ -20,6 +20,7 @@ import '../../core/db/follow_up_dao.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/referral.dart';
 import '../../core/models/sla.dart';
+import '../patient/referral_narrative.dart';
 
 /// Severity band that drives card colour, sort order and whether the alert
 /// counts toward the "N actions needed" badge.
@@ -214,13 +215,10 @@ class CceAlert {
   }) {
     final raw = _decodeMap(fu.rawJson);
     final programme = _programmeLabel(raw);
-    final reason = _firstString(raw, const [
-          'reason',
-          'referredReasons',
-          'referralReason',
-        ]) ??
-        programme ??
-        CceStrings.referralReasonFallback;
+    final reason = _localizedReferralReason(
+      raw['reason'] ?? raw['referredReasons'] ?? raw['referralReason'],
+      fallback: programme ?? CceStrings.referralReasonFallback,
+    );
     final facility = _firstString(raw, const [
       'referredSiteName',
       'facilityName',
@@ -367,7 +365,7 @@ class CceAlert {
 
   /// Facility / Treatment progress for a REFERRED follow-up card.
   ///
-  /// NCD: `medicalreviewvisit` after NCD visit → Facility;
+  /// NCD: `medicalreviewvisit` / `enrollment` after NCD visit → Facility;
   /// `ncdmedicalreview` / `medicalReview` after NCD visit → Treatment
   /// (Treatment implies Facility). Non-NCD: Facility when call attempts > 0.
   static ({bool atFacility, bool treated}) _followUpProgress({
@@ -401,9 +399,9 @@ class CceAlert {
   static String _compactKind(String? kind) =>
       (kind ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]'), '');
 
-  /// Facility check-in shell (`medicalreviewvisit`).
+  /// Facility check-in shell (`medicalreviewvisit` / `enrollment`).
   static bool _isFacilityKind(String compact) =>
-      compact == 'MEDICALREVIEWVISIT';
+      compact == 'MEDICALREVIEWVISIT' || compact == 'ENROLLMENT';
 
   /// Clinical NCD medical review (`ncdmedicalreview` / `medicalReview`).
   static bool _isTreatmentKind(String compact) =>
@@ -539,10 +537,23 @@ class CceAlert {
 
   static String _referredMeta(Referral r, String? facility) {
     final date = _dateShort(r.createdAt);
-    final reason = (r.diagnosisLabel != null && r.diagnosisLabel!.isNotEmpty)
-        ? r.diagnosisLabel!
-        : CceStrings.referralReasonFallback;
+    final reason = _localizedReferralReason(
+      r.diagnosisLabel,
+      fallback: CceStrings.referralReasonFallback,
+    );
     return CceStrings.referredMeta(date, facility, reason);
+  }
+
+  /// Maps Spice wire tokens (`Symptoms`, `High BP`, `High BG`, lists, or
+  /// comma/`and`-joined strings) onto [shortReasonLabel] so CCE never shows
+  /// the English codes under Bangla.
+  static String _localizedReferralReason(Object? rawReason, {String? fallback}) {
+    final labels = parseReferralReasonTokens(rawReason)
+        .map(shortReasonLabel)
+        .where((s) => s.isNotEmpty)
+        .toList(growable: false);
+    if (labels.isNotEmpty) return labels.join(', ');
+    return fallback ?? CceStrings.referralReasonFallback;
   }
 
   static String _statusLine(

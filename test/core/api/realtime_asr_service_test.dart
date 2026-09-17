@@ -53,5 +53,21 @@ void main() {
       expect(info.uri.queryParameters['assessmentType'], 'ncd');
       expect(info.uri.queryParameters['symptomVocab'], 'fever');
     });
+
+    test('connectionInfo includes encounterId as a query parameter when provided',
+        () async {
+      final service = RealtimeAsrService(api);
+      final info = await service.connectionInfo(
+        language: 'bn-IN',
+        encounterId: 'enc-abc-123',
+      );
+      expect(info.uri.queryParameters['encounterId'], 'enc-abc-123');
+    });
+
+    test('connectionInfo omits encounterId when not provided', () async {
+      final service = RealtimeAsrService(api);
+      final info = await service.connectionInfo(language: 'bn-IN');
+      expect(info.uri.queryParameters.containsKey('encounterId'), isFalse);
+    });
   });
 }

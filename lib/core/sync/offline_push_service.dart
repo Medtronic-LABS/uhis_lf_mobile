@@ -18,6 +18,9 @@ import '../../features/patient/followup_call_service.dart';
 import '../../features/visit/forms/pregnancy_outcome_side_effects.dart';
 
 /// Pending-row counts shown on the Offline Sync screen (Spice parity).
+///
+/// [followUps] is distinct follow-ups that still have unsynced call logs
+/// (`follow_up_calls.is_synced = 0`), not ticket `sync_status` alone.
 class OfflinePushCounts {
   const OfflinePushCounts({
     this.households = 0,
@@ -152,6 +155,7 @@ class OfflinePushService extends ChangeNotifier {
     }
     if (_running ||
         isPushInFlight ||
+        SyncActivity.householdMemberPushInFlight ||
         SyncActivity.assessmentPushInFlight ||
         SyncActivity.pullInFlight) {
       return OfflinePushResult(
@@ -270,6 +274,9 @@ class OfflinePushService extends ChangeNotifier {
       }
       final pendingAssessments = assessmentQueue.ready;
       final assessmentIds = pendingAssessments.map((e) => e.id).toList();
+      // Session provenance is shared for households/members/follow-ups.
+      // toApiRequest restamps each assessment's modifiedDate from createdAt
+      // (Android convertEntityToRequest).
       final assessmentPayloads = pendingAssessments
           .map(
             (e) => e.toApiRequest(
@@ -461,6 +468,17 @@ class OfflinePushService extends ChangeNotifier {
           await _followUpCalls.markPushFailed(pushedFollowUpIds);
         } catch (e) {
           debugPrint('[OfflinePush] follow-up markPushFailed skipped: $e');
+        }
+      } else if (poll == _PushPollResult.success &&
+          pushedFollowUpIds.isNotEmpty &&
+          _followUpCalls != null) {
+        // Status poll never stamps FollowUp → Success in entityList handling;
+        // promote locally so tickets do not stick at InProgress after calls
+        // were already marked synced on create-accept.
+        try {
+          await _followUpCalls.markPushSucceeded(pushedFollowUpIds);
+        } catch (e) {
+          debugPrint('[OfflinePush] follow-up markPushSucceeded skipped: $e');
         }
       }
 

@@ -154,10 +154,15 @@ class ChildAssessmentSection extends StatefulWidget {
     super.key,
     required this.data,
     required this.onChanged,
+    this.ageInMonths,
   });
 
   final ChildAssessmentData data;
   final ValueChanged<ChildAssessmentData> onChanged;
+
+  /// Whole months since birth — filters `childIllnessType` options (Spice
+  /// `AssessmentRMNCHFragment` age gate). Null shows all UHIS options.
+  final int? ageInMonths;
 
   @override
   State<ChildAssessmentSection> createState() => _ChildAssessmentSectionState();
@@ -292,6 +297,7 @@ class _ChildAssessmentSectionState extends State<ChildAssessmentSection> {
           if (d.anyIllness == true) ...[
             const SizedBox(height: 14),
             _ComplicationPicker(
+              ageInMonths: widget.ageInMonths,
               selected: d.complications,
               onChanged: (chips) => _emit(d.copyWith(complications: chips)),
             ),
@@ -594,10 +600,12 @@ class _ComplicationPicker extends StatelessWidget {
   const _ComplicationPicker({
     required this.selected,
     required this.onChanged,
+    this.ageInMonths,
   });
 
   final List<String> selected;
   final ValueChanged<List<String>> onChanged;
+  final int? ageInMonths;
 
   @override
   Widget build(BuildContext context) {
@@ -629,7 +637,8 @@ class _ComplicationPicker extends StatelessWidget {
         Wrap(
           spacing: 7,
           runSpacing: 7,
-          children: ChildAssessmentStrings.complicationOptionIds.map((id) {
+          children: ChildAssessmentStrings.complicationOptionIdsForAge(ageInMonths)
+              .map((id) {
             final active = selected.contains(id);
             return GestureDetector(
               onTap: () {

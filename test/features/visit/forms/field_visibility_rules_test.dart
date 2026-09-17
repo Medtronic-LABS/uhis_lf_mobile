@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:uhis_next/features/visit/forms/canonical_visit_data.dart';
+import 'package:uhis_next/core/i18n/app_locale.dart';
 import 'package:uhis_next/features/visit/forms/form_config.dart';
 import 'package:uhis_next/features/visit/forms/unified_section_rules.dart';
 
@@ -837,6 +838,43 @@ void main() {
       );
     });
 
+    test('NCD follow-up hides first-visit diagnosis / smoker / BP-DM meds '
+        '(BDNCDAssessmentFragment parity)', () async {
+      final config = await FormConfig.load(rootBundle);
+
+      bool visible(String id, {required bool followUp}) {
+        return FieldVisibilityRules.isFieldVisible(
+          field: config.fields[id]!,
+          data: CanonicalVisitData({
+            // Prefill would otherwise reveal medicationFrequency* via conditions.
+            'isBeforeHtnDiagnosis': 'yes',
+            'isBeforeDiabetesDiagnosis': 'yes',
+          }),
+          rulesByTargetId: config.visibilityRulesByTargetId,
+          formType: 'ncd',
+          isNcdFollowUp: followUp,
+        );
+      }
+
+      for (final id in [
+        'isBeforeHtnDiagnosis',
+        'medicationFrequencyBp',
+        'isBeforeDiabetesDiagnosis',
+        'medicationFrequencyBg',
+        'isRegularSmoker',
+      ]) {
+        expect(visible(id, followUp: true), isFalse,
+            reason: '$id hidden on NCD follow-up');
+        expect(visible(id, followUp: false), isTrue,
+            reason: '$id shown on first NCD visit '
+                '(meds need diagnosis=yes which is set in data)');
+      }
+
+      // First visit: diagnosis visible; meds gated — with yes they show.
+      expect(visible('isBeforeHtnDiagnosis', followUp: false), isTrue);
+      expect(visible('medicationFrequencyBp', followUp: false), isTrue);
+    });
+
     test('NCD height ignores ANC visit-number gate', () {
       final height = _fieldDef('height', {
         'label': 'Height',
@@ -1066,6 +1104,31 @@ void main() {
           formType: 'pncMother',
         ),
         isTrue,
+      );
+    });
+  });
+
+  group('fieldOptionDisplayLabel', () {
+    setUpAll(() async {
+      AppLocale.current = AppLanguage.english;
+      await FormConfig.loadAndCache(rootBundle);
+    });
+
+    test('maps pregnancy outcome delivery and complication ids', () {
+      expect(
+        fieldOptionDisplayLabel('modeOfDelivery', 'normalDelivery'),
+        'Normal Delivery',
+      );
+      expect(
+        fieldOptionDisplayLabel('anyComplicationsDuringDelivery', 'yes'),
+        'Yes',
+      );
+      expect(
+        fieldOptionDisplayLabel(
+          'complicationsDuringDelivery',
+          'excessiveBleeding,convulsions',
+        ),
+        'Excessive bleeding, Convulsions',
       );
     });
   });

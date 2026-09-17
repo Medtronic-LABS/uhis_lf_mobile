@@ -170,6 +170,38 @@ void main() {
       await svc.markPushed(['f1']);
       expect(await dao.pendingPushCount(), 0);
       expect((await dao.byId('f1'))!.syncStatus, FollowUpSyncStatus.inProgress);
+      expect((await dao.callsFor('f1')).single.isSynced, isTrue);
+    });
+
+    test('markPushSucceeded promotes InProgress follow-up to Success', () async {
+      final (db, dao, svc) = await openDb();
+      addTearDown(db.close);
+      await dao.upsertMany([serverFollowUp('f1')]);
+      await svc.logCall(
+          followUpId: 'f1', status: FollowUpCallStatus.unsuccessful);
+      await svc.markPushed(['f1']);
+      await svc.markPushSucceeded(['f1']);
+
+      expect((await dao.byId('f1'))!.syncStatus, FollowUpSyncStatus.success);
+      expect(await dao.pendingPushCount(), 0);
+      expect((await dao.callsFor('f1')).single.isSynced, isTrue);
+    });
+
+    test('pendingPushCount groups unsynced calls by follow-up', () async {
+      final (db, dao, svc) = await openDb();
+      addTearDown(db.close);
+      await dao.upsertMany([
+        serverFollowUp('f1', backendId: 41),
+        serverFollowUp('f2', backendId: 42),
+      ]);
+      await svc.logCall(
+          followUpId: 'f1', status: FollowUpCallStatus.unsuccessful);
+      await svc.logCall(
+          followUpId: 'f1', status: FollowUpCallStatus.unsuccessful);
+      await svc.logCall(
+          followUpId: 'f2', status: FollowUpCallStatus.successful);
+
+      expect(await dao.pendingPushCount(), 2);
     });
   });
 
@@ -187,7 +219,9 @@ void main() {
       expect(row, isNotNull);
       expect(row!.syncStatus, FollowUpSyncStatus.notSynced);
       expect(row.isCompleted, isFalse);
-      expect(await dao.pendingPushCount(), 1);
+      // Offline Sync badge counts unsynced call logs only — no calls yet.
+      expect(await dao.pendingPushCount(), 0);
+      expect(await dao.pendingPush(), hasLength(1));
     });
   });
 }

@@ -6,6 +6,18 @@ import '../../../core/models/programme.dart';
 abstract final class ProgrammeGridSync {
   ProgrammeGridSync._();
 
+  /// Female-only maternal / reproductive programmes.
+  ///
+  /// Never auto-select or seed these for confirmed male patients — symptom
+  /// catalogue tags (e.g. chest_pain → ANC+NCD) and bad ANC/PW enrolment
+  /// data must not open pregnancy forms for males.
+  static const Set<Programme> maternalProgrammes = {
+    Programme.anc,
+    Programme.pnc,
+    Programme.pw,
+    Programme.familyPlanning,
+  };
+
   /// Pathway activations that should be added to the SK's selection set.
   ///
   /// Never resurrects a programme the SK explicitly deselected in this visit
@@ -17,27 +29,40 @@ abstract final class ProgrammeGridSync {
   }) =>
       activated.difference(selected).difference(dismissedBySk);
 
+  /// Drops [maternalProgrammes] when [isMale] is true; otherwise returns
+  /// [programmes] unchanged. Prefer this over `!isFemale` so `Sex.unknown`
+  /// patients are not blocked by missing gender data.
+  static Set<Programme> withoutMaternalIfMale(
+    Set<Programme> programmes, {
+    required bool isMale,
+  }) =>
+      isMale ? programmes.difference(maternalProgrammes) : programmes;
+
   /// Enrolled programmes that may be auto-selected for *this* visit.
   ///
   /// Maternal programmes are gated by current state so a historical PNC
   /// enrollment does not force PNC forms onto a still-pregnant ANC visit
   /// (and vice versa). NCD / FP / other programmes stay eligible when enrolled.
+  /// Confirmed males never receive maternal seeds regardless of pregnancy
+  /// flags or stale ANC/PW enrolment.
   static Set<Programme> applicableEnrolledSeed({
     required Set<Programme> enrolled,
     required bool isPregnant,
     required bool isPostpartum,
+    bool isMale = false,
   }) {
     return enrolled.where((p) {
       switch (p) {
         case Programme.anc:
         case Programme.pw:
-          return isPregnant;
+          return !isMale && isPregnant;
         case Programme.pnc:
-          return isPostpartum;
+          return !isMale && isPostpartum;
         case Programme.unknown:
           return false;
         // FP: hidden during pregnancy; after delivery only once PNC is enrolled.
         case Programme.familyPlanning:
+          if (isMale) return false;
           if (isPregnant) return false;
           if (isPostpartum) return enrolled.contains(Programme.pnc);
           return true;
@@ -69,18 +94,53 @@ abstract final class ProgrammeGridSync {
   /// would falsely mark the visit as a child visit (see
   /// `VisitFlowScreen._isChildVisit`), routing Step 2 to the immunisation
   /// timeline instead of the real programme form.
+  ///
+  /// When [isMale] is true, also drops [maternalProgrammes] so ANC-tagged
+  /// adult symptoms (chest pain, headache, …) cannot silently open ANC/PNC
+  /// forms for male patients.
   static Set<Programme> catalogProgrammesFor(
     Set<Programme> symptomProgrammes, {
     required bool isChildVisitEligible,
+    bool isMale = false,
+  }) {
+    final withoutChild = isChildVisitEligible
+        ? Set<Programme>.from(symptomProgrammes)
+        : symptomProgrammes.difference({Programme.imci, Programme.epi});
+    return withoutMaternalIfMale(withoutChild, isMale: isMale);
+  }
+
+  /// Drops [Programme.pnc] unless the patient is postpartum, on a PO visit,
+  /// or [pncEligibleForActivation] (PO can be recorded this session).
+  static Set<Programme> withoutPncUnlessPostpartum(
+    Set<Programme> programmes, {
+    required bool isPostpartum,
+    bool isDeliveryVisit = false,
+    bool pncEligibleForActivation = false,
+  }) {
+    if (isPostpartum && !isDeliveryVisit) return programmes;
+    if (isDeliveryVisit || pncEligibleForActivation) return programmes;
+    return programmes.difference({Programme.pnc});
+  }
+
+  /// True when [Programme.pnc] is selected but delivery is not yet on record
+  /// — the visit must capture PO this session (PW+ANC parity at Continue).
+  static bool shouldAutoEnableDeliveryForPnc({
+    required bool hasPnc,
+    required bool isPostpartum,
   }) =>
-      isChildVisitEligible
-          ? symptomProgrammes
-          : symptomProgrammes.difference({Programme.imci, Programme.epi});
+      hasPnc && !isPostpartum;
+
+  /// Clears ANC/PW when a delivery visit is required for PNC (Continue backfill).
+  static Set<Programme> applyPncRequiresDelivery(Set<Programme> programmes) {
+    return programmes
+      ..remove(Programme.anc)
+      ..remove(Programme.pw);
+  }
 
   /// Apply Pregnancy Outcome (delivery) selection to the service grid.
   ///
-  /// Clears **only** ANC and PW. Other selected programmes stay on; PNC is
-  /// ensured so pregnancy-outcome / mother / child forms can open.
+  /// Clears **only** ANC and PW. PNC stays optional — the SK may combine PO +
+  /// PNC on the same visit. Other selected programmes (NCD, etc.) stay on.
   static ({Set<Programme> selected, Set<Programme> dismissedBySk})
       applyDeliverySelected({
     required Set<Programme> selected,
@@ -88,12 +148,10 @@ abstract final class ProgrammeGridSync {
   }) {
     final nextSelected = Set<Programme>.from(selected)
       ..remove(Programme.anc)
-      ..remove(Programme.pw)
-      ..add(Programme.pnc);
+      ..remove(Programme.pw);
     final nextDismissed = Set<Programme>.from(dismissedBySk)
       ..add(Programme.anc)
-      ..add(Programme.pw)
-      ..remove(Programme.pnc);
+      ..add(Programme.pw);
     return (selected: nextSelected, dismissedBySk: nextDismissed);
   }
 
@@ -127,5 +185,20 @@ abstract final class ProgrammeGridSync {
     if (isPostpartum) return true;
     if (hasOpenPregnancyEpisode) return !isPregnant;
     return false;
+  }
+
+  /// Whether the Step 1 ANC card should be locked (disabled).
+  ///
+  /// Mirrors [ServiceSelectionResolver]'s postpartum ANC strip and Spice's
+  /// single-RMNCH-tile switch to PNC after delivery — postpartum blocks ANC
+  /// regardless of historical PW/ANC enrolment ([isPwGateOpen]).
+  static bool isAncGridLocked({
+    required bool isPostpartum,
+    required bool isPwGateOpen,
+    required bool isDeliveryVisit,
+    required bool ancRevisitTooSoon,
+  }) {
+    if (isPostpartum) return true;
+    return !isPwGateOpen || isDeliveryVisit || ancRevisitTooSoon;
   }
 }

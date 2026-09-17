@@ -4,10 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth/auth_state.dart';
-import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../../core/sync/sync_report.dart';
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_version_label.dart';
 
@@ -62,20 +63,33 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('[_LoginScreenState] _submit: form validation failed');
       return;
     }
+    final username = _userCtl.text.trim();
+    if (!mounted) return;
+
     final auth = context.read<AuthState>();
     debugPrint('[_LoginScreenState] _submit: calling auth.login…');
-    final ok = await auth.login(_userCtl.text.trim(), _passCtl.text);
+    final ok = await auth.login(username, _passCtl.text);
     debugPrint('[_LoginScreenState] _submit: auth.login → ok=$ok error=${auth.error}');
     if (!mounted) return;
     if (ok) {
+      final sync = context.read<OfflineSyncService>();
+      final skipLoginSync =
+          auth.sameUserRelogin && await sync.lastSyncedAt() != null;
+
       // Prefetch user hierarchy (saves upazila + durable SS/village cache) so
       // enrollment dropdowns work offline after process death / PIN unlock.
       context
           .read<UserHierarchyService>()
           .prefetch(forceRefresh: true)
           .ignore();
-      debugPrint('[_LoginScreenState] post-login: onboardingComplete=${auth.onboardingComplete} pinEnabled=${auth.pinEnabled} biometricEnabled=${auth.biometricEnabled}');
-      if (!auth.onboardingComplete && !auth.pinEnabled) {
+      debugPrint('[_LoginScreenState] post-login: onboardingComplete=${auth.onboardingComplete} pinEnabled=${auth.pinEnabled} biometricEnabled=${auth.biometricEnabled} sameUserRelogin=${auth.sameUserRelogin} skipLoginSync=$skipLoginSync');
+      if (skipLoginSync) {
+        // UHIS parity: ResourceLoadingScreen skips download when
+        // SERVER_LAST_SYNCED exists — go straight to home; delta sync runs
+        // later via connectivity / manual offline sync.
+        debugPrint('[_LoginScreenState] returning user with sync cursor → /home');
+        context.go('/home');
+      } else if (!auth.onboardingComplete && !auth.pinEnabled) {
         // New user — kick off sync in background immediately so data arrives
         // while they complete PIN setup, then go to onboarding. A wiping
         // full sync is only correct for a genuinely new device/user; if this
@@ -88,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
           '(sameUserRelogin=${auth.sameUserRelogin})',
         );
         if (!auth.sameUserRelogin) {
-          _startBackgroundColdSync(context);
+          _startBackgroundColdSync(context, sameUser: false);
         }
         context.go('/onboarding');
       } else if (!auth.pinEnabled && !auth.biometricEnabled) {
@@ -109,7 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
           '(sameUserRelogin=${auth.sameUserRelogin})',
         );
         if (!auth.sameUserRelogin) {
-          _startBackgroundColdSync(context);
+          _startBackgroundColdSync(context, sameUser: false);
         }
         context.go('/onboarding');
       } else {
@@ -157,15 +171,16 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// Fire-and-forget cold sync started right after login so data arrives
-  /// while the user completes onboarding/PIN setup. Deliberately not awaited
-  /// by callers — `SyncProgressScreen` attaches to this in-flight/completed
-  /// sync instead of restarting it (see sync_progress_screen.dart). Logs the
-  /// outcome since the caller can't observe it directly.
-  void _startBackgroundColdSync(BuildContext context) {
-    context.read<OfflineSyncService>().coldSync(wipeBeforeSync: true).then((
-      report,
-    ) {
+  /// Fire-and-forget sync started right after login so data arrives while the
+  /// user completes onboarding/PIN setup. Deliberately not awaited — callers
+  /// attach to this in-flight sync on [SyncProgressScreen] instead of
+  /// restarting it. Uses incremental sync for a returning SK (UHIS parity).
+  void _startBackgroundColdSync(BuildContext context, {required bool sameUser}) {
+    final sync = context.read<OfflineSyncService>();
+    final Future<SyncReport> future = sameUser
+        ? sync.reloginSync()
+        : sync.coldSync(wipeBeforeSync: true);
+    future.then((report) {
       debugPrint(
         '[_LoginScreenState] background coldSync done: '
         'households=${report.households} members=${report.members} '
@@ -184,12 +199,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
     final showPin = context.select<AuthState, bool>((a) => a.pinEnabled);
     final busy = context.select<AuthState, bool>((a) => a.busy);
-    // A cached username means this is a relogin (session-expiry or
-    // otherwise), not a fresh device or a just-logged-out one — lock the
-    // field to it so a same-user relogin can never accidentally submit a
-    // different username (which would wipe local data via sameUserRelogin
-    // going false). Only an explicit Logout clears the cache, which is the
-    // only way a genuinely different user gets an editable field again.
+    // A cached username means this device is bound to one SK (UHIS parity —
+    // username field locked after first login). Explicit logout keeps
+    // lastUsername on disk so the field stays prefilled and offline login
+    // continues to work.
     final cachedUsername = context.select<AuthState, String?>((a) => a.username);
     return Scaffold(
       body: Stack(

@@ -8,6 +8,7 @@ import '../models/risk.dart';
 import '../models/provance_dto.dart';
 import '../sync/latest_visit_follow_up.dart';
 import 'app_database.dart';
+import 'follow_up_dao.dart';
 import 'pregnancy_episode_dao.dart';
 
 /// Sync status for local assessments, matching Android's OfflineSyncStatus.
@@ -246,13 +247,9 @@ class LocalAssessmentEntity {
 
   /// Convert to API request format matching Android's Assessment model.
   ///
-  /// [provenance] — map with `organizationId`, `spiceUserId`, `userId`,
-  /// `modifiedDate` from the logged-in user session.
-  /// [peerSupervisorId] — numeric user ID used as `peerSupervisorId`.
-  /// Convert to API request format matching Android's Assessment model.
-  ///
-  /// [provenance] — ProvanceDto with `organizationId`, `spiceUserId`, `userId`,
-  /// `modifiedDate` from the logged-in user session (matches Android ProvanceDto).
+  /// [provenance] supplies session identity (`organizationId`, `spiceUserId`,
+  /// `userId`). Visit time is always this row's [createdAt], matching Android
+  /// `ProvanceDto(modifiedDate = entity.createdAt)` and `updatedAt = entity.createdAt`.
   /// [peerSupervisorId] — numeric user ID used as `peerSupervisorId`.
   Map<String, dynamic> toApiRequest({
     required ProvanceDto? provenance,
@@ -278,6 +275,17 @@ class LocalAssessmentEntity {
     final isPregnancyType =
         kPregnancyEpisodeLinkedTypes.contains(assessmentType.toUpperCase());
 
+    // Android OfflineSyncRepository.convertEntityToRequest: each assessment
+    // carries its own createdAt as provenance.modifiedDate and updatedAt so a
+    // later batch sync cannot collapse two backdated visits onto one date.
+    final visitAt = createdAt ?? updatedAt;
+    final visitIso =
+        visitAt == null ? null : toOfflineOffsetDateTime(visitAt);
+    final provenanceJson = provenance?.toJson();
+    if (provenanceJson != null && visitIso != null) {
+      provenanceJson['modifiedDate'] = visitIso;
+    }
+
     final request = <String, dynamic>{
       // Android sends the assessment row's own numeric PK. Ours is a UUID, so
       // schema v38 carries a parallel numeric reference_id; pre-v38 rows that
@@ -289,7 +297,7 @@ class LocalAssessmentEntity {
       // household sub-village with a '0' fallback. A null here fails the whole
       // entity server-side.
       'villageId': villageId?.isNotEmpty == true ? villageId : '0',
-      'assessmentDate': createdAt?.toUtc().toIso8601String(),
+      'assessmentDate': visitIso,
       'patientStatus': referralStatus ?? 'Recovered',
       // Android Assessment DTO has no top-level assessmentStatus — only
       // encounter.customStatus. Omitting keeps the wire shape Android-shaped.
@@ -304,11 +312,11 @@ class LocalAssessmentEntity {
         'memberId': memberId,
         'referred': isReferred,
         'patientId': patientId,
-        'provenance': provenance?.toJson(),
+        'provenance': provenanceJson,
         'latitude': latitude,
         'longitude': longitude,
-        'startTime': createdAt?.toUtc().toIso8601String(),
-        'endTime': updatedAt?.toUtc().toIso8601String(),
+        'startTime': visitIso,
+        'endTime': visitIso,
         // All RMNCH types (ANC, PNC_MOTHER, PNC_NEONATE, ChildHood_Visit) carry visitNumber.
         'visitNumber': ?visitNum,
         if (isPregnancyType) 'pregnancyEpisodeId': ?pregnancyEpisodeId,
@@ -327,7 +335,7 @@ class LocalAssessmentEntity {
           'customStatus': status,
       },
       if (followUpId != null) 'followUpId': followUpId,
-      'updatedAt': updatedAt?.millisecondsSinceEpoch ?? 0,
+      'updatedAt': visitAt?.millisecondsSinceEpoch ?? 0,
     };
 
     ConsoleLog.banner('[PayloadDebug] assessment-payload ($wireType)\n${request.toString()}');
@@ -1014,6 +1022,41 @@ class LocalAssessmentDao {
     return rows.map(LocalAssessmentEntity.fromDb).toList();
   }
 
+  /// Get assessments stored under ANY of [patientIds], newest-first.
+  ///
+  /// A member's assessments are not all keyed the same way: [AssessmentRepository]
+  /// writes `members.patient_id` when the server has issued one and the local
+  /// PK otherwise, while screens route with whichever id they had on hand. A
+  /// single-key read therefore misses rows that exist — see
+  /// `memberAssessmentLookupKeys` / [assessmentLookupKeysForRoute], which build
+  /// the candidate key set this takes.
+  ///
+  /// Rows are de-duplicated by primary key, so overlapping keys resolving to
+  /// the same member cannot double-count a visit.
+  Future<List<LocalAssessmentEntity>> getByPatientIds(
+      List<String> patientIds) async {
+    final keys = patientIds
+        .map((k) => k.trim())
+        .where((k) => k.isNotEmpty)
+        .toSet()
+        .toList();
+    if (keys.isEmpty) return const [];
+    final placeholders = List.filled(keys.length, '?').join(',');
+    final rows = await _db.db.query(
+      tableName,
+      where: 'patient_id IN ($placeholders)',
+      whereArgs: keys,
+      orderBy: 'created_at DESC',
+    );
+    final seen = <String>{};
+    final out = <LocalAssessmentEntity>[];
+    for (final row in rows) {
+      final entity = LocalAssessmentEntity.fromDb(row);
+      if (seen.add(entity.id)) out.add(entity);
+    }
+    return out;
+  }
+
   /// Get assessments by patient ID.
   Future<List<LocalAssessmentEntity>> getByPatientId(String patientId) async {
     final rows = await _db.db.query(
@@ -1113,14 +1156,25 @@ class LocalAssessmentDao {
   /// Returns true when an ANC assessment already exists today for [patientId].
   /// Used to block duplicate same-day ANC visits.
   Future<bool> hasAncAssessmentTodayForPatient(String patientId) async {
+    if (patientId.isEmpty) return false;
+    return hasAncAssessmentTodayForPatients([patientId]);
+  }
+
+  /// Same as [hasAncAssessmentTodayForPatient] but matches any alias id.
+  Future<bool> hasAncAssessmentTodayForPatients(
+    Iterable<String> patientIds,
+  ) async {
+    final ids = patientIds.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+    if (ids.isEmpty) return false;
     final todayStart = DateTime.now()
         .copyWith(hour: 0, minute: 0, second: 0, millisecond: 0);
+    final placeholders = List.filled(ids.length, '?').join(',');
     final result = await _db.db.rawQuery(
       "SELECT COUNT(*) as count FROM $tableName "
-      "WHERE patient_id = ? "
+      "WHERE patient_id IN ($placeholders) "
       "AND assessment_type IN ('ANC', 'anc') "
       "AND created_at >= ?",
-      [patientId, todayStart.millisecondsSinceEpoch],
+      [...ids, todayStart.millisecondsSinceEpoch],
     );
     return (result.first['count'] as int) > 0;
   }
@@ -1164,6 +1218,63 @@ class LocalAssessmentDao {
       }
     }
     return out;
+  }
+
+  /// Latest local assessment type per patient key (`members.id`), for roster
+  /// tags when synced history is missing or older than an on-device visit.
+  Future<Map<String, ({String type, int at})>> latestLocalServiceForMany(
+    List<String> patientIds,
+  ) async {
+    if (patientIds.isEmpty) return const {};
+    final placeholders = List.filled(patientIds.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      '''
+      SELECT patient_id, assessment_type, created_at
+      FROM $tableName
+      WHERE patient_id IN ($placeholders)
+        AND patient_id IS NOT NULL
+        AND created_at IS NOT NULL
+      ORDER BY created_at DESC
+      ''',
+      patientIds,
+    );
+    final out = <String, ({String type, int at})>{};
+    for (final r in rows) {
+      final pid = r['patient_id'] as String?;
+      if (pid == null || out.containsKey(pid)) continue;
+      final type = r['assessment_type'] as String?;
+      final at = r['created_at'];
+      if (type == null || type.isEmpty || at == null) continue;
+      final ms = (at is int) ? at : int.tryParse(at.toString()) ?? 0;
+      out[pid] = (type: type, at: ms);
+    }
+    return out;
+  }
+
+  /// Completed visit count per patient from local assessments not yet fully
+  /// reflected in synced [AssessmentDao] history. Excludes
+  /// [AssessmentSyncStatus.success] so a visit already pulled from the server
+  /// is not double-counted alongside its synced row.
+  Future<Map<String, int>> visitCountsByPatients(
+    List<String> patientIds,
+    List<String> kinds,
+  ) async {
+    if (patientIds.isEmpty || kinds.isEmpty) return const {};
+    final pp = List.filled(patientIds.length, '?').join(',');
+    final upperKinds = kinds.map((k) => k.toUpperCase()).toList();
+    final kp = List.filled(upperKinds.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      'SELECT patient_id, COUNT(*) AS cnt FROM $tableName '
+      'WHERE patient_id IN ($pp) '
+      'AND UPPER(assessment_type) IN ($kp) '
+      'AND sync_status != ? '
+      'GROUP BY patient_id',
+      [...patientIds, ...upperKinds, AssessmentSyncStatus.success.name],
+    );
+    return {
+      for (final r in rows)
+        if (r['patient_id'] is String) r['patient_id'] as String: r['cnt'] as int,
+    };
   }
 
   /// Latest local assessment visit per patient → follow-up stamp from

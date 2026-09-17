@@ -60,6 +60,22 @@ void main() {
       );
       expect(seeded, {Programme.ncd});
     });
+
+    test('male never seeds ANC/PW/PNC/FP even when pregnant flags are set', () {
+      final seeded = ProgrammeGridSync.applicableEnrolledSeed(
+        enrolled: {
+          Programme.anc,
+          Programme.pw,
+          Programme.pnc,
+          Programme.familyPlanning,
+          Programme.ncd,
+        },
+        isPregnant: true,
+        isPostpartum: true,
+        isMale: true,
+      );
+      expect(seeded, {Programme.ncd});
+    });
   });
 
   group('ProgrammeGridSync.catalogProgrammesFor', () {
@@ -86,16 +102,120 @@ void main() {
       );
       expect(result, {Programme.ncd});
     });
+
+    test('male drops maternal tags but keeps NCD from a shared symptom', () {
+      final result = ProgrammeGridSync.catalogProgrammesFor(
+        {Programme.anc, Programme.ncd, Programme.tb},
+        isChildVisitEligible: false,
+        isMale: true,
+      );
+      expect(result, {Programme.ncd, Programme.tb});
+    });
+
+    test('female keeps maternal tags from the same symptom', () {
+      final result = ProgrammeGridSync.catalogProgrammesFor(
+        {Programme.anc, Programme.ncd},
+        isChildVisitEligible: false,
+        isMale: false,
+      );
+      expect(result, {Programme.anc, Programme.ncd});
+    });
+  });
+
+  group('ProgrammeGridSync.withoutMaternalIfMale', () {
+    test('strips ANC/PNC/PW/FP for males only', () {
+      final input = {
+        Programme.anc,
+        Programme.pnc,
+        Programme.pw,
+        Programme.familyPlanning,
+        Programme.ncd,
+      };
+      expect(
+        ProgrammeGridSync.withoutMaternalIfMale(input, isMale: true),
+        {Programme.ncd},
+      );
+      expect(
+        ProgrammeGridSync.withoutMaternalIfMale(input, isMale: false),
+        input,
+      );
+    });
   });
 
   group('ProgrammeGridSync.applyDeliverySelected', () {
-    test('clears only ANC and PW; keeps NCD and ensures PNC', () {
+    test('clears only ANC and PW; keeps NCD and optional PNC', () {
       final next = ProgrammeGridSync.applyDeliverySelected(
-        selected: {Programme.anc, Programme.pw, Programme.ncd},
+        selected: {Programme.anc, Programme.pw, Programme.ncd, Programme.pnc},
         dismissedBySk: const {},
       );
       expect(next.selected, {Programme.ncd, Programme.pnc});
       expect(next.dismissedBySk, {Programme.anc, Programme.pw});
+    });
+  });
+
+  group('ProgrammeGridSync.withoutPncUnlessPostpartum', () {
+    test('keeps PNC when postpartum', () {
+      expect(
+        ProgrammeGridSync.withoutPncUnlessPostpartum(
+          {Programme.pnc, Programme.ncd},
+          isPostpartum: true,
+        ),
+        {Programme.pnc, Programme.ncd},
+      );
+    });
+
+    test('keeps PNC on a delivery visit', () {
+      expect(
+        ProgrammeGridSync.withoutPncUnlessPostpartum(
+          {Programme.pnc},
+          isPostpartum: false,
+          isDeliveryVisit: true,
+        ),
+        {Programme.pnc},
+      );
+    });
+
+    test('keeps PNC when PO can be recorded (symptom path)', () {
+      expect(
+        ProgrammeGridSync.withoutPncUnlessPostpartum(
+          {Programme.pnc, Programme.anc},
+          isPostpartum: false,
+          pncEligibleForActivation: true,
+        ),
+        {Programme.pnc, Programme.anc},
+      );
+    });
+
+    test('strips PNC when not postpartum and PO not recordable', () {
+      expect(
+        ProgrammeGridSync.withoutPncUnlessPostpartum(
+          {Programme.pnc, Programme.ncd},
+          isPostpartum: false,
+        ),
+        {Programme.ncd},
+      );
+    });
+  });
+
+  group('ProgrammeGridSync.shouldAutoEnableDeliveryForPnc', () {
+    test('true when PNC selected and not postpartum', () {
+      expect(
+        ProgrammeGridSync.shouldAutoEnableDeliveryForPnc(
+          hasPnc: true,
+          isPostpartum: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('false when postpartum (PO already on record)', () {
+      expect(
+        ProgrammeGridSync.shouldAutoEnableDeliveryForPnc(
+          hasPnc: true,
+          isPostpartum: true,
+        ),
+        isFalse,
+      );
     });
   });
 
@@ -177,6 +297,65 @@ void main() {
           reason: 'Both signals must agree there is an active, open '
               'pregnancy — a lagging/unsynced legacy flag should not by '
               'itself unlock the card either.');
+    });
+  });
+
+  group('ProgrammeGridSync.isAncGridLocked', () {
+    test('locked when postpartum regardless of PW gate or revisit', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: true,
+          isPwGateOpen: true,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('unlocked when pregnant, PW gate open, and revisit elapsed', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: true,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('locked when PW gate not open', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: false,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('locked on delivery visit or within revisit interval', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: true,
+          isDeliveryVisit: true,
+          ancRevisitTooSoon: false,
+        ),
+        isTrue,
+      );
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: true,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: true,
+        ),
+        isTrue,
+      );
     });
   });
 }

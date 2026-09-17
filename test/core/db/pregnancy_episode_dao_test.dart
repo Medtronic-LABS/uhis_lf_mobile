@@ -129,6 +129,48 @@ void main() {
   });
 
   group('PregnancyEpisodeDao.closeEpisode', () {
+    test('obstetricPatch preserves prior LMP when closing episode', () async {
+      final (_, snapshotDao, episodeDao) = await openTestDb();
+      const patientId = 'po-patch';
+      await episodeDao.startNewEpisode(
+        patientId: patientId,
+        obstetric: PregnancySnapshotRow(
+          patientId: patientId,
+          facts: const PregnancyFacts(
+            highRiskPregnantWoman: true,
+            hasGapsInAnc: true,
+          ),
+          lmpDate: 5000,
+          ancVisitNo: 2,
+        ),
+      );
+
+      final patch = PregnancySnapshotRow(
+        patientId: patientId,
+        facts: const PregnancyFacts(
+          highRiskPregnantWoman: true,
+          hasGapsInAnc: true,
+          isPostpartumWindow: true,
+        ),
+        deliveryDateMillis: 9000,
+        facilityIdentifiedForDelivery: 'CHC',
+      );
+
+      await episodeDao.closeEpisode(
+        patientId: patientId,
+        deliveryDateMillis: 9000,
+        obstetricPatch: patch,
+      );
+
+      final projected = await snapshotDao.byPatient(patientId);
+      expect(projected?.lmpDate, 5000);
+      expect(projected?.ancVisitNo, 2);
+      expect(projected?.deliveryDateMillis, 9000);
+      expect(projected?.facts.isPostpartumWindow, isTrue);
+      expect(projected?.facts.highRiskPregnantWoman, isTrue);
+      expect(projected?.facilityIdentifiedForDelivery, 'CHC');
+    });
+
     test('sets closedAt and deliveryDateMillis on the open episode',
         () async {
       final (_, snapshotDao, episodeDao) = await openTestDb();

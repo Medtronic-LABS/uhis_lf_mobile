@@ -98,12 +98,38 @@ class NabaPriorVisit {
       };
 }
 
+/// One assessment's clinical inputs for NABA.
+///
+/// For referral programmes, mirrors Flutter `_computeReferral` inputs so the
+/// backend can recompute the same rules. For `PWPROFILE` / `FAMILY_PLANNING`,
+/// carries form context (those flows have no Step 2 referral card).
+class NabaReferralAssessment {
+  const NabaReferralAssessment({
+    required this.assessmentType,
+    required this.referralInputs,
+  });
+
+  /// Wire assessment type: `ANC`, `NCD`, `PNC_MOTHER`, `CHILDHOOD_VISIT`,
+  /// `PWPROFILE`, `FAMILY_PLANNING`, …
+  final String assessmentType;
+
+  /// Clinical fields for this assessment type (referral inputs, or form
+  /// context for PW / FP).
+  final Map<String, dynamic> referralInputs;
+
+  Map<String, dynamic> toJson() => {
+        'assessmentType': assessmentType,
+        'referralInputs': referralInputs,
+      };
+}
+
 // ── Primary request ───────────────────────────────────────────────────────────
 
 class NabaRequest {
   const NabaRequest({
     required this.requestId,
     required this.patientId,
+    this.appLanguage = 'bn',
     this.visitType = 'routine',
     this.aiScribeConfidence = 1.0,
     this.clinicalRuleIds = const [],
@@ -122,10 +148,19 @@ class NabaRequest {
     this.priorVisits = const [],
     this.openFollowUps = const [],
     this.riskIndicators = const [],
+    this.assessments = const [],
+    this.isReferred = false,
+    this.referredReasons = const [],
+    this.referralReason,
   });
 
   final String requestId;
   final String patientId;
+
+  /// SK's app locale (`bn` / `en`). The backend appends an output-language
+  /// instruction keyed off this, so clinical copy — including the referral
+  /// banner's reason — comes back in the SK's language instead of English.
+  final String appLanguage;
   final String visitType;
   final double aiScribeConfidence;
   final List<String> clinicalRuleIds;
@@ -145,9 +180,22 @@ class NabaRequest {
   final List<Map<String, dynamic>> openFollowUps;
   final List<String> riskIndicators;
 
+  /// Per-assessment referral inputs (same fields Flutter uses clinically).
+  final List<NabaReferralAssessment> assessments;
+
+  /// Step 2 clinical referral flag (same gate as the Step 3 referral card).
+  final bool isReferred;
+
+  /// Step 2 wire reasons shown on the offline referral card (bullets).
+  final List<String> referredReasons;
+
+  /// Joined referral-card body text (offline card copy / clinical fallback).
+  final String? referralReason;
+
   Map<String, dynamic> toJson() => {
         'requestId': requestId,
         'patientId': patientId,
+        'appLanguage': appLanguage,
         'visitType': visitType,
         'aiScribeConfidence': aiScribeConfidence,
         'clinicalRuleIds': clinicalRuleIds,
@@ -168,6 +216,12 @@ class NabaRequest {
         'priorVisits': priorVisits.map((v) => v.toJson()).toList(),
         'openFollowUps': openFollowUps,
         'riskIndicators': riskIndicators,
+        if (assessments.isNotEmpty)
+          'assessments': assessments.map((a) => a.toJson()).toList(),
+        'isReferred': isReferred,
+        'referredReasons': referredReasons,
+        if (referralReason != null && referralReason!.isNotEmpty)
+          'referralReason': referralReason,
       };
 }
 

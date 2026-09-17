@@ -8,6 +8,11 @@ import 'assessment_thresholds.dart';
 import '../../features/visit/models/anc_assessment.dart';
 import '../risk/ncd_status.dart';
 
+/// Wire / summary condition for ANC AI BP-trend auto-referral.
+/// English on the wire; UI localizes via [ReferralStrings] / timeline narrative.
+const String kAncRisingBpTrendCondition =
+    'Rising blood pressure trend across visits';
+
 // ─── Result types ─────────────────────────────────────────────────────────────
 
 /// NCD 4-band risk classification (matches Android NCDReferralColorEvaluator).
@@ -291,6 +296,9 @@ class AncReferralEvaluator {
     bool? historyOfPph,
     bool? historyOfSevereAnaemia,
     bool? historyOfGdm,
+    /// Rising systolic/diastolic AI-trend (last 2 priors + today, ≥5/step).
+    /// Set by the visit form from [VitalsTrendAnalyzer.hasRisingBpTrend].
+    bool risingBpTrend = false,
   }) {
     final exam = assessment.medicalHistoryPhysicalExamination;
     final poci = assessment.pointOfCareInvestigations;
@@ -422,6 +430,12 @@ class AncReferralEvaluator {
     // High BP without pre-eclampsia criteria (non-emergency)
     if (highBp && !emergency.contains('Suspected pre-eclampsia')) {
       nonEmergency.add('High blood pressure');
+    }
+
+    // AI vitals trend: systolic/diastolic climbing ≥5 across last 2 priors +
+    // today — refer even when today's reading is still below 140/90.
+    if (risingBpTrend) {
+      nonEmergency.add(kAncRisingBpTrendCondition);
     }
 
     // H/O obstetric complications

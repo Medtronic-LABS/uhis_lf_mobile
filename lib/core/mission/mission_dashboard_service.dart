@@ -25,7 +25,6 @@ import '../models/referral.dart';
 import '../time/calendar_day.dart';
 import 'mission_pregnancy_facts.dart';
 import 'programme_reason.dart' as shared;
-import '../debug/console_log.dart';
 
 /// Input data for computing mission brief and queue.
 class MissionInputData {
@@ -961,31 +960,6 @@ class MissionDashboardService {
     // (a → b → none, pregnant, overdue).
     final result = <MissionQueueItem>[...byPid.values, ...nonPatient];
     result.sort(MissionQueueItem.compareByPriority);
-
-    assert(() {
-      final codes = result.map((q) => q.priorityCode);
-      ConsoleLog.banner('[Dashboard queue] ${result.length} items:');
-      ConsoleLog.banner('  spec:     $kPrioritySortSpecLegend');
-      ConsoleLog.banner('  chain:    ${prioritySortChain(codes)}');
-      ConsoleLog.banner('  compact:  ${prioritySortChainCompact(codes)}');
-      for (var i = 0; i < result.length; i++) {
-        final q = result[i];
-        final progs = q.programmes.map((p) => p.name).join(',');
-        final overdue = (q.daysOverdue != null && q.daysOverdue! > 0)
-            ? ' | overdue: ${q.daysOverdue}d'
-            : '';
-        final why = q.clinicalReasons.isNotEmpty
-            ? ' | why: ${q.clinicalReasons.first}'
-            : '';
-        ConsoleLog.banner(
-          '  ${i + 1}. [${q.priorityCode}] ${q.patientName}'
-          ' | prog: $progs | tier: ${q.tier.name}'
-          '${q.isPregnant ? " | pregnant" : ""}'
-          '$overdue$why',
-        );
-      }
-      return true;
-    }());
 
     return result;
   }

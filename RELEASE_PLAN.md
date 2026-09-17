@@ -294,3 +294,97 @@ paths.
 8. Later, if you want CI to auto-publish to Play: create a Play Console service account, add its JSON as repo secret `PLAY_SERVICE_ACCOUNT_JSON`, then uncomment the `publish-play-store` job in `.github/workflows/release.yml`.
 9. **Move `~/.keystores/uhis-lf-mobile/credentials.txt`** into a real secrets vault / password manager, then delete the plaintext file from disk.
 10. **Back up `~/.keystores/uhis-lf-mobile/apon-sushashthya-upload.jks`** outside this machine (encrypted company vault) — this is your *upload key*; losing it before Google acknowledges the upload cert means starting the listing over.
+
+---
+
+## 11. Release plan — 1.0.6+6 (next, supersedes §§1–10's "first submission" framing)
+
+The app has since gone live on Play (current production track: **versionCode 5 / 1.0.5**, per the
+`app_release_production_v1.0.5+5_26-08-12_04-00-12.aab` in `releases/`). This section plans the *next*
+release, built from `main`, following the same `patch`-bump-per-release cadence the last four releases
+already established (`1.0.2+2 → 1.0.3+3 → 1.0.4+4 → 1.0.5+5`, one release commit each: `#629` etc.).
+
+### 11.1 `main` sync status (checked 2026-08-13)
+
+- `git fetch origin` → `origin/main` is fully contained in local `main` (`git log main..origin/main`
+  is empty) — nothing to pull.
+- Local `main` is **one commit ahead** of `origin/main`: `9a9bbb8` "Merge branch 'main' of
+  github.com:Medtronic-LABS/uhis_lf_mobile". Diffed against `origin/main`'s tip (`925ab05`) — **zero
+  file changes**; it's a no-op merge commit (both parents' content already converge), most likely a
+  local `git pull` artifact. Safe either way — push it (fast-forward, no force needed) to keep local
+  and remote identical before cutting the release, or leave it. Recommendation: push it now so the
+  release build and the pushed history match exactly:
+  ```bash
+  git push origin main
+  ```
+- **Not included in this release**: `feat/ai-scribe-programme-coverage-expansion` (current checkout,
+  5 commits, not merged into `main`) and any other unmerged branch (`fix/soft-logout-...`,
+  `feat/form-sdk-canonical-transformer`, etc.). Confirmed via `git merge-base --is-ancestor` — none are
+  ancestors of `main`. This release ships `main` as-is, per your instruction.
+
+### 11.2 What's new since 1.0.5+5 (`baf604c` → `main`, 22 commits / 9 merged PRs)
+
+| PR | Change |
+|---|---|
+| #639 | App translations added |
+| #638 | Realtime ASR silent-failure remediation — client-side fixes for the WS channel resurrecting into a listening state after disconnect (T6), error visibility in the banner + accessibility label, `encounterId` not reaching the realtime connection, diagnostics instrumentation |
+| #637 | AI trend change |
+| #636 | AI trend auto-refer |
+| #635 | Missing translations |
+| #634 | Translations and referred changes |
+| #632 | Duplicate household issue fix |
+| #631 | Bangla text change |
+| #630 | Household button name change |
+
+Net: `37 files changed, +4361/−580` across `lib/core/{api,clinical,constants,db,debug,models,sync}`,
+`lib/features/{cce,counselling,dashboard,household/enrollment,patient,realtime_asr,scribe,visit}`, plus
+`assets/translations/strings.json`. Mostly bug fixes + translation/copy work, one clinical feature area
+(AI trend / auto-refer) and one reliability area (realtime ASR). No breaking schema/API changes.
+
+### 11.3 Version decision
+
+**Recommended: `1.0.6+6`** (patch bump), matching the exact cadence of every prior release regardless
+of fix-vs-feature mix — this repo's convention has not used a minor bump yet. Flagging in case you'd
+rather mark the AI-trend/auto-refer work with a minor bump (`1.1.0+6`); say so and I'll use that instead
+before building.
+
+### 11.4 Execution steps
+
+1. **Sync**: `git push origin main` (11.1) — do this first so the release commit lands on a branch
+   that already matches remote.
+2. **Bump + build** (from `main`, clean tree):
+   ```bash
+   JAVA_HOME=/opt/homebrew/opt/openjdk@21 scripts/release.sh production patch
+   ```
+   This rewrites `pubspec.yaml` to `1.0.6+6`, builds `app-release.aab`, verifies the signer against the
+   upload keystore, and archives a copy into `releases/`.
+3. **Commit the bump**:
+   ```bash
+   git add pubspec.yaml
+   git commit -m "chore(release): bump version to 1.0.6+6"
+   ```
+4. **Tag** (tree is clean again after the commit):
+   ```bash
+   scripts/release.sh production "" --tag
+   git push origin main
+   git push origin v1.0.6+6
+   ```
+   Pushing the `v*` tag also fires `.github/workflows/release.yml` in CI, which rebuilds/re-verifies
+   the same artifact from a clean runner and attaches it to a GitHub Release — a second independent
+   confirmation the signed bundle is reproducible, not just a rebuild of this machine's cache.
+5. **Upload to Play Console** (still manual — §7/§294 item 8, `PLAY_SERVICE_ACCOUNT_JSON` was never
+   added): Internal testing track → `build/app/outputs/bundle/release/app-release.aab`. Release notes:
+   summarize 11.2 in user-facing language (translation improvements, AI-assisted follow-up/referral
+   trend detection, more reliable live transcription) — Play requires *some* "what's new" text.
+6. **Promote** Internal testing → Production via staged rollout (20% → 50% → 100%), per §6 — this
+   Organization account has no forced closed-testing gate, but given realtime-ASR and AI-trend touched
+   this release, a short Internal/Closed smoke pass before 100% is worth the day it costs.
+
+### 11.5 Loose end noticed while planning this (not blocking, flagging per doc convention)
+
+Several **uncommitted, untracked** files sit in the current worktree — `design/`,
+`docs/soft_logout_sync_dedup_plan.md`, `scripts/{brac_translation_diff,export_current_translations}.py`,
+`store_assets/current_translations.xlsx`, `store_assets/translation_comparison_brac_vs_current.xlsx`.
+None of these affect a `main`-branch build (they're untracked, so a checkout of `main` doesn't touch
+them), but the translation-diff tooling suggests a BRAC translation review is mid-flight and may want
+to land before or shortly after 1.0.6+6 — worth checking with whoever owns that work before it's lost.

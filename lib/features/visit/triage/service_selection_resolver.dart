@@ -1,4 +1,5 @@
 import '../../../core/models/programme.dart';
+import 'programme_grid_sync.dart';
 
 /// Why [ServiceSelectionResolver.finalize] blocked a programme and the SK
 /// must be told before the visit can proceed. `null` on
@@ -18,12 +19,17 @@ enum ServiceSelectionBlockReason {
 class ServiceSelectionResult {
   const ServiceSelectionResult({
     required this.programmes,
+    this.isDeliveryVisit = false,
     this.blockedReason,
     this.silentlyEmptied = false,
   });
 
   /// The final, priority-ordered set of programmes for this visit.
   final Set<Programme> programmes;
+
+  /// Raised when PNC is selected without PO on record — Step 2 opens the
+  /// pregnancy-outcome form alongside any PNC forms (Continue backfill).
+  final bool isDeliveryVisit;
 
   /// True when a silent drop (no dialog) left [programmes] empty — e.g. PW
   /// was the only selection and got dropped because it's already
@@ -88,40 +94,51 @@ abstract final class ServiceSelectionResolver {
 
   /// Finalizes the SK's Step-1 selection into the set Step 2 will render.
   ///
-  /// Ports, in order, the 4 rules that used to run in Step 2's
+  /// Ports, in order, the rules that used to run in Step 2's
   /// `_hydrate()`:
-  /// 1. Delivery visits include PNC by default, unless the SK explicitly
-  ///    deselected it in the grid ([pncDismissedBySk]) — Pregnancy Outcome
-  ///    and PNC are independently selectable on a delivery visit.
-  /// 2. **PW-once-only** — dropped silently when [pwRegistrationBlocked].
-  ///    If that empties the selection, returns immediately with
-  ///    [ServiceSelectionResult.silentlyEmptied] (no further rules run —
-  ///    matches the original code's immediate home-navigation branch).
-  /// 3. **ANC blocked postpartum** — removed with
-  ///    [ServiceSelectionBlockReason.ancBlockedPostpartum] when
-  ///    [isPostpartum].
-  /// 4. **ANC blocked by revisit interval** — removed with
-  ///    [ServiceSelectionBlockReason.ancBlockedRevisit] when
-  ///    [ancRevisitBlocked] (1 day since last ANC visit if it was
-  ///    high-risk, else 15 days — computed by the caller).
-  /// 5. **PW auto-add** — added alongside a first-time (not
-  ///    [pwRegistrationBlocked]) ANC selection.
+  /// 1. **PO auto-enable** — when PNC is selected without PO on record,
+  ///    [ServiceSelectionResult.isDeliveryVisit] is raised (mirrors Task 5).
+  /// 2. **Male maternal strip** — silent drop of
+  ///    [ProgrammeGridSync.maternalProgrammes] when [isMale].
+  /// 3. **PNC without PO strip** — drops PNC when not postpartum and not a
+  ///    delivery visit (symptom smuggling guard).
+  /// 4. **PW-once-only** — dropped silently when [pwRegistrationBlocked].
+  /// 5. **ANC blocked postpartum** — removed with dialog reason.
+  /// 6. **ANC blocked by revisit interval** — removed with dialog reason.
+  /// 7. **PW auto-add** — added alongside a first-time ANC selection.
+  /// 8. **Delivery visit ANC/PW clear** — incompatible with PO backfill.
   ///
-  /// Finally applies [excludedFromSelection] and returns the surviving set
-  /// ordered by [canonicalPriority].
+  /// PNC is never auto-added on a delivery visit — PO+PNC is optional.
   static ServiceSelectionResult finalize({
     required Set<Programme> selected,
     required bool pwRegistrationBlocked,
     required bool isPostpartum,
     required bool ancRevisitBlocked,
     bool isDeliveryVisit = false,
-    bool pncDismissedBySk = false,
+    bool isMale = false,
   }) {
     var programmes = Set<Programme>.from(selected);
-
-    if (isDeliveryVisit && !pncDismissedBySk) {
-      programmes.add(Programme.pnc);
+    var deliveryVisit = isDeliveryVisit;
+    if (ProgrammeGridSync.shouldAutoEnableDeliveryForPnc(
+      hasPnc: programmes.contains(Programme.pnc),
+      isPostpartum: isPostpartum,
+    )) {
+      deliveryVisit = true;
     }
+
+    // Confirmed males never proceed with maternal services — even when
+    // symptom catalogue tags or stale enrolment smuggled them into
+    // [selected]. Prefer [isMale] over !female so Sex.unknown is untouched.
+    if (isMale) {
+      programmes =
+          ProgrammeGridSync.withoutMaternalIfMale(programmes, isMale: true);
+    }
+
+    programmes = ProgrammeGridSync.withoutPncUnlessPostpartum(
+      programmes,
+      isPostpartum: isPostpartum,
+      isDeliveryVisit: deliveryVisit,
+    );
 
     // Pilot-scope exclusion — silent, applies regardless of how the
     // programme entered the set.
@@ -132,8 +149,21 @@ abstract final class ServiceSelectionResolver {
       programmes.remove(Programme.pw);
     }
     if (programmes.isEmpty && selected.isNotEmpty) {
-      return const ServiceSelectionResult(
+      // Male + only maternal programmes (or maternal + already-excluded
+      // tags) — empty is correct, but must not trigger the PW-already-
+      // enrolled snackbar path ([silentlyEmptied]).
+      final nonMaternalSelected = isMale
+          ? ProgrammeGridSync.withoutMaternalIfMale(selected, isMale: true)
+          : selected;
+      if (isMale && nonMaternalSelected.isEmpty) {
+        return ServiceSelectionResult(
+          programmes: {},
+          isDeliveryVisit: deliveryVisit,
+        );
+      }
+      return ServiceSelectionResult(
         programmes: {},
+        isDeliveryVisit: deliveryVisit,
         silentlyEmptied: true,
       );
     }
@@ -145,6 +175,7 @@ abstract final class ServiceSelectionResolver {
       programmes.remove(Programme.anc);
       return ServiceSelectionResult(
         programmes: _ordered(programmes),
+        isDeliveryVisit: deliveryVisit,
         blockedReason: ServiceSelectionBlockReason.ancBlockedPostpartum,
       );
     }
@@ -154,6 +185,7 @@ abstract final class ServiceSelectionResolver {
       programmes.remove(Programme.anc);
       return ServiceSelectionResult(
         programmes: _ordered(programmes),
+        isDeliveryVisit: deliveryVisit,
         blockedReason: ServiceSelectionBlockReason.ancBlockedRevisit,
       );
     }
@@ -167,7 +199,14 @@ abstract final class ServiceSelectionResolver {
       programmes.add(Programme.pw);
     }
 
-    return ServiceSelectionResult(programmes: _ordered(programmes));
+    if (deliveryVisit) {
+      programmes = ProgrammeGridSync.applyPncRequiresDelivery(programmes);
+    }
+
+    return ServiceSelectionResult(
+      programmes: _ordered(programmes),
+      isDeliveryVisit: deliveryVisit,
+    );
   }
 
   /// Resolves the "primary" programme from an ordered list of programme-name

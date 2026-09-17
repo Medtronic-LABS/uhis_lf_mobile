@@ -14,8 +14,7 @@ import 'biometric_service.dart';
 enum AuthStatus { unknown, signedOut, signedIn }
 
 class AuthState extends ChangeNotifier {
-  AuthState(this._repo, this._biometric, {Future<void> Function()? onWipeLocalData})
-      : _onWipeLocalData = onWipeLocalData {
+  AuthState(this._repo, this._biometric) {
     // Server-side session invalidation (401) → logout immediately.
     // UHIS parity: no client-side token refresh. 403 permission denials
     // never reach here.
@@ -28,10 +27,6 @@ class AuthState extends ChangeNotifier {
 
   final AuthRepository _repo;
   final BiometricService _biometric;
-  // Truncates the local SQLCipher DB on logout — set from main.dart to
-  // AppDatabase.wipeAllData(). Optional (and non-fatal if it throws) so
-  // AuthState keeps no direct data-layer dependency.
-  final Future<void> Function()? _onWipeLocalData;
   // Additional in-memory caches to clear on logout (e.g.
   // MissionDashboardRepository.clearCache) — registered post-construction via
   // [registerLogoutHook] since some repositories are wired up in main.dart
@@ -40,23 +35,21 @@ class AuthState extends ChangeNotifier {
   // user who logs in on the same device, even though the DB itself is wiped.
   final List<void Function()> _logoutHooks = [];
 
-  /// Registers a callback to run during [logout], after the local DB wipe.
+  /// Registers a callback to run during [logout], after pending flushes.
   /// Use this for any in-memory cache that would otherwise outlive a signed-
   /// out session and leak into the next user's login.
   void registerLogoutHook(void Function() hook) {
     _logoutHooks.add(hook);
   }
 
-  // Best-effort flushes to run BEFORE the local DB wipe — e.g. pushing any
-  // still-`pending` assessment writes so they reach the backend before
-  // their local row is truncated. Without this, a write made shortly
-  // before logout (or while offline) can be silently lost forever: gone
-  // locally, never received by the backend, so nothing can restore it on
-  // the next login. Same registration pattern as [registerLogoutHook].
+  // Best-effort flushes to run before logout completes — e.g. pushing any
+  // still-`pending` assessment writes so they reach the backend before the
+  // user leaves. Without this, a write made shortly before logout (or while
+  // offline) may not reach the server until the next login sync.
   final List<Future<void> Function()> _preWipeHooks = [];
 
-  /// Registers a callback to run during [logout], before the local DB wipe.
-  /// Use this to flush any pending offline-sync writes. Each hook is
+  /// Registers a callback to run during [logout], before in-memory caches are
+  /// cleared. Use this to flush any pending offline-sync writes. Each hook is
   /// expected to bound its own duration (e.g. via `.timeout(...)`) — a slow
   /// or offline hook must not be able to hang logout.
   void registerPreWipeHook(Future<void> Function() hook) {
@@ -157,10 +150,8 @@ class AuthState extends ChangeNotifier {
           debugPrint('[AuthState] login: offline password verified${restored ? ', session restored' : ', no prior session'}');
           return true;
         }
-        // Fall through to online login. The offline probe can false-positive
-        // (e.g. google.com DNS blocked while spice backend is reachable), and
-        // logout clears the offline password hash — so a hard fail here would
-        // strand the user with no network attempt.
+        // Fall through to online login when the offline probe false-positives
+        // (e.g. google.com DNS blocked while spice backend is reachable).
         debugPrint(
             '[AuthState] login: no offline credentials — trying online login');
       }
@@ -413,54 +404,41 @@ class AuthState extends ChangeNotifier {
     _error = null;
   }
 
-  Future<void> logout() async {
-    ConsoleLog.step('🔐 [AuthState] logout() Step 1/5 — ending server session...');
-    await _repo.logout();
+  Future<void> logout({bool? online}) async {
+    final netOnline = online ?? !await isDeviceOffline();
     ConsoleLog.step(
-        '🔐 [AuthState] logout() Step 2/5 — flushing ${_preWipeHooks.length} pending sync(s)...');
+        '🔐 [AuthState] logout() Step 1/4 — ending server session (online=$netOnline)...');
+    await _repo.logout(online: netOnline);
+    ConsoleLog.step(
+        '🔐 [AuthState] logout() Step 2/4 — flushing ${_preWipeHooks.length} pending sync(s)...');
     for (final hook in _preWipeHooks) {
       try {
         await hook();
       } catch (e) {
-        ConsoleLog.warn('[AuthState] pre-wipe flush hook failed: $e');
-        // Non-fatal — same reasoning as the DB wipe below: sign-out must
-        // complete regardless of whether a flush succeeded.
+        ConsoleLog.warn('[AuthState] pre-logout flush hook failed: $e');
+        // Non-fatal — sign-out must complete regardless of whether a flush succeeded.
       }
     }
-    ConsoleLog.step('🔐 [AuthState] logout() Step 3/5 — truncating local database...');
-    if (_onWipeLocalData != null) {
-      try {
-        await _onWipeLocalData();
-      } catch (e) {
-        ConsoleLog.warn('[AuthState] local data wipe failed during logout: $e');
-        // Non-fatal — sign-out must complete regardless; next login re-wipes.
-      }
-    } else {
-      ConsoleLog.warn(
-          '[AuthState] logout() Step 3/5 — no wipe callback configured, skipped.');
-    }
+    // UHIS parity: local offline DB, sync cursor, username, password hash,
+    // PIN/biometric, and profile prefs all survive logout.
     ConsoleLog.step(
-        '🔐 [AuthState] logout() Step 4/5 — clearing ${_logoutHooks.length} in-memory cache(s)...');
+        '🔐 [AuthState] logout() Step 3/4 — clearing ${_logoutHooks.length} in-memory cache(s)...');
     for (final hook in _logoutHooks) {
       try {
         hook();
       } catch (e) {
         ConsoleLog.warn('[AuthState] logout cache-clear hook failed: $e');
-        // Non-fatal — same reasoning as the DB wipe above.
+        // Non-fatal — same reasoning as the flush step above.
       }
     }
     _status = AuthStatus.signedOut;
     _locked = false;
-    _biometricEnabled = false;
-    _pinEnabled = false;
-    // AuthRepository.logout() already deleted the stored username (Step 1)
-    // so a genuinely different user can sign in next — but that's on disk;
-    // this in-memory field is what LoginScreen actually reads, and nothing
-    // else in this method resets it. Without this, the same process would
-    // keep showing the old username prefilled (and locked) until a full
-    // app restart re-bootstrapped _username from the now-empty storage.
-    _username = null;
-    ConsoleLog.success('✅ [AuthState] logout() Step 5/5 — signed out.');
+    // Re-read persisted enrolment + username — UHIS keeps these across logout
+    // so LoginScreen shows a locked, prefilled username and offline login works.
+    _username = await _repo.lastUsername();
+    _biometricEnabled = await _repo.isBiometricEnabled();
+    _pinEnabled = await _repo.isPinSet();
+    ConsoleLog.success('✅ [AuthState] logout() Step 4/4 — signed out.');
     // Defer to avoid build scope conflicts
     _scheduleNotify();
   }

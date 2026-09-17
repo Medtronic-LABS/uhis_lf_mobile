@@ -388,6 +388,10 @@ GoRouter buildRouter(AuthState auth) {
                           ?.whereType<String>()
                           .toList() ??
                       const [],
+                  existingHouseholdName: extra['householdName'] as String?,
+                  existingHeadName: extra['headName'] as String?,
+                  existingHeadPhoneNumber:
+                      extra['headPhoneNumber'] as String?,
                 ),
               );
             },

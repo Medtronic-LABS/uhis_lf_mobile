@@ -18,6 +18,8 @@ import 'widgets/enrollment_segmented_buttons.dart';
 import 'widgets/enrollment_dropdown.dart';
 import 'widgets/enrollment_sticky_bar.dart';
 
+enum _DuplicateAction { cancel, viewRecord, continueAnyway }
+
 /// Combined household + head enrollment form.
 ///
 /// Merges the former Step 1 (household info) and Step 2 (household head info)
@@ -443,37 +445,61 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       if (existing != null && mounted) {
         ConsoleLog.warn(
             '[Enrollment] possible duplicate head, existing FHIR id: ${existing.fhirId}');
-        final proceed = await showDialog<bool>(
-          context: context,
-          builder: (dlgCtx) => AlertDialog(
-            title: Text(EnrollmentStrings.duplicateTitle),
-            content: Text(
-              '${EnrollmentStrings.duplicateBody}\n\n${existing.name ?? headNid}',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dlgCtx).pop(false),
-                child: Text(EnrollmentStrings.cancel),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(dlgCtx).pop(false);
-                  context.push('/patients/${existing.id}');
-                },
-                child: Text(EnrollmentStrings.duplicateViewRecord),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dlgCtx).pop(true),
-                child: Text(EnrollmentStrings.duplicateContinue),
-              ),
-            ],
-          ),
+        final action = await _showDuplicateDialog(
+          existingName: existing.name ?? headNid,
         );
-        if (proceed != true || !mounted) return;
+        if (!mounted) return;
+        if (action == _DuplicateAction.viewRecord) {
+          // Prefer patientId / fhirId — same resolution as household roster.
+          final navId = (existing.patientId != null &&
+                  existing.patientId!.isNotEmpty)
+              ? existing.patientId!
+              : (existing.fhirId != null && existing.fhirId!.isNotEmpty)
+                  ? existing.fhirId!
+                  : existing.id;
+          // Navigate only after the dialog has fully closed — pushing from
+          // the dialog button raced Navigator.pop and crashed with
+          // !keyReservation.contains(key).
+          context.go('/patients/$navId');
+          return;
+        }
+        if (action != _DuplicateAction.continueAnyway) return;
       }
     }
 
     if (mounted) context.push('/household/enrollment/success');
+  }
+
+  Future<_DuplicateAction> _showDuplicateDialog({
+    required String existingName,
+  }) async {
+    final result = await showDialog<_DuplicateAction>(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        title: Text(EnrollmentStrings.duplicateTitle),
+        content: Text(
+          '${EnrollmentStrings.duplicateBody}\n\n$existingName',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dlgCtx).pop(_DuplicateAction.cancel),
+            child: Text(EnrollmentStrings.cancel),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dlgCtx).pop(_DuplicateAction.viewRecord),
+            child: Text(EnrollmentStrings.duplicateViewRecord),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dlgCtx).pop(_DuplicateAction.continueAnyway),
+            child: Text(EnrollmentStrings.duplicateContinue),
+          ),
+        ],
+      ),
+    );
+    return result ?? _DuplicateAction.cancel;
   }
 
   @override

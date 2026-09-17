@@ -23,6 +23,7 @@ class CceAlertCard extends StatelessWidget {
     this.onUpdateStatus,
     this.onCall,
     this.onWhatsapp,
+    this.onSms,
   });
 
   final CceAlert alert;
@@ -34,6 +35,10 @@ class CceAlertCard extends StatelessWidget {
   /// WhatsApp action — shown on warning-severity cards when the patient has a
   /// phone number. Optional; if null the WhatsApp button is hidden.
   final VoidCallback? onWhatsapp;
+
+  /// SMS action — same visibility rules as [onWhatsapp] (patients without
+  /// WhatsApp). Optional; if null the SMS button is hidden.
+  final VoidCallback? onSms;
 
   @override
   Widget build(BuildContext context) {
@@ -180,6 +185,17 @@ class CceAlertCard extends StatelessWidget {
             AppColors.whatsapp,
             const Color(0x1F25D366),
             onWhatsapp!,
+          ),
+          const SizedBox(width: 6),
+        ],
+        if (alert.severity == CceSeverity.warning &&
+            alert.hasPhone &&
+            onSms != null) ...[
+          _miniIcon(
+            Icons.sms_rounded,
+            const Color(0xFF1565C0),
+            const Color(0x1F1565C0),
+            onSms!,
           ),
           const SizedBox(width: 6),
         ],

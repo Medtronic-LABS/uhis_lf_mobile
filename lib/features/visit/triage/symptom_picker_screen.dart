@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/clinical/ai_context_fields.dart';
 import '../../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
+import '../../../core/clinical/patient_assessment_aliases.dart';
 import '../../../core/clinical/service_eligibility.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
@@ -16,15 +17,16 @@ import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/db/assessment_dao.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/immunisation_dao.dart';
+import '../../../core/db/member_dao.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/models/programme.dart';
 import '../../../core/risk/pregnancy_cohort_rules.dart';
+import '../../../core/time/calendar_day.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
-import '../../../core/time/calendar_day.dart';
 import '../../patient/followup_repository.dart';
 import '../../patient/vitals_repository.dart';
 import '../../scribe/models/ai_extracted_field.dart';
@@ -34,12 +36,15 @@ import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
+import 'ai_scribe_triage_vocab.dart';
+import 'anc_revisit_lock_message.dart';
 import 'programme_grid_sync.dart';
 import 'service_selection_resolver.dart';
 import 'symptom_catalog.dart';
 import 'unified_symptom_catalog.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
+import '../../../core/i18n/app_date_format.dart';
 
 /// Symptom picker screen for the triage step.
 ///
@@ -125,7 +130,6 @@ class _AncRevisitStatus {
   const _AncRevisitStatus({
     required this.tooSoon,
     this.lastVisitMs,
-    this.nextDueMs,
     this.highRisk = false,
     this.revisitDays,
   });
@@ -138,17 +142,21 @@ class _AncRevisitStatus {
   /// Epoch ms of the last ANC visit, when known.
   final int? lastVisitMs;
 
-  /// Epoch ms of next ANC due — from latest assessment `nextVisitDate` when
-  /// stamped, otherwise computed as last visit + [revisitDays].
-  final int? nextDueMs;
-
-  /// Whether that last visit was flagged high-risk.
+  /// Whether that last visit was flagged high-risk (`HIGH_RISK_PW` on
+  /// `customStatus`, Spice `getAncMenuRevisitDays`).
   final bool highRisk;
 
   /// The interval applied — 1 day (high-risk) or 15 days (normal), null when
   /// [lastVisitMs] is unavailable and this fell back to [_ancVisitedToday].
   final int? revisitDays;
 }
+
+AncRevisitLockInput _ancRevisitLockInput(_AncRevisitStatus status) =>
+    AncRevisitLockInput(
+      lastVisitMs: status.lastVisitMs,
+      highRisk: status.highRisk,
+      revisitDays: status.revisitDays,
+    );
 
 class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   TriageViewModel? _viewModel;
@@ -160,6 +168,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// the server-assigned `members.patient_id`, which [PatientContextBuilder]
   /// remaps onto the local key every other table is keyed by. Falls back to
   /// the routed id until the context has loaded.
+
+  /// Every id local assessments may be keyed under for this patient.
+  List<String> _patientAliasIds = const [];
+
   String get _patientId => _patientContext?.patientId ?? widget.patientId;
 
   VisitBriefingResponse? _briefingData;
@@ -273,6 +285,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         programmesDao: programmesDao,
         pregnancyDao: pregnancyDao,
         immunisationDao: immunisationDao,
+        assessmentDao: context.read<AssessmentDao>(),
+        localAssessmentDao: context.read<LocalAssessmentDao>(),
       );
 
       final ctx = await builder.build(patientId);
@@ -302,10 +316,19 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       // the SK must explicitly select PW first before ANC becomes available.
       final isPw = ctx.activeProgrammes.contains(Programme.pw) ||
           ctx.activeProgrammes.contains(Programme.anc);
-      // Block a second ANC visit on the same calendar day.
+      final aliasIds = {
+        ...await patientAssessmentAliasIds(
+          patientDao,
+          patientId: widget.patientId.isNotEmpty ? widget.patientId : patientId,
+          memberId: widget.memberId,
+        ),
+        ctx.patientId,
+      }.where((id) => id.isNotEmpty).toList(growable: false);
+      _patientAliasIds = aliasIds;
+      // Block a second ANC visit on the same calendar day (any patient id alias).
       final ancToday = await context
           .read<LocalAssessmentDao>()
-          .hasAncAssessmentTodayForPatient(ctx.patientId);
+          .hasAncAssessmentTodayForPatients(aliasIds);
       // Whether this patient currently has an open pregnancy episode — locks
       // the PW card (see _InlineServiceSelector._isLocked) so the SK can't
       // select a re-registration that ServiceSelectionResolver would only
@@ -328,22 +351,28 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       // _ancVisitedToday field.
       final ancRevisitStatus = await _computeAncRevisitStatus(
         patientId: ctx.patientId,
+        aliasIds: aliasIds,
         fallbackTooSoon: ancToday,
+        openEpisodeLastAncMs: openEpisode?.obstetric.lastAncVisitDateMs,
       );
       // Pregnancy Outcome is an explicit SK choice — never auto-on.
       // Postpartum mothers get PNC via [enrolledSeed], not this flag.
+      final isMale = ctx.sex == Sex.male;
       final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
         enrolled: ctx.activeProgrammes.toSet(),
         isPregnant: ctx.isPregnant,
         isPostpartum: ctx.isPostpartum,
+        isMale: isMale,
       );
+      final gatedPathwaySet =
+          ProgrammeGridSync.withoutMaternalIfMale(pathwaySet, isMale: isMale);
       vm.addListener(_syncPathwaysToServiceGrid);
       setState(() {
         _patientContext = ctx;
         _viewModel = vm;
         _selectedProgrammes
           ..clear()
-          ..addAll(pathwaySet)
+          ..addAll(gatedPathwaySet)
           // Only seed enrolled programmes that apply to *this* visit state
           // (e.g. skip enrolled PNC while still pregnant). SK can still add
           // or remove cards after load.
@@ -356,15 +385,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           // separately and must stay unlocked for an already-pregnant woman.
           _selectedProgrammes.remove(Programme.pw);
         }
-        if (ancRevisitStatus.tooSoon) {
-          // Within the revisit interval — ANC is locked in the grid (see
-          // _InlineServiceSelector._isLocked), keeps _selectedProgrammes
-          // honest if enrolledSeed pre-ticked it.
+        if (ancRevisitStatus.tooSoon || ctx.isPostpartum) {
+          // Within the revisit interval or postpartum — ANC is locked in the
+          // grid (see ProgrammeGridSync.isAncGridLocked), keeps
+          // _selectedProgrammes honest if enrolledSeed/pathways pre-ticked it.
           _selectedProgrammes.remove(Programme.anc);
         }
         _pathwayActivatedProgrammes
           ..clear()
-          ..addAll(pathwaySet);
+          ..addAll(gatedPathwaySet);
         _isPW = isPw;
         _isDelivery = false;
         _ancVisitedToday = ancToday;
@@ -423,6 +452,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         followUpRepo: followUpRepo,
         patientDao: context.read<PatientDao>(),
         immunisationDao: context.read<ImmunisationDao>(),
+        memberDao: context.read<MemberDao>(),
       );
 
       final lastVisit = visitsByVisit.isNotEmpty ? visitsByVisit.first : null;
@@ -430,8 +460,41 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       final request = <String, dynamic>{
         'patientId': patientCtx.patientId,
         if (widget.patientName != null) 'patientName': widget.patientName,
-        if (widget.patientAge != null) 'ageYears': widget.patientAge,
-        if (widget.patientGender != null) 'gender': widget.patientGender,
+        // Same precedence as `gender` below: the locally-loaded context wins
+        // over the route-threaded widget.patientAge, which travels the identical
+        // five-hop `extra` map and arrives null in practice. Gated on ageKnown
+        // rather than ageMonths > 0 — ageMonths defaults to 0 when the record
+        // has neither dob nor age, which is indistinguishable from a newborn.
+        if (patientCtx.ageKnown)
+          'ageYears': patientCtx.ageYears
+        else if (widget.patientAge != null)
+          'ageYears': widget.patientAge,
+        // Prefer the locally-loaded context over the route-threaded
+        // widget.patientGender. That parameter is handed down five hops from
+        // the navigation `extra` map and arrives null in practice, so the
+        // briefing was being generated with no gender at all — the server then
+        // had to guess, and a male NCD patient was greeted "Sister". patientCtx
+        // is loaded from the local DB in this screen and is already what the
+        // banner header ("SIT WITH HER/HIM") renders from, so sourcing it here
+        // makes the header and the AI greeting agree. The threaded value is
+        // kept as a fallback so nothing regresses if some entry point does
+        // populate it while the local record's sex is unknown.
+        if (patientCtx.sex != Sex.unknown)
+          'gender': patientCtx.sex.name
+        else if (widget.patientGender != null)
+          'gender': widget.patientGender,
+        // Never sent before, so the one server path that reads it has been
+        // dead code until now. Gated on sex: patientCtx.isPregnant is true for
+        // anyone enrolled in ANC/PW, and that enrolment provably lands on male
+        // patients (72f89c5, "Male patients gets ANC"). Sending isPregnant=true
+        // alongside gender=male trips the server's fetal-movement guard
+        // (briefing_service.py, _guard_against_premature_fetal_movement_question),
+        // which swaps the greeting for the female-addressed "আপু / Sister"
+        // line — reintroducing the mis-gendering this change exists to fix.
+        // Only `male` is excluded, not "not female": an unknown-sex ANC patient
+        // is almost certainly pregnant, and `gender` is omitted entirely in that
+        // case, so no male/pregnant contradiction can reach the server.
+        'isPregnant': patientCtx.sex != Sex.male && patientCtx.isPregnant,
         'activeProgrammes': patientCtx.activeProgrammes
             .map((p) => p.name)
             .toList(),
@@ -445,8 +508,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         'clinicalFindings': clinicalFindings.map((f) => f.toJson()).toList(),
         if (patientCtx.gestationalWeeks != null)
           'gestationalWeeks': patientCtx.gestationalWeeks,
+        'appLanguage': AppLocale.isBangla ? 'bn' : 'en',
       };
 
+      debugPrint('[Briefing] appLanguage=${request['appLanguage']} '
+          'isBangla=${AppLocale.isBangla} locale=${AppLocale.current}');
       debugPrint('[DebugTrace] briefing request patientId=${request['patientId']} '
           'body=${jsonEncode(request)}');
       final data = await briefingRepo.generate(request);
@@ -522,10 +588,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           }
         }
       } else {
-        // Delivery / pregnancy-outcome visit: clear only ANC + PW. Other
-        // selected programmes (NCD, TB, etc.) stay open alongside PNC /
-        // pregnancy-outcome forms.
+        // Delivery / pregnancy-outcome visit: clear only ANC + PW. PNC stays
+        // optional — SK may combine PO + PNC on the same visit.
         _isPW = false;
+        _skDismissedProgrammes.remove(Programme.pnc);
         final next = ProgrammeGridSync.applyDeliverySelected(
           selected: _selectedProgrammes,
           dismissedBySk: _skDismissedProgrammes,
@@ -542,6 +608,76 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         'programmes=${_selectedProgrammes.map((p) => p.name).join(", ")} '
         'isPW=$_isPW');
     _fireProgrammesLive();
+  }
+
+  /// Builds the programme set leaving Step 1, then runs
+  /// [ServiceSelectionResolver.finalize] (PW backfill for ANC, PO backfill
+  /// for PNC, revisit/postpartum gates). Symptom sync only surfaces chips;
+  /// prerequisite pairing happens here at Continue.
+  Future<ServiceSelectionResult?> _finalizeStep1Selection(
+    Set<Programme> programmes,
+  ) async {
+    final needsPwCheck = programmes.contains(Programme.pw) ||
+        programmes.contains(Programme.anc);
+    final pwBlocked =
+        needsPwCheck ? await _isPwRegistrationBlocked() : false;
+    final ancRevisitBlocked = programmes.contains(Programme.anc)
+        ? await _isAncRevisitTooSoon()
+        : false;
+    if (!mounted) return null;
+
+    return ServiceSelectionResolver.finalize(
+      selected: programmes,
+      pwRegistrationBlocked: pwBlocked,
+      isPostpartum: _patientContext?.isPostpartum ?? false,
+      ancRevisitBlocked: ancRevisitBlocked,
+      isDeliveryVisit: _isDelivery,
+      isMale: _patientContext?.sex == Sex.male,
+    );
+  }
+
+  /// Handles a [ServiceSelectionResult] from [_finalizeStep1Selection].
+  /// Returns true when the caller should proceed to Step 2.
+  Future<bool> _handleFinalizeResult(ServiceSelectionResult result) async {
+    if (result.blockedReason != null) {
+      await _showAncBlockedDialog(result.blockedReason!);
+      if (!mounted) return false;
+      setState(() {
+        _selectedProgrammes
+          ..clear()
+          ..addAll(result.programmes);
+        _skDismissedProgrammes.add(Programme.anc);
+        _isDelivery = result.isDeliveryVisit;
+      });
+      _fireProgrammesLive();
+      return false;
+    }
+
+    if (result.silentlyEmptied) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(AppStrings.pwAlreadyEnrolledMessage),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ));
+      setState(() {
+        _selectedProgrammes.clear();
+        _skDismissedProgrammes.add(Programme.pw);
+        _isDelivery = result.isDeliveryVisit;
+      });
+      _fireProgrammesLive();
+      return false;
+    }
+
+    setState(() {
+      _selectedProgrammes
+        ..clear()
+        ..addAll(result.programmes);
+      _isDelivery = result.isDeliveryVisit;
+    });
+    _fireProgrammesLive();
+    return true;
   }
 
   /// Keeps [_selectedProgrammes] and [_pathwayActivatedProgrammes] in sync
@@ -581,27 +717,50 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     // Each UnifiedSymptomDef.programmes names every service that symptom
     // belongs to, providing finer-grained auto-selection than the rule engine.
     // See ProgrammeGridSync.catalogProgrammesFor for why imci/epi are gated
-    // on the patient actually being a young child.
+    // on the patient actually being a young child, and why maternal programmes
+    // are dropped for confirmed males.
     final isYoungChild = _patientContext?.isYoungChild == true;
+    final isMale = _patientContext?.sex == Sex.male;
     for (final code in currentSymptoms) {
       final def = UnifiedSymptomCatalog.byCode(code);
       if (def == null) continue;
       activated.addAll(ProgrammeGridSync.catalogProgrammesFor(
         def.programmes,
         isChildVisitEligible: isYoungChild,
+        isMale: isMale,
       ));
     }
+
+    // Belt-and-suspenders: pathway rules should already sex-gate ANC, but
+    // never let maternal programmes enter the male selection set.
+    final gatedActivated =
+        ProgrammeGridSync.withoutMaternalIfMale(activated, isMale: isMale);
+
+    // Symptom → PNC mapping mirrors ANC: catalogue may tick PNC even when the
+    // manual chip is locked; Continue backfills PO when needed.
+    final eligibleActivated = ProgrammeGridSync.withoutPncUnlessPostpartum(
+      gatedActivated,
+      isPostpartum: _patientContext?.isPostpartum ?? false,
+      isDeliveryVisit: _isDelivery,
+      pncEligibleForActivation: true,
+    );
 
     // Exclude programmes currently locked in the grid — a newly-selected
     // symptom must not silently resurrect ANC (within its revisit interval)
     // or PW (already registered) after they were stripped/locked at load.
     final unseen = ProgrammeGridSync.additionsFromPathways(
-      activated: activated,
+      activated: eligibleActivated,
       selected: _selectedProgrammes,
       dismissedBySk: _skDismissedProgrammes,
     ).where((p) {
-      if (p == Programme.anc && _ancRevisitStatus.tooSoon) return false;
+      if (p == Programme.anc &&
+          (_ancRevisitStatus.tooSoon ||
+              (_patientContext?.isPostpartum ?? false))) {
+        return false;
+      }
       if (p == Programme.pw && _openPregnancyEpisode != null) return false;
+      // On a PO visit, PNC is manual-only — symptoms must not auto-add it.
+      if (p == Programme.pnc && _isDelivery) return false;
       return true;
     }).toSet();
     if (unseen.isNotEmpty) {
@@ -760,68 +919,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         programmes = base;
       }
 
-      // Finalize the selection through the single service-selection choke
-      // point — all business-rule gating (PW-once-only, ANC-blocked-
-      // postpartum/revisit-too-soon, PW-auto-add) runs here, before the SK
-      // ever leaves Step 1. Short-circuit the extra DAO reads unless the
-      // selection actually touches PW/ANC.
-      final needsPwCheck = programmes.contains(Programme.pw) ||
-          programmes.contains(Programme.anc);
-      final pwBlocked =
-          needsPwCheck ? await _isPwRegistrationBlocked() : false;
-      final ancRevisitBlocked = programmes.contains(Programme.anc)
-          ? await _isAncRevisitTooSoon()
-          : false;
-      if (!mounted) return;
-
-      final result = ServiceSelectionResolver.finalize(
-        selected: programmes,
-        pwRegistrationBlocked: pwBlocked,
-        isPostpartum: _patientContext?.isPostpartum ?? false,
-        ancRevisitBlocked: ancRevisitBlocked,
-        isDeliveryVisit: _isDelivery,
-        pncDismissedBySk: _skDismissedProgrammes.contains(Programme.pnc),
-      );
-
-      if (result.blockedReason != null) {
-        await _showAncBlockedDialog(result.blockedReason!);
-        if (!mounted) return;
-        // Stay on Step 1 with the corrected selection applied — the SK's
-        // symptom picks and other selected services survive; they can
-        // review/adjust and tap Continue again.
-        setState(() {
-          _selectedProgrammes
-            ..clear()
-            ..addAll(result.programmes);
-          _skDismissedProgrammes.add(Programme.anc);
-        });
-        _fireProgrammesLive();
-        return;
-      }
-
-      if (result.silentlyEmptied) {
-        // PW (or an excluded programme) was the only selection and got
-        // dropped — hint instead of a dialog, stay on Step 1.
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(
-            content: Text(AppStrings.pwAlreadyEnrolledMessage),
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-          ));
-        setState(() {
-          _selectedProgrammes.clear();
-          _skDismissedProgrammes.add(Programme.pw);
-        });
-        _fireProgrammesLive();
-        return;
-      }
+      final result = await _finalizeStep1Selection(programmes);
+      if (result == null || !mounted) return;
+      if (!await _handleFinalizeResult(result)) return;
 
       widget.onProgrammesSelected?.call(Set.unmodifiable(result.programmes));
       widget.onEnrolledProgrammesResolved?.call(
         Set.unmodifiable(_patientContext?.activeProgrammes ?? const {}),
       );
-      widget.onDeliverySelected?.call(_isDelivery);
+      widget.onDeliverySelected?.call(result.isDeliveryVisit);
       widget.onSymptomsConfirmed?.call(
         vm.selectedSymptoms,
         vm.sicknessDuration,
@@ -832,8 +938,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       return;
     }
 
-    // Bypass the triage-result interstitial and go straight to the form.
-    _navigateToForm(pathways);
+    // Standalone route — same finalize choke point before opening the form.
+    final programmes = Set<Programme>.from(_selectedProgrammes);
+    final result = await _finalizeStep1Selection(programmes);
+    if (result == null || !mounted) return;
+    if (!await _handleFinalizeResult(result)) return;
+
+    _navigateToForm(
+      pathways,
+      programmeNames: result.programmes.map((p) => p.name).toList(),
+      isDeliveryVisit: result.isDeliveryVisit,
+    );
   }
 
   /// Whether starting a new PW registration should be blocked because this
@@ -864,73 +979,66 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   /// Whether a new ANC visit is too soon after the last one, and the
   /// context behind that decision (last visit date, risk level, the
-  /// interval applied) — a risk-based revisit interval (1 day if the last
-  /// visit was high-risk, else 15 days), ported from Android Spice's
-  /// `isAncMenuDisabledByLastVisit` / `getAncMenuRevisitDays`. Falls back to
-  /// [fallbackTooSoon] (the same-calendar-day check) when no dated snapshot
-  /// is available yet (e.g. sync hasn't landed a `PregnancySnapshotDao` row).
-  ///
-  /// Shared by the Continue-time gate ([_isAncRevisitTooSoon]) and the
-  /// Eligible Services grid (locks the ANC card, shows why) so the two can
-  /// never drift from each other. [patientId] and [fallbackTooSoon] are
-  /// explicit parameters rather than reading [_patientId]/[_ancVisitedToday]
-  /// internally, since the grid calls this *during* `_loadPatientContext`,
-  /// before those fields are updated for the current load.
+  /// interval applied) — ported from Android Spice's
+  /// `isAncMenuDisabledByLastVisit` / `getAncMenuRevisitDays`. Uses the
+  /// last ANC visit date + 1-day (high-risk) or 15-day (normal) interval;
+  /// does not block on stamped `nextVisitDate`. Falls back to
+  /// [fallbackTooSoon] (same-calendar-day check) when no dated ANC row exists.
   Future<_AncRevisitStatus> _computeAncRevisitStatus({
     required String patientId,
+    required List<String> aliasIds,
     required bool fallbackTooSoon,
+    int? openEpisodeLastAncMs,
   }) async {
     try {
-      // Prefer latest ANC assessment (local + synced history) for last visit
-      // and stamped nextVisitDate — same source as Care History / summary.
-      final schedule = await context
+      final ancContext = await this.context
           .read<AssessmentRepository>()
-          .latestAncVisitSchedule(patientId, alsoId: widget.memberId);
+          .latestAncRevisitContext(
+            patientId,
+            alsoId: widget.memberId,
+            extraIds: aliasIds,
+          );
 
-      final snapshots = context.read<PregnancySnapshotDao>();
+      final snapshots = this.context.read<PregnancySnapshotDao>();
       final snapshot = await snapshots.byPatientOrMember(
         patientId,
         memberId: widget.memberId,
       );
-      final lastVisitMs = schedule?.lastVisitAt.millisecondsSinceEpoch ??
-          snapshot?.lastAncVisitDateMs;
-      if (lastVisitMs == null) {
-        debugPrint(
-          '[AncRevisitDebug] READ patientId=$patientId memberId=${widget.memberId} '
-          'scheduleFound=${schedule != null} snapshotFound=${snapshot != null} '
-          'lastAncVisitDateMs=null → fallbackTooSoon=$fallbackTooSoon',
-        );
-        return _AncRevisitStatus(tooSoon: fallbackTooSoon);
+      int? lastVisitMs = ancContext?.lastVisitAt.millisecondsSinceEpoch;
+      void bump(int? ms) {
+        if (ms == null) return;
+        if (lastVisitMs == null || ms > lastVisitMs!) lastVisitMs = ms;
       }
-      final highRisk = snapshot?.facts.highRiskPregnantWoman ?? false;
-      final revisitDays = highRisk ? 1 : 15;
-      final stampedNext = schedule?.nextDueAt;
-      final int nextDueMs;
-      final bool tooSoon;
-      if (stampedNext != null) {
-        nextDueMs = CalendarDay.startOf(stampedNext).millisecondsSinceEpoch;
-        // Locked until the calendar due day arrives (daysToDue > 0).
-        tooSoon = CalendarDay.daysBetween(DateTime.now(), stampedNext) > 0;
-      } else {
-        nextDueMs =
-            lastVisitMs + Duration(days: revisitDays).inMilliseconds;
-        final daysSince = DateTime.now()
-            .difference(DateTime.fromMillisecondsSinceEpoch(lastVisitMs))
-            .inDays;
-        tooSoon = daysSince < revisitDays;
-      }
+
+      bump(snapshot?.lastAncVisitDateMs);
+      bump(openEpisodeLastAncMs);
+
+      final highRisk = ancContext?.highRiskPw ??
+          snapshot?.facts.highRiskPregnantWoman ??
+          false;
+      final lock = computeAncRevisitLock(
+        lastVisitMs: lastVisitMs,
+        highRisk: highRisk,
+        ancAssessmentToday: fallbackTooSoon,
+      );
+      final daysSince = lastVisitMs == null
+          ? null
+          : CalendarDay.daysBetween(
+              DateTime.fromMillisecondsSinceEpoch(lastVisitMs!),
+              DateTime.now(),
+            );
       debugPrint(
         '[AncRevisitDebug] READ patientId=$patientId memberId=${widget.memberId} '
-        'lastVisitMs=$lastVisitMs nextDueMs=$nextDueMs '
-        'stampedNext=${stampedNext != null} highRisk=$highRisk '
-        'revisitDays=$revisitDays → tooSoon=$tooSoon',
+        'aliasIds=$aliasIds contextFound=${ancContext != null} '
+        'snapshotFound=${snapshot != null} openEpisodeLastAncMs=$openEpisodeLastAncMs '
+        'lastVisitMs=$lastVisitMs highRisk=$highRisk ancToday=$fallbackTooSoon '
+        'revisitDays=${lock.revisitDays} daysSince=$daysSince → tooSoon=${lock.tooSoon}',
       );
       return _AncRevisitStatus(
-        tooSoon: tooSoon,
-        lastVisitMs: lastVisitMs,
-        nextDueMs: nextDueMs,
-        highRisk: highRisk,
-        revisitDays: revisitDays,
+        tooSoon: lock.tooSoon,
+        lastVisitMs: lock.lastVisitMs,
+        highRisk: lock.highRisk,
+        revisitDays: lock.revisitDays,
       );
     } catch (e) {
       debugPrint('[SymptomPicker] ANC revisit-interval lookup failed: $e');
@@ -940,7 +1048,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   Future<bool> _isAncRevisitTooSoon() async => (await _computeAncRevisitStatus(
         patientId: _patientId,
+        aliasIds: _patientAliasIds.isEmpty
+            ? [
+                widget.patientId,
+                if (widget.memberId != null) widget.memberId!,
+                _patientId,
+              ].where((id) => id.isNotEmpty).toList()
+            : _patientAliasIds,
         fallbackTooSoon: _ancVisitedToday,
+        openEpisodeLastAncMs: _openPregnancyEpisode?.obstetric.lastAncVisitDateMs,
       ))
           .tooSoon;
 
@@ -956,8 +1072,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         title = AppStrings.ancBlockedPostpartumTitle;
         message = AppStrings.ancBlockedPostpartumMessage;
       case ServiceSelectionBlockReason.ancBlockedRevisit:
-        title = AppStrings.ancBlockedDuplicateTitle;
-        message = AppStrings.ancBlockedDuplicateMessage;
+        if (_ancRevisitStatus.lastVisitMs == null) {
+          title = AppStrings.ancBlockedDuplicateTitle;
+          message = AppStrings.ancBlockedDuplicateMessage;
+        } else {
+          title = AppStrings.ancBlockedRevisitTitle;
+          message = ancRevisitLockMessage(_ancRevisitLockInput(_ancRevisitStatus));
+        }
     }
     return showDialog<void>(
       context: context,
@@ -975,8 +1096,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     );
   }
 
-  void _navigateToForm(List<ActivatedPathway> pathways) {
-    debugPrint('[_SymptomPickerScreenState] _navigateToForm pathways=${pathways}');
+  void _navigateToForm(
+    List<ActivatedPathway> pathways, {
+    required List<String> programmeNames,
+    required bool isDeliveryVisit,
+  }) {
+    debugPrint('[_SymptomPickerScreenState] _navigateToForm pathways=$pathways '
+        'programmes=$programmeNames isDelivery=$isDeliveryVisit');
     final origin = widget.origin;
     final originParam = origin != null ? '?origin=$origin' : '';
 
@@ -987,7 +1113,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         'memberId': widget.memberId,
         'householdId': widget.householdId,
         'patientAge': widget.patientAge,
-        'activatedPathways': pathways.map((p) => p.programme.name).toList(),
+        'activatedPathways': programmeNames,
+        'isDeliveryVisit': isDeliveryVisit,
       },
     );
   }
@@ -1314,9 +1441,14 @@ class _AiBriefingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Pronoun resolution — spec §4.1 ANC greeting "আপু" (her),
-    // §5.1 NCD "কাকা" (him). Defaults to him when sex is unknown.
-    final isFemale = patientContext.sex == Sex.female;
+    // Pronoun resolution for the SK-facing header and hint. Tri-state on
+    // purpose: an unrecorded sex must not silently read as male, so it maps
+    // to null and the card says "HIM/HER" instead of picking one.
+    final isFemale = switch (patientContext.sex) {
+      Sex.female => true,
+      Sex.male => false,
+      Sex.unknown => null,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -1340,7 +1472,6 @@ class _AiBriefingSection extends StatelessWidget {
         // can't answer for themselves, so the card addresses the guardian.
         GreetWarmlyCard(
           isFemale: isFemale,
-          loading: briefingLoading,
           // Deliberately not isYoungChild (RMNCH childhoodVisit, <25mo) —
           // this card's "can't answer for themselves" rationale is a
           // communication-capability concern for the whole under-5 band,
@@ -1350,10 +1481,6 @@ class _AiBriefingSection extends StatelessWidget {
           // revert this back on a future merge.)
           isChild: patientContext.ageMonths < 60,
           selectedProgrammes: selectedProgrammes,
-          gestationalWeeks: patientContext.gestationalWeeks,
-          greeting: briefingData?.greeting,
-          fallbackOpeningLine:
-              briefingData?.suggestedDiscussionPoints.openingLine,
         ),
       ],
     );
@@ -1493,118 +1620,62 @@ class _BriefingCard1Content extends StatelessWidget {
 // greeting line in the SK's selected app language, footer is a small
 // helper hint so the SK leads with empathy before tapping the AI Scribe
 // below. Header/hint/greeting all follow [AppLocale] — no bilingual
-// pairing: only the selected language renders, never both at once. The
-// greeting prefers the AI-generated `greeting` block for the active
-// language and falls back to the localized static copy when it's null,
-// empty, or the SK has disabled the Step 1 AI briefing. When the briefing
-// API returns a non-empty openingLine (legacy, pre-`greeting` field) we
-// surface it as the English line before falling back to the static one —
-// only relevant when the app language is English.
+// pairing: only the selected language renders, never both at once.
+//
+// Entirely local: the card takes no briefing data and makes no network
+// call, so it paints on the first frame with no skeleton state, and the
+// opener is identical every visit and always available offline.
 //
 // Public so it can be pumped directly in a widget test — see
-// GreetWarmlyCard's own test file for the header/hint/fallback coverage.
+// GreetWarmlyCard's own test file for the header/hint coverage.
 class GreetWarmlyCard extends StatelessWidget {
   const GreetWarmlyCard({
     super.key,
     required this.isFemale,
-    required this.loading,
     this.isChild = false,
     this.selectedProgrammes = const {},
-    this.gestationalWeeks,
-    this.greeting,
-    this.fallbackOpeningLine,
   });
 
-  final bool isFemale;
-  final bool loading;
+  /// Tri-state: `true` female, `false` male, `null` when the patient's sex
+  /// isn't recorded — the header and hint then say "HIM/HER" and "he/she"
+  /// instead of defaulting to one. Only those two consume it; the greeting
+  /// line itself is genderless in every case.
+  final bool? isFemale;
 
   /// True for an under-5 patient — they can't answer for themselves, so
   /// every line addresses the guardian about the child rather than the
-  /// child directly (the AI-generated `greeting` block is instructed to do
-  /// the same; this only governs the offline / AI-unavailable fallback).
+  /// child directly.
   final bool isChild;
 
-  /// The SK's currently-ticked service cards. Governs which static
-  /// fallback question is asked — e.g. an ANC visit asks a
-  /// pregnancy-relevant question, an NCD visit asks about medicines —
-  /// instead of one question assumed for every adult patient regardless of
-  /// why they're being seen today.
+  /// The SK's currently-ticked service cards. Governs which static coaching
+  /// hint is shown, so it names the actual checkup rather than always
+  /// assuming a pregnancy one. Deliberately does NOT reach the greeting
+  /// line — that stays generic (see
+  /// [SymptomPickerStrings.sitWithGreetEnglishFor]).
   final Set<Programme> selectedProgrammes;
-
-  /// Gates the fetal-movement question within the pregnancy fallback to
-  /// when it's actually meaningful (quickening isn't felt in early
-  /// pregnancy) — null/early gestation asks about nausea/appetite instead.
-  final int? gestationalWeeks;
-
-  /// AI-generated greeting block. When null or empty, the localized static
-  /// fallback is shown so the SK still has a sensible opener offline.
-  final GreetingContent? greeting;
-
-  /// Legacy fallback — the SDP opening line was used before the dedicated
-  /// greeting block existed. Surface it as the English line when the new
-  /// `greeting.english` field is empty and the app language is English.
-  /// Not used for a child patient — an adult-patient opener wouldn't fit a
-  /// guardian-directed greeting.
-  final String? fallbackOpeningLine;
 
   static const Color _navyBg = AppColors.navy;
 
   /// Single greeting line in the SK's selected app language — Bangla when
   /// [AppLocale.isBangla], English otherwise. Never returns both languages
   /// at once.
-  String _resolveGreetingLine() {
-    final g = greeting;
-    if (AppLocale.isBangla) {
-      if (g != null && g.bangla.trim().isNotEmpty) return g.bangla.trim();
-      return SymptomPickerStrings.sitWithGreetBanglaFor(
-        isFemale: isFemale,
-        isChild: isChild,
-        selectedProgrammes: selectedProgrammes,
-        gestationalWeeks: gestationalWeeks,
-      );
-    }
-    if (g != null && g.english.trim().isNotEmpty) return g.english.trim();
-    if (!isChild &&
-        fallbackOpeningLine != null &&
-        fallbackOpeningLine!.trim().isNotEmpty) {
-      return fallbackOpeningLine!.trim();
-    }
-    return SymptomPickerStrings.sitWithGreetEnglishFor(
-      isFemale: isFemale,
-      isChild: isChild,
-      selectedProgrammes: selectedProgrammes,
-      gestationalWeeks: gestationalWeeks,
-    );
-  }
+  String _resolveGreetingLine() => AppLocale.isBangla
+      ? SymptomPickerStrings.sitWithGreetBanglaFor(isChild: isChild)
+      : SymptomPickerStrings.sitWithGreetEnglishFor(isChild: isChild);
 
   /// Coaching line shown under the greeting, in the SK's selected app
-  /// language. When the app language is Bangla, prefers `greeting.hintBn`,
-  /// then `greeting.hintBangla`, then falls through to the generic
-  /// `greeting.hint`; English just uses `greeting.hint` directly. Falls
-  /// back to the localized static coaching line when none of the AI
-  /// fields are populated so the SK still gets the "ask about home first"
-  /// nudge offline.
-  String _resolveHint() {
-    final g = greeting;
-    if (g != null) {
-      if (AppLocale.isBangla) {
-        if (g.hintBn.trim().isNotEmpty) return g.hintBn.trim();
-        if (g.hintBangla.trim().isNotEmpty) return g.hintBangla.trim();
-      }
-      if (g.hint.trim().isNotEmpty) return g.hint.trim();
-    }
-    return SymptomPickerStrings.sitWithGreetHintFor(
-      isFemale: isFemale,
-      selectedProgrammes: selectedProgrammes,
-      isChild: isChild,
-    );
-  }
+  /// language — the "ask about home first" nudge, chosen from the ticked
+  /// service cards.
+  String _resolveHint() => SymptomPickerStrings.sitWithGreetHintFor(
+    isFemale: isFemale,
+    selectedProgrammes: selectedProgrammes,
+    isChild: isChild,
+  );
 
   @override
   Widget build(BuildContext context) {
     final greetingLine = _resolveGreetingLine();
     final hint = _resolveHint();
-    final hasAi = greeting != null && !greeting!.isEmpty;
 
     return Container(
       decoration: BoxDecoration(
@@ -1631,10 +1702,9 @@ class GreetWarmlyCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 5),
-          if (loading && !hasAi)
-            const _GreetLoadingSkeleton()
-          else
-            Column(
+          // No loading branch: the copy is local, so it paints on the first
+          // frame rather than after a briefing round-trip.
+          Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -1665,39 +1735,6 @@ class GreetWarmlyCard extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-/// Skeleton shown inside [GreetWarmlyCard] while the briefing API is in
-/// flight. Mirrors the navy palette so it doesn't flash white.
-class _GreetLoadingSkeleton extends StatelessWidget {
-  const _GreetLoadingSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final w = c.maxWidth;
-        Widget bar(double fraction, double height) => Container(
-          width: w * fraction,
-          height: height,
-          decoration: BoxDecoration(
-            color: AppColors.textOnNavy.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(4),
-          ),
-        );
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            bar(0.85, 18),
-            const SizedBox(height: 8),
-            bar(0.65, 18),
-            const SizedBox(height: 12),
-            bar(0.95, 14),
-          ],
-        );
-      },
     );
   }
 }
@@ -1919,10 +1956,20 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
         final isSearching = _query.isNotEmpty;
 
         // Search pool: full applicable vocab for cross-programme discovery
-        // once the SK types 3+ chars; otherwise restricted to catalog codes.
+        // once the SK types 3+ chars; otherwise restricted to catalog codes
+        // that pass the demographic gate (males must not see maternal chips
+        // like reduced_fetal_movement in short-prefix search).
         final searchPool = _query.length >= _secondaryThreshold
             ? vm.applicableVocabCodes
-            : SymptomCatalog.all.map((s) => s.code).toList();
+            : SymptomCatalog.all
+                .map((s) => s.code)
+                .where(
+                  (c) => AiScribeTriageVocab.isDemographicallyPlausible(
+                    c,
+                    vm.patientContext,
+                  ),
+                )
+                .toList();
 
         // Determine which sections to show in the grid.
         // Searching → flat headerless section of matches.
@@ -2449,10 +2496,12 @@ class _InlineServiceSelector extends StatelessWidget {
       return isDelivery || ctx.isPostpartum || openPregnancyEpisode != null;
     }
     if (card.programme == Programme.anc) {
-      // ANC requires PW selection first; also blocked within the risk-based
-      // revisit interval (1 day if high-risk, 15 days otherwise).
-      // !pregnant removed: SK may start ANC for a new pregnancy (no prior PW record).
-      return !isPW || isDelivery || ancRevisitStatus.tooSoon;
+      return ProgrammeGridSync.isAncGridLocked(
+        isPostpartum: ctx.isPostpartum,
+        isPwGateOpen: isPW,
+        isDeliveryVisit: isDelivery,
+        ancRevisitTooSoon: ancRevisitStatus.tooSoon,
+      );
     }
     if (card.isDelivery) {
       return ProgrammeGridSync.isPregnancyOutcomeLocked(
@@ -2461,13 +2510,13 @@ class _InlineServiceSelector extends StatelessWidget {
         hasOpenPregnancyEpisode: openPregnancyEpisode != null,
       );
     }
-    // PNC's normal rule ("available once postpartum") can't fire during the
-    // very visit that records the delivery — isPostpartum isn't true until
-    // that submission lands. Carved out here so PNC is a genuinely optional,
-    // freely-toggleable card specifically on a delivery visit (default
-    // selected via ProgrammeGridSync.applyDeliverySelected, but the SK can
-    // untick it — see ServiceSelectionResolver.finalize's pncDismissedBySk).
-    if (card.programme == Programme.pnc) return !ctx.isPostpartum && !isDelivery;
+    // PNC requires PO first (PW+ANC parity): PO visit selected, or postpartum
+    // (delivery already on record). Prerequisite PO for new pregnancies is
+    // backfilled at Continue when symptoms surface PNC alone.
+    if (card.programme == Programme.pnc) {
+      if (ctx.isPostpartum) return false;
+      return !isDelivery;
+    }
     // FP is contraindicated during active pregnancy; available post-delivery.
     if (card.programme == Programme.familyPlanning) return pregnant;
     return false;
@@ -2493,7 +2542,8 @@ class _InlineServiceSelector extends StatelessWidget {
     // visit — mirrors the PW-episode treatment above.
     if (card.programme == Programme.anc) {
       return selectedProgrammes.contains(Programme.anc) &&
-          !ancRevisitStatus.tooSoon;
+          !ancRevisitStatus.tooSoon &&
+          !patientContext.isPostpartum;
     }
     if (card.isDelivery) return isDelivery;
     if (card.isRMNCH) {
@@ -2520,12 +2570,15 @@ class _InlineServiceSelector extends StatelessWidget {
       if (ctx.isPostpartum) return TriageStrings.pwLockedPostpartumHint;
     }
     if (card.programme == Programme.anc) {
+      if (ctx.isPostpartum) return TriageStrings.ancLockedPostpartumHint;
       if (isDelivery) return TriageStrings.ancDeliveryConflictHint;
-      if (ancRevisitStatus.tooSoon) return _ancRevisitMessage(ancRevisitStatus);
+      if (ancRevisitStatus.tooSoon) {
+        return ancRevisitLockMessage(_ancRevisitLockInput(ancRevisitStatus));
+      }
       return TriageStrings.pwHint; // locked because PW isn't selected yet
     }
     if (card.isDelivery) return TriageStrings.pregnancyOutcomeLockedHint;
-    if (card.programme == Programme.pnc) return TriageStrings.pncOnlyPostpartumHint;
+    if (card.programme == Programme.pnc) return TriageStrings.pncPoHint;
     if (card.programme == Programme.familyPlanning) {
       return TriageStrings.fpLockedPregnantHint;
     }
@@ -2631,10 +2684,7 @@ class _InlineServiceSelector extends StatelessWidget {
                         pathwayProgrammes.contains(c.programme),
                     subtitle: (c.isPW && openPregnancyEpisode != null)
                         ? _pwEpisodeSubtitle(openPregnancyEpisode!)
-                        : (c.programme == Programme.anc &&
-                                ancRevisitStatus.tooSoon)
-                            ? _ancRevisitMessage(ancRevisitStatus)
-                            : null,
+                        : null,
                     onTap: () => _handleTap(context, c),
                   ))
               .toList(),
@@ -2645,7 +2695,7 @@ class _InlineServiceSelector extends StatelessWidget {
 
   /// Compact "LMP … · EDD …" subtitle shown on the locked PW card.
   String _pwEpisodeSubtitle(PregnancyEpisodeRow episode) {
-    final fmt = DateFormat('d MMM yyyy');
+    final fmt = AppDateFormat.dayMonthYearFmt;
     final lmpMs = episode.obstetric.lmpDate;
     final eddMs = episode.obstetric.eddDate;
     return TriageStrings.pwEpisodeSubtitle(
@@ -2658,25 +2708,6 @@ class _InlineServiceSelector extends StatelessWidget {
     );
   }
 
-  /// Message shown both on the locked ANC card's subtitle and its tap toast
-  /// — deliberately the same string in both places (unlike the PW fix).
-  String _ancRevisitMessage(_AncRevisitStatus status) {
-    final lastVisitMs = status.lastVisitMs;
-    if (lastVisitMs == null) return TriageStrings.ancVisitedTodayMessage;
-    final fmt = DateFormat('d MMM yyyy');
-    final lastVisitStr =
-        fmt.format(DateTime.fromMillisecondsSinceEpoch(lastVisitMs));
-    if (status.highRisk) {
-      return TriageStrings.ancRevisitMessageHighRisk(lastVisit: lastVisitStr);
-    }
-    final revisitDays = status.revisitDays ?? 15;
-    final nextDueMs = status.nextDueMs ??
-        lastVisitMs + Duration(days: revisitDays).inMilliseconds;
-    return TriageStrings.ancRevisitMessageNormal(
-      lastVisit: lastVisitStr,
-      nextDue: fmt.format(DateTime.fromMillisecondsSinceEpoch(nextDueMs)),
-    );
-  }
 }
 
 class _ServiceTile extends StatelessWidget {

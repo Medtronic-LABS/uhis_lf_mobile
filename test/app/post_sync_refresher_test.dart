@@ -123,8 +123,8 @@ void main() {
 
   test('an explicit refreshNow still runs even when the sync wrote nothing',
       () async {
-    // The gate belongs to the stream hook, not to the method: the sync screen
-    // calls refreshNow() directly and must still prepare the dashboard.
+    // The gate belongs to the stream hook, not to the method: callers that
+    // need a refresh despite an empty pull (e.g. manual) must still run.
     final refresher = attach();
     progress.add(SyncProgress.completed(hasChanges: false));
     await pumpEventQueue();

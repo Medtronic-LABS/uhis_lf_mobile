@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:uhis_next/core/api/api_client.dart';
 import 'package:uhis_next/core/api/endpoints.dart';
 import 'package:uhis_next/core/config/app_config.dart';
+import 'package:uhis_next/core/i18n/app_locale.dart';
 
 /// Counts requests per path and replays a scripted outcome per attempt, so a
 /// test can assert exactly how many times a request was issued. Replaces the
@@ -62,6 +63,11 @@ Future<(ApiClient, _ScriptedAdapter)> _clientWith(
 }
 
 void main() {
+  // These assert English copy, so pin the language. AppLocale defaults to
+  // Bangla (BD-first), and Bangla localizes digits — '12 days' becomes
+  // '১২ days' — so an unpinned test is really asserting the default locale.
+  setUp(() => AppLocale.current = AppLanguage.english);
+
   group('ApiClient timeouts', () {
     test('BaseOptions are driven by AppConfig, not hardcoded', () async {
       final api = await ApiClient.create();

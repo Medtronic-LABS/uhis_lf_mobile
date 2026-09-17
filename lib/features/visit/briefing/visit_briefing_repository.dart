@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 
 import '../../../core/api/api_client.dart';
@@ -31,7 +32,7 @@ class VisitBriefingRepository {
   // sends 'clinicalFindings' (rule-computed) instead of the old ad-hoc
   // 'riskIndicators' list — a breaking change to what the backend prompt
   // produces.
-  static const String _kindBriefing = 'visit-briefing.v5';
+  static const String _kindBriefing = 'visit-briefing.v6';
   static const String _kindSummary = 'patient-summary.v3';
 
   /// Returns the Dio instance and path pair to use for a given remote path.
@@ -53,7 +54,8 @@ class VisitBriefingRepository {
 
   String _cacheKeyFor(String kind, Map<String, dynamic> ctx) {
     final pid = (ctx['patientId'] as String?)?.trim() ?? 'unknown';
-    return '$kind:$pid';
+    final lang = (ctx['appLanguage'] as String?)?.trim() ?? 'en';
+    return '$kind:$pid:$lang';
   }
 
   Future<VisitBriefingResponse> generate(Map<String, dynamic> patientContext) async {
@@ -65,6 +67,7 @@ class VisitBriefingRepository {
     final cache = _cache;
     if (cache != null) {
       final cached = await cache.get(cacheKey, contentHash: hash);
+      debugPrint('[BriefingCache] key=$cacheKey hit=${cached != null}');
       if (cached != null) {
         final decoded = jsonDecode(cached.payload) as Map<String, dynamic>;
         return VisitBriefingResponse.fromJson(decoded);

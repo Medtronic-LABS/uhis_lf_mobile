@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uhis_next/core/api/api_client.dart';
 import 'package:uhis_next/core/clinical/briefing_rules/briefing_findings_aggregator.dart';
+import 'package:uhis_next/core/clinical/briefing_rules/clinical_finding.dart';
+import 'package:uhis_next/core/constants/app_strings.dart';
 import 'package:uhis_next/core/db/app_database.dart';
 import 'package:uhis_next/core/db/assessment_dao.dart';
 import 'package:uhis_next/core/db/immunisation_dao.dart';
@@ -547,5 +549,145 @@ void main() {
 
       expect(findings.map((f) => f.code), contains('childImmunization.weightGainSlowed'));
     });
+  });
+
+  // Regression: the routine finding announced "Visit 1" for a woman with two
+  // completed ANC visits. `ancVisitCount`/`pncVisitCount` were read only from
+  // tier-1 local rows, so any visit history reaching the rules through the
+  // history or remote tier — which happens precisely when tier 1 is empty —
+  // necessarily counted 0. Asserted against ClinicalFindingStrings so the
+  // expectation is exact and independent of the active locale's numerals.
+  group('BriefingFindingsAggregator.build — visit count matches the tier that '
+      'supplied the data', () {
+    Future<List<ClinicalFinding>> buildAnc(
+      AppDatabase db, {
+      required String patientId,
+      String? ctxPatientId,
+      List<MemberAssessment> remote = const [],
+    }) async =>
+        BriefingFindingsAggregator.build(
+          patientId: patientId,
+          patientCtx: patientCtx(
+            patientId: ctxPatientId ?? patientId,
+            activeProgrammes: {Programme.anc},
+          ),
+          selectedProgrammes: {Programme.anc},
+          assessmentDao: LocalAssessmentDao(db),
+          historyAssessmentDao: AssessmentDao(db),
+          followUpRepo: FollowUpRepository(await ApiClient.create()),
+          patientDao: PatientDao(db),
+          immunisationDao: ImmunisationDao(db),
+          remoteAssessments: remote,
+        );
+
+    /// Flat BP across both visits so no rising-trend rule fires and the
+    /// routine fallback — the finding that carries the count — is reached.
+    Map<String, dynamic> ancDetails() => {
+          'medicalHistoryPhysicalExamination': {'systolic': 110, 'diastolic': 70},
+        };
+
+    test('two LOCAL ANC visits → third visit announced', () async {
+      final db = await openTestDb();
+      addTearDown(db.close);
+      await insertAssessment(db,
+          patientId: 'p1',
+          assessmentType: 'ANC',
+          details: ancDetails(),
+          createdAt: 1000);
+      await insertAssessment(db,
+          patientId: 'p1',
+          assessmentType: 'ANC',
+          details: ancDetails(),
+          createdAt: 2000);
+
+      final findings = await buildAnc(db, patientId: 'p1');
+
+      expect(findings.map((f) => f.message),
+          contains(ClinicalFindingStrings.ancRoutineVisit(3)));
+    });
+
+    test('two ANC visits in synced HISTORY only → third visit announced, '
+        'not the first', () async {
+      final db = await openTestDb();
+      addTearDown(db.close);
+      await insertHistoryAssessment(db,
+          patientId: 'p1',
+          kind: 'ANC',
+          observations: {'systolic': 110, 'diastolic': 70},
+          occurredAt: 1000);
+      await insertHistoryAssessment(db,
+          patientId: 'p1',
+          kind: 'ANC',
+          observations: {'systolic': 110, 'diastolic': 70},
+          occurredAt: 2000);
+
+      final findings = await buildAnc(db, patientId: 'p1');
+
+      expect(findings.map((f) => f.message),
+          contains(ClinicalFindingStrings.ancRoutineVisit(3)));
+      expect(findings.map((f) => f.message),
+          isNot(contains(ClinicalFindingStrings.ancRoutineVisit(1))));
+    });
+
+    test('two ANC visits in remoteAssessments only → third visit announced',
+        () async {
+      final db = await openTestDb();
+      addTearDown(db.close);
+
+      final findings = await buildAnc(db, patientId: 'p1', remote: [
+        MemberAssessment(
+          id: 'e2',
+          type: 'ANC',
+          date: DateTime(2026, 8, 20),
+          rawJson: const {
+            'observations': {'bp': '110/70'}
+          },
+        ),
+        MemberAssessment(
+          id: 'e1',
+          type: 'ANC',
+          date: DateTime(2026, 7, 10),
+          rawJson: const {
+            'observations': {'bp': '110/70'}
+          },
+        ),
+      ]);
+
+      expect(findings.map((f) => f.message),
+          contains(ClinicalFindingStrings.ancRoutineVisit(3)));
+    });
+
+    test('local rows keyed by an id the route did not carry are still found '
+        'via the remapped context id', () async {
+      final db = await openTestDb();
+      addTearDown(db.close);
+      // AssessmentRepository stores under members.patient_id; the screen
+      // routed with a different id that PatientContextBuilder remapped.
+      await insertAssessment(db,
+          patientId: 'local-42',
+          assessmentType: 'ANC',
+          details: ancDetails(),
+          createdAt: 1000);
+      await insertAssessment(db,
+          patientId: 'local-42',
+          assessmentType: 'ANC',
+          details: ancDetails(),
+          createdAt: 2000);
+
+      final findings = await buildAnc(
+        db,
+        patientId: 'Patient/fhir-999',
+        ctxPatientId: 'local-42',
+      );
+
+      expect(findings.map((f) => f.message),
+          contains(ClinicalFindingStrings.ancRoutineVisit(3)));
+    });
+
+    // NOT COVERED: the matching pncVisitCount fix. PNC's routine message
+    // (`ClinicalFindingStrings.pncRoutine`) carries no number, so the count
+    // only reaches the SK through `pncOverdueVisit` — which needs a
+    // FollowUpDao-backed FollowUpRepository plus a follow_ups rawJson whose
+    // programme inference resolves to PNC. Worth adding with that fixture.
   });
 }

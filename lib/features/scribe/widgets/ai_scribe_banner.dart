@@ -1,14 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/api/realtime_asr_service.dart';
-import '../../../core/api/scribe_api_service.dart';
 import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/app_database.dart';
 import '../../../core/db/audio_sample_dao.dart';
+import '../../../core/i18n/app_locale.dart';
+import '../../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../../core/preferences/vad_tuning_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
@@ -54,6 +56,7 @@ class AiScribeBanner extends StatefulWidget {
     this.onFormFill,
     this.symptomVocab,
     this.onLiveSymptomCodes,
+    this.visibleFieldIds,
   });
 
   final String encounterId;
@@ -97,6 +100,12 @@ class AiScribeBanner extends StatefulWidget {
   final void Function(RealtimeSymptomCodes codes, String fullTranscript)?
       onLiveSymptomCodes;
 
+  /// Field ids currently rendered on the assessment form. When set, the
+  /// extraction schema is restricted to them so a progressive-disclosure
+  /// field cannot be auto-filled while the SK has no way to see or confirm
+  /// it. Pass null to offer the programme's full field set.
+  final Set<String>? visibleFieldIds;
+
   @override
   State<AiScribeBanner> createState() => _AiScribeBannerState();
 }
@@ -125,19 +134,41 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       service: context.read<RealtimeAsrService>(),
       permissionService: ScribePermissionService(),
       vadTuning: context.read<VadTuningNotifier>(),
+      audioSettings: context.read<ScribeAudioSettingsNotifier>(),
     );
     _liveCtrl.setHierarchyService(context.read<UserHierarchyService>());
     _liveCtrl.setSampleDao(AudioSampleDao(context.read<AppDatabase>()));
-    _liveCtrl.setScribeApiService(context.read<ScribeApiService>());
     _liveCtrl.addListener(_onLiveChanged);
-    final assessmentType = widget.assessmentType;
-    if (assessmentType != null) {
-      _liveCtrl.setFormSchema(
-        FormFieldSchemaBuilder.forProgrammeNames(
-          assessmentType.split(',').map((s) => s.trim()).toList(),
-        ),
-      );
+    _applyFormSchema();
+  }
+
+  @override
+  void didUpdateWidget(AiScribeBanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Progressive disclosure: answering a gate question reveals new fields
+    // mid-visit. The controller re-sends the schema on every extract, so
+    // refreshing it here is enough for the next extraction to pick them up.
+    if (oldWidget.assessmentType != widget.assessmentType ||
+        !setEquals(oldWidget.visibleFieldIds, widget.visibleFieldIds)) {
+      _applyFormSchema();
     }
+  }
+
+  /// Builds the live-ASR extraction schema from the current assessment type
+  /// and rendered-field set. Null assessment type (Step 1) clears it, which
+  /// keeps the generic symptom-extraction path.
+  void _applyFormSchema() {
+    final assessmentType = widget.assessmentType;
+    if (assessmentType == null) {
+      _liveCtrl.setFormSchema(null);
+      return;
+    }
+    _liveCtrl.setFormSchema(
+      FormFieldSchemaBuilder.forProgrammeNames(
+        assessmentType.split(',').map((s) => s.trim()).toList(),
+        visibleFieldIds: widget.visibleFieldIds,
+      ),
+    );
   }
 
   @override
@@ -223,6 +254,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
           '${widget.assessmentType} ==========>>');
     }
     _liveCtrl.start(
+      language: AppLocale.isBangla ? 'bn-IN' : 'en-IN',
       assessmentType: widget.assessmentType,
       symptomVocab: widget.symptomVocab,
       encounterId: widget.encounterId,
@@ -252,6 +284,12 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
     final session = controller.session;
     final liveActive = _liveCtrl.isActive;
+    // Distinct from `isActive`: `error` must still render (the panel that
+    // shows `errorMessage`), even though the session itself is no longer
+    // occupying the mic/socket. Using `isActive` alone here is exactly the
+    // bug that made every realtime ASR error structurally invisible.
+    final liveErrored = _liveCtrl.state == RealtimeAsrState.error;
+    final showLivePanel = liveActive || liveErrored;
     final isRecording = !liveActive && session.state == ScribeState.recording;
     final isError =
         !liveActive && !_showDone && session.state == ScribeState.error;
@@ -263,8 +301,8 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     final idleChoice =
         !liveActive && !isRecording && !isError && !isProcessing;
 
-    final title = liveActive
-        ? RealtimeAsrStrings.title
+    final title = showLivePanel
+        ? (liveErrored ? RealtimeAsrStrings.errorTitle : RealtimeAsrStrings.title)
         : _showDone
             ? SymptomPickerStrings.scribeBannerDone
             : isError
@@ -277,12 +315,14 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                             isFemale: widget.isFemale,
                           );
 
-    final subtitle = liveActive
-        ? (switch (_liveCtrl.state) {
-            RealtimeAsrState.connecting => RealtimeAsrStrings.connecting,
-            RealtimeAsrState.stopping => RealtimeAsrStrings.stopping,
-            _ => RealtimeAsrStrings.listening,
-          })
+    final subtitle = showLivePanel
+        ? (liveErrored
+            ? (_liveCtrl.errorMessage ?? RealtimeAsrStrings.genericError)
+            : switch (_liveCtrl.state) {
+                RealtimeAsrState.connecting => RealtimeAsrStrings.connecting,
+                RealtimeAsrState.stopping => RealtimeAsrStrings.stopping,
+                _ => RealtimeAsrStrings.listening,
+              })
         : _showDone
             ? SymptomPickerStrings.scribeBannerDoneSubtitle
             : isError
@@ -321,8 +361,10 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       color: Colors.transparent,
       child: Semantics(
         button: !isProcessing,
-        label: liveActive
-            ? RealtimeAsrStrings.stopLiveLabel
+        label: showLivePanel
+            ? (liveErrored
+                ? RealtimeAsrStrings.errorTitle
+                : RealtimeAsrStrings.stopLiveLabel)
             : isRecording
                 ? SymptomPickerStrings.scribeStopRecordingLabel
                 : isError
@@ -431,7 +473,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
                     ),
                   ],
                 ),
-                if (liveActive) ...[
+                if (showLivePanel) ...[
                   const SizedBox(height: 10),
                   AiScribeLiveAsrPanel(controller: _liveCtrl),
                 ],
@@ -476,10 +518,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     }
     if (showDone) return const ScribeDoneMicOrb();
     if (isRecording) {
-      return ScribeRecordingMicOrb(
-        recorderController: controller.waveformRecorder,
-        backgroundColor: _recordingIconBg,
-      );
+      return const ScribeRecordingMicOrb(backgroundColor: _recordingIconBg);
     }
     if (isProcessing) {
       return const ScribeProcessingMicOrb(backgroundColor: _iconBg);

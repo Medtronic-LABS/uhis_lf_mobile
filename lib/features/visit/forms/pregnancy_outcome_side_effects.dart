@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../core/db/member_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -67,23 +66,59 @@ class PregnancyOutcomeSideEffects {
         : 'Mother';
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
+    final localHouseholdId = householdId ?? mother.householdId;
+
     for (var index = 0; index < newborns.length; index++) {
       final raw = newborns[index];
       if (raw is! Map) continue;
-      final alive = raw['isBabyAlive']?.toString().toLowerCase();
-      if (alive != 'yes') continue;
+      if (!_isBabyAlive(raw['isBabyAlive'])) continue;
 
       final sex = raw['sex']?.toString().trim().toLowerCase() ?? '';
-      final babyRef = const Uuid().v4();
       // Spice names by newbornDetails index (1-based), not live-only count.
       final babyName = 'Baby ${index + 1} of $motherName';
       final dobWire = _dateWire(deliveryDate);
 
-      final entity = HouseholdMemberEntity(
-        id: babyRef,
-        referenceId: babyRef,
-        householdId: householdId ?? mother.householdId,
-        householdReferenceId: mother.householdReferenceId,
+      // UHIS / enrollment parity: insertLocal keeps sync_status NotSynced so
+      // getUnsynced() picks the baby up on offline-sync/create. upsertMany()
+      // routed through insertOrUpdateFromBE() and incorrectly stamped Success.
+      final localId = await _members.insertLocal(
+        HouseholdMemberEntity(
+          id: '0',
+          householdId: localHouseholdId,
+          householdFhirId: mother.householdFhirId,
+          householdReferenceId:
+              mother.householdReferenceId ?? localHouseholdId,
+          name: babyName,
+          gender: sex,
+          dob: dobWire,
+          patientId: null,
+          villageId: mother.villageId,
+          villageName: mother.villageName,
+          subVillageId: mother.subVillageId,
+          subVillageName: mother.subVillageName,
+          shasthyaShebikaId: mother.shasthyaShebikaId,
+          isActive: true,
+          isHouseholdHead: false,
+          motherReferenceId: mother.referenceId ?? mother.id,
+          motherPatientId: mother.patientId ?? motherPatientId,
+          guardianId: mother.referenceId ?? mother.id,
+          guardianFhirId: mother.fhirId ?? mother.id,
+          latitude: mother.latitude,
+          longitude: mother.longitude,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+          syncStatus: 'NotSynced',
+        ),
+      );
+      await _members.setReferenceId(localId);
+
+      final persisted = HouseholdMemberEntity(
+        id: localId,
+        referenceId: localId,
+        householdId: localHouseholdId,
+        householdFhirId: mother.householdFhirId,
+        householdReferenceId:
+            mother.householdReferenceId ?? localHouseholdId,
         name: babyName,
         gender: sex,
         dob: dobWire,
@@ -106,16 +141,14 @@ class PregnancyOutcomeSideEffects {
         syncStatus: 'NotSynced',
       );
 
-      await _members.upsertMany([entity]);
-
       // Bridge into patients so worklist / household UI can see the baby.
       final patient = Patient(
-        id: babyRef,
+        id: localId,
         patientId: null,
         name: babyName,
         gender: sex,
         dob: dobWire,
-        householdId: householdId ?? mother.householdId,
+        householdId: localHouseholdId,
         villageId: mother.subVillageId ?? mother.villageId,
         villageName: mother.subVillageName ?? mother.villageName,
         isActive: true,
@@ -126,14 +159,14 @@ class PregnancyOutcomeSideEffects {
       await _patients.upsertMany([patient]);
 
       wireBabies.add(_babyWirePayload(
-        entity: entity,
+        entity: persisted,
         mother: mother,
         provenance: provenance,
         nowMs: nowMs,
       ));
 
       debugPrint(
-          '[PregnancyOutcome] registered baby "$babyName" ref=$babyRef');
+          '[PregnancyOutcome] registered baby "$babyName" localId=$localId');
     }
 
     return wireBabies;
@@ -181,9 +214,19 @@ class PregnancyOutcomeSideEffects {
       if (byId != null) return byId;
     }
     if (patientId != null && patientId.isNotEmpty) {
-      return _members.getByPatientId(patientId);
+      final byPatient = await _members.getByPatientId(patientId);
+      if (byPatient != null) return byPatient;
+      // patients.id is often the local member PK after sync bridge.
+      return _members.getById(patientId);
     }
     return null;
+  }
+
+  /// Matches [_asYesNoWire] / Spice `"Yes"` option ids on newborn cards.
+  static bool _isBabyAlive(Object? value) {
+    if (value == null) return false;
+    final s = value.toString().trim().toLowerCase();
+    return s == 'yes' || s == 'true' || s == '1';
   }
 
   static String _dateWire(String raw) {
@@ -222,10 +265,13 @@ class PregnancyOutcomeSideEffects {
     int? nowMs,
   }) {
     final ts = nowMs ?? entity.updatedAt ?? DateTime.now().millisecondsSinceEpoch;
+    final householdRef =
+        entity.householdReferenceId ?? entity.householdId ?? '';
     return {
       'referenceId': entity.referenceId ?? entity.id,
-      'householdId': entity.householdId,
-      'householdReferenceId': entity.householdReferenceId,
+      if (entity.householdFhirId != null && entity.householdFhirId!.isNotEmpty)
+        'householdId': entity.householdFhirId,
+      if (householdRef.isNotEmpty) 'householdReferenceId': householdRef,
       'name': entity.name,
       'nationalId': '',
       'idType': '',

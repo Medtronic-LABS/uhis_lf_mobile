@@ -137,7 +137,6 @@ class MissionDashboardRepository {
   Future<ReferralSummary> loadReferralSummary() async {
     final input = await _loadInputData();
     final summary = _service.computeReferralSummary(input);
-    debugPrint('[MissionDashboardRepository] ReferralSummary: active=${summary.active}, breached=${summary.breached}, awaiting=${summary.awaitingReview}, completed=${summary.completed}');
     return summary;
   }
 
@@ -282,10 +281,6 @@ class MissionDashboardRepository {
 
     // Load referrals using queryDashboard (excludes closed by default)
     final referrals = await _referralDao.queryDashboard(limit: 200);
-    debugPrint('[MissionDashboardRepository] Loaded ${referrals.length} referrals');
-    for (final ref in referrals) {
-      debugPrint('[MissionDashboardRepository] Referral ${ref.id}: state=${ref.state}, tier=${ref.slaTier}, patient=${ref.patientId}');
-    }
     final referralAssessments = <String, PriorityAssessment>{};
 
     // Collect patient IDs for CQL batch request

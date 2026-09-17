@@ -11,6 +11,8 @@ import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import 'pregnancy_outcome_snapshot_mapper.dart';
+import '../../../core/debug/asr_diagnostics.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/mission/mission_pregnancy_facts.dart';
 import '../../../core/models/json_read.dart';
@@ -27,6 +29,7 @@ import '../../referral/referral_repository.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
 import '../models/anc_assessment.dart';
+import '../naba/naba_models.dart';
 import 'canonical_visit_data.dart';
 import 'childhood_visit.dart';
 import 'form_config.dart';
@@ -34,6 +37,7 @@ import 'rmnch_follow_up_calculator.dart';
 import 'unified_payload_mapper.dart';
 import 'unified_section_rules.dart';
 import 'vitals_trend.dart';
+import '../../../core/i18n/app_date_format.dart';
 
 /// Manages in-progress canonical form state for a single visit.
 ///
@@ -114,6 +118,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool _lastIsReferred = false;
   List<String> _lastReferredReasons = const [];
   String? _lastReferralFacility;
+  List<String> _lastPwRiskFactors = const [];
+  List<NabaReferralAssessment> _lastNabaReferralAssessments = const [];
 
   /// Provenance per fieldId — who last set the value (SK vs AI scribe).
   /// Fields never touched have no entry (treated as manual-owned once typed).
@@ -167,6 +173,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool get lastIsReferred => _lastIsReferred;
   List<String> get lastReferredReasons => _lastReferredReasons;
   String? get lastReferralFacility => _lastReferralFacility;
+  /// PWPROFILE risk labels for Step 3 (UHIS “Risk factors identified”).
+  List<String> get lastPwRiskFactors => _lastPwRiskFactors;
+
+  /// Per-assessment referral inputs for `naba/generate` (mirrors `_computeReferral`).
+  List<NabaReferralAssessment> get lastNabaReferralAssessments =>
+      _lastNabaReferralAssessments;
   String? get submitError => _submitError;
   Set<String> get validationErrors => _validationErrors;
 
@@ -880,6 +892,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
     // either widget updates the other (pulse already did this; sys/dia
     // were missing — SK reported only pulse mirrored).
     _mirrorBpAcrossProgrammes(fieldId, value);
+    // Cross-programme BG sync: NCD/ANC BloodGlucoseEntry uses
+    // glucoseType + glucose; PNC (and legacy ANC) use bloodSugar +
+    // fastingBloodSugar/randomBloodSugar (and bloodSugarFasting/
+    // bloodSugarRandom). Keep both vocabularies aligned for ANC+NCD and
+    // PNC+NCD combined visits.
+    _mirrorGlucoseAcrossProgrammes(fieldId, value);
     if (fieldId == 'liveBirthNumbers') {
       _resizeNewbornDetails(value);
     }
@@ -1039,6 +1057,31 @@ class UnifiedFormNotifier extends ChangeNotifier {
     _data = _data.setValue('newbornDetails', existing);
   }
 
+  /// Copies flat `babyAlive` / `babySex` / `neonatalDeathCause` (the
+  /// fieldRefs the PO layout and ASR schema use) onto the first
+  /// `newbornDetails` card so the on-screen baby widgets and the wire
+  /// payload both see the fill. Extra babies stay empty for the SK.
+  void _stampAiBabyFieldsOntoNewbornCards() {
+    final raw = _data.getValue('newbornDetails');
+    if (raw is! List || raw.isEmpty) return;
+    final alive = _data.getValue('babyAlive');
+    final sex = _data.getValue('babySex');
+    final cause = _data.getValue('neonatalDeathCause');
+    if (alive == null && sex == null && cause == null) return;
+
+    final list = <Map<String, dynamic>>[
+      for (final e in raw)
+        e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{},
+    ];
+    if (list.isEmpty) return;
+    final first = list.first;
+    if (alive != null) first['isBabyAlive'] = alive;
+    if (sex != null) first['sex'] = sex;
+    if (cause != null) first['causeOfNeonatalDeath'] = cause;
+    list[0] = first;
+    _data = _data.setValue('newbornDetails', list);
+  }
+
   /// Updates one baby entry inside `newbornDetails` and notifies listeners.
   void updateNewbornField(int babyIndex, String key, dynamic value) {
     final existingRaw = _data.getValue('newbornDetails');
@@ -1068,6 +1111,129 @@ class UnifiedFormNotifier extends ChangeNotifier {
     _data = _data.setValue('newbornDetails', list);
     notifyListeners();
     _saveDraft();
+  }
+
+  static const _glucoseMirrorFieldIds = {
+    'glucoseType',
+    'glucose',
+    'bloodSugar',
+    'fastingBloodSugar',
+    'randomBloodSugar',
+    'bloodSugarFasting',
+    'bloodSugarRandom',
+  };
+
+  /// Keeps NCD/ANC `glucoseType`+`glucose` and PNC/ANC maternal BG keys in sync.
+  ///
+  /// Vocabularies:
+  /// - NCD / ANC BloodGlucoseEntry: `glucoseType` (`fbs`/`rbs`) + `glucose`
+  /// - PNC: `bloodSugar` (`fasting`/`random`) + `fastingBloodSugar` /
+  ///   `randomBloodSugar`
+  /// - Legacy ANC typed fields: `bloodSugarFasting` / `bloodSugarRandom`
+  ///
+  /// Mutates [_data] only (same pattern as [_mirrorBpAcrossProgrammes]) so
+  /// we never recurse through [updateField].
+  void _mirrorGlucoseAcrossProgrammes(String fieldId, dynamic value) {
+    const ncdType = 'glucoseType';
+    const ncdValue = 'glucose';
+    const maternalType = 'bloodSugar';
+    const maternalFbs = 'fastingBloodSugar';
+    const maternalRbs = 'randomBloodSugar';
+    const ancFbs = 'bloodSugarFasting';
+    const ancRbs = 'bloodSugarRandom';
+
+    String? toMaternalType(String? raw) {
+      switch (raw) {
+        case 'fbs':
+        case 'fasting':
+          return 'fasting';
+        case 'rbs':
+        case 'ppbs':
+        case 'random':
+          return 'random';
+        default:
+          return null;
+      }
+    }
+
+    String? toNcdType(String? raw) {
+      switch (raw) {
+        case 'fbs':
+        case 'fasting':
+          return 'fbs';
+        case 'rbs':
+        case 'ppbs':
+        case 'random':
+          return 'rbs';
+        default:
+          return null;
+      }
+    }
+
+    void writeFasting(dynamic v) {
+      _data = _data.setValue(maternalType, 'fasting');
+      _data = _data.setValue(ncdType, 'fbs');
+      _data = _data.setValue(ncdValue, v);
+      _data = _data.setValue(maternalFbs, v);
+      _data = _data.setValue(ancFbs, v);
+    }
+
+    void writeRandom(dynamic v) {
+      _data = _data.setValue(maternalType, 'random');
+      _data = _data.setValue(ncdType, 'rbs');
+      _data = _data.setValue(ncdValue, v);
+      _data = _data.setValue(maternalRbs, v);
+      _data = _data.setValue(ancRbs, v);
+    }
+
+    if (fieldId == ncdType) {
+      final maternal = toMaternalType(value?.toString());
+      _data = _data.setValue(maternalType, maternal);
+      final g = _data.getValue(ncdValue);
+      if (maternal == 'fasting' && g != null) {
+        _data = _data.setValue(maternalFbs, g);
+        _data = _data.setValue(ancFbs, g);
+      } else if (maternal == 'random' && g != null) {
+        _data = _data.setValue(maternalRbs, g);
+        _data = _data.setValue(ancRbs, g);
+      }
+      return;
+    }
+
+    if (fieldId == ncdValue) {
+      final type = toMaternalType(
+        _data.getValue(ncdType)?.toString() ??
+            _data.getValue(maternalType)?.toString(),
+      );
+      if (type == 'fasting') {
+        writeFasting(value);
+      } else if (type == 'random') {
+        writeRandom(value);
+      }
+      return;
+    }
+
+    if (fieldId == maternalType) {
+      final ncd = toNcdType(value?.toString());
+      _data = _data.setValue(ncdType, ncd);
+      if (ncd == 'fbs') {
+        final v = _data.getValue(maternalFbs) ?? _data.getValue(ancFbs);
+        if (v != null) _data = _data.setValue(ncdValue, v);
+      } else if (ncd == 'rbs') {
+        final v = _data.getValue(maternalRbs) ?? _data.getValue(ancRbs);
+        if (v != null) _data = _data.setValue(ncdValue, v);
+      }
+      return;
+    }
+
+    if (fieldId == maternalFbs || fieldId == ancFbs) {
+      writeFasting(value);
+      return;
+    }
+
+    if (fieldId == maternalRbs || fieldId == ancRbs) {
+      writeRandom(value);
+    }
   }
 
   /// Keeps NCD `bpLogDetails` and ANC/PNC flat BP keys in sync.
@@ -1132,7 +1298,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
-  static final _eddDisplayFormat = DateFormat('dd MMMM yyyy');
+  // A getter, not a static final: caching the DateFormat would freeze it in
+  // whichever language was active at first use.
+  static DateFormat get _eddDisplayFormat => AppDateFormat.dayMonthNameYearFmt;
 
   /// Fields Android resets when LMP is cleared or is < 6 weeks ago.
   static const _pwLmpClearedFieldIds = {
@@ -1231,6 +1399,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }) {
     final rejected = <String>[];
     var appliedAny = false;
+    var appliedCount = 0;
+    var appliedDeliveryOutcomeType = false;
+    var appliedLiveBirthNumbers = false;
+    // Category counts only — never field ids or values — for the
+    // ASR_FORM_APPLY diagnostic event below.
+    final rejectedByCategory = <String, int>{};
+    void countRejection(String category) {
+      rejectedByCategory[category] = (rejectedByCategory[category] ?? 0) + 1;
+    }
 
     debugPrint(
         '<==================== ASR FORM FILL: ${fields.length} field(s) '
@@ -1241,6 +1418,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         debugPrint('<----- asr SKIPPED  [${field.fieldId}] SK-owned '
             '(${_fieldSources[field.fieldId]?.name}) — value "${field.value}" '
             'NOT applied ----->');
+        countRejection('sk_owned');
         continue;
       }
 
@@ -1249,6 +1427,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         debugPrint('<----- asr REJECTED [${field.fieldId}] unknown field — '
             'value "${field.value}" ----->');
         rejected.add('${field.fieldId}: unknown field');
+        countRejection('unsupported_field');
         continue;
       }
 
@@ -1258,6 +1437,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
             'failed ${def.widgetHint.name} validation '
             '(allowed: ${def.options.map((o) => o.id).join('/')}) ----->');
         rejected.add('${def.label}: "${field.value}" not a valid value');
+        countRejection('validation_failed');
         continue;
       }
 
@@ -1271,6 +1451,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
           incomingSegment != null &&
           storedSegment == incomingSegment &&
           _data.getValue(field.fieldId) != null) {
+        countRejection('unchanged_duplicate');
         continue;
       }
 
@@ -1279,6 +1460,13 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _fieldSources[field.fieldId] = FieldSource.aiPending;
       _fieldSourceSegments[field.fieldId] = field.sourceSegment;
       appliedAny = true;
+      appliedCount++;
+      if (field.fieldId == 'deliveryOutcomeType') {
+        appliedDeliveryOutcomeType = true;
+      }
+      if (field.fieldId == 'liveBirthNumbers') {
+        appliedLiveBirthNumbers = true;
+      }
       debugPrint('<----- asr APPLIED  [${field.fieldId}] = $validated '
           '${previous == null ? '' : '(was: $previous) '}'
           'src="${field.sourceSegment ?? '-'}" ----->');
@@ -1304,6 +1492,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
           debugPrint('<----- asr APPLIED  [$key] = $v '
               '(mirrored from bpLogDetails) ----->');
         }
+      } else if (const {'systolic', 'diastolic', 'pulse'}
+              .contains(field.fieldId) &&
+          !_isSkOwned('bpLogDetails')) {
+        // Inverse: PNC/ANC flat BP → NCD bpLogDetails so both widgets
+        // show the reading on a combined PNC+NCD (or PO+PNC+NCD) visit.
+        _mirrorBpAcrossProgrammes(field.fieldId, validated);
+      }
+      if (_glucoseMirrorFieldIds.contains(field.fieldId)) {
+        final protected = {
+          for (final k in _glucoseMirrorFieldIds)
+            if (k != field.fieldId && _isSkOwned(k)) k: _data.getValue(k),
+        };
+        _mirrorGlucoseAcrossProgrammes(field.fieldId, validated);
+        for (final e in protected.entries) {
+          _data = _data.setValue(e.key, e.value);
+        }
       }
       // Inverse of the BP case: the ANC screen renders deliveryFacilityType
       // but the payload mapper reads facilityIdentifiedForDelivery (identical
@@ -1319,10 +1523,35 @@ class UnifiedFormNotifier extends ChangeNotifier {
       }
     }
 
+    // Same branch cleanup typing runs in updateField — otherwise AI can
+    // fill abortion + live-birth fields in one pass and leave a hidden
+    // branch driving visibility. After the batch so later fields in this
+    // same extraction cannot re-populate a branch we just cleared.
+    if (appliedDeliveryOutcomeType) {
+      _resetPregnancyOutcomeBranches(
+        _data.getValue('deliveryOutcomeType')?.toString(),
+      );
+    } else if (appliedLiveBirthNumbers) {
+      _resizeNewbornDetails(_data.getValue('liveBirthNumbers'));
+    }
+    _stampAiBabyFieldsOntoNewbornCards();
+
     debugPrint('<==================== ASR FORM FILL done: '
         '${fields.length - rejected.length} applied, '
         '${rejected.length} rejected ====================>');
     _logAsrCoverage(fieldDefs);
+
+    // Correlated with the realtime controller's own ASR_SESSION_SUMMARY by
+    // the same encounter id — this event carries fields_applied/rejected,
+    // which the controller has no visibility into (form population happens
+    // here, several layers away from the WebSocket/controller). Counts and
+    // category labels only — never a field id or value.
+    AsrDiagnostics.event('ASR_FORM_APPLY', encounterId: _encounterId, fields: {
+      'fieldsReceived': fields.length,
+      'fieldsApplied': appliedCount,
+      'fieldsRejected': fields.length - appliedCount,
+      'rejectedByCategory': rejectedByCategory,
+    });
 
     if (appliedAny) {
       notifyListeners();
@@ -1597,8 +1826,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
           ? await _assessmentRepo.hasPriorNcdAssessment(_patientId)
           : false;
 
-      final (isReferred, referredReasons) =
-          _computeReferral(isNcdFollowUp: isNcdFollowUp);
+      // ANC AI BP-trend: same analyzer as the Step 2 trend card. When
+      // systolic/diastolic rise ≥5 across last 2 priors + today, auto-refer
+      // even if today's reading is still below 140/90.
+      final risingBpTrend = _activeFormTypes.contains('anc')
+          ? VitalsTrendAnalyzer.hasRisingBpTrend(
+              priorVisits: await ancVitalsHistory(),
+              today: _todayAncVisitVitals(),
+            )
+          : false;
+
+      final (isReferred, referredReasons) = _computeReferral(
+        isNcdFollowUp: isNcdFollowUp,
+        risingBpTrend: risingBpTrend,
+      );
+      _lastNabaReferralAssessments =
+          _buildNabaReferralAssessments(isNcdFollowUp: isNcdFollowUp);
 
       Map<String, dynamic>? ncdOtherDetails;
       final cataractNcdProvided = _activeFormTypes.contains('cataract') &&
@@ -1663,6 +1906,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final payloads = UnifiedPayloadMapper.decompose(
         _withWireOptionValues(_data),
         _activeFormTypes.toSet(),
+        risingBpTrend: risingBpTrend,
       );
       if (payloads.isEmpty) {
         debugPrint(
@@ -1677,14 +1921,26 @@ class UnifiedFormNotifier extends ChangeNotifier {
       ConsoleLog.step('[ReferralFacility] form submit — referralFacility=${_data.getValue('referralFacility')} referralFacilityType=${_data.getValue('referralFacilityType')} → _lastReferralFacility=$_lastReferralFacility');
 
       final savedIds = <String>[];
-      final pwStatus = payloads.any((p) => p.assessmentType == 'PWPROFILE')
-          ? PwRiskFactors.status(
-              pregnancyHistory: payloads
-                  .firstWhere((p) => p.assessmentType == 'PWPROFILE')
-                  .details,
-              dateOfBirth: await _patientDateOfBirth(),
-            )
-          : null;
+      final pwPayload = payloads
+          .where((p) => p.assessmentType == 'PWPROFILE')
+          .firstOrNull;
+      List<String>? pwStatus;
+      if (pwPayload != null) {
+        final dob = await _patientDateOfBirth();
+        final riskScreening = _pwRiskScreeningFromData();
+        _lastPwRiskFactors = PwRiskFactors.compute(
+          pregnancyHistory: pwPayload.details,
+          riskScreening: riskScreening,
+          dateOfBirth: dob,
+        );
+        pwStatus = [
+          _lastPwRiskFactors.isEmpty
+              ? PwRiskFactors.normalPregnancy
+              : PwRiskFactors.highRisk,
+        ];
+      } else {
+        _lastPwRiskFactors = const [];
+      }
       final poStatus = payloads.any((p) =>
               p.assessmentType == 'PREGNANCY_OUTCOME' ||
               p.assessmentType == 'PREGNANCYOUTCOME')
@@ -1918,14 +2174,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final isOutcome = types.contains('PREGNANCY_OUTCOME') ||
           types.contains('PREGNANCYOUTCOME');
       if (!isOutcome) return null;
-      final deliveryRaw =
-          _data.getValue('dateOfDelivery') ?? _data.getValue('deliveryDate');
-      final deliveryMs = deliveryRaw is String
-          ? DateTime.tryParse(deliveryRaw)?.millisecondsSinceEpoch
-          : null;
+      final poSnapshot = PregnancyOutcomeSnapshotMapper.fromPoData(
+        patientId: localId,
+        data: _data,
+        existing: (await _pregnancyEpisodeDao.openEpisodeFor(localId) ??
+                await _pregnancyEpisodeDao.mostRecentFor(localId))
+            ?.obstetric,
+      );
+      final deliveryMs = poSnapshot.deliveryDateMillis ??
+          DateTime.now().millisecondsSinceEpoch;
       final created = await _pregnancyEpisodeDao.closeEpisode(
         patientId: localId,
-        deliveryDateMillis: deliveryMs ?? DateTime.now().millisecondsSinceEpoch,
+        deliveryDateMillis: deliveryMs,
+        obstetricPatch: poSnapshot,
       );
       return created.id;
     }
@@ -2114,6 +2375,52 @@ class UnifiedFormNotifier extends ChangeNotifier {
     return out;
   }
 
+  /// NCD symptom option `value` codes — same as sync `symptomsLog.ncdSymptoms`
+  /// (e.g. `shortnessOfBreath`), not numeric widget ids (`"1"`).
+  List<String> _ncdSymptomWireValues(Object? raw) {
+    if (raw is! List || raw.isEmpty) return const [];
+    final options = _fieldDefs['ncdSymptoms']?.options ?? const <FieldOption>[];
+    final out = <String>[];
+    for (final item in raw) {
+      final id = FieldOption.coerceId(item);
+      if (id == null || id.isEmpty) continue;
+      final lower = id.toLowerCase();
+      if (lower == 'none' || lower == 'nosymptoms') continue;
+      String? wire;
+      for (final option in options) {
+        if (option.id == id ||
+            option.wireValue == id ||
+            option.name == id) {
+          wire = option.wireValue;
+          break;
+        }
+      }
+      final token = (wire ?? id).trim();
+      if (token.isNotEmpty && !out.contains(token)) out.add(token);
+    }
+    return out;
+  }
+
+  /// English option `name` for NABA (ids like `"3"` → `"Severe vomiting"`).
+  /// Falls back to the stored token if the field library has no match.
+  List<String> _optionNamesForField(String fieldId, Object? raw) {
+    if (raw is! List || raw.isEmpty) return const [];
+    final options = _fieldDefs[fieldId]?.options ?? const <FieldOption>[];
+    final out = <String>[];
+    for (final item in raw) {
+      final token = item is Map
+          ? (item['value'] ?? item['id'] ?? item['name'])
+          : item;
+      if (token == null) continue;
+      final option = FieldOption.find(token, options);
+      final name = (option != null && option.name.trim().isNotEmpty)
+          ? option.name.trim()
+          : token.toString().trim();
+      if (name.isNotEmpty && !out.contains(name)) out.add(name);
+    }
+    return out;
+  }
+
   /// Local `patients.id` for [_patientId]. Snapshot + programmes are keyed by
   /// the member PK; the visit route often carries `members.patient_id`.
   Future<String> _localPatientId() async {
@@ -2204,9 +2511,263 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// Runs clinical evaluators against current form data and returns
+  /// Flat form values that UHIS nests under `healthRiskScreening`.
+  Map<String, dynamic>? _pwRiskScreeningFromData() {
+    final obstetric = _data.getValue('obstetricComplications');
+    final medical = _data.getValue('medicalComplications');
+    final conditions = _data.getValue('currentMedicalConditions');
+    if (obstetric == null && medical == null && conditions == null) {
+      return null;
+    }
+    return {
+      if (obstetric != null) 'obstetricComplications': obstetric,
+      if (medical != null) 'medicalComplications': medical,
+      if (conditions != null) 'currentMedicalConditions': conditions,
+    };
+  }
+
+  /// Per-assessment clinical inputs for NABA (`naba/generate`).
+  ///
+  /// Includes [_computeReferral] inputs for NCD/ANC/PNC/childhood, plus
+  /// PWPROFILE / FAMILY_PLANNING form context (those programmes have no Step 2
+  /// referral card, but NABA still needs the assessment details).
+  List<NabaReferralAssessment> _buildNabaReferralAssessments({
+    required bool isNcdFollowUp,
+  }) {
+    final out = <NabaReferralAssessment>[];
+    double? asDouble(String k) => _asDoubleField(k);
+
+    final avgBp = UnifiedPayloadMapper.ncdAvgBp(_data);
+    final sys = avgBp.systolic?.toDouble() ??
+        asDouble('systolic') ??
+        asDouble('bloodPressureSystolic');
+    final dia = avgBp.diastolic?.toDouble() ??
+        asDouble('diastolic') ??
+        asDouble('bloodPressureDiastolic');
+    final glucoseType = _data.getValue('glucoseType') as String?;
+    final glVal = asDouble('glucoseValue') ??
+        asDouble('glucose') ??
+        asDouble('fastingBloodSugar') ??
+        asDouble('randomBloodSugar');
+    final tempF = asDouble('temperature');
+    final tempC = tempF == null ? null : fahrenheitToCelsius(tempF);
+    final pulse = asDouble('pulse')?.toInt();
+    final hemoglobin = asDouble('hemoglobin');
+    final oedema = (_data.getValue('oedema') ?? _data.getValue('edema'))
+        ?.toString();
+
+    Map<String, dynamic> compact(Map<String, dynamic> raw) {
+      final m = <String, dynamic>{};
+      raw.forEach((k, v) {
+        if (v == null) return;
+        if (v is String && v.isEmpty) return;
+        if (v is List && v.isEmpty) return;
+        m[k] = v;
+      });
+      return m;
+    }
+
+    List<String> stringList(Object? raw) {
+      if (raw is! List) return const [];
+      return raw
+          .map((e) {
+            if (e is Map) {
+              return (e['value'] ?? e['id'] ?? e['name'])?.toString();
+            }
+            return e?.toString();
+          })
+          .whereType<String>()
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+
+    final includeNcd = _activeFormTypes.contains('ncd') ||
+        (_activeFormTypes.contains('cataract') &&
+            _data.getValue('ncdServiceProvided')?.toString().toLowerCase() ==
+                'yes');
+    if (includeNcd) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'NCD',
+        referralInputs: compact({
+          'isFollowUpVisit': isNcdFollowUp,
+          'systolic': sys,
+          'diastolic': dia,
+          'glucoseValue': glVal,
+          'glucoseType': glucoseType,
+          'hba1c': asDouble('hba1c'),
+          'ncdSymptoms': _ncdSymptomWireValues(_data.getValue('ncdSymptoms')),
+        }),
+      ));
+    }
+
+    if (_activeFormTypes.contains('pwProfile')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'PWPROFILE',
+        referralInputs: compact({
+          'lmp': _data.getValue('lmp')?.toString(),
+          'gravida': asDouble('gravida'),
+          'parity': asDouble('parity'),
+          'livingChildren': asDouble('livingChildren'),
+          'ageOfLastChild': _data.getValue('ageOfLastChild')?.toString(),
+          'pregnancyTest': _data.getValue('pregnancyTest')?.toString(),
+          'obstetricComplications':
+              stringList(_data.getValue('obstetricComplications')),
+          'medicalComplications':
+              stringList(_data.getValue('medicalComplications')),
+          'currentMedicalConditions':
+              stringList(_data.getValue('currentMedicalConditions')),
+        }),
+      ));
+    }
+
+    // Same fields as UnifiedPayloadMapper._toFamilyPlanning (wire assessment).
+    if (_activeFormTypes.contains('familyPlanning') ||
+        _activeFormTypes.contains('family_planning')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'FAMILY_PLANNING',
+        referralInputs: compact({
+          'numberOfLivingChildren':
+              _data.getValue('numberOfLivingChildren')?.toString(),
+          'ageOfLastChild':
+              UnifiedPayloadMapper.asDobWire(_data.getValue('ageOfLastChild')),
+          'desireForChildrenInFuture':
+              _data.getValue('desireForChildrenInFuture') ??
+                  _data.getValue('desireForChildren'),
+          'familyPlanningMethods':
+              stringList(_data.getValue('familyPlanningMethods')),
+        }),
+      ));
+    }
+
+    if (_activeFormTypes.contains('anc')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'ANC',
+        referralInputs: compact({
+          'bloodPressureSystolic': sys?.toInt(),
+          'bloodPressureDiastolic': dia?.toInt(),
+          'fundalHeight': asDouble('fundalHeight'),
+          'oedema': oedema,
+          'weight': asDouble('weight'),
+          'height': asDouble('height'),
+          'hemoglobin': hemoglobin,
+          'urinaryAlbumin': _data.getValue('urinaryAlbumin')?.toString(),
+          'urinaryBilirubin': _data.getValue('urinaryBilirubin')?.toString(),
+          'urinarySugar': _data.getValue('urinarySugar')?.toString(),
+          'bloodSugarFasting': glucoseType == 'fbs' ? glVal : null,
+          'bloodSugarRandom': glucoseType != 'fbs' ? glVal : null,
+          'glucoseType': glucoseType,
+          'dangerSignsExperienced12': _optionNamesForField(
+              'dangerSignsExperienced12',
+              _data.getValue('dangerSignsExperienced12')),
+          'dangerSignsExperienced13To27': _optionNamesForField(
+              'dangerSignsExperienced13To27',
+              _data.getValue('dangerSignsExperienced13To27')),
+          'dangerSignsExperienced28To40': _optionNamesForField(
+              'dangerSignsExperienced28To40',
+              _data.getValue('dangerSignsExperienced28To40')),
+          'gestationalWeeks': asDouble('gestationalAge')?.toInt() ??
+              asDouble('gestationalWeeks')?.toInt(),
+          'temperatureFahrenheit': tempF,
+          'temperatureCelsius': tempC,
+          'pulse': pulse,
+          'ttTdCompleted': _data.getValue('ttTdCompleted')?.toString(),
+          'ultrasound': _data.getValue('ultrasound')?.toString(),
+          'ancFromMedicalDoctor':
+              _data.getValue('ancFromMedicalDoctor')?.toString(),
+          'facilityIdentifiedForDelivery':
+              _data.getValue('facilityIdentifiedForDelivery')?.toString(),
+          'ifaTotalConsumed': asDouble('ifaTotalConsumed')?.toInt() ??
+              asDouble('ifaTabletsConsumed')?.toInt(),
+          'calciumTotalConsumed': asDouble('calciumTotalConsumed')?.toInt() ??
+              asDouble('calciumTabletsConsumed')?.toInt(),
+          'ancVisitNumber': _data.getValue('ancVisitNumber') ??
+              _data.getValue('visitNo'),
+        }),
+      ));
+    }
+
+    if (_activeFormTypes.contains('pncMother')) {
+      final willEmitPnc = !_activeFormTypes.contains('pregnancyOutcome') ||
+          _data.getValue('deliveryOutcomeType')?.toString() == 'liveBirth';
+      if (willEmitPnc) {
+        out.add(NabaReferralAssessment(
+          assessmentType: 'PNC_MOTHER',
+          referralInputs: compact({
+            'postpartumDangerSigns':
+                stringList(_data.getValue('postpartumDangerSigns')),
+            'systolic': sys,
+            'diastolic': dia,
+            'temperatureFahrenheit': tempF,
+            'temperatureCelsius': tempC,
+            'pulse': pulse,
+            'hemoglobin': hemoglobin,
+            'bloodSugarFasting': glucoseType == 'fbs' ? glVal : null,
+            'bloodSugarRandom': glucoseType != 'fbs' ? glVal : null,
+            'glucoseType': glucoseType,
+            'urinaryBilirubin': _data.getValue('urinaryBilirubin')?.toString(),
+            'urinaryAlbumin': _data.getValue('urinaryAlbumin')?.toString(),
+            'oedema': oedema,
+            'htnPatient': _data.getValue('htnPatient')?.toString(),
+            'eclampsia': _data.getValue('eclampsia')?.toString(),
+            'onTreatmentHtnEclampsia':
+                _data.getValue('onTreatmentHtnEclampsia')?.toString(),
+            'dmPatient': _data.getValue('dmPatient')?.toString(),
+            'gdmPatient': _data.getValue('gdmPatient')?.toString(),
+            'onTreatmentDmGdm': _data.getValue('onTreatmentDmGdm')?.toString(),
+            'vitaminAConsumed': _data.getValue('vitaminAConsumed')?.toString(),
+            'daysSinceDelivery': _asInt(_data.getValue('daysSinceDelivery')),
+            'ifaTabletsConsumed': _asInt(_data.getValue('ifaTabletsConsumed') ??
+                _data.getValue('ifaTotalConsumed')),
+            'calciumTabletsConsumed': _asInt(
+                _data.getValue('calciumTabletsConsumed') ??
+                    _data.getValue('calciumTotalConsumed')),
+            'familyPlanningMethods':
+                _data.getValue('familyPlanningMethods')?.toString(),
+            'pncVisitNumber': _data.getValue('pncVisitNumber') ??
+                _data.getValue('visitNo'),
+            'deliveryOutcomeType':
+                _data.getValue('deliveryOutcomeType')?.toString(),
+          }),
+        ));
+      }
+    }
+
+    if (_activeFormTypes.contains('pncChild')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'CHILDHOOD_VISIT',
+        referralInputs: compact({
+          'childReferral': _data.getValue('childReferral')?.toString(),
+        }),
+      ));
+    }
+
+    return List<NabaReferralAssessment>.unmodifiable(out);
+  }
+
+  /// Today's ANC vitals snapshot from the in-progress form (for AI-trend).
+  VisitVitals _todayAncVisitVitals() {
+    double? asDouble(String k) => _asDoubleField(k);
+    return VisitVitals(
+      systolic: asDouble('systolic')?.toInt() ??
+          asDouble('bloodPressureSystolic')?.toInt(),
+      diastolic: asDouble('diastolic')?.toInt() ??
+          asDouble('bloodPressureDiastolic')?.toInt(),
+      weight: asDouble('weight'),
+      urineProtein: () {
+        final v = _data.getValue('urinaryAlbumin');
+        if (v == null) return null;
+        return v is String ? v : v.toString();
+      }(),
+    );
+  }
+
   /// `(isReferred, referredReasons)`.  Called inside [submit] so every
   /// saved [LocalAssessmentEntity] carries the correct referral flag.
-  (bool, List<String>) _computeReferral({bool isNcdFollowUp = false}) {
+  (bool, List<String>) _computeReferral({
+    bool isNcdFollowUp = false,
+    bool risingBpTrend = false,
+  }) {
     bool referred = false;
     final reasons = <String>[];
 
@@ -2306,6 +2867,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         ancAssessment,
         temperatureCelsius: temperatureCelsius(),
         pulseBpm: asDouble('pulse')?.toInt(),
+        risingBpTrend: risingBpTrend,
       );
       final gaps = AncReferralEvaluator.evaluateGaps(
         gestationalAgeWeeks:
@@ -2326,6 +2888,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final hasGaps = gaps.hasGaps;
       debugPrint(
           '[Referral][ANC] highRisk=$hasHighRisk gaps=$hasGaps '
+          'risingBpTrend=$risingBpTrend '
           'emergency=${result.emergencyConditions} '
           'nonEmergency=${result.nonEmergencyConditions} gapsList=${gaps.gaps}');
       if (hasHighRisk || hasGaps) referred = true;
@@ -2336,6 +2899,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
           visitNo: _data.getValue('ancVisitNumber') ?? _data.getValue('visitNo'),
         ),
       );
+      // Surface the AI-trend wire reason for timeline / detail localization
+      // (Spice LABEL_* reasons stay first; this is an extra display token).
+      if (risingBpTrend && !reasons.contains(kAncRisingBpTrendCondition)) {
+        reasons.add(kAncRisingBpTrendCondition);
+      }
     }
 
     if (_activeFormTypes.contains('pncMother')) {

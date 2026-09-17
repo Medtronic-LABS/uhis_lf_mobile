@@ -1,3 +1,4 @@
+import '../../../core/constants/app_strings.dart';
 import '../../../core/models/programme.dart';
 
 /// A simple symptom entry for the triage picker grid.
@@ -12,65 +13,66 @@ class SymptomDef {
   /// or [PathwayRule.combinations] entries in pathway_rules_v1.dart.
   final String code;
 
-  /// Display label shown on the symptom chip (English).
+  /// Display label shown on the symptom chip (localized via [TriageStrings]).
   final String label;
 
   /// Programme section this symptom belongs to in the triage grid.
   final Programme programme;
 }
 
-/// Curated 20-symptom catalog for the Step-1 triage grid.
+/// Curated symptom catalog for the Step-1 triage grid.
 ///
-/// Grouped into 4 clinical programmes. Each section is shown only when the
-/// patient's context makes that programme relevant (pregnant → ANC, postpartum
-/// → PNC, adults → NCD + TB). Order within each section follows clinical
-/// priority.
-///
-/// Search beyond this catalog is available via the free-text search box —
-/// any typed symptom not matching these tiles is added as a custom free-text
-/// chip.
+/// Labels resolve through [TriageStrings.symptomLabel] so Bangla is applied.
+/// Grouped into clinical programmes; each section is shown only when the
+/// patient's context makes that programme relevant.
 abstract final class SymptomCatalog {
   SymptomCatalog._();
 
-  static const all = <SymptomDef>[
-    // ── ANC ──────────────────────────────────────────────────────────────────
-    SymptomDef(code: 'headache',               label: 'Headache',         programme: Programme.anc),
-    SymptomDef(code: 'swelling_face_hands',    label: 'Swelling',         programme: Programme.anc),
-    SymptomDef(code: 'abdominal_pain',         label: 'Abdominal pain',   programme: Programme.anc),
-    SymptomDef(code: 'blurred_vision',         label: 'Blurry vision',    programme: Programme.anc),
-    SymptomDef(code: 'reduced_fetal_movement', label: 'Baby not moving',  programme: Programme.anc),
+  static List<SymptomDef> get all => [
+        // ── ANC ──────────────────────────────────────────────────────────────
+        _s('headache', Programme.anc),
+        _s('swelling_face_hands', Programme.anc),
+        _s('abdominal_pain', Programme.anc),
+        _s('blurred_vision', Programme.anc),
+        _s('reduced_fetal_movement', Programme.anc),
 
-    // ── PNC ──────────────────────────────────────────────────────────────────
-    SymptomDef(code: 'vaginal_bleeding', label: 'Bleeding',       programme: Programme.pnc),
-    SymptomDef(code: 'fever',            label: 'Fever',          programme: Programme.pnc),
-    SymptomDef(code: 'abdominal_pain',   label: 'Abdominal pain', programme: Programme.pnc),
-    SymptomDef(code: 'headache',         label: 'Headache',       programme: Programme.pnc),
-    SymptomDef(code: 'dizziness',        label: 'Dizziness',      programme: Programme.pnc),
+        // ── PNC ──────────────────────────────────────────────────────────────
+        _s('vaginal_bleeding', Programme.pnc),
+        _s('fever', Programme.pnc),
+        _s('abdominal_pain', Programme.pnc),
+        _s('headache', Programme.pnc),
+        _s('dizziness', Programme.pnc),
 
-    // ── NCD ──────────────────────────────────────────────────────────────────
-    SymptomDef(code: 'headache',    label: 'Headache',          programme: Programme.ncd),
-    SymptomDef(code: 'fatigue',     label: 'Feeling tired/weak', programme: Programme.ncd),
-    SymptomDef(code: 'polydipsia',  label: 'Very thirsty',       programme: Programme.ncd),
-    SymptomDef(code: 'chest_pain',  label: 'Chest pain',         programme: Programme.ncd),
-    SymptomDef(code: 'numbness',    label: 'Numbness',           programme: Programme.ncd),
+        // ── NCD ──────────────────────────────────────────────────────────────
+        _s('headache', Programme.ncd),
+        _s('fatigue', Programme.ncd),
+        _s('polydipsia', Programme.ncd),
+        _s('chest_pain', Programme.ncd),
+        _s('numbness', Programme.ncd),
 
-    // ── TB ───────────────────────────────────────────────────────────────────
-    SymptomDef(code: 'cough_over_2_weeks', label: 'Cough',         programme: Programme.tb),
-    SymptomDef(code: 'night_sweats',       label: 'Night sweats',  programme: Programme.tb),
-    SymptomDef(code: 'fever',              label: 'Fever',         programme: Programme.tb),
-    SymptomDef(code: 'weight_loss',        label: 'Losing weight', programme: Programme.tb),
-    SymptomDef(code: 'weakness',           label: 'Feeling weak',  programme: Programme.tb),
+        // ── TB ───────────────────────────────────────────────────────────────
+        _s('cough_over_2_weeks', Programme.tb),
+        _s('night_sweats', Programme.tb),
+        _s('fever', Programme.tb),
+        _s('weight_loss', Programme.tb),
+        _s('weakness', Programme.tb),
 
-    // ── IMCI (Child Health, under-5) ─────────────────────────────────────────
-    SymptomDef(code: 'fever',          label: 'Fever',          programme: Programme.imci),
-    SymptomDef(code: 'cough',          label: 'Cough',          programme: Programme.imci),
-    SymptomDef(code: 'fast_breathing', label: 'Fast breathing', programme: Programme.imci),
-    SymptomDef(code: 'diarrhea',       label: 'Diarrhoea',      programme: Programme.imci),
-    SymptomDef(code: 'vomiting',       label: 'Vomiting',       programme: Programme.imci),
-    SymptomDef(code: 'not_eating',     label: 'Not eating',     programme: Programme.imci),
-    SymptomDef(code: 'convulsions',    label: 'Convulsions',    programme: Programme.imci),
-    SymptomDef(code: 'lethargy',       label: 'Lethargy',       programme: Programme.imci),
-  ];
+        // ── IMCI (Child Health, under-5) ─────────────────────────────────────
+        _s('fever', Programme.imci),
+        _s('cough', Programme.imci),
+        _s('fast_breathing', Programme.imci),
+        _s('diarrhea', Programme.imci),
+        _s('vomiting', Programme.imci),
+        _s('not_eating', Programme.imci),
+        _s('convulsions', Programme.imci),
+        _s('lethargy', Programme.imci),
+      ];
+
+  static SymptomDef _s(String code, Programme programme) => SymptomDef(
+        code: code,
+        label: TriageStrings.symptomLabel(code),
+        programme: programme,
+      );
 
   static List<SymptomDef> byProgramme(Programme p) =>
       all.where((s) => s.programme == p).toList();

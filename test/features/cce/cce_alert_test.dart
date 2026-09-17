@@ -5,11 +5,17 @@ import 'package:uhis_next/core/db/follow_up_dao.dart';
 import 'package:uhis_next/core/models/patient.dart';
 import 'package:uhis_next/core/models/referral.dart';
 import 'package:uhis_next/features/cce/cce_alert.dart';
+import 'package:uhis_next/core/i18n/app_locale.dart';
 
 /// Unit tests for the CCE derivation — the pure mapping from a 14-state
 /// [ReferralStatus] + SLA bookkeeping onto the wireframe's severity / journey /
 /// badge / status-line. No Flutter, no DB.
 void main() {
+  // These assert English copy, so pin the language. AppLocale defaults to
+  // Bangla (BD-first), and Bangla localizes digits — '12 days' becomes
+  // '১২ days' — so an unpinned test is really asserting the default locale.
+  setUp(() => AppLocale.current = AppLanguage.english);
+
   final now = DateTime(2026, 7, 13, 12, 0);
   int ms(Duration fromNow) => now.add(fromNow).millisecondsSinceEpoch;
 
@@ -320,6 +326,29 @@ void main() {
       expect(a.intelTags, contains('At facility'));
     });
 
+    test('enrollment after NCD visit → Facility done (case-insensitive)', () {
+      final ncdMs = now.add(const Duration(days: -10)).millisecondsSinceEpoch;
+      final a = CceAlert.fromFollowUp(
+        ncdFollowUp(),
+        now: now,
+        assessments: [
+          CceAssessmentSignal(
+            id: 'enc-ncd-1',
+            kind: 'NCD',
+            occurredAt: ncdMs,
+          ),
+          CceAssessmentSignal(
+            id: 'enc-enroll-2',
+            kind: 'Enrollment',
+            occurredAt: ncdMs + const Duration(days: 1).inMilliseconds,
+          ),
+        ],
+      );
+      expect(a.journey[2].state, CceStepState.done);
+      expect(a.journey[3].state, CceStepState.pending);
+      expect(a.intelTags, contains('At facility'));
+    });
+
     test('ncdmedicalreview after NCD visit → Treatment + Facility done', () {
       final ncdMs = now.add(const Duration(days: -10)).millisecondsSinceEpoch;
       final a = CceAlert.fromFollowUp(
@@ -412,6 +441,31 @@ void main() {
       expect(a.journey[2].state, CceStepState.done);
       expect(a.journey[2].sublabel, 'Following up');
       expect(a.journey[3].state, CceStepState.pending);
+    });
+
+    test('localizes Spice NCD reason chips in referredMeta', () {
+      final a = CceAlert.fromFollowUp(ncdFollowUp(), now: now);
+      expect(a.referredMeta, contains('High BP'));
+      expect(a.referredMeta, isNot(contains('bloodPressure')));
+
+      final combined = CceAlert.fromFollowUp(
+        FollowUpRow(
+          id: 'fu-2',
+          patientId: 'member-1',
+          kind: 'referred',
+          type: 'REFERRED',
+          rawJson: jsonEncode({
+            'memberId': 'member-1',
+            'encounterName': 'NCD',
+            'referredReasons': ['Symptoms', 'High BP', 'High BG'],
+            'referredSiteName': 'UHC Manikganj',
+          }),
+        ),
+        now: now,
+      );
+      expect(combined.referredMeta, contains('Symptoms'));
+      expect(combined.referredMeta, contains('High BP'));
+      expect(combined.referredMeta, contains('High BG'));
     });
   });
 }

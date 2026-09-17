@@ -67,20 +67,26 @@ void main() {
     repo = AuthRepository(await ApiClient.create());
   });
 
-  test('same username as the last cached login is a returning user',
+  test('same username as the local data owner is a returning user',
       () async {
-    fakeStorage._values['lastUsername'] = 'sk_one';
+    fakeStorage._values['localDataOwner'] = 'sk_one';
 
     expect(await repo.isReturningUser('sk_one'), isTrue);
   });
 
   test('a different username is not a returning user', () async {
-    fakeStorage._values['lastUsername'] = 'sk_one';
+    fakeStorage._values['localDataOwner'] = 'sk_one';
 
     expect(await repo.isReturningUser('sk_two'), isFalse);
   });
 
-  test('no cached username at all (fresh device) is not a returning user',
+  test('no local data owner falls back to lastUsername (legacy)', () async {
+    fakeStorage._values['lastUsername'] = 'sk_one';
+
+    expect(await repo.isReturningUser('sk_one'), isTrue);
+  });
+
+  test('no cached owner at all (fresh device) is not a returning user',
       () async {
     expect(await repo.isReturningUser('sk_one'), isFalse);
   });

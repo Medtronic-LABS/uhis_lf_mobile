@@ -735,3 +735,26 @@ class FormConfig {
     return _instance!;
   }
 }
+
+/// Maps stored option id(s) to locale-aware labels from `field_library.json`.
+///
+/// Accepts comma-separated multi-select values (e.g.
+/// `excessiveBleeding,convulsions`). Falls back to the raw token when
+/// [FormConfig] is not loaded or the id is unknown.
+String fieldOptionDisplayLabel(String fieldId, String rawValue) {
+  final trimmed = rawValue.trim();
+  if (trimmed.isEmpty) return rawValue;
+  List<FieldOption> options;
+  try {
+    options = FormConfig.instance.fields[fieldId]?.options ?? const [];
+  } on Object {
+    return rawValue;
+  }
+  if (options.isEmpty) return rawValue;
+  return trimmed
+      .split(',')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .map((token) => FieldOption.find(token, options)?.displayName ?? token)
+      .join(', ');
+}

@@ -11,8 +11,10 @@ import '../../core/models/patient.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
 import 'sk_performance_repository.dart';
+import '../../core/i18n/app_date_format.dart';
 
-final _cardDateFmt = DateFormat('dd MMM yyyy');
+// A getter, not a top-level final: caching would freeze the locale at first use.
+DateFormat get _cardDateFmt => AppDateFormat.dayMonthYearPaddedFmt;
 
 // ── Spice Android due-info colors ─────────────────────────────────────────────
 const _kColorOverdue  = Color(0xFF994242);

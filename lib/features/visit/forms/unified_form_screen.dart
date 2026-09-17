@@ -302,6 +302,32 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     );
   }
 
+  /// Ids of the fields actually on screen right now — the already-filtered
+  /// [annotated] sections crossed with each field's own visibility.
+  ///
+  /// Handed to [AiScribeBanner] so live ASR can only fill what the SK can
+  /// see and confirm. Derived from the same `activeSections` result the form
+  /// renders from, so the two cannot drift apart.
+  Set<String> _visibleFieldIds(
+    List<AnnotatedFormSection> annotated,
+    UnifiedFormNotifier notifier,
+  ) {
+    final ids = <String>{};
+    for (final a in annotated) {
+      for (final ref in a.section.fieldRefs) {
+        final libraryDef = _config!.fields[ref.id];
+        if (libraryDef == null) continue;
+        final def = ref.options != null
+            ? libraryDef.withOptions(ref.options!)
+            : libraryDef;
+        if (_isFieldVisible(def, notifier, formType: a.section.formType)) {
+          ids.add(ref.id);
+        }
+      }
+    }
+    return ids;
+  }
+
   void _reloadPregnancyIfSeeded() {
     if (!(widget.activeFormTypes.contains('anc') ||
         widget.enrolledFormTypes.contains('anc'))) {
@@ -538,8 +564,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           children: [
             // ── Step 2 AI Scribe banner — the SAME widget as Step 1, in
             // live-first mode. When the programme mix supports auto-fill
-            // (NCD/ANC), extractions come back as form_fill and are written
-            // straight into the form through the validated prefill gate.
+            // (NCD, ANC, PNC mother, pregnancy outcome, and combinations),
+            // extractions come back as form_fill and are written straight
+            // into the form through the validated prefill gate.
             if (AppConfig.scribeEnabled &&
                 context.watch<AiFeatureTogglesNotifier>().toggles.step2AsrEnabled)
               Padding(
@@ -549,10 +576,13 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   encounterId: notifier.encounterId,
                   patientId: notifier.patientId,
                   isFemale: widget.activeFormTypes.contains('anc') ||
-                      widget.activeFormTypes.contains('pnc'),
+                      widget.activeFormTypes.contains('pnc') ||
+                      widget.activeFormTypes.contains('pncMother') ||
+                      widget.activeFormTypes.contains('pregnancyOutcome'),
                   tapStartsLiveAsr: true,
                   assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
                       widget.activeFormTypes),
+                  visibleFieldIds: _visibleFieldIds(annotated, notifier),
                   onFormFill: (fill) {
                     final rejected = notifier.applyAiPrefill(
                       fill.fields.where((f) => f.value != null).toList(),
@@ -2390,7 +2420,8 @@ class _SectionCard extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               _FieldShell(
-                label: aliveDef?.displayLabel ?? 'Is the baby alive?',
+                label: aliveDef?.displayLabel ??
+                    UnifiedFormStrings.babyAliveLabel,
                 isMandatory: true,
                 hasError: aliveError,
                 child: RadioFormField(
@@ -2405,7 +2436,7 @@ class _SectionCard extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               _FieldShell(
-                label: sexDef?.displayLabel ?? 'Sex',
+                label: sexDef?.displayLabel ?? UnifiedFormStrings.babySexLabel,
                 isMandatory: true,
                 hasError: sexError,
                 child: RadioFormField(
@@ -2422,7 +2453,8 @@ class _SectionCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.md),
                 _InlineListSelectField(
                   key: Key('unified_form_newborn_${i}_cause'),
-                  label: causeDef?.displayLabel ?? 'Cause of neonatal death',
+                  label: causeDef?.displayLabel ??
+                      UnifiedFormStrings.neonatalDeathCauseLabel,
                   subLabel: null,
                   isMandatory: true,
                   hasError: causeError,
@@ -4135,9 +4167,16 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
         final sameValue =
             ctrlNum != null && newNum != null && ctrlNum == newNum;
         if (!sameValue) {
-          _ctrl.text = newText;
-          _ctrl.selection =
-              TextSelection.collapsed(offset: newText.length);
+          // Defer so controller updates never fire mid-build (Form setState).
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _ctrl.text == newText) return;
+            final curNum = double.tryParse(_ctrl.text);
+            final tgtNum = double.tryParse(newText);
+            if (curNum != null && tgtNum != null && curNum == tgtNum) return;
+            _ctrl.text = newText;
+            _ctrl.selection =
+                TextSelection.collapsed(offset: newText.length);
+          });
         }
       }
     }
@@ -4297,11 +4336,22 @@ class _NumericFieldState extends State<_NumericField> {
         // is reset to "1.0" after the first "1", and the next character
         // inserts at the wrong cursor position.
         final ctrlNum = double.tryParse(_ctrl.text);
-        final newNum  = double.tryParse(newText);
-        final sameValue = ctrlNum != null && newNum != null && ctrlNum == newNum;
+        final newNum = double.tryParse(newText);
+        final sameValue =
+            ctrlNum != null && newNum != null && ctrlNum == newNum;
         if (!sameValue) {
-          _ctrl.text = newText;
-          _ctrl.selection = TextSelection.collapsed(offset: newText.length);
+          // Defer so TextEditingController.text= never fires mid-build.
+          // It notifies TextFormField → FormState._forceRebuild → setState(),
+          // which crashes if called during the build phase.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _ctrl.text == newText) return;
+            final curNum = double.tryParse(_ctrl.text);
+            final tgtNum = double.tryParse(newText);
+            if (curNum != null && tgtNum != null && curNum == tgtNum) return;
+            _ctrl.text = newText;
+            _ctrl.selection =
+                TextSelection.collapsed(offset: newText.length);
+          });
         }
       }
     }
@@ -4388,7 +4438,7 @@ class _SpinnerField extends StatelessWidget {
       isExpanded: true,
       initialValue: safeValue,
       hint: Text(
-        '— Select —',
+        ComposerStrings.selectPlaceholder,
         style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
       ),
       decoration: InputDecoration(
@@ -4599,10 +4649,13 @@ class _BpReadingFieldState extends State<_BpReadingField> {
   }
 
   void _syncCtrl(TextEditingController ctrl, String newText) {
-    if (ctrl.text != newText) {
+    if (ctrl.text == newText) return;
+    // Defer so controller updates never fire mid-build (Form setState).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || ctrl.text == newText) return;
       ctrl.text = newText;
       ctrl.selection = TextSelection.collapsed(offset: newText.length);
-    }
+    });
   }
 
   @override

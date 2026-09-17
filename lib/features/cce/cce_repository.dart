@@ -3,8 +3,8 @@
 /// follow-up `memberId` → `members.fhir_id` (not `patient_id`).
 ///
 /// For NCD cards, Facility / Treatment are advanced from synced assessment
-/// history (`medicalreviewvisit` / `ncdmedicalreview`) dated on/after the
-/// community NCD visit (`encounterDate` / matching `encounterId`).
+/// history (`medicalreviewvisit` / `enrollment` / `ncdmedicalreview`) dated
+/// on/after the community NCD visit (`encounterDate` / matching `encounterId`).
 library;
 
 import 'dart:convert';

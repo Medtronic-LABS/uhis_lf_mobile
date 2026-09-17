@@ -107,13 +107,6 @@ flutter {
     source = "../.."
 }
 
-configurations.all {
-    // audio_waveforms pulls in exoplayer2.ui which ships exo_player_view.xml with old class names.
-    // Media3's PlayerView inflates the same resource name → ClassCastException. Exclude the UI
-    // module; audio_waveforms only needs the player core, not the ExoPlayer2 UI layer.
-    exclude(group = "com.google.android.exoplayer", module = "exoplayer-ui")
-}
-
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("androidx.core:core-splashscreen:1.0.1")
@@ -137,7 +130,10 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
-    implementation("io.github.petretiandrea:android-pdf-viewer:4.0.0")
+    // android-pdf-viewer removed with micro-coaching-sdk 0.5.2-SNAPSHOT: the SDK's
+    // PdfPagerScreen now renders via the platform android.graphics.pdf.PdfRenderer,
+    // so nothing references com.github.barteksc.pdfviewer any more. Its six prebuilt
+    // .so files were 4 KB-aligned and failed Play's 16 KB page-size requirement.
     implementation(platform("androidx.compose:compose-bom:2025.08.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")

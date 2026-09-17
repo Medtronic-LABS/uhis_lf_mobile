@@ -138,12 +138,15 @@ class FollowUpCallService {
     return id;
   }
 
-  /// How many follow-ups are waiting to be pushed. Drives sync scheduling.
+  /// Distinct follow-ups with unsynced call logs — Offline Sync badge count.
   Future<int> pendingPushCount() => _dao.pendingPushCount();
 
-  /// After a successful push: flip these follow-ups to InProgress + mark their
-  /// calls synced.
+  /// After create accepts: InProgress + mark call rows synced.
   Future<void> markPushed(List<String> ids) => _dao.markPushed(ids);
+
+  /// After status poll Success: promote follow-ups to Success.
+  Future<void> markPushSucceeded(List<String> ids) =>
+      _dao.markPushSucceeded(ids);
 
   /// After a failed push: mark these follow-ups NetworkError for retry.
   Future<void> markPushFailed(List<String> ids) => _dao.markPushFailed(ids);

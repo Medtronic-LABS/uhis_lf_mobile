@@ -8,6 +8,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/roster_revision.dart';
@@ -22,8 +23,11 @@ import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
-import '../visit/widgets/mission_queue_card.dart' show programmeBadgeColors;
+import '../visit/widgets/mission_queue_card.dart' show PatientBadgeRow, programmeBadgeColors;
+import 'member_assessment_lookup.dart';
 import 'enrollment/enrollment_dob.dart';
+import 'enrollment/enrollment_entry_sheet.dart';
+import 'enrollment/nid_ocr_service.dart';
 import 'household_detail_screen.dart';
 
 /// Watches the Patients branch navigator; registered in `router.dart`.
@@ -210,28 +214,38 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
       if (membersByHousehold.isNotEmpty) {
         // Batch-load programmes for all members in one SQL round-trip.
         final allEntities = membersByHousehold.values.expand((e) => e).toList();
-        final allPatientIds = allEntities
-            .map((e) => e.patientId)
-            .whereType<String>()
-            .toSet()
-            .toList();
+        final allLookupKeys = <String>{
+          for (final e in allEntities) ...memberAssessmentLookupKeysFromEntity(e),
+        }.toList();
         final appDb = context.read<AppDatabase>();
         final programmesDao = PatientProgrammesDao(appDb);
         final programmesByPatient = await programmesDao.programmesForMany(
-          allPatientIds,
+          allLookupKeys,
         );
         // Visit counts so a non-queue member's badge is visit-count-aware
         // ("ANC Visit 3 due"), identical to the dashboard's real badge —
         // same DAO/kind-lists WorklistRepository uses (programme_reason.dart).
         final assessmentDao = AssessmentDao(appDb);
-        final ancCounts = await assessmentDao.visitCountsByPatients(
-          allPatientIds,
+        final localAssessmentDao = LocalAssessmentDao(appDb);
+        final ancSyncedCounts = await assessmentDao.visitCountsByPatients(
+          allLookupKeys,
           ancVisitKinds,
         );
-        final pncCounts = await assessmentDao.visitCountsByPatients(
-          allPatientIds,
+        final pncSyncedCounts = await assessmentDao.visitCountsByPatients(
+          allLookupKeys,
           pncVisitKinds,
         );
+        final ancLocalCounts = await localAssessmentDao.visitCountsByPatients(
+          allLookupKeys,
+          ancVisitKinds,
+        );
+        final pncLocalCounts = await localAssessmentDao.visitCountsByPatients(
+          allLookupKeys,
+          pncLocalVisitKinds,
+        );
+        final assessmentsByPatient = await assessmentDao.forMany(allLookupKeys);
+        final localServices =
+            await localAssessmentDao.latestLocalServiceForMany(allLookupKeys);
 
         final items = <_HouseholdItem>[];
         for (final entry in membersByHousehold.entries) {
@@ -240,18 +254,30 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
           // Create household item from member data
           final firstMember = members.first;
           final memberList = members.map((e) {
-            final progs = e.patientId != null
-                ? (programmesByPatient[e.patientId!] ?? const <Programme>{})
+            final lookupKeys = memberAssessmentLookupKeysFromEntity(e);
+            final tableKey = memberSideTableKey(e);
+            final progs = tableKey != null
+                ? (programmesByPatient[tableKey] ?? const <Programme>{})
                 : const <Programme>{};
+            final recentService = resolveRecentServiceKind(
+              lookupKeys: lookupKeys,
+              syncedByKey: assessmentsByPatient,
+              localLatestByPatientId: localServices,
+            );
             return _HouseholdMember.fromEntity(
               e,
               programmes: progs,
-              ancVisitCount: e.patientId != null
-                  ? (ancCounts[e.patientId!] ?? 0)
-                  : 0,
-              pncVisitCount: e.patientId != null
-                  ? (pncCounts[e.patientId!] ?? 0)
-                  : 0,
+              ancVisitCount: combinedVisitCount(
+                lookupKeys: lookupKeys,
+                syncedCounts: ancSyncedCounts,
+                localPendingCounts: ancLocalCounts,
+              ),
+              pncVisitCount: combinedVisitCount(
+                lookupKeys: lookupKeys,
+                syncedCounts: pncSyncedCounts,
+                localPendingCounts: pncLocalCounts,
+              ),
+              recentService: recentService,
             );
           }).toList();
 
@@ -671,6 +697,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
             _MemberInfo.fromMember(other, item),
           ),
           onTap: () => _navigateToDetail(context, item),
+          onAddMember: () => _addMemberToHousehold(item),
         );
       },
     );
@@ -700,6 +727,60 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     // A member may have been added from the detail screen. This list only
     // queries on init, so without this the card's member count (and the header
     // totals) would keep showing the roster as it was when the screen opened.
+    if (mounted) _loadData();
+  }
+
+  /// Opens the NID scanner then the add-member form for [item]'s household.
+  Future<void> _addMemberToHousehold(_HouseholdItem item) async {
+    final localId = item.id ?? '';
+    if (localId.isEmpty) return;
+
+    // Use the screen State's context — not a ListView itemBuilder context,
+    // which is deactivated after the async scanner closes.
+    final result = await showNidScannerForMember(context);
+    if (!mounted || result == null) return;
+
+    final householdEntity =
+        await context.read<HouseholdDao>().getById(localId);
+    if (!mounted) return;
+
+    final serverHouseholdId = householdEntity?.fhirId ?? localId;
+
+    final villageId = householdEntity?.villageId ??
+        item.members.firstOrNull?.villageId ??
+        item.rawJson?['villageId'] as String? ??
+        '';
+    final subVillageId = householdEntity?.subVillageId ?? '';
+    final subVillageName = householdEntity?.subVillageName ?? '';
+    final memberNames = item.members
+        .map((m) => m.name)
+        .whereType<String>()
+        .where((n) => n.isNotEmpty)
+        .toList();
+    final head = _headMember(item.members);
+    final extra = <String, dynamic>{
+      'householdId': serverHouseholdId,
+      'householdReferenceId': localId,
+      'householdName': item.name ?? '',
+      'householdNo': item.householdNo ?? '',
+      'headName': head?.name ?? '',
+      'headPhoneNumber': head?.phoneNumber?.trim().isNotEmpty == true
+          ? head!.phoneNumber!.trim()
+          : householdEntity?.headPhoneNumber?.trim(),
+      'villageId': villageId,
+      'villageName': item.village ?? '',
+      'subVillageId': subVillageId,
+      'subVillageName': subVillageName,
+      'memberNames': memberNames,
+    };
+    if (result.status == NidScanStatus.success && result.data != null) {
+      extra['fromNidScan'] = true;
+      extra['nidNumber'] = result.data!.nidNumber;
+      extra['name'] = result.data!.name;
+      extra['dateOfBirth'] = result.data!.dateOfBirth;
+    }
+    if (!mounted) return;
+    await context.push('/household/enrollment/link-member', extra: extra);
     if (mounted) _loadData();
   }
 
@@ -733,25 +814,37 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     );
   }
 
-  /// Member row matching the v14 wireframe: always uses [_WireframeMemberRow]
-  /// so the layout is consistent regardless of whether the member has a queue
-  /// entry. The status dot (Today / Overdue / This week) is derived from the
-  /// queue item's tier when one exists.
+  /// Member row matching the v14 wireframe — uses [PatientBadgeRow] with the
+  /// same latest-service badge as the household detail screen, plus a
+  /// [_TierStatusPill] when the member has an active queue entry.
   Widget _buildMemberRow(BuildContext context, _MemberInfo member) {
     final pid = member.patientId ?? member.id;
     final queueItem = pid != null ? _queueItems[pid] : null;
-    return _WireframeMemberRow(
-      name: member.name,
-      ageLabel: member.ageLabel,
-      gender: member.gender,
-      phoneNumber: member.phoneNumber,
-      programmes: member.programmes,
-      ancVisitCount: member.ancVisitCount,
-      pncVisitCount: member.pncVisitCount,
-      householdNo: member.householdNo,
-      householdName: member.householdName,
-      tier: queueItem?.tier,
-      onTap: () => _navigateToMemberDetail(context, member),
+    final tier = queueItem?.tier;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: PatientBadgeRow(
+            name: member.name,
+            ageLabel: member.ageLabel,
+            gender: member.gender,
+            phoneNumber: member.phoneNumber,
+            programmes: member.programmes,
+            ancVisitCount: member.ancVisitCount,
+            pncVisitCount: member.pncVisitCount,
+            householdNo: member.householdNo,
+            householdName: member.householdName,
+            useLatestServiceBadge: true,
+            recentServiceKind: member.recentService,
+            onTap: () => _navigateToMemberDetail(context, member),
+          ),
+        ),
+        if (tier != null && tier != DashboardTier.upcoming) ...[
+          const SizedBox(width: 8),
+          _TierStatusPill(tier: tier),
+        ],
+      ],
     );
   }
 
@@ -789,6 +882,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
       orElse: () => item.members.first,
     );
   }
+
+  _HouseholdMember? _headMember(List<_HouseholdMember> members) {
+    if (members.isEmpty) return null;
+    for (final m in members) {
+      if (m.isHouseholdHead == true) return m;
+    }
+    return members.first;
+  }
 }
 
 /// The relation worth showing next to a primary member row — null for a
@@ -820,6 +921,7 @@ class _HouseholdCard extends StatelessWidget {
     required this.onToggleExpanded,
     required this.onMemberTap,
     this.onTap,
+    this.onAddMember,
   });
 
   final _HouseholdItem item;
@@ -841,6 +943,7 @@ class _HouseholdCard extends StatelessWidget {
   final VoidCallback? onToggleExpanded;
   final void Function(_HouseholdMember other) onMemberTap;
   final VoidCallback? onTap;
+  final VoidCallback? onAddMember;
 
   @override
   Widget build(BuildContext context) {
@@ -875,60 +978,65 @@ class _HouseholdCard extends StatelessWidget {
         children: [
           Material(
             color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: lc.cardSurfaceMuted,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: lc.surfaceTrack,
-                      width: 1,
-                    ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: lc.cardSurfaceMuted,
+                border: Border(
+                  bottom: BorderSide(
+                    color: lc.surfaceTrack,
+                    width: 1,
                   ),
                 ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    const Text('🏠', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              child: Row(
+                children: [
+                  const Text('🏠', style: TextStyle(fontSize: 14)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: onTap,
+                      borderRadius: BorderRadius.circular(6),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontFamily: AppFonts.display,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              color: AppColors.navy,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (villageDisplayName != null &&
-                              villageDisplayName!.isNotEmpty) ...[
-                            const SizedBox(height: 1),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              villageDisplayName!,
+                              title,
                               style: const TextStyle(
-                                fontSize: 9.5,
-                                color: AppColors.textMuted,
+                                fontFamily: AppFonts.display,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                color: AppColors.navy,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (villageDisplayName != null &&
+                                villageDisplayName!.isNotEmpty) ...[
+                              const SizedBox(height: 1),
+                              Text(
+                                villageDisplayName!,
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  color: AppColors.textMuted,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
+                    if (onAddMember != null) ...[
+                      const SizedBox(width: 8),
+                      _HouseholdAddMemberButton(onPressed: onAddMember!),
+                    ],
                   ],
                 ),
               ),
             ),
-          ),
           if (primaryRelation != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
@@ -1020,12 +1128,40 @@ class _HouseholdCard extends StatelessWidget {
   }
 }
 
+/// Circular "+" on a household card header — opens add-member for that household.
+class _HouseholdAddMemberButton extends StatelessWidget {
+  const _HouseholdAddMemberButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: HouseholdDetailStrings.addMember,
+      child: Material(
+        color: AppColors.navy.withValues(alpha: 0.08),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: const SizedBox(
+            width: 28,
+            height: 28,
+            child: Icon(
+              Icons.add_rounded,
+              size: 18,
+              color: AppColors.navy,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// One row in a household card's expanded "other members" panel — initials
-/// avatar, name, relation + age/gender, phone, and a "Registered" tag,
-/// matching the v13 mockup's `otherMembers` treatment. The mockup's static
-/// prototype has no tap action here; this app has a real Patient Details
-/// page, so tapping opens it — real capability shouldn't regress just
-/// because the mockup couldn't demonstrate it.
+/// avatar, name, relation + age/gender, phone, and the latest service tag
+/// (or "Registered" when no visit history exists).
 class _OtherMemberRow extends StatelessWidget {
   const _OtherMemberRow({
     required this.member,
@@ -1055,6 +1191,19 @@ class _OtherMemberRow extends StatelessWidget {
     ].whereType<String>().join(' · ');
     final phone = member.phoneNumber?.trim();
     final hasPhone = phone != null && phone.isNotEmpty;
+
+    final serviceKind = member.recentService?.trim();
+    final hasService = serviceKind != null && serviceKind.isNotEmpty;
+    final tagLabel = hasService
+        ? ProgrammeLabels.forServiceKind(serviceKind)
+        : HouseholdListStrings.enrolledTag;
+    final serviceProgramme =
+        hasService ? Programme.fromString(serviceKind) : null;
+    final (badgeBg, badgeFg) = hasService &&
+            serviceProgramme != null &&
+            serviceProgramme != Programme.unknown
+        ? programmeBadgeColors(serviceProgramme)
+        : (lc.statusSuccessSurface, lc.statusSuccessAction);
 
     final row = InkWell(
       onTap: onTap,
@@ -1119,15 +1268,15 @@ class _OtherMemberRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                color: lc.statusSuccessSurface,
+                color: badgeBg,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                HouseholdListStrings.enrolledTag,
+                tagLabel,
                 style: TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
-                  color: lc.statusSuccessAction,
+                  color: badgeFg,
                 ),
               ),
             ),
@@ -1318,6 +1467,7 @@ class _HouseholdMember {
     this.programmes = const {},
     this.ancVisitCount = 0,
     this.pncVisitCount = 0,
+    this.recentService,
   });
 
   final String? id;
@@ -1344,6 +1494,10 @@ class _HouseholdMember {
   /// label ("ANC Visit 3 due"), identical to the dashboard's real badge.
   final int ancVisitCount;
   final int pncVisitCount;
+
+  /// Most recent assessment `kind` / `serviceProvided` — shown on expanded
+  /// "other member" rows when visit history exists.
+  final String? recentService;
 
   static _HouseholdMember fromJson(Map json) {
     String? str(String k) {
@@ -1386,6 +1540,7 @@ class _HouseholdMember {
     Set<Programme> programmes = const {},
     int ancVisitCount = 0,
     int pncVisitCount = 0,
+    String? recentService,
   }) {
     return _HouseholdMember(
       id: e.id,
@@ -1404,6 +1559,7 @@ class _HouseholdMember {
       programmes: programmes,
       ancVisitCount: ancVisitCount,
       pncVisitCount: pncVisitCount,
+      recentService: recentService,
     );
   }
 }
@@ -1429,6 +1585,7 @@ class _MemberInfo {
     this.programmes = const {},
     this.ancVisitCount = 0,
     this.pncVisitCount = 0,
+    this.recentService,
   });
 
   final String? id;
@@ -1456,6 +1613,7 @@ class _MemberInfo {
   final Set<Programme> programmes;
   final int ancVisitCount;
   final int pncVisitCount;
+  final String? recentService;
 
   /// Whole years from DOB (0 for infants) — kept for navigation extras.
   static int? _calculateAge(String? dateOfBirth) {
@@ -1507,6 +1665,7 @@ class _MemberInfo {
       programmes: member.programmes,
       ancVisitCount: member.ancVisitCount,
       pncVisitCount: member.pncVisitCount,
+      recentService: member.recentService,
     );
   }
 }
@@ -1525,137 +1684,6 @@ class _SearchMatchHighlight extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: child,
-    );
-  }
-}
-
-/// Member row that matches the v14 wireframe `renderHouseholds` member item:
-/// name + age/gender + programme badge baseline-aligned (Wrap), address on the
-/// next line, phone below that, and a [_TierStatusPill] on the right when the
-/// member has an active queue entry.
-class _WireframeMemberRow extends StatelessWidget {
-  const _WireframeMemberRow({
-    required this.name,
-    required this.onTap,
-    this.ageLabel,
-    this.gender,
-    this.phoneNumber,
-    this.programmes = const {},
-    this.ancVisitCount = 0,
-    this.pncVisitCount = 0,
-    this.householdNo,
-    this.householdName,
-    this.tier,
-  });
-
-  final String? name;
-  final String? ageLabel;
-  final String? gender;
-  final String? phoneNumber;
-  final Set<Programme> programmes;
-  final int ancVisitCount;
-  final int pncVisitCount;
-  final String? householdNo;
-  final String? householdName;
-  final DashboardTier? tier;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final badgeLabel = programmeReason(
-      programmes: programmes,
-      ancVisitCount: ancVisitCount,
-      pncVisitCount: pncVisitCount,
-    );
-    final (badgeBg, badgeFg) = programmeBadgeColors(primaryProgrammeOf(programmes));
-
-    final address = [
-      householdNo != null ? '#$householdNo' : null,
-      householdName,
-    ].whereType<String>().join(', ');
-
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 6,
-                    runSpacing: 3,
-                    children: [
-                      Text(
-                        name ?? CommonStrings.unnamed,
-                        style: AppTextStyles.worklistPatientName,
-                      ),
-                      if (ageLabel != null || gender != null)
-                        Text(
-                          [
-                            if (ageLabel != null) ageLabel!,
-                            if (gender != null && gender!.isNotEmpty)
-                              gender![0].toUpperCase(),
-                          ].join('/'),
-                          style: AppTextStyles.worklistPatientMeta,
-                        ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: badgeBg,
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          badgeLabel,
-                          style: TextStyle(
-                            fontFamily: AppFonts.body,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: badgeFg,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (address.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        address,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.worklistAddress.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  if (phoneNumber != null && phoneNumber!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        phoneNumber!,
-                        style: AppTextStyles.worklistPhone.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (tier != null && tier != DashboardTier.upcoming) ...[
-              const SizedBox(width: 8),
-              _TierStatusPill(tier: tier!),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

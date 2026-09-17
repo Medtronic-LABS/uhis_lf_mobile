@@ -1,5 +1,5 @@
-/// Unit tests for the local-data wipe hook in [AuthState.logout] —
-/// GitHub issue #37.
+/// Unit tests for [AuthState.logout] — UHIS parity: local DB is kept across
+/// sign-out; delta sync on the next login uses sync_meta.lastSyncTime.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -10,16 +10,25 @@ import 'package:uhis_next/core/auth/auth_state.dart';
 import 'package:uhis_next/core/auth/biometric_service.dart';
 
 /// Bypasses the real network/secure-storage logout implementation so this
-/// test can isolate AuthState's wipe-callback orchestration.
+/// test can isolate AuthState's logout orchestration.
 class _FakeAuthRepository extends AuthRepository {
   _FakeAuthRepository(super.api);
 
   bool logoutCalled = false;
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({bool online = true}) async {
     logoutCalled = true;
   }
+
+  @override
+  Future<String?> lastUsername() async => null;
+
+  @override
+  Future<bool> isBiometricEnabled() async => false;
+
+  @override
+  Future<bool> isPinSet() async => false;
 }
 
 void main() {
@@ -33,45 +42,12 @@ void main() {
     biometric = BiometricService();
   });
 
-  test('logout() calls the local-data wipe callback', () async {
-    var wipeCalled = false;
-    final authState = AuthState(
-      repo,
-      biometric,
-      onWipeLocalData: () async {
-        wipeCalled = true;
-      },
-    );
-
-    await authState.logout();
-
-    expect(repo.logoutCalled, isTrue);
-    expect(wipeCalled, isTrue);
-    expect(authState.status, AuthStatus.signedOut);
-  });
-
-  test('logout() still completes and signs out if the wipe callback throws',
-      () async {
-    final authState = AuthState(
-      repo,
-      biometric,
-      onWipeLocalData: () async {
-        throw Exception('DB wipe failed');
-      },
-    );
-
-    await authState.logout();
-
-    expect(repo.logoutCalled, isTrue);
-    expect(authState.status, AuthStatus.signedOut,
-        reason: 'sign-out must not be blocked by a wipe failure');
-  });
-
-  test('logout() with no wipe callback configured still signs out', () async {
+  test('logout() completes sign-out without wiping local data', () async {
     final authState = AuthState(repo, biometric);
 
-    await authState.logout();
+    await authState.logout(online: true);
 
+    expect(repo.logoutCalled, isTrue);
     expect(authState.status, AuthStatus.signedOut);
   });
 
@@ -101,28 +77,23 @@ void main() {
         reason: 'sign-out must not be blocked by a hook failure');
   });
 
-  test('logout() runs pre-wipe hooks before the local-data wipe callback',
-      () async {
+  test('logout() runs pre-logout flush hooks before cache hooks', () async {
     final order = <String>[];
-    final authState = AuthState(
-      repo,
-      biometric,
-      onWipeLocalData: () async {
-        order.add('wipe');
-      },
-    );
+    final authState = AuthState(repo, biometric);
     authState.registerPreWipeHook(() async {
-      order.add('preWipe');
+      order.add('flush');
+    });
+    authState.registerLogoutHook(() {
+      order.add('cache');
     });
 
     await authState.logout();
 
-    expect(order, ['preWipe', 'wipe'],
-        reason: 'a pending assessment write must get a chance to flush to '
-            'the backend before its local row is truncated');
+    expect(order, ['flush', 'cache'],
+        reason: 'pending writes should flush before in-memory caches clear');
   });
 
-  test('logout() still completes and signs out if a pre-wipe hook throws',
+  test('logout() still completes and signs out if a pre-logout hook throws',
       () async {
     final authState = AuthState(repo, biometric);
     authState.registerPreWipeHook(() => throw Exception('flush failed'));
@@ -133,7 +104,7 @@ void main() {
         reason: 'sign-out must not be blocked by a flush failure');
   });
 
-  test('logout() still completes and signs out if a pre-wipe hook hangs',
+  test('logout() still completes and signs out if a pre-logout hook hangs',
       () async {
     final authState = AuthState(repo, biometric);
     authState.registerPreWipeHook(

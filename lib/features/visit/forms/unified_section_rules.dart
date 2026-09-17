@@ -537,7 +537,9 @@ abstract final class FieldVisibilityRules {
   /// Evaluation order:
   /// 0. `isSummary` fields — hide only on RMNCH fill forms (Android parity).
   /// 1. NCD `newWorseningSymptoms` — always hidden for SK (Android option
-  ///    absent from list). `ncdSymptomsMedication` — follow-up only.
+  ///    absent from list). Follow-up swap: show `ncdSymptomsMedication`, hide
+  ///    first-visit diagnosis / smoker / BP-DM medication questions
+  ///    (`BDNCDAssessmentFragment.onRenderingComplete`).
   /// 2. A generic `condition` rule targeting this field (another field's
   ///    value equals a declared trigger value) — the common case, covers
   ///    ~96 Yes/No/Other-dependent follow-up fields.
@@ -567,8 +569,9 @@ abstract final class FieldVisibilityRules {
   /// [priorHeightLocked] — true when height was seeded from a prior visit and
   /// must not be re-entered; hides the field on programmes that collect
   /// height (NCD, cataract, ANC). PNC mother has no height field.
-  /// [isNcdFollowUp] — Android BDNCD: `ncdSymptomsMedication` is shown only
-  /// when a prior NCD assessment exists (SK follow-up visit).
+  /// [isNcdFollowUp] — Android BDNCD: on a prior-NCD visit, show
+  /// `ncdSymptomsMedication` and hide first-visit diagnosis / smoker /
+  /// BP–DM medication fields (values stay prefilled for payload).
   /// [formType] — owning programme layout key (e.g. `ncd`, `anc`).
   /// [pncVisitNumber] — 1-based PNC mother visit count; on visit 2+ Android
   /// hides HTN/eclampsia/DM/GDM (values stay prefilled in data).
@@ -596,9 +599,13 @@ abstract final class FieldVisibilityRules {
       return false;
     }
 
-    // Android SK BDNCD: medication adherence spinner is follow-up only.
-    if (field.id == 'ncdSymptomsMedication') {
-      return isNcdFollowUp;
+    // Android BDNCDAssessmentFragment.onRenderingComplete — NCD menu only.
+    if (formType == 'ncd' || field.id == 'ncdSymptomsMedication') {
+      final ncdFollowUpGate = _ncdFollowUpVisibility(
+        fieldId: field.id,
+        isNcdFollowUp: isNcdFollowUp,
+      );
+      if (ncdFollowUpGate != null) return ncdFollowUpGate;
     }
 
     // PNC mother visit 2+: Spice managePncFormBasedOnPregnancyDetail hides
@@ -710,6 +717,34 @@ abstract final class FieldVisibilityRules {
     'dmPatient',
     'gdmPatient',
   };
+
+  /// First-visit-only NCD fields UHIS hides once a prior NCD assessment exists
+  /// (`BDNCDAssessmentFragment`: diagnosedBP / diagnosedGlucose / smoker).
+  /// BP/DM medication questions are included so prefilled diagnosis=Yes cannot
+  /// re-reveal them via generic condition rules on follow-up.
+  static const Set<String> _ncdFollowUpHiddenFieldIds = {
+    'isBeforeHtnDiagnosis',
+    'diagnosedBP',
+    'medicationFrequencyBp',
+    'isBeforeDiabetesDiagnosis',
+    'diagnosedGlucose',
+    'medicationFrequencyBg',
+    'isRegularSmoker',
+  };
+
+  /// UHIS BDNCD follow-up swap, or `null` when the field is not gated here.
+  static bool? _ncdFollowUpVisibility({
+    required String fieldId,
+    required bool isNcdFollowUp,
+  }) {
+    if (fieldId == 'ncdSymptomsMedication') {
+      return isNcdFollowUp;
+    }
+    if (isNcdFollowUp && _ncdFollowUpHiddenFieldIds.contains(fieldId)) {
+      return false;
+    }
+    return null;
+  }
 
   /// Fields Spice reveals only when `ncdServiceProvided == yes` on cataract.
   static const Set<String> _cataractNcdYesFieldIds = {

@@ -56,6 +56,35 @@ abstract final class ChildhoodVisit {
     return '${date.year}-$m-${d}T00:00:00+00:00';
   }
 
+  /// Wire ids for `childIllnessType` — UHIS Symptoms entity table
+  /// (`type = childIllnessType`, `display_order`).
+  static const List<String> allChildIllnessOptionIds = [
+    'diarrhea',
+    'pneumonia',
+    'convulsion',
+    'rapidBreathing',
+    'fever',
+    'lethargy',
+    'unableToSuckMilk',
+    'redUmbilicus',
+    'skinRash',
+    'eyeProblem',
+    'cannotStandWalk',
+    'cannotBalance',
+    'cannotSpeak',
+    'other',
+  ];
+
+  /// Age-filtered illness options — Spice `AssessmentRMNCHFragment` checkbox
+  /// filter on `childIllnessType`.
+  static List<String> childIllnessOptionIdsForAge(int? ageInMonths) {
+    if (ageInMonths == null) return List<String>.from(allChildIllnessOptionIds);
+    final excluded = illnessOptionIdsExcluded(ageInMonths);
+    return allChildIllnessOptionIds
+        .where((id) => !excluded.contains(id))
+        .toList();
+  }
+
   /// Illness option `value` codes removed for the child's age — Spice
   /// `AssessmentRMNCHFragment` checkbox filter on `childIllnessType`.
   static Set<String> illnessOptionIdsExcluded(int ageInMonths) {

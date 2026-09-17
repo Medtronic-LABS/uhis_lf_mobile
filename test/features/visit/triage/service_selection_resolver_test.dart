@@ -130,7 +130,7 @@ void main() {
   });
 
   group('ServiceSelectionResolver.finalize — delivery visit', () {
-    test('includes PNC by default on a delivery visit', () {
+    test('PO-only visit does not force PNC', () {
       final result = ServiceSelectionResolver.finalize(
         selected: {Programme.ncd},
         pwRegistrationBlocked: false,
@@ -139,23 +139,59 @@ void main() {
         isDeliveryVisit: true,
       );
 
-      expect(result.programmes, {Programme.ncd, Programme.pnc});
+      expect(result.programmes, {Programme.ncd});
+      expect(result.isDeliveryVisit, isTrue);
     });
 
-    test('omits PNC when the SK explicitly deselected it in the grid', () {
+    test('PO visit keeps SK-selected PNC without re-adding it', () {
       final result = ServiceSelectionResolver.finalize(
-        selected: {Programme.ncd},
+        selected: {Programme.ncd, Programme.pnc},
         pwRegistrationBlocked: false,
         isPostpartum: false,
         ancRevisitBlocked: false,
         isDeliveryVisit: true,
-        pncDismissedBySk: true,
       );
 
-      expect(result.programmes, {Programme.ncd},
-          reason: 'Pregnancy Outcome and PNC are independently selectable — '
-              'an explicit SK deselection must survive finalize(), not be '
-              'silently re-forced back on.');
+      expect(result.programmes.toList(), [Programme.pnc, Programme.ncd]);
+      expect(result.isDeliveryVisit, isTrue);
+    });
+  });
+
+  group('ServiceSelectionResolver.finalize — PO backfill for PNC', () {
+    test('symptoms-only PNC selection enables PO at Continue', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.pnc, Programme.ncd},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+      );
+
+      expect(result.isDeliveryVisit, isTrue);
+      expect(result.programmes.toList(), [Programme.pnc, Programme.ncd]);
+    });
+
+    test('postpartum PNC-only visit does not force PO flag', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.pnc},
+        pwRegistrationBlocked: false,
+        isPostpartum: true,
+        ancRevisitBlocked: false,
+      );
+
+      expect(result.isDeliveryVisit, isFalse);
+      expect(result.programmes, {Programme.pnc});
+    });
+
+    test('PNC backfill clears ANC and PW at Continue', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.pnc, Programme.anc, Programme.pw, Programme.ncd},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+      );
+
+      expect(result.isDeliveryVisit, isTrue);
+      expect(result.programmes.toList(), [Programme.pnc, Programme.ncd]);
     });
   });
 
@@ -215,6 +251,66 @@ void main() {
         result.programmes.toList(),
         [Programme.anc, Programme.ncd, Programme.familyPlanning],
       );
+    });
+  });
+
+  group('ServiceSelectionResolver.finalize — male maternal strip', () {
+    test('strips ANC/PNC/PW/FP for males and keeps NCD', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {
+          Programme.anc,
+          Programme.pnc,
+          Programme.pw,
+          Programme.familyPlanning,
+          Programme.ncd,
+        },
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        isMale: true,
+      );
+
+      expect(result.programmes, {Programme.ncd});
+      expect(result.blockedReason, isNull);
+      expect(result.silentlyEmptied, isFalse);
+    });
+
+    test('does not auto-add PNC on delivery visits for males', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.ncd},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        isDeliveryVisit: true,
+        isMale: true,
+      );
+
+      expect(result.programmes, {Programme.ncd});
+    });
+
+    test('male maternal-only selection empties without PW snackbar flag', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.anc, Programme.pw},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        isMale: true,
+      );
+
+      expect(result.programmes, isEmpty);
+      expect(result.silentlyEmptied, isFalse);
+    });
+
+    test('non-male finalize still auto-adds PW with ANC', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.anc},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        isMale: false,
+      );
+
+      expect(result.programmes, {Programme.anc, Programme.pw});
     });
   });
 

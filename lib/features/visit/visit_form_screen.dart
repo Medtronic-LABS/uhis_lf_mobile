@@ -18,8 +18,9 @@ import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/pregnancy_episode_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
-import '../../core/mission/mission_pregnancy_facts.dart';
+import 'forms/pregnancy_outcome_snapshot_mapper.dart';
 import '../../core/models/programme.dart';
+import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
@@ -32,6 +33,7 @@ import 'forms/form_type_resolver.dart';
 import 'forms/pregnancy_outcome_side_effects.dart';
 import 'forms/unified_form_notifier.dart';
 import 'forms/unified_form_screen.dart';
+import 'naba/naba_models.dart';
 import 'triage/service_selection_resolver.dart';
 import 'visit_controller.dart';
 import 'visit_session.dart';
@@ -98,13 +100,16 @@ class VisitFormScreen extends StatefulWidget {
   final String? origin;
 
   /// When non-null the screen calls this with the primary programme,
-  /// referral flag, and the list of detected clinical referral conditions.
+  /// referral flag, detected clinical referral conditions, and PW risk
+  /// factors (empty unless PWPROFILE was submitted).
   /// Used by [VisitFlowScreen] to keep the SK on the same route for all 3 steps.
   final void Function(
     Programme primaryProgramme,
     bool referralRecommended,
     List<String> referredReasons,
     String? referralFacility,
+    List<String> pwRiskFactors,
+    List<NabaReferralAssessment> nabaReferralAssessments,
   )? onAdvance;
 
   /// Programmes the patient is already enrolled in (from [PatientProgrammesDao]).
@@ -141,8 +146,16 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   List<String>? _notifierFormTypes;
   String? _notifierEncounterId;
 
+  /// Delivery / Pregnancy Outcome is tracked as [isDeliveryVisit], not as a
+  /// programme name in [activatedPathways]. When the SK selects Outcome and
+  /// deselects PNC, Step 1 correctly finalizes an empty programme set — but
+  /// [FormTypeResolver] still seeds `pregnancyOutcome` (+ mother/child PNC
+  /// cards for birth documentation). Without this gate, that visit hit the
+  /// blank "No assessment pathways activated" body.
   bool get _hasActivatedPathways =>
-      widget.activatedPathways != null && widget.activatedPathways!.isNotEmpty;
+      widget.isDeliveryVisit ||
+      (widget.activatedPathways != null &&
+          widget.activatedPathways!.isNotEmpty);
 
   @override
   void didChangeDependencies() {
@@ -151,6 +164,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       _scribeCtrl = ScribeController(
         api: context.read<ScribeApiService>(),
         permissionService: ScribePermissionService(),
+        audioSettings: context.read<ScribeAudioSettingsNotifier>(),
       );
       _scribeCtrl.setHierarchyService(context.read<UserHierarchyService>());
       _scribeCtrl.setSampleDao(
@@ -215,8 +229,17 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     return out;
   }
 
-  Programme _getPrimaryProgramme() =>
-      ServiceSelectionResolver.primaryFrom(widget.activatedPathways ?? const []);
+  Programme _getPrimaryProgramme() {
+    final fromPathways = ServiceSelectionResolver.primaryFrom(
+      widget.activatedPathways ?? const [],
+    );
+    if (fromPathways != Programme.unknown) return fromPathways;
+    // Outcome-only delivery visit (PNC deselected) still needs a primary
+    // for summary / enrolment housekeeping — PNC is the clinical home for
+    // birth documentation alongside pregnancyOutcome forms.
+    if (widget.isDeliveryVisit) return Programme.pnc;
+    return Programme.unknown;
+  }
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
@@ -427,7 +450,58 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         final primaryProgramme = _getPrimaryProgramme();
         final now = DateTime.now();
 
-        // Fire housekeeping in background — navigate immediately, these finish async.
+        final hasPregnancyOutcome =
+            fieldValues.containsKey('deliveryOutcomeType') ||
+                widget.isDeliveryVisit;
+
+        // UHIS parity: baby registration must finish before Step 3 sync —
+        // otherwise syncPendingAssessments can run with householdMembers[] empty.
+        if (hasPregnancyOutcome) {
+          if (patientId != null) {
+            final local = await patientDao.byAnyId(patientId);
+            final localId = local?.id ?? patientId;
+            final poData = CanonicalVisitData(fieldValues);
+            final existingEpisode =
+                await pregnancyEpisodeDao.openEpisodeFor(localId) ??
+                    await pregnancyEpisodeDao.mostRecentFor(localId);
+            final poSnapshot = PregnancyOutcomeSnapshotMapper.fromPoData(
+              patientId: localId,
+              data: poData,
+              existing: existingEpisode?.obstetric,
+            );
+            final deliveryMs = poSnapshot.deliveryDateMillis ??
+                DateTime.now().millisecondsSinceEpoch;
+            await pregnancyEpisodeDao.closeEpisode(
+              patientId: localId,
+              deliveryDateMillis: deliveryMs,
+              obstetricPatch: poSnapshot,
+            );
+            debugPrint('[VisitForm] pregnancy episode closed → postpartum '
+                'deliveryMs=$deliveryMs patientId=$localId '
+                'postpartum=${poSnapshot.facts.isPostpartumWindow}');
+          }
+
+          try {
+            final babies = await PregnancyOutcomeSideEffects(
+              memberDao: memberDao,
+              patientDao: patientDao,
+            ).apply(
+              data: CanonicalVisitData(fieldValues),
+              motherMemberId: widget.memberId ??
+                  widget.householdMemberLocalId?.toString(),
+              motherPatientId: widget.patientId,
+              householdId: widget.householdId,
+            );
+            debugPrint(
+              '[VisitForm] pregnancy outcome side effects — '
+              '${babies.length} baby(ies) queued for sync',
+            );
+          } catch (e) {
+            debugPrint('[VisitForm] pregnancy outcome side effects ✗ $e');
+          }
+        }
+
+        // Remaining housekeeping can finish after navigation.
         unawaited(Future(() async {
           try {
             if (vitalsMap.isNotEmpty) {
@@ -435,61 +509,6 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               debugPrint('[VisitForm] encounter vitals written: $vitalsMap');
             }
 
-            // After PREGNANCY_OUTCOME submission: flip snapshot to postpartum
-            // so next visit correctly shows PNC (not ANC).
-            // Mirrors Android PregnancyCohortRules: dateOfDelivery set → isPostpartum.
-            final hasPregnancyOutcome =
-                fieldValues.containsKey('deliveryOutcomeType') ||
-                    widget.isDeliveryVisit;
-            if (patientId != null && hasPregnancyOutcome) {
-              final deliveryRaw = fieldValues['dateOfDelivery']
-                  ?? fieldValues['deliveryDate'];
-              final deliveryMs = deliveryRaw is String
-                  ? DateTime.tryParse(deliveryRaw)?.millisecondsSinceEpoch
-                  : null;
-              final local =
-                  await patientDao.byAnyId(patientId);
-              final localId = local?.id ?? patientId;
-              await pregnancyEpisodeDao.closeEpisode(
-                patientId: localId,
-                deliveryDateMillis:
-                    deliveryMs ?? DateTime.now().millisecondsSinceEpoch,
-                facts: const PregnancyFacts(
-                  isPostpartumWindow: true,
-                  highRiskPregnantWoman: false,
-                  hasGapsInAnc: false,
-                  isNearTermAnc: false,
-                  hadDeliveryComplications: false,
-                  hasPncIllness: false,
-                ),
-              );
-              debugPrint('[VisitForm] pregnancy episode closed → postpartum '
-                  'deliveryMs=$deliveryMs patientId=$localId');
-            }
-
-            // Android AssessmentViewModel.savePregnancyOutcomeDetails:
-            // register live babies + mark mother inactive on maternal death.
-            if (hasPregnancyOutcome) {
-              try {
-                await PregnancyOutcomeSideEffects(
-                  memberDao: memberDao,
-                  patientDao: patientDao,
-                ).apply(
-                  data: CanonicalVisitData(fieldValues),
-                  motherMemberId: widget.memberId,
-                  motherPatientId: widget.patientId,
-                  householdId: widget.householdId,
-                );
-              } catch (e) {
-                debugPrint('[VisitForm] pregnancy outcome side effects ✗ $e');
-              }
-            }
-
-            // Spice: form save leaves the row NotSynced; sync is started after
-            // the summary screen Done. When embedded in the visit flow, skip
-            // the explicit push here — Step 3 Accept stamps summary then syncs.
-            // No hold flag: if the SK abandons Step 3, reconnect/background
-            // sync can still upload (same tradeoff as Spice).
             if (widget.onAdvance == null) {
               debugPrint('[VisitForm] triggering syncPendingAssessments');
               await assessmentRepo.syncPendingAssessments().then(
@@ -504,15 +523,24 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               );
             }
             if (patientId != null) {
-              // Fallback schedule when Step 3 is skipped; Step 3 Accept
-              // overwrites next_due_at with the summary follow-up date.
-              await patientDao.updateVisitSchedule(
-                patientId: patientId,
-                lastVisitAt: now.millisecondsSinceEpoch,
-                nextDueAt: _nextDueForProgramme(primaryProgramme, now),
-                missedVisitCount: 0,
-              );
-              debugPrint('[VisitForm] schedule updated');
+              // PO-only (Spice pregnancy-outcome summary) has no follow-up;
+              // defer next_due_at until a PNC visit or Step 3 PNC accept.
+              final poOnly = hasPregnancyOutcome &&
+                  !(_notifierFormTypes?.contains('pncMother') ?? false);
+              if (!poOnly) {
+                // Fallback schedule when Step 3 is skipped; Step 3 Accept
+                // overwrites next_due_at with the summary follow-up date.
+                await patientDao.updateVisitSchedule(
+                  patientId: patientId,
+                  lastVisitAt: now.millisecondsSinceEpoch,
+                  nextDueAt: _nextDueForProgramme(primaryProgramme, now),
+                  missedVisitCount: 0,
+                );
+                debugPrint('[VisitForm] schedule updated');
+              } else {
+                debugPrint(
+                    '[VisitForm] PO-only — skipped next_due_at fallback');
+              }
               await worklistRepo.recomputeAllAfterSync();
               debugPrint('[VisitForm] worklist recomputed');
             }
@@ -534,6 +562,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
             _referralRecommended,
             formNotifier.lastReferredReasons,
             formNotifier.lastReferralFacility,
+            formNotifier.lastPwRiskFactors,
+            formNotifier.lastNabaReferralAssessments,
           );
         } else {
           ctx.go(

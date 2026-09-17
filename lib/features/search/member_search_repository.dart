@@ -5,6 +5,7 @@ import '../../core/db/member_dao.dart';
 class MemberHit {
   MemberHit({
     this.id,
+    this.memberLocalId,
     this.name,
     this.age,
     this.gender,
@@ -15,7 +16,11 @@ class MemberHit {
     this.householdNo,
   });
 
+  /// Route / display id — prefers server `members.patient_id`, else local PK.
   final String? id;
+
+  /// Local `members.id` — assessments and programmes are keyed by this value.
+  final String? memberLocalId;
   final String? name;
   final String? age;
   final String? gender;
@@ -105,6 +110,7 @@ class MemberSearchRepository extends ApiRepository {
     final rows = await _members.searchByName(q, limit: displayCap);
     final matches = rows.map((m) => MemberHit(
           id: m.patientId ?? m.id,
+          memberLocalId: m.id,
           name: m.name,
           gender: m.gender,
           phone: m.phone,

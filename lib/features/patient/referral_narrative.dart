@@ -34,22 +34,39 @@ List<String> parseReferralReasonTokens(Object? reasons) {
 
   return trimmed
       .replaceAll(RegExp(r'^\[|\]$'), '')
-      .split(RegExp(r'[,;]'))
+      .split(RegExp(r'[,;]|\s+·\s+|\s+and\s+', caseSensitive: false))
       .map((r) => r.trim().replaceAll(RegExp(r'''^["']+|["']+$'''), ''))
       .where((r) => r.isNotEmpty)
       .toList(growable: false);
 }
 
+/// True when [compact] (spaces/underscores stripped, lowercased) is the ANC
+/// AI rising-BP-trend wire reason — must be checked before the generic High BP
+/// matcher, which would otherwise swallow "…bloodpressure…".
+bool _isRisingBpTrendReason(String compact) =>
+    compact.contains('rising') &&
+    compact.contains('trend') &&
+    (compact.contains('bloodpressure') || compact.contains('bptrend'));
+
 /// Short human-readable label for a single referral reason token.
 String shortReasonLabel(String reason) {
   final k = reason.toLowerCase().replaceAll(RegExp(r'[\s_]+'), ' ').trim();
   final compact = k.replaceAll(' ', '');
-  if (compact.contains('bloodglucose') ||
+  // Spice NCD wire reasons: "High BP", "High BG", "Symptoms".
+  if (compact == 'highbg' ||
+      compact == 'highbloodglucose' ||
+      compact.contains('bloodglucose') ||
       (compact.contains('glucose') && !compact.contains('bloodpressure'))) {
-    return ReferralStrings.shortReasonBloodGlucoseElevated;
+    return ReferralStrings.shortReasonHighBg;
   }
   if (compact.contains('pulse')) return ReferralStrings.shortReasonAbnormalPulse;
-  if (compact.contains('bloodpressure') ||
+  // ANC AI-trend wire: "Rising blood pressure trend across visits".
+  if (_isRisingBpTrendReason(compact)) {
+    return ReferralStrings.shortReasonRisingBpTrend;
+  }
+  if (compact == 'highbp' ||
+      compact == 'highbloodpressure' ||
+      compact.contains('bloodpressure') ||
       k == 'bp' ||
       compact.contains('hypertension')) {
     return ReferralStrings.shortReasonHighBp;
@@ -83,6 +100,9 @@ String shortReasonLabel(String reason) {
   }
   if (compact.contains('overdue') || compact.contains('missedvisit')) {
     return ReferralStrings.shortReasonVisitOverdue;
+  }
+  if (compact == 'symptoms' || compact == 'reportedsymptoms') {
+    return ReferralStrings.shortReasonSymptoms;
   }
   if (compact.contains('symptom')) return ReferralStrings.shortReasonClinicalSymptoms;
   final t = reason.trim();
@@ -133,11 +153,27 @@ String buildReferralNarrative(Object? reasons, Map<String, dynamic> raw) {
     handled.addAll(['danger']);
   }
 
+  // ANC AI rising-BP-trend — before generic High BP (substring would collide).
+  final risingTrendTokens = tokens.where(_isRisingBpTrendReason).toList();
+  if (risingTrendTokens.isNotEmpty) {
+    findings.add(ReferralStrings.risingBpTrendNarrative);
+    handled.addAll(risingTrendTokens);
+  }
+
   final bp = raw['bp']?.toString() ?? '';
   final sys = _sys(bp);
   final dia = _dia(bp);
   final bpHigh = sys >= 140 || dia >= 90;
-  if (hasReason(['bp', 'bloodpressure', 'hypertension']) || bpHigh) {
+  // Ignore rising-trend-only reason tokens when deciding generic High BP.
+  final hasHighBpReason = tokens.any((t) {
+    if (_isRisingBpTrendReason(t)) return false;
+    final c = t.replaceAll(RegExp(r'[\s_]'), '');
+    return c.contains('bloodpressure') ||
+        c == 'highbp' ||
+        c.contains('hypertension') ||
+        c == 'bp';
+  });
+  if (hasHighBpReason || bpHigh) {
     if (bp.isNotEmpty && sys > 0) {
       if (sys >= 160 || dia >= 110) {
         findings.add(ReferralStrings.bpDangerouslyElevated(bp));

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
@@ -1935,23 +1936,23 @@ class AppDatabase {
 
   /// Truncates every table, keeping the schema and the existing connection
   /// intact (no file delete/reopen — that would orphan every DAO's shared
-  /// [Database] handle). Used on logout and after a successful online login,
-  /// before the subsequent full sync repopulates local data.
+  /// [Database] handle). Used when a different SK signs into a shared device
+  /// (login sync) — not on logout (UHIS parity keeps local data).
   Future<void> wipeAllData() async {
-    ConsoleLog.banner(
-        '🧹 [AppDatabase] wipeAllData() — truncating ${_allTables.length} tables...');
+    var totalRows = 0;
     await db.transaction((tx) async {
       for (final table in _allTables) {
         final before = Sqflite.firstIntValue(
                 await tx.rawQuery('SELECT COUNT(*) FROM $table')) ??
             0;
         await tx.delete(table);
-        ConsoleLog.step(
-            '  → truncated $table ($before row${before == 1 ? '' : 's'} removed)');
+        totalRows += before;
       }
     });
-    ConsoleLog.success(
-        '✅ [AppDatabase] wipeAllData() complete — all ${_allTables.length} tables empty.');
+    debugPrint(
+      '[AppDatabase] wipeAllData complete — ${_allTables.length} tables, '
+      '$totalRows rows removed',
+    );
   }
 
   Future<void> close() => db.close();

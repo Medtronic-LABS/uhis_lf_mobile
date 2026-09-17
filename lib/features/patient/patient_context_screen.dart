@@ -23,6 +23,8 @@ import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/clinical/ai_context_fields.dart';
+import '../../core/clinical/referral_facility_labels.dart';
+import '../../core/clinical/assessment_raw_normalizer.dart';
 import '../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
 import '../../core/clinical/briefing_rules/clinical_finding.dart';
 import '../../core/models/programme.dart';
@@ -38,11 +40,17 @@ import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/widgets/gestational_age_card.dart';
 import '../../core/widgets/skeleton.dart';
 import '../household/enrollment/enrollment_dob.dart';
+import '../visit/forms/form_config.dart';
+import '../visit/forms/rmnch_referral_facility.dart';
+import '../household/member_assessment_lookup.dart';
 import '../visit/triage/patient_context_builder.dart';
+import '../visit/forms/anc_existing_illness.dart';
+import '../visit/forms/delivery_facility_type.dart';
 import '../visit/visit_controller.dart';
 import '../visit/visit_start_helper.dart';
 import 'referral_narrative.dart';
 import 'vitals_repository.dart';
+import '../../core/i18n/app_date_format.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -291,6 +299,8 @@ Future<PatientContext?> resolvePatientContext(
     programmesDao: context.read<PatientProgrammesDao>(),
     pregnancyDao: context.read<PregnancySnapshotDao>(),
     immunisationDao: context.read<ImmunisationDao>(),
+    assessmentDao: context.read<AssessmentDao>(),
+    localAssessmentDao: context.read<LocalAssessmentDao>(),
   );
   final patientCtx = await builder.build(patientId);
   return patientCtx ?? _fallbackPatientContextFor(patientId, data);
@@ -420,24 +430,51 @@ class _PatientContextScreenState
     }
   }
 
+  /// Derives enrolled programmes from locally-cached assessment rows.
+  Set<Programme> _programmesFromAssessments(List<MemberAssessment> assessments) {
+    final progs = <Programme>{};
+    for (final a in assessments) {
+      final p = Programme.fromString(a.type);
+      if (p != Programme.unknown) progs.add(p);
+    }
+    return progs;
+  }
+
+  /// All patient/member id keys that may have synced assessment rows in SQLite.
+  Future<Set<String>> _assessmentLookupKeys(String patientId) async {
+    try {
+      return await assessmentLookupKeysForRoute(
+        routePatientId: patientId,
+        memberDao: context.read<MemberDao>(),
+        patientDao: context.read<PatientDao>(),
+        navigationExtra: widget.memberData,
+      );
+    } on Object catch (e) {
+      // ignore: avoid_print
+      print('[PatientContextScreen] assessment lookup keys failed: $e');
+      return {stripPatientRouteId(patientId)};
+    }
+  }
+
   /// Build the local-first Recent Visits feed from three on-device sources.
   /// Spec: dashboard-prioritization-impl §Patient Detail; matches the
   /// offline-first contract (architecture.md §3.1). Returns deduped list
   /// sorted DESC by date.
   Future<List<MemberAssessment>> _localAssessmentsFor(String patientId) async {
-    final stripped = patientId.contains('/')
-        ? patientId.substring(patientId.lastIndexOf('/') + 1)
-        : patientId;
+    final lookupKeys = await _assessmentLookupKeys(patientId);
     final assessments = context.read<AssessmentDao>();
     final localDrafts = context.read<LocalAssessmentDao>();
 
     final out = <MemberAssessment>[];
+    final seenSyncedIds = <String>{};
 
     // Source 1: server-synced records from member-assessment-history.
     // These are the canonical care history entries after a sync completes.
     try {
-      final asMap = await assessments.forMany([stripped]);
-      for (final row in asMap[stripped] ?? const []) {
+      final asMap = await assessments.forMany(lookupKeys.toList());
+      for (final key in lookupKeys) {
+        for (final row in asMap[key] ?? const []) {
+        if (!seenSyncedIds.add(row.id)) continue;
         final date = row.occurredAt == null
             ? DateTime.now()
             : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
@@ -456,6 +493,7 @@ class _PatientContextScreenState
           date: date,
           rawJson: <String, dynamic>{'kind': row.kind, 'raw': row.rawJson},
         ));
+        }
       }
     } on Object catch (e) {
       // ignore: avoid_print
@@ -469,9 +507,15 @@ class _PatientContextScreenState
     // [PatientOrMemberData.assessments], so that it also covers records that
     // only came back over the network.
     try {
-      final drafts = await localDrafts.getByPatientId(stripped);
+      final draftsById = <String, LocalAssessmentEntity>{};
+      for (final key in lookupKeys) {
+        for (final d in await localDrafts.getByPatientId(key)) {
+          draftsById[d.id] = d;
+        }
+      }
+      final drafts = draftsById.values.toList();
       // ignore: avoid_print
-      print('[PatientContextScreen] localDrafts for patientId=$stripped count=${drafts.length}');
+      print('[PatientContextScreen] localDrafts lookupKeys=$lookupKeys count=${drafts.length}');
       for (final d in drafts) {
         // ignore: avoid_print
         print('[PatientContextScreen]   draft id=${d.id} type=${d.assessmentType} syncStatus=${d.syncStatus.name} storedPatientId=${d.patientId}');
@@ -505,7 +549,7 @@ class _PatientContextScreenState
         };
 
         out.add(MemberAssessment(
-          id: d.id.toString(),
+          id: d.id,
           type: d.assessmentType.toUpperCase(),
           date: d.createdAt ?? DateTime.now(),
           status: d.syncStatus.name,
@@ -635,16 +679,9 @@ class _PatientContextScreenState
     debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
         ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
-    // Skip remote assessment fetch only when a sync completed recently AND the
-    // local DB already has assessment rows for this patient. When local is empty
-    // (e.g. member-to-patient mapping failed during the sync pull), fall back to
-    // the remote API so the Recent Visit section doesn't silently go blank.
-    final skipRemote = syncAge != null &&
-        syncAge.inMinutes < 30 &&
-        localAssessments.isNotEmpty;
     ConsoleLog.banner('[PatientCtx] phase1 local=${t0.elapsedMilliseconds}ms'
         ' localPatient=${localPatient != null} localAssessments=${localAssessments.length}'
-        ' syncAge=${syncAge?.inMinutes ?? '?'}min skipRemote=$skipRemote');
+        ' syncAge=${syncAge?.inMinutes ?? '?'}min (local-only — no per-patient API)');
 
     if (localPatient != null) {
       // ignore: avoid_print
@@ -692,8 +729,8 @@ class _PatientContextScreenState
         return true;
       }());
 
-      // Build local-only snapshot and surface it immediately so the screen
-      // renders with cached data while the remote enrichment runs.
+      // Local-only: assessment history is populated by login / warmSync; the
+      // cloud icon on this screen triggers warmSync before re-reading SQLite.
       final localOnly = PatientOrMemberData(
         localPatient: localPatient,
         programmes: localPatient.programmes,
@@ -703,85 +740,33 @@ class _PatientContextScreenState
         pregnancySnapshot: pregnancySnapshot,
         enrolledAt: enrolledAt,
       );
-      if (mounted) {
-        setState(() {
-          _localSnapshot = localOnly;
-          _remoteLoading = true;
-        });
-      }
-
-      // Phase 2: householdName (always local) + remote assessments (skipped
-      // when sync is fresh — avoids a ~900ms round-trip for data already in DB).
-      final tPhase2 = Stopwatch()..start();
-      List<MemberAssessment> remoteAssessments = const [];
-      if (skipRemote) {
-        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
-        final info = await _householdInfo(localPatient.patient.householdId);
-        if (mounted) setState(() => _remoteLoading = false);
-        ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
-            ' remoteSkipped=true total=${t0.elapsedMilliseconds}ms');
-        return localOnly.copyWith(householdName: info.name, householdHeadPhone: info.headPhone);
-      }
-
-      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdInfo');
-      final phase2Results = await Future.wait([
-        memberRepo
-            .getMemberAssessments(
-              widget.patientId,
-              villageId: localPatient.patient.villageId,
-              patientAge: localPatient.patient.age,
-              patientGender: localPatient.patient.gender,
-            )
-            .catchError((_) => <MemberAssessment>[]),
-        _householdInfo(localPatient.patient.householdId),
-      ]);
-      remoteAssessments = phase2Results[0] as List<MemberAssessment>;
-      final householdInfo = phase2Results[1] as ({String? name, String? headPhone});
-      // ignore: avoid_print
-      print('[PatientContextScreen] Found ${remoteAssessments.length} remote assessments');
-
-      if (mounted) setState(() => _remoteLoading = false);
-
+      final info = await _householdInfo(localPatient.patient.householdId);
+      ConsoleLog.banner('[PatientCtx] load done=${t0.elapsedMilliseconds}ms'
+          ' localAssessments=${localAssessments.length}');
       return localOnly.copyWith(
-        remoteAssessments: remoteAssessments,
-        householdName: householdInfo.name,
-        householdHeadPhone: householdInfo.headPhone,
+        householdName: info.name,
+        householdHeadPhone: info.headPhone,
       );
     }
 
     // ignore: avoid_print
-    print('[PatientContextScreen] No local patient, trying remote member API');
-    
-    // If not found locally, try fetching member from remote API
-    final member = await memberRepo.getMemberWithAssessments(widget.patientId);
+    print('[PatientContextScreen] No local patient, trying local member lookup');
+
+    // If not found locally as a patient, try the member row from SQLite.
+    final member = await memberRepo.getMemberById(widget.patientId);
     if (member != null) {
       // ignore: avoid_print
-      print('[PatientContextScreen] Found remote member: ${member.name} with ${member.assessments.length} assessments');
-      // Determine programmes from assessments
-      final progs = <Programme>{};
-      for (final a in member.assessments) {
-        switch (a.type) {
-          case 'ANC':
-            progs.add(Programme.anc);
-            break;
-          case 'IMCI':
-            progs.add(Programme.imci);
-            break;
-          case 'NCD':
-            progs.add(Programme.ncd);
-            break;
-          case 'TB':
-            progs.add(Programme.tb);
-            break;
-        }
-      }
-      
-      final localAssessments = await _localAssessmentsFor(widget.patientId);
+      print('[PatientContextScreen] Found local member: ${member.name}');
+      final memberLocalAssessments =
+          await _localAssessmentsFor(widget.patientId);
+      final patientWithProgs = await patientRepo.byId(widget.patientId);
+      final progs = patientWithProgs?.programmes ??
+          _programmesFromAssessments(memberLocalAssessments);
       final memberHouseholdInfo = await _householdInfo(member.householdId);
       return PatientOrMemberData(
         remoteMember: member,
         programmes: progs,
-        localAssessments: localAssessments,
+        localAssessments: memberLocalAssessments,
         memberId: resolvedMemberId,
         householdName: memberHouseholdInfo.name,
         householdHeadPhone: memberHouseholdInfo.headPhone,
@@ -796,53 +781,16 @@ class _PatientContextScreenState
       // ignore: avoid_print
       print('[PatientContextScreen] Using pre-passed member data from household');
       final data = widget.memberData!;
-      // Extract patient profile for filtering
-      final age = data['age'] as int?;
-      final gender = data['gender'] as String?;
-      final isPregnant = data['isPregnant'] as bool? ?? false;
       // Use the FHIR ID (member.id) only for resource references, not for encounter.memberId.
       final memberId = data['id']?.toString() ?? widget.patientId;
-      
-      // Try to fetch assessments but don't fail if API is unavailable.
-      // Pass villageId: null so the call falls back to all assigned villages
-      // rather than only the first one (which would miss patients in other villages).
-      List<MemberAssessment> assessments = [];
-      try {
-        assessments = await memberRepo.getMemberAssessments(
-          widget.patientId,
-          patientAge: age,
-          patientGender: gender,
-          isPregnant: isPregnant,
-        );
-        // ignore: avoid_print
-        print('[PatientContextScreen] Found ${assessments.length} assessments for pre-passed member');
-      } catch (e) {
-        // ignore: avoid_print
-        print('[PatientContextScreen] Failed to fetch assessments: $e (continuing with basic info)');
-      }
-      
-      // Determine programmes from assessments
-      final progs = <Programme>{};
-      for (final a in assessments) {
-        switch (a.type) {
-          case 'ANC':
-            progs.add(Programme.anc);
-            break;
-          case 'IMCI':
-            progs.add(Programme.imci);
-            break;
-          case 'NCD':
-            progs.add(Programme.ncd);
-            break;
-          case 'TB':
-            progs.add(Programme.tb);
-            break;
-        }
-      }
-      
+
       final localAssessmentsList =
           await _localAssessmentsFor(widget.patientId);
-      final prePassedHouseholdInfo = await _householdInfo(data['householdId']?.toString());
+      final patientWithProgs = await patientRepo.byId(widget.patientId);
+      final progs = patientWithProgs?.programmes ??
+          _programmesFromAssessments(localAssessmentsList);
+      final prePassedHouseholdInfo =
+          await _householdInfo(data['householdId']?.toString());
       return PatientOrMemberData(
         remoteMember: MemberHealthDetails(
           id: memberId,
@@ -854,10 +802,8 @@ class _PatientContextScreenState
           householdId: data['householdId']?.toString(),
           isPregnant: data['isPregnant'] as bool? ?? false,
           patientId: data['patientId'] as String?,
-          assessments: assessments,
         ),
         programmes: progs,
-        remoteAssessments: assessments,
         localAssessments: localAssessmentsList,
         memberId: resolvedMemberId,
         householdName: prePassedHouseholdInfo.name,
@@ -876,11 +822,18 @@ class _PatientContextScreenState
   Future<void> _refresh() async {
     setState(() {
       _refreshing = true;
-      // Keep _localSnapshot so the existing content stays visible
-      // during the pull-to-refresh; skeleton only shows on cold load.
       _remoteLoading = false;
     });
     try {
+      final syncSvc = context.read<OfflineSyncService>();
+      final report = await syncSvc.warmSync();
+      if (!mounted) return;
+      if (report.errors.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(PatientContextStrings.refreshFailed)),
+        );
+        return;
+      }
       final data = await _fetchData();
       if (!mounted) return;
       setState(() {
@@ -925,7 +878,7 @@ class _PatientContextScreenState
     final progs = data.programmes.toList();
 
     final band = data.riskBand;
-    final bandLabel = band == null ? null : 'Band ${band.index + 1}';
+    final bandLabel = band == null ? null : PatientDetailStrings.band(band.index + 1);
     final reasons = data.riskReasons;
 
     final chip = <String>[
@@ -936,7 +889,7 @@ class _PatientContextScreenState
     final summary = StringBuffer()
       ..write('${data.age != null ? '${data.age}y' : '—'}'
           '${data.gender != null ? ', ${data.gender}' : ''}');
-    if (data.isPregnant) summary.write('  ·  Pregnant');
+    if (data.isPregnant) summary.write('  ·  ${PatientDetailStrings.pregnantSuffix}');
 
     final extras = await _clinicalContextExtras(data);
 
@@ -955,21 +908,63 @@ class _PatientContextScreenState
       summary: summary.toString(),
       apiContext: <String, dynamic>{
         'patientId': data.patientId ?? widget.patientId,
-        'name': data.name,
-        'age': data.age,
+        'patientName': data.name,
+        'ageYears': data.age,
         'gender': data.gender,
-        'programmes': progs.map((p) => p.wireTag).toList(),
-        // Duplicate of 'programmes' under the key name the sibling AI Visit
-        // Briefing/NABA requests use (see symptom_picker_screen.dart) — the
-        // backend's patient-scoped prompt may only read this key.
+        'dateOfBirth': data.dateOfBirth,
         'activeProgrammes': progs.map((p) => p.name).toList(),
         'riskBand': bandLabel,
         'riskReasons': reasons,
         'isPregnant': data.isPregnant,
         'villageName': data.villageName,
+        if (data.enrolledAt != null)
+          'registrationDate': data.enrolledAt!.toIso8601String().split('T').first,
+        if (data.pregnancySnapshot?.eddDate != null)
+          'expectedDeliveryDate': DateTime.fromMillisecondsSinceEpoch(
+            data.pregnancySnapshot!.eddDate!,
+          ).toIso8601String().split('T').first,
+        if (data.pregnancySnapshot?.gestationalWeeksFromLmp != null)
+          'gestationalWeeks': data.pregnancySnapshot!.gestationalWeeksFromLmp,
         ...extras,
       },
     );
+  }
+
+  /// Extracts key clinical fields from one assessment's rawJson for the
+  /// AI assistant context — same fields [_TimelineEventSheet] renders.
+  static Map<String, dynamic> _encounterSummary(MemberAssessment a) {
+    final raw = normalizeAssessmentRaw(a.rawJson);
+    String? str(String key) {
+      final v = raw[key];
+      if (v == null) return null;
+      final s = v.toString().trim();
+      return s.isEmpty ? null : s;
+    }
+
+    return {
+      'date': a.date.toIso8601String().split('T').first,
+      'type': a.type,
+      if (a.status != null) 'status': a.status,
+      // Vitals
+      if (str('bp') != null) 'bp': str('bp'),
+      if (str('bg') != null) 'bloodGlucose': str('bg'),
+      if (str('bgType') != null) 'glucoseType': str('bgType'),
+      if (str('hemoglobin') != null) 'hemoglobin': str('hemoglobin'),
+      if (str('weight') != null) 'weight': str('weight'),
+      if (str('bmi') != null) 'bmi': str('bmi'),
+      // ANC / PW obstetric
+      if (str('ancVisitNumber') != null) 'ancVisitNumber': str('ancVisitNumber'),
+      if (str('pncVisitNumber') != null) 'pncVisitNumber': str('pncVisitNumber'),
+      if (str('fundalHeight') != null) 'fundalHeight': str('fundalHeight'),
+      if (str('dangerSignsDuringPregnancy') != null)
+        'dangerSigns': str('dangerSignsDuringPregnancy'),
+      if (str('highRiskPregnantWoman') != null) 'highRisk': str('highRiskPregnantWoman'),
+      // NCD
+      if (str('confirmDiagnosis') != null) 'diagnosis': str('confirmDiagnosis'),
+      if (str('ncdSymptoms') != null) 'symptoms': str('ncdSymptoms'),
+      if (str('referralFacilityType') != null) 'referredTo': str('referralFacilityType'),
+      if (str('followUpVisit') != null) 'followUpDate': str('followUpVisit'),
+    };
   }
 
   /// Clinical-findings/vitals/encounter-history for the assistant's
@@ -1006,6 +1001,7 @@ class _PatientContextScreenState
         followUpRepo: followUpRepo,
         patientDao: context.read<PatientDao>(),
         immunisationDao: context.read<ImmunisationDao>(),
+        memberDao: context.read<MemberDao>(),
         remoteAssessments: data.assessments,
       );
 
@@ -1016,19 +1012,17 @@ class _PatientContextScreenState
       final lastVisit = encounters.isNotEmpty ? encounters.first : null;
       final recentEncounters = encounters
           .take(5)
-          .map((a) => {
-                'date': a.date.toIso8601String().split('T').first,
-                'type': a.type,
-                if (a.status != null) 'status': a.status,
-              })
+          .map((a) => _encounterSummary(a))
           .toList();
 
+      // Primary: parse vitals from assessment JSON rows (same path as risk scoring).
+      // Fallback: pre-loaded vitalHistory spark data (already in memory, never fails).
       final vitalsSummary = await _mostRecentVitalsSummary(
         patientId: patientId,
         localAssessmentDao: localAssessmentDao,
         historyAssessmentDao: historyAssessmentDao,
         remoteAssessments: data.assessments,
-      );
+      ) ?? buildRecentVitalsSummary(data.vitalHistory);
 
       return {
         'visitCount': encounters.length,
@@ -1257,16 +1251,16 @@ class _PatientContextScreenState
     Color statusBg = Colors.transparent;
     Color statusFg = Colors.white;
     if (pendingEntry != null) {
-      statusLabel = 'OVERDUE';
+      statusLabel = PatientDetailStrings.overdue;
       statusBg = AppColors.statusCritical;
     } else if (data.riskBand == Band.band1) {
-      statusLabel = 'CRITICAL';
+      statusLabel = PatientDetailStrings.critical;
       statusBg = AppColors.statusCritical;
     } else if (data.riskBand == Band.band2) {
-      statusLabel = 'HIGH RISK';
+      statusLabel = PatientDetailStrings.highRiskBadge;
       statusBg = AppColors.statusWarning;
     } else if (data.riskBand == Band.band3) {
-      statusLabel = 'MONITORING';
+      statusLabel = PatientDetailStrings.monitoring;
       statusBg = AppColors.navy;
     }
 
@@ -1492,6 +1486,28 @@ const _kBadgeGrayFg     = Color(0xFF374151);
 int _sys(String bp) => int.tryParse(bp.split('/').firstOrNull ?? '') ?? 0;
 int _dia(String bp) => int.tryParse(bp.split('/').lastOrNull ?? '') ?? 0;
 
+Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) =>
+    normalizeAssessmentRaw(rawJson);
+
+/// Routine ANC timeline vitals line — mirrors NCD detail when values are in range.
+String _ancRoutineVitalsDescription({
+  required String bp,
+  required double bg,
+  required String? bgType,
+}) {
+  final parts = <String>[];
+  if (bp.isNotEmpty) {
+    parts.add('${PatientDetailStrings.bp}: $bp mmHg');
+  }
+  if (bg > 0) {
+    final type = bgType ?? 'FBS';
+    parts.add('${PatientDetailStrings.bloodSugarWithType(type)}: $bg mg/dL');
+  }
+  return parts.isEmpty
+      ? PatientContextStrings.timelineRoutineAnc
+      : parts.join(' · ');
+}
+
 /// Convert a single [MemberAssessment] into a display [_TimelineEntry].
 /// Builds a clinical narrative that combines referral reason tokens WITH actual
 /// vitals from [raw]. Each condition is checked from two directions:
@@ -1548,6 +1564,11 @@ String? _pncVisitNumberFrom(MemberAssessment a, Map<String, dynamic> raw) {
   return null;
 }
 
+/// RMNCH and family-planning services omit referral status from history
+/// summaries — mirrors Spice `MemberAssessmentHistoryAdapterUtil.shouldShowReferralStatus`.
+bool _shouldShowReferralStatus(Programme prog) =>
+    prog != Programme.familyPlanning;
+
 _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = true}) {
   final raw = _normalizeRaw(a.rawJson);
   final prog = Programme.fromString(a.type);
@@ -1586,7 +1607,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
     title = PatientProfileStrings.ncdEnrollment;
     category = PatientProfileStrings.ncdEnrollmentCategory;
     dotColor = _kDotOk;
-    description = 'NCD programme enrollment recorded.';
+    description = PatientContextStrings.timelineNcdEnrollmentRecorded;
     return _TimelineEntry(
       emoji: emoji,
       title: title,
@@ -1613,12 +1634,12 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         title = PatientProfileStrings.pregnancyRegistered;
         category = PatientProfileStrings.pregnancyRegistrationCategory;
         dotColor = _kDotAnc;
-        description = 'Pregnant woman profile created — ANC care started';
+        description = PatientContextStrings.timelinePwProfileCreated;
         break;
       }
       final vn = _ancVisitNumberFrom(a, raw);
       title = vn != null
-          ? '${PatientContextStrings.ancVisitLabel} $vn'
+          ? PatientContextStrings.timelineAncVisitN(vn)
           : PatientContextStrings.ancCheckupTitle;
       category = PatientContextStrings.antenatalCareCategory;
 
@@ -1627,8 +1648,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       final diaANC = _dia(bpANC);
       final hbRaw = raw['hemoglobin']?.toString() ?? '';
       final hbANC = double.tryParse(hbRaw) ?? 0;
+      final bgANC = double.tryParse(raw['bg']?.toString() ?? '') ?? 0;
+      final bgTypeANC = normalizeGlucoseTypeLabel(raw['bgType']?.toString());
+      final bpHighANC = sysANC >= 140 || diaANC >= 90;
+      final bpCriticalANC = sysANC >= 160 || diaANC >= 110;
+      final bgHighANC = isGlucoseElevated(bgANC, bgTypeANC, anc: true);
 
-      if (sysANC >= 160 || diaANC >= 110) {
+      if (bpCriticalANC) {
         dotColor = _kDotCritical;
         badge = PatientContextStrings.dangerHighBpBadge;
         badgeColor = _kBadgeCriticalBg;
@@ -1639,31 +1665,58 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badge = PatientContextStrings.severeAnemiaBadge;
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
-        description = 'Hb ${hbANC}g/dL — severe anemia. Urgent review needed.';
-      } else if (sysANC >= 140 || diaANC >= 90) {
+        description = PatientContextStrings.timelineHbSevereAnemia(hbANC);
+      } else if (bpHighANC && bgHighANC) {
+        dotColor = _kDotCritical;
+        badge = PatientContextStrings.ncdHighRiskBadge;
+        badgeColor = _kBadgeCriticalBg;
+        badgeFgColor = _kBadgeCriticalFg;
+        description = ClinicalFindingStrings.ncdBpAndGlucoseCombined;
+      } else if (bpHighANC) {
         dotColor = _kDotHigh;
         badge = CareThreadStrings.highrisk;
         badgeColor = _kBadgeHighBg;
         badgeFgColor = _kBadgeHighFg;
         final dp = <String>[];
-        if (bpANC.isNotEmpty) dp.add('BP $bpANC above target');
-        if (hbANC > 0 && hbANC < 10) dp.add('Anemia (Hb ${hbANC}g/dL)');
-        description = dp.isEmpty ? 'High BP detected — monitor closely.' : dp.join(' · ');
+        if (bpANC.isNotEmpty) {
+          dp.add(PatientContextStrings.timelineBpAboveTarget(bpANC));
+        }
+        if (hbANC > 0 && hbANC < 10) {
+          dp.add(PatientContextStrings.timelineAnemiaHb(hbANC));
+        }
+        description = dp.isEmpty
+            ? PatientContextStrings.timelineHighBpDetected
+            : dp.join(' · ');
+      } else if (bgHighANC) {
+        dotColor = _kDotModerate;
+        badge = PatientContextStrings.highBloodSugarBadge;
+        badgeColor = _kBadgeAmberBg;
+        badgeFgColor = _kBadgeAmberFg;
+        description = bgTypeANC != null
+            ? ReferralStrings.bloodSugarElevated(
+                bgANC.toStringAsFixed(1),
+                bgTypeANC,
+              )
+            : ClinicalFindingStrings.ncdBloodSugarElevated;
       } else if (hbANC > 0 && hbANC < 10) {
         dotColor = _kDotModerate;
         badge = PatientContextStrings.anemiaBadge;
         badgeColor = _kBadgeAmberBg;
         badgeFgColor = _kBadgeAmberFg;
-        description = 'Hb ${hbANC}g/dL — anemia. Review iron supplementation.';
+        description = PatientContextStrings.timelineHbAnemiaReviewIron(hbANC);
       } else if (hbANC >= 10 && hbANC < 11) {
         dotColor = _kDotModerate;
         badge = PatientContextStrings.mildAnemiaBadge;
         badgeColor = _kBadgeAmberBg;
         badgeFgColor = _kBadgeAmberFg;
-        description = 'Hb ${hbANC}g/dL — mild anemia. Ensure iron supplementation continues.';
+        description = PatientContextStrings.timelineHbMildAnemia(hbANC);
       } else {
         dotColor = _kDotAnc;
-        description = 'Routine antenatal visit — vitals within normal range.';
+        description = _ancRoutineVitalsDescription(
+          bp: bpANC,
+          bg: bgANC,
+          bgType: bgTypeANC,
+        );
       }
 
     // ─── PNC / Delivery ───────────────────────────────────────────────────
@@ -1691,13 +1744,13 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
           badge = PatientContextStrings.stillbirthNeonatalDeathBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
-          description = 'Stillbirth or neonatal death recorded — follow-up and counselling needed.';
+          description = PatientContextStrings.timelineStillbirthNeonatalDeath;
         } else if (allVals.contains('abortion') || allVals.contains('miscarriage')) {
           dotColor = _kDotHigh;
           badge = PatientContextStrings.pregnancyLossBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
-          description = 'Pregnancy loss (abortion) recorded — follow-up care advised.';
+          description = PatientContextStrings.timelinePregnancyLoss;
         } else {
           final isCs = delivery.toLowerCase().contains('caesar') ||
               delivery.toLowerCase().contains('c-section') ||
@@ -1709,16 +1762,21 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
           badgeColor = isCs ? _kBadgeHighBg : _kBadgeGreenBg;
           badgeFgColor = isCs ? _kBadgeHighFg : _kBadgeGreenFg;
           final babyWt = raw['babyBirthWeight']?.toString() ?? raw['birthWeight']?.toString();
-          description = delivery.isEmpty
-              ? 'Pregnancy outcome recorded.'
-              : 'Healthy delivery outcome — mother and baby both doing well.'
-                  '${babyWt != null && babyWt.isNotEmpty ? ' Baby $babyWt kg.' : ''}';
+          if (delivery.isEmpty) {
+            description = PatientContextStrings.timelinePregnancyOutcomeRecorded;
+          } else {
+            final baby = (babyWt != null && babyWt.isNotEmpty)
+                ? ' ${PatientContextStrings.timelineBabyWeight(babyWt)}'
+                : '';
+            description =
+                '${PatientContextStrings.timelineHealthyDelivery}$baby';
+          }
         }
       } else {
         // PNC follow-up
         emoji = '🤱';
         title = pncVN.isNotEmpty
-            ? '${PatientContextStrings.pncVisitLabel} $pncVN'
+            ? PatientContextStrings.timelinePncVisitN(pncVN)
             : PatientContextStrings.pncVisitLabel;
         category = PatientContextStrings.postnatalCareCategory;
 
@@ -1741,30 +1799,40 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
           badge = PatientContextStrings.dangerSignBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
-          description = 'Danger sign reported: $dSign.';
+          description = PatientContextStrings.timelineDangerSignReported(dSign);
         } else if (bpHighPNC || tempHighC || pulseHigh || pulseLow) {
           dotColor = _kDotCritical;
           badge = PatientContextStrings.urgentPncBadge;
           badgeColor = _kBadgeCriticalBg;
           badgeFgColor = _kBadgeCriticalFg;
           final urgentParts = <String>[];
-          if (bpHighPNC) urgentParts.add('BP $bpPNC is above target');
-          if (tempHighC) urgentParts.add('Temperature is elevated');
-          if (pulseHigh) urgentParts.add('Pulse $pulse bpm is above normal');
-          if (pulseLow)  urgentParts.add('Pulse $pulse bpm is below normal');
-          description = '${urgentParts.join(', ')} — needs urgent attention.';
+          if (bpHighPNC) {
+            urgentParts.add(PatientContextStrings.timelineBpIsAboveTarget(bpPNC));
+          }
+          if (tempHighC) {
+            urgentParts.add(PatientContextStrings.timelineTemperatureElevated);
+          }
+          if (pulseHigh) {
+            urgentParts.add(PatientContextStrings.timelinePulseAboveNormal(pulse));
+          }
+          if (pulseLow) {
+            urgentParts.add(PatientContextStrings.timelinePulseBelowNormal(pulse));
+          }
+          description = PatientContextStrings.timelinePartsUrgentAttention(
+            urgentParts.join(', '),
+          );
         } else if (hbPNC > 0 && hbPNC < 8) {
           dotColor = _kDotHigh;
           badge = PatientContextStrings.severeAnemiaBadge;
           badgeColor = _kBadgeAmberBg;
           badgeFgColor = _kBadgeAmberFg;
-          description = 'Severe anemia (Hb $hbPNC g/dL).';
+          description = PatientContextStrings.timelineSevereAnemiaHb(hbPNC);
         } else if (fpMethod.isEmpty || ['none', 'no method', 'not using'].contains(fpMethod.trim().toLowerCase())) {
           dotColor = _kDotPnc;
-          description = 'No contraception method in use — counsel on options.';
+          description = PatientContextStrings.timelineNoContraception;
         } else {
           dotColor = _kDotOk;
-          description = 'Recovering well — no concerns at this PNC visit.';
+          description = PatientContextStrings.timelineRecoveringWellPnc;
         }
       }
 
@@ -1783,10 +1851,9 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       final sysNCD = _sys(bpNCD);
       final diaNCD = _dia(bpNCD);
       final bgNCD = double.tryParse(raw['bg']?.toString() ?? '') ?? 0;
-      final bgTypeNCD = raw['bgType']?.toString() ?? 'RBS';
+      final bgTypeNCD = normalizeGlucoseTypeLabel(raw['bgType']?.toString()) ?? 'RBS';
       final bpHighNCD = sysNCD >= 140 || diaNCD >= 90;
-      final bgThreshold = bgTypeNCD.toUpperCase() == 'FBS' ? 7.0 : 11.1;
-      final bgHighNCD = bgNCD > 0 && bgNCD >= bgThreshold;
+      final bgHighNCD = isGlucoseElevated(bgNCD, bgTypeNCD, anc: false);
 
       if (bpHighNCD && bgHighNCD) {
         dotColor = _kDotCritical;
@@ -1820,7 +1887,12 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       final vacName = raw['vaccineName']?.toString() ?? raw['vaccine']?.toString() ?? '';
       final dose = raw['dose']?.toString() ?? '';
       description = vacName.isNotEmpty
-          ? '$vacName${dose.isNotEmpty ? " — Dose $dose" : ""} administered.'
+          ? (dose.isNotEmpty
+              ? PatientContextStrings.timelineVaccineDoseAdministered(
+                  vacName,
+                  dose,
+                )
+              : PatientContextStrings.timelineVaccineAdministered(vacName))
           : ClinicalFindingStrings.childImmunizationOnSchedule;
 
     // ─── IMCI ─────────────────────────────────────────────────────────────
@@ -1835,13 +1907,15 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badgeColor = _kBadgeCriticalBg;
         badgeFgColor = _kBadgeCriticalFg;
         dotColor = _kDotCritical;
-        description = 'Danger sign: $dSignImci — urgent referral needed.';
+        description =
+            PatientContextStrings.timelineDangerSignUrgentReferral(dSignImci);
       } else {
         final wtImci = raw['weight']?.toString();
         final vaccines = raw['receivedVaccine']?.toString() ?? '';
         final imciParts = <String>[
-          if (wtImci != null) 'Weight $wtImci kg',
-          if (vaccines.isNotEmpty) 'Vaccines: $vaccines',
+          if (wtImci != null) PatientContextStrings.timelineWeightKg(wtImci),
+          if (vaccines.isNotEmpty)
+            PatientContextStrings.timelineVaccinesList(vaccines),
         ];
         description = imciParts.isEmpty ? null : imciParts.join(' · ');
       }
@@ -1852,7 +1926,9 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       title = PatientContextStrings.tbFollowUpTitle;
       category = PatientContextStrings.tbProgrammeCategory;
       dotColor = _kDotTb;
-      description = dx.isNotEmpty ? 'Status: $dx' : null;
+      description = dx.isNotEmpty
+          ? PatientContextStrings.timelineStatusDx(dx)
+          : null;
 
     // ─── Family Planning ──────────────────────────────────────────────────
     case Programme.familyPlanning:
@@ -1861,7 +1937,9 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
       category = PatientContextStrings.familyPlanningLabel;
       dotColor = _kDotFp;
       final fpM = _rawStr(raw['familyPlanningMethods']) ?? '';
-      description = fpM.isNotEmpty ? 'Method: $fpM' : null;
+      description = fpM.isNotEmpty
+          ? PatientContextStrings.timelineMethodFp(fpM)
+          : null;
 
     // ─── General / Unknown ────────────────────────────────────────────────
     default:
@@ -1873,7 +1951,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badge = CareThreadStrings.illness;
         badgeColor = _kBadgeGrayBg;
         badgeFgColor = _kBadgeGrayFg;
-        description = 'Tested positive, completed antimalarial course';
+        description = PatientContextStrings.timelineMalariaTreated;
       } else if (combined.contains('diarrhea') || combined.contains('diarrhoea') || combined.contains('vomit')) {
         emoji = '🤢';
         title = PatientContextStrings.severeDiarrheaVomitingTreatedTitle;
@@ -1881,7 +1959,7 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
         badge = CareThreadStrings.illness;
         badgeColor = _kBadgeGrayBg;
         badgeFgColor = _kBadgeGrayFg;
-        description = 'Treated with ORS & antibiotics, fully recovered';
+        description = PatientContextStrings.timelineOrsAntibioticsRecovered;
       } else if (combined.contains('fever')) {
         emoji = '🌡️';
         title = PatientContextStrings.feverTreatedTitle;
@@ -1905,13 +1983,17 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = tru
   // the clinical decision in referralStatus + referralReason.
   // showAsReferral is false for older referred assessments — only the most
   // recent referral entry gets the badge and narrative (see _buildTimelineEntries).
-  if (showAsReferral && rawStatus == 'referred') {
+  if (showAsReferral &&
+      _shouldShowReferralStatus(prog) &&
+      rawStatus == 'referred') {
     dotColor = _kDotCritical;
     badge = PatientContextStrings.referredBadge;
     badgeColor = _kBadgeCriticalBg;
     badgeFgColor = _kBadgeCriticalFg;
     description = _buildReferralNarrative(referralReasons, raw);
-  } else if (showAsReferral && rawStatus == 'ontreatment') {
+  } else if (showAsReferral &&
+      _shouldShowReferralStatus(prog) &&
+      rawStatus == 'ontreatment') {
     dotColor = _kDotHigh;
     badge = PatientContextStrings.onTreatmentBadge;
     badgeColor = _kBadgeHighBg;
@@ -1962,12 +2044,12 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
     if (sys != null && (sys >= 130 || rising)) {
       return _TimelineEntry(
         emoji: '🔔',
-        title: 'BP recheck due',
+        title: PatientContextStrings.timelineBpRecheckDue,
         relativeDate: MissionDashboardStrings.today,
-        category: 'Pre-eclampsia watch',
+        category: PatientContextStrings.timelinePreEclampsiaWatch,
         date: DateTime.now(),
         dotColor: _kDotPending,
-        description: 'Rising trend flagged — check urine protein & danger signs',
+        description: PatientContextStrings.timelineRisingTrendFlagged,
         isPending: true,
         programme: Programme.anc,
       );
@@ -1982,12 +2064,13 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
     if (daysSince >= 60) {
       return _TimelineEntry(
         emoji: '🔔',
-        title: 'Child visit overdue',
+        title: PatientContextStrings.timelineChildVisitOverdue,
         relativeDate: MissionDashboardStrings.today,
-        category: 'IMCI / Child care',
+        category: PatientContextStrings.timelineImciChildCare,
         date: DateTime.now(),
         dotColor: _kDotPending,
-        description: 'Last child health visit was $daysSince days ago — check growth & vaccines',
+        description:
+            PatientContextStrings.timelineLastChildVisitDaysAgo(daysSince),
         isPending: true,
         programme: Programme.imci,
       );
@@ -2002,12 +2085,12 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
     if (daysSince >= 30) {
       return _TimelineEntry(
         emoji: '🔔',
-        title: 'Follow-up overdue',
+        title: PatientContextStrings.timelineFollowUpOverdue,
         relativeDate: MissionDashboardStrings.today,
         category: PatientProfileStrings.ncdFollowUpCategory,
         date: DateTime.now(),
         dotColor: _kDotPending,
-        description: 'NCD follow-up due — last visit $daysSince days ago',
+        description: PatientContextStrings.timelineNcdFollowUpDue(daysSince),
         isPending: true,
         programme: Programme.ncd,
       );
@@ -2142,14 +2225,28 @@ List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
 
     final showAsReferral = latestReferredId == null || a.id == latestReferredId;
     final entry = _assessmentToEntry(a, showAsReferral: showAsReferral);
-    if (entry.title == 'ANC Checkup' && ancOrdinal[a.id] != null) {
-      entries.add(entry.copyWith(title: 'ANC Visit ${ancOrdinal[a.id]}'));
-    } else if (entry.title == 'PNC Visit' && pncOrdinal[a.id] != null) {
-      entries.add(entry.copyWith(title: 'PNC Visit ${pncOrdinal[a.id]}'));
-    } else if (entry.title == 'Vaccination visit' &&
+    if (entry.title == PatientContextStrings.ancCheckupTitle &&
+        ancOrdinal[a.id] != null) {
+      entries.add(
+        entry.copyWith(
+          title: PatientContextStrings.timelineAncVisitN(ancOrdinal[a.id]!),
+        ),
+      );
+    } else if (entry.title == PatientContextStrings.pncVisitLabel &&
+        pncOrdinal[a.id] != null) {
+      entries.add(
+        entry.copyWith(
+          title: PatientContextStrings.timelinePncVisitN(pncOrdinal[a.id]!),
+        ),
+      );
+    } else if (entry.title == EpiStrings.screenTitle &&
         epiOrdinal[a.id] != null) {
       entries.add(
-        entry.copyWith(title: 'Vaccination visit ${epiOrdinal[a.id]}'),
+        entry.copyWith(
+          title: PatientContextStrings.timelineVaccinationVisitN(
+            epiOrdinal[a.id]!,
+          ),
+        ),
       );
     } else {
       entries.add(entry);
@@ -2221,6 +2318,8 @@ _TimelineEntry _mergeVisitDayEntries(List<_TimelineEntry> dayEntries) {
   // Prefer a referred / on-treatment row as the tap primary when present.
   final primary = ordered.firstWhere(
     (e) =>
+        (e.badge ?? '') == PatientContextStrings.referredBadge ||
+        (e.badge ?? '') == PatientContextStrings.onTreatmentBadge ||
         (e.badge ?? '').toLowerCase() == 'referred' ||
         (e.badge ?? '').toLowerCase() == 'on treatment',
     orElse: () => ordered.first,
@@ -2246,7 +2345,7 @@ _TimelineEntry _mergeVisitDayEntries(List<_TimelineEntry> dayEntries) {
     emoji: primary.emoji,
     title: titles.join(' · '),
     relativeDate: _relativeDate(newest),
-    category: titles.length > 1 ? 'Visit' : primary.category,
+    category: titles.length > 1 ? PatientDetailStrings.visits : primary.category,
     date: newest,
     dotColor: primary.dotColor,
     description: descriptions.isEmpty ? null : descriptions.join(' · '),
@@ -2268,8 +2367,8 @@ _TimelineFlow _timelineFlow(_TimelineEntry e) {
   final category = e.category;
 
   if (_isPregnancyOutcomeType(type) ||
-      title == 'Pregnancy Outcome' ||
-      category == 'Delivery') {
+      title == PatientContextStrings.pregnancyOutcomeTitle ||
+      category == PatientContextStrings.deliveryCategory) {
     return _TimelineFlow.postnatal;
   }
   if (e.programme == Programme.pw ||
@@ -2279,13 +2378,13 @@ _TimelineFlow _timelineFlow(_TimelineEntry e) {
       e.programme == Programme.anc ||
       Programme.fromString(type) == Programme.anc ||
       title.startsWith('ANC') ||
-      category == 'Antenatal Care') {
+      category == PatientContextStrings.antenatalCareCategory) {
     return _TimelineFlow.antenatal;
   }
   if (e.programme == Programme.pnc ||
       Programme.fromString(type) == Programme.pnc ||
       title.startsWith('PNC') ||
-      category == 'Postnatal Care') {
+      category == PatientContextStrings.postnatalCareCategory) {
     return _TimelineFlow.postnatal;
   }
   return _TimelineFlow.other;
@@ -2299,8 +2398,8 @@ int _timelineFlowRank(_TimelineEntry e) {
   final category = e.category;
 
   if (_isPregnancyOutcomeType(type) ||
-      title == 'Pregnancy Outcome' ||
-      category == 'Delivery') {
+      title == PatientContextStrings.pregnancyOutcomeTitle ||
+      category == PatientContextStrings.deliveryCategory) {
     return 1; // below PNC
   }
   if (e.programme == Programme.pw ||
@@ -2355,25 +2454,6 @@ List<_TimelineEntry> _sortTimelineDay(List<_TimelineEntry> dayEntries) {
   return [for (final f in flows) ...f.value];
 }
 
-/// Unpacks the `{kind, raw}` envelope written by AssessmentDao so that
-/// clinical fields (bp, bg, ancVisitNumber, …) are accessible at the top level.
-Map<String, dynamic> _unpackRaw(Map<String, dynamic> rawJson) {
-  final r = rawJson['raw'];
-  if (r is String) return jsonDecode(r) as Map<String, dynamic>;
-  if (r is Map) return Map<String, dynamic>.from(r);
-  return rawJson;
-}
-
-/// Normalises a rawJson map so clinical fields are accessible at the top level,
-/// regardless of which of three storage formats the assessment used:
-///
-/// 1. API format (AssessmentDao / member-assessment-history): the unpacked map
-///    is the full API response object; clinical fields live under the nested
-///    `observations` key — e.g. `raw['observations']['bp']` = "148/90".
-/// 2. Local-form format (LocalEncounterDao): vitals spread flat at the top level
-///    but under form-specific keys: `systolic`, `diastolic`, `glucoseValue`.
-/// 3. NCD bpLog format: `bpLog.avgSystolic` / `glucoseLog.glucose`.
-///
 /// Safely coerce a dynamic map value to String?.
 /// JSON-parsed numbers (int/double) are converted via toString(); null stays null.
 String? _rawStr(dynamic v) {
@@ -2413,122 +2493,6 @@ DateTime? _parseFlexibleDate(dynamic v) {
   return DateTime.tryParse(s);
 }
 
-///
-/// After normalisation, callers read `out['bp']`, `out['bg']`, `out['bgType']`
-/// regardless of origin. The merge uses putIfAbsent so explicit top-level keys
-/// always win over sub-map values.
-Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) {
-  final raw = _unpackRaw(rawJson);
-  final out = Map<String, dynamic>.from(raw);
-
-  // Step 1 — flatten 'observations' and 'assessmentDetails' sub-maps (API format).
-  for (final subKey in const ['observations', 'assessmentDetails']) {
-    final sub = raw[subKey];
-    if (sub is Map) {
-      for (final e in sub.entries) {
-        out.putIfAbsent(e.key.toString(), () => e.value);
-      }
-    }
-  }
-
-  // Step 1b — programme wrappers sit one level inside 'assessmentDetails'
-  // (FAMILY_PLANNING sends { familyPlanning: { … } }), so flatten them now that
-  // step 1 has lifted the wrapper to the top level.
-  for (final subKey in const ['familyPlanning', 'family_planning']) {
-    final sub = out[subKey];
-    if (sub is Map) {
-      for (final e in sub.entries) {
-        out.putIfAbsent(e.key.toString(), () => e.value);
-      }
-    }
-  }
-
-  // Step 1c — PWPROFILE nests as pwProfile → pregnancyDetailsAndHistory → fields
-  // (lmp, gravida, parity, …). Lift both levels so the timeline sheet can read
-  // LMP/EDD without knowing the wire shape.
-  for (var depth = 0; depth < 2; depth++) {
-    var lifted = false;
-    for (final subKey in const [
-      'pwProfile',
-      'pregnancyDetailsAndHistory',
-      'pregnancyDetails',
-      'pregnancyProfile',
-      'obstetricHistory',
-    ]) {
-      final sub = out[subKey];
-      if (sub is! Map) continue;
-      for (final e in sub.entries) {
-        out.putIfAbsent(e.key.toString(), () => e.value);
-        lifted = true;
-      }
-    }
-    if (!lifted) break;
-  }
-
-  // Step 2 — map NCD bpLog / glucoseLog nested keys (local-form format).
-  final bpLog = raw['bpLog'];
-  if (bpLog is Map) {
-    out.putIfAbsent('avgSystolic', () => bpLog['avgSystolic']);
-    out.putIfAbsent('avgDiastolic', () => bpLog['avgDiastolic']);
-  }
-  final gLog = raw['glucoseLog'];
-  if (gLog is Map) {
-    out.putIfAbsent('glucoseValue', () => gLog['glucose']);
-    out.putIfAbsent('glucoseType', () => gLog['glucoseType']);
-  }
-
-  // Step 3 — synthesise canonical 'bp' ("sys/dia" string) if missing.
-  if (_rawStr(out['bp']) == null) {
-    int? sys;
-    int? dia;
-    for (final k in const ['systolic', 'bloodPressureSystolic', 'avgSystolic']) {
-      final v = out[k];
-      if (v is num) { sys = v.toInt(); break; }
-      if (v is String) { sys = int.tryParse(v); if (sys != null) break; }
-    }
-    if (sys == null) {
-      // bpLogDetails: [{systolic: x, diastolic: y}]
-      final log = out['bpLogDetails'];
-      if (log is List && log.isNotEmpty && log.first is Map) {
-        final first = log.first as Map;
-        final s = first['systolic'];
-        sys = s is num ? s.toInt() : (s is String ? int.tryParse(s) : null);
-        final d = first['diastolic'];
-        dia = d is num ? d.toInt() : (d is String ? int.tryParse(d) : null);
-      }
-    }
-    if (dia == null) {
-      for (final k in const ['diastolic', 'bloodPressureDiastolic', 'avgDiastolic']) {
-        final v = out[k];
-        if (v is num) { dia = v.toInt(); break; }
-        if (v is String) { dia = int.tryParse(v); if (dia != null) break; }
-      }
-    }
-    if (sys != null && dia != null) out['bp'] = '$sys/$dia';
-  }
-
-  // Step 4 — synthesise canonical 'bg' (value string) + 'bgType' if missing.
-  if ((out['bg'] as String?) == null) {
-    final glu = out['glucoseValue'] ?? out['glucose'] ?? out['bloodGlucose'];
-    if (glu != null) {
-      out['bg'] = glu.toString();
-      if (out['bgType'] == null) {
-        final gt = (out['glucoseType'] as String?)?.toLowerCase();
-        out['bgType'] = gt == 'fasting'
-            ? 'FBS'
-            : gt == 'random'
-                ? 'RBS'
-                : gt == 'postprandial'
-                    ? 'PPBS'
-                    : gt?.toUpperCase();
-      }
-    }
-  }
-
-  return out;
-}
-
-
 /// Derives the ordered list of active care threads from local data.
 /// Reads only what is already in [data] — no async calls, no new endpoints.
 /// Debug timing is emitted to console so per-thread cost is visible in logs.
@@ -2551,17 +2515,25 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final visitNum = _rawStr(raw['ancVisitNumber']);
     if (visitNum != null && visitNum.isNotEmpty) stats[PatientProfileStrings.visitsCompleted] = visitNum;
     final ancBp = _rawStr(raw['bp']);
-    if (ancBp != null && ancBp.isNotEmpty) stats['Last BP'] = '$ancBp mmHg';
+    if (ancBp != null && ancBp.isNotEmpty) {
+      stats[PatientDetailStrings.lastBp] = '$ancBp mmHg';
+    }
     final hb = _rawStr(raw['hemoglobin']);
-    if (hb != null && hb.isNotEmpty) stats['Haemoglobin'] = '$hb g/dL';
+    if (hb != null && hb.isNotEmpty) {
+      stats[PatientDetailStrings.haemoglobin] = '$hb g/dL';
+    }
     final ancWeight = _rawStr(raw['weight']);
-    if (ancWeight != null && ancWeight.isNotEmpty) stats['Weight'] = '$ancWeight kg';
+    if (ancWeight != null && ancWeight.isNotEmpty) {
+      stats[PatientDetailStrings.weight] = '$ancWeight kg';
+    }
     final g = _rawStr(raw['gravida']);
     final p = _rawStr(raw['parity']);
-    if (g != null && g.isNotEmpty && p != null && p.isNotEmpty) stats['Gravida / Parity'] = 'G$g P$p';
+    if (g != null && g.isNotEmpty && p != null && p.isNotEmpty) {
+      stats[PatientDetailStrings.gravidaParity] = 'G$g P$p';
+    }
     final ancTotal =
         data.assessments.where((a) => Programme.fromString(a.type) == Programme.anc).length;
-    if (ancTotal > 0) stats['ANC visits'] = '$ancTotal';
+    if (ancTotal > 0) stats[PatientDetailStrings.ancVisits] = '$ancTotal';
 
     threads.add(_CareThread(
       programme: Programme.anc,
@@ -2572,6 +2544,22 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       stats: stats,
       checkupDate: latest?.date,
     ));
+
+    final ancBg = _rawStr(raw['bg']);
+    if (ancBg != null && ancBg.isNotEmpty) {
+      final bgType = normalizeGlucoseTypeLabel(_rawStr(raw['bgType']));
+      final bgLabel = bgType != null
+          ? PatientDetailStrings.bloodSugarWithType(bgType)
+          : PatientDetailStrings.bloodSugar;
+      threads.add(_CareThread(
+        programme: Programme.anc,
+        label: CareThreadStrings.sugar,
+        icon: '🩸',
+        bg: AppColors.statusInfoSurface,
+        textColor: AppColors.threadInfoText,
+        stats: {bgLabel: '$ancBg mg/dL'},
+      ));
+    }
   }
 
   // NCD — HTN + optional blood-sugar thread
@@ -2589,17 +2577,19 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.ncdSurface,
       textColor: AppColors.ncdText,
       stats: {
-        if (bp != null && bp.isNotEmpty) 'Last BP': '$bp mmHg',
-        if (ncdTotal > 0) 'NCD visits': '$ncdTotal',
-        if (dx != null && dx.isNotEmpty) 'Diagnosis': dx,
+        if (bp != null && bp.isNotEmpty) PatientDetailStrings.lastBp: '$bp mmHg',
+        if (ncdTotal > 0) PatientDetailStrings.ncdVisits: '$ncdTotal',
+        if (dx != null && dx.isNotEmpty) PatientDetailStrings.diagnosis: dx,
       },
       checkupDate: latest?.date,
     ));
 
     final bg = _rawStr(raw['bg']);
     if (bg != null && bg.isNotEmpty) {
-      final bgType = _rawStr(raw['bgType'])?.trim();
-      final bgLabel = (bgType != null && bgType.isNotEmpty) ? 'Blood sugar ($bgType)' : 'Blood sugar';
+      final bgType = normalizeGlucoseTypeLabel(_rawStr(raw['bgType']));
+      final bgLabel = bgType != null
+          ? PatientDetailStrings.bloodSugarWithType(bgType)
+          : PatientDetailStrings.bloodSugar;
       threads.add(_CareThread(
         programme: Programme.ncd,
         label: CareThreadStrings.sugar,
@@ -2626,10 +2616,14 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.pncSurface,
       textColor: AppColors.pncText,
       stats: {
-        if (pncVisit != null) 'PNC visits': pncVisit,
-        if (deliveryMode != null) 'Delivery': deliveryMode,
-        if (complications?.toLowerCase() == 'yes') 'Complications': 'Yes',
-        if (livingChildren != null) 'Living children': livingChildren,
+        if (pncVisit != null) PatientDetailStrings.pncVisits: pncVisit,
+        if (deliveryMode != null)
+          PatientDetailStrings.delivery:
+              fieldOptionDisplayLabel('modeOfDelivery', deliveryMode),
+        if (complications?.toLowerCase() == 'yes')
+          PatientDetailStrings.complications: PatientDetailStrings.yes,
+        if (livingChildren != null)
+          PatientDetailStrings.livingChildren: livingChildren,
       },
       checkupDate: latest?.date,
     ));
@@ -2648,8 +2642,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.threadImmBg,
       textColor: AppColors.tbText,
       stats: {
-        if (weight != null) 'Last weight': '$weight kg',
-        if (imciTotal > 0) 'IMCI visits': '$imciTotal',
+        if (weight != null) PatientDetailStrings.lastWeight: '$weight kg',
+        if (imciTotal > 0) PatientDetailStrings.imciVisits: '$imciTotal',
       },
       checkupDate: latest?.date,
     ));
@@ -2676,8 +2670,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.tbSurface,
       textColor: AppColors.tbText,
       stats: {
-        if (dx != null && dx.isNotEmpty) 'Diagnosis': dx,
-        if (tbTotal > 0) 'TB visits': '$tbTotal',
+        if (dx != null && dx.isNotEmpty) PatientDetailStrings.diagnosis: dx,
+        if (tbTotal > 0) PatientDetailStrings.tbVisits: '$tbTotal',
       },
       checkupDate: latest?.date,
     ));
@@ -2847,6 +2841,7 @@ class _AiInsightCardState extends State<_AiInsightCard> {
         followUpRepo: context.read<FollowUpRepository>(),
         patientDao: context.read<PatientDao>(),
         immunisationDao: context.read<ImmunisationDao>(),
+        memberDao: context.read<MemberDao>(),
         remoteAssessments: widget.data.assessments,
       );
       return _AiInsightResult(
@@ -3142,7 +3137,7 @@ class _PregnancyProgressSection extends StatelessWidget {
     final progress = gaWeeks != null ? (gaWeeks / 40.0).clamp(0.0, 1.0) : 0.0;
     final visitsDone = int.tryParse(ancVisitNumber ?? '0') ?? 0;
 
-    final dateFormat = DateFormat('d MMM yyyy');
+    final dateFormat = AppDateFormat.dayMonthYearFmt;
 
     final card = GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -3155,29 +3150,44 @@ class _PregnancyProgressSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (effectiveLmp != null)
-              _DetailRow(label: 'LMP', value: dateFormat.format(effectiveLmp)),
+              _DetailRow(
+                label: PatientDetailStrings.lmp,
+                value: dateFormat.format(effectiveLmp),
+              ),
             if (eddDate != null)
-              _DetailRow(label: 'EDD', value: dateFormat.format(eddDate)),
+              _DetailRow(
+                label: PatientDetailStrings.edd,
+                value: dateFormat.format(eddDate),
+              ),
             if (gaWeeks != null)
               _DetailRow(
                 label: PatientContextStrings.gestationalAgeLabel,
-                value: '$gaWeeks weeks',
+                value: PatientDetailStrings.weeksValue(gaWeeks),
               ),
             if (weeksLeft != null)
-              _DetailRow(label: 'Weeks remaining', value: '$weeksLeft weeks'),
+              _DetailRow(
+                label: PatientDetailStrings.weeksRemaining,
+                value: PatientDetailStrings.weeksValue(weeksLeft),
+              ),
             _DetailRow(
               label: PatientProfileStrings.visitsCompleted,
               value: '$visitsDone / $_totalAncVisits',
             ),
             if (snapshot.facts.highRiskPregnantWoman)
-              _DetailRow(label: 'Risk', value: 'High risk — elevated BP or other flag'),
+              _DetailRow(
+                label: PatientDetailStrings.risk,
+                value: PatientContextStrings.highRiskElevatedBp,
+              ),
             if (snapshot.facts.hasGapsInAnc)
               _DetailRow(
                 label: PatientContextStrings.ancGapsLabel,
-                value: 'Missed visits detected',
+                value: PatientDetailStrings.missedVisitsDetected,
               ),
             if (snapshot.facts.isNearTermAnc)
-              _DetailRow(label: 'Near term', value: 'Approaching EDD — monitor closely'),
+              _DetailRow(
+                label: PatientDetailStrings.nearTerm,
+                value: PatientContextStrings.approachingEdd,
+              ),
           ],
         ),
       ),
@@ -3371,43 +3381,114 @@ class _StatsGrid extends StatelessWidget {
   final List<MemberAssessment> assessments;
   final String noDataLabel;
 
+  static bool _isBloodSugarLabel(String label) =>
+      label.startsWith(PatientDetailStrings.bloodSugar) ||
+      label.startsWith('Blood sugar');
+
   static (IconData, Color) _iconFor(String label) {
-    if (label.startsWith('Blood sugar')) {
+    if (_isBloodSugarLabel(label)) {
       return (Icons.bloodtype_outlined, const Color(0xFFE65100));
     }
-    return switch (label) {
-      'Last BP'               => (Icons.favorite_rounded,                const Color(0xFFD32F2F)),
-      'Haemoglobin'           => (Icons.water_drop_rounded,              const Color(0xFFD32F2F)),
-      'Weight' || 'Last weight' => (Icons.monitor_weight_outlined,       const Color(0xFF1565C0)),
-      'Visits completed'      => (Icons.assignment_turned_in_outlined,   const Color(0xFF2E7D32)),
-      'Visits'                => (Icons.event_note_outlined,             AppColors.navy),
-      'ANC visits'            => (Icons.pregnant_woman_outlined,         const Color(0xFF7B1FA2)),
-      'Diagnosis'             => (Icons.local_hospital_outlined,         const Color(0xFF7B1FA2)),
-      'Delivery'              => (Icons.child_care_outlined,             const Color(0xFFAD1457)),
-      'PNC visits'            => (Icons.baby_changing_station_outlined,  const Color(0xFF00695C)),
-      'Living children'       => (Icons.people_outline_rounded,          const Color(0xFF2E7D32)),
-      'Gravida / Parity'      => (Icons.pregnant_woman_outlined,         const Color(0xFF7B1FA2)),
-      _                       => (Icons.bar_chart_rounded,               AppColors.navy),
-    };
+    if (label == PatientDetailStrings.lastBp || label == 'Last BP') {
+      return (Icons.favorite_rounded, const Color(0xFFD32F2F));
+    }
+    if (label == PatientDetailStrings.haemoglobin || label == 'Haemoglobin') {
+      return (Icons.water_drop_rounded, const Color(0xFFD32F2F));
+    }
+    if (label == PatientDetailStrings.weight ||
+        label == PatientDetailStrings.lastWeight ||
+        label == 'Weight' ||
+        label == 'Last weight') {
+      return (Icons.monitor_weight_outlined, const Color(0xFF1565C0));
+    }
+    if (label == PatientProfileStrings.visitsCompleted ||
+        label == 'Visits completed') {
+      return (Icons.assignment_turned_in_outlined, const Color(0xFF2E7D32));
+    }
+    if (label == PatientDetailStrings.visits || label == 'Visits') {
+      return (Icons.event_note_outlined, AppColors.navy);
+    }
+    if (label == PatientDetailStrings.ancVisits || label == 'ANC visits') {
+      return (Icons.pregnant_woman_outlined, const Color(0xFF7B1FA2));
+    }
+    if (label == PatientDetailStrings.diagnosis || label == 'Diagnosis') {
+      return (Icons.local_hospital_outlined, const Color(0xFF7B1FA2));
+    }
+    if (label == PatientDetailStrings.delivery || label == 'Delivery') {
+      return (Icons.child_care_outlined, const Color(0xFFAD1457));
+    }
+    if (label == PatientDetailStrings.pncVisits || label == 'PNC visits') {
+      return (Icons.baby_changing_station_outlined, const Color(0xFF00695C));
+    }
+    if (label == PatientDetailStrings.livingChildren ||
+        label == 'Living children') {
+      return (Icons.people_outline_rounded, const Color(0xFF2E7D32));
+    }
+    if (label == PatientDetailStrings.gravidaParity ||
+        label == 'Gravida / Parity') {
+      return (Icons.pregnant_woman_outlined, const Color(0xFF7B1FA2));
+    }
+    return (Icons.bar_chart_rounded, AppColors.navy);
   }
 
   // Maps a stat label to the rawJson field name + display unit.
-  static const Map<String, (String field, String suffix)> _fieldMap = {
-    'Last BP': ('bp', ' mmHg'),
-    'Haemoglobin': ('hemoglobin', ' g/dL'),
-    'Weight': ('weight', ' kg'),
-    'Last weight': ('weight', ' kg'),
-    'Diagnosis': ('confirmDiagnosis', ''),
-    'Delivery': ('modeOfDelivery', ''),
-    'PNC visits': ('pncVisitNumber', ''),
-    'Living children': ('numberOfLivingChildren', ''),
-    'Visits completed': ('ancVisitNumber', ''),
-    'Gravida / Parity': ('_gravida_parity', ''),
-  };
+  static Map<String, (String field, String suffix)> get _fieldMap => {
+        PatientDetailStrings.lastBp: ('bp', ' mmHg'),
+        'Last BP': ('bp', ' mmHg'),
+        PatientDetailStrings.haemoglobin: ('hemoglobin', ' g/dL'),
+        'Haemoglobin': ('hemoglobin', ' g/dL'),
+        PatientDetailStrings.weight: ('weight', ' kg'),
+        'Weight': ('weight', ' kg'),
+        PatientDetailStrings.lastWeight: ('weight', ' kg'),
+        'Last weight': ('weight', ' kg'),
+        PatientDetailStrings.diagnosis: ('confirmDiagnosis', ''),
+        'Diagnosis': ('confirmDiagnosis', ''),
+        PatientDetailStrings.delivery: ('modeOfDelivery', ''),
+        'Delivery': ('modeOfDelivery', ''),
+        PatientDetailStrings.pncVisits: ('pncVisitNumber', ''),
+        'PNC visits': ('pncVisitNumber', ''),
+        PatientDetailStrings.livingChildren: ('numberOfLivingChildren', ''),
+        'Living children': ('numberOfLivingChildren', ''),
+        PatientProfileStrings.visitsCompleted: ('ancVisitNumber', ''),
+        'Visits completed': ('ancVisitNumber', ''),
+        PatientDetailStrings.gravidaParity: ('_gravida_parity', ''),
+        'Gravida / Parity': ('_gravida_parity', ''),
+      };
+
+  static bool _isVisitCountLabel(String key) =>
+      key == PatientDetailStrings.ancVisits ||
+      key == PatientDetailStrings.ncdVisits ||
+      key == PatientDetailStrings.pncVisits ||
+      key == PatientDetailStrings.imciVisits ||
+      key == PatientDetailStrings.tbVisits ||
+      key.endsWith(' visits');
+
+  static String? _programmeKeyFromVisitStatLabel(String key) {
+    if (key == PatientDetailStrings.ancVisits || key == 'ANC visits') {
+      return 'anc';
+    }
+    if (key == PatientDetailStrings.ncdVisits || key == 'NCD visits') {
+      return 'ncd';
+    }
+    if (key == PatientDetailStrings.pncVisits || key == 'PNC visits') {
+      return 'pnc';
+    }
+    if (key == PatientDetailStrings.imciVisits || key == 'IMCI visits') {
+      return 'imci';
+    }
+    if (key == PatientDetailStrings.tbVisits || key == 'TB visits') {
+      return 'tb';
+    }
+    final stripped = key.replaceAll(' visits', '').toLowerCase();
+    if (const {'anc', 'ncd', 'pnc', 'imci', 'tb'}.contains(stripped)) {
+      return stripped;
+    }
+    return null;
+  }
 
   List<(DateTime date, String display, MemberAssessment assessment)> _extractHistory(
       String label) {
-    final fieldEntry = label.startsWith('Blood sugar')
+    final fieldEntry = _isBloodSugarLabel(label)
         ? ('bg', ' mg/dL')
         : _fieldMap[label];
     if (fieldEntry == null) return const [];
@@ -3436,7 +3517,8 @@ class _StatsGrid extends StatelessWidget {
   List<(DateTime date, String display, MemberAssessment assessment)>
       _extractVisitHistory(List<MapEntry<String, String>> visitEntries) {
     final progNames = visitEntries
-        .map((e) => e.key.replaceAll(' visits', '').toLowerCase())
+        .map((e) => _programmeKeyFromVisitStatLabel(e.key))
+        .whereType<String>()
         .toSet();
     final entries = <(DateTime, String, MemberAssessment)>[];
     for (final a in assessments) {
@@ -3677,15 +3759,16 @@ class _StatsGrid extends StatelessWidget {
       ..sort((a, b) => b.checkupDate!.compareTo(a.checkupDate!));
     final latestThread = threadsWithDate.isNotEmpty ? threadsWithDate.first : null;
 
-    // Merge all "* visits" keys into one combined tile.
-    final visitEntries = raw.where((e) => e.key.endsWith(' visits')).toList();
-    final displayStats = raw.where((e) => !e.key.endsWith(' visits')).toList();
+    // Merge all visit-count keys into one combined tile.
+    final visitEntries =
+        raw.where((e) => _isVisitCountLabel(e.key)).toList();
+    final displayStats =
+        raw.where((e) => !_isVisitCountLabel(e.key)).toList();
     if (visitEntries.isNotEmpty) {
       final combinedValue = visitEntries.map((e) {
-        final prog = e.key.replaceAll(' visits', '');
-        return '$prog  ${e.value}';
+        return '${e.key}  ${e.value}';
       }).join('\n');
-      displayStats.add(MapEntry('Visits', combinedValue));
+      displayStats.add(MapEntry(PatientDetailStrings.visits, combinedValue));
     }
 
     final hasStats = displayStats.isNotEmpty || latestThread != null;
@@ -3711,7 +3794,7 @@ class _StatsGrid extends StatelessWidget {
           final tiles = <Widget>[];
           for (final e in displayStats) {
             final (icon, iconColor) = _iconFor(e.key);
-            if (e.key == 'Visits') {
+            if (e.key == PatientDetailStrings.visits || e.key == 'Visits') {
               final hist = _extractVisitHistory(visitEntries);
               tiles.add(GestureDetector(
                 onTap: hist.isNotEmpty
@@ -3928,10 +4011,7 @@ class _LastCheckupTile extends StatelessWidget {
       _ => (const Color(0xFFF3F4F6), AppColors.textMid),
     };
 
-String _monthAbbr(int month) => const [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ][month];
+String _monthAbbr(int month) => DateFormatStrings.monthAbbrev(month);
 
 // ─── Shared card-detail helpers ────────────────────────────────────────────
 
@@ -4420,11 +4500,11 @@ Future<void> _openVisitDayDetail(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Text(
-              'Assessments this visit',
-              style: TextStyle(
+              PatientDetailStrings.assessmentsThisVisit,
+              style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textPrimary,
@@ -4459,7 +4539,7 @@ Future<void> _openVisitDayDetail(
 // ─── Timeline Event Sheet ──────────────────────────────────────────────────
 
 /// Bottom sheet expanding a care-thread timeline event into full clinical detail.
-/// Unpacks the rawJson envelope via [_unpackRaw] to surface clinical fields.
+/// Unpacks the rawJson envelope via [normalizeAssessmentRaw] to surface clinical fields.
 class _TimelineEventSheet extends StatelessWidget {
   const _TimelineEventSheet({
     required this.assessment,
@@ -4491,17 +4571,19 @@ class _TimelineEventSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
     final raw = _normalizeRaw(assessment.rawJson);
-    final dateFormat = DateFormat('d MMMM yyyy · h:mm a');
+    final dateFormat = AppDateFormat.dayMonthNameYearTimeFmt;
     final progColors = Theme.of(context).extension<ProgrammeColors>()!;
     final prog = Programme.fromString(assessment.type);
     final typeColor = progColors.of(prog);
 
     final entries = <MapEntry<String, String>>[];
     final snap = pregnancySnapshot;
-    void addIfPresent(String key, String label) {
+    // [valueMapper] localizes coded values (e.g. referralStatus 'Referred').
+    void addIfPresent(String key, String label,
+        {String Function(String)? valueMapper}) {
       final v = _rawStr(raw[key]);
       if (v != null && v.isNotEmpty) {
-        entries.add(MapEntry(label, v));
+        entries.add(MapEntry(label, valueMapper?.call(v) ?? v));
       }
     }
 
@@ -4525,7 +4607,7 @@ class _TimelineEventSheet extends StatelessWidget {
       if (millis == null) return;
       entries.add(MapEntry(
         label,
-        DateFormat('d MMM yyyy')
+        AppDateFormat.dayMonthYearFmt
             .format(DateTime.fromMillisecondsSinceEpoch(millis)),
       ));
     }
@@ -4552,17 +4634,21 @@ class _TimelineEventSheet extends StatelessWidget {
       lmpDate = eddDate.subtract(const Duration(days: 280));
     }
     if (lmpDate != null) {
-      final shortDate = DateFormat('d MMM yyyy');
-      entries.add(MapEntry('LMP', shortDate.format(lmpDate)));
+      final shortDate = AppDateFormat.dayMonthYearFmt;
+      entries.add(MapEntry(PatientDetailStrings.lmp, shortDate.format(lmpDate)));
       eddDate ??= lmpDate.add(const Duration(days: 280));
-      entries.add(MapEntry('EDD', shortDate.format(eddDate)));
+      entries.add(MapEntry(PatientDetailStrings.edd, shortDate.format(eddDate)));
       final totalDays = DateTime.now().difference(lmpDate).inDays;
       if (totalDays >= 0) {
         final weeks = totalDays ~/ 7;
         final days = totalDays % 7;
         entries.add(MapEntry(
-          'Gestational age',
-          days > 0 ? '$weeks weeks $days days' : '$weeks weeks',
+          PatientDetailStrings.gestationalAge,
+          days > 0
+              ? PatientDetailStrings.gestationalWeeksDays(
+                  '$weeks', '$days', oneDay: days == 1)
+              : PatientDetailStrings.gestationalWeeksOnly(
+                  '$weeks', oneWeek: weeks == 1),
         ));
       }
     } else if (prog == Programme.pw) {
@@ -4573,33 +4659,49 @@ class _TimelineEventSheet extends StatelessWidget {
     }
 
     // ── Vitals (all programmes) ────────────────────────────────────────────
-    addIfPresent('bp', 'BP');
-    addIfPresent('bg', 'Blood glucose');
-    addIfPresent('bgType', 'Glucose type');
-    addIfPresent('bmi', 'BMI');
-    addIfPresent('cvdRisk', 'CVD risk');
-    addIfPresent('weight', 'Weight (kg)');
-    addIfPresent('height', 'Height (cm)');
+    addIfPresent('bp', PatientDetailStrings.bp);
+    addIfPresent('bg', PatientDetailStrings.bloodGlucose);
+    addIfPresent(
+      'bgType',
+      PatientDetailStrings.glucoseType,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent('bmi', PatientDetailStrings.bmi);
+    addIfPresent('cvdRisk', PatientDetailStrings.cvdRisk);
+    addIfPresent('weight', PatientDetailStrings.weightKg);
+    addIfPresent('height', PatientDetailStrings.heightCm);
 
     // ── NCD ────────────────────────────────────────────────────────────────
-    addIfPresent('confirmDiagnosis', 'Diagnosis');
-    addIfPresent('ncdSymptoms', 'Symptoms');
-    addIfPresent('ncdSymptomsMedication', 'Taking medication');
-    addIfPresent('heartAttack', 'Heart attack history');
-    addIfPresent('stroke', 'Stroke history');
-    addIfPresent('kidneyDisease', 'Kidney disease');
-    addIfPresent('copd', 'COPD');
-    addIfPresent('referralFacilityType', 'Referred to');
+    addIfPresent('confirmDiagnosis', PatientDetailStrings.diagnosis);
+    addIfPresent('ncdSymptoms', PatientDetailStrings.symptoms);
+    addIfPresent('ncdSymptomsMedication', PatientDetailStrings.takingMedication);
+    addIfPresent('heartAttack', PatientDetailStrings.heartAttackHistory);
+    addIfPresent('stroke', PatientDetailStrings.strokeHistory);
+    addIfPresent('kidneyDisease', PatientDetailStrings.kidneyDisease);
+    addIfPresent('copd', PatientDetailStrings.copd);
+    addIfPresent(
+      'referralFacilityType',
+      PatientDetailStrings.referredTo,
+      valueMapper: RmnchReferralFacility.resolveReferredToLabel,
+    );
 
     // ── ANC / PW obstetric ─────────────────────────────────────────────────
-    addIfPresent('hemoglobin', 'Hb (g/dL)');
-    addIfPresent('fundalHeight', 'Fundal height (cm)');
-    addWithFallback('gravida', 'Gravida', snap?.gravida);
-    addWithFallback('parity', 'Parity', snap?.parity);
-    addWithFallback('livingChildren', 'Living children', snap?.livingChildren);
+    addIfPresent('hemoglobin', PatientDetailStrings.hb);
+    addIfPresent('fundalHeight', PatientDetailStrings.fundalHeight);
+    addWithFallback('gravida', PatientDetailStrings.gravida, snap?.gravida);
+    addWithFallback('parity', PatientDetailStrings.parity, snap?.parity);
+    addWithFallback(
+      'livingChildren',
+      PatientDetailStrings.livingChildren,
+      snap?.livingChildren,
+    );
     // Pregnancy test is a PW-form field (GA ≤ 16 weeks) — not ANC/PNC.
     if (prog == Programme.pw) {
-      addWithFallback('pregnancyTest', 'Pregnancy test', snap?.pregnancyTest);
+      addWithFallback(
+        'pregnancyTest',
+        PatientDetailStrings.pregnancyTest,
+        snap?.pregnancyTest,
+      );
     }
     // ageOfLastChild is stored as DOB on the wire — show formatted if parseable.
     final ageOfLastChild = _parseFlexibleDate(
@@ -4607,33 +4709,66 @@ class _TimelineEventSheet extends StatelessWidget {
     );
     if (ageOfLastChild != null) {
       entries.add(MapEntry(
-        'Age of last child (DOB)',
-        DateFormat('d MMM yyyy').format(ageOfLastChild),
+        PatientDetailStrings.ageOfLastChildDob,
+        AppDateFormat.dayMonthYearFmt.format(ageOfLastChild),
       ));
     } else {
-      addWithFallback('ageOfLastChild', 'Age of last child', snap?.ageOfLastChild);
+      addWithFallback(
+        'ageOfLastChild',
+        PatientDetailStrings.ageOfLastChild,
+        snap?.ageOfLastChild,
+      );
     }
     // Visit counters belong on the visit that produced them, not PW registration
     // (snapshot often holds 0 / a later count from a different encounter).
     if (prog == Programme.anc) {
-      addWithFallback('ancVisitNumber', 'ANC visit no.', snap?.ancVisitNo);
+      addWithFallback(
+        'ancVisitNumber',
+        PatientDetailStrings.ancVisitNo,
+        snap?.ancVisitNo,
+      );
     }
-    addIfPresent('highRiskPregnantWoman', 'High risk');
-    addIfPresent('gapsInAnc', 'ANC gaps');
-    addIfPresent('dangerSignsDuringPregnancy', 'Danger signs');
-    addIfPresent('referralFacility', 'Referred to');
-    addIfPresent('followUpVisit', 'Follow-up visit');
+    addIfPresent('highRiskPregnantWoman', PatientDetailStrings.highRisk);
+    addIfPresent('gapsInAnc', PatientDetailStrings.ancGaps);
+    addIfPresent('dangerSignsDuringPregnancy', PatientDetailStrings.dangerSigns);
+    addIfPresent(
+      'referralFacility',
+      PatientDetailStrings.referredTo,
+      valueMapper: RmnchReferralFacility.resolveReferredToLabel,
+    );
+    addIfPresent('followUpVisit', PatientDetailStrings.followUpVisit);
 
     // ── PNC ────────────────────────────────────────────────────────────────
     if (prog == Programme.pnc) {
-      addWithFallback('pncVisitNumber', 'PNC visit no.', snap?.pncVisitNo);
+      addWithFallback(
+        'pncVisitNumber',
+        PatientDetailStrings.pncVisitNo,
+        snap?.pncVisitNo,
+      );
     }
-    addIfPresent('modeOfDelivery', 'Mode of delivery');
-    addIfPresent('anyComplicationsDuringDelivery', 'Complications');
-    addIfPresent('complicationsDuringDelivery', 'Complication details');
-    addIfPresent('numberOfLivingChildren', 'Living children');
-    addIfPresent('motherCare', 'Postnatal care');
-    addIfPresent('newbornCare', 'Newborn care');
+    addIfPresent(
+      'modeOfDelivery',
+      PatientDetailStrings.modeOfDelivery,
+      valueMapper: (v) => fieldOptionDisplayLabel('modeOfDelivery', v),
+    );
+    addIfPresent(
+      'anyComplicationsDuringDelivery',
+      PatientDetailStrings.complications,
+      valueMapper: (v) =>
+          fieldOptionDisplayLabel('anyComplicationsDuringDelivery', v),
+    );
+    addIfPresent(
+      'complicationsDuringDelivery',
+      PatientDetailStrings.complicationDetails,
+      valueMapper: (v) =>
+          fieldOptionDisplayLabel('complicationsDuringDelivery', v),
+    );
+    addIfPresent(
+      'numberOfLivingChildren',
+      PatientDetailStrings.livingChildren,
+    );
+    addIfPresent('motherCare', PatientDetailStrings.postnatalCare);
+    addIfPresent('newbornCare', PatientDetailStrings.newbornCare);
 
     // ── Snapshot-only obstetric detail (programme-scoped) ──────────────────
     // These columns are written by ANC / outcome flows, not PW registration.
@@ -4641,83 +4776,125 @@ class _TimelineEventSheet extends StatelessWidget {
     // answers the SK never saw.
     if (snap != null && prog == Programme.anc) {
       addSnapshotList(
-          snap.previousPregnancyComplications, 'Previous complications');
-      addSnapshotList(snap.existingIllness, 'Existing illness');
-      addSnapshotList(snap.onTreatment, 'On treatment');
+        snap.previousPregnancyComplications,
+        PatientDetailStrings.previousComplications,
+      );
+      final existingIllness =
+          AncExistingIllness.formatExistingIllnessList(snap.existingIllness);
+      if (existingIllness.isNotEmpty) {
+        entries.add(
+          MapEntry(PatientDetailStrings.existingIllness, existingIllness),
+        );
+      }
+      final onTreatment =
+          AncExistingIllness.formatOnTreatmentList(snap.onTreatment);
+      if (onTreatment.isNotEmpty) {
+        entries.add(MapEntry(PatientDetailStrings.onTreatment, onTreatment));
+      }
       if (snap.ttTdCompleted?.isNotEmpty == true) {
-        entries.add(MapEntry('TT/Td completed', snap.ttTdCompleted!));
+        entries.add(
+          MapEntry(PatientDetailStrings.ttTdCompleted, snap.ttTdCompleted!),
+        );
       }
       if (snap.facilityIdentifiedForDelivery?.isNotEmpty == true) {
-        entries.add(
-            MapEntry('Delivery facility', snap.facilityIdentifiedForDelivery!));
+        entries.add(MapEntry(
+          PatientDetailStrings.deliveryFacility,
+          DeliveryFacilityType.labelOfId(snap.facilityIdentifiedForDelivery!),
+        ));
       }
       if (snap.ancWeight != null) {
-        entries.add(MapEntry('Last ANC weight (kg)', '${snap.ancWeight}'));
+        entries.add(MapEntry(
+          PatientDetailStrings.lastAncWeightKg,
+          '${snap.ancWeight}',
+        ));
       }
-      addSnapshotDate(snap.lastAncVisitDateMs, 'Last ANC visit');
+      addSnapshotDate(snap.lastAncVisitDateMs, PatientDetailStrings.lastAncVisit);
     }
     if (snap != null && prog == Programme.pnc) {
-      addSnapshotDate(snap.deliveryDateMillis, 'Delivery date');
+      addSnapshotDate(
+        snap.deliveryDateMillis,
+        PatientDetailStrings.deliveryDate,
+      );
     }
 
     // ── TB ─────────────────────────────────────────────────────────────────
-    addIfPresent('has_cough', 'Cough');
-    addIfPresent('had_tb_before', 'Cough >2 weeks');
-    addIfPresent('has_night_sweats', 'Night sweats');
-    addIfPresent('has_fever', 'Fever');
-    addIfPresent('has_weight_loss', 'Weight loss');
+    addIfPresent('has_cough', PatientDetailStrings.cough);
+    addIfPresent('had_tb_before', PatientDetailStrings.coughOver2Weeks);
+    addIfPresent('has_night_sweats', PatientDetailStrings.nightSweats);
+    addIfPresent('has_fever', PatientDetailStrings.fever);
+    addIfPresent('has_weight_loss', PatientDetailStrings.weightLoss);
 
     // ── IMCI / childhood ──────────────────────────────────────────────────
-    addIfPresent('anyIllness', 'Illness/complication');
-    addIfPresent('childIllnessType', 'Complication type');
-    addIfPresent('receivedVaccine', 'Vaccines received');
-    addIfPresent('childBreastFeeding', 'Breastfeeding');
-    addIfPresent('dewormingMedicine', 'Deworming');
-    addIfPresent('childReferral', 'Referral made');
-    addIfPresent('childReferralFacilityType', 'Refer to');
+    addIfPresent('anyIllness', PatientDetailStrings.illnessComplication);
+    addIfPresent('childIllnessType', PatientDetailStrings.complicationType);
+    addIfPresent('receivedVaccine', PatientDetailStrings.vaccinesReceived);
+    addIfPresent('childBreastFeeding', PatientDetailStrings.breastfeeding);
+    addIfPresent('dewormingMedicine', PatientDetailStrings.deworming);
+    addIfPresent('childReferral', PatientDetailStrings.referralMade);
+    addIfPresent('childReferralFacilityType', PatientDetailStrings.referTo);
 
     // ── Eye care / cataract ───────────────────────────────────────────────
-    addIfPresent('eyeTestOutcome', 'Eye test outcome');
-    addIfPresent('eyeDisease', 'Eye disease');
-    addIfPresent('glassPower', 'Glass power');
-    addIfPresent('haveTheGlassesBeenSold', 'Glasses sold');
-    addIfPresent('typeOfGlass', 'Glass type');
-    addIfPresent('typeOfFrame', 'Frame type');
-    addIfPresent('firstTimeUser', 'First time user');
-    addIfPresent('referPlace', 'Refer to');
-    addIfPresent('patientReferredForOperation', 'Referred for operation');
-    addIfPresent('operationName', 'Operation');
-    addIfPresent('pseudophakiaPostCataractSurgery', 'Post-surgery status');
-    addIfPresent('ncdServiceProvided', 'NCD service provided');
+    addIfPresent('eyeTestOutcome', PatientDetailStrings.eyeTestOutcome);
+    addIfPresent('eyeDisease', PatientDetailStrings.eyeDisease);
+    addIfPresent('glassPower', PatientDetailStrings.glassPower);
+    addIfPresent('haveTheGlassesBeenSold', PatientDetailStrings.glassesSold);
+    addIfPresent('typeOfGlass', PatientDetailStrings.glassType);
+    addIfPresent('typeOfFrame', PatientDetailStrings.frameType);
+    addIfPresent('firstTimeUser', PatientDetailStrings.firstTimeUser);
+    addIfPresent('referPlace', PatientDetailStrings.referTo);
+    addIfPresent(
+      'patientReferredForOperation',
+      PatientDetailStrings.referredForOperation,
+    );
+    addIfPresent('operationName', PatientDetailStrings.operation);
+    addIfPresent(
+      'pseudophakiaPostCataractSurgery',
+      PatientDetailStrings.postSurgeryStatus,
+    );
+    addIfPresent(
+      'ncdServiceProvided',
+      PatientDetailStrings.ncdServiceProvided,
+    );
 
     // ── FP ─────────────────────────────────────────────────────────────────
-    addIfPresent('familyPlanningMethods', 'FP method');
-    addIfPresent('desireForChildrenInFuture', 'Desire for children');
+    addIfPresent('familyPlanningMethods', PatientDetailStrings.fpMethod);
+    addIfPresent(
+      'desireForChildrenInFuture',
+      PatientDetailStrings.desireForChildren,
+    );
 
-    // ── Referral (all programmes) ─────────────────────────────────────────
-    addIfPresent('referralStatus', 'Referral status');
-    // Humanize referral reason codes (JSON array or comma list → readable labels)
-    final reasonRaw = raw['referralReason'] ??
-        raw['referredReasons'] ??
-        assessment.notes;
-    final reasonTokens = parseReferralReasonTokens(reasonRaw);
-    if (reasonTokens.isNotEmpty) {
-      final humanized = reasonTokens
-          .map(_shortReasonLabel)
-          .where((r) => r.isNotEmpty)
-          .join(', ');
-      if (humanized.isNotEmpty) {
-        entries.add(MapEntry('Referral reason', humanized));
+    // ── Referral (programmes that surface referral status in history) ─────
+    if (_shouldShowReferralStatus(prog)) {
+      addIfPresent('referralStatus', PatientDetailStrings.referralStatus,
+          valueMapper: ClinicalStatusStrings.label);
+      // Humanize referral reason codes (JSON array or comma list → readable labels)
+      final reasonRaw = raw['referralReason'] ??
+          raw['referredReasons'] ??
+          assessment.notes;
+      final reasonTokens = parseReferralReasonTokens(reasonRaw);
+      if (reasonTokens.isNotEmpty) {
+        final humanized = reasonTokens
+            .map(_shortReasonLabel)
+            .where((r) => r.isNotEmpty)
+            .join(', ');
+        if (humanized.isNotEmpty) {
+          entries.add(MapEntry(PatientDetailStrings.referralReason, humanized));
+        }
       }
     }
 
     // ── customStatus — only if distinct from referralStatus (avoid duplicate) ──
     final cs = raw['customStatus'];
     if (cs is List && cs.isNotEmpty) {
-      final joined = cs.map((e) => e.toString()).join(', ');
+      // Codes like HIGH_RISK_PW / UNCONTROLLED_BP were rendered verbatim.
+      final joined = ClinicalStatusStrings.labelAll(
+          cs.map((e) => e.toString()));
+      final rawJoined = cs.map((e) => e.toString()).join(', ');
       final refStatus = (raw['referralStatus']?.toString() ?? assessment.status ?? '').toLowerCase();
-      if (joined.isNotEmpty && joined.toLowerCase() != refStatus) {
-        entries.add(MapEntry('Status', joined));
+      // Compare on the raw codes, not the localized text — the dedupe must not
+      // change behaviour with the language.
+      if (joined.isNotEmpty && rawJoined.toLowerCase() != refStatus) {
+        entries.add(MapEntry(PatientDetailStrings.status, joined));
       }
     }
 
@@ -4764,7 +4941,8 @@ class _TimelineEventSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (assessment.status != null) _StatusChip(status: assessment.status!),
+                if (assessment.status != null && _shouldShowReferralStatus(prog))
+                  _StatusChip(status: assessment.status!),
               ],
             ),
           ),
@@ -4830,7 +5008,15 @@ class _TimelineEventSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    assessment.notes!,
+                    () {
+                      final localized = parseReferralReasonTokens(assessment.notes)
+                          .map(shortReasonLabel)
+                          .where((s) => s.isNotEmpty)
+                          .join(', ');
+                      return localized.isNotEmpty
+                          ? localized
+                          : assessment.notes!;
+                    }(),
                     style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.5),
                   ),
                 ],
@@ -5134,9 +5320,9 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                           },
                         );
                       },
-                      child: const Text(
-                        '+ Edit',
-                        style: TextStyle(
+                      child: Text(
+                        PatientDetailStrings.editPlus,
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: AppColors.navy,
@@ -5257,11 +5443,15 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             ),
             const SizedBox(height: 10),
             if (lastDate != null)
-              _scheduleRow('Last visit', DateFormat('dd MMM yyyy').format(lastDate), scheme),
+              _scheduleRow(
+                PatientDetailStrings.lastVisit,
+                AppDateFormat.dayMonthYearPaddedFmt.format(lastDate),
+                scheme,
+              ),
             if (nextDate != null)
               _scheduleRow(
-                'Next due',
-                DateFormat('dd MMM yyyy').format(nextDate),
+                PatientDetailStrings.nextDue,
+                AppDateFormat.dayMonthYearPaddedFmt.format(nextDate),
                 scheme,
                 valueColor: isOverdue ? AppColors.statusCritical : null,
               ),
@@ -5344,7 +5534,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
   }
 
   Widget _buildVitalsCard(BuildContext context, ColorScheme scheme, _VitalsSnapshot v) {
-    final date = DateFormat('dd MMM yyyy').format(v.recordedAt);
+    final date = AppDateFormat.dayMonthYearPaddedFmt.format(v.recordedAt);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -5934,7 +6124,9 @@ class _NoServicesCardState extends State<_NoServicesCard> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(controller.error ?? 'Failed to start visit'),
+            content: Text(
+              controller.error ?? PatientContextStrings.startVisitFailed,
+            ),
           ),
         );
       }
@@ -6003,7 +6195,7 @@ class _NoServicesCardState extends State<_NoServicesCard> {
                     : const Icon(Icons.add, size: 18, color: Colors.white),
                 label: Text(
                   _starting
-                      ? 'Starting...'
+                      ? PatientContextStrings.startingEllipsis
                       : EnrollStrings.addServicesCta,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,

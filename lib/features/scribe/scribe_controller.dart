@@ -1,17 +1,20 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api/scribe_api_service.dart';
+import '../../core/audio/scribe_record_config.dart';
 import '../../core/auth/user_hierarchy_service.dart';
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/audio_sample_dao.dart';
+import '../../core/i18n/app_locale.dart';
 import '../../core/errors/domain_exceptions.dart';
+import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../visit/triage/ai_scribe_triage_vocab.dart';
 import '../visit/triage/triage_transcript_matcher.dart';
 import 'audio_sample_sync_service.dart';
@@ -28,46 +31,35 @@ class ScribeController extends ChangeNotifier {
   ScribeController({
     required ScribeApiService api,
     required ScribePermissionService permissionService,
+    ScribeAudioSettingsNotifier? audioSettings,
   }) : _api = api,
-       _perm = permissionService;
+       _perm = permissionService,
+       _audioSettings = audioSettings;
 
   final ScribeApiService _api;
   final ScribePermissionService _perm;
-  /// Drives the live recording waveform visualization only.
-  /// Recycled after each session — [RecorderController] can hang on reuse after
-  /// stop() on Android (audio_waveforms native quirk).
-  RecorderController _recorder = RecorderController();
 
-  /// Captures the actual audio file using the `record` package, which produces
-  /// a standard WAV decodable by the backend. [_recorder] handles waveform only.
+  /// Supplies the on-device microphone capture preference. Nullable so
+  /// tests (and any caller without the provider registered) fall back to
+  /// [AppConfig.rawMicCaptureDefault] rather than needing the whole
+  /// preferences stack — same accommodation [RealtimeAsrController] makes
+  /// for [VadTuningNotifier].
+  final ScribeAudioSettingsNotifier? _audioSettings;
+
+  /// Read at each recording start, not cached, so flipping the setting
+  /// applies to the next recording without restarting the app.
+  RecordConfig get _captureConfig => ScribeRecordConfig.batch(
+    rawMicCapture:
+        _audioSettings?.rawMicCaptureEnabled ?? AppConfig.rawMicCaptureDefault,
+  );
+  /// Captures the audio file uploaded to the backend (`record` / AAC-LC).
   final AudioRecorder _audioRecorder = AudioRecorder();
 
   ScribeSession _session = const ScribeSession();
   ScribeSession get session => _session;
 
-  /// Live recorder controller backing the in-circle waveform visualizer.
-  /// Owned here in the scribe layer; the banner widget only renders from it.
-  RecorderController get waveformRecorder => _recorder;
-
-  /// Capture settings — WAV/PCM mono @16 kHz.
-  ///
-  /// We deliberately record WAV (genuine audio) rather than AAC. On Android,
-  /// AAC is muxed into an MP4 container whose `moov` trailer is only written
-  /// during stop(); audio_waveforms' stop() can hang, leaving a truncated,
-  /// undecodable MP4. WAV uses the AudioRecord + WavEncoder path which writes
-  /// PCM immediately and finalizes the 44-byte header synchronously on stop —
-  /// no container trailer, decodable even if interrupted.
-  static const RecorderSettings _recorderSettings = RecorderSettings(
-    androidEncoderSettings: AndroidEncoderSettings(
-      androidEncoder: AndroidEncoder.wav,
-    ),
-    iosEncoderSettings: IosEncoderSetting(
-      iosEncoder: IosEncoder.kAudioFormatLinearPCM,
-    ),
-    sampleRate: 16000,
-  );
-
-  /// File extension for captured audio — kept in sync with [_recorderSettings].
+  /// File extension for captured audio — matches [ScribeRecordConfig.batch]
+  /// (`AudioEncoder.aacLc`).
   static const String _recordingExtension = 'm4a';
 
   Timer? _elapsedTimer;
@@ -134,26 +126,10 @@ class ScribeController extends ChangeNotifier {
     }
 
     try {
-      _prepareFreshRecorder();
-
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
       _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
-      final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
-
-      await _recorder.record(
-        path: waveformPath,
-        recorderSettings: _recorderSettings,
-      );
-      await _audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          sampleRate: 16000,
-          numChannels: 1,
-          bitRate: 64000,
-        ),
-        path: _recordingPath!,
-      );
+      await _audioRecorder.start(_captureConfig, path: _recordingPath!);
 
       _session = const ScribeSession(state: ScribeState.recording);
       notifyListeners();
@@ -235,30 +211,10 @@ class ScribeController extends ChangeNotifier {
     }
 
     try {
-      _prepareFreshRecorder();
-
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
       _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
-      // Waveform visualization recorder writes to a separate dummy path.
-      final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
-
-      // Start waveform recorder (audio_waveforms) for UI animation only.
-      await _recorder.record(
-        path: waveformPath,
-        recorderSettings: _recorderSettings,
-      );
-
-      // Start actual audio capture via record package — produces standard WAV.
-      await _audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          sampleRate: 16000,
-          numChannels: 1,
-          bitRate: 64000,
-        ),
-        path: _recordingPath!,
-      );
+      await _audioRecorder.start(_captureConfig, path: _recordingPath!);
 
       _session = ScribeSession(state: ScribeState.recording, mode: mode);
       notifyListeners();
@@ -286,7 +242,7 @@ class ScribeController extends ChangeNotifier {
     if (_session.state != ScribeState.recording) return;
     _elapsedTimer?.cancel();
 
-    // Flip to uploading immediately so the banner swaps waveform → spinner
+    // Flip to uploading immediately so the banner swaps recording → spinner
     // without waiting for the native recorder stop call.
     _session = _session.copyWith(
       state: ScribeState.uploading,
@@ -297,9 +253,6 @@ class ScribeController extends ChangeNotifier {
     debugPrint(
       '[AIScribe] Stopping recording after ${_session.elapsedSeconds}s',
     );
-
-    // Drop WaveformWidget before native stop — reduces audio_waveforms hang.
-    await Future<void>.delayed(const Duration(milliseconds: 50));
 
     final effectivePath = await _stopRecorderSafely();
     if (effectivePath == null) {
@@ -334,6 +287,7 @@ class ScribeController extends ChangeNotifier {
             encounterId: encounterId,
             programmes: _currentProgrammes,
             triageNotes: _triageNotes,
+            language: AppLocale.isBangla ? 'bn' : 'en',
           );
           break;
         case ScribeMode.triage:
@@ -342,6 +296,7 @@ class ScribeController extends ChangeNotifier {
             symptomCatalog: _currentSymptomCatalog ?? [],
             patientId: patientId,
             encounterId: encounterId,
+            language: AppLocale.isBangla ? 'bn' : 'en',
           );
           break;
         case ScribeMode.soap:
@@ -352,6 +307,7 @@ class ScribeController extends ChangeNotifier {
             encounterId: encounterId,
             programmes: programme != null ? [programme] : [],
             triageNotes: _triageNotes,
+            language: AppLocale.isBangla ? 'bn' : 'en',
           );
       }
 
@@ -420,7 +376,6 @@ class ScribeController extends ChangeNotifier {
     _currentProgrammes = const [];
     _currentMode = ScribeMode.soap;
     _triageNotes = null;
-    _recycleRecorder();
     _session = const ScribeSession();
     notifyListeners();
   }
@@ -429,7 +384,6 @@ class ScribeController extends ChangeNotifier {
   void surfaceError(String message, {ScribeMode? mode}) {
     _elapsedTimer?.cancel();
     _pollTimer?.cancel();
-    _recycleRecorder();
     _session = ScribeSession(
       state: ScribeState.error,
       errorMessage: message,
@@ -655,42 +609,15 @@ class ScribeController extends ChangeNotifier {
 
   // ── private helpers ───────────────────────────────────────────────────────
 
-
-  void _prepareFreshRecorder() {
-    if (_recorder.isRecording) return;
-    _recycleRecorder();
-  }
-
-  void _recycleRecorder() {
-    try {
-      _recorder.dispose();
-    } catch (e) {
-      debugPrint('[AIScribe] recorder dispose: $e');
-    }
-    _recorder = RecorderController();
-  }
-
   /// Stops capture and waits for the recording to be fully finalized before
   /// returning its path. Returns null when the file never finalized (so the
   /// caller fails instead of uploading a truncated, undecodable MP4).
   ///
-  /// audio_waveforms records AAC into an MP4 container; the `moov` trailer is
+  /// `record` writes AAC into an MP4 container; the `moov` trailer is
   /// written during the native stop(). On Android the Dart stop() Future can
   /// hang even though the native writer completes, so we fire stop() but gate
   /// on the file actually being finalized (moov atom present + size stable).
   Future<String?> _stopRecorderSafely() async {
-    // Stop waveform recorder (fire-and-forget — may hang on audio_waveforms).
-    unawaited(
-      _recorder
-          .stop()
-          .then((p) => debugPrint('[AIScribe] waveform stop() path=$p'))
-          .catchError((Object e) {
-        debugPrint('[AIScribe] waveform stop() error: $e');
-        return null;
-      }),
-    );
-
-    // Stop actual audio capture — record package awaits proper finalization.
     final String? capturedPath = await _audioRecorder
         .stop()
         .catchError((Object e) {
@@ -704,7 +631,6 @@ class ScribeController extends ChangeNotifier {
       debugPrint('[AIScribe] audio captured: path=$path size=${size}B');
     }
 
-    _recycleRecorder();
     notifyListeners();
     return path;
   }
@@ -974,6 +900,7 @@ class ScribeController extends ChangeNotifier {
         patientId: patientId,
         encounterId: encounterId,
         programme: programme,
+        language: AppLocale.isBangla ? 'bn' : 'en',
       );
       _session = _session.copyWith(state: ScribeState.processing, jobId: jobId);
       notifyListeners();
@@ -1011,9 +938,6 @@ class ScribeController extends ChangeNotifier {
   void dispose() {
     _elapsedTimer?.cancel();
     _pollTimer?.cancel();
-    try {
-      _recorder.dispose();
-    } catch (_) {}
     _audioRecorder.dispose();
     super.dispose();
   }

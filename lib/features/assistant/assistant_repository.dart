@@ -13,6 +13,7 @@ import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
+import '../../core/i18n/app_locale.dart';
 import 'assistant_models.dart';
 
 class AssistantRepository {
@@ -145,9 +146,11 @@ class AssistantRepository {
     List<Map<String, String>>? history,
   }) async {
     final (dio, path) = _resolve();
+    final appLanguage = AppLocale.isBangla ? 'bn' : 'en';
+    ConsoleLog.step('[AssistantAsk] appLanguage=$appLanguage context=${patientContext == null ? 'community-health-worker' : 'patient-scoped'}');
     final body = {
       'question': question,
-      'locale': 'en',
+      'appLanguage': appLanguage,
       'context':
           patientContext == null ? 'community-health-worker' : 'patient-scoped',
       if (patientContext != null) 'patientContext': patientContext,

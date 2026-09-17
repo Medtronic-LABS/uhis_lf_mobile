@@ -197,12 +197,17 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
-                    IconButton(
-                      onPressed: _sendSms,
-                      icon: const Icon(Icons.sms_rounded),
-                      tooltip: CounsellingStrings.sendSms,
-                      style: IconButton.styleFrom(
-                        foregroundColor: _waAccentColor,
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _sendSms,
+                        icon: const Icon(Icons.sms_rounded, size: 18),
+                        label: Text(CounsellingStrings.sendSms),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1565C0),
+                          foregroundColor: Colors.white,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                        ),
                       ),
                     ),
                   ],

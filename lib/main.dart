@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'app/locale_provider.dart';
+import 'core/i18n/app_date_format.dart';
 import 'core/i18n/app_locale.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
@@ -18,6 +19,7 @@ import 'app/theme_provider.dart';
 import 'core/api/api_client.dart';
 import 'core/api/realtime_asr_service.dart';
 import 'core/preferences/ai_feature_toggles_notifier.dart';
+import 'core/preferences/scribe_audio_settings_notifier.dart';
 import 'core/preferences/scribe_engine_notifier.dart';
 import 'core/preferences/vad_tuning_notifier.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -26,6 +28,7 @@ import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
 import 'core/constants/app_strings.dart';
+import 'features/visit/forms/form_config.dart';
 import 'core/db/ai_response_cache_dao.dart';
 import 'core/db/app_database.dart';
 import 'core/db/assessment_dao.dart';
@@ -45,8 +48,6 @@ import 'core/db/pregnancy_snapshot_dao.dart';
 import 'core/db/treatment_presence_dao.dart';
 import 'core/db/referral_dao.dart';
 import 'core/db/sync_meta_dao.dart';
-import 'core/notifications/notification_service.dart';
-import 'core/notifications/repeat_scheduler.dart';
 import 'core/risk/risk_scoring_service.dart';
 import 'core/sla/priority_scorer.dart';
 import 'core/sla/sla_evaluator.dart';
@@ -98,6 +99,10 @@ Future<void> main() async {
   // assets (if declared in pubspec fonts:) then to system fonts.
   GoogleFonts.config.allowRuntimeFetching = false;
   await loadTranslations();
+  // Bengali date symbols. Without this every DateFormat falls back to English
+  // month names regardless of app language.
+  await AppDateFormat.ensureInitialised();
+  await FormConfig.loadAndCache(rootBundle);
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();
@@ -112,7 +117,6 @@ Future<void> main() async {
   final authState = AuthState(
     authRepo,
     biometric,
-    onWipeLocalData: appDb.wipeAllData,
   );
   authState.bootstrap(); // fire-and-forget — splash shows while bootstrap runs async
   runApp(UhisNextApp(
@@ -219,11 +223,11 @@ class _UhisNextAppState extends State<UhisNextApp>
   // ── Referral SLA Engine wiring (ReferralDao initialized above) ──────────
   late final SlaEvaluator _slaEvaluator = const SlaEvaluator();
   late final PriorityScorer _priorityScorer = const PriorityScorer();
-  late final NotificationService _notifications = NotificationService();
-  late final RepeatScheduler _repeatScheduler = RepeatScheduler(
-    dao: _referralDao,
-    notifications: _notifications,
-  );
+  // No `notificationScheduler:` — referrals deliberately do NOT post to the OS
+  // notification bar. They surface in-app via the dashboard bell badge, the
+  // referral alert banner, and the CCE alerts drawer. Leaving this null means
+  // ReferralRepository.dispatchPendingNotifications() returns 0 at its own
+  // guard, so no future caller can reintroduce the alerts by accident.
   late final ReferralRepository _referrals = ReferralRepository(
     referrals: _referralDao,
     patients: _patientDao,
@@ -231,7 +235,6 @@ class _UhisNextAppState extends State<UhisNextApp>
     followUps: _followUpDao,
     slaEvaluator: _slaEvaluator,
     priorityScorer: _priorityScorer,
-    notificationScheduler: _repeatScheduler,
     localAssessments: _localAssessmentDao,
   );
 
@@ -309,9 +312,6 @@ class _UhisNextAppState extends State<UhisNextApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Register notification channels + rehydrate any pending repeat alarms
-    // from the last session. Both are idempotent.
-    unawaited(_bootstrapNotifications());
     // Start connectivity monitoring for automatic offline sync retry.
     _connectivitySync.start();
     // Keep the process alive across screen-off for the duration of any sync.
@@ -321,10 +321,10 @@ class _UhisNextAppState extends State<UhisNextApp>
     // These repositories/services are single long-lived instances for the
     // app's whole process (see the `late final` fields above — none are
     // recreated per login), so each caches session data in memory that
-    // AppDatabase.wipeAllData() cannot reach. Without these hooks, the next
-    // user to log in on the same device would briefly see the previous
-    // user's dashboard snapshot, hierarchy/village assignment, or training
-    // progress until something else happened to refresh it.
+    // survives logout (UHIS parity — local DB is kept). Without these hooks,
+    // the next user to log in on the same device would briefly see the
+    // previous user's dashboard snapshot, hierarchy/village assignment, or
+    // training progress until something else happened to refresh it.
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
     widget.authState.addListener(_onAuthStateChanged);
@@ -332,30 +332,15 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Reset sync progress so the next user's /sync screen does not see
     // isComplete=true from the previous session and skip their cold sync.
     widget.authState.registerLogoutHook(_sync.resetProgress);
-    // Best-effort flush of any still-pending assessment writes before the
-    // DB wipe below destroys their local row — without this, an outcome
-    // recorded shortly before logout (or while offline) that hasn't reached
-    // the backend yet is lost permanently: gone locally, never pushed.
-    // Bounded so a slow/offline network can't hang logout.
+    // Best-effort flush of any still-pending assessment writes before sign-out
+    // completes — without this, an outcome recorded shortly before logout (or
+    // while offline) may not reach the backend until the next login sync.
     widget.authState.registerPreWipeHook(
       () => _assessmentRepo
           .syncPendingAssessments()
           .timeout(const Duration(seconds: 10))
           .then((_) {}, onError: (_) {}),
     );
-  }
-
-  Future<void> _bootstrapNotifications() async {
-    try {
-      await _notifications.initialize();
-      await _repeatScheduler.rehydrateOnBoot();
-
-    } catch (e, st) {
-      // Notifications are a non-critical surface; failure should not block
-      // app startup. Surface to console for now; once a telemetry sink lands
-      // (worklist.md §8 / referral-sla-engine.md §8), route through it.
-      debugPrint('[notifications] bootstrap failed: $e\n$st');
-    }
   }
 
   @override
@@ -412,11 +397,16 @@ class _UhisNextAppState extends State<UhisNextApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // SLA states drift while the device sleeps; refresh on every resume.
-      // Fire-and-forget — UI listens to ReferralRepository.changes.
-      unawaited(_referrals
-          .recomputeAllAfterSync()
-          .then((_) => _referrals.dispatchPendingNotifications()));
+      // SLA states drift while the device sleeps; refresh on every resume so
+      // the dashboard priority pipeline and the CCE alerts drawer see current
+      // state. Fire-and-forget — UI listens to ReferralRepository.changes.
+      //
+      // Deliberately does NOT dispatch OS notifications. Referrals surface
+      // in-app only (dashboard bell, referral banner, CCE drawer). Dispatching
+      // here fired one notification per open referral on every resume — after a
+      // first login that is the entire synced history at once, since cold sync
+      // pulls referrals with past due dates that all read as SLA-breached.
+      unawaited(_referrals.recomputeAllAfterSync());
     }
   }
 
@@ -460,8 +450,6 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<ReferralDao>.value(value: _referralDao),
         Provider<SlaEvaluator>.value(value: _slaEvaluator),
         Provider<PriorityScorer>.value(value: _priorityScorer),
-        Provider<NotificationService>.value(value: _notifications),
-        Provider<RepeatScheduler>.value(value: _repeatScheduler),
         Provider<ReferralRepository>.value(value: _referrals),
         Provider<MissionDashboardRepository>.value(value: _missionDashboard),
         Provider<PatientDao>.value(value: _patientDao),
@@ -548,6 +536,13 @@ class _UhisNextAppState extends State<UhisNextApp>
         ChangeNotifierProvider<AiFeatureTogglesNotifier>(
           create: (_) =>
               AiFeatureTogglesNotifier(const FlutterSecureStorage())..load(),
+        ),
+        // Persisted mic capture preference (Settings → Microphone capture) —
+        // whether scribe capture bypasses the handset's echo-cancellation
+        // chain. Consumed by both scribe paths via ScribeRecordConfig.
+        ChangeNotifierProvider<ScribeAudioSettingsNotifier>(
+          create: (_) =>
+              ScribeAudioSettingsNotifier(const FlutterSecureStorage())..load(),
         ),
         // SK → SS → sub-village hierarchy (memory + disk cache; cleared on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(

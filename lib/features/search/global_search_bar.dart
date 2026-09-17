@@ -342,7 +342,10 @@ class _SearchViewState extends State<_SearchView> {
     }
     // Use /patients/ directly (not /patient/) to avoid redirect that loses extra data
     context.push('/patients/${hit.id}', extra: {
-      'id': hit.id,
+      // Local member PK — mirrors household_list_screen navigation so
+      // assessment history resolves when [id] is the server patient_id.
+      'id': hit.memberLocalId ?? hit.id,
+      'patientId': hit.id,
       'name': hit.name,
       'age': hit.age != null ? int.tryParse(hit.age!) : null,
       'gender': hit.gender,
