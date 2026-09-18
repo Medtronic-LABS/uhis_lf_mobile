@@ -44,6 +44,10 @@ dependencies:
   camera: ^0.12.0+1
   geolocator: ^13.0.2
   google_mlkit_barcode_scanning: ^0.14.2
+  # Vendored under plugins/ — upstream 0.4.31 Android build.gradle predates AGP 8
+  # (jcenter + own buildscript) and fails on this project's AGP 9 / Gradle 9.
+  flutter_tesseract_ocr:
+    path: plugins/flutter_tesseract_ocr
   package_info_plus: ^9.0.1
 
 dev_dependencies:
@@ -63,6 +67,8 @@ flutter:
     - assets/fonts/
     - assets/forms/
     - assets/translations/
+    - assets/tessdata/
+    - assets/tessdata_config.json
 
   fonts:
     - family: Nunito
