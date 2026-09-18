@@ -1,9 +1,10 @@
-import 'dart:async';
+import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
@@ -71,6 +72,9 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   bool _isScanning = false;
   NidCardData? _scanned;
 
+  /// A gallery-picked still shown with the scan sweep while OCR runs.
+  File? _picked;
+
   /// Non-null when the scanned NID already belongs to a registered patient.
   Patient? _existingPatient;
 
@@ -79,7 +83,6 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   CameraController? _cameraController;
   bool _cameraReady = false;
   bool _cameraUnavailable = false;
-  Timer? _autoScanTimer;
 
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
@@ -131,14 +134,6 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
-      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
-        if (mounted &&
-            !_isScanning &&
-            _cameraReady &&
-            _overlayState == _OverlayState.scanner) {
-          _handleCapture();
-        }
-      });
     } on CameraException catch (e) {
       debugPrint('EnrollmentOverlay: camera init failed: $e');
       if (mounted) setState(() => _cameraUnavailable = true);
@@ -148,7 +143,6 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   @override
   void dispose() {
     debugPrint('[_EnrollmentOverlayState] dispose');
-    _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
     super.dispose();
@@ -171,11 +165,43 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     }
     if (!mounted) return;
     setState(() => _isScanning = false);
+    _onResult(result);
+  }
 
+  /// Picks a card photo from the gallery and OCRs it (offline, same pipeline as
+  /// a live capture).
+  Future<void> _pickFromGallery() async {
+    if (_isScanning) return;
+    setState(() => _isScanning = true);
+    NidScanResult result;
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 100,
+      );
+      if (picked == null) {
+        if (mounted) setState(() => _isScanning = false);
+        return; // cancelled
+      }
+      // Show the picked still with the scan sweep while OCR runs.
+      if (mounted) setState(() => _picked = File(picked.path));
+      result = await _ocr.extractNidFromImage(picked.path);
+    } on Exception catch (e) {
+      debugPrint('EnrollmentOverlay: gallery pick failed: $e');
+      result = const NidScanResult(NidScanStatus.error);
+    }
+    if (!mounted) return;
+    setState(() => _isScanning = false);
+    _onResult(result);
+  }
+
+  /// Shared success handling for camera capture and gallery pick.
+  void _onResult(NidScanResult result) {
     switch (result.status) {
       case NidScanStatus.success:
         setState(() {
           _scanned = result.data;
+          _picked = null;
           _existingPatient = null;
           _overlayState = _OverlayState.postScan;
         });
@@ -185,7 +211,13 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
       case NidScanStatus.error:
       case NidScanStatus.cancelled:
       case NidScanStatus.skipped:
-        break;
+        final hadPicked = _picked != null;
+        setState(() => _picked = null);
+        if (hadPicked) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(EnrollmentStrings.nidCouldNotReadCard)),
+          );
+        }
     }
   }
 
@@ -222,8 +254,9 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                 readingCard: _overlayState == _OverlayState.postScan,
                 cameraController: _cameraReady ? _cameraController : null,
                 cameraUnavailable: _cameraUnavailable,
-                autoScanActive: _cameraReady && _autoScanTimer != null,
+                previewImage: _picked,
                 onCapture: _handleCapture,
+                onPickFromGallery: _pickFromGallery,
                 onCreateHousehold: () {
                   Navigator.of(context).pop();
                   context.push('/household/enrollment/create');
@@ -289,7 +322,20 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   CameraController? _cameraController;
   bool _cameraReady = false;
   bool _cameraUnavailable = false;
-  Timer? _autoScanTimer;
+
+  /// Non-null once a card has been read — drives the editable review step.
+  NidCardData? _scanned;
+
+  /// A picked/captured still shown with the scan sweep while OCR runs.
+  File? _picked;
+
+  /// "✓ <field>" labels revealed one-by-one after a successful read.
+  final List<String> _found = [];
+  final TextEditingController _nameCtrl = TextEditingController();
+
+  /// Selected gender in the review step — one of [EnrollmentStrings.gendersMember]
+  /// first two entries ('Male' / 'Female'), or null until the SK picks.
+  String? _reviewGender;
 
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
@@ -335,9 +381,6 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
-      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
-        if (mounted && !_isScanning && _cameraReady) _handleCapture();
-      });
     } on CameraException catch (e) {
       debugPrint('MemberNidScan: camera init failed: $e');
       if (mounted) setState(() => _cameraUnavailable = true);
@@ -347,8 +390,8 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   @override
   void dispose() {
     debugPrint('[_MemberNidScanOverlayState] dispose');
-    _autoScanTimer?.cancel();
     _cameraController?.dispose();
+    _nameCtrl.dispose();
     _sweepCtrl.dispose();
     super.dispose();
   }
@@ -361,6 +404,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     NidScanResult result;
     try {
       final frame = await controller.takePicture();
+      if (mounted) setState(() => _picked = File(frame.path));
       result = await _ocr.extractNidFromImage(frame.path);
     } on CameraException catch (e) {
       debugPrint('MemberNidScan: takePicture failed: $e');
@@ -368,16 +412,121 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     }
     if (!mounted) return;
     setState(() => _isScanning = false);
+    _onResult(result);
+  }
 
+  /// Picks a card photo from the gallery and OCRs it (offline, same pipeline as
+  /// a live capture) — for SKs who photographed the card earlier or received it
+  /// over a messaging app.
+  Future<void> _pickFromGallery() async {
+    if (_isScanning) return;
+    setState(() => _isScanning = true);
+    NidScanResult result;
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 100,
+      );
+      if (picked == null) {
+        if (mounted) setState(() => _isScanning = false);
+        return; // cancelled
+      }
+      // Show the picked still with the scan sweep while OCR runs.
+      if (mounted) setState(() => _picked = File(picked.path));
+      result = await _ocr.extractNidFromImage(picked.path);
+    } on Exception catch (e) {
+      debugPrint('MemberNidScan: gallery pick failed: $e');
+      result = const NidScanResult(NidScanStatus.error);
+    }
+    if (!mounted) return;
+    setState(() => _isScanning = false);
+    _onResult(result);
+  }
+
+  /// Shared success handling for both camera capture and gallery pick: reveal
+  /// the found fields one-by-one over the preview, then open the editable review.
+  void _onResult(NidScanResult result) {
     switch (result.status) {
       case NidScanStatus.success:
-        if (mounted) Navigator.of(context).pop(result);
+        _reveal(result.data!);
       case NidScanStatus.notFound:
       case NidScanStatus.error:
       case NidScanStatus.cancelled:
       case NidScanStatus.skipped:
-        break;
+        // Clear the preview and tell the SK the read failed (esp. for gallery,
+        // which has no auto-retry). Live camera stays up to try again.
+        final hadPicked = _picked != null;
+        setState(() => _picked = null);
+        if (hadPicked) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(EnrollmentStrings.nidCouldNotReadCard)),
+          );
+        }
     }
+  }
+
+  /// Reveals each found field over the still with the scan sweep, then opens the
+  /// review sheet — so the SK sees what was read instead of an instant jump.
+  Future<void> _reveal(NidCardData data) async {
+    final labels = <String>[
+      if (data.name != null) '${EnrollmentStrings.nidReviewNameLabel}: ${data.name}',
+      if (data.dateOfBirth != null) 'DOB: ${data.dateOfBirth}',
+      if (data.nidNumber != null) 'NID: ${data.nidNumber}',
+      if (data.gender != null) '${EnrollmentStrings.genderLabel}: ${data.gender!.label}',
+    ];
+    setState(() => _found.clear());
+    for (final l in labels) {
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+      if (!mounted) return;
+      setState(() => _found.add(l));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    if (!mounted) return;
+    setState(() {
+      _scanned = data;
+      _picked = null;
+      _found.clear();
+      _nameCtrl.text = data.name ?? '';
+      _reviewGender = data.gender?.label;
+      _cameraController?.dispose();
+      _cameraController = null;
+      _cameraReady = false;
+    });
+  }
+
+  /// Confirms the reviewed fields and pops the (possibly SK-corrected) data.
+  void _confirmReview() {
+    final base = _scanned;
+    if (base == null) return;
+    final name = _nameCtrl.text.trim();
+    final gender = _reviewGender == 'Male'
+        ? NidGender.male
+        : _reviewGender == 'Female'
+            ? NidGender.female
+            : null;
+    Navigator.of(context).pop(
+      NidScanResult(
+        NidScanStatus.success,
+        NidCardData(
+          nidNumber: base.nidNumber,
+          name: name.isEmpty ? null : name,
+          dateOfBirth: base.dateOfBirth,
+          gender: gender,
+        ),
+      ),
+    );
+  }
+
+  /// Returns to the live scanner to try another capture.
+  void _rescan() {
+    setState(() {
+      _scanned = null;
+      _picked = null;
+      _found.clear();
+      _nameCtrl.clear();
+      _reviewGender = null;
+    });
+    _initCamera();
   }
 
   @override
@@ -388,19 +537,281 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
       child: Material(
         color: Colors.black.withValues(alpha: 0.92),
         child: SafeArea(
-          child: _ScannerBody(
-            isScanning: _isScanning,
-            sweep: _sweep,
-            readingCard: false,
-            cameraController: _cameraReady ? _cameraController : null,
-            cameraUnavailable: _cameraUnavailable,
-            autoScanActive: _cameraReady && _autoScanTimer != null,
-            onCapture: _handleCapture,
-            onCreateHousehold: () {},
-            onCancel: () => Navigator.of(context).pop(null),
-            showCreateHousehold: false,
-            onRegisterManually: () => Navigator.of(context)
-                .pop(const NidScanResult(NidScanStatus.skipped)),
+          child: Stack(
+            children: [
+              _ScannerBody(
+                isScanning: _isScanning,
+                sweep: _sweep,
+                readingCard: _scanned != null,
+                cameraController: _cameraReady ? _cameraController : null,
+                cameraUnavailable: _cameraUnavailable,
+                previewImage: _picked,
+                found: _found,
+                onCapture: _handleCapture,
+                onPickFromGallery: _pickFromGallery,
+                onCreateHousehold: () {},
+                onCancel: () => Navigator.of(context).pop(null),
+                showCreateHousehold: false,
+                onRegisterManually: () => Navigator.of(context)
+                    .pop(const NidScanResult(NidScanStatus.skipped)),
+              ),
+              if (_scanned != null)
+                _MemberReviewSheet(
+                  data: _scanned!,
+                  nameController: _nameCtrl,
+                  gender: _reviewGender,
+                  onGenderChanged: (g) => setState(() => _reviewGender = g),
+                  onConfirm: _confirmReview,
+                  onRescan: _rescan,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Member scan review sheet (editable "what we found") ──────────────────────
+
+/// Slide-up sheet shown after a member NID scan: the fields OCR read, made
+/// **editable** so the SK corrects the name (guards against a misread name
+/// landing silently) and picks the gender (which the Latin front rarely
+/// prints). Confirm pops the reviewed data; Rescan returns to the camera.
+class _MemberReviewSheet extends StatelessWidget {
+  const _MemberReviewSheet({
+    required this.data,
+    required this.nameController,
+    required this.gender,
+    required this.onGenderChanged,
+    required this.onConfirm,
+    required this.onRescan,
+  });
+
+  final NidCardData data;
+  final TextEditingController nameController;
+  final String? gender;
+  final ValueChanged<String?> onGenderChanged;
+  final VoidCallback onConfirm;
+  final VoidCallback onRescan;
+
+  @override
+  Widget build(BuildContext context) {
+    final dob = data.dateOfBirth;
+    final nid = data.nidNumber;
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(color: Color(0x2E000000), blurRadius: 32, offset: Offset(0, -8)),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.h5xl,
+          AppSpacing.xxxl,
+          AppSpacing.h5xl,
+          AppSpacing.h8xl,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                EnrollmentStrings.nidReviewTitle,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.navy,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                EnrollmentStrings.nidReviewSubtitle,
+                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 16),
+              // Editable name.
+              Text(
+                EnrollmentStrings.nidReviewNameLabel,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: nameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  hintText: EnrollmentStrings.nidReviewNameHint,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.field),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              // Gender selector.
+              Text(
+                EnrollmentStrings.genderLabel,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  for (final g in const ['Male', 'Female']) ...[
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => onGenderChanged(g),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: gender == g
+                                ? AppColors.navy
+                                : Colors.white,
+                            border: Border.all(
+                              color: gender == g
+                                  ? AppColors.navy
+                                  : AppColors.border,
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(AppRadius.field),
+                          ),
+                          child: Center(
+                            child: Text(
+                              g,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: gender == g
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (g == 'Male') const SizedBox(width: 10),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                EnrollmentStrings.nidReviewGenderHint,
+                style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 14),
+              // Read-only DOB + NID summary.
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.navy, AppColors.navyMid],
+                  ),
+                  borderRadius: BorderRadius.circular(AppRadius.patRow),
+                ),
+                padding: const EdgeInsets.all(AppSpacing.xxxl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _NidField(
+                      label: EnrollmentStrings.nidFieldDobLabel,
+                      value: dob ?? EnrollmentStrings.nidFieldNotReadValue,
+                      dim: dob == null,
+                    ),
+                    const _NidDivider(),
+                    _NidField(
+                      label: EnrollmentStrings.nidFieldNidLabel,
+                      value: nid ?? '—',
+                      emphasise: true,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Confirm.
+              GestureDetector(
+                onTap: onConfirm,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.navy,
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                  child: Center(
+                    child: Text(
+                      EnrollmentStrings.nidReviewConfirm,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Rescan.
+              GestureDetector(
+                onTap: onRescan,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: AppColors.border, width: 1.5),
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                  child: Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.replay, size: 16, color: AppColors.navy),
+                        const SizedBox(width: 6),
+                        Text(
+                          EnrollmentStrings.nidReviewRescan,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.navy,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -420,10 +831,12 @@ class _ScannerBody extends StatelessWidget {
     required this.onCapture,
     required this.onCreateHousehold,
     required this.onCancel,
-    this.autoScanActive = false,
     this.showCreateHousehold = true,
     this.onLinkToExisting,
     this.onRegisterManually,
+    this.onPickFromGallery,
+    this.previewImage,
+    this.found = const [],
   });
 
   final bool isScanning;
@@ -433,8 +846,12 @@ class _ScannerBody extends StatelessWidget {
   /// Live preview controller, or null while initialising / unavailable.
   final CameraController? cameraController;
   final bool cameraUnavailable;
-  /// When true, shows auto-scan status instead of default subtitle.
-  final bool autoScanActive;
+
+  /// A picked still to show (instead of the live camera) while OCR runs.
+  final File? previewImage;
+
+  /// "✓ <field>" labels revealed over the preview as OCR results stream in.
+  final List<String> found;
   final VoidCallback onCapture;
   final VoidCallback onCreateHousehold;
   final VoidCallback onCancel;
@@ -444,6 +861,8 @@ class _ScannerBody extends StatelessWidget {
   final VoidCallback? onLinkToExisting;
   /// Optional: skips NID scan and opens manual registration form.
   final VoidCallback? onRegisterManually;
+  /// Optional: picks a card photo from the gallery instead of the live camera.
+  final VoidCallback? onPickFromGallery;
 
   bool get _canCapture =>
       !isScanning && !readingCard && cameraController != null;
@@ -610,8 +1029,6 @@ class _ScannerBody extends StatelessWidget {
           Text(
             readingCard
                 ? EnrollmentStrings.nidReadingCardDetailsHeadline
-                : autoScanActive
-                ? EnrollmentStrings.nidAutoScanningHeadline
                 : EnrollmentStrings.nidTakePhotoHeadline,
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
             textAlign: TextAlign.center,
@@ -622,8 +1039,6 @@ class _ScannerBody extends StatelessWidget {
                 ? EnrollmentStrings.nidReadingNumberSubtitle
                 : cameraUnavailable
                 ? EnrollmentStrings.cameraUnavailableLabel
-                : autoScanActive
-                ? EnrollmentStrings.autoScanActive
                 : EnrollmentStrings.positionCardSubtitle,
             style: const TextStyle(fontSize: 12, color: AppColors.onDarkLow),
             textAlign: TextAlign.center,
@@ -635,6 +1050,8 @@ class _ScannerBody extends StatelessWidget {
               sweep: sweep,
               cameraController: cameraController,
               cameraUnavailable: cameraUnavailable,
+              previewImage: previewImage,
+              found: found,
             ),
           ),
           const SizedBox(height: 10),
@@ -644,37 +1061,76 @@ class _ScannerBody extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 18),
-          // Capture button
-          GestureDetector(
-            onTap: _canCapture ? onCapture : null,
-            child: Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 4),
-              ),
-              child: Center(
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                    border: Border.all(
-                      color: _canCapture ? AppColors.textPrimary : Colors.grey,
-                      width: 2,
+          // Capture button (centre) + gallery upload (left).
+          SizedBox(
+            width: double.infinity,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                GestureDetector(
+                  onTap: _canCapture ? onCapture : null,
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 4),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          border: Border.all(
+                            color: _canCapture ? AppColors.textPrimary : Colors.grey,
+                            width: 2,
+                          ),
+                        ),
+                        child: (isScanning || readingCard)
+                            ? const Padding(
+                                padding: EdgeInsets.all(AppSpacing.xxxl),
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textPrimary),
+                              )
+                            : const Icon(Icons.camera_alt, color: AppColors.textPrimary, size: 24),
+                      ),
                     ),
                   ),
-                  child: (isScanning || readingCard)
-                      ? const Padding(
-                          padding: EdgeInsets.all(AppSpacing.xxxl),
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textPrimary),
-                        )
-                      : const Icon(Icons.camera_alt, color: AppColors.textPrimary, size: 24),
                 ),
-              ),
+                if (onPickFromGallery != null)
+                  Positioned(
+                    left: 24,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: (isScanning || readingCard) ? null : onPickFromGallery,
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.35),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: const Icon(Icons.photo_library_outlined,
+                                color: Colors.white, size: 22),
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          EnrollmentStrings.nidUploadLabel,
+                          style: const TextStyle(fontSize: 10, color: AppColors.onDarkFaint),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
@@ -730,12 +1186,21 @@ class _Viewfinder extends StatelessWidget {
     required this.sweep,
     required this.cameraController,
     required this.cameraUnavailable,
+    this.previewImage,
+    this.found = const [],
   });
 
   final bool isScanning;
   final Animation<double> sweep;
   final CameraController? cameraController;
   final bool cameraUnavailable;
+
+  /// A picked/captured still shown (instead of the live camera) while OCR runs.
+  final File? previewImage;
+
+  /// Field labels revealed one-by-one over the preview as OCR "finds" them
+  /// (e.g. "Name: Noor Alam") — the scan-reveal affordance.
+  final List<String> found;
 
   static const double _inset = 10;
   static const double _cSize = 28;
@@ -757,20 +1222,23 @@ class _Viewfinder extends StatelessWidget {
               Positioned.fill(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.card),
-                  child: cameraController != null
-                      ? FittedBox(
-                          fit: BoxFit.cover,
-                          clipBehavior: Clip.hardEdge,
-                          child: SizedBox(
-                            width:
-                                cameraController!.value.previewSize?.height ??
-                                w,
-                            height:
-                                cameraController!.value.previewSize?.width ?? h,
-                            child: CameraPreview(cameraController!),
-                          ),
-                        )
-                      : Container(color: Colors.white.withValues(alpha: 0.04)),
+                  child: previewImage != null
+                      ? Image.file(previewImage!, fit: BoxFit.cover)
+                      : cameraController != null
+                          ? FittedBox(
+                              fit: BoxFit.cover,
+                              clipBehavior: Clip.hardEdge,
+                              child: SizedBox(
+                                width:
+                                    cameraController!.value.previewSize?.height ??
+                                    w,
+                                height:
+                                    cameraController!.value.previewSize?.width ??
+                                    h,
+                                child: CameraPreview(cameraController!),
+                              ),
+                            )
+                          : Container(color: Colors.white.withValues(alpha: 0.04)),
                 ),
               ),
               // Inner dashed hint
@@ -810,8 +1278,8 @@ class _Viewfinder extends StatelessWidget {
                 flipH: true,
                 flipV: true,
               ),
-              // Sweep line
-              if (!isScanning)
+              // Sweep line — also runs over a still preview while OCR is busy.
+              if (!isScanning || previewImage != null)
                 AnimatedBuilder(
                   animation: sweep,
                   builder: (context2, value) => Positioned(
@@ -853,6 +1321,20 @@ class _Viewfinder extends StatelessWidget {
                     ],
                   ),
                 ),
+              // "✓ <field>" reveal chips — grow as OCR results stream in.
+              if (found.isNotEmpty)
+                Positioned(
+                  left: 14,
+                  right: 14,
+                  bottom: 14,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final f in found) _FoundChip(f),
+                    ],
+                  ),
+                ),
             ],
           ),
         );
@@ -866,14 +1348,82 @@ class _Viewfinder extends StatelessWidget {
     bool flipH = false,
     bool flipV = false,
   }) {
+    return _CornerBuilder(cSize: _cSize, top: top, left: left, flipH: flipH, flipV: flipV, thick: _cThick);
+  }
+}
+
+/// A single "✓ <field>" pill that fades + slides in when revealed.
+class _FoundChip extends StatelessWidget {
+  const _FoundChip(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(text),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOut,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(offset: Offset(0, (1 - t) * 8), child: child),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_rounded,
+                  color: Color(0xFF34D399), size: 15),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CornerBuilder extends StatelessWidget {
+  const _CornerBuilder({
+    required this.cSize,
+    required this.top,
+    required this.left,
+    required this.flipH,
+    required this.flipV,
+    required this.thick,
+  });
+
+  final double cSize, top, left, thick;
+  final bool flipH, flipV;
+
+  @override
+  Widget build(BuildContext context) {
     return Positioned(
       top: top,
       left: left,
       child: SizedBox(
-        width: _cSize,
-        height: _cSize,
+        width: cSize,
+        height: cSize,
         child: CustomPaint(
-          painter: _CornerPainter(flipH: flipH, flipV: flipV, thick: _cThick),
+          painter: _CornerPainter(flipH: flipH, flipV: flipV, thick: thick),
         ),
       ),
     );

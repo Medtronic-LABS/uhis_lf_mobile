@@ -50,7 +50,9 @@ store_assets/screenshots/
 /dev/integration_tests/**/xcuserdata
 /dev/integration_tests/**/Pods
 /packages/flutter/coverage/
-version
+# Anchored to repo root: a bare `version` also ignored lib/core/version/ (real
+# source), which silently dropped the force-update feature from the repo.
+/version
 analysis_benchmark.json
 
 # packages file containing multi-root paths
