@@ -95,6 +95,7 @@ import 'core/version/app_update_flow.dart';
 import 'core/version/app_version_enforcer.dart';
 import 'core/version/app_version_info.dart';
 import 'core/version/app_version_service.dart';
+import 'features/scribe/audio_sample_sync_service.dart';
 
 
 Future<void> main() async {
@@ -126,6 +127,7 @@ Future<void> main() async {
     }
     throw e!;
   });
+  AudioSampleSyncService.init(db: appDb, api: ScribeApiService(api));
   final authState = AuthState(
     authRepo,
     biometric,
@@ -418,8 +420,11 @@ class _UhisNextAppState extends State<UhisNextApp>
   bool _sdkInitialized = false;
 
   Future<void> _onAuthStateChanged() async {
-    if (_sdkInitialized) return;
     if (widget.authState.status != AuthStatus.signedIn) return;
+    // Refresh server-side feature flags on every sign-in (fresh login or
+    // biometric/PIN restore). Non-fatal — defaults remain if the call fails.
+    unawaited(_userHierarchy.refreshFeatureFlags());
+    if (_sdkInitialized) return;
     _sdkInitialized = true;
     final token = await widget.authRepo.getToken();
     if (token == null || token.isEmpty) {

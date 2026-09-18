@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 47;
+  static const int schemaVersion = 48;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -57,6 +57,7 @@ class AppDatabase {
   static const String tableTreatmentDetails = 'treatment_details';
   static const String tableRxBuddyCheckins = 'rx_buddy_checkins';
   static const String tableHealthFacilities = 'health_facilities';
+  static const String tableAudioSamples = 'audio_samples';
   static const String tableTelemetryEvents = 'telemetry_events';
 
   /// Before/after values of AI-filled fields the SK edited.
@@ -752,7 +753,34 @@ class AppDatabase {
         'CREATE INDEX idx_health_facilities_default '
         'ON $tableHealthFacilities(is_default DESC)');
 
-    // v42 — AI Scribe / counselling telemetry. Deliberately absent from
+    // v42 — training audio sample queue for voice sample collection.
+    await db.execute('''
+      CREATE TABLE $tableAudioSamples (
+        id TEXT PRIMARY KEY,
+        encounter_id TEXT NOT NULL,
+        fhir_encounter_id TEXT,
+        local_file_path TEXT NOT NULL,
+        scribe_mode TEXT NOT NULL DEFAULT 'formPrefill',
+        language TEXT NOT NULL DEFAULT 'bn',
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at INTEGER,
+        created_at INTEGER NOT NULL
+      )''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audio_samples_status '
+      'ON $tableAudioSamples(upload_status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audio_samples_encounter '
+      'ON $tableAudioSamples(encounter_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audio_samples_retry '
+      'ON $tableAudioSamples(next_retry_at)',
+    );
+
+    // v47 — AI Scribe / counselling telemetry. Deliberately absent from
     // [_allTables]: see the comment on that list, and the "why this data is
     // not patient-linked" doc on lib/core/telemetry/telemetry_event.dart.
     await db.execute('''
@@ -2099,6 +2127,35 @@ class AppDatabase {
         );
       }
     }
+    if (from < 48) {
+      // v48 — training audio sample queue for voice sample collection.
+      // Additive; safe on devices arriving from any prior version.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableAudioSamples (
+          id TEXT PRIMARY KEY,
+          encounter_id TEXT NOT NULL,
+          fhir_encounter_id TEXT,
+          local_file_path TEXT NOT NULL,
+          scribe_mode TEXT NOT NULL DEFAULT 'formPrefill',
+          language TEXT NOT NULL DEFAULT 'bn',
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          next_retry_at INTEGER,
+          created_at INTEGER NOT NULL
+        )''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_audio_samples_status '
+        'ON $tableAudioSamples(upload_status)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_audio_samples_encounter '
+        'ON $tableAudioSamples(encounter_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_audio_samples_retry '
+        'ON $tableAudioSamples(next_retry_at)',
+      );
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -2126,7 +2183,7 @@ class AppDatabase {
     tableChatMessages, tableCoachingFaqs,
     tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
     tableTreatmentDetails, tableRxBuddyCheckins,
-    tableHealthFacilities,
+    tableHealthFacilities, tableAudioSamples,
     // PHI, so it is wiped — the opposite of $tableTelemetryEvents above.
     // See the doc on that constant for why the two differ.
     tableAiValueAudit,

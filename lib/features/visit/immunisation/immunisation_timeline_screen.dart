@@ -16,6 +16,8 @@ import '../assessment_repository.dart';
 import '../forms/childhood_visit.dart';
 import '../triage/child_assessment_section.dart';
 import 'child_immunization_dto.dart';
+import 'epi_card_scan_screen.dart';
+import 'epi_card_scanner.dart';
 import 'epi_schedule_engine.dart';
 import 'epi_visit_summary.dart';
 import 'immunisation_repository.dart';
@@ -95,6 +97,10 @@ class _ImmunisationTimelineScreenState
   bool _loading = true;
   String? _error;
   ChildAssessmentData _childAssessmentData = ChildAssessmentData();
+
+  EpiScanResult? _scanResult;
+  bool _scanning = false;
+  String? _scanError;
 
   /// Local `patients.id` after [PatientDao.byAnyId] resolution. Household /
   /// Start Visit often pass server `patient_id` or `members.id`; immunisation
@@ -440,6 +446,26 @@ class _ImmunisationTimelineScreenState
                   ),
                 ],
               ),
+              actions: [
+                if (!_loading && _error == null && _milestones != null)
+                  _scanning
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            ),
+                          ),
+                        )
+                      : IconButton(
+                          tooltip: EpiStrings.scanCardCta,
+                          icon: const Icon(Icons.document_scanner_outlined),
+                          onPressed: _scanWholeCard,
+                        ),
+              ],
             ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -465,8 +491,36 @@ class _ImmunisationTimelineScreenState
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 16),
             children: [
+              // Scan EPI card — inline row so it's reachable in both standalone
+              // (AppBar button) and embedded (visit-flow, no AppBar) contexts.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: _ScanInlineButton(
+                  scanning: _scanning,
+                  onTap: _scanning ? null : _scanWholeCard,
+                ),
+              ),
+
               // Overdue banner
               if (overdueCount > 0) _OverdueBanner(count: overdueCount),
+
+              // Only surface the result banner for vaccines that still need
+              // recording — matched doses already completed are dropped by
+              // _matchedVaccineNames, so an all-completed scan shows nothing.
+              if (_scanResult != null &&
+                  _matchedVaccineNames(milestones).isNotEmpty)
+                _ScanTimelineBanner(
+                  vaccineNames: _matchedVaccineNames(milestones),
+                  datePrefilled: _scanResult!.extractedDate != null,
+                  onReview: () =>
+                      _reviewMatchedMilestones(milestones, patientName),
+                  onDismiss: () => setState(() {
+                    _scanResult = null;
+                    _scanError = null;
+                  }),
+                )
+              else if (_scanError != null)
+                _ScanErrorBanner(message: _scanError!),
 
               // Timeline
               _Timeline(
@@ -654,6 +708,10 @@ class _ImmunisationTimelineScreenState
         if (dobStr != null && dobStr.isNotEmpty) {
           patientDob = DateTime.tryParse(dobStr);
         }
+        // Pre-fill date from card scan if scan matched any vaccine in this milestone.
+        final milestoneCodes = milestone.vaccines.map((v) => v.code).toSet();
+        final scanMatched = _scanResult != null &&
+            _scanResult!.matchedCodes.any(milestoneCodes.contains);
         return _UpdateStatusSheet(
           milestone: milestone,
           patientId: _patientKey,
@@ -666,6 +724,7 @@ class _ImmunisationTimelineScreenState
           householdId: _patient?.householdId,
           householdMemberLocalId: widget.householdMemberLocalId,
           dob: patientDob,
+          prefilledDate: scanMatched ? _scanResult!.extractedDate : null,
           onRecorded: () {
             setState(() => _loading = true);
             _load();
@@ -673,6 +732,79 @@ class _ImmunisationTimelineScreenState
         );
       },
     );
+  }
+
+  /// Friendly display labels for the vaccines the scan matched, in schedule
+  /// order and de-duplicated (a Bengali row label can match every dose of a
+  /// vaccine, so the same milestone's codes collapse to distinct labels).
+  List<String> _matchedVaccineNames(List<VaccineMilestone> milestones) {
+    final result = _scanResult;
+    if (result == null) return const [];
+    final matched = result.matchedCodes.toSet();
+    final names = <String>[];
+    for (final v in milestones.expand((m) => m.vaccines)) {
+      if (!matched.contains(v.code)) continue;
+      // Skip doses already recorded — the scan confirms them but there's
+      // nothing to update; re-listing them reads as "do this again".
+      if (v.status == VaccineStatus.completed) continue;
+      final label = EpiVaccineStrings.display(v.code, v.display);
+      if (!names.contains(label)) names.add(label);
+    }
+    return names;
+  }
+
+  /// Opens the review sheet for each milestone the scan matched, in schedule
+  /// order, one after another — the SK confirms and saves each (dates entered
+  /// manually) without hunting for the rows. Nothing is auto-saved.
+  Future<void> _reviewMatchedMilestones(
+      List<VaccineMilestone> milestones, String patientName) async {
+    final result = _scanResult;
+    if (result == null) return;
+    final matched = result.matchedCodes.toSet();
+    // Only milestones that still have a matched, not-yet-recorded dose — a
+    // fully-completed milestone has nothing to update.
+    final toReview = milestones
+        .where((m) => m.vaccines.any((v) =>
+            matched.contains(v.code) && v.status != VaccineStatus.completed))
+        .toList();
+    for (final milestone in toReview) {
+      if (!mounted) return;
+      await _showUpdateSheet(milestone, patientName);
+    }
+  }
+
+  Future<void> _scanWholeCard() async {
+    final milestones = _milestones;
+    if (milestones == null) return;
+    // Full-screen UPI-style scanner: live camera + in-frame gallery upload;
+    // it shows the captured image with a scan-line sweep while dual-engine OCR
+    // runs on-device, then returns the result.
+    final allCodes =
+        milestones.expand((m) => m.vaccines).map((v) => v.code).toList();
+    final codeLabels = <String, String>{
+      for (final v in milestones.expand((m) => m.vaccines))
+        v.code: EpiVaccineStrings.display(v.code, v.display),
+    };
+    final result = await Navigator.of(context).push<EpiScanResult>(
+      MaterialPageRoute(
+        builder: (_) => EpiCardScanScreen(
+          targetCodes: allCodes,
+          codeLabels: codeLabels,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    if (!result.anyMatched) {
+      setState(() {
+        _scanError = EpiStrings.scanFailed;
+        _scanResult = null;
+      });
+      return;
+    }
+    setState(() {
+      _scanError = null;
+      _scanResult = result;
+    });
   }
 }
 
@@ -1375,6 +1507,7 @@ class _UpdateStatusSheet extends StatefulWidget {
     this.householdId,
     this.householdMemberLocalId,
     this.dob,
+    this.prefilledDate,
   });
 
   final VaccineMilestone milestone;
@@ -1401,6 +1534,11 @@ class _UpdateStatusSheet extends StatefulWidget {
   /// Patient date of birth — used as the earliest selectable date administered.
   final DateTime? dob;
 
+  /// Date pre-filled from an EPI card scan at the timeline level. When set,
+  /// the sheet opens with this date in the Date Administered field and shows
+  /// a small "from card scan" hint so the SK knows why it's pre-populated.
+  final DateTime? prefilledDate;
+
   @override
   State<_UpdateStatusSheet> createState() => _UpdateStatusSheetState();
 }
@@ -1410,7 +1548,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   /// reason) instead of the default vaccinated flow (date + notes).
   bool _referring = false;
 
-  DateTime _givenDate = DateTime.now();
+  late DateTime _givenDate;
   final TextEditingController _notesCtrl = TextEditingController();
 
   final TextEditingController _reasonCtrl = TextEditingController();
@@ -1419,6 +1557,12 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   String? _facilityError;
 
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _givenDate = widget.prefilledDate ?? DateTime.now();
+  }
 
   @override
   void dispose() {
@@ -1697,6 +1841,19 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
                         }
                       },
                     ),
+                    if (widget.prefilledDate != null) ...[
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Text(
+                          EpiStrings.scanDatePrefilled,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: _kGreen,
+                          ),
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 16),
 
@@ -2002,6 +2159,232 @@ class _DateField extends StatelessWidget {
                 size: 18, color: AppColors.textMuted),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── EPI card scan widgets ────────────────────────────────────────────────────
+
+/// Compact inline "Scan EPI card" button shown at the top of the timeline
+/// list in both standalone and embedded (visit-flow) contexts.
+class _ScanInlineButton extends StatelessWidget {
+  const _ScanInlineButton({required this.scanning, this.onTap});
+
+  final bool scanning;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0F4FF),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFBFCCF5), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            if (scanning)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.navy),
+              )
+            else
+              const Icon(Icons.document_scanner_outlined,
+                  size: 18, color: AppColors.navy),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                scanning ? EpiStrings.scanning : EpiStrings.scanCardCta,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: AppColors.navy,
+                ),
+              ),
+            ),
+            if (!scanning)
+              const Icon(Icons.chevron_right_rounded,
+                  size: 16, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dismissible green banner shown at the top of the timeline after a
+/// successful whole-card scan. Tapping × clears the result.
+class _ScanTimelineBanner extends StatelessWidget {
+  const _ScanTimelineBanner({
+    required this.vaccineNames,
+    required this.datePrefilled,
+    required this.onReview,
+    required this.onDismiss,
+  });
+
+  final List<String> vaccineNames;
+  final bool datePrefilled;
+  final VoidCallback onReview;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _kGreen, width: 1),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 1),
+              child: Icon(Icons.check_circle_outline_rounded,
+                  size: 18, color: _kGreen),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    EpiStrings.scanResultBanner(vaccineNames.length),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _kGreen,
+                    ),
+                  ),
+                  if (vaccineNames.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final name in vaccineNames) _VaccineChip(name),
+                      ],
+                    ),
+                  ],
+                  if (datePrefilled)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        EpiStrings.scanDatePrefilled,
+                        style:
+                            const TextStyle(fontSize: 11, color: _kGreen),
+                      ),
+                    ),
+                  if (vaccineNames.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: onReview,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: _kGreen,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          EpiStrings.scanReviewCta,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded,
+                  size: 18, color: _kGreen),
+              onPressed: onDismiss,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact pill naming a single scanned-and-matched vaccine.
+class _VaccineChip extends StatelessWidget {
+  const _VaccineChip(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _kGreen, width: 1),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: _kGreen,
+        ),
+      ),
+    );
+  }
+}
+
+/// Amber warning banner shown when OCR could not match any vaccine or date.
+class _ScanErrorBanner extends StatelessWidget {
+  const _ScanErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(10),
+          bottomRight: Radius.circular(10),
+        ),
+        border: const Border(left: BorderSide(color: _kAmber, width: 3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, size: 16, color: _kAmber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _kAmber,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
