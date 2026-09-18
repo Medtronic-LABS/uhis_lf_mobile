@@ -5236,6 +5236,7 @@ abstract final class EnrollmentStrings {
   static String get nidReviewConfirm => getTranslatedString('Enrollment.nidReviewConfirm', 'Confirm & fill form');
   static String get nidReviewRescan => getTranslatedString('Enrollment.nidReviewRescan', 'Rescan');
   static String get nidUploadLabel => getTranslatedString('Enrollment.nidUploadLabel', 'Upload');
+  static String get nidCouldNotReadCard => getTranslatedString('Enrollment.nidCouldNotReadCard', "Couldn't read the card — try a clearer photo.");
 
   // ── Mobile / ID number validation messages ──────────────────────────────
   static String mobileStartsWithError(String prefix) => getTranslatedString('Enrollment.mobileStartsWithError', 'Phone number should starts with {prefix}', params: {'prefix': prefix}, localizeDigits: false);

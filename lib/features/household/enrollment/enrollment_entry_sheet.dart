@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -69,6 +71,9 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   _OverlayState _overlayState = _OverlayState.scanner;
   bool _isScanning = false;
   NidCardData? _scanned;
+
+  /// A gallery-picked still shown with the scan sweep while OCR runs.
+  File? _picked;
 
   /// Non-null when the scanned NID already belongs to a registered patient.
   Patient? _existingPatient;
@@ -178,6 +183,8 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
         if (mounted) setState(() => _isScanning = false);
         return; // cancelled
       }
+      // Show the picked still with the scan sweep while OCR runs.
+      if (mounted) setState(() => _picked = File(picked.path));
       result = await _ocr.extractNidFromImage(picked.path);
     } on Exception catch (e) {
       debugPrint('EnrollmentOverlay: gallery pick failed: $e');
@@ -194,6 +201,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
       case NidScanStatus.success:
         setState(() {
           _scanned = result.data;
+          _picked = null;
           _existingPatient = null;
           _overlayState = _OverlayState.postScan;
         });
@@ -203,7 +211,13 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
       case NidScanStatus.error:
       case NidScanStatus.cancelled:
       case NidScanStatus.skipped:
-        break;
+        final hadPicked = _picked != null;
+        setState(() => _picked = null);
+        if (hadPicked) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(EnrollmentStrings.nidCouldNotReadCard)),
+          );
+        }
     }
   }
 
@@ -240,6 +254,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                 readingCard: _overlayState == _OverlayState.postScan,
                 cameraController: _cameraReady ? _cameraController : null,
                 cameraUnavailable: _cameraUnavailable,
+                previewImage: _picked,
                 onCapture: _handleCapture,
                 onPickFromGallery: _pickFromGallery,
                 onCreateHousehold: () {
@@ -310,6 +325,9 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
 
   /// Non-null once a card has been read — drives the editable review step.
   NidCardData? _scanned;
+
+  /// A gallery-picked still shown with the scan sweep while OCR runs.
+  File? _picked;
   final TextEditingController _nameCtrl = TextEditingController();
 
   /// Selected gender in the review step — one of [EnrollmentStrings.gendersMember]
@@ -409,6 +427,8 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
         if (mounted) setState(() => _isScanning = false);
         return; // cancelled
       }
+      // Show the picked still with the scan sweep while OCR runs.
+      if (mounted) setState(() => _picked = File(picked.path));
       result = await _ocr.extractNidFromImage(picked.path);
     } on Exception catch (e) {
       debugPrint('MemberNidScan: gallery pick failed: $e');
@@ -427,6 +447,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
         final data = result.data!;
         setState(() {
           _scanned = data;
+          _picked = null;
           _nameCtrl.text = data.name ?? '';
           _reviewGender = data.gender?.label;
           _cameraController?.dispose();
@@ -437,7 +458,15 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
       case NidScanStatus.error:
       case NidScanStatus.cancelled:
       case NidScanStatus.skipped:
-        break;
+        // Clear the preview and tell the SK the read failed (esp. for gallery,
+        // which has no auto-retry). Live camera stays up to try again.
+        final hadPicked = _picked != null;
+        setState(() => _picked = null);
+        if (hadPicked) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(EnrollmentStrings.nidCouldNotReadCard)),
+          );
+        }
     }
   }
 
@@ -468,6 +497,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   void _rescan() {
     setState(() {
       _scanned = null;
+      _picked = null;
       _nameCtrl.clear();
       _reviewGender = null;
     });
@@ -490,6 +520,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
                 readingCard: _scanned != null,
                 cameraController: _cameraReady ? _cameraController : null,
                 cameraUnavailable: _cameraUnavailable,
+                previewImage: _picked,
                 onCapture: _handleCapture,
                 onPickFromGallery: _pickFromGallery,
                 onCreateHousehold: () {},
@@ -778,6 +809,7 @@ class _ScannerBody extends StatelessWidget {
     this.onLinkToExisting,
     this.onRegisterManually,
     this.onPickFromGallery,
+    this.previewImage,
   });
 
   final bool isScanning;
@@ -787,6 +819,9 @@ class _ScannerBody extends StatelessWidget {
   /// Live preview controller, or null while initialising / unavailable.
   final CameraController? cameraController;
   final bool cameraUnavailable;
+
+  /// A picked still to show (instead of the live camera) while OCR runs.
+  final File? previewImage;
   final VoidCallback onCapture;
   final VoidCallback onCreateHousehold;
   final VoidCallback onCancel;
@@ -985,6 +1020,7 @@ class _ScannerBody extends StatelessWidget {
               sweep: sweep,
               cameraController: cameraController,
               cameraUnavailable: cameraUnavailable,
+              previewImage: previewImage,
             ),
           ),
           const SizedBox(height: 10),
@@ -1119,12 +1155,16 @@ class _Viewfinder extends StatelessWidget {
     required this.sweep,
     required this.cameraController,
     required this.cameraUnavailable,
+    this.previewImage,
   });
 
   final bool isScanning;
   final Animation<double> sweep;
   final CameraController? cameraController;
   final bool cameraUnavailable;
+
+  /// A picked/captured still shown (instead of the live camera) while OCR runs.
+  final File? previewImage;
 
   static const double _inset = 10;
   static const double _cSize = 28;
@@ -1146,20 +1186,23 @@ class _Viewfinder extends StatelessWidget {
               Positioned.fill(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.card),
-                  child: cameraController != null
-                      ? FittedBox(
-                          fit: BoxFit.cover,
-                          clipBehavior: Clip.hardEdge,
-                          child: SizedBox(
-                            width:
-                                cameraController!.value.previewSize?.height ??
-                                w,
-                            height:
-                                cameraController!.value.previewSize?.width ?? h,
-                            child: CameraPreview(cameraController!),
-                          ),
-                        )
-                      : Container(color: Colors.white.withValues(alpha: 0.04)),
+                  child: previewImage != null
+                      ? Image.file(previewImage!, fit: BoxFit.cover)
+                      : cameraController != null
+                          ? FittedBox(
+                              fit: BoxFit.cover,
+                              clipBehavior: Clip.hardEdge,
+                              child: SizedBox(
+                                width:
+                                    cameraController!.value.previewSize?.height ??
+                                    w,
+                                height:
+                                    cameraController!.value.previewSize?.width ??
+                                    h,
+                                child: CameraPreview(cameraController!),
+                              ),
+                            )
+                          : Container(color: Colors.white.withValues(alpha: 0.04)),
                 ),
               ),
               // Inner dashed hint
@@ -1199,8 +1242,8 @@ class _Viewfinder extends StatelessWidget {
                 flipH: true,
                 flipV: true,
               ),
-              // Sweep line
-              if (!isScanning)
+              // Sweep line — also runs over a still preview while OCR is busy.
+              if (!isScanning || previewImage != null)
                 AnimatedBuilder(
                   animation: sweep,
                   builder: (context2, value) => Positioned(
