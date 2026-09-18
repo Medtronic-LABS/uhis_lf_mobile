@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
@@ -7,6 +9,9 @@ import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/widgets/gestational_age_card.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/telemetry/telemetry_service.dart';
+import '../../../core/telemetry/visit_content_service.dart';
+import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/i18n/app_locale.dart';
@@ -152,6 +157,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// Weight (kg) from the patient's most-recent prior visit across ALL
   /// programme types — used for the weight-delta badge.  `null` until loaded.
   double? _lastRecordedWeight;
+
+  /// Live ASR controller owned by [AiScribeBanner] — read at submit for
+  /// visit-content telemetry.
+  RealtimeAsrController? _liveAsrCtrl;
 
   // One GlobalKey per section — used to scroll to the first error section
   // on submit so the SK doesn't have to hunt for the highlighted field.
@@ -410,6 +419,21 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           enrolledFormTypes: widget.enrolledFormTypes,
           ageInMonths: widget.ageInMonths,
         );
+        // Hand the notifier what the SK can actually see, for the telemetry
+        // report's capture-rate denominators. Pushed here rather than at the
+        // AiScribeBanner call site below, which sits behind a scribeEnabled
+        // guard — a manual visit needs these numbers too. Plain assignment,
+        // no listener notification, so calling it from build is safe.
+        notifier.setRenderedFieldStats(
+          visibleFieldIds: _visibleFieldIds(annotated, notifier),
+          renderedTotal: annotated.fold<int>(
+              0, (sum, a) => sum + a.section.fieldRefs.length),
+          renderedFormTypes: {
+            for (final a in annotated)
+              if (a.section.formType.isNotEmpty) a.section.formType,
+          },
+        );
+
         final outcomeValue = notifier.data.getValue('deliveryOutcomeType');
         if (widget.activeFormTypes.contains('pregnancyOutcome')) {
           debugPrint('[DeliveryOutcome] rebuild sections=${annotated.length} '
@@ -501,7 +525,17 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         }
 
         String? lastFormType;
+        var vitalsDividerShown = false;
         for (final annotatedSection in annotated) {
+          if (annotatedSection.group == SectionGroup.vitals &&
+              !vitalsDividerShown) {
+            vitalsDividerShown = true;
+            items.add(_ProgrammeDivider(
+              label: UnifiedFormStrings.programmeBadgeLabel('commonVitals') ??
+                  'Vitals',
+              formType: 'commonVitals',
+            ));
+          }
           final ft = annotatedSection.section.formType;
           final isNew = ft.isNotEmpty &&
               annotatedSection.group != SectionGroup.vitals &&
@@ -583,6 +617,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
                       widget.activeFormTypes),
                   visibleFieldIds: _visibleFieldIds(annotated, notifier),
+                  onScribeSpan: (startedAtMs, endedAtMs) =>
+                      notifier.markScribeSpan(
+                    startedAtMs: startedAtMs,
+                    endedAtMs: endedAtMs,
+                  ),
                   onFormFill: (fill) {
                     final rejected = notifier.applyAiPrefill(
                       fill.fields.where((f) => f.value != null).toList(),
@@ -593,6 +632,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                           '[Step2ASR] rejected: ${rejected.join(' | ')}');
                     }
                   },
+                  onLiveControllerReady: (ctrl) => _liveAsrCtrl = ctrl,
                   // VisitFormScreen watches ScribeController state and
                   // auto-opens the SOAP review sheet when reviewReady — no
                   // action needed here.
@@ -697,7 +737,27 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       // codes during submit — the mapper needs the field library to do that.
       notifier.formConfig = _config!;
       notifier.fieldDefs = _config!.fields;
+      final encounterId = notifier.encounterId;
+      final patientId = notifier.patientId;
+      final visitContent = AppConfig.visitContentTelemetryEnabled
+          ? ctx.read<VisitContentService>()
+          : null;
       await notifier.submit();
+      if (visitContent != null) {
+        // Flush the live ASR session before reading the transcript — submit
+        // can fire while recording is still active, and dispose() stop() runs
+        // too late (after navigation) to capture the final segments.
+        final liveCtrl = _liveAsrCtrl;
+        if (liveCtrl != null && liveCtrl.isActive) {
+          await liveCtrl.stop();
+        }
+        final transcript = _liveAsrCtrl?.fullTranscript;
+        await visitContent.recordTranscript(
+          visitUuid: ctx.read<TelemetryService>().ensureVisitUuid(encounterId),
+          patientId: patientId,
+          transcript: transcript,
+        );
+      }
       widget.onSubmitComplete();
     } catch (e) {
       _logSubmitBlocked(

@@ -47,13 +47,24 @@ class AnnotatedFormSection {
 abstract final class UnifiedSectionRules {
   UnifiedSectionRules._();
 
-  /// Section IDs whose sections are pinned to the top as the "Vitals" group.
-  ///
-  /// Empty: each programme now owns its own vitals sections (ncdBiometrics,
-  /// ancSpecificVitals, maternalHealthAssessment, iccmVitals, etc.) and
-  /// commonVitals is no longer injected as a shared pre-section. All sections
-  /// are rendered under their programme group header instead.
-  static const _vitalsSectionIds = <String>{};
+  /// Programmes that share height/weight/BP/BG when two or more appear on one
+  /// visit. A synthetic [commonVitals] section is injected at the top instead
+  /// of rendering those fields under each programme header.
+  static const Set<String> _vitalsSharingFormTypes = {
+    'anc',
+    'ncd',
+    'pncMother',
+    'cataract',
+  };
+
+  /// Flat BP field ids (ANC/PNC pair card and commonVitals layout).
+  static const Set<String> _sharedBpFlatFieldIds = {
+    'systolic',
+    'diastolic',
+    'pulse',
+    'bloodPressure',
+    'bpLogDetails',
+  };
 
   /// Semantic field equivalence groups (cross-programme).
   ///
@@ -61,8 +72,9 @@ abstract final class UnifiedSectionRules {
   /// that two programmes that represent the same measurement with different
   /// field IDs do not both render a capture widget.
   ///
-  /// BP and BG are intentionally allowed in every programme that lists them:
-  /// ANC and NCD each keep their own widgets in multi-programme visits.
+  /// Cross-programme dedup for supplements and pulse. Shared vitals (height,
+  /// weight, BMI, BP, BG) are handled by [_buildCombinedCommonVitalsSection]
+  /// on combined visits instead of these groups.
   static const List<Set<String>> _semanticFieldGroups = [
     // Height / weight / BMI are intentionally NOT cross-claimed: Android NCD
     // shows its own Biometric card even when ANC/PNC also capture them.
@@ -146,6 +158,145 @@ abstract final class UnifiedSectionRules {
     }
   }
 
+  static bool _isCombinedVitalsVisit(List<String> activeFormTypes) {
+    final count =
+        activeFormTypes.where(_vitalsSharingFormTypes.contains).length;
+    return count >= 2;
+  }
+
+  /// Pre-claim a shared vital and its cross-programme aliases.
+  static void _claimSharedVitalGlobally(String fieldId, Set<String> claimed) {
+    if (_biometricFieldIds.contains(fieldId)) {
+      claimed.addAll(_biometricFieldIds);
+      return;
+    }
+    if (_bloodGlucoseFieldIds.contains(fieldId)) {
+      claimed.addAll(_bloodGlucoseFieldIds);
+      return;
+    }
+    if (_sharedBpFlatFieldIds.contains(fieldId)) {
+      claimed.addAll(_sharedBpFlatFieldIds);
+      return;
+    }
+    claimed.add(fieldId);
+  }
+
+  static FieldRef? _resolveFieldRef(
+    FormConfig config, {
+    required String fieldId,
+    String? preferFormType,
+    String? preferSectionId,
+  }) {
+    if (preferFormType != null) {
+      for (final section in config.forms[preferFormType] ?? []) {
+        if (preferSectionId != null && section.sectionId != preferSectionId) {
+          continue;
+        }
+        for (final ref in section.fieldRefs) {
+          if (ref.id == fieldId) return ref;
+        }
+      }
+    }
+    for (final sections in config.forms.values) {
+      for (final section in sections) {
+        for (final ref in section.fieldRefs) {
+          if (ref.id == fieldId) return ref;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Shared vitals block for multi-programme visits (ANC+NCD, NCD+PNC, etc.).
+  static AnnotatedFormSection? _buildCombinedCommonVitalsSection({
+    required FormConfig config,
+    required List<String> activeFormTypes,
+    required Set<String> claimedFieldIds,
+  }) {
+    if (!_isCombinedVitalsVisit(activeFormTypes)) return null;
+
+    final refs = <FieldRef>[];
+
+    for (final id in ['height', 'weight', 'bmi']) {
+      final ref = _resolveFieldRef(
+        config,
+        fieldId: id,
+        preferFormType: 'commonVitals',
+      );
+      if (ref != null && !refs.any((r) => r.id == id)) {
+        refs.add(ref);
+      }
+    }
+    if (refs.any((r) => _biometricFieldIds.contains(r.id))) {
+      _claimSharedVitalGlobally('height', claimedFieldIds);
+    }
+
+    void addField(
+      String fieldId, {
+      String? preferFormType,
+      String? preferSectionId,
+    }) {
+      if (refs.any((r) => r.id == fieldId)) return;
+      final ref = _resolveFieldRef(
+        config,
+        fieldId: fieldId,
+        preferFormType: preferFormType,
+        preferSectionId: preferSectionId,
+      );
+      if (ref == null) return;
+      refs.add(ref);
+      _claimSharedVitalGlobally(fieldId, claimedFieldIds);
+    }
+
+    final hasNcd = activeFormTypes.contains('ncd');
+    if (hasNcd) {
+      addField('bpLogDetails', preferFormType: 'ncd', preferSectionId: 'bpLog');
+    } else {
+      for (final id in ['bloodPressure', 'systolic', 'diastolic']) {
+        addField(id, preferFormType: 'commonVitals');
+      }
+      if (activeFormTypes.contains('anc')) {
+        addField(
+          'pulse',
+          preferFormType: 'anc',
+          preferSectionId: 'ancSpecificVitals',
+        );
+      } else if (activeFormTypes.contains('pncMother')) {
+        addField(
+          'pulse',
+          preferFormType: 'pncMother',
+          preferSectionId: 'maternalHealthAssessment',
+        );
+      }
+    }
+
+    final hasAncOrPnc = activeFormTypes.contains('anc') ||
+        activeFormTypes.contains('pncMother');
+    if (hasNcd && hasAncOrPnc) {
+      addField('glucoseType', preferFormType: 'ncd', preferSectionId: 'glucoseLog');
+    }
+
+    if (refs.isEmpty) return null;
+
+    FormSection? template;
+    for (final s in config.forms['commonVitals'] ?? const <FormSection>[]) {
+      if (s.sectionId == 'commonVitals') {
+        template = s;
+        break;
+      }
+    }
+
+    return AnnotatedFormSection(
+      section: FormSection(
+        sectionId: 'commonVitals',
+        title: template?.title ?? 'Vitals',
+        formType: 'commonVitals',
+        fieldRefs: refs,
+      ),
+      group: SectionGroup.vitals,
+    );
+  }
+
   /// Within one formType: claim BG field + aliases so BloodGlucoseEntry and
   /// bare `glucose` never both render in the same programme section.
   static void _claimBloodGlucoseLocal(String fieldId, Set<String> localClaimed) {
@@ -180,40 +331,19 @@ abstract final class UnifiedSectionRules {
     final vitalsSections = <AnnotatedFormSection>[];
     final enrolledSections = <AnnotatedFormSection>[];
     final recommendedSections = <AnnotatedFormSection>[];
+    final combinedVitals = _isCombinedVitalsVisit(activeFormTypes);
 
-    // ── Pass 1: vitals sections (pinned first, claimed first) ──────────────
-    for (final formType in activeFormTypes) {
-      for (final section in config.forms[formType] ?? []) {
-        if (!_vitalsSectionIds.contains(section.sectionId)) { continue; }
-        if (!_isSectionVisible(
-          section: section,
-          activeFormTypes: activeFormTypes,
-          enrolledFormTypes: enrolledFormTypes,
-          currentData: currentData,
-          gestationalWeeks: gestationalWeeks,
-          ageInMonths: ageInMonths,
-        )) { continue; }
-
-        final remaining =
-            section.fieldRefs.where((r) => !claimedFieldIds.contains(r.id)).toList();
-        if (remaining.isEmpty) { continue; }
-        for (final ref in remaining) { _claimField(ref.id, claimedFieldIds); }
-
-        vitalsSections.add(AnnotatedFormSection(
-          section: remaining.length == section.fieldRefs.length
-              ? section
-              : FormSection(
-                  sectionId: section.sectionId,
-                  title: section.title,
-                  formType: section.formType,
-                  fieldRefs: remaining,
-                ),
-          group: SectionGroup.vitals,
-        ));
-      }
+    // ── Pass 1: shared common vitals (combined visits only) ────────────────
+    final commonVitals = _buildCombinedCommonVitalsSection(
+      config: config,
+      activeFormTypes: activeFormTypes,
+      claimedFieldIds: claimedFieldIds,
+    );
+    if (commonVitals != null) {
+      vitalsSections.add(commonVitals);
     }
 
-    // ── Pass 2: non-vitals sections ─────────────────────────────────────────
+    // ── Pass 2: programme sections ──────────────────────────────────────────
     //
     // Delivery visit (pregnancyOutcome active): outcome sections come FIRST
     // (Android: document birth before mother/child PNC), then enrolled PNC,
@@ -230,7 +360,6 @@ abstract final class UnifiedSectionRules {
       // ANC and NCD, while still collapsing aliases inside one programme.
       final localClaimed = <String>{};
       for (final section in config.forms[formType] ?? []) {
-        if (_vitalsSectionIds.contains(section.sectionId)) continue;
         if (!_isSectionVisible(
           section: section,
           activeFormTypes: activeFormTypes,
@@ -243,13 +372,14 @@ abstract final class UnifiedSectionRules {
         }
 
         // Claim while filtering so glucoseType collapses bare `glucose`
-        // in the same section before it is kept in [remaining]. Height /
-        // weight / BMI are also per-formType so NCD biometrics survive ANC.
+        // in the same section before it is kept in [remaining]. On combined
+        // vitals visits shared measurements were pre-claimed in pass 1.
         final remaining = <FieldRef>[];
         for (final r in section.fieldRefs) {
           if (localClaimed.contains(r.id)) continue;
-          final perFormType = _bloodGlucoseFieldIds.contains(r.id) ||
-              _biometricFieldIds.contains(r.id);
+          final perFormType = !combinedVitals &&
+              (_bloodGlucoseFieldIds.contains(r.id) ||
+                  _biometricFieldIds.contains(r.id));
           if (!perFormType && claimedFieldIds.contains(r.id)) {
             continue;
           }
@@ -657,8 +787,23 @@ abstract final class FieldVisibilityRules {
     // recorded height, keep the weight-only pair shell (value stays in data).
     if (field.id == 'height' &&
         priorHeightLocked &&
-        _adultHeightHideOnPriorFormTypes.contains(formType)) {
+        (_adultHeightHideOnPriorFormTypes.contains(formType) ||
+            formType == 'commonVitals')) {
       return false;
+    }
+
+    // Shared vitals block inherits ANC visit/GA gates when height/BMI render
+    // there on combined ANC visits.
+    if (formType == 'commonVitals') {
+      if (field.id == 'height' || field.id == 'bmi') {
+        final ancGate = _ancConditionalVisibility(
+          fieldId: field.id,
+          data: data,
+          gestationalWeeks: gestationalWeeks,
+          ancVisitNumber: ancVisitNumber,
+        );
+        if (ancGate != null) return ancGate;
+      }
     }
 
     final rules = rulesByTargetId[field.id];
@@ -707,6 +852,7 @@ abstract final class FieldVisibilityRules {
     'ncd',
     'cataract',
     'anc',
+    'commonVitals',
   };
 
   /// Android `AssessmentRMNCHFragment.managePncFormBasedOnPregnancyDetail`

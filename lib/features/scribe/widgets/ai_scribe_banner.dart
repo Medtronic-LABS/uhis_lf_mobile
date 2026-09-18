@@ -54,9 +54,11 @@ class AiScribeBanner extends StatefulWidget {
     this.tapStartsLiveAsr = false,
     this.assessmentType,
     this.onFormFill,
+    this.onScribeSpan,
     this.symptomVocab,
     this.onLiveSymptomCodes,
     this.visibleFieldIds,
+    this.onLiveControllerReady,
   });
 
   final String encounterId;
@@ -87,6 +89,16 @@ class AiScribeBanner extends StatefulWidget {
   /// when [assessmentType] is set).
   final void Function(FormPrefillResult fill)? onFormFill;
 
+  /// Wall-clock bounds of a scribe session that just filled the form, epoch
+  /// ms, either end nullable.
+  ///
+  /// This widget is the only place that knows whether the batch recorder or
+  /// the live listener produced a fill — it owns one and reads the other — so
+  /// the span is reported from here rather than inferred by the caller. The
+  /// receiver is expected to widen a stored span rather than replace it, so
+  /// reporting both paths is safe when a visit used both.
+  final void Function(int? startedAtMs, int? endedAtMs)? onScribeSpan;
+
   /// Client-authoritative symptom vocabulary for the generic scribe path —
   /// when set (and [assessmentType] is null), live extractions come back as
   /// coded [RealtimeSymptomCodes] (real per-code confidence, no keyword
@@ -105,6 +117,10 @@ class AiScribeBanner extends StatefulWidget {
   /// field cannot be auto-filled while the SK has no way to see or confirm
   /// it. Pass null to offer the programme's full field set.
   final Set<String>? visibleFieldIds;
+
+  /// Called once after the live ASR controller is created — lets the parent
+  /// read [RealtimeAsrController.fullTranscript] at submit time.
+  final void Function(RealtimeAsrController controller)? onLiveControllerReady;
 
   @override
   State<AiScribeBanner> createState() => _AiScribeBannerState();
@@ -140,6 +156,12 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     _liveCtrl.setSampleDao(AudioSampleDao(context.read<AppDatabase>()));
     _liveCtrl.addListener(_onLiveChanged);
     _applyFormSchema();
+    final ready = widget.onLiveControllerReady;
+    if (ready != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ready(_liveCtrl);
+      });
+    }
   }
 
   @override
@@ -232,6 +254,14 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     if (fill != null && !identical(fill, _lastAppliedFormFill)) {
       _lastAppliedFormFill = fill;
       try {
+        // Before the fill, so a listener that reads the span while handling
+        // the fill already has it.
+        widget.onScribeSpan
+            ?.call(_liveCtrl.startedAtMs, _liveCtrl.endedAtMs);
+        final batch = _scribe?.session;
+        if (batch != null) {
+          widget.onScribeSpan?.call(batch.startedAtMs, batch.endedAtMs);
+        }
         widget.onFormFill?.call(fill);
       } catch (e, st) {
         // Surface loudly — a silent failure here means extracted values

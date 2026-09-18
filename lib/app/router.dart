@@ -23,6 +23,8 @@ import '../features/pin/pin_unlock_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
 import '../features/sync/offline_sync_screen.dart';
 import '../features/counselling/counselling_screen.dart';
+import '../core/config/app_config.dart';
+import '../features/debug/telemetry_viewer_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/assistant/assistant_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
@@ -520,6 +522,12 @@ GoRouter buildRouter(AuthState auth) {
           path: '/dev/form-gallery',
           name: 'form-gallery',
           builder: (_, _) => Scaffold(body: Center(child: Text(CommonStrings.comingSoon))),
+        ),
+      if (kDebugMode || AppConfig.telemetryScreenEnabled)
+        GoRoute(
+          path: '/dev/telemetry',
+          name: 'telemetry-report',
+          builder: (_, _) => const TelemetryViewerScreen(),
         ),
     ],
   );
