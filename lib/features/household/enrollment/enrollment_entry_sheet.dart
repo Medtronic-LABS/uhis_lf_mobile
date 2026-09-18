@@ -291,6 +291,14 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   bool _cameraUnavailable = false;
   Timer? _autoScanTimer;
 
+  /// Non-null once a card has been read — drives the editable review step.
+  NidCardData? _scanned;
+  final TextEditingController _nameCtrl = TextEditingController();
+
+  /// Selected gender in the review step — one of [EnrollmentStrings.gendersMember]
+  /// first two entries ('Male' / 'Female'), or null until the SK picks.
+  String? _reviewGender;
+
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
 
@@ -349,6 +357,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     debugPrint('[_MemberNidScanOverlayState] dispose');
     _autoScanTimer?.cancel();
     _cameraController?.dispose();
+    _nameCtrl.dispose();
     _sweepCtrl.dispose();
     super.dispose();
   }
@@ -371,13 +380,57 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
 
     switch (result.status) {
       case NidScanStatus.success:
-        if (mounted) Navigator.of(context).pop(result);
+        // Enter the editable review step instead of applying OCR blindly.
+        _autoScanTimer?.cancel();
+        _autoScanTimer = null;
+        final data = result.data!;
+        setState(() {
+          _scanned = data;
+          _nameCtrl.text = data.name ?? '';
+          _reviewGender = data.gender?.label;
+          _cameraController?.dispose();
+          _cameraController = null;
+          _cameraReady = false;
+        });
       case NidScanStatus.notFound:
       case NidScanStatus.error:
       case NidScanStatus.cancelled:
       case NidScanStatus.skipped:
         break;
     }
+  }
+
+  /// Confirms the reviewed fields and pops the (possibly SK-corrected) data.
+  void _confirmReview() {
+    final base = _scanned;
+    if (base == null) return;
+    final name = _nameCtrl.text.trim();
+    final gender = _reviewGender == 'Male'
+        ? NidGender.male
+        : _reviewGender == 'Female'
+            ? NidGender.female
+            : null;
+    Navigator.of(context).pop(
+      NidScanResult(
+        NidScanStatus.success,
+        NidCardData(
+          nidNumber: base.nidNumber,
+          name: name.isEmpty ? null : name,
+          dateOfBirth: base.dateOfBirth,
+          gender: gender,
+        ),
+      ),
+    );
+  }
+
+  /// Returns to the live scanner to try another capture.
+  void _rescan() {
+    setState(() {
+      _scanned = null;
+      _nameCtrl.clear();
+      _reviewGender = null;
+    });
+    _initCamera();
   }
 
   @override
@@ -388,19 +441,279 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
       child: Material(
         color: Colors.black.withValues(alpha: 0.92),
         child: SafeArea(
-          child: _ScannerBody(
-            isScanning: _isScanning,
-            sweep: _sweep,
-            readingCard: false,
-            cameraController: _cameraReady ? _cameraController : null,
-            cameraUnavailable: _cameraUnavailable,
-            autoScanActive: _cameraReady && _autoScanTimer != null,
-            onCapture: _handleCapture,
-            onCreateHousehold: () {},
-            onCancel: () => Navigator.of(context).pop(null),
-            showCreateHousehold: false,
-            onRegisterManually: () => Navigator.of(context)
-                .pop(const NidScanResult(NidScanStatus.skipped)),
+          child: Stack(
+            children: [
+              _ScannerBody(
+                isScanning: _isScanning,
+                sweep: _sweep,
+                readingCard: _scanned != null,
+                cameraController: _cameraReady ? _cameraController : null,
+                cameraUnavailable: _cameraUnavailable,
+                autoScanActive: _cameraReady && _autoScanTimer != null,
+                onCapture: _handleCapture,
+                onCreateHousehold: () {},
+                onCancel: () => Navigator.of(context).pop(null),
+                showCreateHousehold: false,
+                onRegisterManually: () => Navigator.of(context)
+                    .pop(const NidScanResult(NidScanStatus.skipped)),
+              ),
+              if (_scanned != null)
+                _MemberReviewSheet(
+                  data: _scanned!,
+                  nameController: _nameCtrl,
+                  gender: _reviewGender,
+                  onGenderChanged: (g) => setState(() => _reviewGender = g),
+                  onConfirm: _confirmReview,
+                  onRescan: _rescan,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Member scan review sheet (editable "what we found") ──────────────────────
+
+/// Slide-up sheet shown after a member NID scan: the fields OCR read, made
+/// **editable** so the SK corrects the name (guards against a misread name
+/// landing silently) and picks the gender (which the Latin front rarely
+/// prints). Confirm pops the reviewed data; Rescan returns to the camera.
+class _MemberReviewSheet extends StatelessWidget {
+  const _MemberReviewSheet({
+    required this.data,
+    required this.nameController,
+    required this.gender,
+    required this.onGenderChanged,
+    required this.onConfirm,
+    required this.onRescan,
+  });
+
+  final NidCardData data;
+  final TextEditingController nameController;
+  final String? gender;
+  final ValueChanged<String?> onGenderChanged;
+  final VoidCallback onConfirm;
+  final VoidCallback onRescan;
+
+  @override
+  Widget build(BuildContext context) {
+    final dob = data.dateOfBirth;
+    final nid = data.nidNumber;
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(color: Color(0x2E000000), blurRadius: 32, offset: Offset(0, -8)),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.h5xl,
+          AppSpacing.xxxl,
+          AppSpacing.h5xl,
+          AppSpacing.h8xl,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                EnrollmentStrings.nidReviewTitle,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.navy,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                EnrollmentStrings.nidReviewSubtitle,
+                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 16),
+              // Editable name.
+              Text(
+                EnrollmentStrings.nidReviewNameLabel,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: nameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  hintText: EnrollmentStrings.nidReviewNameHint,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.field),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              // Gender selector.
+              Text(
+                EnrollmentStrings.genderLabel,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  for (final g in const ['Male', 'Female']) ...[
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => onGenderChanged(g),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: gender == g
+                                ? AppColors.navy
+                                : Colors.white,
+                            border: Border.all(
+                              color: gender == g
+                                  ? AppColors.navy
+                                  : AppColors.border,
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(AppRadius.field),
+                          ),
+                          child: Center(
+                            child: Text(
+                              g,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: gender == g
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (g == 'Male') const SizedBox(width: 10),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                EnrollmentStrings.nidReviewGenderHint,
+                style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 14),
+              // Read-only DOB + NID summary.
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.navy, AppColors.navyMid],
+                  ),
+                  borderRadius: BorderRadius.circular(AppRadius.patRow),
+                ),
+                padding: const EdgeInsets.all(AppSpacing.xxxl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _NidField(
+                      label: EnrollmentStrings.nidFieldDobLabel,
+                      value: dob ?? EnrollmentStrings.nidFieldNotReadValue,
+                      dim: dob == null,
+                    ),
+                    const _NidDivider(),
+                    _NidField(
+                      label: EnrollmentStrings.nidFieldNidLabel,
+                      value: nid ?? '—',
+                      emphasise: true,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Confirm.
+              GestureDetector(
+                onTap: onConfirm,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.navy,
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                  child: Center(
+                    child: Text(
+                      EnrollmentStrings.nidReviewConfirm,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Rescan.
+              GestureDetector(
+                onTap: onRescan,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: AppColors.border, width: 1.5),
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                  child: Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.replay, size: 16, color: AppColors.navy),
+                        const SizedBox(width: 6),
+                        Text(
+                          EnrollmentStrings.nidReviewRescan,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.navy,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
