@@ -326,8 +326,11 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   /// Non-null once a card has been read — drives the editable review step.
   NidCardData? _scanned;
 
-  /// A gallery-picked still shown with the scan sweep while OCR runs.
+  /// A picked/captured still shown with the scan sweep while OCR runs.
   File? _picked;
+
+  /// "✓ <field>" labels revealed one-by-one after a successful read.
+  final List<String> _found = [];
   final TextEditingController _nameCtrl = TextEditingController();
 
   /// Selected gender in the review step — one of [EnrollmentStrings.gendersMember]
@@ -401,6 +404,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     NidScanResult result;
     try {
       final frame = await controller.takePicture();
+      if (mounted) setState(() => _picked = File(frame.path));
       result = await _ocr.extractNidFromImage(frame.path);
     } on CameraException catch (e) {
       debugPrint('MemberNidScan: takePicture failed: $e');
@@ -439,21 +443,12 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     _onResult(result);
   }
 
-  /// Shared success handling for both camera capture and gallery pick: enter the
-  /// editable review step instead of applying OCR blindly.
+  /// Shared success handling for both camera capture and gallery pick: reveal
+  /// the found fields one-by-one over the preview, then open the editable review.
   void _onResult(NidScanResult result) {
     switch (result.status) {
       case NidScanStatus.success:
-        final data = result.data!;
-        setState(() {
-          _scanned = data;
-          _picked = null;
-          _nameCtrl.text = data.name ?? '';
-          _reviewGender = data.gender?.label;
-          _cameraController?.dispose();
-          _cameraController = null;
-          _cameraReady = false;
-        });
+        _reveal(result.data!);
       case NidScanStatus.notFound:
       case NidScanStatus.error:
       case NidScanStatus.cancelled:
@@ -468,6 +463,35 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
           );
         }
     }
+  }
+
+  /// Reveals each found field over the still with the scan sweep, then opens the
+  /// review sheet — so the SK sees what was read instead of an instant jump.
+  Future<void> _reveal(NidCardData data) async {
+    final labels = <String>[
+      if (data.name != null) '${EnrollmentStrings.nidReviewNameLabel}: ${data.name}',
+      if (data.dateOfBirth != null) 'DOB: ${data.dateOfBirth}',
+      if (data.nidNumber != null) 'NID: ${data.nidNumber}',
+      if (data.gender != null) '${EnrollmentStrings.genderLabel}: ${data.gender!.label}',
+    ];
+    setState(() => _found.clear());
+    for (final l in labels) {
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+      if (!mounted) return;
+      setState(() => _found.add(l));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    if (!mounted) return;
+    setState(() {
+      _scanned = data;
+      _picked = null;
+      _found.clear();
+      _nameCtrl.text = data.name ?? '';
+      _reviewGender = data.gender?.label;
+      _cameraController?.dispose();
+      _cameraController = null;
+      _cameraReady = false;
+    });
   }
 
   /// Confirms the reviewed fields and pops the (possibly SK-corrected) data.
@@ -498,6 +522,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     setState(() {
       _scanned = null;
       _picked = null;
+      _found.clear();
       _nameCtrl.clear();
       _reviewGender = null;
     });
@@ -521,6 +546,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
                 cameraController: _cameraReady ? _cameraController : null,
                 cameraUnavailable: _cameraUnavailable,
                 previewImage: _picked,
+                found: _found,
                 onCapture: _handleCapture,
                 onPickFromGallery: _pickFromGallery,
                 onCreateHousehold: () {},
@@ -810,6 +836,7 @@ class _ScannerBody extends StatelessWidget {
     this.onRegisterManually,
     this.onPickFromGallery,
     this.previewImage,
+    this.found = const [],
   });
 
   final bool isScanning;
@@ -822,6 +849,9 @@ class _ScannerBody extends StatelessWidget {
 
   /// A picked still to show (instead of the live camera) while OCR runs.
   final File? previewImage;
+
+  /// "✓ <field>" labels revealed over the preview as OCR results stream in.
+  final List<String> found;
   final VoidCallback onCapture;
   final VoidCallback onCreateHousehold;
   final VoidCallback onCancel;
@@ -1021,6 +1051,7 @@ class _ScannerBody extends StatelessWidget {
               cameraController: cameraController,
               cameraUnavailable: cameraUnavailable,
               previewImage: previewImage,
+              found: found,
             ),
           ),
           const SizedBox(height: 10),
@@ -1156,6 +1187,7 @@ class _Viewfinder extends StatelessWidget {
     required this.cameraController,
     required this.cameraUnavailable,
     this.previewImage,
+    this.found = const [],
   });
 
   final bool isScanning;
@@ -1165,6 +1197,10 @@ class _Viewfinder extends StatelessWidget {
 
   /// A picked/captured still shown (instead of the live camera) while OCR runs.
   final File? previewImage;
+
+  /// Field labels revealed one-by-one over the preview as OCR "finds" them
+  /// (e.g. "Name: Noor Alam") — the scan-reveal affordance.
+  final List<String> found;
 
   static const double _inset = 10;
   static const double _cSize = 28;
@@ -1285,6 +1321,20 @@ class _Viewfinder extends StatelessWidget {
                     ],
                   ),
                 ),
+              // "✓ <field>" reveal chips — grow as OCR results stream in.
+              if (found.isNotEmpty)
+                Positioned(
+                  left: 14,
+                  right: 14,
+                  bottom: 14,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final f in found) _FoundChip(f),
+                    ],
+                  ),
+                ),
             ],
           ),
         );
@@ -1298,14 +1348,82 @@ class _Viewfinder extends StatelessWidget {
     bool flipH = false,
     bool flipV = false,
   }) {
+    return _CornerBuilder(cSize: _cSize, top: top, left: left, flipH: flipH, flipV: flipV, thick: _cThick);
+  }
+}
+
+/// A single "✓ <field>" pill that fades + slides in when revealed.
+class _FoundChip extends StatelessWidget {
+  const _FoundChip(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(text),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOut,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(offset: Offset(0, (1 - t) * 8), child: child),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_rounded,
+                  color: Color(0xFF34D399), size: 15),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CornerBuilder extends StatelessWidget {
+  const _CornerBuilder({
+    required this.cSize,
+    required this.top,
+    required this.left,
+    required this.flipH,
+    required this.flipV,
+    required this.thick,
+  });
+
+  final double cSize, top, left, thick;
+  final bool flipH, flipV;
+
+  @override
+  Widget build(BuildContext context) {
     return Positioned(
       top: top,
       left: left,
       child: SizedBox(
-        width: _cSize,
-        height: _cSize,
+        width: cSize,
+        height: cSize,
         child: CustomPaint(
-          painter: _CornerPainter(flipH: flipH, flipV: flipV, thick: _cThick),
+          painter: _CornerPainter(flipH: flipH, flipV: flipV, thick: thick),
         ),
       ),
     );

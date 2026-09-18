@@ -37,6 +37,26 @@ Republic of Bangladesh
 ''';
       expect(NidOcrService.extractName(text), isNull);
     });
+
+    test('falls back to the ALL-CAPS name line when the label is unreadable', () {
+      // OCR dropped the "Name" label entirely — common on live captures.
+      const text = '''
+Government of the People's Republic of Bangladesh
+National ID Card
+RANU MONDOL
+Date of Birth 05 Jan 1990
+NID No. 123 456 7890
+''';
+      expect(NidOcrService.extractName(text), 'Ranu Mondol');
+    });
+
+    test('fallback still rejects uppercase boilerplate', () {
+      const text = '''
+GOVERNMENT OF BANGLADESH
+NATIONAL ID CARD
+''';
+      expect(NidOcrService.extractName(text), isNull);
+    });
   });
 
   group('extractNidNumber', () {

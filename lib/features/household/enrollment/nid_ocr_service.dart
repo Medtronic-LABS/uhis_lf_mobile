@@ -302,6 +302,25 @@ class NidOcrService {
         }
       }
     }
+    // Fallback (no readable "Name" label): the English name on a Bangladesh NID
+    // is printed in ALL-CAPS Latin (e.g. "RANU MONDOL"). Pick the top-most
+    // uppercase, multi-word, non-boilerplate line. This makes the read succeed
+    // even when OCR drops or mangles the "Name" label.
+    return _bestUppercaseName(lines);
+  }
+
+  /// Chooses the most name-like ALL-CAPS Latin line — the layout-independent
+  /// fallback for [extractName].
+  static String? _bestUppercaseName(List<String> lines) {
+    for (final line in lines) {
+      if (!_looksLikeName(line)) continue;
+      final letters = RegExp(r'[A-Za-z]').allMatches(line).length;
+      if (letters == 0) continue;
+      final uppers = RegExp(r'[A-Z]').allMatches(line).length;
+      final mostlyUpper = uppers / letters >= 0.8;
+      final wordCount = line.trim().split(RegExp(r'\s+')).length;
+      if (mostlyUpper && wordCount >= 2) return _titleCase(line);
+    }
     return null;
   }
 
