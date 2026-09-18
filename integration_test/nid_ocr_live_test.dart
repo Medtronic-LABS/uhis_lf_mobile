@@ -19,8 +19,13 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   test('OCR every pushed NID sample and print the extracted fields', () async {
-    final base = await getExternalStorageDirectory();
-    final dir = Directory('${base!.path}/nid_samples');
+    // Prefer a reinstall-proof shared path (survives `flutter test`'s reinstall);
+    // fall back to the app-scoped external dir.
+    Directory dir = Directory('/sdcard/Download/nid_samples');
+    if (!dir.existsSync()) {
+      final base = await getExternalStorageDirectory();
+      dir = Directory('${base!.path}/nid_samples');
+    }
     // Opt-in harness: skip cleanly (never fail CI) when no samples were pushed.
     // `flutter test` reinstalls the app and wipes this dir, so push the cards
     // AFTER install and run this test without a rebuild.
