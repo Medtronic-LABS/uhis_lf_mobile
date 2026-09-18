@@ -14,7 +14,7 @@ library;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
-import '../config/app_config.dart';
+import '../version/app_version_info.dart';
 import 'telemetry_dao.dart';
 import 'telemetry_event.dart';
 
@@ -169,8 +169,8 @@ class TelemetryService {
         visitUuid: visitUuid,
         skUserId: userId?.toString(),
         capturedTenantId: tenantId,
-        appVersion: AppConfig.appVersionName,
-        appBuild: AppConfig.appVersionCode,
+        appVersion: AppVersionInfo.current.versionName,
+        appBuild: AppVersionInfo.current.versionCode,
         payloadVersion: kTelemetryPayloadVersion,
         payload: payload,
       ));

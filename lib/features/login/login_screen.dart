@@ -75,6 +75,9 @@ class _LoginScreenState extends State<LoginScreen> {
     debugPrint('[_LoginScreenState] _submit: auth.login → ok=$ok error=${auth.error}');
     if (!mounted) return;
     if (ok) {
+      await promptOptionalUpdateIfNeeded(context);
+      if (!mounted) return;
+
       final sync = context.read<OfflineSyncService>();
       final skipLoginSync =
           auth.sameUserRelogin && await sync.lastSyncedAt() != null;
@@ -140,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } else if (auth.appUpdateRequired) {
       await showAppUpdateRequiredDialog(
         context,
-        serverMessage: auth.appUpdateMessage,
+        message: auth.appUpdateMessage,
       );
       if (!mounted) return;
       auth.clearAppUpdateRequired();

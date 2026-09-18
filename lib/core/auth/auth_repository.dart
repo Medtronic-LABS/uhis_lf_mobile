@@ -253,14 +253,18 @@ class AuthRepository {
     final versionResult = await _appVersionService.check();
     switch (versionResult) {
       case AppVersionUpToDate():
+      case AppVersionUpdateAvailable():
         break;
-      case AppVersionUpdateRequired(:final message):
+      case AppVersionUpdateRequired(:final minVersionLabel):
         await _api.clearSession();
         throw AppUpdateRequiredException(
-          message ?? AppUpdateStrings.pleaseUpdateTheApp,
+          AppUpdateStrings.forcedUpdateMessage(minVersionLabel),
         );
       case AppVersionCheckFailed():
-        break;
+        await _api.clearSession();
+        throw AppVersionCheckFailedException(
+          AppUpdateStrings.versionCheckUnavailable,
+        );
     }
 
     await _storage.write(key: _kUsername, value: username);
@@ -753,10 +757,18 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
-/// Thrown when spice-service reports the installed build is below the minimum
-/// version code. Login must not complete until the user updates.
+/// Thrown when the installed build is below the minimum version code.
+/// Login must not complete until the user updates.
 class AppUpdateRequiredException implements Exception {
   AppUpdateRequiredException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+/// Thrown when the version-policy endpoint cannot be reached or parsed.
+class AppVersionCheckFailedException implements Exception {
+  AppVersionCheckFailedException(this.message);
   final String message;
   @override
   String toString() => message;

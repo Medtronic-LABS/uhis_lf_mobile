@@ -364,9 +364,10 @@ class ApiClient {
           if (tid != null && tid.isNotEmpty) {
             options.headers['tenantId'] = tid;
           }
-          options.headers['App-Version'] = AppConfig.appVersionName;
+          final version = AppVersionInfo.current;
+          options.headers['App-Version'] = version.versionName;
           options.headers['App-Version-Code'] =
-              AppConfig.appVersionCode.toString();
+              version.versionCode.toString();
           handler.next(options);
         },
       ),

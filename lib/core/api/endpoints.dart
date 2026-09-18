@@ -17,10 +17,11 @@ class Endpoints {
   /// Returns user hierarchy: villages, subVillages, workflowIds, facilities.
   static const String staticUserData = '/spice-service/static-data/user-data';
 
-  /// Validates the installed build against the server minimum version code.
-  /// Android reference: `StaticDataController.checkAppVersion`.
-  static const String staticAppVersion =
-      '/spice-service/static-data/app-version';
+  /// Minimum-version check on leapfrog-ai-service (via nginx gateway).
+  static const String mobileAppVersionGateway = '/ai-scribe/mobile/app-version';
+
+  /// Same check when [AppConfig.aiServiceBaseUrl] hits the service directly.
+  static const String mobileAppVersionDirect = '/mobile/app-version';
 
   /// Patient search by identifier / free text. Used to look up an existing
   /// registration from a scanned NID before enrolling a duplicate.

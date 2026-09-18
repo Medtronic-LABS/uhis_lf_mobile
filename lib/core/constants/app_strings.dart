@@ -129,11 +129,33 @@ abstract final class AppUpdateStrings {
 
   /// Spice R.string.alert
   static String get alertTitle => getTranslatedString('alertTitle', 'Alert');
-  /// Spice R.string.please_update_the_app
+  /// Spice R.string.please_update_the_app — generic fallback when no label.
   static String get pleaseUpdateTheApp => getTranslatedString(
         'pleaseUpdateTheApp',
         'A new version of the app is available. Please update to continue.',
       );
+  /// Forced update body — built from [minAppVersionLabel] (UHIS parity).
+  static String forcedUpdateMessage(String minVersionLabel) {
+    final label = minVersionLabel.trim();
+    if (label.isEmpty) return pleaseUpdateTheApp;
+    return getTranslatedString(
+      'pleaseUpdateToMinVersion',
+      'Please update to {version} or higher to continue.',
+      params: {'version': label},
+      localizeDigits: false,
+    );
+  }
+  /// Optional update body — built from [latestAppVersionLabel].
+  static String optionalUpdateMessage(String latestVersionLabel) {
+    final label = latestVersionLabel.trim();
+    if (label.isEmpty) return pleaseUpdateTheApp;
+    return getTranslatedString(
+      'optionalAppUpdateAvailable',
+      'A new version ({version}) is available. Update now for the latest features.',
+      params: {'version': label},
+      localizeDigits: false,
+    );
+  }
   /// Spice R.string.open_play_store
   static String get openPlayStore =>
       getTranslatedString('openPlayStore', 'Open Play Store');
@@ -141,6 +163,14 @@ abstract final class AppUpdateStrings {
   static String get pleaseCheckIfPlayStoreAvailable => getTranslatedString(
         'pleaseCheckIfPlayStoreAvailable',
         'Please check if Google Play Store is installed in the device',
+      );
+  /// Optional (non-blocking) update prompt — dismissible.
+  static String get updateLater =>
+      getTranslatedString('updateLater', 'Later');
+  /// Shown when the version-policy endpoint cannot be reached.
+  static String get versionCheckUnavailable => getTranslatedString(
+        'versionCheckUnavailable',
+        'Unable to verify the app version. Please check your connection and try again.',
       );
 }
 

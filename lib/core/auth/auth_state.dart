@@ -178,6 +178,11 @@ class AuthState extends ChangeNotifier {
       _appUpdateMessage = e.message;
       _status = AuthStatus.signedOut;
       return false;
+    } on AppVersionCheckFailedException catch (e) {
+      debugPrint('[AuthState] login: version check failed — ${e.message}');
+      _error = e.message;
+      _status = AuthStatus.signedOut;
+      return false;
     } catch (e) {
       debugPrint('[AuthState] login: failed — $e');
       _error = NetworkErrorMapper.friendly(e);

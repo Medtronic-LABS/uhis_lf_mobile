@@ -8127,6 +8127,14 @@
     "bn": "অ্যাপের একটি নতুন সংস্করণ উপলব্ধ। চালিয়ে যেতে অনুগ্রহ করে আপডেট করুন।",
     "en": "A new version of the app is available. Please update to continue."
   },
+  "pleaseUpdateToMinVersion": {
+    "bn": "চালিয়ে যেতে অনুগ্রহ করে {version} বা তার উপরের সংস্করণে আপডেট করুন।",
+    "en": "Please update to {version} or higher to continue."
+  },
+  "optionalAppUpdateAvailable": {
+    "bn": "একটি নতুন সংস্করণ ({version}) উপলব্ধ। সর্বশেষ সুবিধা পেতে এখনই আপডেট করুন।",
+    "en": "A new version ({version}) is available. Update now for the latest features."
+  },
   "memberCount": {
     "bn": "{count} জন সদস্য",
     "en": "{count} members"
@@ -11614,6 +11622,10 @@
   "updateConfirmSync": {
     "bn": "নিশ্চিত করুন ও CCE-তে সিঙ্ক করুন",
     "en": "Confirm & sync to CCE"
+  },
+  "updateLater": {
+    "bn": "পরে",
+    "en": "Later"
   },
   "updateOptArrived": {
     "bn": "স্বাস্থ্যকেন্দ্রে পৌঁছেছে",
