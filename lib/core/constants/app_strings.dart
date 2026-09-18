@@ -4114,11 +4114,9 @@ abstract final class TeleconsultStrings {
   static String get specialityMaternityCoach => getTranslatedString('Teleconsult.specialityMaternityCoach', 'Maternity Coach');
   static String get contactNumberLabel => getTranslatedString('Teleconsult.contactNumberLabel', 'Contact Number');
   static String get contactNumberRequired => getTranslatedString('Teleconsult.contactNumberRequired', 'Enter a contact number to continue.');
-  static String get documentTypeLabel => getTranslatedString('Teleconsult.documentTypeLabel', 'Document Type');
   static String get documentTypePrescription => getTranslatedString('Teleconsult.documentTypePrescription', 'Prescription');
   static String get documentTypeLabReports => getTranslatedString('Teleconsult.documentTypeLabReports', 'Lab Reports');
   static String get selectDocumentsLabel => getTranslatedString('Teleconsult.selectDocumentsLabel', 'Select Medical Documents');
-  static String get selectDocumentsHint => getTranslatedString('Teleconsult.selectDocumentsHint', 'Select Medical documents (Prescriptions/ Lab Reports)');
   static String get selectDocumentsMax => getTranslatedString('Teleconsult.selectDocumentsMax', 'Maximum 3 documents');
   static String get takePhoto => getTranslatedString('Teleconsult.takePhoto', 'Take photo');
   static String get chooseFromGallery => getTranslatedString('Teleconsult.chooseFromGallery', 'Choose from gallery');

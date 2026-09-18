@@ -28,6 +28,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdfx/pdfx.dart';
@@ -42,7 +44,6 @@ import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/counselling_launcher.dart';
-import '../household/enrollment/widgets/enrollment_segmented_buttons.dart';
 import 'pdf_viewer_screen.dart';
 import 'teleconsult_permission_service.dart';
 
@@ -138,6 +139,12 @@ class TeleconsultScreen extends StatefulWidget {
 class _TeleconsultScreenState extends State<TeleconsultScreen> {
   late final ShukheeClient _client;
   late final TeleconsultPermissionService _permissionService;
+  // Resolved once, up front, while context is still valid -- the SK can leave
+  // this screen (back button, `_confirmLeaveCall`) while a call is still
+  // being polled in the background, and the poll/save below must keep
+  // running and be able to persist the result after this widget is disposed,
+  // when `context`/`context.read` are no longer safe to use.
+  late final TeleconsultPrescriptionDao _prescriptionDao;
   final _callViewKey = GlobalKey();
 
   _Stage _stage = _Stage.booking;
@@ -157,8 +164,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   // values instead of sending the SK back to a blank form.
   String? _lastContactNumber;
   String? _lastSpeciality;
-  String? _lastDocumentType;
-  List<ShukheeMediaFile> _lastMedias = const [];
+  Map<String, List<ShukheeMediaFile>> _lastMediaGroups = const {};
 
   static const _minConnectingDuration = Duration(seconds: 2);
   Timer? _connectingMinDurationTimer;
@@ -168,6 +174,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
     super.initState();
     _client = widget.client ?? _buildDefaultClient();
     _permissionService = widget.permissionService ?? TeleconsultPermissionService();
+    _prescriptionDao = widget.prescriptionDao ?? context.read<TeleconsultPrescriptionDao>();
   }
 
   @override
@@ -179,40 +186,96 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
 
   ShukheeClient _buildDefaultClient() {
     final apiClient = context.read<ApiClient>();
+    final config = ShukheeConfig(
+      baseUrl: AppConfig.shukheeApiBaseUrl,
+      // ApiClient.exportAuthToken() returns the full "Bearer <token>" string
+      // verbatim (its own request interceptor uses it as-is, with no scheme
+      // prepended -- see api_client.dart's onRequest handlers) -- but
+      // shukhee_sdk's authTokenProvider contract expects just the raw token
+      // and prepends "Bearer " itself. Strip it here so the two don't stack
+      // into "Bearer Bearer <token>", which the real auth-service rejects
+      // with 400 (confirmed live against the sandbox this session).
+      authTokenProvider: () async {
+        final raw = apiClient.exportAuthToken();
+        if (raw == null) return null;
+        const prefix = 'Bearer ';
+        return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+      },
+      // The backend's real (Phase 2) auth validation needs this to call the
+      // legacy platform's own /authenticate endpoint -- see shukhee_sdk's
+      // ShukheeConfig.tenantIdProvider doc for why.
+      tenantIdProvider: () async => apiClient.tenantId,
+    );
     return ShukheeClient(
-      ShukheeConfig(
-        baseUrl: AppConfig.shukheeApiBaseUrl,
-        // ApiClient.exportAuthToken() returns the full "Bearer <token>" string
-        // verbatim (its own request interceptor uses it as-is, with no scheme
-        // prepended -- see api_client.dart's onRequest handlers) -- but
-        // shukhee_sdk's authTokenProvider contract expects just the raw token
-        // and prepends "Bearer " itself. Strip it here so the two don't stack
-        // into "Bearer Bearer <token>", which the real auth-service rejects
-        // with 400 (confirmed live against the sandbox this session).
-        authTokenProvider: () async {
-          final raw = apiClient.exportAuthToken();
-          if (raw == null) return null;
-          const prefix = 'Bearer ';
-          return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+      config,
+      // Debug-only: shukhee_sdk builds its own internal Dio with no logging
+      // (it has no dependency on this app's ConsoleLog/[PayloadDebug]
+      // convention), so every Shukhee HTTP call is otherwise invisible on
+      // device. Injecting our own Dio here (same BaseOptions the SDK would
+      // have built itself) lets _shukheeDebugInterceptor observe exactly
+      // what's sent/received without touching the shared SDK package.
+      dio: kDebugMode ? _buildDebugDio(config) : null,
+    );
+  }
+
+  /// Debug-only Dio, mirroring the BaseOptions shukhee_sdk would have built
+  /// internally, plus a request/response/error logging interceptor -- see
+  /// [_buildDefaultClient]. `[ShukheeDebug]` tag, visible via `adb logcat`.
+  static Dio _buildDebugDio(ShukheeConfig config) {
+    final dio = Dio(BaseOptions(
+      baseUrl: config.baseUrl,
+      connectTimeout: config.connectTimeout,
+      receiveTimeout: config.receiveTimeout,
+    ));
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          final data = options.data;
+          String bodyDesc;
+          if (data is FormData) {
+            final fields = {for (final f in data.fields) f.key: f.value};
+            final files = {
+              for (final f in data.files) f.key: '${f.value.filename} (${f.value.length}b)',
+            };
+            bodyDesc = 'fields=$fields'
+                '${files.isNotEmpty ? ' files=$files' : ''}';
+          } else {
+            bodyDesc = data?.toString() ?? '(none)';
+          }
+          ConsoleLog.banner(
+            '[ShukheeDebug] --> ${options.method} ${options.path}\n'
+            'headers: ${options.headers}\n'
+            'body: $bodyDesc',
+          );
+          handler.next(options);
         },
-        // The backend's real (Phase 2) auth validation needs this to call the
-        // legacy platform's own /authenticate endpoint -- see shukhee_sdk's
-        // ShukheeConfig.tenantIdProvider doc for why.
-        tenantIdProvider: () async => apiClient.tenantId,
+        onResponse: (response, handler) {
+          ConsoleLog.success(
+            '[ShukheeDebug] <-- ${response.statusCode} ${response.requestOptions.path}',
+          );
+          ConsoleLog.json('[ShukheeDebug] response body', response.data);
+          handler.next(response);
+        },
+        onError: (e, handler) {
+          ConsoleLog.warn(
+            '[ShukheeDebug] <-- ERROR ${e.response?.statusCode} ${e.requestOptions.path}: '
+            '${e.response?.data ?? e.message}',
+          );
+          handler.next(e);
+        },
       ),
     );
+    return dio;
   }
 
   Future<void> _submitBooking({
     required String contactNumber,
     required String speciality,
-    required String documentType,
-    required List<ShukheeMediaFile> medias,
+    required Map<String, List<ShukheeMediaFile>> mediaGroups,
   }) async {
     _lastContactNumber = contactNumber;
     _lastSpeciality = speciality;
-    _lastDocumentType = documentType;
-    _lastMedias = medias;
+    _lastMediaGroups = mediaGroups;
 
     final permitted = await _permissionService.ensureCameraAndMicPermission(context);
     if (!mounted) return;
@@ -251,8 +314,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         patientName: widget.patientLabel,
         patientDob: widget.patientDob,
         patientGender: widget.patientGender,
-        medias: medias,
-        documentType: documentType,
+        mediaGroups: mediaGroups,
       );
       if (!mounted) return;
       setState(() => _booking = booking);
@@ -268,8 +330,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   void _retryBooking() {
     final contactNumber = _lastContactNumber;
     final speciality = _lastSpeciality;
-    final documentType = _lastDocumentType;
-    if (contactNumber == null || speciality == null || documentType == null) {
+    if (contactNumber == null || speciality == null) {
       setState(() => _stage = _Stage.booking);
       return;
     }
@@ -277,8 +338,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       _submitBooking(
         contactNumber: contactNumber,
         speciality: speciality,
-        documentType: documentType,
-        medias: _lastMedias,
+        mediaGroups: _lastMediaGroups,
       ),
     );
   }
@@ -315,6 +375,14 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
     });
   }
 
+  /// Polls until the call reaches a terminal status, then (if completed)
+  /// downloads and saves the prescription/invoice. Deliberately keeps running
+  /// to completion even if the SK backs out of this screen mid-call --
+  /// `unawaited` in [_submitBooking] means nothing cancels this Future on
+  /// dispose, so only the *UI-facing* `setState` calls below are guarded by
+  /// [mounted]; the download/save side-effects are not, so a call that
+  /// finishes after the SK has already left still ends up in the patient's
+  /// visit timeline instead of being silently dropped.
   Future<void> _pollInBackground(String callLog) async {
     final status = await _client.pollStatus(
       callLog: callLog,
@@ -327,22 +395,24 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         if (mounted) setState(() => _status = update);
       },
     );
-    if (!mounted) return;
     _liveTimer?.cancel();
     if (!status.isCompleted) {
-      setState(() {
-        _status = status;
-        _stage = _Stage.notCompleted;
-      });
+      if (mounted) {
+        setState(() {
+          _status = status;
+          _stage = _Stage.notCompleted;
+        });
+      }
       return;
     }
-    setState(() {
-      _status = status;
-      _stage = _Stage.generatingPrescription;
-    });
+    if (mounted) {
+      setState(() {
+        _status = status;
+        _stage = _Stage.generatingPrescription;
+      });
+    }
     await _prefetchDocuments(status);
-    if (!mounted) return;
-    setState(() => _stage = _Stage.wrapUp);
+    if (mounted) setState(() => _stage = _Stage.wrapUp);
   }
 
   /// Eagerly downloads whatever documents the completed call produced so the
@@ -374,6 +444,13 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   /// re-fetch. No-op when the call wasn't launched from a real visit
   /// ([TeleconsultScreen.visitId] null -- nothing to attach it to) or when
   /// neither document downloaded (nothing worth persisting).
+  ///
+  /// Deliberately does NOT check [mounted] -- this can run after the SK has
+  /// already left the screen (see [_pollInBackground]), and the save must
+  /// still happen so the timeline picks it up next time the visit is opened.
+  /// [_prescriptionDao] is resolved once in [initState] for exactly this
+  /// reason: `context.read` here would be unsafe once this widget is
+  /// disposed.
   Future<void> _savePrescriptionToVisit({
     required String callLog,
     required ShukheeStatus status,
@@ -389,10 +466,8 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
           'bytes downloaded (visitId=$visitId callLog=$callLog).');
       return;
     }
-    if (!mounted) return;
     try {
-      final dao = widget.prescriptionDao ?? context.read<TeleconsultPrescriptionDao>();
-      await dao.upsert(TeleconsultPrescriptionRow(
+      await _prescriptionDao.upsert(TeleconsultPrescriptionRow(
         visitId: visitId,
         callLog: callLog,
         doctorName: status.doctorName,
@@ -671,12 +746,22 @@ class _BookingFormView extends StatefulWidget {
   final Future<void> Function({
     required String contactNumber,
     required String speciality,
-    required String documentType,
-    required List<ShukheeMediaFile> medias,
+    required Map<String, List<ShukheeMediaFile>> mediaGroups,
   }) onSubmit;
 
   @override
   State<_BookingFormView> createState() => _BookingFormViewState();
+}
+
+/// One document-type bucket on the booking form -- e.g. "Prescription" with its own
+/// photographed files, kept separate from "Lab Report"'s so a single booking can carry
+/// both, each correctly tagged (see [ShukheeClient.startConsultation]'s `mediaGroups`).
+class _MediaGroup {
+  _MediaGroup({required this.type, required this.label});
+
+  final String type; // 'prescription' | 'lab_report' -- the literal API value.
+  final String label; // Translated display label for this bucket's header.
+  final List<XFile> files = [];
 }
 
 class _BookingFormViewState extends State<_BookingFormView> {
@@ -701,8 +786,10 @@ class _BookingFormViewState extends State<_BookingFormView> {
   /// the form stays usable rather than dead-ending on a network error.
   List<ShukheeSpeciality>? _specialities;
   String? _selectedTitle;
-  String _documentType = 'prescription';
-  final List<XFile> _pickedFiles = [];
+  final List<_MediaGroup> _mediaGroups = [
+    _MediaGroup(type: 'prescription', label: TeleconsultStrings.documentTypePrescription),
+    _MediaGroup(type: 'lab_report', label: TeleconsultStrings.documentTypeLabReports),
+  ];
   String? _phoneError;
   bool _submitting = false;
 
@@ -777,8 +864,10 @@ class _BookingFormViewState extends State<_BookingFormView> {
     }
   }
 
-  Future<void> _pickFiles() async {
-    final remaining = _maxDocuments - _pickedFiles.length;
+  Future<void> _pickFilesForGroup(_MediaGroup group) async {
+    // Capped per group, not shared across groups -- Prescription filling up to
+    // _maxDocuments must not hide/disable the independent Lab Report dropzone.
+    final remaining = _maxDocuments - group.files.length;
     if (remaining <= 0) return;
 
     final source = await showModalBottomSheet<ImageSource>(
@@ -811,7 +900,7 @@ class _BookingFormViewState extends State<_BookingFormView> {
         maxHeight: _maxDocumentDimension,
         imageQuality: _documentImageQuality,
       );
-      if (file != null && mounted) setState(() => _pickedFiles.add(file));
+      if (file != null && mounted) setState(() => group.files.add(file));
     } else {
       final files = await picker.pickMultiImage(
         limit: remaining,
@@ -820,12 +909,12 @@ class _BookingFormViewState extends State<_BookingFormView> {
         imageQuality: _documentImageQuality,
       );
       if (files.isNotEmpty && mounted) {
-        setState(() => _pickedFiles.addAll(files.take(remaining)));
+        setState(() => group.files.addAll(files.take(remaining)));
       }
     }
   }
 
-  void _removeFile(int index) => setState(() => _pickedFiles.removeAt(index));
+  void _removeFile(_MediaGroup group, int index) => setState(() => group.files.removeAt(index));
 
   Future<void> _submit() async {
     final phone = _phoneController.text.trim();
@@ -838,10 +927,18 @@ class _BookingFormViewState extends State<_BookingFormView> {
       _submitting = true;
     });
 
-    final medias = <ShukheeMediaFile>[];
-    for (final file in _pickedFiles) {
-      final bytes = await file.readAsBytes();
-      medias.add(ShukheeMediaFile(filename: file.name, bytes: bytes, mimeType: file.mimeType));
+    // One key per non-empty group -- e.g. {'prescription': [...], 'lab_report': [...]} --
+    // lets a single booking carry both a prescription and a lab report photo, each
+    // correctly tagged (see ShukheeClient.startConsultation's mediaGroups doc comment).
+    final mediaGroups = <String, List<ShukheeMediaFile>>{};
+    for (final group in _mediaGroups) {
+      if (group.files.isEmpty) continue;
+      final medias = <ShukheeMediaFile>[];
+      for (final file in group.files) {
+        final bytes = await file.readAsBytes();
+        medias.add(ShukheeMediaFile(filename: file.name, bytes: bytes, mimeType: file.mimeType));
+      }
+      mediaGroups[group.type] = medias;
     }
     if (!mounted) return;
 
@@ -850,8 +947,7 @@ class _BookingFormViewState extends State<_BookingFormView> {
     await widget.onSubmit(
       contactNumber: phone,
       speciality: _selectedSpeciality?.title ?? kTeleconsultSpecialities.first,
-      documentType: _documentType,
-      medias: medias,
+      mediaGroups: mediaGroups,
     );
     if (mounted) setState(() => _submitting = false);
   }
@@ -934,39 +1030,34 @@ class _BookingFormViewState extends State<_BookingFormView> {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xl),
-                    EnrollmentSegmentedButtons(
-                      label: TeleconsultStrings.documentTypeLabel,
-                      options: const ['prescription', 'lab_report'],
-                      selectedValue: _documentType,
-                      allowDeselect: false,
-                      optionLabel: (v) => v == 'prescription'
-                          ? TeleconsultStrings.documentTypePrescription
-                          : TeleconsultStrings.documentTypeLabReports,
-                      onChanged: (v) => setState(() => _documentType = v ?? _documentType),
-                      selectedFillColor: AppColors.catFacilitySurface,
-                      selectedBorderColor: AppColors.catFacilityBorder,
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
                     Text(
                       TeleconsultStrings.selectDocumentsLabel,
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    if (_pickedFiles.isNotEmpty) ...[
-                      Wrap(
-                        spacing: AppSpacing.sm,
-                        runSpacing: AppSpacing.sm,
-                        children: List.generate(_pickedFiles.length, (i) {
-                          return _PickedDocumentThumbnail(
-                            file: _pickedFiles[i],
-                            onRemove: () => _removeFile(i),
-                          );
-                        }),
+                    for (final group in _mediaGroups) ...[
+                      Text(
+                        group.label,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                       ),
-                      const SizedBox(height: AppSpacing.sm),
+                      const SizedBox(height: AppSpacing.xs),
+                      if (group.files.isNotEmpty) ...[
+                        Wrap(
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.sm,
+                          children: List.generate(group.files.length, (i) {
+                            return _PickedDocumentThumbnail(
+                              file: group.files[i],
+                              onRemove: () => _removeFile(group, i),
+                            );
+                          }),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                      ],
+                      if (group.files.length < _maxDocuments)
+                        _MediaPickerDropzone(onTap: () => _pickFilesForGroup(group)),
+                      const SizedBox(height: AppSpacing.md),
                     ],
-                    if (_pickedFiles.length < _maxDocuments)
-                      _MediaPickerDropzone(onTap: _pickFiles),
                   ],
                 ),
               ),
@@ -1089,12 +1180,6 @@ class _MediaPickerDropzone extends StatelessWidget {
             children: [
               const Icon(Icons.add_circle_outline_rounded, color: AppColors.catFacilityBorder, size: 28),
               const SizedBox(height: AppSpacing.sm),
-              Text(
-                TeleconsultStrings.selectDocumentsHint,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 2),
               Text(
                 TeleconsultStrings.selectDocumentsMax,
                 textAlign: TextAlign.center,

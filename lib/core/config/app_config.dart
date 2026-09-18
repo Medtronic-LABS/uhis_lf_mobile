@@ -345,17 +345,26 @@ class AppConfig {
 
   // ── Shukhee teleconsult ────────────────────────────────────────────────
 
-  /// Base URL of the backend exposing the Shukhee consultation endpoints
-  /// (`frappe-uhis-next`'s `shukhee_integration` app locally; a dedicated
-  /// microservice once "uhis-next" is split out behind the platform gateway
-  /// remotely). Empty by default -- forces explicit per-environment
-  /// configuration rather than silently pointing at [apiBaseUrl], which is
-  /// a different backend entirely (the old platform's gateway, not
-  /// frappe-uhis-next).
-  static const String shukheeApiBaseUrl = String.fromEnvironment(
-    'SHUKHEE_API_BASE_URL',
-    defaultValue: '',
-  );
+  /// Path segment nginx routes to `frappe-uhis-next`'s `shukhee_integration`
+  /// app, appended to [apiBaseUrl] for dev/prod -- same gateway host as every
+  /// other service; [ShukheeConfig]'s own endpoint paths
+  /// (`/api/method/shukhee_integration.api.consultation.*`) are unaffected
+  /// either way, only this base segment differs.
+  static const String _shukheeGatewaySegment = 'admin-api';
+
+  /// Base URL of the backend exposing the Shukhee consultation endpoints.
+  ///
+  /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
+  ///   appended, e.g. `https://spice-dev-backend.uhis.labsplatform.com/admin-api`.
+  /// - Local override: set `SHUKHEE_API_BASE_URL` to a complete base URL
+  ///   (e.g. `http://10.0.2.2:8000`) pointing directly at a local
+  ///   `frappe-uhis-next` instance -- used verbatim, no gateway segment
+  ///   appended, since a direct local instance isn't behind that route.
+  static String get shukheeApiBaseUrl {
+    const local = String.fromEnvironment('SHUKHEE_API_BASE_URL', defaultValue: '');
+    if (local.isNotEmpty) return local;
+    return '$apiBaseUrl$_shukheeGatewaySegment';
+  }
 
   /// Feature flag: whether the real Shukhee teleconsult flow is wired up.
   /// Default off -- this integrates against a real third-party vendor with
@@ -368,10 +377,17 @@ class AppConfig {
   );
 
   /// Max attempts / delay for polling consultation status after booking.
-  /// Mirrors the desk-side admin UI's own polling cadence for the same
-  /// backend endpoint (4s), proven against the live Shukhee sandbox.
+  /// Delay mirrors the desk-side admin UI's own polling cadence for the same
+  /// backend endpoint (4s), proven against the live Shukhee sandbox. The
+  /// budget this pair spans (~20 minutes) covers the *entire* call, not just
+  /// booking acceptance -- `get_consultation_status` is only marked
+  /// `completed` once the doctor actually ends the call, so a shorter budget
+  /// (previously ~2 minutes) timed out mid-call and showed "Doctor not
+  /// available" even though a doctor had answered (confirmed live: Call Logs
+  /// stuck at `accepted` with no Shukhee call ever actually rejected/
+  /// cancelled/on-hold).
   static int get teleconsultPollMaxAttempts =>
-      int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_MAX_ATTEMPTS')) ?? 30;
+      int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_MAX_ATTEMPTS')) ?? 300;
 
   static int get teleconsultPollDelaySeconds =>
       int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_DELAY_SECONDS')) ?? 4;

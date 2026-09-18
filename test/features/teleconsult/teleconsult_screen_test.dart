@@ -12,7 +12,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shukhee_sdk/shukhee_sdk.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uhis_next/core/constants/app_strings.dart';
+import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/db/teleconsult_prescription_dao.dart';
 import 'package:uhis_next/core/theme/app_theme.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_permission_service.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_screen.dart';
@@ -38,8 +41,7 @@ class _FailingShukheeClient extends ShukheeClient {
   final List<String> reasons = [];
   final List<String?> encounterIds = [];
   final List<String> specialities = [];
-  final List<String> documentTypes = [];
-  final List<int> mediaCounts = [];
+  final List<Map<String, List<ShukheeMediaFile>>> mediaGroupsCalls = [];
   int callCount = 0;
 
   /// Mirrors the real Shukhee sandbox's live speciality list (confirmed via
@@ -66,8 +68,7 @@ class _FailingShukheeClient extends ShukheeClient {
     String? patientName,
     String? patientDob,
     String? patientGender,
-    List<ShukheeMediaFile> medias = const [],
-    String documentType = 'other',
+    Map<String, List<ShukheeMediaFile>> mediaGroups = const {},
   }) async {
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     callCount++;
@@ -75,8 +76,7 @@ class _FailingShukheeClient extends ShukheeClient {
     reasons.add(reason);
     encounterIds.add(encounterId);
     specialities.add(requestedSpeciality);
-    documentTypes.add(documentType);
-    mediaCounts.add(medias.length);
+    mediaGroupsCalls.add(mediaGroups);
     throw exceptionBuilder();
   }
 }
@@ -121,6 +121,25 @@ Future<void> _fillAndSubmitBookingForm(
 }
 
 void main() {
+  // TeleconsultScreen resolves its TeleconsultPrescriptionDao up front, in
+  // initState (see teleconsult_screen.dart) -- it must keep working after the
+  // widget is disposed, when `context.read` is no longer safe, so it's
+  // captured once eagerly instead of read lazily. Every test below must
+  // therefore supply one; none of them ever complete a call (every
+  // `_FailingShukheeClient` always throws), so a real but never-written-to
+  // in-memory DAO is enough -- no fake/mock needed.
+  late final TeleconsultPrescriptionDao testDao;
+
+  setUpAll(() async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    final db = await databaseFactory.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(version: AppDatabase.schemaVersion, onCreate: AppDatabase.createSchema),
+    );
+    testDao = TeleconsultPrescriptionDao(AppDatabase.forTesting(db));
+  });
+
   testWidgets('shows the booking form with General Physician pre-selected', (tester) async {
     final client = _FailingShukheeClient(() => const ShukheeBookingException('boom'));
 
@@ -131,6 +150,7 @@ void main() {
         patientPhone: '+8801000000000',
         reason: 'Fever',
         client: client,
+        prescriptionDao: testDao,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -153,6 +173,7 @@ void main() {
         patientId: 'p1',
         reason: 'Fever',
         client: client,
+        prescriptionDao: testDao,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -181,6 +202,7 @@ void main() {
         patientId: 'p1',
         reason: 'Fever',
         client: client,
+        prescriptionDao: testDao,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -211,6 +233,7 @@ void main() {
         visitId: 'VISIT-1',
         reason: 'Severe pneumonia, referral recommended',
         client: client,
+        prescriptionDao: testDao,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -220,7 +243,8 @@ void main() {
     expect(client.reasons.single, 'Severe pneumonia, referral recommended');
     expect(client.encounterIds.single, 'VISIT-1');
     expect(client.specialities.single, 'General Physician');
-    expect(client.documentTypes.single, 'prescription');
+    // No photos picked -- no media group keys sent at all.
+    expect(client.mediaGroupsCalls.single, isEmpty);
   });
 
   testWidgets('passes a non-default speciality selection through to the booking call', (tester) async {
@@ -233,6 +257,7 @@ void main() {
         patientPhone: '+8801000000000',
         reason: 'Fever',
         client: client,
+        prescriptionDao: testDao,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -270,6 +295,7 @@ void main() {
         patientPhone: '+8801000000000',
         reason: 'Fever',
         client: client,
+        prescriptionDao: testDao,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -293,6 +319,7 @@ void main() {
         patientPhone: '+8801000000000',
         reason: 'Fever',
         client: client,
+        prescriptionDao: testDao,
         permissionService: _FakePermissionService(granted: false),
       )),
     );
@@ -315,6 +342,7 @@ void main() {
         patientPhone: '+8801000000000',
         reason: 'Fever',
         client: client,
+        prescriptionDao: testDao,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -336,6 +364,7 @@ void main() {
         patientPhone: '+8801000000000',
         reason: 'Fever',
         client: client,
+        prescriptionDao: testDao,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -353,4 +382,18 @@ void main() {
     expect(client.contactNumbers, ['+8801000000000', '+8801000000000']);
     expect(client.specialities, ['General Physician', 'General Physician']);
   });
+
+  // NOTE: the background-poll-survives-disposal fix in teleconsult_screen.dart
+  // (removing the `mounted` guard around _savePrescriptionToVisit, resolving
+  // TeleconsultPrescriptionDao in initState) has no widget test here. A
+  // successful startConsultation unconditionally builds an offstage
+  // ShukheeCallView (a real platform WebView) the moment the "connecting"
+  // stage renders -- which this harness cannot support (see this file's top
+  // doc comment: no WebViewPlatform test double exists), and building it
+  // throws regardless of whether the underlying poll/save logic is correct.
+  // Confirmed manually instead: a live device run's ConsoleLog showed
+  // `[TeleconsultPrescription] saved ...` after backing out of an in-progress
+  // call, and an ad hoc version of this test (a fake client that succeeds
+  // startConsultation) reached the same save line before being removed for
+  // that reason.
 }
