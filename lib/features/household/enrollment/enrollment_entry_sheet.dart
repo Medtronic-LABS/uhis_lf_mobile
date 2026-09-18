@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
@@ -377,10 +378,40 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     }
     if (!mounted) return;
     setState(() => _isScanning = false);
+    _onResult(result);
+  }
 
+  /// Picks a card photo from the gallery and OCRs it (offline, same pipeline as
+  /// a live capture) — for SKs who photographed the card earlier or received it
+  /// over a messaging app.
+  Future<void> _pickFromGallery() async {
+    if (_isScanning) return;
+    setState(() => _isScanning = true);
+    NidScanResult result;
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 100,
+      );
+      if (picked == null) {
+        if (mounted) setState(() => _isScanning = false);
+        return; // cancelled
+      }
+      result = await _ocr.extractNidFromImage(picked.path);
+    } on Exception catch (e) {
+      debugPrint('MemberNidScan: gallery pick failed: $e');
+      result = const NidScanResult(NidScanStatus.error);
+    }
+    if (!mounted) return;
+    setState(() => _isScanning = false);
+    _onResult(result);
+  }
+
+  /// Shared success handling for both camera capture and gallery pick: enter the
+  /// editable review step instead of applying OCR blindly.
+  void _onResult(NidScanResult result) {
     switch (result.status) {
       case NidScanStatus.success:
-        // Enter the editable review step instead of applying OCR blindly.
         _autoScanTimer?.cancel();
         _autoScanTimer = null;
         final data = result.data!;
@@ -451,6 +482,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
                 cameraUnavailable: _cameraUnavailable,
                 autoScanActive: _cameraReady && _autoScanTimer != null,
                 onCapture: _handleCapture,
+                onPickFromGallery: _pickFromGallery,
                 onCreateHousehold: () {},
                 onCancel: () => Navigator.of(context).pop(null),
                 showCreateHousehold: false,
@@ -737,6 +769,7 @@ class _ScannerBody extends StatelessWidget {
     this.showCreateHousehold = true,
     this.onLinkToExisting,
     this.onRegisterManually,
+    this.onPickFromGallery,
   });
 
   final bool isScanning;
@@ -757,6 +790,8 @@ class _ScannerBody extends StatelessWidget {
   final VoidCallback? onLinkToExisting;
   /// Optional: skips NID scan and opens manual registration form.
   final VoidCallback? onRegisterManually;
+  /// Optional: picks a card photo from the gallery instead of the live camera.
+  final VoidCallback? onPickFromGallery;
 
   bool get _canCapture =>
       !isScanning && !readingCard && cameraController != null;
@@ -957,37 +992,76 @@ class _ScannerBody extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 18),
-          // Capture button
-          GestureDetector(
-            onTap: _canCapture ? onCapture : null,
-            child: Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 4),
-              ),
-              child: Center(
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                    border: Border.all(
-                      color: _canCapture ? AppColors.textPrimary : Colors.grey,
-                      width: 2,
+          // Capture button (centre) + gallery upload (left).
+          SizedBox(
+            width: double.infinity,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                GestureDetector(
+                  onTap: _canCapture ? onCapture : null,
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 4),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          border: Border.all(
+                            color: _canCapture ? AppColors.textPrimary : Colors.grey,
+                            width: 2,
+                          ),
+                        ),
+                        child: (isScanning || readingCard)
+                            ? const Padding(
+                                padding: EdgeInsets.all(AppSpacing.xxxl),
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textPrimary),
+                              )
+                            : const Icon(Icons.camera_alt, color: AppColors.textPrimary, size: 24),
+                      ),
                     ),
                   ),
-                  child: (isScanning || readingCard)
-                      ? const Padding(
-                          padding: EdgeInsets.all(AppSpacing.xxxl),
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textPrimary),
-                        )
-                      : const Icon(Icons.camera_alt, color: AppColors.textPrimary, size: 24),
                 ),
-              ),
+                if (onPickFromGallery != null)
+                  Positioned(
+                    left: 24,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: (isScanning || readingCard) ? null : onPickFromGallery,
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.35),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: const Icon(Icons.photo_library_outlined,
+                                color: Colors.white, size: 22),
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          EnrollmentStrings.nidUploadLabel,
+                          style: const TextStyle(fontSize: 10, color: AppColors.onDarkFaint),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
