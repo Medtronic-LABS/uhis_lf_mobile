@@ -190,6 +190,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final notifier = context.read<UnifiedFormNotifier>();
+      // After the first frame, so this is the moment the form is actually on
+      // screen — the start of the time the SK spends filling it in.
+      notifier.markFormOpened();
 
       if (widget.confirmedSymptoms.isNotEmpty) {
         // Store raw codes so section-rules can drive conditional visibility.

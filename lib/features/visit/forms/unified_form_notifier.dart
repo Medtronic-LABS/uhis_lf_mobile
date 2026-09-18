@@ -8,7 +8,6 @@ import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
-import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/telemetry/telemetry_service.dart';
 import 'package:uuid/uuid.dart';
@@ -68,7 +67,6 @@ class UnifiedFormNotifier extends ChangeNotifier {
     String? defaultReferralSiteId,
     ReferralRepository? referralRepo,
     TelemetryService? telemetryService,
-    EncounterDao? encounterDao,
     ValueAuditDao? valueAuditDao,
   })  : _encounterId = encounterId,
         _patientId = patientId,
@@ -86,7 +84,6 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _defaultReferralSiteId = defaultReferralSiteId,
         _referralRepo = referralRepo,
         _telemetryService = telemetryService,
-        _encounterDao = encounterDao,
         _valueAuditDao = valueAuditDao;
 
   final String _encounterId;
@@ -109,7 +106,6 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// either is absent the visit simply emits no telemetry — a missing metric
   /// must never be able to affect a clinical submit.
   final TelemetryService? _telemetryService;
-  final EncounterDao? _encounterDao;
 
   /// Field ids the screen is currently rendering, and how many refs it laid
   /// out in total. Pushed by [UnifiedFormScreen] rather than re-derived here:
@@ -1390,6 +1386,36 @@ class UnifiedFormNotifier extends ChangeNotifier {
     'bpLogDetails': {'systolic', 'diastolic', 'pulse'},
   };
 
+  /// Extra leaf values a capture target's widget writes besides the target.
+  ///
+  /// `glucoseType`'s `_BloodGlucoseEntryField` writes the fasting/random
+  /// qualifier AND the numeric `glucose` reading — two distinct clinical
+  /// values (they sit in different [_mirrorGroups], so they are not aliases)
+  /// from one widget with one layout `fieldRef`.
+  ///
+  /// `glucose` therefore can never appear in [_visibleFieldIds], so it was
+  /// absent from the capture denominator while AI genuinely filled it. The
+  /// numerator counts leaves and the denominator counted widgets, and a real
+  /// visit reported 9 fields filled against 7 visible.
+  ///
+  /// Composite containers are NOT listed here: [_compositeMembers] already
+  /// names their leaves, and those REPLACE the container rather than adding
+  /// to it, because the container is not a value in its own right.
+  static const Map<String, Set<String>> _siblingLeaves = {
+    'glucoseType': {'glucose'},
+  };
+
+  /// The distinct leaf values that [target]'s widget writes.
+  ///
+  /// The unit of the capture denominator, so that it counts the same things
+  /// `aiFilled` does.
+  static Set<String> _captureLeaves(String target) {
+    final members = _compositeMembers[target];
+    if (members != null) return members;
+    final siblings = _siblingLeaves[target];
+    return siblings == null ? {target} : {target, ...siblings};
+  }
+
   /// The provenance already recorded for [fieldId], or failing that for any
   /// alias of the same clinical value.
   ///
@@ -1484,6 +1510,16 @@ class UnifiedFormNotifier extends ChangeNotifier {
     _data = _data.setValue(fieldId, value);
     _fieldSources[fieldId] = FieldSource.prefilled;
   }
+
+  @visibleForTesting
+  static Set<String> captureLeavesForTesting(String target) =>
+      _captureLeaves(target);
+
+  @visibleForTesting
+  int? get formOpenedAtMsForTesting => _formOpenedAtMs;
+
+  @visibleForTesting
+  Future<int?> visitDurationMsForTesting() => _visitDurationMs();
 
   /// Test seam for the preload paths: the real ones ([preloadBiometrics] and
   /// friends) need DAOs, but the classification only cares that the value
@@ -2377,9 +2413,14 @@ class UnifiedFormNotifier extends ChangeNotifier {
     List<String> aiAcceptedUnchanged,
   }) telemetryVisitCapture() {
     final b = classifyFieldProvenance();
-    final captureIds = b.targetIds
-        .where(_visibleFieldIds.contains)
-        .toList()
+    // Expanded to leaves, because `aiFilled` records leaves: AI fills
+    // `systolic`/`diastolic`/`pulse`, never the `bpLogDetails` container, and
+    // it fills `glucose` alongside `glucoseType`. Counting widgets here and
+    // leaves there let the numerator exceed the denominator.
+    final captureIds = <String>{
+      for (final target in b.targetIds.where(_visibleFieldIds.contains))
+        ..._captureLeaves(target),
+    }.toList()
       ..sort();
     return (
       captureFieldIds: captureIds,
@@ -2701,20 +2742,38 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Wall-clock duration of this visit, or null when the encounter row cannot
   /// be read. Includes any time the app spent backgrounded, which is why the
   /// report medians these rather than averaging them.
+  /// When the assessment form came on screen, set once by [markFormOpened].
+  int? _formOpenedAtMs;
+
+  /// Stamps the start of form-completion timing.
+  ///
+  /// Called when the form is mounted. First call wins: the form screen can
+  /// rebuild, and a later stamp would shorten the measured time.
+  void markFormOpened() {
+    _formOpenedAtMs ??= DateTime.now().millisecondsSinceEpoch;
+  }
+
+  /// How long the SK spent on the assessment form.
+  ///
+  /// Measured from [markFormOpened], NOT from the encounter's `startedAt`.
+  /// The encounter is stamped in `EncounterRepository.createVisit()` — the
+  /// moment "start visit" is tapped on the dashboard — which is several
+  /// screens before the form exists: triage, the symptom picker, and the AI
+  /// briefing cards all sit in between. Measuring from there reported whole
+  /// visit time under a column labelled form-completion time, running one to
+  /// two minutes long on a real assessment.
+  ///
+  /// Null when the form was never marked open, rather than falling back to
+  /// the encounter stamp: a missing measurement is honest, and silently
+  /// mixing two different meanings in one column is what this fixes.
   Future<int?> _visitDurationMs() async {
-    final dao = _encounterDao;
-    if (dao == null) return null;
-    try {
-      final row = await dao.byId(_encounterId);
-      final startedAt = row?.startedAt;
-      if (startedAt == null) return null;
-      final elapsed =
-          DateTime.now().millisecondsSinceEpoch - startedAt;
-      return elapsed >= 0 ? elapsed : null;
-    } on Object catch (e) {
-      debugPrint('[Telemetry] visit duration unavailable: $e');
+    final openedAt = _formOpenedAtMs;
+    if (openedAt == null) {
+      debugPrint('[Telemetry] form open never marked — duration not reported');
       return null;
     }
+    final elapsed = DateTime.now().millisecondsSinceEpoch - openedAt;
+    return elapsed >= 0 ? elapsed : null;
   }
 
   static int? _asPositiveInt(Object? raw) {

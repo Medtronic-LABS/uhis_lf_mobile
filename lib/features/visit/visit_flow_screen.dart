@@ -1352,8 +1352,19 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     _loadPatientPhone();
     _loadHouseholdMembers();
     _loadNcdFacilities();
-    unawaited(_recordSummaryStarted());
+    // NOT started here. This runs in the same breath as _fetchNaba() above,
+    // so the clock used to include the whole AI round-trip — the SK was
+    // watching a shimmer, not reading a recommendation, and the reported
+    // reading time ran several seconds long on every visit. It starts when
+    // the recommendation is actually on screen; see _buildResult.
   }
+
+  /// Whether the CDSS view clock has been started for this screen.
+  ///
+  /// One start per visit: the recommendation is rendered by a FutureBuilder
+  /// that rebuilds on any parent rebuild, and re-recording would keep pushing
+  /// the start time forward until the measured reading time collapsed.
+  bool _summaryStartRecorded = false;
 
   Future<void> _recordSummaryStarted() async {
     if (!AppConfig.visitContentTelemetryEnabled || !mounted) return;
@@ -2519,6 +2530,14 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         }
         if (snap.hasError) {
           return _buildError(snap.error);
+        }
+        // The first frame carrying a real recommendation is when reading can
+        // begin, so that is when the clock starts. Guarded because a
+        // FutureBuilder rebuilds for reasons that have nothing to do with the
+        // future — a parent rebuild would otherwise keep resetting the start.
+        if (!_summaryStartRecorded) {
+          _summaryStartRecorded = true;
+          unawaited(_recordSummaryStarted());
         }
         return _buildResult(_effectiveNaba(snap.data!));
       },
