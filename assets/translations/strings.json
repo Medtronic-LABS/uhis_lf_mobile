@@ -10459,6 +10459,10 @@
     "bn": "অ্যাকাউন্ট, নিরাপত্তা ও অ্যাপ পছন্দ",
     "en": "Account, security & app preferences"
   },
+  "Settings.appVersion": {
+    "bn": "অ্যাপ সংস্করণ",
+    "en": "App Version"
+  },
   "settingsTitle": {
     "bn": "মাইক্রোফোন অ্যাক্সেস প্রয়োজন",
     "en": "Microphone access needed"

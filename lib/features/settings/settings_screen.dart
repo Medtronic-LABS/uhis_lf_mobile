@@ -16,6 +16,7 @@ import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/config/app_config.dart';
+import '../../core/widgets/app_version_label.dart';
 import '../debug/db_viewer_screen.dart';
 import '../debug/telemetry_viewer_screen.dart';
 import 'settings_actions.dart';
@@ -282,7 +283,36 @@ class _SettingsBody extends StatelessWidget {
         const _AiWidgetTogglesCard(),
         const SizedBox(height: 14),
         const _MicCaptureCard(),
+        const SizedBox(height: 28),
+        const _AppVersionFooter(),
       ],
+    );
+  }
+}
+
+class _AppVersionFooter extends StatelessWidget {
+  const _AppVersionFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            SettingsStrings.appVersion,
+            style: TextStyle(
+              fontFamily: AppFonts.body,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textDisabled,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const AppVersionLabel(),
+        ],
+      ),
     );
   }
 }

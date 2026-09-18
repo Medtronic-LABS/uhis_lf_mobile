@@ -516,6 +516,9 @@ abstract final class SettingsStrings {
         'Settings.offlineSyncSubtitle',
         'Push pending households, members & visits',
       );
+
+  static String get appVersion =>
+      getTranslatedString('Settings.appVersion', 'App Version');
 }
 
 /// Offline Sync screen copy (Spice OfflineSyncActivity).
