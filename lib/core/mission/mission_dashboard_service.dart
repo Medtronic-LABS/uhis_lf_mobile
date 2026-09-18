@@ -58,6 +58,7 @@ class MissionInputData {
     this.referralArrivalPendingPatientIds = const {},
     this.slaBreachedReferralPatientIds = const {},
     this.villageNamesById = const {},
+    this.deceasedReasonByLookupId = const {},
   });
 
   /// All patients on the worklist.
@@ -131,8 +132,9 @@ class MissionInputData {
   /// stale-record composite-score bonus (`(now − lastUpdated).days > 30`).
   final Map<String, int> lastUpdatedByPatientId;
 
-  /// Patients hidden from the queue unconditionally — `member.isActive == false`
-  /// OR `member.deceasedReason != null`.
+  /// Patients hidden from the queue unconditionally — `patients.is_active == false`.
+  /// Deceased household members remain visible with a tag via
+  /// [deceasedReasonByLookupId] so the SK sees why visits are blocked.
   final Set<String> hiddenPatientIds;
 
   /// Patients with a follow-up marked completed today — hidden from today's
@@ -188,8 +190,27 @@ class MissionInputData {
   /// location instead of the raw numeric ID.
   final Map<String, String> villageNamesById;
 
+  /// Deceased-reason payloads keyed by member id and/or `patient_id` for
+  /// inactive members. Presence of a key means deceased; value may be null
+  /// when no reason was recorded.
+  final Map<String, String?> deceasedReasonByLookupId;
+
   /// True if CQL results are available for scoring.
   bool get hasCqlResults => cqlResults.isNotEmpty;
+
+  /// Resolves deceased status for a queue lookup id (patient or member id).
+  ({bool isDeceased, String? deceasedReason}) deceasedFor(String? lookupId) {
+    if (lookupId == null || lookupId.isEmpty) {
+      return (isDeceased: false, deceasedReason: null);
+    }
+    if (!deceasedReasonByLookupId.containsKey(lookupId)) {
+      return (isDeceased: false, deceasedReason: null);
+    }
+    return (
+      isDeceased: true,
+      deceasedReason: deceasedReasonByLookupId[lookupId],
+    );
+  }
 }
 
 /// Simplified member data for household opportunity detection.
@@ -549,6 +570,7 @@ class MissionDashboardService {
     final priority = _bandToPriority(entry.band);
     final aiInsight = _buildAiInsight(drivers);
     final reason = _programmeReason(entry);
+    final deceased = data.deceasedFor(entry.patientId);
 
     return MissionQueueItem(
       id: entry.patientId,
@@ -583,6 +605,8 @@ class MissionDashboardService {
         MissionAction.scheduleVisit,
         MissionAction.callFamily,
       ],
+      isDeceased: deceased.isDeceased,
+      deceasedReason: deceased.deceasedReason,
     );
   }
 
@@ -612,6 +636,7 @@ class MissionDashboardService {
     final daysOverdue = now.difference(createdDateTime).inDays;
 
     final hhId = data.patientHouseholdsById[referral.patientId];
+    final deceased = data.deceasedFor(referral.patientId);
     return MissionQueueItem(
       id: referral.id,
       type: MissionItemType.referral,
@@ -643,6 +668,8 @@ class MissionDashboardService {
         MissionAction.callFacility,
         MissionAction.locate,
       ],
+      isDeceased: deceased.isDeceased,
+      deceasedReason: deceased.deceasedReason,
     );
   }
 
@@ -659,6 +686,7 @@ class MissionDashboardService {
 
     final aiInsight = _buildAiInsight(drivers);
     final hhId = data.patientHouseholdsById[followUp.patientId];
+    final deceased = data.deceasedFor(followUp.patientId);
     return MissionQueueItem(
       id: followUp.id,
       type: MissionItemType.followUp,
@@ -679,6 +707,8 @@ class MissionDashboardService {
         MissionAction.scheduleVisit,
         MissionAction.callFamily,
       ],
+      isDeceased: deceased.isDeceased,
+      deceasedReason: deceased.deceasedReason,
     );
   }
 
