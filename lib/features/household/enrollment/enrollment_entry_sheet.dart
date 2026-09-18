@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -80,7 +78,6 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   CameraController? _cameraController;
   bool _cameraReady = false;
   bool _cameraUnavailable = false;
-  Timer? _autoScanTimer;
 
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
@@ -132,14 +129,6 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
-      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
-        if (mounted &&
-            !_isScanning &&
-            _cameraReady &&
-            _overlayState == _OverlayState.scanner) {
-          _handleCapture();
-        }
-      });
     } on CameraException catch (e) {
       debugPrint('EnrollmentOverlay: camera init failed: $e');
       if (mounted) setState(() => _cameraUnavailable = true);
@@ -149,7 +138,6 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   @override
   void dispose() {
     debugPrint('[_EnrollmentOverlayState] dispose');
-    _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
     super.dispose();
@@ -172,7 +160,36 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     }
     if (!mounted) return;
     setState(() => _isScanning = false);
+    _onResult(result);
+  }
 
+  /// Picks a card photo from the gallery and OCRs it (offline, same pipeline as
+  /// a live capture).
+  Future<void> _pickFromGallery() async {
+    if (_isScanning) return;
+    setState(() => _isScanning = true);
+    NidScanResult result;
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 100,
+      );
+      if (picked == null) {
+        if (mounted) setState(() => _isScanning = false);
+        return; // cancelled
+      }
+      result = await _ocr.extractNidFromImage(picked.path);
+    } on Exception catch (e) {
+      debugPrint('EnrollmentOverlay: gallery pick failed: $e');
+      result = const NidScanResult(NidScanStatus.error);
+    }
+    if (!mounted) return;
+    setState(() => _isScanning = false);
+    _onResult(result);
+  }
+
+  /// Shared success handling for camera capture and gallery pick.
+  void _onResult(NidScanResult result) {
     switch (result.status) {
       case NidScanStatus.success:
         setState(() {
@@ -223,8 +240,8 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                 readingCard: _overlayState == _OverlayState.postScan,
                 cameraController: _cameraReady ? _cameraController : null,
                 cameraUnavailable: _cameraUnavailable,
-                autoScanActive: _cameraReady && _autoScanTimer != null,
                 onCapture: _handleCapture,
+                onPickFromGallery: _pickFromGallery,
                 onCreateHousehold: () {
                   Navigator.of(context).pop();
                   context.push('/household/enrollment/create');
@@ -290,7 +307,6 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   CameraController? _cameraController;
   bool _cameraReady = false;
   bool _cameraUnavailable = false;
-  Timer? _autoScanTimer;
 
   /// Non-null once a card has been read — drives the editable review step.
   NidCardData? _scanned;
@@ -344,9 +360,6 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
-      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
-        if (mounted && !_isScanning && _cameraReady) _handleCapture();
-      });
     } on CameraException catch (e) {
       debugPrint('MemberNidScan: camera init failed: $e');
       if (mounted) setState(() => _cameraUnavailable = true);
@@ -356,7 +369,6 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   @override
   void dispose() {
     debugPrint('[_MemberNidScanOverlayState] dispose');
-    _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _nameCtrl.dispose();
     _sweepCtrl.dispose();
@@ -412,8 +424,6 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   void _onResult(NidScanResult result) {
     switch (result.status) {
       case NidScanStatus.success:
-        _autoScanTimer?.cancel();
-        _autoScanTimer = null;
         final data = result.data!;
         setState(() {
           _scanned = data;
@@ -480,7 +490,6 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
                 readingCard: _scanned != null,
                 cameraController: _cameraReady ? _cameraController : null,
                 cameraUnavailable: _cameraUnavailable,
-                autoScanActive: _cameraReady && _autoScanTimer != null,
                 onCapture: _handleCapture,
                 onPickFromGallery: _pickFromGallery,
                 onCreateHousehold: () {},
@@ -765,7 +774,6 @@ class _ScannerBody extends StatelessWidget {
     required this.onCapture,
     required this.onCreateHousehold,
     required this.onCancel,
-    this.autoScanActive = false,
     this.showCreateHousehold = true,
     this.onLinkToExisting,
     this.onRegisterManually,
@@ -779,8 +787,6 @@ class _ScannerBody extends StatelessWidget {
   /// Live preview controller, or null while initialising / unavailable.
   final CameraController? cameraController;
   final bool cameraUnavailable;
-  /// When true, shows auto-scan status instead of default subtitle.
-  final bool autoScanActive;
   final VoidCallback onCapture;
   final VoidCallback onCreateHousehold;
   final VoidCallback onCancel;
@@ -958,8 +964,6 @@ class _ScannerBody extends StatelessWidget {
           Text(
             readingCard
                 ? EnrollmentStrings.nidReadingCardDetailsHeadline
-                : autoScanActive
-                ? EnrollmentStrings.nidAutoScanningHeadline
                 : EnrollmentStrings.nidTakePhotoHeadline,
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
             textAlign: TextAlign.center,
@@ -970,8 +974,6 @@ class _ScannerBody extends StatelessWidget {
                 ? EnrollmentStrings.nidReadingNumberSubtitle
                 : cameraUnavailable
                 ? EnrollmentStrings.cameraUnavailableLabel
-                : autoScanActive
-                ? EnrollmentStrings.autoScanActive
                 : EnrollmentStrings.positionCardSubtitle,
             style: const TextStyle(fontSize: 12, color: AppColors.onDarkLow),
             textAlign: TextAlign.center,
