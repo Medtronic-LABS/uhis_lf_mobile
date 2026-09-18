@@ -126,6 +126,8 @@ class MissionQueueItem {
     this.isPregnant = false,
     this.band = Band.band4,
     this.clinicalReasons = const <String>[],
+    this.isDeceased = false,
+    this.deceasedReason,
   });
 
   /// Unique identifier (patient ID, referral ID, or composite key).
@@ -255,6 +257,12 @@ class MissionQueueItem {
   /// never surfaced in the SK UI.
   final List<String> clinicalReasons;
 
+  /// True when the linked household member is marked deceased locally.
+  final bool isDeceased;
+
+  /// Encoded death reason from the household deceased flow, if recorded.
+  final String? deceasedReason;
+
   /// Spec §2.8 priority code for debug (`1a`, `2b`, `3`, `4`).
   String get priorityCode => priorityCodeFor(band, modifier);
 
@@ -303,6 +311,8 @@ class MissionQueueItem {
     bool? isPregnant,
     Band? band,
     List<String>? clinicalReasons,
+    bool? isDeceased,
+    String? deceasedReason,
   }) {
     return MissionQueueItem(
       id: id,
@@ -337,6 +347,8 @@ class MissionQueueItem {
       isPregnant: isPregnant ?? this.isPregnant,
       band: band ?? this.band,
       clinicalReasons: clinicalReasons ?? this.clinicalReasons,
+      isDeceased: isDeceased ?? this.isDeceased,
+      deceasedReason: deceasedReason ?? this.deceasedReason,
     );
   }
 

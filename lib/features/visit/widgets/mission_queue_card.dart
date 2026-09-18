@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/mission/programme_reason.dart';
+import '../../../core/rmnch/deceased_reason.dart';
 import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
 import '../../../core/models/programme.dart';
@@ -137,7 +138,9 @@ class MissionQueueCard extends StatelessWidget {
                                 Text(
                                   item.patientName,
                                   style: AppTextStyles.worklistPatientName.copyWith(
-                                    color: isCompleted ? tokens.textMuted : const Color(0xFF111827),
+                                    color: isCompleted || item.isDeceased
+                                        ? tokens.textMuted
+                                        : const Color(0xFF111827),
                                     decoration: isCompleted ? TextDecoration.lineThrough : null,
                                   ),
                                 ),
@@ -153,10 +156,26 @@ class MissionQueueCard extends StatelessWidget {
                                   ),
                                 if (isCompleted)
                                   _VisitedBadge(tokens: tokens)
+                                else if (item.isDeceased)
+                                  const _DeceasedBadge()
                                 else
                                   MissionReasonBadge(item: item),
                               ],
                             ),
+
+                            if (item.isDeceased)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  '${MemberDeceasedStrings.reasonForDeath}: '
+                                  '${DeceasedReason.formatForDisplay(item.deceasedReason)}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.worklistAddress.copyWith(
+                                    color: tokens.textMuted,
+                                  ),
+                                ),
+                              ),
 
                             // Address
                             Builder(builder: (context) {
@@ -540,6 +559,33 @@ class _StatusDot extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+// ─── Deceased badge ───────────────────────────────────────────────────────────
+
+class _DeceasedBadge extends StatelessWidget {
+  const _DeceasedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.progressTrack,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Text(
+        MemberDeceasedStrings.deceased,
+        style: const TextStyle(
+          fontFamily: AppFonts.body,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textMuted,
+        ),
+      ),
     );
   }
 }

@@ -301,6 +301,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     treatmentPresence: _treatmentPresenceDao,
     assessments: _assessmentDao,
     hierarchy: _userHierarchy,
+    members: _memberDao,
   );
 
   // ── Assessment Repository for offline-first assessment capture ──────────

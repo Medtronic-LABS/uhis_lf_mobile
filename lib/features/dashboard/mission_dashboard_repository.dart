@@ -7,6 +7,7 @@ import '../../core/api/cql_api_service.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/db/referral_dao.dart';
@@ -45,6 +46,7 @@ class MissionDashboardRepository {
     this._cqlService,
     this._assessments,
     this._hierarchy,
+    this._members,
     DateTime Function()? clock,
   })  : _clock = clock ?? DateTime.now,
         _service = const MissionDashboardService();
@@ -61,6 +63,7 @@ class MissionDashboardRepository {
   final CqlApiService? _cqlService;
   final AssessmentDao? _assessments;
   final UserHierarchyService? _hierarchy;
+  final MemberDao? _members;
   final DateTime Function() _clock;
   final MissionDashboardService _service;
 
@@ -621,6 +624,10 @@ class MissionDashboardRepository {
       }
     }
 
+    final deceasedReasonByLookupId = _members == null
+        ? const <String, String?>{}
+        : await _members.deceasedLookupByIds(patientIdSet);
+
     // Build village id → name lookup from hierarchy cache (no network call).
     final villageNamesById = <String, String>{};
     if (_hierarchy != null) {
@@ -662,6 +669,7 @@ class MissionDashboardRepository {
       referralArrivalPendingPatientIds: referralArrivalPendingPatientIds,
       slaBreachedReferralPatientIds: slaBreachedReferralPatientIds,
       villageNamesById: villageNamesById,
+      deceasedReasonByLookupId: deceasedReasonByLookupId,
     );
 
     return _cachedInput!;
