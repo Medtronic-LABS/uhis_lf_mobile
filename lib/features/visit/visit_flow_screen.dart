@@ -32,6 +32,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/locale_provider.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
+import '../../core/auth/user_hierarchy_service.dart';
+import '../../core/db/app_database.dart';
+import '../../core/db/audio_sample_dao.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/config/app_config.dart';
@@ -529,11 +532,17 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Widget _buildStepBody() {
     switch (_step) {
       case 0:
-        _step1Scribe ??= ScribeController(
-          api: context.read<ScribeApiService>(),
-          permissionService: ScribePermissionService(),
-          audioSettings: context.read<ScribeAudioSettingsNotifier>(),
-        );
+        if (_step1Scribe == null) {
+          _step1Scribe = ScribeController(
+            api: context.read<ScribeApiService>(),
+            permissionService: ScribePermissionService(),
+            audioSettings: context.read<ScribeAudioSettingsNotifier>(),
+          );
+          _step1Scribe!
+              .setHierarchyService(context.read<UserHierarchyService>());
+          _step1Scribe!
+              .setSampleDao(AudioSampleDao(context.read<AppDatabase>()));
+        }
         return _Step1Symptoms(
           key: ValueKey('flow-step1-${widget.visitId}'),
           encounterId: widget.visitId,
