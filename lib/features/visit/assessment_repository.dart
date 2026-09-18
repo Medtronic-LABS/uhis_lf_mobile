@@ -9,6 +9,7 @@ import '../../core/debug/console_log.dart';
 import '../../core/api/endpoints.dart' show Endpoints;
 import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
+import '../../core/version/app_version_info.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
@@ -483,8 +484,8 @@ class AssessmentRepository extends ChangeNotifier {
     // receives the full contract shape Android sends.
     final request = {
       'requestId': requestId,
-      'appVersionName': AppConfig.appVersionName,
-      'appVersionCode': AppConfig.appVersionCode,
+      'appVersionName': AppVersionInfo.current.versionName,
+      'appVersionCode': AppVersionInfo.current.versionCode,
       'appType': AppConfig.appType,
       'syncMode': syncMode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
@@ -1884,8 +1885,8 @@ class AssessmentRepository extends ChangeNotifier {
         'requestId': requestId,
         'dataRequired': false,
         if (userId != null) 'userId': userId,
-        'appVersionName': AppConfig.appVersionName,
-        'appVersionCode': AppConfig.appVersionCode,
+        'appVersionName': AppVersionInfo.current.versionName,
+        'appVersionCode': AppVersionInfo.current.versionCode,
         if (deviceId.isNotEmpty) 'deviceId': deviceId,
       };
       ConsoleLog.banner('[PayloadDebug] sync-status\n${body.toString()}');

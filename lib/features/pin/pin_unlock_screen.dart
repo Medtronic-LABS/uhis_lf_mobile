@@ -6,6 +6,7 @@ import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/sync_connectivity_service.dart';
+import '../../core/version/app_version_enforcer.dart';
 import '../../core/theme/app_theme.dart';
 import 'pin_pad.dart';
 
@@ -24,6 +25,17 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
   String? _error;
   bool _busy = false;
 
+  Future<void> _biometricUnlockFromPin() async {
+    final auth = context.read<AuthState>();
+    final connectivity = context.read<SyncConnectivityService>();
+    final ok = await auth.biometricUnlock();
+    if (!mounted) return;
+    if (ok) {
+      connectivity.syncIfSessionReady();
+      await goHomeIfUpToDate(context);
+    }
+  }
+
   Future<void> _onChanged(String v) async {
     debugPrint('[_PinUnlockScreenState] _onChanged v=$v');
     setState(() {
@@ -40,7 +52,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     if (ok) {
       // Reconnect may have arrived while locked — push any pending work now.
       context.read<SyncConnectivityService>().syncIfSessionReady();
-      context.go('/home');
+      await goHomeIfUpToDate(context);
     } else {
       setState(() {
         _busy = false;
@@ -114,20 +126,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                       // Show biometric button only if user enabled it AND device has biometric enrolled
                       if (biometricEnabled && biometricAvailable)
                         TextButton.icon(
-                          onPressed: _busy
-                              ? null
-                              : () async {
-                                  final router = GoRouter.of(context);
-                                  final auth = context.read<AuthState>();
-                                  final connectivity =
-                                      context.read<SyncConnectivityService>();
-                                  final ok = await auth.biometricUnlock();
-                                  if (!mounted) return;
-                                  if (ok) {
-                                    connectivity.syncIfSessionReady();
-                                    router.go('/home');
-                                  }
-                                },
+                          onPressed: _busy ? null : _biometricUnlockFromPin,
                           icon: const Icon(Icons.lock_open),
                           label: Text(LockStrings.unlockWithBiometrics),
                         ),

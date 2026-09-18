@@ -6,6 +6,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, kIsWeb;
 
 import '../config/app_config.dart';
+import '../version/app_version_info.dart';
 import 'endpoints.dart';
 import 'browser_adapter_stub.dart'
     if (dart.library.html) 'browser_adapter_web.dart';
@@ -204,9 +205,10 @@ class ApiClient {
             if (org != null && org.isNotEmpty) {
               options.headers['organizationId'] = org;
             }
-            options.headers['App-Version'] = AppConfig.appVersionName;
+            final version = AppVersionInfo.current;
+            options.headers['App-Version'] = version.versionName;
             options.headers['App-Version-Code'] =
-                AppConfig.appVersionCode.toString();
+                version.versionCode.toString();
           }
           handler.next(options);
         },
@@ -362,9 +364,10 @@ class ApiClient {
           if (tid != null && tid.isNotEmpty) {
             options.headers['tenantId'] = tid;
           }
-          options.headers['App-Version'] = AppConfig.appVersionName;
+          final version = AppVersionInfo.current;
+          options.headers['App-Version'] = version.versionName;
           options.headers['App-Version-Code'] =
-              AppConfig.appVersionCode.toString();
+              version.versionCode.toString();
           handler.next(options);
         },
       ),

@@ -91,6 +91,10 @@ import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
+import 'core/version/app_update_flow.dart';
+import 'core/version/app_version_enforcer.dart';
+import 'core/version/app_version_info.dart';
+import 'core/version/app_version_service.dart';
 import 'features/scribe/audio_sample_sync_service.dart';
 
 
@@ -111,8 +115,10 @@ Future<void> main() async {
   // month names regardless of app language.
   await AppDateFormat.ensureInitialised();
   await FormConfig.loadAndCache(rootBundle);
+  await AppVersionInfo.ensureLoaded();
   final api = await ApiClient.create();
-  final authRepo = AuthRepository(api);
+  final appVersionService = AppVersionService(api);
+  final authRepo = AuthRepository(api, appVersionService: appVersionService);
   final biometric = BiometricService();
   final appDb = await AppDatabase.open().onError((e, st) async {
     if (kIsWeb) {
@@ -133,6 +139,7 @@ Future<void> main() async {
     authState: authState,
     biometric: biometric,
     appDb: appDb,
+    appVersionService: appVersionService,
   ));
 }
 
@@ -144,6 +151,7 @@ class UhisNextApp extends StatefulWidget {
     required this.authState,
     required this.biometric,
     required this.appDb,
+    required this.appVersionService,
   });
 
   final ApiClient api;
@@ -151,6 +159,7 @@ class UhisNextApp extends StatefulWidget {
   final AuthState authState;
   final BiometricService biometric;
   final AppDatabase appDb;
+  final AppVersionService appVersionService;
 
   @override
   State<UhisNextApp> createState() => _UhisNextAppState();
@@ -351,6 +360,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     authRepo: widget.authRepo,
     flushUploadQueues: _postSync.flushUploadQueues,
   );
+  late final AppVersionEnforcer _appVersionEnforcer =
+      AppVersionEnforcer(widget.appVersionService);
 
   @override
   void initState() {
@@ -369,6 +380,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // the next user to log in on the same device would briefly see the
     // previous user's dashboard snapshot, hierarchy/village assignment, or
     // training progress until something else happened to refresh it.
+    widget.authState.registerLogoutHook(AppVersionService.invalidateSessionCache);
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
     widget.authState.addListener(_onAuthStateChanged);
@@ -451,6 +463,8 @@ class _UhisNextAppState extends State<UhisNextApp>
       // first login that is the entire synced history at once, since cold sync
       // pulls referrals with past due dates that all read as SLA-breached.
       unawaited(_referrals.recomputeAllAfterSync());
+      // Play Core requires re-showing an in-progress immediate update on resume.
+      unawaited(resumeInProgressAppUpdateIfAny());
     }
   }
 
@@ -459,6 +473,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     return MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: widget.api),
+        Provider<AppVersionService>.value(value: widget.appVersionService),
+        Provider<AppVersionEnforcer>.value(value: _appVersionEnforcer),
         Provider<AuthRepository>.value(value: widget.authRepo),
         Provider<BiometricService>.value(value: widget.biometric),
         Provider<AppDatabase>.value(value: widget.appDb),
