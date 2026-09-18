@@ -353,7 +353,6 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         defaultReferralSiteId: ctx.read<ApiClient>().organizationFhirId,
         referralRepo: ctx.read<ReferralRepository>(),
         telemetryService: ctx.read<TelemetryService>(),
-        encounterDao: ctx.read<EncounterDao>(),
         valueAuditDao: ctx.read<ValueAuditDao>(),
       );
       _formNotifier = notifier;
