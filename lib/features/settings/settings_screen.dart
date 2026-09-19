@@ -15,7 +15,10 @@ import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
 import '../../core/preferences/vad_tuning_notifier.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/config/app_config.dart';
+import '../../core/widgets/app_version_label.dart';
 import '../debug/db_viewer_screen.dart';
+import '../debug/telemetry_viewer_screen.dart';
 import 'settings_actions.dart';
 import 'widgets/profile_card.dart';
 import 'widgets/settings_row.dart';
@@ -229,7 +232,7 @@ class _SettingsBody extends StatelessWidget {
                   if (chosen != null) await locale.setLanguage(chosen);
                 },
               ),
-              if (kDebugMode) ...[
+              if (kDebugMode || AppConfig.telemetryScreenEnabled) ...[
                 const Divider(height: 20),
                 _SettingsTapRow(
                   row: SettingsRow(
@@ -241,6 +244,19 @@ class _SettingsBody extends StatelessWidget {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const DebugDbViewerScreen(),
+                    ),
+                  ),
+                ),
+                _SettingsTapRow(
+                  row: SettingsRow(
+                    emoji: '📊',
+                    chipColor: AppColors.catChildSurface,
+                    title: SettingsStrings.debugTelemetry,
+                    subtitle: SettingsStrings.debugTelemetrySubtitle,
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const TelemetryViewerScreen(),
                     ),
                   ),
                 ),
@@ -267,7 +283,36 @@ class _SettingsBody extends StatelessWidget {
         const _AiWidgetTogglesCard(),
         const SizedBox(height: 14),
         const _MicCaptureCard(),
+        const SizedBox(height: 28),
+        const _AppVersionFooter(),
       ],
+    );
+  }
+}
+
+class _AppVersionFooter extends StatelessWidget {
+  const _AppVersionFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            SettingsStrings.appVersion,
+            style: TextStyle(
+              fontFamily: AppFonts.body,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textDisabled,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const AppVersionLabel(),
+        ],
+      ),
     );
   }
 }

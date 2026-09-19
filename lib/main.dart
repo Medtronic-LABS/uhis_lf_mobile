@@ -52,6 +52,14 @@ import 'core/risk/risk_scoring_service.dart';
 import 'core/sla/priority_scorer.dart';
 import 'core/sla/sla_evaluator.dart';
 import 'core/auth/user_hierarchy_service.dart';
+import 'core/telemetry/telemetry_dao.dart';
+import 'core/telemetry/telemetry_uploader.dart';
+import 'core/telemetry/telemetry_service.dart';
+import 'core/telemetry/value_audit_dao.dart';
+import 'core/telemetry/value_audit_uploader.dart';
+import 'core/telemetry/visit_content_dao.dart';
+import 'core/telemetry/visit_content_service.dart';
+import 'core/telemetry/visit_content_uploader.dart';
 import 'core/sync/offline_sync_service.dart';
 import 'app/post_sync_refresher.dart';
 import 'core/sync/sync_foreground_controller.dart';
@@ -83,6 +91,11 @@ import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
+import 'core/version/app_update_flow.dart';
+import 'core/version/app_version_enforcer.dart';
+import 'core/version/app_version_info.dart';
+import 'core/version/app_version_service.dart';
+import 'features/scribe/audio_sample_sync_service.dart';
 
 
 Future<void> main() async {
@@ -102,8 +115,10 @@ Future<void> main() async {
   // month names regardless of app language.
   await AppDateFormat.ensureInitialised();
   await FormConfig.loadAndCache(rootBundle);
+  await AppVersionInfo.ensureLoaded();
   final api = await ApiClient.create();
-  final authRepo = AuthRepository(api);
+  final appVersionService = AppVersionService(api);
+  final authRepo = AuthRepository(api, appVersionService: appVersionService);
   final biometric = BiometricService();
   final appDb = await AppDatabase.open().onError((e, st) async {
     if (kIsWeb) {
@@ -112,6 +127,7 @@ Future<void> main() async {
     }
     throw e!;
   });
+  AudioSampleSyncService.init(db: appDb, api: ScribeApiService(api));
   final authState = AuthState(
     authRepo,
     biometric,
@@ -123,6 +139,7 @@ Future<void> main() async {
     authState: authState,
     biometric: biometric,
     appDb: appDb,
+    appVersionService: appVersionService,
   ));
 }
 
@@ -134,6 +151,7 @@ class UhisNextApp extends StatefulWidget {
     required this.authState,
     required this.biometric,
     required this.appDb,
+    required this.appVersionService,
   });
 
   final ApiClient api;
@@ -141,6 +159,7 @@ class UhisNextApp extends StatefulWidget {
   final AuthState authState;
   final BiometricService biometric;
   final AppDatabase appDb;
+  final AppVersionService appVersionService;
 
   @override
   State<UhisNextApp> createState() => _UhisNextAppState();
@@ -170,6 +189,38 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
   late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
+  late final TelemetryDao _telemetryDao = TelemetryDao(widget.appDb);
+  late final TelemetryService _telemetryService = TelemetryService(
+    dao: _telemetryDao,
+    userIdResolver: widget.authRepo.userId,
+    // Parsed to int because the column and the server column are integers;
+    // a non-numeric tenant yields null, which degrades to the pre-existing
+    // "credit the uploading session" behaviour rather than writing garbage.
+    tenantIdResolver: () async {
+      final raw = await widget.authRepo.currentTenantId();
+      return raw == null ? null : int.tryParse(raw);
+    },
+  );
+  late final TelemetryUploader _telemetryUploader =
+      TelemetryUploader(_telemetryDao, widget.api);
+  // PHI stream, separate from telemetry all the way down — own dao, own
+  // uploader, own flag (AppConfig.valueAuditEnabled), and its table is wiped
+  // on SK handover.
+  late final ValueAuditDao _valueAuditDao = ValueAuditDao(widget.appDb);
+  late final ValueAuditUploader _valueAuditUploader =
+      ValueAuditUploader(_valueAuditDao, widget.api);
+  late final VisitContentDao _visitContentDao =
+      VisitContentDao(widget.appDb);
+  late final VisitContentService _visitContentService = VisitContentService(
+    dao: _visitContentDao,
+    userIdResolver: widget.authRepo.userId,
+    tenantIdResolver: () async {
+      final raw = await widget.authRepo.currentTenantId();
+      return raw == null ? null : int.tryParse(raw);
+    },
+  );
+  late final VisitContentUploader _visitContentUploader =
+      VisitContentUploader(_visitContentDao, widget.api);
   late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
     households: _householdDao,
     members: _memberDao,
@@ -250,6 +301,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     treatmentPresence: _treatmentPresenceDao,
     assessments: _assessmentDao,
     hierarchy: _userHierarchy,
+    members: _memberDao,
   );
 
   // ── Assessment Repository for offline-first assessment capture ──────────
@@ -281,6 +333,9 @@ class _UhisNextAppState extends State<UhisNextApp>
     worklist: _worklist,
     referrals: _referrals,
     mission: _missionDashboard,
+    telemetry: _telemetryUploader,
+    valueAudit: _valueAuditUploader,
+    visitContent: _visitContentUploader,
   );
   late final SyncForegroundController _syncForeground = SyncForegroundController(
     progress: _sync.progressStream,
@@ -304,7 +359,10 @@ class _UhisNextAppState extends State<UhisNextApp>
     pushService: _offlinePush,
     authState: widget.authState,
     authRepo: widget.authRepo,
+    flushUploadQueues: _postSync.flushUploadQueues,
   );
+  late final AppVersionEnforcer _appVersionEnforcer =
+      AppVersionEnforcer(widget.appVersionService);
 
   @override
   void initState() {
@@ -323,6 +381,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // the next user to log in on the same device would briefly see the
     // previous user's dashboard snapshot, hierarchy/village assignment, or
     // training progress until something else happened to refresh it.
+    widget.authState.registerLogoutHook(AppVersionService.invalidateSessionCache);
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
     widget.authState.addListener(_onAuthStateChanged);
@@ -362,8 +421,11 @@ class _UhisNextAppState extends State<UhisNextApp>
   bool _sdkInitialized = false;
 
   Future<void> _onAuthStateChanged() async {
-    if (_sdkInitialized) return;
     if (widget.authState.status != AuthStatus.signedIn) return;
+    // Refresh server-side feature flags on every sign-in (fresh login or
+    // biometric/PIN restore). Non-fatal — defaults remain if the call fails.
+    unawaited(_userHierarchy.refreshFeatureFlags());
+    if (_sdkInitialized) return;
     _sdkInitialized = true;
     final token = await widget.authRepo.getToken();
     if (token == null || token.isEmpty) {
@@ -402,6 +464,8 @@ class _UhisNextAppState extends State<UhisNextApp>
       // first login that is the entire synced history at once, since cold sync
       // pulls referrals with past due dates that all read as SLA-breached.
       unawaited(_referrals.recomputeAllAfterSync());
+      // Play Core requires re-showing an in-progress immediate update on resume.
+      unawaited(resumeInProgressAppUpdateIfAny());
     }
   }
 
@@ -410,6 +474,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     return MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: widget.api),
+        Provider<AppVersionService>.value(value: widget.appVersionService),
+        Provider<AppVersionEnforcer>.value(value: _appVersionEnforcer),
         Provider<AuthRepository>.value(value: widget.authRepo),
         Provider<BiometricService>.value(value: widget.biometric),
         Provider<AppDatabase>.value(value: widget.appDb),
@@ -471,6 +537,14 @@ class _UhisNextAppState extends State<UhisNextApp>
                 )),
         // Visit flow providers
         Provider<EncounterDao>.value(value: _encounterDao),
+        Provider<TelemetryDao>.value(value: _telemetryDao),
+        Provider<TelemetryService>.value(value: _telemetryService),
+        Provider<TelemetryUploader>.value(value: _telemetryUploader),
+        Provider<ValueAuditDao>.value(value: _valueAuditDao),
+        Provider<ValueAuditUploader>.value(value: _valueAuditUploader),
+        Provider<VisitContentDao>.value(value: _visitContentDao),
+        Provider<VisitContentService>.value(value: _visitContentService),
+        Provider<VisitContentUploader>.value(value: _visitContentUploader),
         Provider<EncounterRepository>(
             create: (ctx) => EncounterRepository(
                   widget.api,

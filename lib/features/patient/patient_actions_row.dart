@@ -19,8 +19,10 @@ class PatientActionsRow extends StatefulWidget {
     this.householdId,
     this.villageId,
     this.memberId,
+    this.householdMemberLocalId,
     this.programmes = const {},
     this.origin,
+    this.isDeceased = false,
   });
 
   final String patientId;
@@ -33,10 +35,14 @@ class PatientActionsRow extends StatefulWidget {
   /// Populates encounter.memberId in the offline-sync payload so the
   /// FHIR mapper can link the assessment to the correct RelatedPerson.
   final String? memberId;
+  final int? householdMemberLocalId;
   final Set<Programme> programmes;
 
   /// Origin screen for return navigation ('dashboard' or 'tasks').
   final String? origin;
+
+  /// When true, new visits are blocked and the start button stays disabled.
+  final bool isDeceased;
 
   @override
   State<PatientActionsRow> createState() => _PatientActionsRowState();
@@ -56,7 +62,7 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
   }
 
   Future<void> _startVisit() async {
-    if (_starting) return;
+    if (_starting || widget.isDeceased) return;
     if (!hasAnyEligibleProgramme(ageYears: widget.patientAge)) {
       _showNotEligibleToast();
       return;
@@ -68,7 +74,7 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
     final programme = widget.programmes.isNotEmpty
         ? widget.programmes.first
         : Programme.unknown;
-    final encounterId = await startOrResumeVisit(
+    final result = await startOrResumeVisit(
       context,
       controller: controller,
       patientId: widget.patientId,
@@ -81,7 +87,8 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
 
     if (!mounted) return;
 
-    if (encounterId != null) {
+    if (result.succeeded) {
+      final encounterId = result.encounterId!;
       final originParam = widget.origin != null ? '?origin=${widget.origin}' : '';
       context.go(
         '/patients/visit/$encounterId/flow$originParam',
@@ -93,11 +100,13 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
           'householdId': widget.householdId,
           'villageId': widget.villageId,
           'memberId': widget.memberId,
+          if (widget.householdMemberLocalId != null)
+            'householdMemberLocalId': widget.householdMemberLocalId,
         },
       );
     } else {
       setState(() => _starting = false);
-      if (mounted) {
+      if (mounted && !result.messageAlreadyShown) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(controller.error ?? PatientContextStrings.startVisitFailed)),
         );
@@ -108,7 +117,9 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final eligible = hasAnyEligibleProgramme(ageYears: widget.patientAge);
+    final eligible =
+        !widget.isDeceased && hasAnyEligibleProgramme(ageYears: widget.patientAge);
+    final visitDisabled = widget.isDeceased || _starting;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,7 +128,7 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: _starting ? null : _startVisit,
+                onPressed: visitDisabled ? null : _startVisit,
                 icon: _starting
                     ? const SizedBox(
                         width: 18,
@@ -125,7 +136,13 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.play_arrow),
-                label: Text(_starting ? PatientContextStrings.startingEllipsis : PatientContextStrings.startVisit),
+                label: Text(
+                  widget.isDeceased
+                      ? MemberDeceasedStrings.deceased
+                      : _starting
+                          ? PatientContextStrings.startingEllipsis
+                          : PatientContextStrings.startVisit,
+                ),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                   backgroundColor: eligible

@@ -11,8 +11,10 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/sync/offline_push_service.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
+import '../../core/version/app_version_enforcer.dart';
 
 /// Full-screen loading indicator shown during initial data sync after login.
 ///
@@ -135,6 +137,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
         debugPrint(
           '[Sync] UHIS parity — sync cursor present, skipping login pull',
         );
+        context.read<SyncConnectivityService>().syncIfSessionReady();
         _finishSyncAndGoHome();
         return;
       }
@@ -187,7 +190,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     if (_finishHandled) return;
     _finishHandled = true;
     _warmEncounterCacheInBackground();
-    if (mounted) _navigateAfterSync();
+    if (mounted) unawaited(_navigateAfterSync());
   }
 
   /// Prefetch today's completed-visit ids so Home's first queue build is warm.
@@ -204,8 +207,8 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     }());
   }
 
-  void _navigateAfterSync() {
-    context.go('/home');
+  Future<void> _navigateAfterSync() async {
+    await goHomeIfUpToDate(context);
   }
 
   Future<void> _retry() async {
@@ -219,9 +222,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     await _startSync();
   }
 
-  void _continueOffline() {
+  Future<void> _continueOffline() async {
     if (_blockedNoAuth) return;
-    context.go('/home');
+    await goHomeIfUpToDate(context);
   }
 
   void _returnToLogin() {

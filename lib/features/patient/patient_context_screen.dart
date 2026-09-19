@@ -27,6 +27,7 @@ import '../../core/clinical/referral_facility_labels.dart';
 import '../../core/clinical/assessment_raw_normalizer.dart';
 import '../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
 import '../../core/clinical/briefing_rules/clinical_finding.dart';
+import '../../core/rmnch/deceased_reason.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import '../../core/risk/clinical_vitals_from_history.dart';
@@ -67,6 +68,9 @@ class PatientOrMemberData {
     this.vitalHistory = const [],
     this.pregnancySnapshot,
     this.enrolledAt,
+    this.householdMemberLocalId,
+    this.isActive = true,
+    this.deceasedReason,
   });
 
   final PatientWithProgrammes? localPatient;
@@ -97,6 +101,17 @@ class PatientOrMemberData {
   final String? memberId;
   /// When the member was first enrolled in the app (from local DB `created_at`).
   final DateTime? enrolledAt;
+
+  /// Local autoincrement PK for visit/assessment identity (`members.id`).
+  final int? householdMemberLocalId;
+
+  /// False when the member has been marked deceased locally.
+  final bool isActive;
+
+  /// Encoded death reason from the household deceased flow, if recorded.
+  final String? deceasedReason;
+
+  bool get isDeceased => !isActive;
 
   bool get hasData => localPatient != null || remoteMember != null;
 
@@ -266,6 +281,9 @@ class PatientOrMemberData {
     String? householdHeadPhone,
     List<VisitVitals>? vitalHistory,
     PregnancySnapshotRow? pregnancySnapshot,
+    int? householdMemberLocalId,
+    bool? isActive,
+    String? deceasedReason,
   }) {
     return PatientOrMemberData(
       localPatient: localPatient,
@@ -280,6 +298,10 @@ class PatientOrMemberData {
       vitalHistory: vitalHistory ?? this.vitalHistory,
       pregnancySnapshot: pregnancySnapshot ?? this.pregnancySnapshot,
       enrolledAt: enrolledAt,
+      householdMemberLocalId:
+          householdMemberLocalId ?? this.householdMemberLocalId,
+      isActive: isActive ?? this.isActive,
+      deceasedReason: deceasedReason ?? this.deceasedReason,
     );
   }
 }
@@ -507,12 +529,36 @@ class _PatientContextScreenState
     // [PatientOrMemberData.assessments], so that it also covers records that
     // only came back over the network.
     try {
+      await localDrafts.syncPatientIdsFromMemberLinks();
+
       final draftsById = <String, LocalAssessmentEntity>{};
-      for (final key in lookupKeys) {
-        for (final d in await localDrafts.getByPatientId(key)) {
+      void absorb(Iterable<LocalAssessmentEntity> rows) {
+        for (final d in rows) {
           draftsById[d.id] = d;
         }
       }
+
+      absorb(await localDrafts.getByPatientIds(lookupKeys.toList()));
+
+      // PW/ANC saves after member sync: visit flow passes FHIR memberId, so
+      // householdMemberLocalId was 0 and patient_id could be null/wrong until
+      // identity resolution is fixed — still find rows by local member PK.
+      final memberDao = context.read<MemberDao>();
+      for (final key in lookupKeys) {
+        final member = await memberDao.getById(key) ??
+            await memberDao.getByPatientId(key) ??
+            await memberDao.getByFhirId(key);
+        if (member == null) continue;
+        final localPk = int.tryParse(member.id);
+        if (localPk != null && localPk > 0) {
+          absorb(await localDrafts.getByHouseholdMemberId(localPk));
+        }
+        final fhir = member.fhirId?.trim();
+        if (fhir != null && fhir.isNotEmpty) {
+          absorb(await localDrafts.getByMemberId(fhir));
+        }
+      }
+
       final drafts = draftsById.values.toList();
       // ignore: avoid_print
       print('[PatientContextScreen] localDrafts lookupKeys=$lookupKeys count=${drafts.length}');
@@ -552,7 +598,9 @@ class _PatientContextScreenState
           id: d.id,
           type: d.assessmentType.toUpperCase(),
           date: d.createdAt ?? DateTime.now(),
-          status: d.syncStatus.name,
+          status: d.referralStatus?.trim().isNotEmpty == true
+              ? d.referralStatus
+              : null,
           notes: d.referredReasons,
           rawJson: localRaw,
         ));
@@ -580,7 +628,8 @@ class _PatientContextScreenState
   Future<String> _resolveEncounterMemberId() async {
     final memberDao = context.read<MemberDao>();
     final entity = await memberDao.getById(widget.patientId) ??
-        await memberDao.getByPatientId(widget.patientId);
+        await memberDao.getByPatientId(widget.patientId) ??
+        await memberDao.getByFhirId(widget.patientId);
 
     if (entity != null) {
       if (entity.fhirId?.isNotEmpty == true) {
@@ -607,6 +656,41 @@ class _PatientContextScreenState
     final fallback = widget.memberData?['id'] as String? ?? widget.patientId;
     debugPrint('[PatientContext] memberId fallback: $fallback');
     return fallback;
+  }
+
+  /// Local autoincrement PK for [LocalAssessmentEntity.householdMemberLocalId].
+  Future<int?> _resolveHouseholdMemberLocalId() async {
+    final entity = await _resolveMemberEntity(context.read<MemberDao>());
+    if (entity == null) {
+      final fromExtras = widget.memberData?['id']?.toString();
+      if (fromExtras != null) {
+        return int.tryParse(fromExtras);
+      }
+      return int.tryParse(widget.patientId);
+    }
+    return int.tryParse(entity.id);
+  }
+
+  Future<HouseholdMemberEntity?> _resolveMemberEntity(MemberDao memberDao) async {
+    return await memberDao.getById(widget.patientId) ??
+        await memberDao.getByPatientId(widget.patientId) ??
+        await memberDao.getByFhirId(widget.patientId);
+  }
+
+  PatientOrMemberData _applyMemberStatus(
+    PatientOrMemberData data,
+    HouseholdMemberEntity? member,
+  ) {
+    if (member != null) {
+      return data.copyWith(
+        isActive: member.isActive,
+        deceasedReason: member.deceasedReason,
+      );
+    }
+    if (data.localPatient?.patient.isActive == false) {
+      return data.copyWith(isActive: false);
+    }
+    return data;
   }
 
   /// Pregnancy snapshots are stored under the local member PK — see
@@ -662,20 +746,24 @@ class _PatientContextScreenState
     // Phase 1: all local reads in parallel — returns instantly from SQLite.
     final phase1 = await Future.wait([
       _resolveEncounterMemberId(),
+      _resolveHouseholdMemberLocalId(),
       patientRepo.byId(widget.patientId),
       _localAssessmentsFor(widget.patientId),
       syncSvc.lastSyncedAt(),
       vitalsRepo.recentByVisit(widget.patientId).catchError((_) => <VisitVitals>[]),
       _loadPregnancySnapshot(pregnancyDao, memberDao).catchError((_) => null),
       memberRepo.enrolledAtFor(widget.patientId).catchError((_) => null),
+      _resolveMemberEntity(memberDao),
     ]);
     final resolvedMemberId = phase1[0] as String?;
-    final localPatient = phase1[1] as PatientWithProgrammes?;
-    final localAssessments = phase1[2] as List<MemberAssessment>;
-    final lastSync = phase1[3] as DateTime?;
-    final vitalHistory = phase1[4] as List<VisitVitals>;
-    final pregnancySnapshot = phase1[5] as PregnancySnapshotRow?;
-    final enrolledAt = phase1[6] as DateTime?;
+    final resolvedHouseholdMemberLocalId = phase1[1] as int?;
+    final localPatient = phase1[2] as PatientWithProgrammes?;
+    final localAssessments = phase1[3] as List<MemberAssessment>;
+    final lastSync = phase1[4] as DateTime?;
+    final vitalHistory = phase1[5] as List<VisitVitals>;
+    final pregnancySnapshot = phase1[6] as PregnancySnapshotRow?;
+    final enrolledAt = phase1[7] as DateTime?;
+    final memberEntity = phase1[8] as HouseholdMemberEntity?;
     debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
         ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
@@ -739,13 +827,17 @@ class _PatientContextScreenState
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
         enrolledAt: enrolledAt,
+        householdMemberLocalId: resolvedHouseholdMemberLocalId,
       );
       final info = await _householdInfo(localPatient.patient.householdId);
       ConsoleLog.banner('[PatientCtx] load done=${t0.elapsedMilliseconds}ms'
           ' localAssessments=${localAssessments.length}');
-      return localOnly.copyWith(
-        householdName: info.name,
-        householdHeadPhone: info.headPhone,
+      return _applyMemberStatus(
+        localOnly.copyWith(
+          householdName: info.name,
+          householdHeadPhone: info.headPhone,
+        ),
+        memberEntity,
       );
     }
 
@@ -763,16 +855,20 @@ class _PatientContextScreenState
       final progs = patientWithProgs?.programmes ??
           _programmesFromAssessments(memberLocalAssessments);
       final memberHouseholdInfo = await _householdInfo(member.householdId);
-      return PatientOrMemberData(
-        remoteMember: member,
-        programmes: progs,
-        localAssessments: memberLocalAssessments,
-        memberId: resolvedMemberId,
-        householdName: memberHouseholdInfo.name,
-        householdHeadPhone: memberHouseholdInfo.headPhone,
-        vitalHistory: vitalHistory,
-        pregnancySnapshot: pregnancySnapshot,
-        enrolledAt: enrolledAt,
+      return _applyMemberStatus(
+        PatientOrMemberData(
+          remoteMember: member,
+          programmes: progs,
+          localAssessments: memberLocalAssessments,
+          memberId: resolvedMemberId,
+          householdName: memberHouseholdInfo.name,
+          householdHeadPhone: memberHouseholdInfo.headPhone,
+          vitalHistory: vitalHistory,
+          pregnancySnapshot: pregnancySnapshot,
+          enrolledAt: enrolledAt,
+          householdMemberLocalId: resolvedHouseholdMemberLocalId,
+        ),
+        memberEntity,
       );
     }
 
@@ -791,26 +887,33 @@ class _PatientContextScreenState
           _programmesFromAssessments(localAssessmentsList);
       final prePassedHouseholdInfo =
           await _householdInfo(data['householdId']?.toString());
-      return PatientOrMemberData(
-        remoteMember: MemberHealthDetails(
-          id: memberId,
-          name: data['name'] as String? ?? PatientContextStrings.unknownMemberName,
-          gender: data['gender'] as String?,
-          age: data['age'] as int?,
-          dateOfBirth: data['dateOfBirth'] as String?,
-          phoneNumber: data['phoneNumber'] as String?,
-          householdId: data['householdId']?.toString(),
-          isPregnant: data['isPregnant'] as bool? ?? false,
-          patientId: data['patientId'] as String?,
+      return _applyMemberStatus(
+        PatientOrMemberData(
+          remoteMember: MemberHealthDetails(
+            id: memberId,
+            name: data['name'] as String? ??
+                PatientContextStrings.unknownMemberName,
+            gender: data['gender'] as String?,
+            age: data['age'] as int?,
+            dateOfBirth: data['dateOfBirth'] as String?,
+            phoneNumber: data['phoneNumber'] as String?,
+            householdId: data['householdId']?.toString(),
+            isPregnant: data['isPregnant'] as bool? ?? false,
+            patientId: data['patientId'] as String?,
+          ),
+          programmes: progs,
+          localAssessments: localAssessmentsList,
+          memberId: resolvedMemberId,
+          householdName: prePassedHouseholdInfo.name,
+          householdHeadPhone: prePassedHouseholdInfo.headPhone,
+          vitalHistory: vitalHistory,
+          pregnancySnapshot: pregnancySnapshot,
+          enrolledAt: enrolledAt,
+          householdMemberLocalId: resolvedHouseholdMemberLocalId,
+          isActive: data['isActive'] as bool? ?? true,
+          deceasedReason: data['deceasedReason'] as String?,
         ),
-        programmes: progs,
-        localAssessments: localAssessmentsList,
-        memberId: resolvedMemberId,
-        householdName: prePassedHouseholdInfo.name,
-        householdHeadPhone: prePassedHouseholdInfo.headPhone,
-        vitalHistory: vitalHistory,
-        pregnancySnapshot: pregnancySnapshot,
-        enrolledAt: enrolledAt,
+        memberEntity,
       );
     }
 
@@ -904,6 +1007,7 @@ class _PatientContextScreenState
       memberId: data.memberId,
       programmes: progs,
       diagnosisLabel: reasons.isNotEmpty ? reasons.first : null,
+      isDeceased: data.isDeceased,
       chipLine: chip,
       summary: summary.toString(),
       apiContext: <String, dynamic>{
@@ -916,6 +1020,7 @@ class _PatientContextScreenState
         'riskBand': bandLabel,
         'riskReasons': reasons,
         'isPregnant': data.isPregnant,
+        'isDeceased': data.isDeceased,
         'villageName': data.villageName,
         if (data.enrolledAt != null)
           'registrationDate': data.enrolledAt!.toIso8601String().split('T').first,
@@ -1250,16 +1355,16 @@ class _PatientContextScreenState
     String? statusLabel;
     Color statusBg = Colors.transparent;
     Color statusFg = Colors.white;
-    if (pendingEntry != null) {
+    if (!data.isDeceased && pendingEntry != null) {
       statusLabel = PatientDetailStrings.overdue;
       statusBg = AppColors.statusCritical;
-    } else if (data.riskBand == Band.band1) {
+    } else if (!data.isDeceased && data.riskBand == Band.band1) {
       statusLabel = PatientDetailStrings.critical;
       statusBg = AppColors.statusCritical;
-    } else if (data.riskBand == Band.band2) {
+    } else if (!data.isDeceased && data.riskBand == Band.band2) {
       statusLabel = PatientDetailStrings.highRiskBadge;
       statusBg = AppColors.statusWarning;
-    } else if (data.riskBand == Band.band3) {
+    } else if (!data.isDeceased && data.riskBand == Band.band3) {
       statusLabel = PatientDetailStrings.monitoring;
       statusBg = AppColors.navy;
     }
@@ -1286,6 +1391,10 @@ class _PatientContextScreenState
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 14, 14, AppSpacing.stickyBarClearance),
                   children: [
+                    if (data.isDeceased) ...[
+                      _DeceasedMemberBanner(deceasedReason: data.deceasedReason),
+                      const SizedBox(height: 10),
+                    ],
                     // ── AI Insight card ───────────────────────────────────
                     _AiInsightCard(
                       key: ValueKey('ai-insight-$_aiInsightRefreshGen'),
@@ -1336,8 +1445,10 @@ class _PatientContextScreenState
                       householdId: data.householdId,
                       villageId: data.villageId,
                       memberId: data.memberId,
+                      householdMemberLocalId: data.householdMemberLocalId,
                       programmes: data.programmes,
                       origin: widget.origin,
+                      isDeceased: data.isDeceased,
                     ),
                   ],
                 ),
@@ -1520,7 +1631,20 @@ String _buildReferralNarrative(String? reasons, Map<String, dynamic> raw) =>
 
 /// Short human-readable label for a single referral reason token.
 /// Used in the detail sheet where space is tighter than the full narrative.
-String _shortReasonLabel(String reason) => shortReasonLabel(reason);
+String _shortReasonLabel(String reason) => localizeReferralReasonPhrase(reason);
+
+bool _isClinicalReferralStatus(String? status) {
+  if (status == null || status.trim().isEmpty) return false;
+  final key = status.toLowerCase().replaceAll(RegExp(r'[\s_]+'), '');
+  const syncOrInternal = {
+    'pending',
+    'synced',
+    'networkerror',
+    'inprogress',
+    'failed',
+  };
+  return !syncOrInternal.contains(key);
+}
 
 /// True when [type] is a delivery / pregnancy-outcome assessment (not a PNC visit).
 bool _isPregnancyOutcomeType(String type) {
@@ -2579,7 +2703,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       stats: {
         if (bp != null && bp.isNotEmpty) PatientDetailStrings.lastBp: '$bp mmHg',
         if (ncdTotal > 0) PatientDetailStrings.ncdVisits: '$ncdTotal',
-        if (dx != null && dx.isNotEmpty) PatientDetailStrings.diagnosis: dx,
+        if (dx != null && dx.isNotEmpty)
+          PatientDetailStrings.diagnosis: ClinicalStatusStrings.labelDiagnosis(dx),
       },
       checkupDate: latest?.date,
     ));
@@ -2670,7 +2795,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.tbSurface,
       textColor: AppColors.tbText,
       stats: {
-        if (dx != null && dx.isNotEmpty) PatientDetailStrings.diagnosis: dx,
+        if (dx != null && dx.isNotEmpty)
+          PatientDetailStrings.diagnosis: ClinicalStatusStrings.labelDiagnosis(dx),
         if (tbTotal > 0) PatientDetailStrings.tbVisits: '$tbTotal',
       },
       checkupDate: latest?.date,
@@ -3507,7 +3633,10 @@ class _StatsGrid extends StatelessWidget {
       } else {
         final v = _rawStr(raw[field]);
         if (v != null && v.isNotEmpty) {
-          result.add((a.date, '$v$suffix', a));
+          final display = field == 'confirmDiagnosis'
+              ? ClinicalStatusStrings.labelDiagnosis(v)
+              : '$v$suffix';
+          result.add((a.date, display, a));
         }
       }
     }
@@ -4672,13 +4801,41 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('height', PatientDetailStrings.heightCm);
 
     // ── NCD ────────────────────────────────────────────────────────────────
-    addIfPresent('confirmDiagnosis', PatientDetailStrings.diagnosis);
-    addIfPresent('ncdSymptoms', PatientDetailStrings.symptoms);
-    addIfPresent('ncdSymptomsMedication', PatientDetailStrings.takingMedication);
-    addIfPresent('heartAttack', PatientDetailStrings.heartAttackHistory);
-    addIfPresent('stroke', PatientDetailStrings.strokeHistory);
-    addIfPresent('kidneyDisease', PatientDetailStrings.kidneyDisease);
-    addIfPresent('copd', PatientDetailStrings.copd);
+    addIfPresent(
+      'confirmDiagnosis',
+      PatientDetailStrings.diagnosis,
+      valueMapper: ClinicalStatusStrings.labelDiagnosis,
+    );
+    addIfPresent(
+      'ncdSymptoms',
+      PatientDetailStrings.symptoms,
+      valueMapper: (v) => fieldOptionDisplayLabel('ncdSymptoms', v),
+    );
+    addIfPresent(
+      'ncdSymptomsMedication',
+      PatientDetailStrings.takingMedication,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent(
+      'heartAttack',
+      PatientDetailStrings.heartAttackHistory,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent(
+      'stroke',
+      PatientDetailStrings.strokeHistory,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent(
+      'kidneyDisease',
+      PatientDetailStrings.kidneyDisease,
+      valueMapper: ClinicalStatusStrings.label,
+    );
+    addIfPresent(
+      'copd',
+      PatientDetailStrings.copd,
+      valueMapper: ClinicalStatusStrings.label,
+    );
     addIfPresent(
       'referralFacilityType',
       PatientDetailStrings.referredTo,
@@ -4792,9 +4949,10 @@ class _TimelineEventSheet extends StatelessWidget {
         entries.add(MapEntry(PatientDetailStrings.onTreatment, onTreatment));
       }
       if (snap.ttTdCompleted?.isNotEmpty == true) {
-        entries.add(
-          MapEntry(PatientDetailStrings.ttTdCompleted, snap.ttTdCompleted!),
-        );
+        entries.add(MapEntry(
+          PatientDetailStrings.ttTdCompleted,
+          ClinicalStatusStrings.label(snap.ttTdCompleted!),
+        ));
       }
       if (snap.facilityIdentifiedForDelivery?.isNotEmpty == true) {
         entries.add(MapEntry(
@@ -4900,7 +5058,7 @@ class _TimelineEventSheet extends StatelessWidget {
 
     final sheetTitle = prog == Programme.pw
         ? PatientProfileStrings.pregnancyRegistrationCategory
-        : assessment.type;
+        : ProgrammeLabels.forServiceKind(assessment.type);
     final sheetHeading = assessment.visitNumber != null
         ? '$sheetTitle — ${PatientContextStrings.visitNumberLabel(assessment.visitNumber!)}'
         : sheetTitle;
@@ -4941,7 +5099,9 @@ class _TimelineEventSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (assessment.status != null && _shouldShowReferralStatus(prog))
+                if (assessment.status != null &&
+                    _shouldShowReferralStatus(prog) &&
+                    _isClinicalReferralStatus(assessment.status))
                   _StatusChip(status: assessment.status!),
               ],
             ),
@@ -5010,7 +5170,7 @@ class _TimelineEventSheet extends StatelessWidget {
                   Text(
                     () {
                       final localized = parseReferralReasonTokens(assessment.notes)
-                          .map(shortReasonLabel)
+                          .map(localizeReferralReasonPhrase)
                           .where((s) => s.isNotEmpty)
                           .join(', ');
                       return localized.isNotEmpty
@@ -5281,6 +5441,8 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             householdId: d.householdId,
             villageId: d.villageId,
             memberId: d.memberId,
+            householdMemberLocalId: int.tryParse(d.localPatient?.patient.id ?? ''),
+            isDeceased: d.isDeceased,
           )
         else
           Container(
@@ -5648,6 +5810,76 @@ class _VitalsSnapshot {
 // card with bilingual prompt, AI summary card with lavender background.
 // ─────────────────────────────────────────────────────────────────────────────
 
+class _DeceasedMemberBanner extends StatelessWidget {
+  const _DeceasedMemberBanner({this.deceasedReason});
+
+  final String? deceasedReason;
+
+  @override
+  Widget build(BuildContext context) {
+    final reason = deceasedReason?.trim();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: AppColors.progressTrack,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.no_accounts_outlined,
+                  size: 18, color: Colors.grey.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  MemberDeceasedStrings.deceasedBanner,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade500,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  MemberDeceasedStrings.deceased,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (reason != null && reason.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${MemberDeceasedStrings.reasonForDeath}: '
+              '${DeceasedReason.formatForDisplay(reason)}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _PatientDetailHeader extends StatelessWidget {
   const _PatientDetailHeader({
     required this.data,
@@ -5689,6 +5921,8 @@ class _PatientDetailHeader extends StatelessWidget {
             onTap: () => _launchMaps(context, data.villageName!)),
       if (data.isPregnant)
         _HeaderChip(Icons.pregnant_woman, PatientContextStrings.pregnantChip),
+      if (data.isDeceased)
+        _HeaderChip(Icons.no_accounts_outlined, MemberDeceasedStrings.deceased),
     ];
 
     return Container(
@@ -6067,7 +6301,9 @@ class _NoServicesCard extends StatefulWidget {
     this.householdId,
     this.villageId,
     this.memberId,
+    this.householdMemberLocalId,
     this.origin,
+    this.isDeceased = false,
   });
 
   final String patientId;
@@ -6077,7 +6313,9 @@ class _NoServicesCard extends StatefulWidget {
   final String? householdId;
   final String? villageId;
   final String? memberId;
+  final int? householdMemberLocalId;
   final String? origin;
+  final bool isDeceased;
 
   @override
   State<_NoServicesCard> createState() => _NoServicesCardState();
@@ -6087,11 +6325,11 @@ class _NoServicesCardState extends State<_NoServicesCard> {
   bool _starting = false;
 
   Future<void> _startVisit() async {
-    if (_starting) return;
+    if (_starting || widget.isDeceased) return;
     setState(() => _starting = true);
 
     final controller = context.read<VisitController>();
-    final encounterId = await startOrResumeVisit(
+    final result = await startOrResumeVisit(
       context,
       controller: controller,
       patientId: widget.patientId,
@@ -6104,7 +6342,8 @@ class _NoServicesCardState extends State<_NoServicesCard> {
 
     if (!mounted) return;
 
-    if (encounterId != null) {
+    if (result.succeeded) {
+      final encounterId = result.encounterId!;
       final originParam =
           widget.origin != null ? '?origin=${widget.origin}' : '';
       context.go(
@@ -6117,11 +6356,13 @@ class _NoServicesCardState extends State<_NoServicesCard> {
           'householdId': widget.householdId,
           'villageId': widget.villageId,
           'memberId': widget.memberId,
+          if (widget.householdMemberLocalId != null)
+            'householdMemberLocalId': widget.householdMemberLocalId,
         },
       );
     } else {
       setState(() => _starting = false);
-      if (mounted) {
+      if (mounted && !result.messageAlreadyShown) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -6185,7 +6426,8 @@ class _NoServicesCardState extends State<_NoServicesCard> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: _starting ? null : _startVisit,
+                onPressed:
+                    (_starting || widget.isDeceased) ? null : _startVisit,
                 icon: _starting
                     ? const SizedBox(
                         width: 18,
@@ -6194,9 +6436,11 @@ class _NoServicesCardState extends State<_NoServicesCard> {
                       )
                     : const Icon(Icons.add, size: 18, color: Colors.white),
                 label: Text(
-                  _starting
-                      ? PatientContextStrings.startingEllipsis
-                      : EnrollStrings.addServicesCta,
+                  widget.isDeceased
+                      ? MemberDeceasedStrings.deceased
+                      : _starting
+                          ? PatientContextStrings.startingEllipsis
+                          : EnrollStrings.addServicesCta,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: Colors.white,

@@ -6,6 +6,7 @@ import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../config/app_config.dart';
+import '../version/app_version_info.dart';
 import '../constants/app_strings.dart';
 import '../db/follow_up_dao.dart';
 import '../db/household_dao.dart';
@@ -320,8 +321,8 @@ class OfflinePushService extends ChangeNotifier {
       final requestId = const Uuid().v4();
       final request = {
         'requestId': requestId,
-        'appVersionName': AppConfig.appVersionName,
-        'appVersionCode': AppConfig.appVersionCode,
+        'appVersionName': AppVersionInfo.current.versionName,
+        'appVersionCode': AppVersionInfo.current.versionCode,
         'appType': AppConfig.appType,
         'syncMode': syncMode,
         if (deviceId.isNotEmpty) 'deviceId': deviceId,
@@ -546,8 +547,8 @@ class OfflinePushService extends ChangeNotifier {
             'requestId': requestId,
             'dataRequired': false,
             'userId': userId,
-            'appVersionName': AppConfig.appVersionName,
-            'appVersionCode': AppConfig.appVersionCode,
+            'appVersionName': AppVersionInfo.current.versionName,
+            'appVersionCode': AppVersionInfo.current.versionCode,
             if (deviceId.isNotEmpty) 'deviceId': deviceId,
           },
         );

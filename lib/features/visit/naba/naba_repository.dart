@@ -33,6 +33,7 @@ class NabaRepository {
         connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(minutes: 2),
       ));
+      _client.attachAiServiceAuth(direct);
       return (direct, '/naba/generate');
     }
     return (_client.dio, Endpoints.nabaGenerate);

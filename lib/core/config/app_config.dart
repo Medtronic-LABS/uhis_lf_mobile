@@ -24,21 +24,6 @@ class AppConfig {
     defaultValue: 'mob',
   );
 
-  /// Human-readable app version (also sent as the `App-Version` header so the
-  /// offline-sync service can gate compatibility). Mirrors the version in
-  /// `pubspec.yaml` so a single bump propagates to the wire.
-  static const String appVersionName = String.fromEnvironment(
-    'APP_VERSION_NAME',
-    defaultValue: '2.1.0',
-  );
-
-  /// Numeric app version code (also sent as the `App-Version-Code` header).
-  /// Matches the Android reference contract for offline-sync request bodies.
-  static const int appVersionCode = int.fromEnvironment(
-    'APP_VERSION_CODE',
-    defaultValue: 12,
-  );
-
   /// Application type sent in offline-sync request bodies. Mirrors the
   /// Android reference `CommonUtils.isCommunityOrNot()` (`COMMUNITY` for SK
   /// builds; `FO` for field-officer builds when that variant ships).
@@ -158,6 +143,14 @@ class AppConfig {
   /// Base URL for the AI Assistant service (port 8097 when running locally).
   /// Derives from [aiServiceBaseUrl] when set; otherwise routes through nginx.
   static String get assistantBaseUrl {
+    if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
+    return apiBaseUrl;
+  }
+
+  /// Base URL for `POST /mobile/app-version` on leapfrog-ai-service. Uses
+  /// [aiServiceBaseUrl] when set (e.g. `http://10.0.2.2:8095`); otherwise
+  /// [apiBaseUrl] with the `/ai-scribe/mobile/app-version` gateway path.
+  static String get appVersionCheckBaseUrl {
     if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
     return apiBaseUrl;
   }
@@ -335,6 +328,45 @@ class AppConfig {
 
   static int get vadPreRollMs =>
       int.tryParse(const String.fromEnvironment('VAD_PREROLL_MS')) ?? 350;
+
+  /// Exposes the on-device AI Scribe telemetry report (Settings -> debug row,
+  /// and the `/dev/telemetry` route) in a **release** build.
+  ///
+  /// Normally the screen is `kDebugMode`-only. This flag exists because debug
+  /// builds cannot always be produced on a restricted network — the `sqlite3`
+  /// package downloads a prebuilt library from GitHub release assets at build
+  /// time, which some corporate networks block — and field verification of
+  /// the telemetry numbers still has to happen on a real handset.
+  ///
+  /// Off by default, so a normal release ships without it. Mirrors the
+  /// server's `ENABLE_TELEMETRY_DASHBOARD`: the report is opt-in at both ends.
+  static bool get telemetryScreenEnabled =>
+      const bool.fromEnvironment('TELEMETRY_SCREEN', defaultValue: false);
+
+  /// Feature flag: record the before/after **values** of fields the SK edited
+  /// after AI filled them. Set via `--dart-define=VALUE_AUDIT=true`.
+  ///
+  /// On by default for now (product QA). Deliberately a separate flag from
+  /// [telemetryScreenEnabled], because this is the one part of telemetry that
+  /// holds clinical data. Ordinary telemetry stores field *ids* and counts and
+  /// is non-PHI by construction; these rows store what was measured, so they
+  /// live in their own table, are wiped with the rest of the patient data when
+  /// a different SK signs in, and are gated at both ends (mirrors the server's
+  /// `ENABLE_VALUE_AUDIT`).
+  ///
+  /// Pass `--dart-define=VALUE_AUDIT=false` to disable capture in a build.
+  static bool get valueAuditEnabled =>
+      const bool.fromEnvironment('VALUE_AUDIT', defaultValue: true);
+
+  /// Feature flag: capture visit-scoped AI content (transcript, WhatsApp
+  /// summary, referral text) for product QA. Set via
+  /// `--dart-define=VISIT_CONTENT_TELEMETRY=true`.
+  ///
+  /// On by default for now (product QA). Rows hold PHI and are wiped on SK
+  /// handover like [valueAuditEnabled]. Pass
+  /// `--dart-define=VISIT_CONTENT_TELEMETRY=false` to disable.
+  static bool get visitContentTelemetryEnabled =>
+      const bool.fromEnvironment('VISIT_CONTENT_TELEMETRY', defaultValue: true);
 
   /// Feature flag: use the uhis_form JSON-driven renderer instead of the
   /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
