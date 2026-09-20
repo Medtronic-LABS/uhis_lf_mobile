@@ -1,0 +1,6 @@
+What's new in 1.0.13:
+• New: scan a child's immunization booklet with the camera to auto-fill vaccine records (offline Bangla OCR)
+• Mark a household member as deceased so they no longer clutter the home worklist
+• App version now shown in Settings, with prompts to update when a new version is required
+• Fixed a home-page loading delay
+• Pregnancy Outcome, referral-name, and translation fixes; faster, more reliable sign-in/sign-out
