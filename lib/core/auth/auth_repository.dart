@@ -12,6 +12,7 @@ import '../debug/console_log.dart';
 import '../api/endpoints.dart';
 import '../config/app_config.dart';
 import '../constants/app_strings.dart';
+import '../version/app_version_service.dart';
 
 /// Hash password using HmacSHA512 keyed by [AppConfig.passwordHashKey],
 /// matching the Spice Android EncryptionUtil.getSecurePassword() implementation.
@@ -35,7 +36,9 @@ String _newPinSalt() {
 }
 
 class AuthRepository {
-  AuthRepository(this._api) : _storage = const FlutterSecureStorage(
+  AuthRepository(this._api, {AppVersionService? appVersionService})
+      : _appVersionService = appVersionService ?? AppVersionService(_api),
+        _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   ) {
     _api.onAuthCookieRotated = (cookie, expiry) async {
@@ -64,6 +67,7 @@ class AuthRepository {
   }
 
   final ApiClient _api;
+  final AppVersionService _appVersionService;
   final FlutterSecureStorage _storage;
 
   /// Set by [AuthState] to [AuthState.handleSessionExpired] — see
@@ -243,6 +247,26 @@ class AuthRepository {
     if (resp.statusCode != 200 && resp.statusCode != 302) {
       throw AuthException(extractLoginErrorMessage(resp.data) ?? AuthStrings.invalidCredentials);
     }
+
+    // Android LoginRepository parity: version gate runs after auth cookies exist
+    // but before persisting the signed-in session locally.
+    final versionResult = await _appVersionService.check();
+    switch (versionResult) {
+      case AppVersionUpToDate():
+      case AppVersionUpdateAvailable():
+        break;
+      case AppVersionUpdateRequired(:final minVersionLabel):
+        await _api.clearSession();
+        throw AppUpdateRequiredException(
+          AppUpdateStrings.forcedUpdateMessage(minVersionLabel),
+        );
+      case AppVersionCheckFailed():
+        await _api.clearSession();
+        throw AppVersionCheckFailedException(
+          AppUpdateStrings.versionCheckUnavailable,
+        );
+    }
+
     await _storage.write(key: _kUsername, value: username);
     await _markLocalDataOwner(username);
     // Persist hash for offline password verification (Spice Android parity).
@@ -728,6 +752,23 @@ class AuthRepository {
 
 class AuthException implements Exception {
   AuthException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+/// Thrown when the installed build is below the minimum version code.
+/// Login must not complete until the user updates.
+class AppUpdateRequiredException implements Exception {
+  AppUpdateRequiredException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+/// Thrown when the version-policy endpoint cannot be reached or parsed.
+class AppVersionCheckFailedException implements Exception {
+  AppVersionCheckFailedException(this.message);
   final String message;
   @override
   String toString() => message;

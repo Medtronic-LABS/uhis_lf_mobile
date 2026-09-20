@@ -18,11 +18,25 @@ void main() {
       AppLocale.current = AppLanguage.bangla;
       for (final code in [
         'HIGH_RISK_PW',
+        'GAPS_IN_ANC',
         'NORMAL_PREGNANCY',
         'UNCONTROLLED_BP',
         'UNCONTROLLED_BG',
         'Referred',
         'rbs',
+        'Normal delivery',
+        'C_SECTION',
+        'C section',
+        'ASSISTED_DELIVERY',
+        'Still birth',
+        'Live birth',
+        'ABORTION',
+        'NEONATAL_DEATH',
+        'HIGH_RISK_PNC',
+        'High risk pnc',
+        'NORMAL_PNC',
+        'GLASS_POWER:2.0',
+        'yes',
       ]) {
         final label = ClinicalStatusStrings.label(code);
         expect(label, isNot(code), reason: '$code was not localized');
@@ -43,6 +57,7 @@ void main() {
     test('map to English when the app is in English', () {
       AppLocale.current = AppLanguage.english;
       expect(ClinicalStatusStrings.label('HIGH_RISK_PW'), 'High-risk pregnancy');
+      expect(ClinicalStatusStrings.label('HIGH_RISK_PNC'), 'High-risk PNC');
       expect(ClinicalStatusStrings.label('Referred'), 'Referred');
     });
   });
@@ -67,5 +82,23 @@ void main() {
     final out = ClinicalStatusStrings.labelAll(
         ['UNCONTROLLED_BP', 'UNCONTROLLED_BG']);
     expect(out, 'Uncontrolled blood pressure, Uncontrolled blood sugar');
+  });
+
+  group('labelDiagnosis', () {
+    test('maps SNOMED display terms to Bangla', () {
+      AppLocale.current = AppLanguage.bangla;
+      expect(ClinicalStatusStrings.labelDiagnosis('Hypertension'), 'উচ্চ রক্তচাপ');
+      expect(ClinicalStatusStrings.labelDiagnosis('Yes'), 'হ্যাঁ');
+      expect(ClinicalStatusStrings.labelDiagnosis('No'), 'না');
+    });
+
+    test('localizes comma-separated confirmDiagnosis values', () {
+      AppLocale.current = AppLanguage.bangla;
+      final out = ClinicalStatusStrings.labelDiagnosis(
+        'Hypertension, Diabetes mellitus type 2 (disorder)',
+      );
+      expect(out, contains('উচ্চ রক্তচাপ'));
+      expect(out, contains('ডায়াবেটিস'));
+    });
   });
 }

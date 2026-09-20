@@ -25,6 +25,7 @@ class HouseholdMemberEntity {
     this.subVillageName,
     this.shasthyaShebikaId,
     this.isActive = true,
+    this.deceasedReason,
     this.isHouseholdHead = false,
     this.isPregnant = false,
     this.relation,
@@ -71,6 +72,7 @@ class HouseholdMemberEntity {
   final String? subVillageName;
   final String? shasthyaShebikaId;
   final bool isActive;
+  final String? deceasedReason;
   final bool isHouseholdHead;
   final bool isPregnant;
   final String? relation;
@@ -114,6 +116,7 @@ class HouseholdMemberEntity {
       'sub_village_name': subVillageName,
       'shasthya_shebika_id': shasthyaShebikaId,
       'is_active': isActive ? 1 : 0,
+      'deceased_reason': deceasedReason,
       'is_household_head': isHouseholdHead ? 1 : 0,
       'is_pregnant': isPregnant ? 1 : 0,
       'relation': relation,
@@ -162,6 +165,7 @@ class HouseholdMemberEntity {
     String? subVillageName,
     String? shasthyaShebikaId,
     bool? isActive,
+    String? deceasedReason,
     bool? isHouseholdHead,
     bool? isPregnant,
     String? relation,
@@ -204,6 +208,7 @@ class HouseholdMemberEntity {
       subVillageName: subVillageName ?? this.subVillageName,
       shasthyaShebikaId: shasthyaShebikaId ?? this.shasthyaShebikaId,
       isActive: isActive ?? this.isActive,
+      deceasedReason: deceasedReason ?? this.deceasedReason,
       isHouseholdHead: isHouseholdHead ?? this.isHouseholdHead,
       isPregnant: isPregnant ?? this.isPregnant,
       relation: relation ?? this.relation,
@@ -262,6 +267,7 @@ class HouseholdMemberEntity {
       subVillageName: row['sub_village_name'] as String?,
       shasthyaShebikaId: row['shasthya_shebika_id'] as String?,
       isActive: (row['is_active'] as int?) == 1,
+      deceasedReason: row['deceased_reason'] as String?,
       isHouseholdHead: (row['is_household_head'] as int?) == 1,
       isPregnant: (row['is_pregnant'] as int?) == 1,
       relation: row['relation'] as String?,
@@ -352,6 +358,7 @@ class HouseholdMemberEntity {
       shasthyaShebikaId:
           str('shasthyaShebikaId') ?? str('shasthya_shebika_id'),
       isActive: json['isActive'] != false,
+      deceasedReason: str('deceasedReason') ?? str('deceased_reason'),
       isHouseholdHead: isHead,
       isPregnant: parseBool(json['isPregnant']),
       relation: relation,
@@ -446,30 +453,44 @@ class MemberDao {
   }
 
   /// Stamp FHIR id after offline-sync/status Success.
+  ///
+  /// Also mirrors the server id into [AppDatabase.tablePatients].patient_id
+  /// (keyed by the same local member PK as [AppDatabase.tablePatients].id).
+  /// Enrollment creates that row without patient_id; until this runs, only
+  /// members.fhir_id is populated after the status poll.
   Future<void> updateFhirId({
     required String localId,
     required String? fhirId,
     required String syncStatus,
   }) async {
-    await _db.db.rawUpdate(
-      '''
-      UPDATE ${AppDatabase.tableMembers}
-      SET fhir_id = ?,
-          sync_status = CASE
-            WHEN sync_status IN ('InProgress', 'NetworkError', 'NotSynced', 'Pending')
-            THEN ?
-            ELSE sync_status
-          END,
-          updated_at = ?
-      WHERE id = ?
-      ''',
-      [
-        fhirId,
-        syncStatus,
-        DateTime.now().millisecondsSinceEpoch,
-        int.tryParse(localId) ?? localId,
-      ],
-    );
+    final pk = int.tryParse(localId) ?? localId;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await _db.db.transaction((tx) async {
+      await tx.rawUpdate(
+        '''
+        UPDATE ${AppDatabase.tableMembers}
+        SET fhir_id = ?,
+            sync_status = CASE
+              WHEN sync_status IN ('InProgress', 'NetworkError', 'NotSynced', 'Pending')
+              THEN ?
+              ELSE sync_status
+            END,
+            updated_at = ?
+        WHERE id = ?
+        ''',
+        [fhirId, syncStatus, nowMs, pk],
+      );
+      if (fhirId != null && fhirId.isNotEmpty) {
+        await tx.rawUpdate(
+          '''
+          UPDATE ${AppDatabase.tablePatients}
+          SET patient_id = ?, updated_at = ?
+          WHERE id = ?
+          ''',
+          [fhirId, nowMs, pk],
+        );
+      }
+    });
   }
 
   /// Points `reference_id` (what the push echoes) at the local PK after insert.
@@ -652,6 +673,27 @@ class MemberDao {
       AppDatabase.tableMembers,
       {
         'is_active': isActive ? 1 : 0,
+        'sync_status': syncStatus,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [int.tryParse(id) ?? id],
+    );
+  }
+
+  /// Mark member deceased with reason — mirrors Android
+  /// `updateMemberDeceasedReason` (isActive=false, NotSynced).
+  Future<void> updateMemberDeceasedReason(
+    String id, {
+    required bool isActive,
+    String? deceasedReason,
+    String syncStatus = 'NotSynced',
+  }) async {
+    await _db.db.update(
+      AppDatabase.tableMembers,
+      {
+        'is_active': isActive ? 1 : 0,
+        'deceased_reason': deceasedReason,
         'sync_status': syncStatus,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
@@ -854,6 +896,42 @@ class MemberDao {
     );
     if (rows.isEmpty) return null;
     return HouseholdMemberEntity.fromDb(rows.first);
+  }
+
+  /// Bulk lookup of inactive (deceased) members keyed by member id and
+  /// [patient_id] — mirrors [getByPatientId] / [getById] resolution used when
+  /// starting a visit.
+  Future<Map<String, String?>> deceasedLookupByIds(
+    Iterable<String> lookupIds,
+  ) async {
+    final ids = lookupIds.where((id) => id.trim().isNotEmpty).toSet();
+    if (ids.isEmpty) return const {};
+
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final args = [...ids, ...ids];
+    final rows = await _db.db.rawQuery(
+      'SELECT id, patient_id, deceased_reason '
+      'FROM ${AppDatabase.tableMembers} '
+      'WHERE is_active = 0 '
+      'AND (id IN ($placeholders) OR patient_id IN ($placeholders))',
+      args,
+    );
+
+    final result = <String, String?>{};
+    for (final row in rows) {
+      final reason = row['deceased_reason'] as String?;
+      final memberId = row['id']?.toString();
+      final patientId = row['patient_id'] as String?;
+      if (memberId != null && ids.contains(memberId)) {
+        result[memberId] = reason;
+      }
+      if (patientId != null &&
+          patientId.isNotEmpty &&
+          ids.contains(patientId)) {
+        result[patientId] = reason;
+      }
+    }
+    return result;
   }
 
   /// Get member by national ID (LOCAL query, no network).

@@ -7,6 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_state.dart';
+import '../core/version/app_version_home_gate.dart';
+import '../core/version/app_version_service.dart';
+import 'nav_keys.dart';
 import '../core/models/programme.dart';
 import '../core/constants/app_strings.dart';
 import '../core/theme/app_theme.dart';
@@ -23,6 +26,8 @@ import '../features/pin/pin_unlock_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
 import '../features/sync/offline_sync_screen.dart';
 import '../features/counselling/counselling_screen.dart';
+import '../core/config/app_config.dart';
+import '../features/debug/telemetry_viewer_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/assistant/assistant_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
@@ -42,7 +47,6 @@ import '../core/db/patient_dao.dart';
 import 'bottom_nav.dart';
 
 /// Navigation keys for each tab's navigator.
-final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'home');
 final _patientsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'patients');
 final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'assistant');
@@ -50,7 +54,7 @@ final _galleryNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'gallery');
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     refreshListenable: auth,
     initialLocation: '/',
     redirect: (context, state) {
@@ -82,6 +86,12 @@ GoRouter buildRouter(AuthState auth) {
           // /pin-setup and /onboarding are signed-in destinations,
           // so they are intentionally NOT redirected away.
           if (loc.startsWith('/login') || loc == '/' || loc == '/lock') {
+            // Stay on login until the optional-update dialog is dismissed —
+            // GoRouter refresh fires right after sign-in and would otherwise
+            // navigate away while the dialog is still open.
+            if (loc.startsWith('/login') && AppVersionService.needsOptionalPrompt) {
+              return null;
+            }
             // First-run: redirect to onboarding if not completed yet
             if (!auth.onboardingComplete && !auth.pinEnabled) {
               return '/onboarding';
@@ -156,7 +166,9 @@ GoRouter buildRouter(AuthState auth) {
             routes: [
               GoRoute(
                 path: '/home',
-                builder: (_, _) => const DashboardScreen(),
+                builder: (_, _) => const AppVersionHomeGate(
+                  child: DashboardScreen(),
+                ),
               ),
             ],
           ),
@@ -442,7 +454,7 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/patients/visit/:visitId/flow',
         name: 'visit-flow',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         pageBuilder: (context, state) {
           Map<String, dynamic>? extra;
           if (state.extra is Map<String, dynamic>) {
@@ -520,6 +532,12 @@ GoRouter buildRouter(AuthState auth) {
           path: '/dev/form-gallery',
           name: 'form-gallery',
           builder: (_, _) => Scaffold(body: Center(child: Text(CommonStrings.comingSoon))),
+        ),
+      if (kDebugMode || AppConfig.telemetryScreenEnabled)
+        GoRoute(
+          path: '/dev/telemetry',
+          name: 'telemetry-report',
+          builder: (_, _) => const TelemetryViewerScreen(),
         ),
     ],
   );

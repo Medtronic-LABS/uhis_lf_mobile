@@ -33,21 +33,25 @@ class SyncConnectivityService {
     required OfflinePushService pushService,
     required AuthState authState,
     required AuthRepository authRepo,
+    void Function()? flushUploadQueues,
   })  : _assessmentRepo = assessmentRepo,
         _syncService = syncService,
         _pushService = pushService,
         _authState = authState,
-        _authRepo = authRepo;
+        _authRepo = authRepo,
+        _flushUploadQueues = flushUploadQueues;
 
   final AssessmentRepository _assessmentRepo;
   final OfflineSyncService _syncService;
   final OfflinePushService _pushService;
   final AuthState _authState;
   final AuthRepository _authRepo;
+  final void Function()? _flushUploadQueues;
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   Timer? _retryTimer;
   bool _wasOffline = false;
+  bool _syncInFlight = false;
 
   /// Begin listening. Safe to call multiple times (idempotent after first call).
   void start() {
@@ -112,6 +116,13 @@ class SyncConnectivityService {
   /// work is pushed even if the offline→online edge was already consumed
   /// (e.g. network returned while locked, or app opened already online).
   void syncIfSessionReady() {
+    if (_authState.status == AuthStatus.signedIn &&
+        !_authState.locked &&
+        _authRepo.hasSessionCredentials) {
+      // Telemetry is independent of offline-sync pull — drain it as soon as
+      // the session is ready rather than waiting for warmSync to complete.
+      _flushUploadQueues?.call();
+    }
     _triggerSync();
   }
 
@@ -126,6 +137,11 @@ class SyncConnectivityService {
           '[SyncConnectivity] Skipping auto-sync — no auth token/session credentials');
       return;
     }
+    if (_syncInFlight) {
+      debugPrint('[SyncConnectivity] Skipping auto-sync — sync already in flight');
+      return;
+    }
+    _syncInFlight = true;
 
     // Push everything pending (outbound), then pull fresh data (inbound).
     // Fire-and-forget; errors are logged.
@@ -161,6 +177,9 @@ class SyncConnectivityService {
             debugPrint('[SyncConnectivity] Retrying sync after network error');
             _triggerSync();
           });
+        })
+        .whenComplete(() {
+          _syncInFlight = false;
         });
   }
 }

@@ -1179,6 +1179,50 @@ class LocalAssessmentDao {
     return (result.first['count'] as int) > 0;
   }
 
+  /// Repairs assessment rows saved before identity resolution was fixed:
+  /// copies [members.id] into [patient_id] and backfills [household_member_local_id]
+  /// when only the server FHIR id was stored.
+  Future<int> syncPatientIdsFromMemberLinks() async {
+    var updated = await _db.db.rawUpdate('''
+      UPDATE $tableName
+      SET patient_id = (
+        SELECT CAST(m.id AS TEXT) FROM ${AppDatabase.tableMembers} m
+        WHERE m.id = $tableName.household_member_local_id
+      )
+      WHERE (patient_id IS NULL OR patient_id = '')
+        AND household_member_local_id > 0
+    ''');
+
+    updated += await _db.db.rawUpdate('''
+      UPDATE $tableName
+      SET
+        patient_id = (
+          SELECT CAST(m.id AS TEXT) FROM ${AppDatabase.tableMembers} m
+          WHERE m.fhir_id = $tableName.member_id
+             OR m.fhir_id = $tableName.patient_id
+          LIMIT 1
+        ),
+        household_member_local_id = COALESCE(
+          NULLIF(household_member_local_id, 0),
+          (
+            SELECT m.id FROM ${AppDatabase.tableMembers} m
+            WHERE m.fhir_id = $tableName.member_id
+               OR m.fhir_id = $tableName.patient_id
+            LIMIT 1
+          )
+        )
+      WHERE household_member_local_id = 0
+         OR patient_id IS NULL
+         OR patient_id = ''
+         OR patient_id IN (
+           SELECT m.fhir_id FROM ${AppDatabase.tableMembers} m
+           WHERE m.fhir_id IS NOT NULL AND m.fhir_id != ''
+         )
+    ''');
+
+    return updated;
+  }
+
   /// Get all assessments for a household member.
   Future<List<LocalAssessmentEntity>> getByHouseholdMemberId(
       int memberId) async {

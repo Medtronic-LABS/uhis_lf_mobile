@@ -9,6 +9,11 @@ import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
+import '../../../core/telemetry/telemetry_service.dart';
+import 'package:uuid/uuid.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/telemetry/value_audit_dao.dart';
+import '../../../core/telemetry/value_audit_entry.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import 'pregnancy_outcome_snapshot_mapper.dart';
@@ -61,6 +66,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
     String? pregnancyEpisodeId,
     String? defaultReferralSiteId,
     ReferralRepository? referralRepo,
+    TelemetryService? telemetryService,
+    ValueAuditDao? valueAuditDao,
   })  : _encounterId = encounterId,
         _patientId = patientId,
         _activeFormTypes = activeFormTypes,
@@ -75,7 +82,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _householdMemberLocalId = householdMemberLocalId,
         _pregnancyEpisodeId = pregnancyEpisodeId,
         _defaultReferralSiteId = defaultReferralSiteId,
-        _referralRepo = referralRepo;
+        _referralRepo = referralRepo,
+        _telemetryService = telemetryService,
+        _valueAuditDao = valueAuditDao;
 
   final String _encounterId;
   final String _patientId;
@@ -92,6 +101,37 @@ class UnifiedFormNotifier extends ChangeNotifier {
   final String? _pregnancyEpisodeId;
   final String? _defaultReferralSiteId;
   final ReferralRepository? _referralRepo;
+
+  /// Both optional so existing callers and tests construct unchanged. When
+  /// either is absent the visit simply emits no telemetry — a missing metric
+  /// must never be able to affect a clinical submit.
+  final TelemetryService? _telemetryService;
+
+  /// Field ids the screen is currently rendering, and how many refs it laid
+  /// out in total. Pushed by [UnifiedFormScreen] rather than re-derived here:
+  /// visibility depends on progressive-disclosure state only the screen
+  /// evaluates. Assigned without notifying — it is read at submit, never
+  /// rendered, so waking listeners from a build would only risk a loop.
+  Set<String> _visibleFieldIds = const {};
+  int _renderedFieldCount = 0;
+
+  /// Programmes whose sections the screen actually laid out. Not always the
+  /// same as [_activeFormTypes]: `activeSections` also renders *enrolled*
+  /// form types, so a combined visit can show eye-care or NCD sections that
+  /// the active list doesn't name. Needed so `libraryTotal` spans the same
+  /// programmes as `renderedTotal` — otherwise "fields rendered" can exceed
+  /// "fields in form", which reads as a miscount.
+  Set<String> _renderedFormTypes = const {};
+
+  void setRenderedFieldStats({
+    required Set<String> visibleFieldIds,
+    required int renderedTotal,
+    Set<String> renderedFormTypes = const {},
+  }) {
+    _visibleFieldIds = visibleFieldIds;
+    _renderedFieldCount = renderedTotal;
+    _renderedFormTypes = renderedFormTypes;
+  }
 
   DateTime? _lmpDate;
   DateTime? _eddDate;
@@ -128,6 +168,47 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Verbatim transcript quote backing an AI-filled value (null when the
   /// server didn't supply one). Keyed by fieldId, AI-filled fields only.
   final Map<String, String?> _fieldSourceSegments = {};
+
+  /// Fields where AI proposed a value but the SK had already filled them, so
+  /// the proposal was rejected. Visit-scoped; see the `sk_owned` branch in
+  /// [applyAiPrefill].
+  final Set<String> _aiOverriddenFieldIds = {};
+
+  /// Wall-clock bounds of the scribe session(s) that touched this form, epoch
+  /// ms. Reported to telemetry as "AI Scribe Start/End Time".
+  ///
+  /// Earliest start and latest end across every session on the form: an SK can
+  /// dictate, review, then dictate again, and the report means "when was AI
+  /// listening for this visit", not "the last time it was".
+  int? _scribeStartedAtMs;
+  int? _scribeEndedAtMs;
+
+  /// Rejection categories accumulated across every fill on this form.
+  ///
+  /// [applyAiPrefill] already computes these per call and hands them to
+  /// AsrDiagnostics; accumulating them here is what lets the visit report an
+  /// overall success/failure status instead of nothing at all.
+  final Map<String, int> _asrRejectionCounts = {};
+
+  /// What AI put in a field, captured the instant before the SK's first edit
+  /// overwrote it. Field id -> AI's value as a string.
+  ///
+  /// **Clinical values.** Held only in memory during the visit and written to
+  /// the PHI value-audit table at submit; never added to the telemetry
+  /// payload, which stays ids-and-counts. Empty unless
+  /// [AppConfig.valueAuditEnabled] — a build without that flag captures
+  /// nothing at all.
+  ///
+  /// First edit only: an SK may edit the same field repeatedly, and AI's
+  /// proposal is whatever was there before the *first* of those.
+  final Map<String, String?> _aiProposedValues = {};
+
+  /// Null in tests and in any build without the value-audit flag wired.
+  final ValueAuditDao? _valueAuditDao;
+
+  /// True once any fill applied at least one field — the difference between
+  /// "AI ran and produced nothing" and "AI never ran".
+  bool _anyAiFillApplied = false;
 
   /// When true, height was taken from a prior visit and must not be edited /
   /// re-shown — mirrors Spice readonly prefill; Flutter also hides the field.
@@ -283,7 +364,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     );
     if (priorHeight != null) {
       if (_isBlankField(_data.getValue('height'))) {
-        _data = _data.setValue('height', priorHeight);
+        _setPrefilled('height', priorHeight);
         changed = true;
       }
       if (!_heightLockedFromPrior) {
@@ -298,7 +379,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         memberId: _memberId,
       );
       if (w != null) {
-        _data = _data.setValue('weight', w);
+        _setPrefilled('weight', w);
         changed = true;
       }
     }
@@ -353,7 +434,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     var changed = false;
     for (final entry in prior.entries) {
       if (_data.getValue(entry.key) == null) {
-        _data = _data.setValue(entry.key, entry.value);
+        _setPrefilled(entry.key, entry.value);
         changed = true;
       }
     }
@@ -371,7 +452,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     var changed = false;
     for (final entry in prior.entries) {
       if (_data.getValue(entry.key) == null) {
-        _data = _data.setValue(entry.key, entry.value);
+        _setPrefilled(entry.key, entry.value);
         changed = true;
       }
     }
@@ -394,7 +475,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     void putIfEmpty(String key, dynamic value) {
       if (value == null) return;
       if (_data.getValue(key) != null) return;
-      _data = _data.setValue(key, value);
+      _setPrefilled(key, value);
       changed = true;
     }
 
@@ -452,7 +533,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     var changed = false;
     for (final entry in prior.entries) {
       if (_data.getValue(entry.key) == null) {
-        _data = _data.setValue(entry.key, entry.value);
+        _setPrefilled(entry.key, entry.value);
         changed = true;
       }
     }
@@ -471,7 +552,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     var changed = false;
     for (final entry in prior.entries) {
       if (_data.getValue(entry.key) == null) {
-        _data = _data.setValue(entry.key, entry.value);
+        _setPrefilled(entry.key, entry.value);
         changed = true;
       }
     }
@@ -533,7 +614,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     var changed = false;
     for (final entry in prior.entries) {
       if (_data.getValue(entry.key) == null) {
-        _data = _data.setValue(entry.key, entry.value);
+        _setPrefilled(entry.key, entry.value);
         changed = true;
       }
     }
@@ -597,7 +678,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       snapshotDeliveryDateMillis: snap?.deliveryDateMillis,
     );
     if (days == null) return;
-    _data = _data.setValue('daysSinceDelivery', days);
+    _setDerived('daysSinceDelivery', days);
     debugPrint('[PncDays] seeded daysSinceDelivery=$days patient=$_patientId');
     notifyListeners();
   }
@@ -628,7 +709,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     final iso = RmnchFollowUpCalculator.toFormDate(next);
     debugPrint('[FollowUp] auto-seed followUpVisit=$iso '
         '(forms=$_activeFormTypes)');
-    _data = _data.setValue('followUpVisit', iso);
+    _setDerived('followUpVisit', iso);
     notifyListeners();
     _saveDraft();
   }
@@ -650,6 +731,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
       }
       for (final entry in segments.entries) {
         _fieldSourceSegments[entry.key] = entry.value as String?;
+      }
+      final overridden = decoded['aiOverridden'];
+      if (overridden is List) {
+        _aiOverriddenFieldIds.addAll(overridden.map((e) => e.toString()));
       }
     } catch (e) {
       debugPrint('[UnifiedForm] field-sources parse error: $e');
@@ -842,14 +927,25 @@ class UnifiedFormNotifier extends ChangeNotifier {
     } else {
       ConsoleLog.step('[FormField] $fieldId ($valueType) = $value');
     }
+    // Before the write: the value still in the field IS AI's proposal, and
+    // this is the only moment it can be read.
+    _captureAiValueBeforeFirstEdit(fieldId);
     _data = _data.setValue(fieldId, value);
     // SK edit of an AI-filled value → aiModified (audit trail keeps the AI
     // origin); any other SK entry → manual. Either way the field is now
     // SK-owned and later AI extractions must never overwrite it.
+    final priorSource = _groupSourceFor(fieldId);
+    // `aiModified` counts as AI-origin too, not just `aiPending`. Recognising
+    // only `aiPending` meant the FIRST edit of an AI-filled field set
+    // `aiModified` correctly and every edit after it saw a non-aiPending
+    // source and fell through to `manual` — silently converting a correction
+    // into manual entry. On a real handset `temperature` was edited 12 times
+    // and reported as manual; the same downgrade hit any second edit within a
+    // mirror group, because propagation leaves the whole group `aiModified`.
+    final aiOrigin = priorSource == FieldSource.aiPending ||
+        priorSource == FieldSource.aiModified;
     _fieldSources[fieldId] =
-        _fieldSources[fieldId] == FieldSource.aiPending
-            ? FieldSource.aiModified
-            : FieldSource.manual;
+        aiOrigin ? FieldSource.aiModified : FieldSource.manual;
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
     }
@@ -892,12 +988,16 @@ class UnifiedFormNotifier extends ChangeNotifier {
     // either widget updates the other (pulse already did this; sys/dia
     // were missing — SK reported only pulse mirrored).
     _mirrorBpAcrossProgrammes(fieldId, value);
+    // Aliases must carry the provenance of the field acted on — see
+    // [_propagateSourceToMirrors] for the correction-loss this fixes.
+    _propagateSourceToMirrors(fieldId);
     // Cross-programme BG sync: NCD/ANC BloodGlucoseEntry uses
     // glucoseType + glucose; PNC (and legacy ANC) use bloodSugar +
     // fastingBloodSugar/randomBloodSugar (and bloodSugarFasting/
     // bloodSugarRandom). Keep both vocabularies aligned for ANC+NCD and
     // PNC+NCD combined visits.
     _mirrorGlucoseAcrossProgrammes(fieldId, value);
+    _propagateSourceToMirrors(fieldId);
     if (fieldId == 'liveBirthNumbers') {
       _resizeNewbornDetails(value);
     }
@@ -940,6 +1040,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _data = _data.removeFields({targetId});
         _fieldSources.remove(targetId);
         _fieldSourceSegments.remove(targetId);
+        _aiOverriddenFieldIds.remove(targetId);
       }
       _clearHiddenDependents(targetId, visited);
     }
@@ -1020,6 +1121,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     _data = _data.removeFields(fieldIds);
     for (final id in fieldIds) {
       _fieldSources.remove(id);
+      _aiOverriddenFieldIds.remove(id);
     }
   }
 
@@ -1080,6 +1182,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (cause != null) first['causeOfNeonatalDeath'] = cause;
     list[0] = first;
     _data = _data.setValue('newbornDetails', list);
+    // AI-stamped baby fields: the composite carries AI provenance so a
+    // later SK edit is classified as a correction, not manual entry.
+    _fieldSources['newbornDetails'] ??= FieldSource.aiPending;
   }
 
   /// Updates one baby entry inside `newbornDetails` and notifies listeners.
@@ -1109,6 +1214,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
     list[babyIndex] = entry;
     _data = _data.setValue('newbornDetails', list);
+    // Same transition as [updateField]: an SK edit of an AI-filled
+    // composite is a correction; any other SK entry is manual.
+    _fieldSources['newbornDetails'] =
+        _fieldSources['newbornDetails'] == FieldSource.aiPending
+            ? FieldSource.aiModified
+            : FieldSource.manual;
     notifyListeners();
     _saveDraft();
   }
@@ -1237,6 +1348,197 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// Keeps NCD `bpLogDetails` and ANC/PNC flat BP keys in sync.
+  /// Field ids that are alternate names for the SAME clinical value, written
+  /// by the mirror helpers below so each programme's vocabulary stays in sync.
+  ///
+  /// Telemetry collapses each group to a single entry: six names for one
+  /// glucose reading is one capture opportunity and one SK action, so counting
+  /// them separately would report six manual entries (or six corrections) for
+  /// one thing the SK did. Kept here, beside the helpers that create the
+  /// aliases, rather than in `UnifiedSectionRules._semanticFieldGroups` —
+  /// that list governs which *section* renders a field, a different concern.
+  static const List<Set<String>> _mirrorGroups = [
+    // The numeric reading.
+    {
+      'glucose',
+      'bloodSugarFasting',
+      'bloodSugarRandom',
+      'fastingBloodSugar',
+      'randomBloodSugar',
+    },
+    // The fasting/random qualifier.
+    {'glucoseType', 'bloodSugar'},
+  ];
+
+  /// Composite containers: one field id holding several **distinct** values.
+  ///
+  /// `bpLogDetails` is a list of `{systolic, diastolic, pulse}` — the same data
+  /// the flat fields hold, in a different shape. It is deliberately NOT a
+  /// mirror group: systolic, diastolic and pulse are three separate clinical
+  /// measurements, not aliases of one another, so they are counted
+  /// individually (the SK filled three boxes) and provenance never propagates
+  /// between them. Treating them as one group counted a whole BP reading as a
+  /// single field and stamped one edit across all three.
+  ///
+  /// The container itself is excluded from the buckets — it is not a field the
+  /// SK sees, and counting it alongside its members would double-count.
+  static const Map<String, Set<String>> _compositeMembers = {
+    'bpLogDetails': {'systolic', 'diastolic', 'pulse'},
+  };
+
+  /// Extra leaf values a capture target's widget writes besides the target.
+  ///
+  /// `glucoseType`'s `_BloodGlucoseEntryField` writes the fasting/random
+  /// qualifier AND the numeric `glucose` reading — two distinct clinical
+  /// values (they sit in different [_mirrorGroups], so they are not aliases)
+  /// from one widget with one layout `fieldRef`.
+  ///
+  /// `glucose` therefore can never appear in [_visibleFieldIds], so it was
+  /// absent from the capture denominator while AI genuinely filled it. The
+  /// numerator counts leaves and the denominator counted widgets, and a real
+  /// visit reported 9 fields filled against 7 visible.
+  ///
+  /// Composite containers are NOT listed here: [_compositeMembers] already
+  /// names their leaves, and those REPLACE the container rather than adding
+  /// to it, because the container is not a value in its own right.
+  static const Map<String, Set<String>> _siblingLeaves = {
+    'glucoseType': {'glucose'},
+  };
+
+  /// The distinct leaf values that [target]'s widget writes.
+  ///
+  /// The unit of the capture denominator, so that it counts the same things
+  /// `aiFilled` does.
+  static Set<String> _captureLeaves(String target) {
+    final members = _compositeMembers[target];
+    if (members != null) return members;
+    final siblings = _siblingLeaves[target];
+    return siblings == null ? {target} : {target, ...siblings};
+  }
+
+  /// The provenance already recorded for [fieldId], or failing that for any
+  /// alias of the same clinical value.
+  ///
+  /// Group-aware on purpose: if AI filled `glucose` and the SK edits
+  /// `bloodSugarRandom`, the edit is a **correction of an AI value**, even
+  /// though that particular field id had no source of its own.
+  FieldSource? _groupSourceFor(String fieldId) {
+    final own = _fieldSources[fieldId];
+    if (own != null) return own;
+    for (final group in _mirrorGroups) {
+      if (!group.contains(fieldId)) continue;
+      for (final alias in group) {
+        final s = _fieldSources[alias];
+        if (s != null) return s;
+      }
+      return null;
+    }
+    // A member with no source of its own inherits the container's, so editing
+    // a BP box AI had filled is still recognised as a correction.
+    for (final entry in _compositeMembers.entries) {
+      if (entry.key == fieldId) continue;
+      if (entry.value.contains(fieldId)) return _fieldSources[entry.key];
+    }
+    return _compositeMembers.containsKey(fieldId)
+        ? _firstNonNullSource(_compositeMembers[fieldId]!)
+        : null;
+  }
+
+  FieldSource? _firstNonNullSource(Iterable<String> ids) {
+    for (final id in ids) {
+      final s = _fieldSources[id];
+      if (s != null) return s;
+    }
+    return null;
+  }
+
+  /// Gives every mirrored alias the provenance of the field actually acted on.
+  ///
+  /// The mirror helpers deliberately write `_data` directly so they never
+  /// recurse through [updateField] — which also meant they wrote no
+  /// [FieldSource] at all. The consequence was silent and wrong: when AI filled
+  /// a glucose or BP value and the SK edited the *mirrored* field,
+  /// [updateField] saw a null source and stamped `manual` instead of
+  /// `aiModified`, so a real correction was reclassified as manual entry.
+  ///
+  /// An alias that is already SK-owned keeps its own source — a stronger claim
+  /// must never be downgraded by a mirror pass.
+  void _propagateSourceToMirrors(String originFieldId) {
+    final origin = _fieldSources[originFieldId];
+    if (origin == null) return;
+    for (final group in _mirrorGroups) {
+      if (!group.contains(originFieldId)) continue;
+      for (final alias in group) {
+        if (alias == originFieldId) continue;
+        if (_data.getValue(alias) == null) continue;
+        // Unconditional: the group is one clinical value, so it carries one
+        // provenance. Skipping aliases here would leave the group in mixed
+        // states and make the bucket depend on which alias got classified
+        // first.
+        _fieldSources[alias] = origin;
+      }
+      return;
+    }
+
+    // Container edited (the BP widget writes the list): every value it now
+    // holds came from that edit, so the members inherit.
+    final members = _compositeMembers[originFieldId];
+    if (members != null) {
+      for (final member in members) {
+        if (_data.getValue(member) == null) continue;
+        _fieldSources[member] = origin;
+      }
+      return;
+    }
+
+    // Member edited: only the container follows. Never the sibling members —
+    // changing systolic says nothing about diastolic.
+    for (final entry in _compositeMembers.entries) {
+      if (entry.value.contains(originFieldId)) {
+        if (_data.getValue(entry.key) != null) {
+          _fieldSources[entry.key] = origin;
+        }
+        return;
+      }
+    }
+  }
+
+  /// Records a value the SK did not enter and AI did not propose — history,
+  /// chronic record, or a prior visit. Single home for the preload paths so
+  /// the classification cannot drift between them.
+  void _setPrefilled(String fieldId, dynamic value) {
+    _data = _data.setValue(fieldId, value);
+    _fieldSources[fieldId] = FieldSource.prefilled;
+  }
+
+  @visibleForTesting
+  static Set<String> captureLeavesForTesting(String target) =>
+      _captureLeaves(target);
+
+  @visibleForTesting
+  int? get formOpenedAtMsForTesting => _formOpenedAtMs;
+
+  @visibleForTesting
+  Future<int?> visitDurationMsForTesting() => _visitDurationMs();
+
+  /// Test seam for the preload paths: the real ones ([preloadBiometrics] and
+  /// friends) need DAOs, but the classification only cares that the value
+  /// arrived with [FieldSource.prefilled].
+  @visibleForTesting
+  void applyPrefilledForTesting(String fieldId, dynamic value) =>
+      _setPrefilled(fieldId, value);
+
+  /// Test seam for the computed paths (BMI, EDD, follow-up dates).
+  @visibleForTesting
+  void applyDerivedForTesting(String fieldId, dynamic value) =>
+      _setDerived(fieldId, value);
+
+  /// Records a value computed from other fields rather than captured.
+  void _setDerived(String fieldId, dynamic value) {
+    _data = _data.setValue(fieldId, value);
+    _fieldSources[fieldId] = FieldSource.derived;
+  }
+
   void _mirrorBpAcrossProgrammes(String fieldId, dynamic value) {
     const flatKeys = {'systolic', 'diastolic', 'pulse'};
 
@@ -1294,7 +1596,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     final w = _toDouble(_data.getValue('weight'));
     if (h != null && h > 0 && w != null && w > 0) {
       final bmi = w / ((h / 100) * (h / 100));
-      _data = _data.setValue('bmi', double.parse(bmi.toStringAsFixed(1)));
+      _setDerived('bmi', double.parse(bmi.toStringAsFixed(1)));
     }
   }
 
@@ -1344,12 +1646,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
     _lmpDate = lmp;
     _eddDate = edd;
     _gestationalWeeks = weeks;
-    _data = _data.setValue('EDD', _eddDisplayFormat.format(edd));
+    _setDerived('EDD', _eddDisplayFormat.format(edd));
     // Android formatGestationalAge(Pair): "X weeks Y days "
-    _data = _data.setValue(
-      'gestationalWeek',
-      '$weeks weeks $remDays days',
-    );
+    _setDerived('gestationalWeek', '$weeks weeks $remDays days');
 
     if (days > FieldVisibilityRules.pregnancyTestMaxGestationalDays) {
       _data = _data.setValue('pregnancyTest', null);
@@ -1419,6 +1718,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
             '(${_fieldSources[field.fieldId]?.name}) — value "${field.value}" '
             'NOT applied ----->');
         countRejection('sk_owned');
+        // AI disagreed with a value the SK had already entered. Previously
+        // only counted as a rejection category and discarded — but it is the
+        // only signal for "SK typed first, AI proposed something else", which
+        // the correction rate cannot see.
+        _aiOverriddenFieldIds.add(field.fieldId);
         continue;
       }
 
@@ -1553,6 +1857,14 @@ class UnifiedFormNotifier extends ChangeNotifier {
       'rejectedByCategory': rejectedByCategory,
     });
 
+    // Keep the same counts for the visit-level report. Categories only — this
+    // never holds a field id or a value.
+    rejectedByCategory.forEach((category, count) {
+      _asrRejectionCounts[category] =
+          (_asrRejectionCounts[category] ?? 0) + count;
+    });
+    if (appliedCount > 0) _anyAiFillApplied = true;
+
     if (appliedAny) {
       notifyListeners();
       _saveDraft();
@@ -1575,14 +1887,24 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Per-programme ASR coverage snapshot after each extraction:
   ///   <---- asr COVERAGE [anc]: 8/24 AI-filled · 2 manual · 14 empty ---->
   ///   <---- asr MISSING  [anc]: hemoglobin, fundalHeight, … ---->
-  void _logAsrCoverage(Map<String, FieldDef> fieldDefs) {
-    for (final programme in _activeFormTypes) {
-      final targets = fieldDefs.values
+  /// Fields of [programme] that AI Scribe could plausibly fill. Single home
+  /// for this predicate — both the coverage log line and the telemetry event
+  /// read it, so the reported denominator can never drift from the logged one.
+  /// `bmi` is excluded because it is computed from height/weight, never spoken.
+  List<FieldDef> _extractionTargets(
+    Map<String, FieldDef> fieldDefs,
+    String programme,
+  ) =>
+      fieldDefs.values
           .where((d) =>
               d.programmeIds.contains(programme) &&
               _extractableHints.contains(d.widgetHint) &&
               d.id != 'bmi')
           .toList();
+
+  void _logAsrCoverage(Map<String, FieldDef> fieldDefs) {
+    for (final programme in _activeFormTypes) {
+      final targets = _extractionTargets(fieldDefs, programme);
       if (targets.isEmpty) continue;
 
       final aiFilled = <String>[];
@@ -1608,6 +1930,59 @@ class UnifiedFormNotifier extends ChangeNotifier {
         debugPrint('<---- asr MISSING  [$programme]: ${empty.join(', ')} ---->');
       }
     }
+  }
+
+  /// Builds a form-field coverage snapshot for the S3 training sidecar.
+  ///
+  /// Returns a structured map with per-programme fill status and the full
+  /// ASR transcript. Written as `{sampleId}.coverage.json` alongside the WAV.
+  Map<String, dynamic> coverageSnapshot(String? transcript) {
+    final programmes = <String, dynamic>{};
+    for (final programme in _activeFormTypes) {
+      final targets = _fieldDefs.values
+          .where((d) =>
+              d.programmeIds.contains(programme) &&
+              _extractableHints.contains(d.widgetHint) &&
+              d.id != 'bmi')
+          .toList();
+      if (targets.isEmpty) continue;
+      final aiFilled = <String>[];
+      final manual = <String>[];
+      final empty = <String>[];
+      final fields = <String, dynamic>{};
+      for (final d in targets) {
+        final value = _data.getValue(d.id);
+        final source = _fieldSources[d.id];
+        final hasValue = value != null;
+        String? sourceStr;
+        if (hasValue &&
+            (source == FieldSource.aiPending ||
+                source == FieldSource.aiModified)) {
+          aiFilled.add(d.id);
+          sourceStr = source!.name;
+        } else if (hasValue) {
+          manual.add(d.id);
+          sourceStr = source?.name ?? 'manual';
+        } else {
+          empty.add(d.id);
+        }
+        fields[d.id] = {'value': value?.toString(), 'source': sourceStr};
+      }
+      programmes[programme] = {
+        'total': targets.length,
+        'aiFilled': aiFilled.length,
+        'manual': manual.length,
+        'empty': empty.length,
+        'fields': fields,
+      };
+    }
+    return {
+      'encounterId': _encounterId,
+      'assessmentType': _activeFormTypes.join(','),
+      'capturedAt': DateTime.now().toUtc().toIso8601String(),
+      'transcript': transcript,
+      'programmes': programmes,
+    };
   }
 
   /// True when the SK typed or edited this field — AI must never overwrite.
@@ -2058,6 +2433,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
               : null,
         );
       }
+      // Report telemetry last: every clinical write above has succeeded by
+      // now, and this call cannot throw (see _emitVisitTelemetry).
+      await _emitVisitTelemetry();
       return savedIds;
     } catch (e) {
       _submitError = e.toString();
@@ -2066,6 +2444,389 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _submitting = false;
       notifyListeners();
     }
+  }
+
+  /// Emits one `visit_completed` telemetry event for the weekly report.
+  ///
+  /// Runs only after every clinical write in [submit] has succeeded, and is
+  /// wrapped so a telemetry failure can never turn a saved visit into a
+  /// failed one. Buckets are unioned across active programmes (a field shared
+  /// by ANC and NCD is one capture opportunity, not two).
+  /// Buckets and denominators for [visit_completed], scoped to visible
+  /// capture opportunities only.
+  ///
+  /// AI fills on fields outside the extraction target set (rescued
+  /// out-of-programme edits) or not visible on screen must not inflate
+  /// [aiFilled] above [extractableVisible].
+  @visibleForTesting
+  ({
+    List<String> captureFieldIds,
+    int extractableVisible,
+    List<String> aiCorrected,
+    List<String> aiAcceptedUnchanged,
+  }) telemetryVisitCapture() {
+    final b = classifyFieldProvenance();
+    // Expanded to leaves, because `aiFilled` records leaves: AI fills
+    // `systolic`/`diastolic`/`pulse`, never the `bpLogDetails` container, and
+    // it fills `glucose` alongside `glucoseType`. Counting widgets here and
+    // leaves there let the numerator exceed the denominator.
+    final captureIds = <String>{
+      for (final target in b.targetIds.where(_visibleFieldIds.contains))
+        ..._captureLeaves(target),
+    }.toList()
+      ..sort();
+    return (
+      captureFieldIds: captureIds,
+      extractableVisible: captureIds.length,
+      aiCorrected:
+          b.aiCorrected.where(captureIds.contains).toList()..sort(),
+      aiAcceptedUnchanged:
+          b.aiAcceptedUnchanged.where(captureIds.contains).toList()..sort(),
+    );
+  }
+
+  Future<void> _emitVisitTelemetry() async {
+    final telemetry = _telemetryService;
+    if (telemetry == null) return;
+    try {
+      final b = classifyFieldProvenance();
+      final capture = telemetryVisitCapture();
+      // Shared with value-audit and visit-content via [ensureVisitUuid].
+      final visitUuid = telemetry.ensureVisitUuid(_encounterId);
+      await telemetry.recordVisitCompleted(
+        visitUuid: visitUuid,
+        programmes: List<String>.from(_activeFormTypes),
+        scribeUsed: capture.aiCorrected.isNotEmpty ||
+            capture.aiAcceptedUnchanged.isNotEmpty ||
+            _aiOverriddenFieldIds.isNotEmpty,
+        aiCorrected: capture.aiCorrected,
+        aiAcceptedUnchanged: capture.aiAcceptedUnchanged,
+        manual: b.manual.toList(),
+        prefilled: b.prefilled.toList(),
+        derived: b.derived.toList(),
+        aiOverridden: _aiOverriddenFieldIds.toList(),
+        scribeStartedAtMs: _scribeStartedAtMs,
+        scribeEndedAtMs: _scribeEndedAtMs,
+        manualEditingMs: _manualEditingMs(),
+        outcome: asrOutcome,
+        failureReasons: asrFailureReasons,
+        empty: b.empty.toList(),
+        libraryTotal: b.libraryTotal,
+        renderedTotal: _renderedFieldCount,
+        extractableVisible: capture.extractableVisible,
+        captureFieldIds: capture.captureFieldIds,
+        durationMs: await _visitDurationMs(),
+      );
+      await _writeValueAudit(visitUuid);
+    } on Object catch (e) {
+      debugPrint('[Telemetry] visit_completed not emitted: $e');
+    }
+  }
+
+  /// Buckets every extraction-target field by how its value got there.
+  ///
+  /// Exposed for tests: the emission path in [_emitVisitTelemetry] needs a
+  /// full [submit] (and therefore real DAOs), so keeping the classification
+  /// behind that made it untestable — and it shipped with two wrong buckets
+  /// that only a hand ground-truth run caught.
+  @visibleForTesting
+  ({
+    Set<String> aiCorrected,
+    Set<String> aiAcceptedUnchanged,
+    Set<String> manual,
+    Set<String> prefilled,
+    Set<String> derived,
+    Set<String> empty,
+    Set<String> targetIds,
+    int libraryTotal,
+  }) classifyFieldProvenance() {
+      final aiCorrected = <String>{};
+      final aiAcceptedUnchanged = <String>{};
+      final manual = <String>{};
+      final prefilled = <String>{};
+      final derived = <String>{};
+      final empty = <String>{};
+      final targetIds = <String>{};
+      // One entry per mirror group: six field names for one glucose reading is
+      // one capture opportunity and one SK action, so the group is classified
+      // once. Without this, editing a mirrored AI value would report several
+      // corrections for a single edit.
+      final claimedGroups = <int>{};
+
+      for (final programme in _activeFormTypes) {
+        for (final def in _extractionTargets(_fieldDefs, programme)) {
+          if (!targetIds.add(def.id)) continue;
+          // A container is not a field the SK sees; its members are counted
+          // individually, so counting it too would double-count the reading.
+          if (_compositeMembers.containsKey(def.id)) continue;
+          final groupIndex =
+              _mirrorGroups.indexWhere((g) => g.contains(def.id));
+          if (groupIndex >= 0 && !claimedGroups.add(groupIndex)) continue;
+
+          final hasValue = _data.getValue(def.id) != null;
+          final source = _fieldSources[def.id];
+          if (!hasValue) {
+            empty.add(def.id);
+            continue;
+          }
+          switch (source) {
+            case FieldSource.aiModified:
+              aiCorrected.add(def.id);
+            case FieldSource.aiPending:
+            case FieldSource.aiAccepted:
+              // `aiPending` means the SK did not edit it — NOT that they
+              // reviewed and approved it, since the live scribe path sets no
+              // explicit accept. The correction rate is therefore a lower
+              // bound on error, which is why `aiOverridden` is also reported.
+              aiAcceptedUnchanged.add(def.id);
+            case FieldSource.manual:
+              manual.add(def.id);
+            case FieldSource.prefilled:
+              prefilled.add(def.id);
+            case FieldSource.derived:
+              derived.add(def.id);
+            case FieldSource.aiRejected:
+            case null:
+              // A value with no recorded provenance. Every write path is now
+              // classified, so this should not occur — counted as prefilled
+              // rather than manual so an unclassified write can never inflate
+              // the SK's manual-effort figure again (the defect a ground-truth
+              // run caught: 16 reported for 10 typed).
+              prefilled.add(def.id);
+          }
+        }
+      }
+
+      // Anything with recorded provenance that the loop above did not reach —
+      // typically a field belonging to a programme outside _activeFormTypes
+      // (an eye-care or NCD field rendered on a combined visit). Those edits
+      // were previously dropped entirely: `eyeTestOutcome` and `referPlace`
+      // logged a transition on device and then appeared in no bucket at all.
+      //
+      // Deliberately NOT added to targetIds: they are real activity to
+      // account for, but they were never offered to the extractor, so they
+      // are not capture opportunities and must not move the capture rate.
+      final classified = {
+        ...aiCorrected, ...aiAcceptedUnchanged, ...manual,
+        ...prefilled, ...derived, ...empty,
+      };
+      for (final entry in _fieldSources.entries) {
+        final id = entry.key;
+        if (classified.contains(id)) continue;
+        if (_compositeMembers.containsKey(id)) continue;
+        if (_data.getValue(id) == null) continue;
+        if (_mirrorGroups.any((g) => g.contains(id) &&
+            g.any(classified.contains))) {
+          continue; // its group is already represented
+        }
+        // Only rescue what a human or the AI actually did. `prefilled` and
+        // `derived` are system-written; outside the target set they are not
+        // actions and not capture opportunities, so sweeping them in would
+        // resurrect fields deliberately excluded from the buckets (`bmi` is
+        // computed from height/weight and is never a capture opportunity).
+        switch (entry.value) {
+          case FieldSource.aiModified:
+            aiCorrected.add(id);
+          case FieldSource.aiPending:
+          case FieldSource.aiAccepted:
+            aiAcceptedUnchanged.add(id);
+          case FieldSource.manual:
+            manual.add(id);
+          case FieldSource.prefilled:
+          case FieldSource.derived:
+          case FieldSource.aiRejected:
+            break;
+        }
+      }
+
+      // "Total fields available in the form": every field declared by any
+      // programme the screen rendered, extractable or not. Spans the rendered
+      // set (not just _activeFormTypes) so the three denominators nest —
+      // visible <= rendered <= in form.
+      final countedProgrammes = {..._activeFormTypes, ..._renderedFormTypes};
+      final libraryTotal = _fieldDefs.values
+          .where((d) => d.programmeIds.any(countedProgrammes.contains))
+          .length;
+
+      return (
+        aiCorrected: aiCorrected,
+        aiAcceptedUnchanged: aiAcceptedUnchanged,
+        manual: manual,
+        prefilled: prefilled,
+        derived: derived,
+        empty: empty,
+        targetIds: targetIds,
+        libraryTotal: libraryTotal,
+      );
+  }
+
+  /// Field ids where AI proposed a value the SK had already filled.
+  @visibleForTesting
+  Set<String> get aiOverriddenFieldIds => _aiOverriddenFieldIds;
+
+  /// Records the wall-clock bounds of a scribe session that filled this form.
+  ///
+  /// Called by the screen from the scribe banner's fill callback, which is the
+  /// only place that knows whether the batch or the live path ran. Widens the
+  /// stored span rather than replacing it, so several sessions on one form
+  /// report as one interval.
+  ///
+  /// Nulls are ignored: a fill that arrives without timing (an older banner, a
+  /// path that never recorded) must not clear a span already captured.
+  void markScribeSpan({int? startedAtMs, int? endedAtMs}) {
+    if (startedAtMs != null &&
+        (_scribeStartedAtMs == null || startedAtMs < _scribeStartedAtMs!)) {
+      _scribeStartedAtMs = startedAtMs;
+    }
+    if (endedAtMs != null &&
+        (_scribeEndedAtMs == null || endedAtMs > _scribeEndedAtMs!)) {
+      _scribeEndedAtMs = endedAtMs;
+    }
+  }
+
+  /// The in-memory AI-value capture map. Empty unless
+  /// [AppConfig.valueAuditEnabled] — which is what the tests pin.
+  @visibleForTesting
+  Map<String, String?> get aiProposedValuesForTesting =>
+      Map.unmodifiable(_aiProposedValues);
+
+  @visibleForTesting
+  int? get scribeStartedAtMsForTesting => _scribeStartedAtMs;
+
+  @visibleForTesting
+  int? get scribeEndedAtMsForTesting => _scribeEndedAtMs;
+
+  /// Remembers AI's value for [fieldId] if this is the SK's first edit of it.
+  ///
+  /// Gated on [AppConfig.valueAuditEnabled], so a build without the flag never
+  /// holds a clinical value even in memory. Only `aiPending` qualifies: an
+  /// `aiModified` source means the SK has already edited this field, so what
+  /// is in it now is the SK's value, not AI's.
+  void _captureAiValueBeforeFirstEdit(String fieldId) {
+    if (!AppConfig.valueAuditEnabled) return;
+    if (_aiProposedValues.containsKey(fieldId)) return;
+    if (_groupSourceFor(fieldId) != FieldSource.aiPending) return;
+    _aiProposedValues[fieldId] = _stringifyValue(_data.getValue(fieldId));
+  }
+
+  /// The form's own rendering of a value, not a re-formatted one.
+  ///
+  /// A report that shows a clinician what AI proposed has to show what it
+  /// actually proposed, so this does not round, parse or infer units.
+  static String? _stringifyValue(dynamic raw) => raw?.toString();
+
+  /// Writes the before/after pairs for this visit to the PHI audit table.
+  ///
+  /// Final values are read HERE, at submit, not when the edit happened: the SK
+  /// may edit the same field several times and only the last value reached the
+  /// record. [visitUuid] is the same correlator the visit's telemetry event
+  /// carries, which is what lets a report join the two streams.
+  ///
+  /// Never throws — a lost audit row is not worth failing a visit over, the
+  /// same stance the telemetry emit takes.
+  Future<void> _writeValueAudit(String visitUuid) async {
+    if (!AppConfig.valueAuditEnabled) return;
+    final dao = _valueAuditDao;
+    if (dao == null || _aiProposedValues.isEmpty) return;
+    try {
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+      await dao.insertAll([
+        for (final entry in _aiProposedValues.entries)
+          ValueAuditEntry(
+            id: const Uuid().v4(),
+            visitUuid: visitUuid,
+            fieldId: entry.key,
+            aiValue: entry.value,
+            finalValue: _stringifyValue(_data.getValue(entry.key)),
+            occurredAt: now,
+          ),
+      ]);
+      debugPrint('[ValueAudit] wrote ${_aiProposedValues.length} pair(s)');
+    } on Object catch (e, st) {
+      debugPrint('[ValueAudit] write failed: $e');
+      debugPrint('[ValueAudit] $st');
+    }
+  }
+
+  /// Overall status of AI Scribe on this form, or null when it never ran.
+  ///
+  /// `success` — fills applied and nothing was rejected.
+  /// `partial` — fills applied but some proposals were dropped.
+  /// `failed`  — AI proposed things and none of them stuck.
+  ///
+  /// Deliberately three states rather than a bool: "AI ran and every value was
+  /// rejected" and "AI filled the form cleanly" are both non-events under a
+  /// success flag, and the difference is the whole point of the metric.
+  @visibleForTesting
+  String? get asrOutcome {
+    final rejected = _asrRejectionCounts.values.fold<int>(0, (a, b) => a + b);
+    if (!_anyAiFillApplied && rejected == 0) return null;
+    if (!_anyAiFillApplied) return 'failed';
+    return rejected == 0 ? 'success' : 'partial';
+  }
+
+  /// Why proposals were dropped, by category, or null when none were.
+  /// Categories only — never a field id or a value.
+  @visibleForTesting
+  Map<String, int>? get asrFailureReasons =>
+      _asrRejectionCounts.isEmpty ? null : Map.unmodifiable(_asrRejectionCounts);
+
+  /// Wall-clock from the scribe session ending to now, in ms, or null when no
+  /// session ran.
+  ///
+  /// A proxy for editing effort, not keystroke timing: it includes any pause
+  /// the SK took between finishing dictation and submitting. Called at submit,
+  /// so "now" is the submit instant. Negative spans (clock adjustment) return
+  /// null rather than a nonsense duration.
+  int? _manualEditingMs() {
+    final ended = _scribeEndedAtMs;
+    if (ended == null) return null;
+    final elapsed = DateTime.now().millisecondsSinceEpoch - ended;
+    return elapsed >= 0 ? elapsed : null;
+  }
+
+  /// Test seam for the clear path that drops values along with their
+  /// provenance — exercised so a cleared field cannot keep reporting as an
+  /// AI disagreement now that the override set is persisted in the draft.
+  @visibleForTesting
+  void clearPregnancyOutcomeFieldsForTesting(Set<String> fieldIds) =>
+      _clearPregnancyOutcomeFields(fieldIds);
+
+  /// Wall-clock duration of this visit, or null when the encounter row cannot
+  /// be read. Includes any time the app spent backgrounded, which is why the
+  /// report medians these rather than averaging them.
+  /// When the assessment form came on screen, set once by [markFormOpened].
+  int? _formOpenedAtMs;
+
+  /// Stamps the start of form-completion timing.
+  ///
+  /// Called when the form is mounted. First call wins: the form screen can
+  /// rebuild, and a later stamp would shorten the measured time.
+  void markFormOpened() {
+    _formOpenedAtMs ??= DateTime.now().millisecondsSinceEpoch;
+  }
+
+  /// How long the SK spent on the assessment form.
+  ///
+  /// Measured from [markFormOpened], NOT from the encounter's `startedAt`.
+  /// The encounter is stamped in `EncounterRepository.createVisit()` — the
+  /// moment "start visit" is tapped on the dashboard — which is several
+  /// screens before the form exists: triage, the symptom picker, and the AI
+  /// briefing cards all sit in between. Measuring from there reported whole
+  /// visit time under a column labelled form-completion time, running one to
+  /// two minutes long on a real assessment.
+  ///
+  /// Null when the form was never marked open, rather than falling back to
+  /// the encounter stamp: a missing measurement is honest, and silently
+  /// mixing two different meanings in one column is what this fixes.
+  Future<int?> _visitDurationMs() async {
+    final openedAt = _formOpenedAtMs;
+    if (openedAt == null) {
+      debugPrint('[Telemetry] form open never marked — duration not reported');
+      return null;
+    }
+    final elapsed = DateTime.now().millisecondsSinceEpoch - openedAt;
+    return elapsed >= 0 ? elapsed : null;
   }
 
   static int? _asPositiveInt(Object? raw) {
@@ -2968,6 +3729,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
       fieldSources: jsonEncode({
         'sources': _fieldSources.map((k, v) => MapEntry(k, v.name)),
         'segments': _fieldSourceSegments,
+        // Rides the same blob so no schema change is needed. Without this a
+        // notifier rebuild mid-visit (changing programme selection disposes
+        // the form) reset the disagreement count to zero, while corrections
+        // survived — quietly understating how often AI was overruled.
+        'aiOverridden': _aiOverriddenFieldIds.toList(),
       }),
     );
     _draftDao.saveDraft(row).catchError((e) {

@@ -11,6 +11,7 @@ import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../auth/user_hierarchy_service.dart';
 import '../config/app_config.dart';
+import '../version/app_version_info.dart';
 import '../errors/domain_exceptions.dart';
 import '../models/assessment_history_item.dart';
 import '../db/app_database.dart';
@@ -471,10 +472,8 @@ class OfflineSyncService extends ChangeNotifier {
     }
   }
 
-  // App version + type are sourced from AppConfig so the Engineering Design
-  // Standards "Configuration management" rule (no hardcoded build values) is
-  // honoured and a single `--dart-define` bump propagates to both headers
-  // (set in `ApiClient`) and request bodies.
+  // App version is sourced from [AppVersionInfo] (pubspec `version:` field),
+  // matching Spice Android's BuildConfig.VERSION_NAME / VERSION_CODE contract.
 
   /// Formats [dt] as `"2024-01-15T10:30:00+00:00"` — matching Android's
   /// `DateTimeFormatter.ISO_OFFSET_DATE_TIME` output (no millis, explicit offset).
@@ -524,8 +523,8 @@ class OfflineSyncService extends ChangeNotifier {
       'villageIds': villageIds,
       if (since != null) 'lastSyncTime': _toOffsetDateTime(since),
       'userId': ?userId,
-      'appVersionName': AppConfig.appVersionName,
-      'appVersionCode': AppConfig.appVersionCode,
+      'appVersionName': AppVersionInfo.current.versionName,
+      'appVersionCode': AppVersionInfo.current.versionCode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'appType': AppConfig.appType,
       'memberIds': <int>[],
@@ -838,6 +837,42 @@ class OfflineSyncService extends ChangeNotifier {
       final existingIds = patients.map((p) => p.id).toSet();
       var added = 0;
       for (final p in bridgedPatients) {
+        final existingIdx = patients.indexWhere((e) => e.id == p.id);
+        if (existingIdx >= 0) {
+          final cur = patients[existingIdx];
+          if ((cur.patientId == null || cur.patientId!.isEmpty) &&
+              p.patientId != null &&
+              p.patientId!.isNotEmpty) {
+            patients[existingIdx] = Patient(
+              id: cur.id,
+              patientId: p.patientId,
+              name: cur.name ?? p.name,
+              gender: cur.gender ?? p.gender,
+              dob: cur.dob ?? p.dob,
+              phone: cur.phone ?? p.phone,
+              nationalId: cur.nationalId ?? p.nationalId,
+              householdId: cur.householdId ?? p.householdId,
+              villageId: cur.villageId ?? p.villageId,
+              villageName: cur.villageName ?? p.villageName,
+              isActive: cur.isActive ?? p.isActive,
+              updatedAt: p.updatedAt ?? cur.updatedAt,
+              rawJson: cur.rawJson,
+              age: cur.age ?? p.age,
+              riskScore: cur.riskScore,
+              riskBand: cur.riskBand,
+              riskModifier: cur.riskModifier,
+              riskReasons: cur.riskReasons,
+              riskHintLevel: cur.riskHintLevel,
+              riskHintColor: cur.riskHintColor,
+              redFlag: cur.redFlag,
+              lastVisitAt: cur.lastVisitAt,
+              nextDueAt: cur.nextDueAt,
+              missedVisitCount: cur.missedVisitCount,
+            );
+            added++;
+          }
+          continue;
+        }
         if (existingIds.add(p.id)) {
           patients.add(p);
           added++;
@@ -1008,6 +1043,14 @@ class OfflineSyncService extends ChangeNotifier {
     _emitPersistProgress(SyncPersistPhase.patients, 0, patients.length,
         force: true);
     await _patients.upsertMany(patients);
+    final backfilledServerIds =
+        await _patients.syncServerPatientIdsFromMembers();
+    if (backfilledServerIds > 0) {
+      debugPrint(
+        '[OfflineSyncService] Backfilled patient_id on $backfilledServerIds '
+        'patient row(s) from members.fhir_id',
+      );
+    }
     mark('patients', patients.length);
     if (programmes.isNotEmpty) {
       _emitPersistProgress(
@@ -2096,8 +2139,8 @@ class OfflineSyncService extends ChangeNotifier {
       'villageIds': scope,
       if (since != null) 'lastSyncTime': _toOffsetDateTime(since),
       'userId': ?userId,
-      'appVersionName': AppConfig.appVersionName,
-      'appVersionCode': AppConfig.appVersionCode,
+      'appVersionName': AppVersionInfo.current.versionName,
+      'appVersionCode': AppVersionInfo.current.versionCode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'memberIds': <int>[],
     };

@@ -17,6 +17,12 @@ class Endpoints {
   /// Returns user hierarchy: villages, subVillages, workflowIds, facilities.
   static const String staticUserData = '/spice-service/static-data/user-data';
 
+  /// Minimum-version check on leapfrog-ai-service (via nginx gateway).
+  static const String mobileAppVersionGateway = '/ai-scribe/mobile/app-version';
+
+  /// Same check when [AppConfig.aiServiceBaseUrl] hits the service directly.
+  static const String mobileAppVersionDirect = '/mobile/app-version';
+
   /// Patient search by identifier / free text. Used to look up an existing
   /// registration from a scanned NID before enrolling a duplicate.
   /// Postman: `patient-controller/searchPatient` → `{{spice_url}}/patient/search`.
@@ -221,6 +227,24 @@ class Endpoints {
   // ── AI Assistant: conversational Q&A ────────────────────────────────────
   static const String assistantAsk = '/ai-scribe/assistant/ask';
 
+  // ── Telemetry: AI Scribe adoption / accuracy reporting ───────────────────
+  /// Batch-ingest of `telemetry_events` rows queued on device. Idempotent on
+  /// each event's client-generated id, so a retry after a lost response
+  /// cannot double-count. Server: ai-scribe-service `app/api/telemetry.py`.
+  static const String telemetryEvents = '/ai-scribe/telemetry/events';
+
+  /// Batch-ingest of the PHI value-audit stream — the before/after values of
+  /// AI-filled fields the SK edited. A separate path from [telemetryEvents]
+  /// because it is separately gated at both ends: a deployment can accept
+  /// telemetry and refuse values. Server: ai-scribe-service
+  /// `app/api/value_audit.py`.
+  static const String telemetryValueAudit =
+      '/ai-scribe/telemetry/value-audit';
+
+  /// Batch-ingest of visit-scoped AI content (transcript + summary text).
+  static const String telemetryVisitContent =
+      '/ai-scribe/telemetry/visit-content';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>
@@ -262,4 +286,14 @@ class Endpoints {
   /// Presigned GET URLs for module thumbnails (batch POST, max 50 IDs).
   static const String coachingModuleThumbnails =
       '/medtronics-api/sync/modules/presigned-thumbnails';
+
+  // ── AI training audio sample collection ───────────────────────────────────
+  /// Upload raw audio for field-loss analysis training.
+  static const String trainingAudioSample = '/ai-scribe/training/audio-sample';
+
+  /// Post client-side counters + extract call log for a RealtimeASR session.
+  static const String realtimeSessionSummary = '/ai-scribe/training/realtime-session';
+
+  /// Server-side feature flags for mobile clients.
+  static const String aiScribeConfig = '/ai-scribe/config';
 }
