@@ -7,6 +7,9 @@ import 'package:provider/provider.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
+import '../../core/auth/user_hierarchy_service.dart';
+import '../../core/db/app_database.dart';
+import '../../core/db/audio_sample_dao.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
@@ -18,6 +21,8 @@ import '../../core/db/pregnancy_snapshot_dao.dart';
 import 'forms/pregnancy_outcome_snapshot_mapper.dart';
 import '../../core/models/programme.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
+import '../../core/telemetry/telemetry_service.dart';
+import '../../core/telemetry/value_audit_dao.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
@@ -163,6 +168,9 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         permissionService: ScribePermissionService(),
         audioSettings: context.read<ScribeAudioSettingsNotifier>(),
       );
+      _scribeCtrl.setHierarchyService(context.read<UserHierarchyService>());
+      _scribeCtrl.setSampleDao(
+          AudioSampleDao(context.read<AppDatabase>()));
       _scribeInitialized = true;
     }
   }
@@ -344,6 +352,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         householdMemberLocalId: widget.householdMemberLocalId ?? 0,
         defaultReferralSiteId: ctx.read<ApiClient>().organizationFhirId,
         referralRepo: ctx.read<ReferralRepository>(),
+        telemetryService: ctx.read<TelemetryService>(),
+        valueAuditDao: ctx.read<ValueAuditDao>(),
       );
       _formNotifier = notifier;
       _notifierFormTypes = List<String>.from(formTypes);

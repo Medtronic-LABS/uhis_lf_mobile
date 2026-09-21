@@ -296,3 +296,62 @@ Worklist.unnamedPatient
 feedOption_$id
 notifReminderBody
 notifReminderTitle
+
+# Telemetry report screen + its Settings entry. Deliberately untranslated:
+# the screen is an internal analytics tool gated behind
+# --dart-define=TELEMETRY_SCREEN=true (off in any normal release), so an SK
+# never sees these labels. Translate them if the screen is ever promoted to
+# a user-facing surface.
+Settings.debugTelemetry
+Settings.debugTelemetrySubtitle
+Telemetry.accuracy
+Telemetry.adoption
+Telemetry.aiCorrected
+Telemetry.aiFilled
+Telemetry.aiOverridden
+Telemetry.aiUnchanged
+Telemetry.avgAiFields
+Telemetry.captureRate
+Telemetry.composeCaveat
+Telemetry.contactCaveat
+Telemetry.contactShares
+Telemetry.contactSms
+Telemetry.contactWhatsapp
+Telemetry.copyJson
+Telemetry.correctionCaveat
+Telemetry.correctionRate
+Telemetry.counselling
+Telemetry.derivedFields
+Telemetry.disagreementCaveat
+Telemetry.disagreementRate
+Telemetry.download
+Telemetry.durationCaveat
+Telemetry.eventCount
+Telemetry.fieldsCaptured
+Telemetry.fieldsInForm
+Telemetry.fieldsRendered
+Telemetry.fieldsVisible
+Telemetry.from
+Telemetry.generate
+Telemetry.manualFields
+Telemetry.manualUsers
+Telemetry.manualVisits
+Telemetry.medianManual
+Telemetry.medianWithScribe
+Telemetry.noData
+Telemetry.notAvailable
+Telemetry.pendingUpload
+Telemetry.prefilledFields
+Telemetry.provenance
+Telemetry.provenanceCaveat
+Telemetry.savedTo
+Telemetry.scribeUsers
+Telemetry.scribeVisits
+Telemetry.smsOpened
+Telemetry.timeToComplete
+Telemetry.title
+Telemetry.to
+Telemetry.totalAiFields
+Telemetry.visitsInRange
+Telemetry.whatsappOpened
+Telemetry.worstFields

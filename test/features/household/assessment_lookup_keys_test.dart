@@ -48,6 +48,26 @@ void main() {
     expect(keys, containsAll(['646733', '1']));
   });
 
+  test('maps server FHIR id to local assessment keys', () async {
+    await patients.upsertMany([
+      const Patient(id: '1', patientId: '646733', name: 'Aliya', rawJson: '{}'),
+    ]);
+    await appDb.db.insert(AppDatabase.tableMembers, {
+      'id': 1,
+      'name': 'Aliya',
+      'patient_id': '1',
+      'fhir_id': 'fhir-abc-123',
+    });
+
+    final keys = await assessmentLookupKeysForRoute(
+      routePatientId: 'fhir-abc-123',
+      memberDao: members,
+      patientDao: patients,
+    );
+
+    expect(keys, containsAll(['fhir-abc-123', '1', '646733']));
+  });
+
   test('includes navigation extra local member id', () async {
     await patients.upsertMany([
       const Patient(id: '1', patientId: '646733', rawJson: '{}'),

@@ -6,6 +6,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, kIsWeb;
 
 import '../config/app_config.dart';
+import '../version/app_version_info.dart';
 import 'endpoints.dart';
 import 'browser_adapter_stub.dart'
     if (dart.library.html) 'browser_adapter_web.dart';
@@ -204,9 +205,10 @@ class ApiClient {
             if (org != null && org.isNotEmpty) {
               options.headers['organizationId'] = org;
             }
-            options.headers['App-Version'] = AppConfig.appVersionName;
+            final version = AppVersionInfo.current;
+            options.headers['App-Version'] = version.versionName;
             options.headers['App-Version-Code'] =
-                AppConfig.appVersionCode.toString();
+                version.versionCode.toString();
           }
           handler.next(options);
         },
@@ -332,6 +334,44 @@ class ApiClient {
   /// Import a previously persisted Bearer token.
   void importAuthToken(String? token) {
     _authToken = token;
+  }
+
+  /// Attach UHIS auth headers to a direct ai-scribe Dio instance.
+  ///
+  /// When [AppConfig.aiServiceBaseUrl] bypasses the main [dio] stack, callers
+  /// must replay the same credentials the gateway would forward: Bearer token
+  /// and/or session cookies plus `tenantId`. The ai-scribe service rejects
+  /// requests missing any of these with HTTP 401.
+  void attachAiServiceAuth(Dio direct) {
+    direct.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final token = _authToken;
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = token;
+          }
+          if (!kIsWeb) {
+            final cookies = await exportAuthCookies();
+            final cookiePairs = <String>[
+              if (cookies.jsession != null) 'JSESSIONID=${cookies.jsession}',
+              if (cookies.authCookie != null) 'AuthCookie=${cookies.authCookie}',
+            ];
+            if (cookiePairs.isNotEmpty) {
+              options.headers['Cookie'] = cookiePairs.join('; ');
+            }
+          }
+          final tid = _tenantId;
+          if (tid != null && tid.isNotEmpty) {
+            options.headers['tenantId'] = tid;
+          }
+          final version = AppVersionInfo.current;
+          options.headers['App-Version'] = version.versionName;
+          options.headers['App-Version-Code'] =
+              version.versionCode.toString();
+          handler.next(options);
+        },
+      ),
+    );
   }
 
   Future<({String? jsession, String? authCookie})> exportAuthCookies() async {

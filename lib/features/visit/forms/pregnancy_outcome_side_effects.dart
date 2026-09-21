@@ -185,12 +185,10 @@ class PregnancyOutcomeSideEffects {
           '[PregnancyOutcome] maternal death — mother not found to deactivate');
       return;
     }
-    // Keep existing sync_status — deceased mother must not enter
-    // householdMembers[] create (that path is for new babies only).
-    await _members.updateActiveStatus(
+    // Spice: NotSynced so getOtherUnsyncedMembers pushes isActive=false.
+    await _members.updateMemberDeceasedReason(
       mother.id,
       isActive: false,
-      syncStatus: mother.syncStatus,
     );
     final patientId = mother.patientId ?? motherPatientId;
     if (patientId != null && patientId.isNotEmpty) {
@@ -279,6 +277,10 @@ class PregnancyOutcomeSideEffects {
       'gender': entity.gender,
       'isHouseholdHead': false,
       'isActive': entity.isActive,
+      if (entity.fhirId != null && entity.fhirId!.isNotEmpty)
+        'id': entity.fhirId,
+      if (entity.deceasedReason != null && entity.deceasedReason!.isNotEmpty)
+        'deceasedReason': entity.deceasedReason,
       'isChild': true,
       'maritalStatus': '',
       'disability': '',

@@ -11,6 +11,7 @@ import '../../app/post_sync_refresher.dart';
 import '../../app/theme.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/db/encounter_dao.dart';
@@ -23,6 +24,7 @@ import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/models/programme.dart';
 import '../search/member_search_repository.dart';
+import '../../core/rmnch/deceased_reason.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import 'widgets/dashboard_search_field.dart';
 import '../visit/assessment_repository.dart';
@@ -121,13 +123,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _filterState = context.read<DashboardFilterState>();
     _reloadStats();
+    // Start the queue load synchronously so the first paint can show a spinner
+    // (or stale cache on return from a visit) instead of "No missions for today".
+    _loadMissionData();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      // UHIS parity: LandingActivity.startSyncWorker() on every home open.
+      context.read<SyncConnectivityService>().syncIfSessionReady();
       final auth = context.read<AuthState>();
       await _loadSummary(auth);
       await _loadVillagesLine();
-      // Load mission data (may already be cached from sync screen)
-      _loadMissionData();
     });
   }
 
@@ -574,7 +579,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'villageId=$villageId → householdMemberLocalId=$householdMemberLocalId',
     );
     if (!mounted) return;
-    final encounterId = await startOrResumeVisit(
+    final result = await startOrResumeVisit(
       context,
       controller: controller,
       patientId: patientId,
@@ -584,7 +589,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       householdId: householdId,
     );
     if (!mounted) return;
-    if (encounterId != null) {
+    if (result.succeeded) {
+      final encounterId = result.encounterId!;
       debugPrint('$logPrefix visit started, navigating with origin=dashboard');
       context.go(
         '/patients/visit/$encounterId/flow?origin=dashboard',
@@ -601,6 +607,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
       return;
     }
+    if (result.messageAlreadyShown) return;
     debugPrint('$logPrefix visit start failed: ${controller.error}');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -695,10 +702,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   key: ValueKey('queue_$_refreshVersion'),
                   future: _queueFuture,
                   builder: (context, snap) {
-                    final waiting =
-                        snap.connectionState == ConnectionState.waiting &&
-                            _baseQueue.isEmpty;
-                    final queue = snap.data ?? const <MissionQueueItem>[];
+                    // While a fresh load is in flight, keep showing the last
+                    // cached queue rather than an empty list — otherwise a
+                    // reload after visit completion flashes "No missions for
+                    // today" until loadQueue finishes (~2–3 s).
+                    final queue = snap.hasData
+                        ? snap.data!
+                        : (_baseQueue.isNotEmpty
+                            ? _buildFilteredList(_baseQueue)
+                            : const <MissionQueueItem>[]);
+                    final waiting = !snap.hasData &&
+                        snap.connectionState != ConnectionState.done &&
+                        queue.isEmpty;
 
                     // Headers: filter panel, spacer, visits title, spacer.
                     // Then empty-state OR a reveal-window of queue cards.
@@ -1679,9 +1694,10 @@ class _GlobalSearchResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final deceased = !hit.isActive;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: deceased ? AppColors.progressTrack : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
@@ -1690,13 +1706,17 @@ class _GlobalSearchResultCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: const Color(0xFFEFF6FF),
+            backgroundColor: deceased
+                ? AppColors.textMuted.withValues(alpha: 0.25)
+                : const Color(0xFFEFF6FF),
             child: Text(
               hit.name?.isNotEmpty == true
                   ? hit.name![0].toUpperCase()
                   : '?',
-              style: const TextStyle(
-                color: Color(0xFF1D4ED8),
+              style: TextStyle(
+                color: deceased
+                    ? AppColors.textMuted
+                    : const Color(0xFF1D4ED8),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1706,14 +1726,52 @@ class _GlobalSearchResultCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  hit.name ?? PatientContextStrings.unknownMemberName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 3,
+                  children: [
+                    Text(
+                      hit.name ?? PatientContextStrings.unknownMemberName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: deceased ? AppColors.textMuted : null,
+                      ),
+                    ),
+                    if (deceased)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.progressTrack,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                        ),
+                        child: Text(
+                          MemberDeceasedStrings.deceased,
+                          style: const TextStyle(
+                            fontFamily: AppFonts.body,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                if (hit.gender != null)
+                if (deceased)
+                  Text(
+                    '${MemberDeceasedStrings.reasonForDeath}: '
+                    '${DeceasedReason.formatForDisplay(hit.deceasedReason)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
+                  )
+                else if (hit.gender != null)
                   Text(
                     MissionDashboardStrings.genderLabel(hit.gender!),
                     style: const TextStyle(
@@ -1724,15 +1782,19 @@ class _GlobalSearchResultCard extends StatelessWidget {
               ],
             ),
           ),
-          FilledButton.tonal(
-            onPressed: onStartVisit,
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          if (!deceased)
+            FilledButton.tonal(
+              onPressed: onStartVisit,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                MissionDashboardStrings.startVisit,
+                style: const TextStyle(fontSize: 12),
+              ),
             ),
-            child: Text(MissionDashboardStrings.startVisit, style: const TextStyle(fontSize: 12)),
-          ),
         ],
       ),
     );
