@@ -36,7 +36,6 @@ import '../features/visit/visit_flow_screen.dart';
 import '../core/api/api_client.dart';
 import '../core/auth/auth_repository.dart';
 import '../features/household/enrollment/create_household_screen.dart';
-import '../features/household/enrollment/household_created_screen.dart';
 import '../features/household/enrollment/add_household_member_screen.dart';
 import '../features/household/enrollment/enrollment_controller.dart';
 import '../features/household/enrollment/select_household_screen.dart';
@@ -349,13 +348,6 @@ GoRouter buildRouter(AuthState auth) {
                 ),
               );
             },
-          ),
-          GoRoute(
-            path: '/household/enrollment/success',
-            pageBuilder: (context, state) => const MaterialPage(
-              key: ValueKey('enrollment-success'),
-              child: HouseholdCreatedScreen(),
-            ),
           ),
           GoRoute(
             path: '/household/enrollment/add-member',

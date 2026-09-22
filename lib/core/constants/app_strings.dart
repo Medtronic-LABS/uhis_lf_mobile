@@ -100,6 +100,9 @@ abstract final class AppStrings {
   static String get ancBlockedDuplicateTitle => getTranslatedString('ancBlockedDuplicateTitle', 'ANC Already Recorded Today');
   static String get ancBlockedDuplicateMessage => getTranslatedString('ancBlockedDuplicateMessage', 'An ANC assessment has already been recorded for this patient today. Only one ANC visit is allowed per day.');
   static String get ancBlockedRevisitTitle => getTranslatedString('ancBlockedRevisitTitle', 'ANC visit not due yet');
+  static String get ancBlockedEarlyPregnancyTitle => getTranslatedString('ancBlockedEarlyPregnancyTitle', '⚠️ Pregnancy Too Early to Assess');
+  static String get ancBlockedEarlyPregnancyMessage => getTranslatedString('ancBlockedEarlyPregnancyMessage', 'Pregnancy assessment can only be conducted after 6 weeks from LMP.\n\nPlease revisit after 6 weeks for complete pregnancy profile assessment and ANC.');
+  static String get ancLockedEarlyLmpHint => getTranslatedString('ancLockedEarlyLmpHint', '⚠ ANC is available only after 6 weeks from LMP.');
 
   // ── PW registration blocking ──────────────────────────────────────────────
   static String get pwAlreadyEnrolledTitle => getTranslatedString('pwAlreadyEnrolledTitle', 'Already Registered');

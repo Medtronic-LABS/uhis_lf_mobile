@@ -19,6 +19,10 @@ abstract final class PregnancyCohortRules {
   /// Android `POSTNATAL_WINDOW_DAYS`.
   static const int postnatalWindowDays = 42;
 
+  /// Android `PregnantWomen.LMP_THRESHOLD_DAYS` — ANC is only offered once
+  /// at least 6 weeks (42 days) have elapsed since LMP.
+  static const int lmpThresholdDays = 42;
+
   /// True while the pregnancy is still open: LMP known, no delivery
   /// recorded, and EDD (if known) isn't more than [overdueGraceDays] days in
   /// the past.
@@ -59,5 +63,13 @@ abstract final class PregnancyCohortRules {
     return (now ?? DateTime.now())
         .difference(DateTime.fromMillisecondsSinceEpoch(deliveryMs))
         .inDays;
+  }
+
+  /// Mirrors Android `MetaRepository.getANCPNCStatus()` ANC branch — active
+  /// pregnancy with known LMP at least [lmpThresholdDays] old and no delivery.
+  static bool isAncEligible(PregnancySnapshotRow? row, {DateTime? now}) {
+    if (!isActivePregnancy(row, now: now)) return false;
+    final days = daysSinceLmp(row, now: now);
+    return days != null && days >= lmpThresholdDays;
   }
 }

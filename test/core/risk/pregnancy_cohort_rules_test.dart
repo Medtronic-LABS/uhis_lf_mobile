@@ -103,4 +103,26 @@ void main() {
       expect(PregnancyCohortRules.daysSinceDelivery(r, now: now), 10);
     });
   });
+
+  group('PregnancyCohortRules.isAncEligible', () {
+    test('false when LMP is unknown', () {
+      expect(PregnancyCohortRules.isAncEligible(null, now: now), isFalse);
+      expect(PregnancyCohortRules.isAncEligible(row(), now: now), isFalse);
+    });
+
+    test('false when fewer than 42 days since LMP', () {
+      final r = row(lmpDaysAgo: 30);
+      expect(PregnancyCohortRules.isAncEligible(r, now: now), isFalse);
+    });
+
+    test('true at exactly 42 days since LMP', () {
+      final r = row(lmpDaysAgo: 42);
+      expect(PregnancyCohortRules.isAncEligible(r, now: now), isTrue);
+    });
+
+    test('false once delivery has been recorded', () {
+      final r = row(lmpDaysAgo: 70, deliveryDaysAgo: 3);
+      expect(PregnancyCohortRules.isAncEligible(r, now: now), isFalse);
+    });
+  });
 }

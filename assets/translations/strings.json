@@ -4723,6 +4723,18 @@
     "bn": "এএনসি সেবা দেওয়া যাবে না",
     "en": "ANC Not Available"
   },
+  "ancBlockedEarlyPregnancyTitle": {
+    "bn": "⚠️ গর্ভাবস্থা মূল্যায়নের জন্য খুব প্রাথমিক পর্যায়",
+    "en": "⚠️ Pregnancy Too Early to Assess"
+  },
+  "ancBlockedEarlyPregnancyMessage": {
+    "bn": "এলএমপি থেকে ৬ সপ্তাহ পরেই কেবল গর্ভাবস্থা মূল্যায়ন করা সম্ভব।\n\nসম্পূর্ণ গর্ভাবস্থা প্রোফাইল মূল্যায়ন এবং এএনসি-র জন্য অনুগ্রহ করে ৬ সপ্তাহ পরে আবার আসুন।",
+    "en": "Pregnancy assessment can only be conducted after 6 weeks from LMP.\n\nPlease revisit after 6 weeks for complete pregnancy profile assessment and ANC."
+  },
+  "ancLockedEarlyLmpHint": {
+    "bn": "⚠ এলএমপি-র ৬ সপ্তাহ পরেই এএনসি সেবা দেওয়া যাবে",
+    "en": "⚠ ANC is available only after 6 weeks from LMP."
+  },
   "ancLockedPostpartumHint": {
     "bn": "⚠ প্রসবের পর এএনসি সেবা দেওয়া যাবে না — পোস্টন্যাটাল যত্নের জন্য পিএনসি ব্যবহার করুন",
     "en": "⚠ ANC is not available after delivery — use PNC for postnatal care"

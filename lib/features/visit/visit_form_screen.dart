@@ -70,6 +70,7 @@ class VisitFormScreen extends StatefulWidget {
     this.enrolledProgrammes = const {},
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
+    this.onAncSuppressedForEarlyLmpChanged,
   });
 
   final String visitId;
@@ -124,6 +125,9 @@ class VisitFormScreen extends StatefulWidget {
 
   /// Subset of [confirmedSymptoms] pre-selected by the AI Scribe.
   final Set<String> aiPickedSymptoms;
+
+  /// Propagates live early-LMP ANC suppression to [VisitFlowScreen]'s header.
+  final ValueChanged<bool>? onAncSuppressedForEarlyLmpChanged;
 
   @override
   State<VisitFormScreen> createState() => _VisitFormScreenState();
@@ -371,6 +375,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         enrolledFormTypes: enrolledFormTypes,
         confirmedSymptoms: widget.confirmedSymptoms,
         aiPickedSymptoms: widget.aiPickedSymptoms,
+        onAncSuppressedForEarlyLmpChanged:
+            widget.onAncSuppressedForEarlyLmpChanged,
         onSubmitComplete: () =>
             _onSectionedSubmit(ctx, visitCtrl, session, notifier),
       ),
