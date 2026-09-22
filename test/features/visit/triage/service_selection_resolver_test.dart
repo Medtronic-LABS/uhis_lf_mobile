@@ -60,6 +60,39 @@ void main() {
     });
   });
 
+  group('ServiceSelectionResolver.finalize — ANC blocked early LMP', () {
+    test('removes ANC and reports ancBlockedEarlyPregnancy', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.anc, Programme.ncd},
+        pwRegistrationBlocked: false,
+        isPostpartum: false,
+        ancRevisitBlocked: false,
+        ancEarlyLmpBlocked: true,
+      );
+
+      expect(result.programmes, {Programme.ncd});
+      expect(
+        result.blockedReason,
+        ServiceSelectionBlockReason.ancBlockedEarlyPregnancy,
+      );
+    });
+
+    test('postpartum block takes precedence over early-LMP block', () {
+      final result = ServiceSelectionResolver.finalize(
+        selected: {Programme.anc},
+        pwRegistrationBlocked: false,
+        isPostpartum: true,
+        ancRevisitBlocked: false,
+        ancEarlyLmpBlocked: true,
+      );
+
+      expect(
+        result.blockedReason,
+        ServiceSelectionBlockReason.ancBlockedPostpartum,
+      );
+    });
+  });
+
   group('ServiceSelectionResolver.finalize — Task 1 (ANC revisit interval)', () {
     test('removes ANC and reports ancBlockedRevisit', () {
       final result = ServiceSelectionResolver.finalize(

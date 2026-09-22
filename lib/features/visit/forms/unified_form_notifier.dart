@@ -2225,11 +2225,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
         }
       }
 
-      final payloads = UnifiedPayloadMapper.decompose(
+      var payloads = UnifiedPayloadMapper.decompose(
         _withWireOptionValues(_data),
         _activeFormTypes.toSet(),
         risingBpTrend: risingBpTrend,
       );
+      if (payloads.any((p) => p.assessmentType == 'ANC') &&
+          FieldVisibilityRules.isPregnancyTooEarly(_data)) {
+        debugPrint(
+          '[SubmitBlocked] ANC dropped — LMP is under the 6-week threshold',
+        );
+        payloads =
+            payloads.where((p) => p.assessmentType != 'ANC').toList();
+      }
       if (payloads.isEmpty) {
         debugPrint(
             '[SubmitBlocked] no assessment payloads produced for form types '

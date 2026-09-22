@@ -1,13 +1,18 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/auth/user_hierarchy_service.dart';
+import '../../../core/db/household_dao.dart';
 import '../../../core/db/member_dao.dart';
 import '../../../core/debug/console_log.dart';
+import '../../../core/sync/offline_sync_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
+import '../household_detail_screen.dart';
 import 'enrollment_controller.dart';
 import 'enrollment_dob.dart';
 import 'enrollment_id_number.dart';
@@ -23,8 +28,9 @@ enum _DuplicateAction { cancel, viewRecord, continueAnyway }
 /// Combined household + head enrollment form.
 ///
 /// Merges the former Step 1 (household info) and Step 2 (household head info)
-/// into a single scrollable screen. On "Continue" both sections are validated
-/// and the controller is updated before navigating to the success/review screen.
+/// into a single scrollable screen. On "Submit" both sections are validated,
+/// persisted to the local DB + pushed to the server, then the SK lands on the
+/// household detail screen to add members or start visits.
 class CreateHouseholdScreen extends StatefulWidget {
   const CreateHouseholdScreen({
     super.key,
@@ -333,7 +339,33 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     }
   }
 
-  Future<void> _handleContinue(EnrollmentController controller) async {
+  Future<HouseholdDetailData?> _detailDataForPersistedHousehold(
+    BuildContext context,
+    EnrollmentController controller,
+    String hhLocalId,
+  ) async {
+    final memberDao = context.read<MemberDao>();
+    final hhDao = context.read<HouseholdDao>();
+    final hhEntity = await hhDao.getById(hhLocalId);
+    final memberEntities = await memberDao.getByHouseholdId(hhLocalId);
+    final members =
+        memberEntities.map(HouseholdMemberData.fromEntity).toList();
+    final hh = controller.household;
+
+    return HouseholdDetailData(
+      id: hhLocalId,
+      name: hhEntity?.name ?? controller.householdHead?.name,
+      householdNo: hh?.householdNumber ?? hhEntity?.householdNo,
+      village: hh?.villageName ?? hhEntity?.village,
+      subVillage: hh?.subVillageName ?? hhEntity?.subVillageName,
+      memberCount: members.isNotEmpty ? members.length : hh?.numberOfMembers,
+      latitude: hhEntity?.latitude,
+      longitude: hhEntity?.longitude,
+      members: members,
+    );
+  }
+
+  Future<void> _handleSubmit(EnrollmentController controller) async {
     final errors = _runValidation();
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
@@ -341,7 +373,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       return;
     }
     setState(() => _fieldErrors = {});
-    debugPrint('[_CreateHouseholdScreenState] _handleContinue householdType=$_householdType ssWorker=${_selectedSsWorker?.id} village=${_selectedVillage?.id} fromNidScan=${widget.fromNidScan}');
+    debugPrint('[_CreateHouseholdScreenState] _handleSubmit householdType=$_householdType ssWorker=${_selectedSsWorker?.id} village=${_selectedVillage?.id} fromNidScan=${widget.fromNidScan}');
     // Guarantee a valid sub-village even if the SK never opened the dropdown.
     // Android scopes member/assessment sync to sub-village IDs, so a household
     // enrolled with an empty sub-village (→ 0) is invisible in the Spice app.
@@ -467,7 +499,54 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       }
     }
 
-    if (mounted) context.push('/household/enrollment/success');
+    if (controller.loading || controller.submitted) return;
+
+    final success = await controller.submitHousehold();
+    if (!mounted) return;
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(controller.error ?? EnrollmentStrings.enrollmentFailed),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final hhLocalId = controller.persistedHouseholdLocalId;
+    if (hhLocalId == null || hhLocalId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(EnrollmentStrings.saveLocallyFailedError),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final detail = await _detailDataForPersistedHousehold(
+      context,
+      controller,
+      hhLocalId,
+    );
+    if (!mounted || detail == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(EnrollmentStrings.enrollmentSuccess),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    final sync = context.read<OfflineSyncService>();
+    context.go('/patients/household/$hhLocalId', extra: detail);
+    controller.reset();
+
+    // Defer warm pull so it does not race the background enrollment POST.
+    unawaited(
+      Future<void>.delayed(const Duration(seconds: 1), sync.warmSync),
+    );
   }
 
   Future<_DuplicateAction> _showDuplicateDialog({
@@ -1082,8 +1161,9 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                   right: 0,
                   bottom: 0,
                   child: EnrollmentStickyBar(
-                    label: EnrollmentStrings.continueArrow,
-                    onPressed: () => _handleContinue(controller),
+                    label: EnrollmentStrings.submit,
+                    loading: controller.loading || controller.submitted,
+                    onPressed: () => _handleSubmit(controller),
                   ),
                 ),
               ],

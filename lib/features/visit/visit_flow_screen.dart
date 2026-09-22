@@ -168,6 +168,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// ANC or PNC visit number for the header badge (1-based). Null until loaded.
   int? _visitNumber;
 
+  /// Live Step 2 signal from [UnifiedFormScreen] — LMP under 6 weeks hides
+  /// ANC sections and the header's ANC visit badge until eligible.
+  bool _step2AncSuppressed = false;
+
   /// After immunization on a combined Child Health + Vaccination visit, show
   /// the childhood visit form next (immunization timeline itself is unchanged).
   bool _childhoodFormAfterVaccination = false;
@@ -470,6 +474,27 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     return _primaryProgramme;
   }
 
+  List<String> _headerActiveFormTypes() {
+    if (_step == 0) {
+      return _step1LiveProgrammes.map((p) => p.name).toList();
+    }
+    final tags = _confirmedProgrammes.map((p) => p.name).toList();
+    if (_step == 1 && _step2AncSuppressed) {
+      return tags.where((t) => t != 'anc').toList();
+    }
+    return tags;
+  }
+
+  int? _headerVisitNumber() {
+    if (_step == 1 && _step2AncSuppressed) return null;
+    return _visitNumber;
+  }
+
+  void _onStep2AncSuppressedChanged(bool suppressed) {
+    if (_step2AncSuppressed == suppressed) return;
+    setState(() => _step2AncSuppressed = suppressed);
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -498,11 +523,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   ageDisplay: _ageDisplay,
                   householdId: widget.householdId,
                   patientGender: widget.patientGender,
-                  visitNumber: _visitNumber,
+                  visitNumber: _headerVisitNumber(),
                   primaryProgramme: _headerPrimaryProgramme,
-                  activeFormTypes: _step == 0
-                      ? _step1LiveProgrammes.map((p) => p.name).toList()
-                      : _confirmedProgrammes.map((p) => p.name).toList(),
+                  activeFormTypes: _headerActiveFormTypes(),
                   onBack: () {
                     if (_step == 1) {
                       setState(() => _step = 0);
@@ -592,6 +615,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             setState(() {
               _step = 1;
               _triageSubmitted = true;
+              _step2AncSuppressed = false;
             });
           },
         );
@@ -730,6 +754,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           enrolledProgrammes: _enrolledProgrammes,
           isDeliveryVisit: _isDeliveryVisit,
           origin: widget.origin,
+          onAncSuppressedForEarlyLmpChanged: _onStep2AncSuppressedChanged,
           onAdvance: (programme, referral, reasons, facility, pwRisks, nabaAssessments) {
             debugPrint('[ReferralFacility] flow captured — facility=$facility referral=$referral');
             setState(() {
@@ -1004,6 +1029,7 @@ class _Step2VitalsForm extends StatelessWidget {
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
     this.isDeliveryVisit = false,
+    this.onAncSuppressedForEarlyLmpChanged,
   });
 
   final String visitId;
@@ -1027,6 +1053,7 @@ class _Step2VitalsForm extends StatelessWidget {
   final List<String> confirmedSymptoms;
   /// Subset of [confirmedSymptoms] pre-selected by AI Scribe.
   final Set<String> aiPickedSymptoms;
+  final ValueChanged<bool>? onAncSuppressedForEarlyLmpChanged;
   final void Function(
     Programme primaryProgramme,
     bool referralRecommended,
@@ -1057,6 +1084,7 @@ class _Step2VitalsForm extends StatelessWidget {
       enrolledProgrammes: enrolledProgrammes,
       confirmedSymptoms: confirmedSymptoms,
       aiPickedSymptoms: aiPickedSymptoms,
+      onAncSuppressedForEarlyLmpChanged: onAncSuppressedForEarlyLmpChanged,
       onAdvance: onAdvance,
     );
   }
@@ -1185,6 +1213,7 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
     this.eddMs,
     this.isDeliveryVisit = false,
     this.origin,
+    this.onAncSuppressedForEarlyLmpChanged,
   });
 
   final String visitId;
@@ -1206,6 +1235,7 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
   final Set<String> aiPickedSymptoms;
   final String? sicknessDuration;
   final String? otherSymptoms;
+  final ValueChanged<bool>? onAncSuppressedForEarlyLmpChanged;
 
   /// Final, already-vetted programme set from
   /// `SymptomPickerScreen._doAdvance` — Step 1's `ServiceSelectionResolver`
@@ -1255,6 +1285,7 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
       enrolledProgrammes: enrolledProgrammes,
       confirmedSymptoms: confirmedSymptoms.toList(),
       aiPickedSymptoms: aiPickedSymptoms,
+      onAncSuppressedForEarlyLmpChanged: onAncSuppressedForEarlyLmpChanged,
       onAdvance: onAdvance,
     );
   }
