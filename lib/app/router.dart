@@ -493,6 +493,8 @@ GoRouter buildRouter(AuthState auth) {
               gestationalWeeks: extra['gestationalWeeks'] as int?,
               clinicalContextSummary: extra['clinicalContextSummary'] as String?,
               whatsappMessage: extra['whatsappMessage'] as String?,
+              confirmedSymptoms: (extra['confirmedSymptoms'] as Set<String>?) ?? const <String>{},
+              referredReasons: (extra['referredReasons'] as List<String>?) ?? const [],
             ),
           );
         },

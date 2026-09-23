@@ -9,13 +9,20 @@
 /// prescription/invoice previews (or a "not available" state).
 ///
 /// UI matches design mockups for this flow as closely as the real data
-/// allows -- the wrap-up screen deliberately does NOT build a "Doctor's
-/// Conclusion" card, Rx ID, or structured prescription line items: no such
-/// data exists anywhere in Shukhee's real API contract (confirmed against
-/// their sandbox API doc and Postman collection), so building them would be
-/// fabricated content. The live call screen likewise renders no custom
-/// mic/camera/end-call controls -- that's Shukhee's own web page inside the
-/// WebView, which exposes no control-surface hook to the host app.
+/// allows -- the wrap-up screen's "Doctor's Summary" card
+/// ([_ClinicalDataCard]) renders Shukhee's own `appointment.clinicalData`
+/// (diagnosis, medicines, follow-up) once a consultation completes, added
+/// per their 2026-09-22 API update; Rx ID still isn't part of their
+/// contract, so that specific field stays out. The live call screen
+/// likewise renders no custom mic/camera/end-call controls -- that's
+/// Shukhee's own web page inside the WebView, which exposes no
+/// control-surface hook to the host app.
+///
+/// "Join Call" only shows once Shukhee's nested `appointment.status` reaches
+/// `ConsultationStarted` (see [ShukheeStatus.isConsultationStarted]) --
+/// booking/acceptance alone isn't enough, per the same API update; entering
+/// [_Stage.generatingPrescription] is likewise driven by `ConsultationEnd`,
+/// not only the outer terminal status.
 ///
 /// Engineering Design Standards:
 ///   - All Shukhee-specific I/O lives in `shukhee_sdk`; this file only
@@ -39,12 +46,15 @@ import 'package:shukhee_sdk/shukhee_sdk.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/local_assessment_dao.dart';
+import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/db/teleconsult_prescription_dao.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/counselling_launcher.dart';
 import 'pdf_viewer_screen.dart';
+import 'teleconsult_clinical_data.dart';
 import 'teleconsult_permission_service.dart';
 
 /// The fixed, live-confirmed set of Shukhee specialities offered on the
@@ -85,9 +95,12 @@ class TeleconsultScreen extends StatefulWidget {
     this.gestationalWeeks,
     this.clinicalContextSummary,
     this.whatsappMessage,
+    this.confirmedSymptoms = const <String>{},
+    this.referredReasons = const [],
     @visibleForTesting this.client,
     @visibleForTesting this.permissionService,
     @visibleForTesting this.prescriptionDao,
+    @visibleForTesting this.clinicalDataBuilder,
   });
 
   final String patientLabel;
@@ -125,12 +138,26 @@ class TeleconsultScreen extends StatefulWidget {
   /// button. Null/empty hides the button.
   final String? whatsappMessage;
 
+  /// Triage symptom codes confirmed for this visit -- mapped to human
+  /// -readable labels and sent as `clinicalData.chiefComplaints` at booking
+  /// time (see [TeleconsultClinicalDataBuilder]). Empty when nothing was
+  /// confirmed.
+  final Set<String> confirmedSymptoms;
+
+  /// Structured risk-flag/gap strings from the visit's referral assessment
+  /// (see `_Step3AiRecoState.widget.referredReasons` in
+  /// `visit_flow_screen.dart`) -- sent as `clinicalData.pastIllness` at
+  /// booking time (see [TeleconsultClinicalDataBuilder]). Empty when the
+  /// visit raised no risk flags.
+  final List<String> referredReasons;
+
   /// Test-only injection points — real callers never pass these; the screen
   /// builds its own instances from [AppConfig]/the widget tree's [Provider]s
   /// otherwise.
   final ShukheeClient? client;
   final TeleconsultPermissionService? permissionService;
   final TeleconsultPrescriptionDao? prescriptionDao;
+  final TeleconsultClinicalDataBuilder? clinicalDataBuilder;
 
   @override
   State<TeleconsultScreen> createState() => _TeleconsultScreenState();
@@ -145,6 +172,10 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   // running and be able to persist the result after this widget is disposed,
   // when `context`/`context.read` are no longer safe to use.
   late final TeleconsultPrescriptionDao _prescriptionDao;
+  // Same "resolve once, up front" reasoning as _prescriptionDao above --
+  // _submitBooking's clinicalData assembly runs before any context.read
+  // would still be safe if it were deferred.
+  late final TeleconsultClinicalDataBuilder _clinicalDataBuilder;
   final _callViewKey = GlobalKey();
 
   _Stage _stage = _Stage.booking;
@@ -175,6 +206,11 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
     _client = widget.client ?? _buildDefaultClient();
     _permissionService = widget.permissionService ?? TeleconsultPermissionService();
     _prescriptionDao = widget.prescriptionDao ?? context.read<TeleconsultPrescriptionDao>();
+    _clinicalDataBuilder = widget.clinicalDataBuilder ??
+        TeleconsultClinicalDataBuilder(
+          assessmentDao: context.read<LocalAssessmentDao>(),
+          pregnancySnapshotDao: context.read<PregnancySnapshotDao>(),
+        );
   }
 
   @override
@@ -304,6 +340,12 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
     });
 
     try {
+      final clinicalData = await _clinicalDataBuilder.build(
+        patientId: widget.patientId,
+        confirmedSymptoms: widget.confirmedSymptoms,
+        referredReasons: widget.referredReasons,
+      );
+      if (!mounted) return;
       final booking = await _client.startConsultation(
         contactNumber: contactNumber,
         reason: (widget.reason?.trim().isNotEmpty ?? false)
@@ -315,6 +357,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         patientDob: widget.patientDob,
         patientGender: widget.patientGender,
         mediaGroups: mediaGroups,
+        clinicalData: clinicalData,
       );
       if (!mounted) return;
       setState(() => _booking = booking);
@@ -356,7 +399,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
 
   void _maybeEnterConnected() {
     if (!mounted || _stage != _Stage.connecting) return;
-    if (_webViewReady && _minDurationElapsed) {
+    if (_webViewReady && _minDurationElapsed && _appointmentReadyToJoin) {
       setState(() {
         _stage = _Stage.connected;
         _callStartedAt = DateTime.now();
@@ -365,6 +408,22 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       _startLiveTimer();
     }
   }
+
+  /// Gates showing the live call view on Shukhee's own appointment status,
+  /// not just the WebView having loaded -- per the vendor's contract, "Join
+  /// Call" should only appear once the doctor has actually started the
+  /// consultation server-side (`appointmentStatus == ConsultationStarted`),
+  /// not merely once the request was booked/accepted.
+  ///
+  /// Fail-closed while no poll has landed yet ([_status] null) or the poll
+  /// hasn't reported an appointment status yet -- this is safe rather than
+  /// risky: an in-flight call booked on an app build from *before* this gate
+  /// existed was never subject to any gate at all, so there's no "old call
+  /// stuck waiting on a value it'll never get" scenario to guard against.
+  /// The bound against a genuinely stuck "Connecting…" screen is
+  /// [AppConfig.teleconsultPollMaxAttempts] (already in place) and the
+  /// existing [_Stage.notCompleted] exit ramp in [_pollInBackground].
+  bool get _appointmentReadyToJoin => _status?.isConsultationStarted ?? false;
 
   void _startLiveTimer() {
     _liveTimer?.cancel();
@@ -392,7 +451,19 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       // screen can show the assigned doctor as soon as Shukhee has one,
       // rather than waiting for the whole call to finish.
       onUpdate: (update) {
-        if (mounted) setState(() => _status = update);
+        if (!mounted) return;
+        setState(() => _status = update);
+        // A delayed appointment-status arrival (e.g. the WebView finished
+        // loading before Shukhee reported ConsultationStarted) can unblock a
+        // "connecting" screen that was otherwise waiting on this same signal.
+        _maybeEnterConnected();
+        // The doctor ending the call server-side is a real "prescription in
+        // progress" signal distinct from the outer terminal status below --
+        // show it as soon as it's known, not only once the whole poll
+        // resolves.
+        if (update.isConsultationEnded && _stage == _Stage.connected) {
+          setState(() => _stage = _Stage.generatingPrescription);
+        }
       },
     );
     _liveTimer?.cancel();
@@ -1526,11 +1597,11 @@ class _RecordSharedBanner extends StatelessWidget {
   }
 }
 
-/// Shown once the call reaches `completed`. Only renders what the backend
-/// actually returns — doctor identity, the retrospective "record shared"
-/// banner, and inline prescription/invoice previews. The mockup's "Doctor's
-/// Conclusion" card, Rx ID, and structured line items are deliberately not
-/// built: no such data exists in Shukhee's contract.
+/// Shown once the call reaches `completed`. Renders what the backend
+/// returns — doctor identity, the retrospective "record shared" banner,
+/// inline prescription/invoice previews, and (when Shukhee's own
+/// `clinicalData` block is present -- see [_ClinicalDataCard]) a structured
+/// summary of the doctor's diagnosis, prescribed medicines, and follow-up.
 class _WrapUpView extends StatelessWidget {
   const _WrapUpView({
     required this.client,
@@ -1581,6 +1652,10 @@ class _WrapUpView extends StatelessWidget {
           const SizedBox(height: AppSpacing.h6xl),
           _RecordSharedBanner(clinicalContextSummary: clinicalContextSummary, visitNumber: visitNumber),
           const SizedBox(height: AppSpacing.h6xl),
+          if (status?.clinicalData != null) ...[
+            _ClinicalDataCard(data: status!.clinicalData!),
+            const SizedBox(height: AppSpacing.h6xl),
+          ],
           if (hasPrescription && log != null)
             _DocumentPreviewCard(
               client: client,
@@ -1633,6 +1708,139 @@ class _WrapUpView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Structured, read-only summary of Shukhee's `appointment.clinicalData`
+/// (diagnosis, prescribed medicines, meal instructions, vitals the doctor
+/// recorded, follow-up) -- only ever shown once [ShukheeStatus.clinicalData]
+/// is non-null, i.e. the consultation completed under an app version that
+/// requests this field. Renders each section only when non-empty rather
+/// than always showing every label -- Shukhee's own doctors don't
+/// necessarily fill in every field for every consultation.
+class _ClinicalDataCard extends StatelessWidget {
+  const _ClinicalDataCard({required this.data});
+
+  final ShukheeClinicalData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = <Widget?>[
+      _bulletSection(TeleconsultStrings.chiefComplaintsLabel, data.chiefComplaints),
+      _bulletSection(TeleconsultStrings.diagnosisLabel, data.diagnosis),
+      _bulletSection(TeleconsultStrings.labTestsLabel, data.labTest),
+      _bulletSection(TeleconsultStrings.adviceLabel, data.advice),
+      _bulletSection(TeleconsultStrings.drugHistoryLabel, data.drugHistory),
+      _medicineSection(),
+      _mealInstructionSection(),
+      _lastVitalSection(),
+      _followUpSection(),
+    ].whereType<Widget>().toList();
+
+    if (sections.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            TeleconsultStrings.clinicalSummaryTitle,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (final section in sections) ...[section, const SizedBox(height: AppSpacing.sm)],
+        ],
+      ),
+    );
+  }
+
+  Widget? _bulletSection(String label, List<String> items) {
+    if (items.isEmpty) return null;
+    return _LabeledSection(label: label, child: Text(items.join(', ')));
+  }
+
+  Widget? _medicineSection() {
+    if (data.medicine.isEmpty) return null;
+    return _LabeledSection(
+      label: TeleconsultStrings.medicinesLabel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: data.medicine.map((m) {
+          final name = m.brandName ?? m.genericName ?? '';
+          final details = [m.strength, m.dosage, m.frequency, m.instruction]
+              .where((v) => v != null && v.isNotEmpty)
+              .join(' · ');
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(details.isEmpty ? name : '$name — $details'),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget? _mealInstructionSection() {
+    if (data.mealInstruction.isEmpty) return null;
+    return _LabeledSection(
+      label: TeleconsultStrings.mealInstructionsLabel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: data.mealInstruction.map((m) {
+          final label = [m.mealType, m.instruction].where((v) => v != null && v.isNotEmpty).join(': ');
+          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(label));
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget? _lastVitalSection() {
+    final vital = data.lastVital;
+    if (vital == null) return null;
+    final parts = <String>[
+      if (vital.temperature != null) '${vital.temperature}°',
+      if (vital.pulseRate != null) '${vital.pulseRate} bpm',
+      if (vital.bloodPressure != null) '${vital.bloodPressure} mmHg',
+      if (vital.spo2 != null) 'SpO₂ ${vital.spo2}%',
+    ];
+    if (parts.isEmpty) return null;
+    return _LabeledSection(label: TeleconsultStrings.lastVitalsLabel, child: Text(parts.join(' · ')));
+  }
+
+  Widget? _followUpSection() {
+    final parts = <String>[
+      if (data.followUpComment != null && data.followUpComment!.isNotEmpty) data.followUpComment!,
+      if (data.followUpDay != null && data.followUpDay!.isNotEmpty) '${data.followUpDay} days',
+      if (data.followUpDate != null && data.followUpDate!.isNotEmpty) data.followUpDate!,
+    ];
+    if (parts.isEmpty) return null;
+    return _LabeledSection(label: TeleconsultStrings.followUpLabel, child: Text(parts.join(' · ')));
+  }
+}
+
+class _LabeledSection extends StatelessWidget {
+  const _LabeledSection({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 2),
+        DefaultTextStyle.merge(style: const TextStyle(fontSize: 13), child: child),
+      ],
     );
   }
 }

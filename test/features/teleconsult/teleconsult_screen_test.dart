@@ -15,8 +15,11 @@ import 'package:shukhee_sdk/shukhee_sdk.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uhis_next/core/constants/app_strings.dart';
 import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/db/local_assessment_dao.dart';
+import 'package:uhis_next/core/db/pregnancy_snapshot_dao.dart';
 import 'package:uhis_next/core/db/teleconsult_prescription_dao.dart';
 import 'package:uhis_next/core/theme/app_theme.dart';
+import 'package:uhis_next/features/teleconsult/teleconsult_clinical_data.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_permission_service.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_screen.dart';
 
@@ -69,6 +72,7 @@ class _FailingShukheeClient extends ShukheeClient {
     String? patientDob,
     String? patientGender,
     Map<String, List<ShukheeMediaFile>> mediaGroups = const {},
+    Map<String, dynamic>? clinicalData,
   }) async {
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     callCount++;
@@ -116,6 +120,13 @@ Future<void> _fillAndSubmitBookingForm(
     await tester.pump();
   }
   await tester.tap(find.text(TeleconsultStrings.startConsultationButton));
+  // `_submitBooking` now awaits `TeleconsultClinicalDataBuilder.build()`
+  // first, which runs real sqflite_common_ffi queries -- `databaseFactoryFfi`
+  // dispatches those to a background isolate, so the round trip only
+  // completes via a real event-loop tick, not `WidgetTester.pump`'s fake
+  // clock. `runAsync` briefly leaves the fake-async zone so that round trip
+  // can actually land before we resume pumping frames.
+  await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
 }
@@ -129,6 +140,11 @@ void main() {
   // `_FailingShukheeClient` always throws), so a real but never-written-to
   // in-memory DAO is enough -- no fake/mock needed.
   late final TeleconsultPrescriptionDao testDao;
+  // Same "real but never-written-to" reasoning as testDao above --
+  // TeleconsultClinicalDataBuilder's own DAOs are resolved up front in
+  // initState too (see TeleconsultScreen), and every test here fails
+  // booking before clinicalData would ever be inspected.
+  late final TeleconsultClinicalDataBuilder testClinicalDataBuilder;
 
   setUpAll(() async {
     sqfliteFfiInit();
@@ -138,6 +154,10 @@ void main() {
       options: OpenDatabaseOptions(version: AppDatabase.schemaVersion, onCreate: AppDatabase.createSchema),
     );
     testDao = TeleconsultPrescriptionDao(AppDatabase.forTesting(db));
+    testClinicalDataBuilder = TeleconsultClinicalDataBuilder(
+      assessmentDao: LocalAssessmentDao(AppDatabase.forTesting(db)),
+      pregnancySnapshotDao: PregnancySnapshotDao(AppDatabase.forTesting(db)),
+    );
   });
 
   testWidgets('shows the booking form with General Physician pre-selected', (tester) async {
@@ -151,6 +171,7 @@ void main() {
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -174,6 +195,7 @@ void main() {
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -203,6 +225,7 @@ void main() {
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -214,6 +237,15 @@ void main() {
 
     expect(find.text(TeleconsultStrings.connectingHeaderTitle), findsOneWidget);
     expect(find.text(TeleconsultStrings.lookingForDoctor), findsOneWidget);
+
+    // `_submitBooking` awaits `TeleconsultClinicalDataBuilder.build()` (real
+    // sqflite_common_ffi queries on a background isolate) before it ever
+    // calls `_client.startConsultation` -- the fake-clock `pump()` below
+    // can't unblock that real isolate round trip on its own, so without this
+    // real gap the client's artificial delay timer never even starts and
+    // `client.callCount` stays 0.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
 
     // Advance past both the fake delay and the 2s connecting-gate timer so
     // nothing leaks into the next test.
@@ -234,6 +266,7 @@ void main() {
         reason: 'Severe pneumonia, referral recommended',
         client: client,
         prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -258,6 +291,7 @@ void main() {
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -296,6 +330,7 @@ void main() {
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -320,6 +355,7 @@ void main() {
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
         permissionService: _FakePermissionService(granted: false),
       )),
     );
@@ -343,6 +379,7 @@ void main() {
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -365,6 +402,7 @@ void main() {
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
         permissionService: _FakePermissionService(),
       )),
     );
@@ -376,6 +414,10 @@ void main() {
     expect(client.callCount, 1);
 
     await tester.tap(find.text(CommonStrings.retry));
+    // Same real-DB-round-trip reasoning as `_fillAndSubmitBookingForm` above --
+    // retry re-invokes `_submitBooking`, which awaits the clinicalData builder
+    // again.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pumpAndSettle();
 
     expect(client.callCount, 2);

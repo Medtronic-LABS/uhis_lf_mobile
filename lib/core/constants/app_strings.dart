@@ -4200,6 +4200,19 @@ abstract final class TeleconsultStrings {
   static String get viewPrescription => getTranslatedString('Teleconsult.viewPrescription', 'View Prescription');
   static String get viewInvoice => getTranslatedString('Teleconsult.viewInvoice', 'View Invoice');
   static String get viewFullDocument => getTranslatedString('Teleconsult.viewFullDocument', 'View full document');
+
+  // ── Clinical summary (Shukhee's clinicalData, once completed) ───────────────
+  static String get clinicalSummaryTitle => getTranslatedString('Teleconsult.clinicalSummaryTitle', 'Doctor\'s Summary');
+  static String get chiefComplaintsLabel => getTranslatedString('Teleconsult.chiefComplaintsLabel', 'Chief Complaints');
+  static String get diagnosisLabel => getTranslatedString('Teleconsult.diagnosisLabel', 'Diagnosis');
+  static String get labTestsLabel => getTranslatedString('Teleconsult.labTestsLabel', 'Lab Tests');
+  static String get adviceLabel => getTranslatedString('Teleconsult.adviceLabel', 'Advice');
+  static String get drugHistoryLabel => getTranslatedString('Teleconsult.drugHistoryLabel', 'Drug History');
+  static String get medicinesLabel => getTranslatedString('Teleconsult.medicinesLabel', 'Medicines');
+  static String get mealInstructionsLabel => getTranslatedString('Teleconsult.mealInstructionsLabel', 'Meal Instructions');
+  static String get lastVitalsLabel => getTranslatedString('Teleconsult.lastVitalsLabel', 'Vitals Recorded by Doctor');
+  static String get followUpLabel => getTranslatedString('Teleconsult.followUpLabel', 'Follow-up');
+
   static String get loadingPreview => getTranslatedString('Teleconsult.loadingPreview', 'Loading preview…');
   static String get previewUnavailable => getTranslatedString('Teleconsult.previewUnavailable', 'Preview unavailable');
   static String get documentOpenFailed => getTranslatedString('Teleconsult.documentOpenFailed', 'Could not open the document. Please try again.');

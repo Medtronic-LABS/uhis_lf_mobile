@@ -137,6 +137,13 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   late int? _patientAge = widget.patientAge;
   String? _patientDob;
 
+  /// Same "constructor wins, DB fills the gap" pattern as [_patientDob] --
+  /// required by Shukhee's `find_or_create_shukhee_patient` (alongside name
+  /// and DOB) to auto-create a patient record for a contact number it
+  /// hasn't seen before. Without this fallback, a caller that didn't pass a
+  /// gender silently breaks that patient's first teleconsult booking.
+  late String? _patientGender = widget.patientGender;
+
   /// Postpartum status — seeded from constructor; DB lookup can upgrade
   /// false → true (see [_loadPostpartumFromDb]).
   late bool _isPostpartum = widget.isPostpartum;
@@ -262,6 +269,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         _patientName = _patientName ?? p.name;
         _patientAge = _patientAge ?? p.age;
         _patientDob = _patientDob ?? p.dob;
+        _patientGender = _patientGender ?? p.gender;
       });
     } catch (e) {
       debugPrint('[VisitFlow] patient lookup failed: $e');
@@ -487,7 +495,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   patientName: _patientName,
                   ageDisplay: _ageDisplay,
                   householdId: widget.householdId,
-                  patientGender: widget.patientGender,
+                  patientGender: _patientGender,
                   visitNumber: _visitNumber,
                   primaryProgramme: _headerPrimaryProgramme,
                   activeFormTypes: _step == 0
@@ -535,7 +543,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           householdId: widget.householdId,
           patientAge: widget.patientAge,
           patientName: widget.patientName,
-          patientGender: widget.patientGender,
+          patientGender: _patientGender,
           origin: widget.origin,
           scribeController: _step1Scribe!,
           onSymptomsConfirmed: (symptoms, duration, other, aiPicked) {
@@ -702,7 +710,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientAge: widget.patientAge,
           ageInMonths: _ageInMonths,
           patientName: widget.patientName,
-          patientGender: widget.patientGender,
+          patientGender: _patientGender,
           gestationalWeeks: _effectiveGestationalWeeks,
           lmpMs: _resolvedLmpMs,
           eddMs: _resolvedEddMs,
@@ -733,9 +741,18 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           key: ValueKey('flow-step3-${widget.visitId}'),
           visitId: widget.visitId,
           patientId: widget.patientId,
-          patientLabel: widget.patientName ?? widget.patientId,
+          // _patientName (not widget.patientName) -- it has the same value
+          // as the constructor param, plus a PatientDao DB fallback (see its
+          // declaration/resolution above) for callers that didn't pass a
+          // name at all. This is what actually reaches Shukhee as the
+          // patient's real full name (see TeleconsultScreen.patientLabel ->
+          // start_consultation's patientName), so it must never silently
+          // degrade to the raw patient id just because one caller forgot to
+          // pass a name.
+          patientLabel: _patientName ?? widget.patientId,
           patientAge: widget.patientAge,
-          patientGender: widget.patientGender,
+          patientGender: _patientGender,
+          patientDob: _patientDob,
           gestationalWeeks: _effectiveGestationalWeeks,
           visitNumber: _visitNumber,
           lmpMs: _resolvedLmpMs,
@@ -1270,6 +1287,7 @@ class _Step3AiReco extends StatefulWidget {
     this.patientLabel,
     this.patientAge,
     this.patientGender,
+    this.patientDob,
     this.gestationalWeeks,
     this.visitNumber,
     this.lmpMs,
@@ -1285,6 +1303,10 @@ class _Step3AiReco extends StatefulWidget {
   final String? patientLabel;
   final int? patientAge;
   final String? patientGender;
+
+  /// See `_TeleconsultButton.patientDob`'s doc comment -- threaded through
+  /// unchanged to the teleconsult booking call.
+  final String? patientDob;
   final int? gestationalWeeks;
   /// ANC/PNC visit number (1-based) — threaded through to the teleconsult
   /// screen's "ANC Visit N" header label. Null for non-ANC/PNC visits.
@@ -2965,10 +2987,13 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               clinicalContextSummary: _clinicalContextSummary,
             ),
             patientGender: widget.patientGender,
+            patientDob: widget.patientDob,
             visitNumber: widget.visitNumber,
             gestationalWeeks: widget.gestationalWeeks,
             clinicalContextSummary: _clinicalContextSummary,
             whatsappMessage: naba.whatsappSummary,
+            confirmedSymptoms: widget.confirmedSymptoms,
+            referredReasons: widget.referredReasons,
             onAccepted: () => _onAccepted(naba),
           ),
         ],
@@ -4041,10 +4066,13 @@ class _TeleconsultButton extends StatefulWidget {
     this.patientPhone,
     this.reason,
     this.patientGender,
+    this.patientDob,
     this.visitNumber,
     this.gestationalWeeks,
     this.clinicalContextSummary,
     this.whatsappMessage,
+    this.confirmedSymptoms = const <String>{},
+    this.referredReasons = const [],
   });
 
   final String patientLabel;
@@ -4064,6 +4092,14 @@ class _TeleconsultButton extends StatefulWidget {
 
   final String? patientGender;
 
+  /// The patient's date of birth (ISO 8601), if known — required by
+  /// Shukhee's `find_or_create_shukhee_patient` to auto-create a patient
+  /// record on their side for a contact number they haven't seen before
+  /// (alongside [patientLabel]/[patientGender]). Omitting it doesn't break
+  /// an already-registered patient's booking, but silently breaks every
+  /// *new* patient's first booking.
+  final String? patientDob;
+
   /// ANC/PNC visit number (1-based) — for the teleconsult header's
   /// "ANC Visit N" label. Null for non-ANC/PNC visits.
   final int? visitNumber;
@@ -4081,6 +4117,19 @@ class _TeleconsultButton extends StatefulWidget {
   /// [_AiCounsellingCard] — powers the wrap-up screen's "Send counselling to
   /// family" button.
   final String? whatsappMessage;
+
+  /// Triage symptom codes confirmed for this visit (see
+  /// `_Step3AiRecoState._confirmedSymptoms`) -- mapped to human-readable
+  /// labels and sent as `clinicalData.chiefComplaints` at booking time (see
+  /// `TeleconsultClinicalDataBuilder`). Empty when nothing was confirmed.
+  final Set<String> confirmedSymptoms;
+
+  /// Structured risk-flag/gap strings behind [reason]'s concatenated text
+  /// (see `_Step3AiRecoState.widget.referredReasons` /
+  /// `_offlineReferralReasonText`) -- sent as `clinicalData.pastIllness` at
+  /// booking time (see `TeleconsultClinicalDataBuilder`). Empty when the
+  /// visit raised no risk flags.
+  final List<String> referredReasons;
 
   @override
   State<_TeleconsultButton> createState() => _TeleconsultButtonState();
@@ -4123,10 +4172,13 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
           if (widget.patientPhone != null) 'patientPhone': widget.patientPhone,
           if (widget.reason != null) 'reason': widget.reason,
           if (widget.patientGender != null) 'patientGender': widget.patientGender,
+          if (widget.patientDob != null) 'patientDob': widget.patientDob,
           if (widget.visitNumber != null) 'visitNumber': widget.visitNumber,
           if (widget.gestationalWeeks != null) 'gestationalWeeks': widget.gestationalWeeks,
           if (widget.clinicalContextSummary != null)
             'clinicalContextSummary': widget.clinicalContextSummary,
+          if (widget.confirmedSymptoms.isNotEmpty) 'confirmedSymptoms': widget.confirmedSymptoms,
+          if (widget.referredReasons.isNotEmpty) 'referredReasons': widget.referredReasons,
           if (widget.whatsappMessage != null) 'whatsappMessage': widget.whatsappMessage,
         },
       );
@@ -4194,10 +4246,13 @@ class _BottomCtaBar extends StatelessWidget {
     this.patientPhone,
     this.teleconsultReason,
     this.patientGender,
+    this.patientDob,
     this.visitNumber,
     this.gestationalWeeks,
     this.clinicalContextSummary,
     this.whatsappMessage,
+    this.confirmedSymptoms = const <String>{},
+    this.referredReasons = const [],
   });
   final bool accepted;
   final VoidCallback onAccepted;
@@ -4207,10 +4262,13 @@ class _BottomCtaBar extends StatelessWidget {
   final String? patientPhone;
   final String? teleconsultReason;
   final String? patientGender;
+  final String? patientDob;
   final int? visitNumber;
   final int? gestationalWeeks;
   final String? clinicalContextSummary;
   final String? whatsappMessage;
+  final Set<String> confirmedSymptoms;
+  final List<String> referredReasons;
 
   @override
   Widget build(BuildContext context) {
@@ -4231,10 +4289,13 @@ class _BottomCtaBar extends StatelessWidget {
                 patientPhone: patientPhone,
                 reason: teleconsultReason,
                 patientGender: patientGender,
+                patientDob: patientDob,
                 visitNumber: visitNumber,
                 gestationalWeeks: gestationalWeeks,
                 clinicalContextSummary: clinicalContextSummary,
                 whatsappMessage: whatsappMessage,
+                confirmedSymptoms: confirmedSymptoms,
+                referredReasons: referredReasons,
               ),
               const SizedBox(height: 8),
               // Accept / save — secondary (outlined navy)
