@@ -227,6 +227,31 @@ void main() {
     });
   });
 
+  group('telemetry capture scope', () {
+    test('out-of-scope AI fills stay out of aiFilled and captureFieldIds', () {
+      defs = {
+        ..._defs(['systolic'], programme: 'ncd'),
+        ..._defs(['eyeTestOutcome'], programme: 'eye_care'),
+      };
+      notifier.fieldDefs = defs;
+      notifier.setRenderedFieldStats(
+        visibleFieldIds: {'systolic', 'eyeTestOutcome'},
+        renderedTotal: 2,
+        renderedFormTypes: {'ncd', 'eye_care'},
+      );
+      notifier.applyAiPrefill(
+        [ai('systolic', 120), ai('eyeTestOutcome', 'normal')],
+        fieldDefs: defs,
+      );
+
+      final capture = notifier.telemetryVisitCapture();
+      expect(capture.captureFieldIds, ['systolic']);
+      expect(capture.extractableVisible, 1);
+      expect(capture.aiAcceptedUnchanged, ['systolic']);
+      expect(capture.aiCorrected, isEmpty);
+    });
+  });
+
   group('out-of-programme edits', () {
     test('an edited field outside activeFormTypes still reaches a bucket', () {
       // eyeTestOutcome and referPlace logged a transition on device and then

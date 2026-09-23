@@ -58,6 +58,7 @@ class AuthState extends ChangeNotifier {
   AuthStatus _status = AuthStatus.unknown;
   String? _username;
   String? _error;
+  String? _appUpdateMessage;
   bool _busy = false;
   bool _biometricEnabled = false;
   bool _biometricAvailable = false;
@@ -88,6 +89,8 @@ class AuthState extends ChangeNotifier {
   }
   String? get username => _username;
   String? get error => _error;
+  String? get appUpdateMessage => _appUpdateMessage;
+  bool get appUpdateRequired => _appUpdateMessage != null;
   bool get busy => _busy;
   bool get biometricEnabled => _biometricEnabled;
   bool get biometricAvailable => _biometricAvailable;
@@ -129,6 +132,7 @@ class AuthState extends ChangeNotifier {
   Future<bool> login(String username, String password) async {
     _busy = true;
     _error = null;
+    _appUpdateMessage = null;
     _scheduleNotify();
     try {
       // Offline path: verify stored hash (Spice Android parity).
@@ -169,6 +173,16 @@ class AuthState extends ChangeNotifier {
       _locked = false;
       debugPrint('[AuthState] login: online success');
       return true;
+    } on AppUpdateRequiredException catch (e) {
+      debugPrint('[AuthState] login: update required — ${e.message}');
+      _appUpdateMessage = e.message;
+      _status = AuthStatus.signedOut;
+      return false;
+    } on AppVersionCheckFailedException catch (e) {
+      debugPrint('[AuthState] login: version check failed — ${e.message}');
+      _error = e.message;
+      _status = AuthStatus.signedOut;
+      return false;
     } catch (e) {
       debugPrint('[AuthState] login: failed — $e');
       _error = NetworkErrorMapper.friendly(e);
@@ -402,6 +416,10 @@ class AuthState extends ChangeNotifier {
 
   void clearError() {
     _error = null;
+  }
+
+  void clearAppUpdateRequired() {
+    _appUpdateMessage = null;
   }
 
   Future<void> logout({bool? online}) async {

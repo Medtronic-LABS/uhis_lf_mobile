@@ -385,9 +385,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           // separately and must stay unlocked for an already-pregnant woman.
           _selectedProgrammes.remove(Programme.pw);
         }
-        if (ancRevisitStatus.tooSoon || ctx.isPostpartum) {
-          // Within the revisit interval or postpartum — ANC is locked in the
-          // grid (see ProgrammeGridSync.isAncGridLocked), keeps
+        if (ancRevisitStatus.tooSoon ||
+            ctx.isPostpartum ||
+            _isAncEarlyLmpBlockedFromEpisode(openEpisode)) {
+          // Within the revisit interval, postpartum, or LMP < 6 weeks — ANC is
+          // locked in the grid (see ProgrammeGridSync.isAncGridLocked), keeps
           // _selectedProgrammes honest if enrolledSeed/pathways pre-ticked it.
           _selectedProgrammes.remove(Programme.anc);
         }
@@ -624,6 +626,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     final ancRevisitBlocked = programmes.contains(Programme.anc)
         ? await _isAncRevisitTooSoon()
         : false;
+    final ancEarlyLmpBlocked = programmes.contains(Programme.anc) &&
+        _isAncEarlyLmpBlockedFromEpisode(_openPregnancyEpisode);
     if (!mounted) return null;
 
     return ServiceSelectionResolver.finalize(
@@ -631,9 +635,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       pwRegistrationBlocked: pwBlocked,
       isPostpartum: _patientContext?.isPostpartum ?? false,
       ancRevisitBlocked: ancRevisitBlocked,
+      ancEarlyLmpBlocked: ancEarlyLmpBlocked,
       isDeliveryVisit: _isDelivery,
       isMale: _patientContext?.sex == Sex.male,
     );
+  }
+
+  /// True when the open pregnancy episode has LMP recorded but fewer than
+  /// 6 weeks have elapsed — mirrors Android `getANCPNCStatus()` ANC gate.
+  bool _isAncEarlyLmpBlockedFromEpisode(PregnancyEpisodeRow? episode) {
+    if (episode == null) return false;
+    return !PregnancyCohortRules.isAncEligible(episode.obstetric);
   }
 
   /// Handles a [ServiceSelectionResult] from [_finalizeStep1Selection].
@@ -1079,6 +1091,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           title = AppStrings.ancBlockedRevisitTitle;
           message = ancRevisitLockMessage(_ancRevisitLockInput(_ancRevisitStatus));
         }
+      case ServiceSelectionBlockReason.ancBlockedEarlyPregnancy:
+        title = AppStrings.ancBlockedEarlyPregnancyTitle;
+        message = AppStrings.ancBlockedEarlyPregnancyMessage;
     }
     return showDialog<void>(
       context: context,
@@ -2496,11 +2511,14 @@ class _InlineServiceSelector extends StatelessWidget {
       return isDelivery || ctx.isPostpartum || openPregnancyEpisode != null;
     }
     if (card.programme == Programme.anc) {
+      final ancEarlyLmpBlocked = openPregnancyEpisode != null &&
+          !PregnancyCohortRules.isAncEligible(openPregnancyEpisode!.obstetric);
       return ProgrammeGridSync.isAncGridLocked(
         isPostpartum: ctx.isPostpartum,
         isPwGateOpen: isPW,
         isDeliveryVisit: isDelivery,
         ancRevisitTooSoon: ancRevisitStatus.tooSoon,
+        ancEarlyLmpBlocked: ancEarlyLmpBlocked,
       );
     }
     if (card.isDelivery) {
@@ -2572,6 +2590,10 @@ class _InlineServiceSelector extends StatelessWidget {
     if (card.programme == Programme.anc) {
       if (ctx.isPostpartum) return TriageStrings.ancLockedPostpartumHint;
       if (isDelivery) return TriageStrings.ancDeliveryConflictHint;
+      if (openPregnancyEpisode != null &&
+          !PregnancyCohortRules.isAncEligible(openPregnancyEpisode!.obstetric)) {
+        return AppStrings.ancLockedEarlyLmpHint;
+      }
       if (ancRevisitStatus.tooSoon) {
         return ancRevisitLockMessage(_ancRevisitLockInput(ancRevisitStatus));
       }

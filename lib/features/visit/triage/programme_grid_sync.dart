@@ -197,8 +197,10 @@ abstract final class ProgrammeGridSync {
     required bool isPwGateOpen,
     required bool isDeliveryVisit,
     required bool ancRevisitTooSoon,
+    bool ancEarlyLmpBlocked = false,
   }) {
     if (isPostpartum) return true;
+    if (ancEarlyLmpBlocked) return true;
     return !isPwGateOpen || isDeliveryVisit || ancRevisitTooSoon;
   }
 }

@@ -100,6 +100,9 @@ abstract final class AppStrings {
   static String get ancBlockedDuplicateTitle => getTranslatedString('ancBlockedDuplicateTitle', 'ANC Already Recorded Today');
   static String get ancBlockedDuplicateMessage => getTranslatedString('ancBlockedDuplicateMessage', 'An ANC assessment has already been recorded for this patient today. Only one ANC visit is allowed per day.');
   static String get ancBlockedRevisitTitle => getTranslatedString('ancBlockedRevisitTitle', 'ANC visit not due yet');
+  static String get ancBlockedEarlyPregnancyTitle => getTranslatedString('ancBlockedEarlyPregnancyTitle', '⚠️ Pregnancy Too Early to Assess');
+  static String get ancBlockedEarlyPregnancyMessage => getTranslatedString('ancBlockedEarlyPregnancyMessage', 'Pregnancy assessment can only be conducted after 6 weeks from LMP.\n\nPlease revisit after 6 weeks for complete pregnancy profile assessment and ANC.');
+  static String get ancLockedEarlyLmpHint => getTranslatedString('ancLockedEarlyLmpHint', '⚠ ANC is available only after 6 weeks from LMP.');
 
   // ── PW registration blocking ──────────────────────────────────────────────
   static String get pwAlreadyEnrolledTitle => getTranslatedString('pwAlreadyEnrolledTitle', 'Already Registered');
@@ -118,6 +121,60 @@ abstract final class CommonStrings {
   static String get remove => getTranslatedString('remove', 'Remove');
   static String versionLabel(String version) => getTranslatedString('versionLabel', 'v{version}', params: {'version': version}, localizeDigits: false);
   static String get comingSoon => getTranslatedString('Common.comingSoon', 'Coming soon');
+  /// Spice R.string.ok
+  static String get ok => getTranslatedString('ok', 'OK');
+}
+
+/// Forced app-update dialog — Spice Android `R.string.alert`,
+/// `please_update_the_app`, `open_play_store`, `please_check_if_play_store_available`.
+abstract final class AppUpdateStrings {
+  AppUpdateStrings._();
+
+  /// Spice R.string.alert
+  static String get alertTitle => getTranslatedString('alertTitle', 'Alert');
+  /// Spice R.string.please_update_the_app — generic fallback when no label.
+  static String get pleaseUpdateTheApp => getTranslatedString(
+        'pleaseUpdateTheApp',
+        'A new version of the app is available. Please update to continue.',
+      );
+  /// Forced update body — built from [minAppVersionLabel] (UHIS parity).
+  static String forcedUpdateMessage(String minVersionLabel) {
+    final label = minVersionLabel.trim();
+    if (label.isEmpty) return pleaseUpdateTheApp;
+    return getTranslatedString(
+      'pleaseUpdateToMinVersion',
+      'Please update to {version} or higher to continue.',
+      params: {'version': label},
+      localizeDigits: false,
+    );
+  }
+  /// Optional update body — built from [latestAppVersionLabel].
+  static String optionalUpdateMessage(String latestVersionLabel) {
+    final label = latestVersionLabel.trim();
+    if (label.isEmpty) return pleaseUpdateTheApp;
+    return getTranslatedString(
+      'optionalAppUpdateAvailable',
+      'A new version ({version}) is available. Update now for the latest features.',
+      params: {'version': label},
+      localizeDigits: false,
+    );
+  }
+  /// Spice R.string.open_play_store
+  static String get openPlayStore =>
+      getTranslatedString('openPlayStore', 'Open Play Store');
+  /// Spice R.string.please_check_if_play_store_available
+  static String get pleaseCheckIfPlayStoreAvailable => getTranslatedString(
+        'pleaseCheckIfPlayStoreAvailable',
+        'Please check if Google Play Store is installed in the device',
+      );
+  /// Optional (non-blocking) update prompt — dismissible.
+  static String get updateLater =>
+      getTranslatedString('updateLater', 'Later');
+  /// Shown when the version-policy endpoint cannot be reached.
+  static String get versionCheckUnavailable => getTranslatedString(
+        'versionCheckUnavailable',
+        'Unable to verify the app version. Please check your connection and try again.',
+      );
 }
 
 /// Offline-capability indicator copy — `lib/core/widgets/offline_capability_banner.dart`.
@@ -462,6 +519,9 @@ abstract final class SettingsStrings {
         'Settings.offlineSyncSubtitle',
         'Push pending households, members & visits',
       );
+
+  static String get appVersion =>
+      getTranslatedString('Settings.appVersion', 'App Version');
 }
 
 /// Offline Sync screen copy (Spice OfflineSyncActivity).
@@ -1064,6 +1124,44 @@ abstract final class MemberDeceasedStrings {
       );
   static String get unnamed =>
       getTranslatedString('unnamed', '(Unnamed)');
+
+  /// Localized death-type spinner label (neonatal / maternal / other).
+  static String deathTypeLabel(String id) => switch (id) {
+        'neonatal' =>
+          getTranslatedString('MemberDeceased.deathType.neonatal', 'Neo Natal'),
+        'mother' =>
+          getTranslatedString('MemberDeceased.deathType.mother', 'Maternal'),
+        'other' =>
+          getTranslatedString('MemberDeceased.deathType.other', 'Other'),
+        _ => id,
+      };
+
+  /// Localized cause-of-death checkbox label for neonatal/maternal branches.
+  static String deathCauseLabel(String id) => getTranslatedString(
+        'MemberDeceased.cause.$id',
+        _deathCauseEnglish(id),
+      );
+
+  static String _deathCauseEnglish(String id) => switch (id) {
+        'asphyxia' => 'Asphyxia',
+        'abnormallyLowTemperature' => 'Abnormally low temperature',
+        'lowBirthWeight' => 'Low birth weight',
+        'convulsions' => 'Convulsions',
+        'prematureBirth' => 'Premature birth',
+        'sepsisUmbilicalSepsis' => 'Sepsis/ Umbilical sepsis',
+        'pneumonia' => 'Pneumonia',
+        'congenitalAnomaly' => 'Congenital Anomaly',
+        'unknown' => 'Unknown',
+        'excessiveBleeding' => 'Excessive bleeding',
+        'infection' => 'Infection',
+        'hypertensiveDisorder' => 'Hypertensive disorder (Eclampsia)',
+        'obstructedLabor' => 'Obstructed labor',
+        'uterineRupture' => 'Uterine rupture',
+        'unsafeAbortion' => 'Unsafe abortion',
+        'severeAnemia' => 'Severe Anemia',
+        'otherMedicalComplications' => 'Other medical complications',
+        _ => id,
+      };
 }
 
 /// AI Worklist (Screen 2): chip filter labels, programme tags, urgent banner,
@@ -5401,6 +5499,45 @@ abstract final class EpiStrings {
           'n': '$monthsUntil',
           'unit': monthsUntil == 1 ? 'month' : 'months',
         },
+      );
+
+  static String get scanCardCta =>
+      getTranslatedString('Epi.scanCardCta', 'Scan EPI card');
+  static String get scanCardSubtitle => getTranslatedString(
+        'Epi.scanCardSubtitle',
+        'Photograph the booklet to detect which vaccines were given · enter dates manually',
+      );
+  static String scanResultBanner(int count) => getTranslatedString(
+        'Epi.scanResultBanner',
+        '${count == 1 ? '1 vaccine' : '$count vaccines'} found · Review and save',
+        params: {'count': '$count'},
+      );
+  static String get scanDatePrefilled => getTranslatedString(
+        'Epi.scanDatePrefilled',
+        'Date pre-filled from card · Edit if needed',
+      );
+  static String get scanFailed => getTranslatedString(
+        'Epi.scanFailed',
+        "Couldn't read card — please enter manually",
+      );
+  static String get scanning =>
+      getTranslatedString('Epi.scanning', 'Scanning…');
+  static String get scanReviewCta =>
+      getTranslatedString('Epi.scanReviewCta', 'Review & update →');
+  static String get scanFrameHint => getTranslatedString(
+        'Epi.scanFrameHint', 'Align the vaccination card in the frame');
+  static String get scanUploadLabel =>
+      getTranslatedString('Epi.scanUploadLabel', 'Upload');
+  static String get scanReadingCard =>
+      getTranslatedString('Epi.scanReadingCard', 'Reading card…');
+  static String scanVaccineFound(String name) => getTranslatedString(
+        'Epi.scanVaccineFound',
+        '$name found',
+        params: {'name': name},
+      );
+  static String get scanCameraUnavailable => getTranslatedString(
+        'Epi.scanCameraUnavailable',
+        'Camera unavailable — grant permission or upload an image',
       );
 }
 

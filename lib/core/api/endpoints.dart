@@ -17,6 +17,12 @@ class Endpoints {
   /// Returns user hierarchy: villages, subVillages, workflowIds, facilities.
   static const String staticUserData = '/spice-service/static-data/user-data';
 
+  /// Minimum-version check on leapfrog-ai-service (via nginx gateway).
+  static const String mobileAppVersionGateway = '/ai-scribe/mobile/app-version';
+
+  /// Same check when [AppConfig.aiServiceBaseUrl] hits the service directly.
+  static const String mobileAppVersionDirect = '/mobile/app-version';
+
   /// Patient search by identifier / free text. Used to look up an existing
   /// registration from a scanned NID before enrolling a duplicate.
   /// Postman: `patient-controller/searchPatient` → `{{spice_url}}/patient/search`.
@@ -285,4 +291,14 @@ class Endpoints {
   /// Presigned GET URLs for module thumbnails (batch POST, max 50 IDs).
   static const String coachingModuleThumbnails =
       '/medtronics-api/sync/modules/presigned-thumbnails';
+
+  // ── AI training audio sample collection ───────────────────────────────────
+  /// Upload raw audio for field-loss analysis training.
+  static const String trainingAudioSample = '/ai-scribe/training/audio-sample';
+
+  /// Post client-side counters + extract call log for a RealtimeASR session.
+  static const String realtimeSessionSummary = '/ai-scribe/training/realtime-session';
+
+  /// Server-side feature flags for mobile clients.
+  static const String aiScribeConfig = '/ai-scribe/config';
 }

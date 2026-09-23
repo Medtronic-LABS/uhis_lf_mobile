@@ -32,6 +32,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/locale_provider.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
+import '../../core/auth/user_hierarchy_service.dart';
+import '../../core/db/app_database.dart';
+import '../../core/db/audio_sample_dao.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/config/app_config.dart';
@@ -164,6 +167,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
 
   /// ANC or PNC visit number for the header badge (1-based). Null until loaded.
   int? _visitNumber;
+
+  /// Live Step 2 signal from [UnifiedFormScreen] — LMP under 6 weeks hides
+  /// ANC sections and the header's ANC visit badge until eligible.
+  bool _step2AncSuppressed = false;
 
   /// After immunization on a combined Child Health + Vaccination visit, show
   /// the childhood visit form next (immunization timeline itself is unchanged).
@@ -467,6 +474,27 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     return _primaryProgramme;
   }
 
+  List<String> _headerActiveFormTypes() {
+    if (_step == 0) {
+      return _step1LiveProgrammes.map((p) => p.name).toList();
+    }
+    final tags = _confirmedProgrammes.map((p) => p.name).toList();
+    if (_step == 1 && _step2AncSuppressed) {
+      return tags.where((t) => t != 'anc').toList();
+    }
+    return tags;
+  }
+
+  int? _headerVisitNumber() {
+    if (_step == 1 && _step2AncSuppressed) return null;
+    return _visitNumber;
+  }
+
+  void _onStep2AncSuppressedChanged(bool suppressed) {
+    if (_step2AncSuppressed == suppressed) return;
+    setState(() => _step2AncSuppressed = suppressed);
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -495,11 +523,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   ageDisplay: _ageDisplay,
                   householdId: widget.householdId,
                   patientGender: widget.patientGender,
-                  visitNumber: _visitNumber,
+                  visitNumber: _headerVisitNumber(),
                   primaryProgramme: _headerPrimaryProgramme,
-                  activeFormTypes: _step == 0
-                      ? _step1LiveProgrammes.map((p) => p.name).toList()
-                      : _confirmedProgrammes.map((p) => p.name).toList(),
+                  activeFormTypes: _headerActiveFormTypes(),
                   onBack: () {
                     if (_step == 1) {
                       setState(() => _step = 0);
@@ -529,11 +555,17 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Widget _buildStepBody() {
     switch (_step) {
       case 0:
-        _step1Scribe ??= ScribeController(
-          api: context.read<ScribeApiService>(),
-          permissionService: ScribePermissionService(),
-          audioSettings: context.read<ScribeAudioSettingsNotifier>(),
-        );
+        if (_step1Scribe == null) {
+          _step1Scribe = ScribeController(
+            api: context.read<ScribeApiService>(),
+            permissionService: ScribePermissionService(),
+            audioSettings: context.read<ScribeAudioSettingsNotifier>(),
+          );
+          _step1Scribe!
+              .setHierarchyService(context.read<UserHierarchyService>());
+          _step1Scribe!
+              .setSampleDao(AudioSampleDao(context.read<AppDatabase>()));
+        }
         return _Step1Symptoms(
           key: ValueKey('flow-step1-${widget.visitId}'),
           encounterId: widget.visitId,
@@ -583,6 +615,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             setState(() {
               _step = 1;
               _triageSubmitted = true;
+              _step2AncSuppressed = false;
             });
           },
         );
@@ -721,6 +754,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           enrolledProgrammes: _enrolledProgrammes,
           isDeliveryVisit: _isDeliveryVisit,
           origin: widget.origin,
+          onAncSuppressedForEarlyLmpChanged: _onStep2AncSuppressedChanged,
           onAdvance: (programme, referral, reasons, facility, pwRisks, nabaAssessments) {
             debugPrint('[ReferralFacility] flow captured — facility=$facility referral=$referral');
             setState(() {
@@ -995,6 +1029,7 @@ class _Step2VitalsForm extends StatelessWidget {
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
     this.isDeliveryVisit = false,
+    this.onAncSuppressedForEarlyLmpChanged,
   });
 
   final String visitId;
@@ -1018,6 +1053,7 @@ class _Step2VitalsForm extends StatelessWidget {
   final List<String> confirmedSymptoms;
   /// Subset of [confirmedSymptoms] pre-selected by AI Scribe.
   final Set<String> aiPickedSymptoms;
+  final ValueChanged<bool>? onAncSuppressedForEarlyLmpChanged;
   final void Function(
     Programme primaryProgramme,
     bool referralRecommended,
@@ -1048,6 +1084,7 @@ class _Step2VitalsForm extends StatelessWidget {
       enrolledProgrammes: enrolledProgrammes,
       confirmedSymptoms: confirmedSymptoms,
       aiPickedSymptoms: aiPickedSymptoms,
+      onAncSuppressedForEarlyLmpChanged: onAncSuppressedForEarlyLmpChanged,
       onAdvance: onAdvance,
     );
   }
@@ -1176,6 +1213,7 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
     this.eddMs,
     this.isDeliveryVisit = false,
     this.origin,
+    this.onAncSuppressedForEarlyLmpChanged,
   });
 
   final String visitId;
@@ -1197,6 +1235,7 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
   final Set<String> aiPickedSymptoms;
   final String? sicknessDuration;
   final String? otherSymptoms;
+  final ValueChanged<bool>? onAncSuppressedForEarlyLmpChanged;
 
   /// Final, already-vetted programme set from
   /// `SymptomPickerScreen._doAdvance` — Step 1's `ServiceSelectionResolver`
@@ -1246,6 +1285,7 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
       enrolledProgrammes: enrolledProgrammes,
       confirmedSymptoms: confirmedSymptoms.toList(),
       aiPickedSymptoms: aiPickedSymptoms,
+      onAncSuppressedForEarlyLmpChanged: onAncSuppressedForEarlyLmpChanged,
       onAdvance: onAdvance,
     );
   }
@@ -1352,8 +1392,19 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     _loadPatientPhone();
     _loadHouseholdMembers();
     _loadNcdFacilities();
-    unawaited(_recordSummaryStarted());
+    // NOT started here. This runs in the same breath as _fetchNaba() above,
+    // so the clock used to include the whole AI round-trip — the SK was
+    // watching a shimmer, not reading a recommendation, and the reported
+    // reading time ran several seconds long on every visit. It starts when
+    // the recommendation is actually on screen; see _buildResult.
   }
+
+  /// Whether the CDSS view clock has been started for this screen.
+  ///
+  /// One start per visit: the recommendation is rendered by a FutureBuilder
+  /// that rebuilds on any parent rebuild, and re-recording would keep pushing
+  /// the start time forward until the measured reading time collapsed.
+  bool _summaryStartRecorded = false;
 
   Future<void> _recordSummaryStarted() async {
     if (!AppConfig.visitContentTelemetryEnabled || !mounted) return;
@@ -2519,6 +2570,14 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         }
         if (snap.hasError) {
           return _buildError(snap.error);
+        }
+        // The first frame carrying a real recommendation is when reading can
+        // begin, so that is when the clock starts. Guarded because a
+        // FutureBuilder rebuilds for reasons that have nothing to do with the
+        // future — a parent rebuild would otherwise keep resetting the start.
+        if (!_summaryStartRecorded) {
+          _summaryStartRecorded = true;
+          unawaited(_recordSummaryStarted());
         }
         return _buildResult(_effectiveNaba(snap.data!));
       },

@@ -24,21 +24,6 @@ class AppConfig {
     defaultValue: 'mob',
   );
 
-  /// Human-readable app version (also sent as the `App-Version` header so the
-  /// offline-sync service can gate compatibility). Mirrors the version in
-  /// `pubspec.yaml` so a single bump propagates to the wire.
-  static const String appVersionName = String.fromEnvironment(
-    'APP_VERSION_NAME',
-    defaultValue: '2.1.0',
-  );
-
-  /// Numeric app version code (also sent as the `App-Version-Code` header).
-  /// Matches the Android reference contract for offline-sync request bodies.
-  static const int appVersionCode = int.fromEnvironment(
-    'APP_VERSION_CODE',
-    defaultValue: 12,
-  );
-
   /// Application type sent in offline-sync request bodies. Mirrors the
   /// Android reference `CommonUtils.isCommunityOrNot()` (`COMMUNITY` for SK
   /// builds; `FO` for field-officer builds when that variant ships).
@@ -158,6 +143,14 @@ class AppConfig {
   /// Base URL for the AI Assistant service (port 8097 when running locally).
   /// Derives from [aiServiceBaseUrl] when set; otherwise routes through nginx.
   static String get assistantBaseUrl {
+    if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
+    return apiBaseUrl;
+  }
+
+  /// Base URL for `POST /mobile/app-version` on leapfrog-ai-service. Uses
+  /// [aiServiceBaseUrl] when set (e.g. `http://10.0.2.2:8095`); otherwise
+  /// [apiBaseUrl] with the `/ai-scribe/mobile/app-version` gateway path.
+  static String get appVersionCheckBaseUrl {
     if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
     return apiBaseUrl;
   }

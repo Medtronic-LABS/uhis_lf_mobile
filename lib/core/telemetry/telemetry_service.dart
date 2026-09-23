@@ -14,7 +14,7 @@ library;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
-import '../config/app_config.dart';
+import '../version/app_version_info.dart';
 import 'telemetry_dao.dart';
 import 'telemetry_event.dart';
 
@@ -87,6 +87,7 @@ class TelemetryService {
     required int libraryTotal,
     required int renderedTotal,
     required int extractableVisible,
+    List<String> captureFieldIds = const [],
     int? durationMs,
     int? scribeStartedAtMs,
     int? scribeEndedAtMs,
@@ -111,6 +112,7 @@ class TelemetryService {
       libraryTotal: libraryTotal,
       renderedTotal: renderedTotal,
       extractableVisible: extractableVisible,
+      captureFieldIds: captureFieldIds,
       scribeStartedAtMs: scribeStartedAtMs,
       scribeEndedAtMs: scribeEndedAtMs,
       manualEditingMs: manualEditingMs,
@@ -197,8 +199,8 @@ class TelemetryService {
         visitUuid: visitUuid,
         skUserId: userId?.toString(),
         capturedTenantId: tenantId,
-        appVersion: AppConfig.appVersionName,
-        appBuild: AppConfig.appVersionCode,
+        appVersion: AppVersionInfo.current.versionName,
+        appBuild: AppVersionInfo.current.versionCode,
         payloadVersion: kTelemetryPayloadVersion,
         payload: payload,
       ));

@@ -898,6 +898,42 @@ class MemberDao {
     return HouseholdMemberEntity.fromDb(rows.first);
   }
 
+  /// Bulk lookup of inactive (deceased) members keyed by member id and
+  /// [patient_id] — mirrors [getByPatientId] / [getById] resolution used when
+  /// starting a visit.
+  Future<Map<String, String?>> deceasedLookupByIds(
+    Iterable<String> lookupIds,
+  ) async {
+    final ids = lookupIds.where((id) => id.trim().isNotEmpty).toSet();
+    if (ids.isEmpty) return const {};
+
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final args = [...ids, ...ids];
+    final rows = await _db.db.rawQuery(
+      'SELECT id, patient_id, deceased_reason '
+      'FROM ${AppDatabase.tableMembers} '
+      'WHERE is_active = 0 '
+      'AND (id IN ($placeholders) OR patient_id IN ($placeholders))',
+      args,
+    );
+
+    final result = <String, String?>{};
+    for (final row in rows) {
+      final reason = row['deceased_reason'] as String?;
+      final memberId = row['id']?.toString();
+      final patientId = row['patient_id'] as String?;
+      if (memberId != null && ids.contains(memberId)) {
+        result[memberId] = reason;
+      }
+      if (patientId != null &&
+          patientId.isNotEmpty &&
+          ids.contains(patientId)) {
+        result[patientId] = reason;
+      }
+    }
+    return result;
+  }
+
   /// Get member by national ID (LOCAL query, no network).
   Future<HouseholdMemberEntity?> getByNationalId(String nid) async {
     if (nid.trim().isEmpty) return null;
