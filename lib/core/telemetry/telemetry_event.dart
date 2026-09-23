@@ -431,6 +431,7 @@ class AssistantAskPayload {
     required this.appLanguage,
     this.generationMs,
     this.context = 'patient-scoped',
+    this.deceasedContext = false,
   });
 
   /// True when the SK re-asked the same question earlier in this chat session.
@@ -448,10 +449,18 @@ class AssistantAskPayload {
   /// `patient-scoped` | `community-health-worker`.
   final String context;
 
+  /// True when the question was asked about a patient marked deceased
+  /// ([PatientAiContext.isDeceased] at ask time). Non-PHI — a flag, not the
+  /// patient's identity. Lets the report audit the LEAP-50 guardrail (the
+  /// assistant must decline routine care guidance for a deceased member)
+  /// without reading every answer's free text.
+  final bool deceasedContext;
+
   Map<String, dynamic> toJson() => {
         'askedAgain': askedAgain,
         'appLanguage': appLanguage,
         'context': context,
+        'deceasedContext': deceasedContext,
         // Omitted rather than null so a reader tells "not measured" from a
         // real zero — matching the other payloads in this file.
         if (generationMs != null) 'generationMs': generationMs,
@@ -463,5 +472,6 @@ class AssistantAskPayload {
         appLanguage: json['appLanguage']?.toString() ?? 'bn',
         generationMs: (json['generationMs'] as num?)?.toInt(),
         context: json['context']?.toString() ?? 'patient-scoped',
+        deceasedContext: json['deceasedContext'] == true,
       );
 }

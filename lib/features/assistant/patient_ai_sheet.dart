@@ -292,6 +292,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
             askedAgain: askedAgain,
             appLanguage: appLanguage,
             generationMs: stopwatch.elapsedMilliseconds,
+            deceasedContext: widget.ctx.isDeceased,
             correlator: correlator,
           )
           .catchError((_) {}));

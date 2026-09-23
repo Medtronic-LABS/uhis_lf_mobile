@@ -160,6 +160,7 @@ class TelemetryService {
     required String appLanguage,
     int? generationMs,
     String context = 'patient-scoped',
+    bool deceasedContext = false,
     String? correlator,
     DateTime? occurredAt,
   }) async {
@@ -170,6 +171,7 @@ class TelemetryService {
         appLanguage: appLanguage,
         generationMs: generationMs,
         context: context,
+        deceasedContext: deceasedContext,
       ).toJson(),
       // The per-ask correlator rides the event's visit_uuid slot — the join
       // key the server uses to attach the gated question/answer content.
