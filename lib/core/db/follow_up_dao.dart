@@ -328,6 +328,40 @@ class FollowUpDao {
     );
   }
 
+  /// Merge a server pull into a row the device has already edited (call log
+  /// pending push or status poll in flight). Mirrors Android skipping
+  /// `NotSynced` rows, extended for `InProgress` so completion/attempts are
+  /// not wiped before the server bundle reflects the pushed call.
+  static FollowUpRow mergePull(FollowUpRow local, FollowUpRow remote) {
+    final protect = FollowUpSyncStatus.pending.contains(local.syncStatus) ||
+        local.syncStatus == FollowUpSyncStatus.inProgress;
+    if (!protect) return remote;
+
+    int? maxAttempts(int? a, int? b) {
+      if (a == null) return b;
+      if (b == null) return a;
+      return a > b ? a : b;
+    }
+
+    return FollowUpRow(
+      id: remote.id,
+      patientId: remote.patientId,
+      kind: remote.kind,
+      dueAt: remote.dueAt ?? local.dueAt,
+      completedAt: local.completedAt ?? remote.completedAt,
+      attempts: maxAttempts(local.attempts, remote.attempts),
+      unsuccessfulAttempts:
+          maxAttempts(local.unsuccessfulAttempts, remote.unsuccessfulAttempts),
+      type: remote.type ?? local.type,
+      referredSiteId: remote.referredSiteId ?? local.referredSiteId,
+      isLost: local.isLost || remote.isLost,
+      backendId: remote.backendId ?? local.backendId,
+      syncStatus: local.syncStatus,
+      updatedAt: local.updatedAt ?? remote.updatedAt,
+      rawJson: remote.rawJson,
+    );
+  }
+
   Future<void> upsertMany(List<FollowUpRow> rows) async {
     if (rows.isEmpty) return;
     // Protect locally-edited rows: a server pull must never clobber a
@@ -347,12 +381,24 @@ class FollowUpDao {
       ],
     );
     final locked = pendingRows.map((r) => r['id'] as String).toSet();
+    final existingRows = await _db.db.query(
+      AppDatabase.tableFollowUps,
+      where: 'id IN ($idPlaceholders)',
+      whereArgs: ids,
+    );
+    final existingById = {
+      for (final row in existingRows)
+        row['id'] as String: FollowUpRow.fromDb(row),
+    };
     final batch = _db.db.batch();
     for (final r in rows) {
       if (locked.contains(r.id)) continue;
+      final existing = existingById[r.id];
+      final toWrite =
+          existing == null ? r : FollowUpDao.mergePull(existing, r);
       batch.insert(
         AppDatabase.tableFollowUps,
-        r.toDb(),
+        toWrite.toDb(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }

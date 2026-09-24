@@ -205,6 +205,33 @@ void main() {
     });
   });
 
+  group('mergePull (server bundle vs local call log)', () {
+    test('preserves local completion while sync is InProgress', () {
+      const local = FollowUpRow(
+        id: '1',
+        patientId: 'p1',
+        kind: FollowUpKind.medicalReview,
+        completedAt: 1000,
+        attempts: 3,
+        unsuccessfulAttempts: 2,
+        syncStatus: FollowUpSyncStatus.inProgress,
+        rawJson: '{}',
+      );
+      const remote = FollowUpRow(
+        id: '1',
+        patientId: 'p1',
+        kind: FollowUpKind.medicalReview,
+        attempts: 0,
+        syncStatus: FollowUpSyncStatus.success,
+        rawJson: '{"isCompleted":false}',
+      );
+      final merged = FollowUpDao.mergePull(local, remote);
+      expect(merged.completedAt, 1000);
+      expect(merged.attempts, 3);
+      expect(merged.syncStatus, FollowUpSyncStatus.inProgress);
+    });
+  });
+
   group('scheduleLocal (device-created follow-up)', () {
     test('creates a NotSynced, open follow-up that is push-eligible', () async {
       final (db, dao, svc) = await openDb();

@@ -4263,6 +4263,14 @@ abstract final class NabaStrings {
   static String get sendViaWhatsApp => getTranslatedString('sendViaWhatsApp', 'Send via WhatsApp');
   static String get sendThisMessage => getTranslatedString('sendThisMessage', 'Send this message');
   static String get aiCounsellingGuide => getTranslatedString('aiCounsellingGuide', 'AI Counselling Guide');
+  static String get messageHelpfulPrompt => getTranslatedString(
+      'Naba.messageHelpfulPrompt', 'Was this message helpful?');
+  static String get feedbackThanks => getTranslatedString(
+      'Naba.feedbackThanks', 'Thanks for the feedback');
+  static String get feedbackAcknowledged => getTranslatedString(
+      'Naba.feedbackAcknowledged', 'Feedback recorded — thank you');
+  static String get feedbackSaveFailed => getTranslatedString(
+      'Naba.feedbackSaveFailed', 'Could not save feedback');
   static String get whatsAppNotInstalled => getTranslatedString('Naba.whatsAppNotInstalled', 'WhatsApp is not installed on this device.');
   static String get smsNotAvailable => getTranslatedString('Naba.smsNotAvailable', 'SMS is not available on this device.');
 

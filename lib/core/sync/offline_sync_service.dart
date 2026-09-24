@@ -1369,8 +1369,19 @@ class OfflineSyncService extends ChangeNotifier {
       'nextVisitDate',
       'visitDate',
     ]);
-    final completedAt = JsonRead.epochMillis(
-        raw, const ['completedAt', 'completedDate', 'visitDate']);
+    // UHIS/spice close follow-ups with `isCompleted` on CallRegister — not
+    // always a dedicated completedAt timestamp. Do not treat encounter
+    // `visitDate` as completion (that keeps open tickets wrongly closed or,
+    // when missing isCompleted, leaves completed tickets on the open list).
+    var completedAt = JsonRead.epochMillis(
+        raw, const ['completedAt', 'completedDate']);
+    if (completedAt == null && _truthy(raw['isCompleted'])) {
+      completedAt = JsonRead.epochMillis(raw, const [
+            'updatedAt',
+            'calledAt',
+          ]) ??
+          DateTime.now().millisecondsSinceEpoch;
+    }
     final attempts = JsonRead.firstInt(raw, const ['attempts', 'visits']);
     final unsuccessful = JsonRead.firstInt(raw, const [
       'unsuccessfulAttempts',
@@ -1389,6 +1400,7 @@ class OfflineSyncService extends ChangeNotifier {
     ])?.toUpperCase();
     final isLost = _truthy(raw['isLostToFollowUp']) ||
         _truthy(raw['lostToFollowUp']) ||
+        _truthy(raw['isWrongNumber']) ||
         (kind != null && kind.toLowerCase().contains('lost')) ||
         wireType == 'LOST_TO_FOLLOW_UP';
     final backendId = (raw['id'] as num?)?.toInt();

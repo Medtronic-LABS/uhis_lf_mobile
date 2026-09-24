@@ -48,6 +48,23 @@ void main() {
     expect(row?.transcriptCapturedAt, isNotNull);
   });
 
+  test('helpfulness vote merges onto the same visit row', () async {
+    await service.recordSummaryCompleted(
+      visitUuid: 'visit-1',
+      patientId: 'patient-1',
+      whatsappSummary: 'Reduce salt intake',
+    );
+    await service.recordHelpfulnessVote(
+      visitUuid: 'visit-1',
+      patientId: 'patient-1',
+      vote: VisitContentHelpfulnessVote.up,
+    );
+    final row = await dao.byVisitUuid('visit-1');
+    expect(row?.whatsappSummary, 'Reduce salt intake');
+    expect(row?.helpfulnessVote, VisitContentHelpfulnessVote.up);
+    expect(row?.uploadStatus, VisitContentUploadStatus.pending);
+  });
+
   test('transcript added after upload is re-queued as pending', () async {
     await service.recordSummaryCompleted(
       visitUuid: 'visit-1',

@@ -42,7 +42,10 @@ import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/telemetry/share_telemetry.dart';
 import '../../core/telemetry/telemetry_service.dart';
 import '../../core/telemetry/telemetry_event.dart';
+import '../../core/telemetry/visit_content_dao.dart';
+import '../../core/telemetry/visit_content_entry.dart';
 import '../../core/telemetry/visit_content_service.dart';
+import '../../core/telemetry/visit_content_uploader.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
@@ -2947,6 +2950,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               text: naba.whatsappSummary!,
               patientLabel: widget.patientLabel,
               patientPhone: _patientPhone,
+              patientId: widget.patientId,
+              visitUuid: context
+                  .read<TelemetryService>()
+                  .ensureVisitUuid(widget.visitId),
             ),
             const SizedBox(height: 12),
           ],
@@ -3472,19 +3479,57 @@ class _ReferralAlertCard extends StatelessWidget {
   }
 }
 
-class _AiCounsellingCard extends StatelessWidget {
+class _AiCounsellingCard extends StatefulWidget {
   const _AiCounsellingCard({
     required this.programme,
     required this.text,
+    required this.patientId,
+    required this.visitUuid,
     this.patientLabel,
     this.patientPhone,
   });
   final Programme programme;
   final String text;
+  final String patientId;
+  final String visitUuid;
   final String? patientLabel;
   final String? patientPhone;
 
-  Color _outerBg() => programme == Programme.ncd
+  @override
+  State<_AiCounsellingCard> createState() => _AiCounsellingCardState();
+}
+
+class _AiCounsellingCardState extends State<_AiCounsellingCard> {
+  String? _vote;
+  bool _loadingVote = true;
+  bool _savingVote = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreVote());
+  }
+
+  Future<void> _restoreVote() async {
+    if (!AppConfig.visitContentTelemetryEnabled) {
+      if (mounted) setState(() => _loadingVote = false);
+      return;
+    }
+    try {
+      final row =
+          await context.read<VisitContentDao>().byVisitUuid(widget.visitUuid);
+      if (mounted) {
+        setState(() {
+          _vote = row?.helpfulnessVote;
+          _loadingVote = false;
+        });
+      }
+    } on Object {
+      if (mounted) setState(() => _loadingVote = false);
+    }
+  }
+
+  Color _outerBg() => widget.programme == Programme.ncd
       ? const Color(0xFFFFFBEB)
       : const Color(0xFFF0FDF4);
 
@@ -3504,12 +3549,128 @@ class _AiCounsellingCard extends StatelessWidget {
         launched: launched,
       );
 
+  Future<void> _onVote(String vote) async {
+    if (_savingVote) return;
+    setState(() {
+      _vote = vote;
+      _savingVote = true;
+    });
+    try {
+      await context.read<VisitContentService>().recordHelpfulnessVote(
+            visitUuid: widget.visitUuid,
+            patientId: widget.patientId,
+            vote: vote,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            vote == VisitContentHelpfulnessVote.up
+                ? NabaStrings.feedbackThanks
+                : NabaStrings.feedbackAcknowledged,
+          ),
+        ),
+      );
+      try {
+        // ignore: unawaited_futures
+        context.read<VisitContentUploader>().uploadPending();
+      } on Object {
+        /* uploader optional in tests */
+      }
+    } on Object {
+      if (!mounted) return;
+      setState(() => _vote = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(NabaStrings.feedbackSaveFailed)),
+      );
+    } finally {
+      if (mounted) setState(() => _savingVote = false);
+    }
+  }
+
+  Widget _helpfulnessRow() {
+    if (_loadingVote) {
+      return const SizedBox(
+        height: 36,
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    final up = _vote == VisitContentHelpfulnessVote.up;
+    final down = _vote == VisitContentHelpfulnessVote.down;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            NabaStrings.messageHelpfulPrompt,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF374151),
+            ),
+          ),
+        ),
+        _voteIcon(
+          icon: Icons.thumb_up_alt_outlined,
+          selected: up,
+          selectedColor: const Color(0xFF16A34A),
+          onTap: _savingVote
+              ? null
+              : () => _onVote(VisitContentHelpfulnessVote.up),
+        ),
+        const SizedBox(width: 8),
+        _voteIcon(
+          icon: Icons.thumb_down_alt_outlined,
+          selected: down,
+          selectedColor: const Color(0xFFDC2626),
+          onTap: _savingVote
+              ? null
+              : () => _onVote(VisitContentHelpfulnessVote.down),
+        ),
+      ],
+    );
+  }
+
+  Widget _voteIcon({
+    required IconData icon,
+    required bool selected,
+    required Color selectedColor,
+    required VoidCallback? onTap,
+  }) {
+    return Material(
+      color: selected ? selectedColor.withValues(alpha: 0.15) : Colors.white,
+      shape: CircleBorder(
+        side: BorderSide(
+          color: selected ? selectedColor : const Color(0xFFD1D5DB),
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(
+            icon,
+            size: 18,
+            color: selected ? selectedColor : const Color(0xFF6B7280),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _sendWhatsApp(BuildContext context) async {
     // Resolved before the awaits below — see share_telemetry.dart.
     final telemetry = shareTelemetryOf(context);
-    final encoded = Uri.encodeComponent(text);
+    final encoded = Uri.encodeComponent(widget.text);
     final rawPhone =
-        patientPhone?.replaceAll(RegExp(r'[^\d]'), '') ?? '';
+        widget.patientPhone?.replaceAll(RegExp(r'[^\d]'), '') ?? '';
     final phoneParam = rawPhone.isNotEmpty ? 'phone=$rawPhone&' : '';
     final nativeUri =
         Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
@@ -3536,8 +3697,8 @@ class _AiCounsellingCard extends StatelessWidget {
 
   Future<void> _sendSms(BuildContext context) async {
     final telemetry = shareTelemetryOf(context);
-    final encoded = Uri.encodeComponent(text);
-    final phone = patientPhone ?? '';
+    final encoded = Uri.encodeComponent(widget.text);
+    final phone = widget.patientPhone ?? '';
     final uri = Uri.parse('sms:$phone?body=$encoded');
     if (!await canLaunchUrl(uri)) {
       _recordShare(telemetry, TelemetryShareChannel.sms, launched: false);
@@ -3593,9 +3754,11 @@ class _AiCounsellingCard extends StatelessWidget {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
-    final recipientLine = patientLabel != null
-        ? VisitFlowStrings.recipientLineFor(patientLabel!, patientPhone)
+    final recipientLine = widget.patientLabel != null
+        ? VisitFlowStrings.recipientLineFor(
+            widget.patientLabel!, widget.patientPhone)
         : null;
 
     return Container(
@@ -3667,7 +3830,7 @@ class _AiCounsellingCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          text,
+                          widget.text,
                           style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF111111),
@@ -3694,6 +3857,8 @@ class _AiCounsellingCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  _helpfulnessRow(),
                   const SizedBox(height: 10),
                   // WhatsApp + SMS — same counselling body; SMS for patients
                   // without WhatsApp (parity with CounsellingScreen).

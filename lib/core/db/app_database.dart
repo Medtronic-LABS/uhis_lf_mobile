@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 48;
+  static const int schemaVersion = 49;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -838,6 +838,7 @@ class AppDatabase {
         referral_recommendation TEXT,
         summary_started_at INTEGER,
         summary_end_at INTEGER,
+        helpfulness_vote TEXT,
         sk_user_id TEXT,
         captured_tenant_id INTEGER,
         occurred_at INTEGER NOT NULL,
@@ -2125,6 +2126,17 @@ class AppDatabase {
         await db.execute(
           'ALTER TABLE $tableTelemetryEvents ADD COLUMN captured_tenant_id INTEGER',
         );
+      }
+    }
+    if (from < 49) {
+      // v49 — Step 3 counselling helpfulness vote (LEAP-68).
+      try {
+        await db.execute(
+          'ALTER TABLE $tableVisitContentTelemetry '
+          'ADD COLUMN helpfulness_vote TEXT',
+        );
+      } catch (_) {
+        /* column already present */
       }
     }
     if (from < 48) {
