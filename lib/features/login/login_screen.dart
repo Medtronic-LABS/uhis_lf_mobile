@@ -8,6 +8,7 @@ import '../../core/version/app_update_flow.dart';
 import '../../core/version/app_version_enforcer.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/sync/call_log_sync_service.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/sync/sync_report.dart';
@@ -204,6 +205,15 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }).catchError((Object e) {
       debugPrint('[_LoginScreenState] background coldSync failed: $e');
+    });
+
+    // Independent of the household/patient bundle sync above -- a fresh
+    // login/relogin backfills the SK's full Shukhee call history immediately
+    // rather than waiting for a connectivity edge that may never occur if
+    // the device stays continuously online (see SyncConnectivityService,
+    // this service's other trigger point).
+    context.read<CallLogSyncService>().pull().catchError((Object e) {
+      debugPrint('[_LoginScreenState] background call-log history pull failed: $e');
     });
   }
 

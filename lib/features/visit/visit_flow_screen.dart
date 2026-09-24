@@ -36,8 +36,8 @@ import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/audio_sample_dao.dart';
 import '../../core/clinical/referral_evaluator.dart';
-import '../../core/constants/app_strings.dart';
 import '../../core/config/app_config.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/telemetry/share_telemetry.dart';
 import '../../core/telemetry/telemetry_service.dart';
@@ -68,6 +68,7 @@ import '../worklist/worklist_repository.dart';
 import 'forms/childhood_visit.dart';
 import 'forms/visit_summary_details.dart';
 import 'forms/rmnch_referral_facility.dart';
+import 'forms/vitals_trend.dart';
 import 'immunisation/epi_visit_summary.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
 import 'triage/symptom_picker_screen.dart';
@@ -143,6 +144,13 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   late String? _patientName = widget.patientName;
   late int? _patientAge = widget.patientAge;
   String? _patientDob;
+
+  /// Same "constructor wins, DB fills the gap" pattern as [_patientDob] --
+  /// required by Shukhee's `find_or_create_shukhee_patient` (alongside name
+  /// and DOB) to auto-create a patient record for a contact number it
+  /// hasn't seen before. Without this fallback, a caller that didn't pass a
+  /// gender silently breaks that patient's first teleconsult booking.
+  late String? _patientGender = widget.patientGender;
 
   /// Postpartum status — seeded from constructor; DB lookup can upgrade
   /// false → true (see [_loadPostpartumFromDb]).
@@ -276,6 +284,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         _patientName = _patientName ?? p.name;
         _patientAge = _patientAge ?? p.age;
         _patientDob = _patientDob ?? p.dob;
+        _patientGender = _patientGender ?? p.gender;
       });
     } catch (e) {
       debugPrint('[VisitFlow] patient lookup failed: $e');
@@ -522,7 +531,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   patientName: _patientName,
                   ageDisplay: _ageDisplay,
                   householdId: widget.householdId,
-                  patientGender: widget.patientGender,
+                  patientGender: _patientGender,
                   visitNumber: _headerVisitNumber(),
                   primaryProgramme: _headerPrimaryProgramme,
                   activeFormTypes: _headerActiveFormTypes(),
@@ -574,7 +583,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           householdId: widget.householdId,
           patientAge: widget.patientAge,
           patientName: widget.patientName,
-          patientGender: widget.patientGender,
+          patientGender: _patientGender,
           origin: widget.origin,
           scribeController: _step1Scribe!,
           onSymptomsConfirmed: (symptoms, duration, other, aiPicked) {
@@ -742,7 +751,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientAge: widget.patientAge,
           ageInMonths: _ageInMonths,
           patientName: widget.patientName,
-          patientGender: widget.patientGender,
+          patientGender: _patientGender,
           gestationalWeeks: _effectiveGestationalWeeks,
           lmpMs: _resolvedLmpMs,
           eddMs: _resolvedEddMs,
@@ -774,10 +783,20 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           key: ValueKey('flow-step3-${widget.visitId}'),
           visitId: widget.visitId,
           patientId: widget.patientId,
-          patientLabel: widget.patientName ?? widget.patientId,
+          // _patientName (not widget.patientName) -- it has the same value
+          // as the constructor param, plus a PatientDao DB fallback (see its
+          // declaration/resolution above) for callers that didn't pass a
+          // name at all. This is what actually reaches Shukhee as the
+          // patient's real full name (see TeleconsultScreen.patientLabel ->
+          // start_consultation's patientName), so it must never silently
+          // degrade to the raw patient id just because one caller forgot to
+          // pass a name.
+          patientLabel: _patientName ?? widget.patientId,
           patientAge: widget.patientAge,
-          patientGender: widget.patientGender,
+          patientGender: _patientGender,
+          patientDob: _patientDob,
           gestationalWeeks: _effectiveGestationalWeeks,
+          visitNumber: _visitNumber,
           lmpMs: _resolvedLmpMs,
           eddMs: _resolvedEddMs,
           confirmedSymptoms: _confirmedSymptoms,
@@ -1316,7 +1335,9 @@ class _Step3AiReco extends StatefulWidget {
     this.patientLabel,
     this.patientAge,
     this.patientGender,
+    this.patientDob,
     this.gestationalWeeks,
+    this.visitNumber,
     this.lmpMs,
     this.eddMs,
     this.memberId,
@@ -1330,7 +1351,14 @@ class _Step3AiReco extends StatefulWidget {
   final String? patientLabel;
   final int? patientAge;
   final String? patientGender;
+
+  /// See `_TeleconsultButton.patientDob`'s doc comment -- threaded through
+  /// unchanged to the teleconsult booking call.
+  final String? patientDob;
   final int? gestationalWeeks;
+  /// ANC/PNC visit number (1-based) — threaded through to the teleconsult
+  /// screen's "ANC Visit N" header label. Null for non-ANC/PNC visits.
+  final int? visitNumber;
   /// LMP epoch-ms from the snapshot — overrides back-calculation in the card.
   final int? lmpMs;
   /// EDD epoch-ms from the snapshot — overrides back-calculation in the card.
@@ -1368,6 +1396,15 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   NabaVitalSnapshot? _loadedVitals;
   List<NabaLabResult> _loadedLabs = [];
   DateTime? _selectedFollowUpDate;
+
+  /// Short real-data summary of a rising BP/weight/urine-protein trend across
+  /// this pregnancy's visits (ANC only) — set by [_loadVitalsAndLabs]. Null
+  /// when not an ANC visit or when [VitalsTrendAnalyzer] doesn't find a
+  /// qualifying trend (needs 2 prior visits + today). This exact string is
+  /// what gets appended to the teleconsult booking `reason` AND shown in the
+  /// "record shared with Sukhee" banner — never two separately-computed
+  /// copies (see `_TeleconsultButton`/`teleconsult_screen.dart`).
+  String? _clinicalContextSummary;
 
   /// Spice ANC/PNC summary facility spinner selection (option id).
   String? _selectedRmnchFacilityId;
@@ -1446,10 +1483,22 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
   Future<void> _loadPatientPhone() async {
     debugPrint('[_Step3AiRecoState] _loadPatientPhone');
-    final member = await context
-        .read<MemberDao>()
-        .getByPatientId(widget.patientId);
+    // widget.patientId isn't reliably one single kind of id -- "Start Visit"/
+    // household chips pass whichever id they have on hand (members.id,
+    // members.patient_id, members.fhir_id), the exact same ambiguity
+    // PatientDao.byAnyId already exists to resolve for name/dob/gender.
+    // getByPatientId alone (a single exact `patient_id` match) silently
+    // returns null, and thus never fills the phone field, whenever
+    // widget.patientId happens to be one of the other id kinds instead.
+    final memberDao = context.read<MemberDao>();
+    final member = await memberDao.getByPatientId(widget.patientId) ??
+        await memberDao.getById(widget.patientId) ??
+        await memberDao.getByFhirId(widget.patientId);
     final phone = member?.phone;
+    debugPrint(
+      '[_Step3AiRecoState] _loadPatientPhone: patientId=${widget.patientId} '
+      'memberFound=${member != null} phone=${phone ?? "(none)"}',
+    );
     if (mounted && phone != null && phone.isNotEmpty) {
       setState(() => _patientPhone = phone);
     }
@@ -1640,7 +1689,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   Future<void> _loadVitalsAndLabs() async {
     debugPrint('[_Step3AiRecoState] _loadVitalsAndLabs');
     try {
-      final dao = context.read<LocalAssessmentDao>(); // read before first await
+      // Read before the first await -- context is unsafe to read afterwards.
+      final dao = context.read<LocalAssessmentDao>();
+      final assessmentRepo = context.read<AssessmentRepository>();
       final assessments = await dao.getByPatientId(widget.patientId);
       if (assessments.isEmpty) return;
 
@@ -1661,12 +1712,74 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           jsonDecode(target.assessmentDetails) as Map<String, dynamic>;
       if (target.assessmentType == 'ANC') {
         _parseAncVitals(data);
+        if (widget.gestationalWeeks != null) {
+          await _loadClinicalContextSummary(assessmentRepo, target.assessmentDetails);
+        }
       } else if (target.assessmentType == 'NCD') {
         _parseNcdVitals(data);
       }
     } catch (e) {
       debugPrint('[NABA] Assessment vitals load failed: $e');
     }
+  }
+
+  /// Populates [_clinicalContextSummary] from the same rising-trend rule
+  /// engine already proven in Step 2's `_VitalsTrendCard` (2 prior ANC
+  /// visits + today, `VitalsTrendAnalyzer`) — never a separately-invented
+  /// summary. Requires a qualifying trend; otherwise stays null (no
+  /// fabricated numbers shown).
+  Future<void> _loadClinicalContextSummary(
+    AssessmentRepository assessmentRepo,
+    String todayAssessmentDetails,
+  ) async {
+    final priors = await assessmentRepo.ancVitalsHistory(widget.patientId);
+    final today = AssessmentRepository.vitalsFromAncAssessmentJson(
+      todayAssessmentDetails,
+      date: DateTime.now(),
+    );
+    final result = VitalsTrendAnalyzer.analyze(priorVisits: priors, today: today);
+    _clinicalContextSummary = _formatTrendSummary(result);
+  }
+
+  String? _formatTrendSummary(VitalsTrendResult result) {
+    if (!result.show) return null;
+
+    VitalMetricTrend? metric(VitalMetric m) {
+      for (final row in result.metrics) {
+        if (row.metric == m) return row;
+      }
+      return null;
+    }
+
+    String seq(List<num?> values) =>
+        values.map((v) => v == null ? '-' : v.round().toString()).join('→');
+
+    final parts = <String>[];
+    final sys = metric(VitalMetric.systolic);
+    final dia = metric(VitalMetric.diastolic);
+    if (sys != null && dia != null) {
+      final combined = [
+        for (var i = 0; i < sys.values.length; i++)
+          '${sys.values[i]?.round() ?? '-'}/${dia.values[i]?.round() ?? '-'}',
+      ].join('→');
+      parts.add('BP trend $combined');
+    } else if (sys != null) {
+      parts.add('Systolic BP trend ${seq(sys.values)}');
+    } else if (dia != null) {
+      parts.add('Diastolic BP trend ${seq(dia.values)}');
+    }
+
+    final weight = metric(VitalMetric.weight);
+    if (weight != null) {
+      final trail = weight.values.map((v) => v == null ? '-' : v.toStringAsFixed(1)).join('→');
+      parts.add('weight trend $trail kg');
+    }
+
+    if (metric(VitalMetric.urineProtein) != null) {
+      parts.add('urine protein present on a repeat check');
+    }
+
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 
   void _parseAncVitals(Map<String, dynamic> data) {
@@ -3007,6 +3120,21 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             accepted: _accepted,
             patientLabel: widget.patientLabel,
             memberId: widget.memberId,
+            visitId: widget.visitId,
+            patientPhone: _patientPhone,
+            teleconsultReason: _deriveTeleconsultReason(
+              naba,
+              widget.patientLabel ?? '',
+              clinicalContextSummary: _clinicalContextSummary,
+            ),
+            patientGender: widget.patientGender,
+            patientDob: widget.patientDob,
+            visitNumber: widget.visitNumber,
+            gestationalWeeks: widget.gestationalWeeks,
+            clinicalContextSummary: _clinicalContextSummary,
+            whatsappMessage: naba.whatsappSummary,
+            confirmedSymptoms: widget.confirmedSymptoms,
+            referredReasons: widget.referredReasons,
             onAccepted: () => _onAccepted(naba),
           ),
         ],
@@ -4083,18 +4211,116 @@ class _SkeletonCard extends StatelessWidget {
 }
 
 
+/// Derives the Shukhee booking `reason` text from the visit's AI
+/// recommendation, so the teleconsult flow never needs a manual reason
+/// field. Prefers the referral reason when a referral is actually
+/// recommended (the clinically urgent path), then the doctor-handover note,
+/// then the general visit summary; falls back to a generic string built
+/// from the patient label if NABA returned none of those.
+///
+/// When [clinicalContextSummary] is given (a real rising-trend summary from
+/// [VitalsTrendAnalyzer], ANC visits only), it's appended here -- this is the
+/// ONLY place that string is added to the booking reason, so the teleconsult
+/// screen's "record shared with Sukhee" banner (which renders this same
+/// combined reason) never claims to have shared something that wasn't
+/// actually sent.
+String _deriveTeleconsultReason(
+  NabaResponse naba,
+  String patientLabel, {
+  String? clinicalContextSummary,
+}) {
+  final String base;
+  final referral = naba.referralRecommendation;
+  if (referral != null && referral.required_ && (referral.reason?.trim().isNotEmpty ?? false)) {
+    base = referral.reason!.trim();
+  } else if (naba.doctorHandover?.trim().isNotEmpty ?? false) {
+    base = naba.doctorHandover!.trim();
+  } else if (naba.visitSummary.summary.trim().isNotEmpty) {
+    base = naba.visitSummary.summary.trim();
+  } else {
+    base = 'Teleconsult requested for $patientLabel';
+  }
+  if (clinicalContextSummary == null || clinicalContextSummary.isEmpty) return base;
+  return '$base\n\n$clinicalContextSummary';
+}
+
 /// Pink "Call a doctor now" button for Step 3.
 ///
 /// Enabled when the device has network connectivity; greyed + tooltip shown
-/// when offline. Taps navigate to [TeleconsultScreen] (feature placeholder).
+/// when offline. Taps navigate to [TeleconsultScreen] for the real Shukhee
+/// booking + call flow.
 class _TeleconsultButton extends StatefulWidget {
   const _TeleconsultButton({
     required this.patientLabel,
     required this.patientId,
+    this.visitId,
+    this.patientPhone,
+    this.reason,
+    this.patientGender,
+    this.patientDob,
+    this.visitNumber,
+    this.gestationalWeeks,
+    this.clinicalContextSummary,
+    this.whatsappMessage,
+    this.confirmedSymptoms = const <String>{},
+    this.referredReasons = const [],
   });
 
   final String patientLabel;
   final String patientId;
+
+  /// Threaded through as `encounter_id` when the real Shukhee booking fires.
+  final String? visitId;
+
+  /// The patient's contact number, if already known — avoids the teleconsult
+  /// screen's own phone-entry fallback sheet.
+  final String? patientPhone;
+
+  /// Pre-derived reason text for the booking (from the visit's AI
+  /// recommendation) — see [_deriveTeleconsultReason]. Already includes
+  /// [clinicalContextSummary] when applicable.
+  final String? reason;
+
+  final String? patientGender;
+
+  /// The patient's date of birth (ISO 8601), if known — required by
+  /// Shukhee's `find_or_create_shukhee_patient` to auto-create a patient
+  /// record on their side for a contact number they haven't seen before
+  /// (alongside [patientLabel]/[patientGender]). Omitting it doesn't break
+  /// an already-registered patient's booking, but silently breaks every
+  /// *new* patient's first booking.
+  final String? patientDob;
+
+  /// ANC/PNC visit number (1-based) — for the teleconsult header's
+  /// "ANC Visit N" label. Null for non-ANC/PNC visits.
+  final int? visitNumber;
+
+  /// For the teleconsult header's "N weeks pregnant" subtitle.
+  final int? gestationalWeeks;
+
+  /// The real BP-trend/urine-protein summary already folded into [reason] --
+  /// passed again here so the teleconsult screen's "record shared with
+  /// Sukhee" banner can render the exact same text rather than re-deriving
+  /// it (see [_deriveTeleconsultReason]'s doc comment).
+  final String? clinicalContextSummary;
+
+  /// The same NABA-derived WhatsApp message used by the inline
+  /// [_AiCounsellingCard] — powers the wrap-up screen's "Send counselling to
+  /// family" button.
+  final String? whatsappMessage;
+
+  /// Triage symptom codes confirmed for this visit (see
+  /// `_Step3AiRecoState._confirmedSymptoms`) -- mapped to human-readable
+  /// labels and sent as `clinicalData.chiefComplaints` at booking time (see
+  /// `TeleconsultClinicalDataBuilder`). Empty when nothing was confirmed.
+  final Set<String> confirmedSymptoms;
+
+  /// Structured risk-flag/gap strings behind [reason]'s concatenated text
+  /// (see `_Step3AiRecoState.widget.referredReasons` /
+  /// `_offlineReferralReasonText`) -- sent as `clinicalData.pastIllness` at
+  /// booking time (see `TeleconsultClinicalDataBuilder`). Empty when the
+  /// visit raised no risk flags.
+  final List<String> referredReasons;
 
   @override
   State<_TeleconsultButton> createState() => _TeleconsultButtonState();
@@ -4133,15 +4359,30 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
         extra: {
           'patientLabel': widget.patientLabel,
           'patientId': widget.patientId,
+          if (widget.visitId != null) 'visitId': widget.visitId,
+          if (widget.patientPhone != null) 'patientPhone': widget.patientPhone,
+          if (widget.reason != null) 'reason': widget.reason,
+          if (widget.patientGender != null) 'patientGender': widget.patientGender,
+          if (widget.patientDob != null) 'patientDob': widget.patientDob,
+          if (widget.visitNumber != null) 'visitNumber': widget.visitNumber,
+          if (widget.gestationalWeeks != null) 'gestationalWeeks': widget.gestationalWeeks,
+          if (widget.clinicalContextSummary != null)
+            'clinicalContextSummary': widget.clinicalContextSummary,
+          if (widget.confirmedSymptoms.isNotEmpty) 'confirmedSymptoms': widget.confirmedSymptoms,
+          if (widget.referredReasons.isNotEmpty) 'referredReasons': widget.referredReasons,
+          if (widget.whatsappMessage != null) 'whatsappMessage': widget.whatsappMessage,
         },
       );
 
   @override
   Widget build(BuildContext context) {
-    final enabled = _isOnline;
+    final enabled = _isOnline && AppConfig.teleconsultEnabled;
     final bg = enabled ? _pink : _pink.withValues(alpha: 0.35);
+    final hint = !AppConfig.teleconsultEnabled
+        ? NabaStrings.callDoctorUnavailableHint
+        : NabaStrings.callDoctorOfflineHint;
     return Tooltip(
-      message: enabled ? '' : NabaStrings.callDoctorOfflineHint,
+      message: enabled ? '' : hint,
       child: SizedBox(
         width: double.infinity,
         child: FilledButton(
@@ -4192,11 +4433,33 @@ class _BottomCtaBar extends StatelessWidget {
     required this.onAccepted,
     this.patientLabel,
     this.memberId,
+    this.visitId,
+    this.patientPhone,
+    this.teleconsultReason,
+    this.patientGender,
+    this.patientDob,
+    this.visitNumber,
+    this.gestationalWeeks,
+    this.clinicalContextSummary,
+    this.whatsappMessage,
+    this.confirmedSymptoms = const <String>{},
+    this.referredReasons = const [],
   });
   final bool accepted;
   final VoidCallback onAccepted;
   final String? patientLabel;
   final String? memberId;
+  final String? visitId;
+  final String? patientPhone;
+  final String? teleconsultReason;
+  final String? patientGender;
+  final String? patientDob;
+  final int? visitNumber;
+  final int? gestationalWeeks;
+  final String? clinicalContextSummary;
+  final String? whatsappMessage;
+  final Set<String> confirmedSymptoms;
+  final List<String> referredReasons;
 
   @override
   Widget build(BuildContext context) {
@@ -4213,6 +4476,17 @@ class _BottomCtaBar extends StatelessWidget {
               _TeleconsultButton(
                 patientLabel: patientLabel ?? '',
                 patientId: memberId ?? '',
+                visitId: visitId,
+                patientPhone: patientPhone,
+                reason: teleconsultReason,
+                patientGender: patientGender,
+                patientDob: patientDob,
+                visitNumber: visitNumber,
+                gestationalWeeks: gestationalWeeks,
+                clinicalContextSummary: clinicalContextSummary,
+                whatsappMessage: whatsappMessage,
+                confirmedSymptoms: confirmedSymptoms,
+                referredReasons: referredReasons,
               ),
               const SizedBox(height: 8),
               // Accept / save — secondary (outlined navy)

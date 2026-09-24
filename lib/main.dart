@@ -46,6 +46,8 @@ import 'core/db/patient_programmes_dao.dart';
 import 'core/db/pregnancy_episode_dao.dart';
 import 'core/db/pregnancy_snapshot_dao.dart';
 import 'core/db/treatment_presence_dao.dart';
+import 'core/db/teleconsult_prescription_dao.dart';
+import 'core/db/call_log_history_dao.dart';
 import 'core/db/referral_dao.dart';
 import 'core/db/sync_meta_dao.dart';
 import 'core/risk/risk_scoring_service.dart';
@@ -91,6 +93,8 @@ import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
+import 'core/sync/call_log_sync_client.dart';
+import 'core/sync/call_log_sync_service.dart';
 import 'core/version/app_update_flow.dart';
 import 'core/version/app_version_enforcer.dart';
 import 'core/version/app_version_info.dart';
@@ -189,6 +193,26 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
   late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
+  late final TeleconsultPrescriptionDao _teleconsultPrescriptionDao =
+      TeleconsultPrescriptionDao(widget.appDb);
+  late final CallLogHistoryDao _callLogHistoryDao = CallLogHistoryDao(widget.appDb);
+  late final CallLogSyncClient _callLogSyncClient = CallLogSyncClient(
+    baseUrl: AppConfig.spiceNextCoreApiBaseUrl,
+    // Same "strip the Bearer prefix" reasoning as
+    // features/teleconsult/shukhee_client_factory.dart's buildShukheeClient.
+    authTokenProvider: () async {
+      final raw = widget.api.exportAuthToken();
+      if (raw == null) return null;
+      const prefix = 'Bearer ';
+      return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+    },
+    tenantIdProvider: () async => widget.api.tenantId,
+  );
+  late final CallLogSyncService _callLogSync = CallLogSyncService(
+    client: _callLogSyncClient,
+    dao: _callLogHistoryDao,
+    syncMeta: _syncMetaDao,
+  );
   late final TelemetryDao _telemetryDao = TelemetryDao(widget.appDb);
   late final TelemetryService _telemetryService = TelemetryService(
     dao: _telemetryDao,
@@ -359,6 +383,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     pushService: _offlinePush,
     authState: widget.authState,
     authRepo: widget.authRepo,
+    callLogSync: _callLogSync,
     flushUploadQueues: _postSync.flushUploadQueues,
   );
   late final AppVersionEnforcer _appVersionEnforcer =
@@ -537,6 +562,9 @@ class _UhisNextAppState extends State<UhisNextApp>
                 )),
         // Visit flow providers
         Provider<EncounterDao>.value(value: _encounterDao),
+        Provider<TeleconsultPrescriptionDao>.value(value: _teleconsultPrescriptionDao),
+        Provider<CallLogHistoryDao>.value(value: _callLogHistoryDao),
+        Provider<CallLogSyncService>.value(value: _callLogSync),
         Provider<TelemetryDao>.value(value: _telemetryDao),
         Provider<TelemetryService>.value(value: _telemetryService),
         Provider<TelemetryUploader>.value(value: _telemetryUploader),
