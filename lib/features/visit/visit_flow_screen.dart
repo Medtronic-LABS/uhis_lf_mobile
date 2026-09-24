@@ -27,13 +27,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/locale_provider.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
+import '../../core/auth/user_hierarchy_service.dart';
+import '../../core/db/app_database.dart';
+import '../../core/db/audio_sample_dao.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/sync/sync_connectivity_service.dart';
+import '../../core/telemetry/share_telemetry.dart';
+import '../../core/telemetry/telemetry_service.dart';
+import '../../core/telemetry/telemetry_event.dart';
+import '../../core/telemetry/visit_content_service.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
@@ -48,7 +57,6 @@ import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/risk/ncd_status.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/counselling_launcher.dart';
 import 'naba/naba_models.dart';
 import 'naba/naba_repository.dart';
 import 'pathway/pathway_engine.dart';
@@ -168,6 +176,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// ANC or PNC visit number for the header badge (1-based). Null until loaded.
   int? _visitNumber;
 
+  /// Live Step 2 signal from [UnifiedFormScreen] — LMP under 6 weeks hides
+  /// ANC sections and the header's ANC visit badge until eligible.
+  bool _step2AncSuppressed = false;
+
   /// After immunization on a combined Child Health + Vaccination visit, show
   /// the childhood visit form next (immunization timeline itself is unchanged).
   bool _childhoodFormAfterVaccination = false;
@@ -197,6 +209,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     super.initState();
     debugPrint('[_VisitFlowState] initState');
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Mint the per-visit telemetry correlator once so visit-content (Step 3),
+      // value-audit and visit_completed all share the same visitUuid.
+      context.read<TelemetryService>().ensureVisitUuid(widget.visitId);
       // Always load — even when patientName is supplied we still need DOB + age
       // for the smart age label (months for infants). ??-guards inside prevent
       // overwriting values already provided by the caller.
@@ -468,6 +483,27 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     return _primaryProgramme;
   }
 
+  List<String> _headerActiveFormTypes() {
+    if (_step == 0) {
+      return _step1LiveProgrammes.map((p) => p.name).toList();
+    }
+    final tags = _confirmedProgrammes.map((p) => p.name).toList();
+    if (_step == 1 && _step2AncSuppressed) {
+      return tags.where((t) => t != 'anc').toList();
+    }
+    return tags;
+  }
+
+  int? _headerVisitNumber() {
+    if (_step == 1 && _step2AncSuppressed) return null;
+    return _visitNumber;
+  }
+
+  void _onStep2AncSuppressedChanged(bool suppressed) {
+    if (_step2AncSuppressed == suppressed) return;
+    setState(() => _step2AncSuppressed = suppressed);
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -496,11 +532,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   ageDisplay: _ageDisplay,
                   householdId: widget.householdId,
                   patientGender: _patientGender,
-                  visitNumber: _visitNumber,
+                  visitNumber: _headerVisitNumber(),
                   primaryProgramme: _headerPrimaryProgramme,
-                  activeFormTypes: _step == 0
-                      ? _step1LiveProgrammes.map((p) => p.name).toList()
-                      : _confirmedProgrammes.map((p) => p.name).toList(),
+                  activeFormTypes: _headerActiveFormTypes(),
                   onBack: () {
                     if (_step == 1) {
                       setState(() => _step = 0);
@@ -530,11 +564,17 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Widget _buildStepBody() {
     switch (_step) {
       case 0:
-        _step1Scribe ??= ScribeController(
-          api: context.read<ScribeApiService>(),
-          permissionService: ScribePermissionService(),
-          audioSettings: context.read<ScribeAudioSettingsNotifier>(),
-        );
+        if (_step1Scribe == null) {
+          _step1Scribe = ScribeController(
+            api: context.read<ScribeApiService>(),
+            permissionService: ScribePermissionService(),
+            audioSettings: context.read<ScribeAudioSettingsNotifier>(),
+          );
+          _step1Scribe!
+              .setHierarchyService(context.read<UserHierarchyService>());
+          _step1Scribe!
+              .setSampleDao(AudioSampleDao(context.read<AppDatabase>()));
+        }
         return _Step1Symptoms(
           key: ValueKey('flow-step1-${widget.visitId}'),
           encounterId: widget.visitId,
@@ -584,6 +624,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             setState(() {
               _step = 1;
               _triageSubmitted = true;
+              _step2AncSuppressed = false;
             });
           },
         );
@@ -722,6 +763,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           enrolledProgrammes: _enrolledProgrammes,
           isDeliveryVisit: _isDeliveryVisit,
           origin: widget.origin,
+          onAncSuppressedForEarlyLmpChanged: _onStep2AncSuppressedChanged,
           onAdvance: (programme, referral, reasons, facility, pwRisks, nabaAssessments) {
             debugPrint('[ReferralFacility] flow captured — facility=$facility referral=$referral');
             setState(() {
@@ -1006,6 +1048,7 @@ class _Step2VitalsForm extends StatelessWidget {
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
     this.isDeliveryVisit = false,
+    this.onAncSuppressedForEarlyLmpChanged,
   });
 
   final String visitId;
@@ -1029,6 +1072,7 @@ class _Step2VitalsForm extends StatelessWidget {
   final List<String> confirmedSymptoms;
   /// Subset of [confirmedSymptoms] pre-selected by AI Scribe.
   final Set<String> aiPickedSymptoms;
+  final ValueChanged<bool>? onAncSuppressedForEarlyLmpChanged;
   final void Function(
     Programme primaryProgramme,
     bool referralRecommended,
@@ -1059,6 +1103,7 @@ class _Step2VitalsForm extends StatelessWidget {
       enrolledProgrammes: enrolledProgrammes,
       confirmedSymptoms: confirmedSymptoms,
       aiPickedSymptoms: aiPickedSymptoms,
+      onAncSuppressedForEarlyLmpChanged: onAncSuppressedForEarlyLmpChanged,
       onAdvance: onAdvance,
     );
   }
@@ -1187,6 +1232,7 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
     this.eddMs,
     this.isDeliveryVisit = false,
     this.origin,
+    this.onAncSuppressedForEarlyLmpChanged,
   });
 
   final String visitId;
@@ -1208,6 +1254,7 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
   final Set<String> aiPickedSymptoms;
   final String? sicknessDuration;
   final String? otherSymptoms;
+  final ValueChanged<bool>? onAncSuppressedForEarlyLmpChanged;
 
   /// Final, already-vetted programme set from
   /// `SymptomPickerScreen._doAdvance` — Step 1's `ServiceSelectionResolver`
@@ -1257,6 +1304,7 @@ class _Step2ProgrammesThenForm extends StatelessWidget {
       enrolledProgrammes: enrolledProgrammes,
       confirmedSymptoms: confirmedSymptoms.toList(),
       aiPickedSymptoms: aiPickedSymptoms,
+      onAncSuppressedForEarlyLmpChanged: onAncSuppressedForEarlyLmpChanged,
       onAdvance: onAdvance,
     );
   }
@@ -1381,6 +1429,32 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     _loadPatientPhone();
     _loadHouseholdMembers();
     _loadNcdFacilities();
+    // NOT started here. This runs in the same breath as _fetchNaba() above,
+    // so the clock used to include the whole AI round-trip — the SK was
+    // watching a shimmer, not reading a recommendation, and the reported
+    // reading time ran several seconds long on every visit. It starts when
+    // the recommendation is actually on screen; see _buildResult.
+  }
+
+  /// Whether the CDSS view clock has been started for this screen.
+  ///
+  /// One start per visit: the recommendation is rendered by a FutureBuilder
+  /// that rebuilds on any parent rebuild, and re-recording would keep pushing
+  /// the start time forward until the measured reading time collapsed.
+  bool _summaryStartRecorded = false;
+
+  Future<void> _recordSummaryStarted() async {
+    if (!AppConfig.visitContentTelemetryEnabled || !mounted) return;
+    try {
+      await context.read<VisitContentService>().recordSummaryStarted(
+            visitUuid: context
+                .read<TelemetryService>()
+                .ensureVisitUuid(widget.visitId),
+            patientId: widget.patientId,
+          );
+    } on Object catch (e) {
+      debugPrint('[VisitContent] summary start not recorded: $e');
+    }
   }
 
   Future<void> _loadNcdFacilities() async {
@@ -2440,6 +2514,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     setState(() => _accepted = true);
     if (!mounted) return;
 
+    unawaited(_recordSummaryCompleted(naba));
+
     // Prefer the SK-picked date, then the first timeline item's resolved date,
     // then a programme-aware Spice default. Null when this programme's summary
     // does not stamp nextVisitDate (e.g. childhood keeps its age-band stamp).
@@ -2567,6 +2643,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     }
 
     if (!mounted) return;
+    // Kick push + warm pull so PostSyncRefresher recomputes the mission queue
+    // soon after landing on Home — assessment push alone does not flush it.
+    context.read<SyncConnectivityService>().syncIfSessionReady();
     context.go(_returnPath);
   }
 
@@ -2604,6 +2683,14 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         }
         if (snap.hasError) {
           return _buildError(snap.error);
+        }
+        // The first frame carrying a real recommendation is when reading can
+        // begin, so that is when the clock starts. Guarded because a
+        // FutureBuilder rebuilds for reasons that have nothing to do with the
+        // future — a parent rebuild would otherwise keep resetting the start.
+        if (!_summaryStartRecorded) {
+          _summaryStartRecorded = true;
+          unawaited(_recordSummaryStarted());
         }
         return _buildResult(_effectiveNaba(snap.data!));
       },
@@ -2816,6 +2903,20 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   bool _showPwSummaryFor(NabaResponse naba) =>
       _isPwVisit && _pwSummaryBody(naba).isNotEmpty;
 
+  Programme _rmnchReferralProgramme() {
+    if (widget.confirmedProgrammes.contains(Programme.anc)) {
+      return Programme.anc;
+    }
+    if (widget.confirmedProgrammes.contains(Programme.pnc)) {
+      return Programme.pnc;
+    }
+    if (widget.primaryProgramme == Programme.anc ||
+        widget.primaryProgramme == Programme.pnc) {
+      return widget.primaryProgramme;
+    }
+    return Programme.anc;
+  }
+
   /// Offline Step 3 referral-card body from Step 2 `referredReasons`.
   ///
   /// Per programme (when clinically referred):
@@ -2837,6 +2938,23 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       );
     }
     return VisitFlowStrings.referralRecommendedFallback;
+  }
+
+  Future<void> _recordSummaryCompleted(NabaResponse naba) async {
+    if (!AppConfig.visitContentTelemetryEnabled || !mounted) return;
+    try {
+      final effective = _effectiveNaba(naba);
+      await context.read<VisitContentService>().recordSummaryCompleted(
+            visitUuid: context
+                .read<TelemetryService>()
+                .ensureVisitUuid(widget.visitId),
+            patientId: widget.patientId,
+            whatsappSummary: effective.whatsappSummary,
+            referralRecommendation: _referralCardReason(effective),
+          );
+    } on Object catch (e) {
+      debugPrint('[VisitContent] summary complete not recorded: $e');
+    }
   }
 
   /// Online → NABA `referral_recommendation.reason`; offline → Step 2 reasons.
@@ -2883,6 +3001,11 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         ncdSiteId = def?.fhirId ?? ncdSites.firstOrNull?.fhirId;
       }
     }
+    final showRmnchPicker = showRmnchFacility && rmnchFacilityId != null;
+    final showNcdPicker =
+        showNcdFacility && ncdSites.isNotEmpty && ncdSiteId != null;
+    final disambiguateReferralLabels =
+        (showRmnchPicker ? 1 : 0) + (showNcdPicker ? 1 : 0) > 1;
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 40),
@@ -2962,8 +3085,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           }(),
 
           // Spice AssessmentRMNCHSummaryFragment: facility after follow-up date.
-          if (showRmnchFacility && rmnchFacilityId != null) ...[
+          if (showRmnchPicker) ...[
             _RmnchReferralFacilityPicker(
+              label: VisitFlowStrings.referralFacilityLabelFor(
+                programme: _rmnchReferralProgramme(),
+                disambiguate: disambiguateReferralLabels,
+              ),
               selectedId: rmnchFacilityId,
               onChanged: (id) =>
                   setState(() => _selectedRmnchFacilityId = id),
@@ -2972,10 +3099,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           ],
 
           // Android BDNCDAssessmentSummaryFragment PHU site spinner.
-          if (showNcdFacility &&
-              ncdSites.isNotEmpty &&
-              ncdSiteId != null) ...[
+          if (showNcdPicker) ...[
             _NcdReferralFacilityPicker(
+              label: VisitFlowStrings.referralFacilityLabelFor(
+                programme: Programme.ncd,
+                disambiguate: disambiguateReferralLabels,
+              ),
               facilities: ncdSites,
               selectedFhirId: ncdSiteId,
               onChanged: (id) => setState(() => _selectedNcdSiteId = id),
@@ -3101,11 +3230,13 @@ class _PwProfileSummaryBlock extends StatelessWidget {
 /// Selection fhirId → `summary.referredSiteId`.
 class _NcdReferralFacilityPicker extends StatelessWidget {
   const _NcdReferralFacilityPicker({
+    required this.label,
     required this.facilities,
     required this.selectedFhirId,
     required this.onChanged,
   });
 
+  final String label;
   final List<HealthFacilityRow> facilities;
   final String selectedFhirId;
   final ValueChanged<String> onChanged;
@@ -3120,7 +3251,7 @@ class _NcdReferralFacilityPicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          EpiStrings.referralFacilityLabel,
+          label,
           style: theme.textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
@@ -3177,10 +3308,12 @@ class _NcdReferralFacilityPicker extends StatelessWidget {
 /// `summary.referralFacilityType` on Accept (Spice Done remap).
 class _RmnchReferralFacilityPicker extends StatelessWidget {
   const _RmnchReferralFacilityPicker({
+    required this.label,
     required this.selectedId,
     required this.onChanged,
   });
 
+  final String label;
   final String selectedId;
   final ValueChanged<String> onChanged;
 
@@ -3205,7 +3338,7 @@ class _RmnchReferralFacilityPicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          EpiStrings.referralFacilityLabel,
+          label,
           style: theme.textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
@@ -3483,22 +3616,68 @@ class _AiCounsellingCard extends StatelessWidget {
       ? const Color(0xFFFFFBEB)
       : const Color(0xFFF0FDF4);
 
+  /// Records a Step-3 share tap. Same helper the counselling screen uses —
+  /// this surface was missed on the first pass, so a real SK tapping
+  /// "Send SMS" at the end of a visit recorded nothing.
+  void _recordShare(
+    TelemetryService? telemetry,
+    String channel, {
+    required bool launched,
+  }) =>
+      recordShareTap(
+        telemetry,
+        channel: channel,
+        surface: TelemetryShareSurface.visitFlow,
+        hasMessage: true,
+        launched: launched,
+      );
+
   Future<void> _sendWhatsApp(BuildContext context) async {
-    await sendCounsellingWhatsApp(
-      context: context,
-      message: text,
-      phone: patientPhone,
-      notInstalledMessage: NabaStrings.whatsAppNotInstalled,
-    );
+    // Resolved before the awaits below — see share_telemetry.dart.
+    final telemetry = shareTelemetryOf(context);
+    final encoded = Uri.encodeComponent(text);
+    final rawPhone =
+        patientPhone?.replaceAll(RegExp(r'[^\d]'), '') ?? '';
+    final phoneParam = rawPhone.isNotEmpty ? 'phone=$rawPhone&' : '';
+    final nativeUri =
+        Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
+    if (await canLaunchUrl(nativeUri)) {
+      await launchUrl(nativeUri);
+      _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: true);
+      return;
+    }
+    final webUri = Uri.parse(
+        'https://wa.me/${rawPhone.isNotEmpty ? rawPhone : ''}?text=$encoded');
+    if (await canLaunchUrl(webUri)) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: true);
+      return;
+    }
+    _recordShare(telemetry, TelemetryShareChannel.whatsapp, launched: false);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(NabaStrings.whatsAppNotInstalled)),
+      );
+    }
   }
 
   Future<void> _sendSms(BuildContext context) async {
-    await sendCounsellingSms(
-      context: context,
-      message: text,
-      phone: patientPhone,
-      notAvailableMessage: NabaStrings.smsNotAvailable,
-    );
+    final telemetry = shareTelemetryOf(context);
+    final encoded = Uri.encodeComponent(text);
+    final phone = patientPhone ?? '';
+    final uri = Uri.parse('sms:$phone?body=$encoded');
+    if (!await canLaunchUrl(uri)) {
+      _recordShare(telemetry, TelemetryShareChannel.sms, launched: false);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(NabaStrings.smsNotAvailable)),
+        );
+      }
+      return;
+    }
+    await launchUrl(uri);
+    _recordShare(telemetry, TelemetryShareChannel.sms, launched: true);
   }
 
   Widget _sendChip({

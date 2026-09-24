@@ -9,6 +9,7 @@ import '../../core/debug/console_log.dart';
 import '../../core/api/endpoints.dart' show Endpoints;
 import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
+import '../../core/version/app_version_info.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
@@ -120,9 +121,13 @@ class AssessmentRepository extends ChangeNotifier {
       villageId: villageId,
     );
 
+    final resolvedHouseholdMemberLocalId = householdMemberLocalId > 0
+        ? householdMemberLocalId
+        : (int.tryParse(identity.patientId ?? '') ?? 0);
+
     final entity = LocalAssessmentEntity(
       id: id,
-      householdMemberLocalId: householdMemberLocalId,
+      householdMemberLocalId: resolvedHouseholdMemberLocalId,
       memberId: identity.memberId,
       householdId: identity.householdId,
       patientId: identity.patientId,
@@ -220,12 +225,21 @@ class AssessmentRepository extends ChangeNotifier {
           ? await dao.getById('$householdMemberLocalId')
           : null;
       if (member == null && keep(patientId) != null) {
-        member = await dao.getByPatientId(patientId!);
+        // Route id is usually the local member PK — not members.patient_id,
+        // which stays null until the server assigns a programme patient id.
+        member = await dao.getById(patientId!) ??
+            await dao.getByPatientId(patientId!) ??
+            await dao.getByFhirId(patientId!);
+      }
+      if (member == null && keep(memberId) != null) {
+        // Visit flow passes the server FHIR id as memberId once sync completes;
+        // int.tryParse(memberId) then fails and householdMemberLocalId stays 0.
+        member = await dao.getByFhirId(memberId!);
       }
       if (member == null) {
         debugPrint(
             '[Assessment] identity unresolved — localId=$householdMemberLocalId '
-            'patientId=$patientId; storing caller-supplied ids');
+            'patientId=$patientId memberId=$memberId; storing caller-supplied ids');
         return (
           memberId: memberId,
           householdId: householdId,
@@ -236,12 +250,11 @@ class AssessmentRepository extends ChangeNotifier {
       final resolved = (
         memberId: keep(member.fhirId) ?? keep(memberId),
         householdId: keep(member.householdFhirId) ?? keep(householdId),
-        // Local reads (visit history, visit numbering, same-day ANC guard,
-        // worklist scoring) all key on this column, so keep the local id when
-        // the server has not assigned a patient id yet. The wire value is
-        // re-derived from hhm.patient_id in getUnsyncedForPush, so a local PK
-        // never reaches the server.
-        patientId: keep(member.patientId) ?? keep(patientId),
+        // Local SQLite reads key on members.id / patients.id (local PK).
+        // members.patient_id is often null for newly enrolled members.
+        patientId: keep(member.id) ??
+            keep(member.patientId) ??
+            keep(patientId),
         villageId: keep(villageId) ??
             keep(member.subVillageId) ??
             keep(member.villageId),
@@ -471,8 +484,8 @@ class AssessmentRepository extends ChangeNotifier {
     // receives the full contract shape Android sends.
     final request = {
       'requestId': requestId,
-      'appVersionName': AppConfig.appVersionName,
-      'appVersionCode': AppConfig.appVersionCode,
+      'appVersionName': AppVersionInfo.current.versionName,
+      'appVersionCode': AppVersionInfo.current.versionCode,
       'appType': AppConfig.appType,
       'syncMode': syncMode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
@@ -1881,8 +1894,8 @@ class AssessmentRepository extends ChangeNotifier {
         'requestId': requestId,
         'dataRequired': false,
         if (userId != null) 'userId': userId,
-        'appVersionName': AppConfig.appVersionName,
-        'appVersionCode': AppConfig.appVersionCode,
+        'appVersionName': AppVersionInfo.current.versionName,
+        'appVersionCode': AppVersionInfo.current.versionCode,
         if (deviceId.isNotEmpty) 'deviceId': deviceId,
       };
       ConsoleLog.banner('[PayloadDebug] sync-status\n${body.toString()}');

@@ -100,6 +100,9 @@ abstract final class AppStrings {
   static String get ancBlockedDuplicateTitle => getTranslatedString('ancBlockedDuplicateTitle', 'ANC Already Recorded Today');
   static String get ancBlockedDuplicateMessage => getTranslatedString('ancBlockedDuplicateMessage', 'An ANC assessment has already been recorded for this patient today. Only one ANC visit is allowed per day.');
   static String get ancBlockedRevisitTitle => getTranslatedString('ancBlockedRevisitTitle', 'ANC visit not due yet');
+  static String get ancBlockedEarlyPregnancyTitle => getTranslatedString('ancBlockedEarlyPregnancyTitle', '⚠️ Pregnancy Too Early to Assess');
+  static String get ancBlockedEarlyPregnancyMessage => getTranslatedString('ancBlockedEarlyPregnancyMessage', 'Pregnancy assessment can only be conducted after 6 weeks from LMP.\n\nPlease revisit after 6 weeks for complete pregnancy profile assessment and ANC.');
+  static String get ancLockedEarlyLmpHint => getTranslatedString('ancLockedEarlyLmpHint', '⚠ ANC is available only after 6 weeks from LMP.');
 
   // ── PW registration blocking ──────────────────────────────────────────────
   static String get pwAlreadyEnrolledTitle => getTranslatedString('pwAlreadyEnrolledTitle', 'Already Registered');
@@ -118,6 +121,60 @@ abstract final class CommonStrings {
   static String get remove => getTranslatedString('remove', 'Remove');
   static String versionLabel(String version) => getTranslatedString('versionLabel', 'v{version}', params: {'version': version}, localizeDigits: false);
   static String get comingSoon => getTranslatedString('Common.comingSoon', 'Coming soon');
+  /// Spice R.string.ok
+  static String get ok => getTranslatedString('ok', 'OK');
+}
+
+/// Forced app-update dialog — Spice Android `R.string.alert`,
+/// `please_update_the_app`, `open_play_store`, `please_check_if_play_store_available`.
+abstract final class AppUpdateStrings {
+  AppUpdateStrings._();
+
+  /// Spice R.string.alert
+  static String get alertTitle => getTranslatedString('alertTitle', 'Alert');
+  /// Spice R.string.please_update_the_app — generic fallback when no label.
+  static String get pleaseUpdateTheApp => getTranslatedString(
+        'pleaseUpdateTheApp',
+        'A new version of the app is available. Please update to continue.',
+      );
+  /// Forced update body — built from [minAppVersionLabel] (UHIS parity).
+  static String forcedUpdateMessage(String minVersionLabel) {
+    final label = minVersionLabel.trim();
+    if (label.isEmpty) return pleaseUpdateTheApp;
+    return getTranslatedString(
+      'pleaseUpdateToMinVersion',
+      'Please update to {version} or higher to continue.',
+      params: {'version': label},
+      localizeDigits: false,
+    );
+  }
+  /// Optional update body — built from [latestAppVersionLabel].
+  static String optionalUpdateMessage(String latestVersionLabel) {
+    final label = latestVersionLabel.trim();
+    if (label.isEmpty) return pleaseUpdateTheApp;
+    return getTranslatedString(
+      'optionalAppUpdateAvailable',
+      'A new version ({version}) is available. Update now for the latest features.',
+      params: {'version': label},
+      localizeDigits: false,
+    );
+  }
+  /// Spice R.string.open_play_store
+  static String get openPlayStore =>
+      getTranslatedString('openPlayStore', 'Open Play Store');
+  /// Spice R.string.please_check_if_play_store_available
+  static String get pleaseCheckIfPlayStoreAvailable => getTranslatedString(
+        'pleaseCheckIfPlayStoreAvailable',
+        'Please check if Google Play Store is installed in the device',
+      );
+  /// Optional (non-blocking) update prompt — dismissible.
+  static String get updateLater =>
+      getTranslatedString('updateLater', 'Later');
+  /// Shown when the version-policy endpoint cannot be reached.
+  static String get versionCheckUnavailable => getTranslatedString(
+        'versionCheckUnavailable',
+        'Unable to verify the app version. Please check your connection and try again.',
+      );
 }
 
 /// Offline-capability indicator copy — `lib/core/widgets/offline_capability_banner.dart`.
@@ -452,6 +509,8 @@ abstract final class SettingsStrings {
   // ── Offline DB browser row (kDebugMode only) ──────────────────────────
   static String get debugDbViewer => getTranslatedString('Settings.debugDbViewer', 'Offline Database');
   static String get debugDbViewerSubtitle => getTranslatedString('Settings.debugDbViewerSubtitle', 'Browse local SQLCipher tables');
+  static String get debugTelemetry => getTranslatedString('Settings.debugTelemetry', 'AI Scribe Report');
+  static String get debugTelemetrySubtitle => getTranslatedString('Settings.debugTelemetrySubtitle', 'Adoption, capture and correction rates by date');
 
   // ── Offline Sync (Spice parity) ───────────────────────────────────────
   static String get offlineSync =>
@@ -460,6 +519,9 @@ abstract final class SettingsStrings {
         'Settings.offlineSyncSubtitle',
         'Push pending households, members & visits',
       );
+
+  static String get appVersion =>
+      getTranslatedString('Settings.appVersion', 'App Version');
 }
 
 /// Offline Sync screen copy (Spice OfflineSyncActivity).
@@ -1006,6 +1068,100 @@ abstract final class HouseholdDetailStrings {
   static String memberDataNotLoaded(int count) => getTranslatedString('memberDataNotLoaded', 'This household has {count} members.\nDetailed member information will be available once data is synced.', params: {'count': '$count'});
 
   static String get addMember => getTranslatedString('HouseholdDetail.addMember', 'Add Member');
+  static String get memberDeceasedMenu =>
+      getTranslatedString('HouseholdDetail.memberDeceased', 'Member Deceased');
+}
+
+/// Member deceased dialog + visit guards (Spice `MemberDeceasedDialogFragment`).
+abstract final class MemberDeceasedStrings {
+  MemberDeceasedStrings._();
+
+  static String get title =>
+      getTranslatedString('MemberDeceased.title', 'Member Deceased');
+  static String get selectMember => getTranslatedString(
+        'MemberDeceased.selectMember',
+        'Select Member Deceased',
+      );
+  static String get pleaseSelect =>
+      getTranslatedString('pleaseSelect', 'Please select');
+  static String get typeOfDeath =>
+      getTranslatedString('MemberDeceased.typeOfDeath', 'Type of death');
+  static String get causeOfDeath =>
+      getTranslatedString('MemberDeceased.causeOfDeath', 'Cause of death');
+  static String get causeHint => getTranslatedString(
+        'MemberDeceased.causeHint',
+        'Select one or more causes',
+      );
+  static String get reason =>
+      getTranslatedString('MemberDeceased.reason', 'Reason');
+  static String get reasonHint => getTranslatedString(
+        'MemberDeceased.reasonHint',
+        'Enter reason for death',
+      );
+  static String get submit =>
+      getTranslatedString('MemberDeceased.submit', 'Submit');
+  static String get deceased =>
+      getTranslatedString('deceased', 'Deceased');
+  static String get reasonForDeath => getTranslatedString(
+        'MemberDeceased.reasonForDeath',
+        'Reason for death',
+      );
+  static String get noActiveMembers => getTranslatedString(
+        'MemberDeceased.noActiveMembers',
+        'No active members in this household',
+      );
+  static String get submitFailed => getTranslatedString(
+        'MemberDeceased.submitFailed',
+        'Could not mark member deceased',
+      );
+  static String get cannotStartVisit => getTranslatedString(
+        'MemberDeceased.cannotStartVisit',
+        'This member is deceased — new visits are not allowed',
+      );
+  static String get deceasedBanner => getTranslatedString(
+        'MemberDeceased.banner',
+        'Deceased — further assessments are not allowed',
+      );
+  static String get unnamed =>
+      getTranslatedString('unnamed', '(Unnamed)');
+
+  /// Localized death-type spinner label (neonatal / maternal / other).
+  static String deathTypeLabel(String id) => switch (id) {
+        'neonatal' =>
+          getTranslatedString('MemberDeceased.deathType.neonatal', 'Neo Natal'),
+        'mother' =>
+          getTranslatedString('MemberDeceased.deathType.mother', 'Maternal'),
+        'other' =>
+          getTranslatedString('MemberDeceased.deathType.other', 'Other'),
+        _ => id,
+      };
+
+  /// Localized cause-of-death checkbox label for neonatal/maternal branches.
+  static String deathCauseLabel(String id) => getTranslatedString(
+        'MemberDeceased.cause.$id',
+        _deathCauseEnglish(id),
+      );
+
+  static String _deathCauseEnglish(String id) => switch (id) {
+        'asphyxia' => 'Asphyxia',
+        'abnormallyLowTemperature' => 'Abnormally low temperature',
+        'lowBirthWeight' => 'Low birth weight',
+        'convulsions' => 'Convulsions',
+        'prematureBirth' => 'Premature birth',
+        'sepsisUmbilicalSepsis' => 'Sepsis/ Umbilical sepsis',
+        'pneumonia' => 'Pneumonia',
+        'congenitalAnomaly' => 'Congenital Anomaly',
+        'unknown' => 'Unknown',
+        'excessiveBleeding' => 'Excessive bleeding',
+        'infection' => 'Infection',
+        'hypertensiveDisorder' => 'Hypertensive disorder (Eclampsia)',
+        'obstructedLabor' => 'Obstructed labor',
+        'uterineRupture' => 'Uterine rupture',
+        'unsafeAbortion' => 'Unsafe abortion',
+        'severeAnemia' => 'Severe Anemia',
+        'otherMedicalComplications' => 'Other medical complications',
+        _ => id,
+      };
 }
 
 /// AI Worklist (Screen 2): chip filter labels, programme tags, urgent banner,
@@ -1692,6 +1848,18 @@ abstract final class ReferralStrings {
       getTranslatedString('Referral.shortReasonSymptoms', 'Symptoms');
   static String get shortReasonClinicalSymptoms =>
       getTranslatedString('Referral.shortReasonClinicalSymptoms', 'Clinical symptoms');
+  static String get suspectedPreEclampsia => getTranslatedString(
+        'Referral.suspectedPreEclampsia',
+        'Suspected pre-eclampsia',
+      );
+  static String get suspectedDiabetes => getTranslatedString(
+        'Referral.suspectedDiabetes',
+        'Suspected diabetes',
+      );
+  static String get suspectedDiabetesWithThreshold => getTranslatedString(
+        'Referral.suspectedDiabetesWithThreshold',
+        'Suspected diabetes (FBS≥5.1 or RBS≥8.5)',
+      );
 
   // ── Narrative — findings sentences (referral_narrative.buildReferralNarrative)
   static String dangerSignReported(String dSign) => getTranslatedString(
@@ -3785,6 +3953,22 @@ abstract final class VisitFlowStrings {
   static String get followUpLabel => getTranslatedString('VisitFlow.followUpLabel', 'Follow-up');
   static String get followUpAutoScheduledNote => getTranslatedString('VisitFlow.followUpAutoScheduledNote', 'Auto-scheduled · already saved');
 
+  /// Step 3 referral facility dropdown label. Prefixes the programme name
+  /// when multiple facility pickers are shown on the same summary screen.
+  static String referralFacilityLabelFor({
+    Programme? programme,
+    required bool disambiguate,
+  }) {
+    if (!disambiguate || programme == null) {
+      return EpiStrings.referralFacilityLabel;
+    }
+    return getTranslatedString(
+      'VisitFlow.referralFacilityForProgramme',
+      '{programme} Referral Facility',
+      params: {'programme': ProgrammeLabels.of(programme)},
+    );
+  }
+
   // ── Referral banner (Step 3) — raw API/legacy reason code → display label.
   // Map keys themselves (Spice ReferredReason / ANC LABEL_* / camelCase) are
   // never translated — only the mapped display value is user-facing.
@@ -5446,6 +5630,45 @@ abstract final class EpiStrings {
           'unit': monthsUntil == 1 ? 'month' : 'months',
         },
       );
+
+  static String get scanCardCta =>
+      getTranslatedString('Epi.scanCardCta', 'Scan EPI card');
+  static String get scanCardSubtitle => getTranslatedString(
+        'Epi.scanCardSubtitle',
+        'Photograph the booklet to detect which vaccines were given · enter dates manually',
+      );
+  static String scanResultBanner(int count) => getTranslatedString(
+        'Epi.scanResultBanner',
+        '${count == 1 ? '1 vaccine' : '$count vaccines'} found · Review and save',
+        params: {'count': '$count'},
+      );
+  static String get scanDatePrefilled => getTranslatedString(
+        'Epi.scanDatePrefilled',
+        'Date pre-filled from card · Edit if needed',
+      );
+  static String get scanFailed => getTranslatedString(
+        'Epi.scanFailed',
+        "Couldn't read card — please enter manually",
+      );
+  static String get scanning =>
+      getTranslatedString('Epi.scanning', 'Scanning…');
+  static String get scanReviewCta =>
+      getTranslatedString('Epi.scanReviewCta', 'Review & update →');
+  static String get scanFrameHint => getTranslatedString(
+        'Epi.scanFrameHint', 'Align the vaccination card in the frame');
+  static String get scanUploadLabel =>
+      getTranslatedString('Epi.scanUploadLabel', 'Upload');
+  static String get scanReadingCard =>
+      getTranslatedString('Epi.scanReadingCard', 'Reading card…');
+  static String scanVaccineFound(String name) => getTranslatedString(
+        'Epi.scanVaccineFound',
+        '$name found',
+        params: {'name': name},
+      );
+  static String get scanCameraUnavailable => getTranslatedString(
+        'Epi.scanCameraUnavailable',
+        'Camera unavailable — grant permission or upload an image',
+      );
 }
 
 /// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral
@@ -6159,7 +6382,10 @@ abstract final class ProgrammeLabels {
       return PatientProfileStrings.ncdFollowUp;
     }
     if (compact == 'PREGNANCYOUTCOME' || compact == 'OUTCOME') {
-      return getTranslatedString('pregnancyOutcome', 'Pregnancy Outcome');
+      return getTranslatedString('pregnancyOutcomeTitle', 'Pregnancy Outcome');
+    }
+    if (compact == 'PNCMOTHER') {
+      return getTranslatedString('Worklist.programmePnc', 'PNC');
     }
     final prog = Programme.fromString(kind);
     if (prog != Programme.unknown) return of(prog);
@@ -6316,12 +6542,77 @@ abstract final class ClinicalStatusStrings {
   /// `Some new code`), never the raw enum — a new backend value should read as
   /// awkward English, not as a database identifier.
   static String label(String raw) {
-    final key = raw.trim().toUpperCase().replaceAll(' ', '_');
+    final trimmed = raw.trim();
+    if (trimmed.toUpperCase().startsWith('GLASS_POWER:')) {
+      final power = trimmed.substring('GLASS_POWER:'.length);
+      return getTranslatedString(
+        'ClinicalStatus.glassPower',
+        'Power - {power}',
+        params: {'power': power},
+      );
+    }
+
+    final phrase = _knownEnglishPhrase(raw);
+    if (phrase != null) return phrase;
+
+    final key = trimmed.toUpperCase().replaceAll(' ', '_');
     return switch (key) {
       'HIGH_RISK_PW' => getTranslatedString(
           'ClinicalStatus.highRiskPw', 'High-risk pregnancy'),
+      'HIGH_RISK_PNC' => getTranslatedString(
+          'ClinicalStatus.highRiskPnc', 'High-risk PNC'),
+      'NORMAL_PNC' => getTranslatedString(
+          'ClinicalStatus.normalPnc', 'Normal PNC'),
+      'GAPS_IN_ANC' => getTranslatedString(
+          'ClinicalStatus.gapsInAnc', 'Gaps in antenatal care'),
+      'GAPS_IN_PNC' => getTranslatedString(
+          'ClinicalStatus.gapsInPnc', 'Gaps in postnatal care'),
       'NORMAL_PREGNANCY' => getTranslatedString(
           'ClinicalStatus.normalPregnancy', 'Normal pregnancy'),
+      'NORMAL_DELIVERY' => getTranslatedString(
+          'ClinicalStatus.normalDelivery', 'Normal delivery'),
+      'C_SECTION' || 'CSECTION' => getTranslatedString(
+          'ClinicalStatus.cSection', 'C-section'),
+      'ASSISTED_DELIVERY' => getTranslatedString(
+          'ClinicalStatus.assistedDelivery', 'Assisted delivery'),
+      'STILL_BIRTH' || 'STILLBIRTH' => getTranslatedString(
+          'ClinicalStatus.stillBirth', 'Stillbirth'),
+      'LIVE_BIRTH' || 'LIVEBIRTH' => getTranslatedString(
+          'ClinicalStatus.liveBirth', 'Live birth'),
+      'NEONATAL_DEATH' => getTranslatedString(
+          'ClinicalStatus.neonatalDeath', 'Neonatal death'),
+      'ABORTION' => getTranslatedString(
+          'ClinicalStatus.abortion', 'Abortion'),
+      'USING_MODERN_FP' => getTranslatedString(
+          'ClinicalStatus.usingModernFp',
+          'Using modern family planning methods'),
+      'NOT_USING_MODERN_FP' => getTranslatedString(
+          'ClinicalStatus.notUsingModernFp',
+          'Not using modern family planning methods'),
+      'NORMAL_NCD' => getTranslatedString('ClinicalStatus.normalNcd', 'Normal'),
+      'GLASSES_SOLD' => getTranslatedString(
+          'ClinicalStatus.glassesSold', 'Glasses sold'),
+      'NCD_SERVICE_IN_CATARACT_CAMP' => getTranslatedString(
+          'ClinicalStatus.ncdServiceInCataractCamp',
+          'NCD in cataract camp'),
+      'REFERRED_FOR_OPERATION' => getTranslatedString(
+          'ClinicalStatus.referredForOperation', 'Referred for operation'),
+      'CATARACTS' => getTranslatedString(
+          'ClinicalStatus.cataracts', 'Cataracts'),
+      'LECRIMAL_TEAR_DUCT_PROBLEM' => getTranslatedString(
+          'ClinicalStatus.lacrimalTearDuctProblem',
+          'Lacrimal (tear duct) problem'),
+      'PTERYGIUM' => getTranslatedString(
+          'ClinicalStatus.pterygium', 'Pterygium'),
+      'GLAUCOMA' => getTranslatedString(
+          'ClinicalStatus.glaucoma', 'Glaucoma'),
+      'MYOPIA' => getTranslatedString('ClinicalStatus.myopia', 'Myopia'),
+      'PRESBYOPIA' => getTranslatedString(
+          'ClinicalStatus.presbyopia', 'Presbyopia'),
+      'OTHER_EYE_PROBLEM' => getTranslatedString(
+          'ClinicalStatus.otherEyeProblem', 'Other problem'),
+      'NO_EYE_PROBLEM' => getTranslatedString(
+          'ClinicalStatus.noEyeProblem', 'No problem'),
       'UNCONTROLLED_BP' => getTranslatedString(
           'ClinicalStatus.uncontrolledBp', 'Uncontrolled blood pressure'),
       'CONTROLLED_BP' => getTranslatedString(
@@ -6347,6 +6638,80 @@ abstract final class ClinicalStatusStrings {
   /// Maps a comma/JSON list of codes through [label].
   static String labelAll(Iterable<String> codes) =>
       codes.map(label).where((s) => s.isNotEmpty).join(', ');
+
+  /// SNOMED display terms from `confirmDiagnosis` (often comma-separated).
+  static String labelDiagnosis(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return raw;
+    if (!trimmed.contains(',')) return _labelDiagnosisTerm(trimmed);
+    return trimmed
+        .split(',')
+        .map((part) => _labelDiagnosisTerm(part.trim()))
+        .where((s) => s.isNotEmpty)
+        .join(', ');
+  }
+
+  static String _labelDiagnosisTerm(String term) {
+    final k = term.trim().toLowerCase();
+    if (k.isEmpty) return term;
+    if (k.contains('hypertension') || k.contains('high blood pressure')) {
+      return getTranslatedString('htn', 'Hypertension');
+    }
+    if (k.contains('diabetes')) {
+      return getTranslatedString('diabetesLabel', 'Diabetes');
+    }
+    if (k.contains('tuberculosis') || k == 'tb') {
+      return getTranslatedString(
+        'VisitFlow.ancExistingIllness.tuberculosis',
+        'Tuberculosis',
+      );
+    }
+    if (k.contains('copd') || k.contains('chronic obstructive')) {
+      return PatientDetailStrings.copd;
+    }
+    if (k.contains('kidney')) {
+      return PatientDetailStrings.kidneyDisease;
+    }
+    if (k.contains('cardiovascular') || k.contains('heart disease')) {
+      return getTranslatedString(
+        'VisitFlow.ancExistingIllness.heartDisease',
+        'Heart Disease',
+      );
+    }
+    return label(term);
+  }
+
+  static String? _knownEnglishPhrase(String raw) {
+    final k = raw.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    if (k.isEmpty) return null;
+    return switch (k) {
+      'normal delivery' => getTranslatedString(
+          'ClinicalStatus.normalDelivery', 'Normal delivery'),
+      'c section' || 'c-section' || 'csection' => getTranslatedString(
+          'ClinicalStatus.cSection', 'C-section'),
+      'assisted delivery' => getTranslatedString(
+          'ClinicalStatus.assistedDelivery', 'Assisted delivery'),
+      'still birth' || 'stillbirth' => getTranslatedString(
+          'ClinicalStatus.stillBirth', 'Stillbirth'),
+      'live birth' || 'livebirth' => getTranslatedString(
+          'ClinicalStatus.liveBirth', 'Live birth'),
+      'neonatal death' => getTranslatedString(
+          'ClinicalStatus.neonatalDeath', 'Neonatal death'),
+      'abortion' => getTranslatedString(
+          'ClinicalStatus.abortion', 'Abortion'),
+      'high risk pnc' => getTranslatedString(
+          'ClinicalStatus.highRiskPnc', 'High-risk PNC'),
+      'normal pnc' => getTranslatedString(
+          'ClinicalStatus.normalPnc', 'Normal PNC'),
+      'gaps in anc' => getTranslatedString(
+          'ClinicalStatus.gapsInAnc', 'Gaps in antenatal care'),
+      'gaps in pnc' => getTranslatedString(
+          'ClinicalStatus.gapsInPnc', 'Gaps in postnatal care'),
+      'yes' => PatientDetailStrings.yes,
+      'no' => PatientContextStrings.no,
+      _ => null,
+    };
+  }
 
   static String _humanize(String raw) {
     final cleaned = raw.trim().replaceAll('_', ' ').toLowerCase();
@@ -6555,6 +6920,37 @@ abstract final class DebugDbStrings {
   static String get refresh => getTranslatedString('DebugDb.refresh', 'Refresh');
   static String get close => getTranslatedString('DebugDb.close', 'Close');
   static String get searchHint => getTranslatedString('DebugDb.searchHint', 'Search rows…');
+  static String get searchHintAdvanced => getTranslatedString(
+      'DebugDb.searchHintAdvanced',
+      'Search all columns, or col:value, col=value');
+  static String get filterTablesHint =>
+      getTranslatedString('DebugDb.filterTablesHint', 'Filter tables…');
+  static String get noTablesMatch =>
+      getTranslatedString('DebugDb.noTablesMatch', 'No tables match');
+  static String get noRowsMatch =>
+      getTranslatedString('DebugDb.noRowsMatch', 'No rows match');
+  static String get columns => getTranslatedString('DebugDb.columns', 'Columns');
+  static String get apply => getTranslatedString('DebugDb.apply', 'Apply');
+  static String get selectAll => getTranslatedString('DebugDb.selectAll', 'Select all');
+  static String get copy => getTranslatedString('DebugDb.copy', 'Copy');
+  static String get copyRow => getTranslatedString('DebugDb.copyRow', 'Copy row');
+  static String get copied => getTranslatedString('DebugDb.copied', 'Copied to clipboard');
+  static String get rawTab => getTranslatedString('DebugDb.rawTab', 'Raw');
+  static String get prettyTab => getTranslatedString('DebugDb.prettyTab', 'Pretty');
+  static String get jsonField => getTranslatedString('DebugDb.jsonField', 'JSON — tap to expand');
+  static String get searchScopeTitle =>
+      getTranslatedString('DebugDb.searchScopeTitle', 'Search columns');
+  static String get searchScopeHelp => getTranslatedString(
+      'DebugDb.searchScopeHelp',
+      'Global search uses selected columns. Or query one column: phone:017, sync_status=NotSynced');
+  static String get visibleColumnsTitle =>
+      getTranslatedString('DebugDb.visibleColumnsTitle', 'Visible columns');
+  static String searchScope(int n) => getTranslatedString(
+      'DebugDb.searchScope', '{n} cols',
+      params: {'n': '$n'});
+  static String sortedBy(String col, bool asc) => getTranslatedString(
+      'DebugDb.sortedBy', '{col} {dir}',
+      params: {'col': col, 'dir': asc ? '↑' : '↓'});
   static String get emptyTable => getTranslatedString('DebugDb.emptyTable', 'No rows');
   static String get counting => getTranslatedString('DebugDb.counting', 'Counting…');
   static String get countFailed => getTranslatedString('DebugDb.countFailed', 'Count failed');
@@ -6581,4 +6977,145 @@ abstract final class DebugDbStrings {
   static String pageLabel(int from, int to, int total) => getTranslatedString(
       'DebugDb.pageLabel', 'Showing {from}–{to} of {total}',
       params: {'from': '$from', 'to': '$to', 'total': '$total'});
+
+  static String pageLabelFiltered(int from, int to, int filtered, int total) =>
+      getTranslatedString(
+        'DebugDb.pageLabelFiltered',
+        'Showing {from}–{to} of {filtered} matches ({total} total)',
+        params: {
+          'from': '$from',
+          'to': '$to',
+          'filtered': '$filtered',
+          'total': '$total',
+        },
+      );
+}
+
+/// AI Scribe / counselling telemetry report (dev screen at `/dev/telemetry`).
+///
+/// Wording here is load-bearing, not decorative: two of these labels exist to
+/// stop a number being read as something it isn't. "Compose opened" must never
+/// become "sent" (we hand off to the OS and never learn the outcome), and the
+/// correction-rate caveat must stay visible (the live scribe path has no
+/// explicit accept, so "not corrected" includes fields nobody reviewed).
+abstract final class TelemetryStrings {
+  TelemetryStrings._();
+
+  static String get title =>
+      getTranslatedString('Telemetry.title', 'AI Scribe Report');
+  static String get from => getTranslatedString('Telemetry.from', 'From');
+  static String get to => getTranslatedString('Telemetry.to', 'To');
+  static String get generate =>
+      getTranslatedString('Telemetry.generate', 'Generate');
+  static String get download =>
+      getTranslatedString('Telemetry.download', 'Download');
+  static String get copyJson =>
+      getTranslatedString('Telemetry.copyJson', 'Copy JSON');
+  static String get noData => getTranslatedString('Telemetry.noData',
+      'No visits recorded in this date range.');
+  static String get notAvailable =>
+      getTranslatedString('Telemetry.notAvailable', '—');
+
+  // ── Section headings ──────────────────────────────────────────────────────
+  static String get adoption =>
+      getTranslatedString('Telemetry.adoption', 'Adoption');
+  static String get timeToComplete =>
+      getTranslatedString('Telemetry.timeToComplete', 'Time to complete');
+  static String get fieldsCaptured =>
+      getTranslatedString('Telemetry.fieldsCaptured', 'Fields captured');
+  static String get accuracy =>
+      getTranslatedString('Telemetry.accuracy', 'Correction rate');
+  static String get counselling =>
+      getTranslatedString('Telemetry.counselling', 'Counselling share');
+  static String get worstFields =>
+      getTranslatedString('Telemetry.worstFields', 'Most-corrected fields');
+
+  // ── Metric labels ─────────────────────────────────────────────────────────
+  static String get scribeUsers =>
+      getTranslatedString('Telemetry.scribeUsers', 'SKs using AI Scribe');
+  static String get manualUsers =>
+      getTranslatedString('Telemetry.manualUsers', 'SKs manual only');
+  static String get scribeVisits =>
+      getTranslatedString('Telemetry.scribeVisits', 'AI Scribe visits');
+  static String get manualVisits =>
+      getTranslatedString('Telemetry.manualVisits', 'Manual visits');
+  static String get medianWithScribe => getTranslatedString(
+      'Telemetry.medianWithScribe', 'Median with AI Scribe');
+  static String get medianManual =>
+      getTranslatedString('Telemetry.medianManual', 'Median manual');
+  static String get totalAiFields =>
+      getTranslatedString('Telemetry.totalAiFields', 'Total AI-filled fields');
+  static String get avgAiFields => getTranslatedString(
+      'Telemetry.avgAiFields', 'Average per AI Scribe visit');
+  static String get captureRate =>
+      getTranslatedString('Telemetry.captureRate', 'Capture rate');
+  static String get fieldsVisible => getTranslatedString(
+      'Telemetry.fieldsVisible', 'Fields visible to the SK');
+  static String get fieldsRendered =>
+      getTranslatedString('Telemetry.fieldsRendered', 'Fields rendered');
+  static String get fieldsInForm =>
+      getTranslatedString('Telemetry.fieldsInForm', 'Fields in form');
+  static String get aiFilled =>
+      getTranslatedString('Telemetry.aiFilled', 'AI-filled');
+  static String get aiCorrected =>
+      getTranslatedString('Telemetry.aiCorrected', 'Corrected by SK');
+  static String get aiUnchanged =>
+      getTranslatedString('Telemetry.aiUnchanged', 'Left unchanged');
+  static String get manualFields => getTranslatedString(
+      'Telemetry.manualFields', 'Manually entered');
+  static String get prefilledFields => getTranslatedString(
+      'Telemetry.prefilledFields', 'Prefilled from history');
+  static String get derivedFields => getTranslatedString(
+      'Telemetry.derivedFields', 'Computed from other fields');
+  static String get aiOverridden => getTranslatedString(
+      'Telemetry.aiOverridden', 'AI overridden (SK had filled it)');
+  static String get disagreementRate => getTranslatedString(
+      'Telemetry.disagreementRate', 'Disagreement rate');
+  static String get provenance =>
+      getTranslatedString('Telemetry.provenance', 'Where values came from');
+  static String get disagreementCaveat => getTranslatedString(
+      'Telemetry.disagreementCaveat',
+      'Corrections plus proposals rejected because the SK had already filled '
+      'the field — a truer disagreement measure than correction rate alone.');
+  static String get provenanceCaveat => getTranslatedString(
+      'Telemetry.provenanceCaveat',
+      'Prefilled and computed values are neither AI nor SK effort, so they are '
+      'counted separately from what the SK manually entered.');
+  static String get correctionRate =>
+      getTranslatedString('Telemetry.correctionRate', 'Manual correction rate');
+  static String get smsOpened => getTranslatedString(
+      'Telemetry.smsOpened', 'SMS compose opened');
+  static String get whatsappOpened => getTranslatedString(
+      'Telemetry.whatsappOpened', 'WhatsApp compose opened');
+  static String get contactShares => getTranslatedString(
+      'Telemetry.contactShares', 'Direct patient contact');
+  static String get contactSms =>
+      getTranslatedString('Telemetry.contactSms', 'SMS to patient');
+  static String get contactWhatsapp => getTranslatedString(
+      'Telemetry.contactWhatsapp', 'WhatsApp to patient');
+  static String get contactCaveat => getTranslatedString(
+      'Telemetry.contactCaveat',
+      'From the CCE drawer and contact sheet — not counselling shares.');
+  static String get eventCount =>
+      getTranslatedString('Telemetry.eventCount', 'Events stored');
+  static String get pendingUpload =>
+      getTranslatedString('Telemetry.pendingUpload', 'Awaiting upload');
+
+  // ── Caveats the report must always carry ──────────────────────────────────
+  static String get correctionCaveat => getTranslatedString(
+      'Telemetry.correctionCaveat',
+      'Lower bound: fields the SK never reviewed count as unchanged, so real '
+      'error may be higher.');
+  static String get composeCaveat => getTranslatedString(
+      'Telemetry.composeCaveat',
+      'Counts compose sheets opened, not messages delivered.');
+  static String get durationCaveat => getTranslatedString(
+      'Telemetry.durationCaveat',
+      'Wall-clock median; includes time the app spent in the background.');
+
+  static String savedTo(String path) => getTranslatedString(
+      'Telemetry.savedTo', 'Saved to {path}',
+      params: {'path': path}, localizeDigits: false);
+  static String visitsInRange(int count) => getTranslatedString(
+      'Telemetry.visitsInRange', '{count} visits', params: {'count': '$count'});
 }

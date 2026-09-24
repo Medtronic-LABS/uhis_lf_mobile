@@ -337,6 +337,19 @@ void main() {
       );
     });
 
+    test('locked when stored LMP is under the 6-week threshold', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: true,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: false,
+          ancEarlyLmpBlocked: true,
+        ),
+        isTrue,
+      );
+    });
+
     test('locked on delivery visit or within revisit interval', () {
       expect(
         ProgrammeGridSync.isAncGridLocked(

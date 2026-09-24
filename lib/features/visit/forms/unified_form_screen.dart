@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
@@ -7,6 +9,9 @@ import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/widgets/gestational_age_card.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/telemetry/telemetry_service.dart';
+import '../../../core/telemetry/visit_content_service.dart';
+import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/i18n/app_locale.dart';
@@ -84,6 +89,7 @@ class UnifiedFormScreen extends StatefulWidget {
     this.enrolledFormTypes = const [],
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
+    this.onAncSuppressedForEarlyLmpChanged,
   });
 
   /// Ordered formType keys (e.g. `['anc', 'ncd']`) from activated pathways.
@@ -119,6 +125,11 @@ class UnifiedFormScreen extends StatefulWidget {
   /// Used to colour AI-sourced chips purple in the programme divider strips.
   final Set<String> aiPickedSymptoms;
 
+  /// Fired when live LMP crosses the 6-week ANC threshold — lets embedded
+  /// hosts (VisitFlowScreen header badge) drop ANC while PW-only Step 2
+  /// is showing.
+  final ValueChanged<bool>? onAncSuppressedForEarlyLmpChanged;
+
   @override
   State<UnifiedFormScreen> createState() => _UnifiedFormScreenState();
 }
@@ -153,6 +164,12 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// programme types — used for the weight-delta badge.  `null` until loaded.
   double? _lastRecordedWeight;
 
+  /// Live ASR controller owned by [AiScribeBanner] — read at submit for
+  /// visit-content telemetry.
+  RealtimeAsrController? _liveAsrCtrl;
+
+  bool? _lastReportedAncSuppressed;
+
   // One GlobalKey per section — used to scroll to the first error section
   // on submit so the SK doesn't have to hunt for the highlighted field.
   final Map<String, GlobalKey> _sectionKeys = {};
@@ -181,6 +198,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final notifier = context.read<UnifiedFormNotifier>();
+      // After the first frame, so this is the moment the form is actually on
+      // screen — the start of the time the SK spends filling it in.
+      notifier.markFormOpened();
 
       if (widget.confirmedSymptoms.isNotEmpty) {
         // Store raw codes so section-rules can drive conditional visibility.
@@ -402,6 +422,23 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     return Consumer<UnifiedFormNotifier>(
       builder: (ctx, notifier, _) {
         final effectiveGa = _effectiveGestationalWeeks(notifier);
+        final ancSuppressed = FieldVisibilityRules.isAncSuppressedForEarlyLmp(
+          activeFormTypes: widget.activeFormTypes,
+          data: notifier.data,
+        );
+        if (_lastReportedAncSuppressed != ancSuppressed) {
+          _lastReportedAncSuppressed = ancSuppressed;
+          final callback = widget.onAncSuppressedForEarlyLmpChanged;
+          if (callback != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) callback(ancSuppressed);
+            });
+          }
+        }
+        final renderFormTypes = FieldVisibilityRules.effectiveActiveFormTypes(
+          activeFormTypes: widget.activeFormTypes,
+          data: notifier.data,
+        );
         final annotated = UnifiedSectionRules.activeSections(
           config: _config!,
           activeFormTypes: widget.activeFormTypes,
@@ -410,6 +447,21 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           enrolledFormTypes: widget.enrolledFormTypes,
           ageInMonths: widget.ageInMonths,
         );
+        // Hand the notifier what the SK can actually see, for the telemetry
+        // report's capture-rate denominators. Pushed here rather than at the
+        // AiScribeBanner call site below, which sits behind a scribeEnabled
+        // guard — a manual visit needs these numbers too. Plain assignment,
+        // no listener notification, so calling it from build is safe.
+        notifier.setRenderedFieldStats(
+          visibleFieldIds: _visibleFieldIds(annotated, notifier),
+          renderedTotal: annotated.fold<int>(
+              0, (sum, a) => sum + a.section.fieldRefs.length),
+          renderedFormTypes: {
+            for (final a in annotated)
+              if (a.section.formType.isNotEmpty) a.section.formType,
+          },
+        );
+
         final outcomeValue = notifier.data.getValue('deliveryOutcomeType');
         if (widget.activeFormTypes.contains('pregnancyOutcome')) {
           debugPrint('[DeliveryOutcome] rebuild sections=${annotated.length} '
@@ -461,7 +513,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         //   • Gestational age card → first item (below the AI Scribe banner)
         //   • Vitals trend card    → last item before submit
         final items = <Widget>[];
-        final isAnc = widget.activeFormTypes.contains('anc');
+        final isAnc = renderFormTypes.contains('anc');
 
         // ── Gestational age card (ANC) — top of scroll area ────────────────
         final cardLmp = notifier.lmpDate ??
@@ -494,6 +546,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           debugPrint(
             '[LMP] card HIDE — no LMP/EDD/GA yet patient=${notifier.patientId}',
           );
+        } else if (ancSuppressed) {
+          debugPrint(
+            '[LMP] card HIDE — LMP under 6-week threshold '
+            'patient=${notifier.patientId}',
+          );
         } else {
           debugPrint(
             '[LMP] card SKIP — not ANC activeFormTypes=${widget.activeFormTypes}',
@@ -501,7 +558,17 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         }
 
         String? lastFormType;
+        var vitalsDividerShown = false;
         for (final annotatedSection in annotated) {
+          if (annotatedSection.group == SectionGroup.vitals &&
+              !vitalsDividerShown) {
+            vitalsDividerShown = true;
+            items.add(_ProgrammeDivider(
+              label: UnifiedFormStrings.programmeBadgeLabel('commonVitals') ??
+                  'Vitals',
+              formType: 'commonVitals',
+            ));
+          }
           final ft = annotatedSection.section.formType;
           final isNew = ft.isNotEmpty &&
               annotatedSection.group != SectionGroup.vitals &&
@@ -575,14 +642,20 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                 child: AiScribeBanner(
                   encounterId: notifier.encounterId,
                   patientId: notifier.patientId,
-                  isFemale: widget.activeFormTypes.contains('anc') ||
-                      widget.activeFormTypes.contains('pnc') ||
-                      widget.activeFormTypes.contains('pncMother') ||
-                      widget.activeFormTypes.contains('pregnancyOutcome'),
+                  isFemale: renderFormTypes.contains('anc') ||
+                      renderFormTypes.contains('pnc') ||
+                      renderFormTypes.contains('pncMother') ||
+                      renderFormTypes.contains('pregnancyOutcome') ||
+                      widget.activeFormTypes.contains('pwProfile'),
                   tapStartsLiveAsr: true,
                   assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
-                      widget.activeFormTypes),
+                      renderFormTypes),
                   visibleFieldIds: _visibleFieldIds(annotated, notifier),
+                  onScribeSpan: (startedAtMs, endedAtMs) =>
+                      notifier.markScribeSpan(
+                    startedAtMs: startedAtMs,
+                    endedAtMs: endedAtMs,
+                  ),
                   onFormFill: (fill) {
                     final rejected = notifier.applyAiPrefill(
                       fill.fields.where((f) => f.value != null).toList(),
@@ -593,6 +666,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                           '[Step2ASR] rejected: ${rejected.join(' | ')}');
                     }
                   },
+                  onLiveControllerReady: (ctrl) => _liveAsrCtrl = ctrl,
                   // VisitFormScreen watches ScribeController state and
                   // auto-opens the SOAP review sheet when reviewReady — no
                   // action needed here.
@@ -697,7 +771,27 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       // codes during submit — the mapper needs the field library to do that.
       notifier.formConfig = _config!;
       notifier.fieldDefs = _config!.fields;
+      final encounterId = notifier.encounterId;
+      final patientId = notifier.patientId;
+      final visitContent = AppConfig.visitContentTelemetryEnabled
+          ? ctx.read<VisitContentService>()
+          : null;
       await notifier.submit();
+      if (visitContent != null) {
+        // Flush the live ASR session before reading the transcript — submit
+        // can fire while recording is still active, and dispose() stop() runs
+        // too late (after navigation) to capture the final segments.
+        final liveCtrl = _liveAsrCtrl;
+        if (liveCtrl != null && liveCtrl.isActive) {
+          await liveCtrl.stop();
+        }
+        final transcript = _liveAsrCtrl?.fullTranscript;
+        await visitContent.recordTranscript(
+          visitUuid: ctx.read<TelemetryService>().ensureVisitUuid(encounterId),
+          patientId: patientId,
+          transcript: transcript,
+        );
+      }
       widget.onSubmitComplete();
     } catch (e) {
       _logSubmitBlocked(

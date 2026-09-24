@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 43;
+  static const int schemaVersion = 50;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -57,6 +57,20 @@ class AppDatabase {
   static const String tableTreatmentDetails = 'treatment_details';
   static const String tableRxBuddyCheckins = 'rx_buddy_checkins';
   static const String tableHealthFacilities = 'health_facilities';
+  static const String tableAudioSamples = 'audio_samples';
+  static const String tableTelemetryEvents = 'telemetry_events';
+
+  /// Before/after values of AI-filled fields the SK edited.
+  ///
+  /// **PHI, unlike [tableTelemetryEvents]** — and therefore listed in
+  /// [_allTables] so a different-SK login clears it. That is the opposite
+  /// treatment to telemetry, deliberately: clinical values must not outlive
+  /// the health worker's session on a shared device, even at the cost of
+  /// losing rows that had not uploaded yet.
+  static const String tableAiValueAudit = 'ai_value_audit';
+
+  /// Transcript + Step 3 summary text for product QA. PHI — wiped on SK handover.
+  static const String tableVisitContentTelemetry = 'visit_content_telemetry';
   static const String tableTeleconsultPrescriptions = 'teleconsult_prescriptions';
   static const String tableCallLogHistory = 'call_log_history';
 
@@ -195,6 +209,7 @@ class AppDatabase {
         created_at INTEGER,
         updated_at INTEGER,
         sync_status TEXT DEFAULT 'Success',
+        deceased_reason TEXT,
         raw_json TEXT
       )''');
     await db.execute(
@@ -741,11 +756,110 @@ class AppDatabase {
         'CREATE INDEX idx_health_facilities_default '
         'ON $tableHealthFacilities(is_default DESC)');
 
-    // v42 — teleconsult_prescriptions: persists a completed teleconsult's
+    // v42 — training audio sample queue for voice sample collection.
+    await db.execute('''
+      CREATE TABLE $tableAudioSamples (
+        id TEXT PRIMARY KEY,
+        encounter_id TEXT NOT NULL,
+        fhir_encounter_id TEXT,
+        local_file_path TEXT NOT NULL,
+        scribe_mode TEXT NOT NULL DEFAULT 'formPrefill',
+        language TEXT NOT NULL DEFAULT 'bn',
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at INTEGER,
+        created_at INTEGER NOT NULL
+      )''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audio_samples_status '
+      'ON $tableAudioSamples(upload_status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audio_samples_encounter '
+      'ON $tableAudioSamples(encounter_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audio_samples_retry '
+      'ON $tableAudioSamples(next_retry_at)',
+    );
+
+    // v47 — AI Scribe / counselling telemetry. Deliberately absent from
+    // [_allTables]: see the comment on that list, and the "why this data is
+    // not patient-linked" doc on lib/core/telemetry/telemetry_event.dart.
+    await db.execute('''
+      CREATE TABLE $tableTelemetryEvents (
+        id TEXT PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        occurred_at INTEGER NOT NULL,
+        visit_uuid TEXT,
+        sk_user_id TEXT,
+        captured_tenant_id INTEGER,
+        app_version TEXT NOT NULL DEFAULT '',
+        app_build INTEGER NOT NULL DEFAULT 0,
+        payload_version INTEGER NOT NULL DEFAULT 1,
+        payload TEXT NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_telemetry_occurred '
+        'ON $tableTelemetryEvents(occurred_at DESC)');
+    await db.execute(
+        'CREATE INDEX idx_telemetry_upload '
+        'ON $tableTelemetryEvents(upload_status)');
+    await db.execute(
+        'CREATE INDEX idx_telemetry_type '
+        'ON $tableTelemetryEvents(event_type)');
+
+    await db.execute('''
+      CREATE TABLE $tableAiValueAudit (
+        id TEXT PRIMARY KEY,
+        visit_uuid TEXT NOT NULL,
+        ai_feature TEXT NOT NULL DEFAULT 'scribe',
+        field_id TEXT NOT NULL,
+        ai_value TEXT,
+        final_value TEXT,
+        occurred_at INTEGER NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_value_audit_upload '
+        'ON $tableAiValueAudit(upload_status)');
+    await db.execute(
+        'CREATE INDEX idx_value_audit_visit '
+        'ON $tableAiValueAudit(visit_uuid)');
+
+    await db.execute('''
+      CREATE TABLE $tableVisitContentTelemetry (
+        id TEXT PRIMARY KEY,
+        visit_uuid TEXT NOT NULL UNIQUE,
+        patient_id TEXT NOT NULL,
+        transcript TEXT,
+        transcript_captured_at INTEGER,
+        whatsapp_summary TEXT,
+        referral_recommendation TEXT,
+        summary_started_at INTEGER,
+        summary_end_at INTEGER,
+        sk_user_id TEXT,
+        captured_tenant_id INTEGER,
+        occurred_at INTEGER NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_visit_content_upload '
+        'ON $tableVisitContentTelemetry(upload_status)');
+    await db.execute(
+        'CREATE INDEX idx_visit_content_visit '
+        'ON $tableVisitContentTelemetry(visit_uuid)');
+
+    // v49 — teleconsult_prescriptions: persists a completed teleconsult's
     // prescription/invoice bytes against the visit that requested the call
     // (encounters.id), so the patient timeline can show a "view prescription"
     // icon on that visit's entry without a network re-fetch. See
-    // lib/core/db/teleconsult_prescription_dao.dart.
+    // lib/core/db/teleconsult_prescription_dao.dart. (Renumbered from v42 —
+    // develop independently claimed v42-48 for the tables above.)
     await db.execute('''
       CREATE TABLE $tableTeleconsultPrescriptions (
         visit_id TEXT PRIMARY KEY,
@@ -756,7 +870,7 @@ class AppDatabase {
         created_at INTEGER NOT NULL
       )''');
 
-    // v43 — call_log_history: a patient's full Shukhee call/prescription/
+    // v50 — call_log_history: a patient's full Shukhee call/prescription/
     // clinicalData history, synced in from Frappe's Call Logs doctype via
     // spice_next_core.api.sync.pull (see lib/core/sync/call_log_sync_service.dart)
     // -- distinct from tableTeleconsultPrescriptions above, which is
@@ -766,6 +880,7 @@ class AppDatabase {
     // different device. prescription_link/invoice_link are presence flags
     // only (never bytes) -- documents are always fetched live, on demand,
     // when the user taps to view them (see TeleconsultCallDetailScreen).
+    // (Renumbered from v43 for the same reason as v49 above.)
     await db.execute('''
       CREATE TABLE $tableCallLogHistory (
         id TEXT PRIMARY KEY,
@@ -1726,6 +1841,7 @@ class AppDatabase {
           created_at INTEGER,
           updated_at INTEGER,
           sync_status TEXT DEFAULT 'Success',
+          deceased_reason TEXT,
           raw_json TEXT
         )''');
       await db.execute(
@@ -1907,7 +2023,194 @@ class AppDatabase {
       );
     }
     if (from < 42) {
-      // v42 — see createSchema's identical block for why this table exists.
+      // v42 — AI Scribe / counselling telemetry. Additive and non-PHI; see
+      // lib/core/telemetry/telemetry_event.dart for why these rows carry no
+      // patient/member/encounter id and are excluded from [_allTables].
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableTelemetryEvents (
+          id TEXT PRIMARY KEY,
+          event_type TEXT NOT NULL,
+          occurred_at INTEGER NOT NULL,
+          visit_uuid TEXT,
+          sk_user_id TEXT,
+          captured_tenant_id INTEGER,
+          app_version TEXT NOT NULL DEFAULT '',
+          app_build INTEGER NOT NULL DEFAULT 0,
+          payload_version INTEGER NOT NULL DEFAULT 1,
+          payload TEXT NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_telemetry_occurred '
+          'ON $tableTelemetryEvents(occurred_at DESC)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_telemetry_upload '
+          'ON $tableTelemetryEvents(upload_status)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_telemetry_type '
+          'ON $tableTelemetryEvents(event_type)');
+    }
+    if (from < 47) {
+      // v47 — drop transcript_source, recommendation_source, referral_recommended
+      // from visit_content_telemetry (devices that reached v46 with them).
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [tableVisitContentTelemetry],
+      );
+      if (tables.isNotEmpty) {
+        final cols = await db.rawQuery(
+          'PRAGMA table_info($tableVisitContentTelemetry)',
+        );
+        if (cols.any((c) => c['name'] == 'transcript_source')) {
+          const tmp = 'visit_content_telemetry_v47';
+          await db.execute('''
+            CREATE TABLE $tmp (
+              id TEXT PRIMARY KEY,
+              visit_uuid TEXT NOT NULL UNIQUE,
+              patient_id TEXT NOT NULL,
+              transcript TEXT,
+              transcript_captured_at INTEGER,
+              whatsapp_summary TEXT,
+              referral_recommendation TEXT,
+              summary_started_at INTEGER,
+              summary_end_at INTEGER,
+              sk_user_id TEXT,
+              captured_tenant_id INTEGER,
+              occurred_at INTEGER NOT NULL,
+              upload_status TEXT NOT NULL DEFAULT 'pending',
+              uploaded_at INTEGER
+            )''');
+          await db.execute('''
+            INSERT INTO $tmp (
+              id, visit_uuid, patient_id, transcript, transcript_captured_at,
+              whatsapp_summary, referral_recommendation, summary_started_at,
+              summary_end_at, sk_user_id, captured_tenant_id, occurred_at,
+              upload_status, uploaded_at
+            )
+            SELECT
+              id, visit_uuid, patient_id, transcript, transcript_captured_at,
+              whatsapp_summary, referral_recommendation, summary_started_at,
+              summary_end_at, sk_user_id, captured_tenant_id, occurred_at,
+              upload_status, uploaded_at
+            FROM $tableVisitContentTelemetry''');
+          await db.execute('DROP TABLE $tableVisitContentTelemetry');
+          await db.execute(
+              'ALTER TABLE $tmp RENAME TO $tableVisitContentTelemetry');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_visit_content_upload '
+              'ON $tableVisitContentTelemetry(upload_status)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_visit_content_visit '
+              'ON $tableVisitContentTelemetry(visit_uuid)');
+        }
+      }
+    }
+    if (from < 46) {
+      // v46 — visit-scoped AI content for product QA (transcript + summary).
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableVisitContentTelemetry (
+          id TEXT PRIMARY KEY,
+          visit_uuid TEXT NOT NULL UNIQUE,
+          patient_id TEXT NOT NULL,
+          transcript TEXT,
+          transcript_captured_at INTEGER,
+          whatsapp_summary TEXT,
+          referral_recommendation TEXT,
+          summary_started_at INTEGER,
+          summary_end_at INTEGER,
+          sk_user_id TEXT,
+          captured_tenant_id INTEGER,
+          occurred_at INTEGER NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_visit_content_upload '
+          'ON $tableVisitContentTelemetry(upload_status)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_visit_content_visit '
+          'ON $tableVisitContentTelemetry(visit_uuid)');
+    }
+    if (from < 45) {
+      // v45 — member deceased reason (Spice HouseholdMember.deceasedReason).
+      try {
+        await db.execute(
+            'ALTER TABLE $tableMembers ADD COLUMN deceased_reason TEXT');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 44) {
+      // v44 — the PHI value-audit stream. Separate table from telemetry
+      // because it is the only part that holds clinical values, and it IS in
+      // [_allTables] so a different-SK login wipes it.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableAiValueAudit (
+          id TEXT PRIMARY KEY,
+          visit_uuid TEXT NOT NULL,
+          ai_feature TEXT NOT NULL DEFAULT 'scribe',
+          field_id TEXT NOT NULL,
+          ai_value TEXT,
+          final_value TEXT,
+          occurred_at INTEGER NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_value_audit_upload '
+          'ON $tableAiValueAudit(upload_status)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_value_audit_visit '
+          'ON $tableAiValueAudit(visit_uuid)');
+    }
+    if (from < 43) {
+      // v43 — captured_tenant_id. A device that reached v42 may already hold
+      // a queue; those rows keep a NULL here and the server falls back to the
+      // uploading session's tenant for them, which is the pre-v43 behaviour.
+      // Guarded because the v42 block above now creates the column outright,
+      // so a device arriving at 43 in one step already has it.
+      final cols = await db.rawQuery(
+        'PRAGMA table_info($tableTelemetryEvents)',
+      );
+      final hasColumn =
+          cols.any((c) => c['name'] == 'captured_tenant_id');
+      if (!hasColumn) {
+        await db.execute(
+          'ALTER TABLE $tableTelemetryEvents ADD COLUMN captured_tenant_id INTEGER',
+        );
+      }
+    }
+    if (from < 48) {
+      // v48 — training audio sample queue for voice sample collection.
+      // Additive; safe on devices arriving from any prior version.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableAudioSamples (
+          id TEXT PRIMARY KEY,
+          encounter_id TEXT NOT NULL,
+          fhir_encounter_id TEXT,
+          local_file_path TEXT NOT NULL,
+          scribe_mode TEXT NOT NULL DEFAULT 'formPrefill',
+          language TEXT NOT NULL DEFAULT 'bn',
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          next_retry_at INTEGER,
+          created_at INTEGER NOT NULL
+        )''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_audio_samples_status '
+        'ON $tableAudioSamples(upload_status)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_audio_samples_encounter '
+        'ON $tableAudioSamples(encounter_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_audio_samples_retry '
+        'ON $tableAudioSamples(next_retry_at)',
+      );
+    }
+    if (from < 49) {
+      // v49 — see createSchema's identical block for why this table exists.
+      // (Renumbered from v42 — develop independently claimed v42-48 above.)
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $tableTeleconsultPrescriptions (
           visit_id TEXT PRIMARY KEY,
@@ -1918,9 +2221,9 @@ class AppDatabase {
           created_at INTEGER NOT NULL
         )''');
     }
-    if (from < 43) {
-      // v43 — see createSchema's identical block for why this table/column
-      // exist.
+    if (from < 50) {
+      // v50 — see createSchema's identical block for why this table/column
+      // exist. (Renumbered from v43 for the same reason as v49 above.)
       try {
         await db.execute('ALTER TABLE $tableSyncMeta ADD COLUMN cursor INTEGER');
       } catch (_) {/* column already present — no-op */}
@@ -1950,6 +2253,17 @@ class AppDatabase {
 
   // Single source of truth for "every table" — used by wipeAllData() so a
   // future new table can't be silently missed from a logout/login wipe.
+  //
+  // ONE DELIBERATE OMISSION: $tableTelemetryEvents. wipeAllData() fires when a
+  // different SK signs into a shared device (see the doc on that method), and
+  // a telemetry row kept here would be destroyed with the outgoing SK's
+  // data — including events queued but not yet uploaded, which is exactly the
+  // backlog the flush exists to drain. It would also make a report for any
+  // past date range impossible. Those rows are non-PHI by construction
+  // (no patient/member/encounter id, counts and form field ids only — see
+  // lib/core/telemetry/telemetry_event.dart), which is what makes surviving
+  // the wipe defensible. Asserted by telemetry_wipe_exclusion_test.dart.
+  // Any OTHER new table belongs in this list.
   static const List<String> _allTables = [
     tableHouseholds, tableMembers, tablePatients, tableSyncMeta,
     tablePatientProgrammes, tableFollowUps, tableFollowUpCalls,
@@ -1962,7 +2276,12 @@ class AppDatabase {
     tableChatMessages, tableCoachingFaqs,
     tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
     tableTreatmentDetails, tableRxBuddyCheckins,
-    tableHealthFacilities, tableTeleconsultPrescriptions, tableCallLogHistory,
+    tableHealthFacilities, tableAudioSamples,
+    // PHI, so it is wiped — the opposite of $tableTelemetryEvents above.
+    // See the doc on that constant for why the two differ.
+    tableAiValueAudit,
+    tableVisitContentTelemetry,
+    tableTeleconsultPrescriptions, tableCallLogHistory,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

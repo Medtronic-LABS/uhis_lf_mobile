@@ -248,6 +248,7 @@ class MemberDetailRepository extends ApiRepository {
       if (_memberDao != null) {
         HouseholdMemberEntity? entity = await _memberDao.getById(memberId);
         entity ??= await _memberDao.getByPatientId(memberId);
+        entity ??= await _memberDao.getByFhirId(memberId);
         if (entity != null) {
           // ignore: avoid_print
           print('[MemberDetailRepository] Found in local DB: ${entity.name}');

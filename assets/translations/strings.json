@@ -863,9 +863,85 @@
     "bn": "বাতিল করুন",
     "en": "Cancel"
   },
+  "DebugDb.apply": {
+    "bn": "প্রয়োগ",
+    "en": "Apply"
+  },
   "DebugDb.close": {
     "bn": "বন্ধ করুন",
     "en": "Close"
+  },
+  "DebugDb.columns": {
+    "bn": "কলাম",
+    "en": "Columns"
+  },
+  "DebugDb.copy": {
+    "bn": "কপি",
+    "en": "Copy"
+  },
+  "DebugDb.copyRow": {
+    "bn": "সারি কপি",
+    "en": "Copy row"
+  },
+  "DebugDb.copied": {
+    "bn": "ক্লিপবোর্ডে কপি হয়েছে",
+    "en": "Copied to clipboard"
+  },
+  "DebugDb.filterTablesHint": {
+    "bn": "টেবিল ফিল্টার…",
+    "en": "Filter tables…"
+  },
+  "DebugDb.jsonField": {
+    "bn": "JSON — প্রসারিত করতে ট্যাপ করুন",
+    "en": "JSON — tap to expand"
+  },
+  "DebugDb.noRowsMatch": {
+    "bn": "কোনো সারি মিলেনি",
+    "en": "No rows match"
+  },
+  "DebugDb.noTablesMatch": {
+    "bn": "কোনো টেবিল মিলেনি",
+    "en": "No tables match"
+  },
+  "DebugDb.pageLabelFiltered": {
+    "bn": "{total}টির মধ্যে {filtered}টি মিল · {from}–{to} দেখানো",
+    "en": "Showing {from}–{to} of {filtered} matches ({total} total)"
+  },
+  "DebugDb.prettyTab": {
+    "bn": "সুন্দর",
+    "en": "Pretty"
+  },
+  "DebugDb.rawTab": {
+    "bn": "কাঁচা",
+    "en": "Raw"
+  },
+  "DebugDb.searchHintAdvanced": {
+    "bn": "সব কলাম, বা col:value, col=value",
+    "en": "Search all columns, or col:value, col=value"
+  },
+  "DebugDb.searchScope": {
+    "bn": "{n} কলাম",
+    "en": "{n} cols"
+  },
+  "DebugDb.searchScopeHelp": {
+    "bn": "নির্বাচিত কলামে খোঁজ। এক কলাম: phone:017, sync_status=NotSynced",
+    "en": "Global search uses selected columns. Or query one column: phone:017, sync_status=NotSynced"
+  },
+  "DebugDb.searchScopeTitle": {
+    "bn": "খোঁজের কলাম",
+    "en": "Search columns"
+  },
+  "DebugDb.selectAll": {
+    "bn": "সব নির্বাচন",
+    "en": "Select all"
+  },
+  "DebugDb.sortedBy": {
+    "bn": "{col} {dir}",
+    "en": "{col} {dir}"
+  },
+  "DebugDb.visibleColumnsTitle": {
+    "bn": "দৃশ্যমান কলাম",
+    "en": "Visible columns"
   },
   "DebugDb.columnCount": {
     "bn": "{n} কলাম",
@@ -3767,6 +3843,10 @@
     "bn": "ফলো-আপ",
     "en": "Follow-up"
   },
+  "VisitFlow.referralFacilityForProgramme": {
+    "bn": "{programme} রেফারেল স্বাস্থ্যকেন্দ্র",
+    "en": "{programme} Referral Facility"
+  },
   "VisitFlow.followUpTimelineFourWeeks": {
     "bn": "৪ সপ্তাহ পর",
     "en": "In 4 weeks"
@@ -4894,6 +4974,18 @@
   "ancBlockedPostpartumTitle": {
     "bn": "এএনসি সেবা দেওয়া যাবে না",
     "en": "ANC Not Available"
+  },
+  "ancBlockedEarlyPregnancyTitle": {
+    "bn": "⚠️ গর্ভাবস্থা মূল্যায়নের জন্য খুব প্রাথমিক পর্যায়",
+    "en": "⚠️ Pregnancy Too Early to Assess"
+  },
+  "ancBlockedEarlyPregnancyMessage": {
+    "bn": "এলএমপি থেকে ৬ সপ্তাহ পরেই কেবল গর্ভাবস্থা মূল্যায়ন করা সম্ভব।\n\nসম্পূর্ণ গর্ভাবস্থা প্রোফাইল মূল্যায়ন এবং এএনসি-র জন্য অনুগ্রহ করে ৬ সপ্তাহ পরে আবার আসুন।",
+    "en": "Pregnancy assessment can only be conducted after 6 weeks from LMP.\n\nPlease revisit after 6 weeks for complete pregnancy profile assessment and ANC."
+  },
+  "ancLockedEarlyLmpHint": {
+    "bn": "⚠ এলএমপি-র ৬ সপ্তাহ পরেই এএনসি সেবা দেওয়া যাবে",
+    "en": "⚠ ANC is available only after 6 weeks from LMP."
   },
   "ancLockedPostpartumHint": {
     "bn": "⚠ প্রসবের পর এএনসি সেবা দেওয়া যাবে না — পোস্টন্যাটাল যত্নের জন্য পিএনসি ব্যবহার করুন",
@@ -8151,6 +8243,162 @@
     "bn": "নিয়মিত ওষুধ খাচ্ছেন কিনা",
     "en": "Medication adherence"
   },
+  "MemberDeceased.banner": {
+    "bn": "মৃত — আরও মূল্যায়ন করা যাবে না",
+    "en": "Deceased — further assessments are not allowed"
+  },
+  "MemberDeceased.cannotStartVisit": {
+    "bn": "এই সদস্য মৃত — নতুন ভিজিট শুরু করা যাবে না",
+    "en": "This member is deceased — new visits are not allowed"
+  },
+  "MemberDeceased.cause.abnormallyLowTemperature": {
+    "bn": "অস্বাভাবিক কম তাপমাত্রা",
+    "en": "Abnormally low temperature"
+  },
+  "MemberDeceased.cause.asphyxia": {
+    "bn": "শ্বাসরোধ",
+    "en": "Asphyxia"
+  },
+  "MemberDeceased.cause.congenitalAnomaly": {
+    "bn": "জন্মগত ত্রুটি",
+    "en": "Congenital Anomaly"
+  },
+  "MemberDeceased.cause.convulsions": {
+    "bn": "খিঁচুনি",
+    "en": "Convulsions"
+  },
+  "MemberDeceased.cause.excessiveBleeding": {
+    "bn": "অতিরিক্ত রক্তক্ষরণ",
+    "en": "Excessive bleeding"
+  },
+  "MemberDeceased.cause.hypertensiveDisorder": {
+    "bn": "উচ্চ রক্তচাপজনিত জটিলতা (ইক্ল্যাম্পসিয়া)",
+    "en": "Hypertensive disorder (Eclampsia)"
+  },
+  "MemberDeceased.cause.infection": {
+    "bn": "সংক্রমণ",
+    "en": "Infection"
+  },
+  "MemberDeceased.cause.lowBirthWeight": {
+    "bn": "কম জন্ম ওজন",
+    "en": "Low birth weight"
+  },
+  "MemberDeceased.cause.obstructedLabor": {
+    "bn": "বাধাগ্রস্থ প্রসব",
+    "en": "Obstructed labor"
+  },
+  "MemberDeceased.cause.otherMedicalComplications": {
+    "bn": "অন্যান্য চিকিৎসাজনিত জটিলতা",
+    "en": "Other medical complications"
+  },
+  "MemberDeceased.cause.pneumonia": {
+    "bn": "নিউমোনিয়া",
+    "en": "Pneumonia"
+  },
+  "MemberDeceased.cause.prematureBirth": {
+    "bn": "অপরিণত জন্ম",
+    "en": "Premature birth"
+  },
+  "MemberDeceased.cause.sepsisUmbilicalSepsis": {
+    "bn": "নাভির সংক্রমণ / সংক্রমণ",
+    "en": "Sepsis/ Umbilical sepsis"
+  },
+  "MemberDeceased.cause.severeAnemia": {
+    "bn": "মারাত্মক রক্তস্বল্পতা",
+    "en": "Severe Anemia"
+  },
+  "MemberDeceased.cause.unsafeAbortion": {
+    "bn": "অনিরাপদ গর্ভপাত",
+    "en": "Unsafe abortion"
+  },
+  "MemberDeceased.cause.unknown": {
+    "bn": "জানা নেই",
+    "en": "Unknown"
+  },
+  "MemberDeceased.cause.uterineRupture": {
+    "bn": "জরায়ু ফেটে যাওয়া",
+    "en": "Uterine rupture"
+  },
+  "MemberDeceased.causeHint": {
+    "bn": "প্রযোজ্য সবগুলি নির্বাচন করুন",
+    "en": "Select one or more causes"
+  },
+  "MemberDeceased.causeOfDeath": {
+    "bn": "মৃত্যুর কারণ",
+    "en": "Cause of death"
+  },
+  "MemberDeceased.deathType.mother": {
+    "bn": "মাতৃমৃত্যু",
+    "en": "Maternal"
+  },
+  "MemberDeceased.deathType.neonatal": {
+    "bn": "নবজাতকের মৃত্যু",
+    "en": "Neo Natal"
+  },
+  "MemberDeceased.deathType.other": {
+    "bn": "অন্যান্য",
+    "en": "Other"
+  },
+  "MemberDeceased.noActiveMembers": {
+    "bn": "এই পরিবারে কোনো সক্রিয় সদস্য নেই",
+    "en": "No active members in this household"
+  },
+  "MemberDeceased.reason": {
+    "bn": "কারণ",
+    "en": "Reason"
+  },
+  "MemberDeceased.reasonForDeath": {
+    "bn": "মৃত্যুর কারণ",
+    "en": "Reason for death"
+  },
+  "MemberDeceased.reasonHint": {
+    "bn": "মৃত্যুর কারণ লিখুন",
+    "en": "Enter reason for death"
+  },
+  "MemberDeceased.selectMember": {
+    "bn": "মৃত সদস্য নির্বাচন করুন",
+    "en": "Select Member Deceased"
+  },
+  "MemberDeceased.submit": {
+    "bn": "জমা দিন",
+    "en": "Submit"
+  },
+  "MemberDeceased.submitFailed": {
+    "bn": "সদস্যকে মৃত হিসেবে চিহ্নিত করা যায়নি",
+    "en": "Could not mark member deceased"
+  },
+  "MemberDeceased.title": {
+    "bn": "মৃত্যু নিবন্ধন",
+    "en": "Member Deceased"
+  },
+  "MemberDeceased.typeOfDeath": {
+    "bn": "মৃত্যুর ধরন",
+    "en": "Type of death"
+  },
+  "deceased": {
+    "bn": "মৃত",
+    "en": "Deceased"
+  },
+  "pleaseCheckIfPlayStoreAvailable": {
+    "bn": "অনুগ্রহ করে যাচাই করুন মোবাইলে Google Play Store ইনস্টল আছে কিনা",
+    "en": "Please check if Google Play Store is installed in the device"
+  },
+  "pleaseSelect": {
+    "bn": "--নির্বাচন করুন--",
+    "en": "Please select"
+  },
+  "pleaseUpdateTheApp": {
+    "bn": "অ্যাপের একটি নতুন সংস্করণ উপলব্ধ। চালিয়ে যেতে অনুগ্রহ করে আপডেট করুন।",
+    "en": "A new version of the app is available. Please update to continue."
+  },
+  "pleaseUpdateToMinVersion": {
+    "bn": "চালিয়ে যেতে অনুগ্রহ করে {version} বা তার উপরের সংস্করণে আপডেট করুন।",
+    "en": "Please update to {version} or higher to continue."
+  },
+  "optionalAppUpdateAvailable": {
+    "bn": "একটি নতুন সংস্করণ ({version}) উপলব্ধ। সর্বশেষ সুবিধা পেতে এখনই আপডেট করুন।",
+    "en": "A new version ({version}) is available. Update now for the latest features."
+  },
   "memberCount": {
     "bn": "{count} জন সদস্য",
     "en": "{count} members"
@@ -8879,9 +9127,17 @@
     "bn": "কোচিং খুলুন",
     "en": "Open Coaching"
   },
+  "ok": {
+    "bn": "ঠিক আছে",
+    "en": "OK"
+  },
   "openReferral": {
     "bn": "রেফারেল খুলুন",
     "en": "Open Referral"
+  },
+  "openPlayStore": {
+    "bn": "প্লে স্টোর খুলুন",
+    "en": "Open Play Store"
   },
   "optimalRoute": {
     "bn": "সর্বোত্তম রুট",
@@ -10467,6 +10723,10 @@
     "bn": "অ্যাকাউন্ট, নিরাপত্তা ও অ্যাপ পছন্দ",
     "en": "Account, security & app preferences"
   },
+  "Settings.appVersion": {
+    "bn": "অ্যাপ সংস্করণ",
+    "en": "App Version"
+  },
   "settingsTitle": {
     "bn": "মাইক্রোফোন অ্যাক্সেস প্রয়োজন",
     "en": "Microphone access needed"
@@ -11631,6 +11891,10 @@
     "bn": "নিশ্চিত করুন ও CCE-তে সিঙ্ক করুন",
     "en": "Confirm & sync to CCE"
   },
+  "updateLater": {
+    "bn": "পরে",
+    "en": "Later"
+  },
   "updateOptArrived": {
     "bn": "স্বাস্থ্যকেন্দ্রে পৌঁছেছে",
     "en": "Arrived at facility"
@@ -12219,6 +12483,14 @@
     "bn": "উচ্চ ঝুঁকিপূর্ণ গর্ভাবস্থা",
     "en": "High-risk pregnancy"
   },
+  "ClinicalStatus.highRiskPnc": {
+    "bn": "উচ্চ ঝুঁকিপূর্ণ প্রসব-পরবর্তী সেবা",
+    "en": "High-risk PNC"
+  },
+  "ClinicalStatus.normalPnc": {
+    "bn": "স্বাভাবিক প্রসব-পরবর্তী সেবা",
+    "en": "Normal PNC"
+  },
   "ClinicalStatus.normalPregnancy": {
     "bn": "স্বাভাবিক গর্ভাবস্থা",
     "en": "Normal pregnancy"
@@ -12250,6 +12522,114 @@
   "ClinicalStatus.uncontrolledBp": {
     "bn": "অনিয়ন্ত্রিত রক্তচাপ",
     "en": "Uncontrolled blood pressure"
+  },
+  "ClinicalStatus.gapsInAnc": {
+    "bn": "প্রসবপূর্ব সেবায় ঘাটতি",
+    "en": "Gaps in antenatal care"
+  },
+  "ClinicalStatus.gapsInPnc": {
+    "bn": "প্রসবোত্তর সেবায় ঘাটতি",
+    "en": "Gaps in postnatal care"
+  },
+  "ClinicalStatus.normalDelivery": {
+    "bn": "স্বাভাবিক প্রসব",
+    "en": "Normal delivery"
+  },
+  "ClinicalStatus.cSection": {
+    "bn": "সিজারিয়ান",
+    "en": "C-section"
+  },
+  "ClinicalStatus.assistedDelivery": {
+    "bn": "প্রসবে সহায়তা নিয়ে প্রসব করাতে হয়েছে (ভ্যাকুয়াম কাপ বা ফোরসেপ ব্যবহার করে প্রসব)",
+    "en": "Assisted delivery"
+  },
+  "ClinicalStatus.abortion": {
+    "bn": "গর্ভপাত",
+    "en": "Abortion"
+  },
+  "ClinicalStatus.neonatalDeath": {
+    "bn": "নবজাতক মৃত্যু",
+    "en": "Neonatal death"
+  },
+  "ClinicalStatus.stillBirth": {
+    "bn": "মৃত প্রসব",
+    "en": "Stillbirth"
+  },
+  "ClinicalStatus.liveBirth": {
+    "bn": "জীবিত শিশু জন্ম",
+    "en": "Live birth"
+  },
+  "ClinicalStatus.usingModernFp": {
+    "bn": "আধুনিক পরিবার পরিকল্পনা পদ্ধতি ব্যবহার করে",
+    "en": "Using modern family planning methods"
+  },
+  "ClinicalStatus.notUsingModernFp": {
+    "bn": "আধুনিক পরিবার পরিকল্পনা পদ্ধতি ব্যবহার না করা",
+    "en": "Not using modern family planning methods"
+  },
+  "ClinicalStatus.normalNcd": {
+    "bn": "স্বাভাবিক",
+    "en": "Normal"
+  },
+  "ClinicalStatus.glassesSold": {
+    "bn": "চশমা বিক্রয়",
+    "en": "Glasses sold"
+  },
+  "ClinicalStatus.ncdServiceInCataractCamp": {
+    "bn": "ক্যাটারেক্ট ক্যাম্পে এনসিডি সেবা",
+    "en": "NCD in cataract camp"
+  },
+  "ClinicalStatus.referredForOperation": {
+    "bn": "অপারেশনের জন্য রেফার",
+    "en": "Referred for operation"
+  },
+  "ClinicalStatus.cataracts": {
+    "bn": "ছানি",
+    "en": "Cataracts"
+  },
+  "ClinicalStatus.lacrimalTearDuctProblem": {
+    "bn": "নেত্রনালীর সমস্যা",
+    "en": "Lacrimal (tear duct) problem"
+  },
+  "ClinicalStatus.pterygium": {
+    "bn": "টেরিজিয়াম/মাংসবৃদ্ধি",
+    "en": "Pterygium"
+  },
+  "ClinicalStatus.glaucoma": {
+    "bn": "গ্লুকোমা",
+    "en": "Glaucoma"
+  },
+  "ClinicalStatus.myopia": {
+    "bn": "দূরদৃষ্টি সমস্যা",
+    "en": "Myopia"
+  },
+  "ClinicalStatus.presbyopia": {
+    "bn": "প্রেসবায়োপিয়া বা নিকট দৃষ্টি সমস্যা",
+    "en": "Presbyopia"
+  },
+  "ClinicalStatus.otherEyeProblem": {
+    "bn": "অন্যান্য সমস্যা",
+    "en": "Other problem"
+  },
+  "ClinicalStatus.noEyeProblem": {
+    "bn": "সমস্যা নেই",
+    "en": "No problem"
+  },
+  "ClinicalStatus.glassPower": {
+    "bn": "পাওয়ার - {power}",
+    "en": "Power - {power}"
+  },
+  "Referral.suspectedPreEclampsia": {
+    "bn": "প্রি-ইক্লাম্পসিয়ার সন্দেহ",
+    "en": "Suspected pre-eclampsia"
+  },
+  "Referral.suspectedDiabetes": {
+    "bn": "ডায়াবেটিস সন্দেহ",
+    "en": "Suspected diabetes"
+  },
+  "Referral.suspectedDiabetesWithThreshold": {
+    "bn": "ডায়াবেটিস সন্দেহ (FBS≥5.1 বা RBS≥8.5)",
+    "en": "Suspected diabetes (FBS≥5.1 or RBS≥8.5)"
   },
   "PatientDetail.gaOneWeek": {
     "bn": "{weeks} সপ্তাহ",

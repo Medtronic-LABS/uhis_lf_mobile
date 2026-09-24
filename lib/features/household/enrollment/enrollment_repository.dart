@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/api/api_repository.dart';
 import '../../../core/api/endpoints.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/version/app_version_info.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/household_dao.dart';
 import '../../../core/db/member_dao.dart';
@@ -82,9 +83,9 @@ class EnrollmentRepository extends ApiRepository {
     required List<String> memberReferenceIds,
     double latitude = 0.0,
     double longitude = 0.0,
-    String appVersionName = AppConfig.appVersionName,
-    int appVersionCode = AppConfig.appVersionCode,
   }) {
+    final appVersionName = AppVersionInfo.current.versionName;
+    final appVersionCode = AppVersionInfo.current.versionCode;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final headRefId = memberReferenceIds.first;
     final extraRefIds = memberReferenceIds.length > 1
@@ -214,8 +215,8 @@ class EnrollmentRepository extends ApiRepository {
         'requestId': requestId,
         'dataRequired': false,
         'userId': userId,
-        'appVersionName': AppConfig.appVersionName,
-        'appVersionCode': AppConfig.appVersionCode,
+        'appVersionName': AppVersionInfo.current.versionName,
+        'appVersionCode': AppVersionInfo.current.versionCode,
         if (deviceId.isNotEmpty) 'deviceId': deviceId,
       };
 
@@ -286,9 +287,9 @@ class EnrollmentRepository extends ApiRepository {
     required String deviceId,
     double latitude = 0.0,
     double longitude = 0.0,
-    String appVersionName = AppConfig.appVersionName,
-    int appVersionCode = AppConfig.appVersionCode,
   }) async {
+    final appVersionName = AppVersionInfo.current.versionName;
+    final appVersionCode = AppVersionInfo.current.versionCode;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final hhReferenceId = _uuid.v4();
 
@@ -429,9 +430,9 @@ class EnrollmentRepository extends ApiRepository {
     String? memberReferenceId,
     double latitude = 0.0,
     double longitude = 0.0,
-    String appVersionName = AppConfig.appVersionName,
-    int appVersionCode = AppConfig.appVersionCode,
   }) async {
+    final appVersionName = AppVersionInfo.current.versionName;
+    final appVersionCode = AppVersionInfo.current.versionCode;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final memberRefId = memberReferenceId ?? _uuid.v4();
 

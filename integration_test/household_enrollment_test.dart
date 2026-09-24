@@ -236,40 +236,27 @@ void main() {
           gender: EnrollmentStrings.gendersHead.first, // 'Male'
         );
 
-        // ── Scroll to Continue and submit ──────────────────────────────────
+        // ── Scroll to Submit and persist ───────────────────────────────────
         await t.scrollUntilVisible(
-          find.text(EnrollmentStrings.continueArrow),
+          find.text(EnrollmentStrings.submit),
           500,
         );
-        await t.tap(find.text(EnrollmentStrings.continueArrow));
-        await _settle(t, 3);
-
-        // ── Review / success screen ────────────────────────────────────────
-        expect(
-          find.textContaining('Household Created'),
-          findsOneWidget,
-          reason: 'Success header must appear after all required fields are filled',
-        );
-        // Head card should show the entered name
-        expect(find.text(_kHeadName), findsOneWidget);
-
-        // ── POST to server + warmSync ──────────────────────────────────────
-        await t.tap(find.text(EnrollmentStrings.saveHousehold));
-        // Allow up to 15 s for the server round-trip.
+        await t.tap(find.text(EnrollmentStrings.submit));
+        // Allow up to 15 s for local persist + server POST.
         await _settle(t, 15);
 
         expect(
           find.text(EnrollmentStrings.enrollmentSuccess),
           findsOneWidget,
-          reason: 'Success snackbar must appear after server POST succeeds',
+          reason: 'Success snackbar must appear after enrollment POST succeeds',
         );
 
-        // ── Navigate back to dashboard ─────────────────────────────────────
-        await _settle(t, 3);
+        // ── Household detail screen ────────────────────────────────────────
+        expect(find.text(_kHeadName), findsOneWidget);
         expect(
-          find.text(MissionDashboardStrings.addHousehold),
+          find.text(HouseholdDetailStrings.addMember),
           findsOneWidget,
-          reason: 'Dashboard must be reached after enrollment',
+          reason: 'Detail screen Add Member CTA must appear after submit',
         );
       },
     );
@@ -294,19 +281,25 @@ void main() {
         );
 
         await t.scrollUntilVisible(
-          find.text(EnrollmentStrings.continueArrow),
+          find.text(EnrollmentStrings.submit),
           500,
         );
-        await t.tap(find.text(EnrollmentStrings.continueArrow));
-        await _settle(t, 3);
+        await t.tap(find.text(EnrollmentStrings.submit));
+        await _settle(t, 15);
 
-        expect(find.textContaining('Household Created'), findsOneWidget);
+        expect(find.text(_kHeadName2), findsOneWidget);
 
-        // ── Tap "Add Member" dashed-border button ─────────────────────────
-        await t.tap(find.text(EnrollmentStrings.addMoreMembers));
+        // ── Add Member from household detail ───────────────────────────────
+        await t.tap(find.text(HouseholdDetailStrings.addMember));
         await _settle(t, 3);
-        expect(find.text('Add Member'), findsOneWidget,
-            reason: 'AddHouseholdMemberScreen must appear');
+        await t.scrollUntilVisible(
+          find.text(EnrollmentStrings.entrySheetRegisterManuallyTitle),
+          300,
+        );
+        await t.tap(find.text(EnrollmentStrings.entrySheetRegisterManuallyTitle));
+        await _settle(t, 3);
+        expect(find.text(EnrollmentStrings.addMemberAppBar), findsOneWidget,
+            reason: 'LinkMemberScreen must appear after skipping NID scan');
 
         // ── Fill member form ───────────────────────────────────────────────
 
@@ -346,28 +339,16 @@ void main() {
         await t.tap(find.text(EnrollmentStrings.saveMemberCTA));
         await _settle(t, 3);
 
-        // ── Back on success screen — member card must be visible ───────────
+        // ── Back on household detail — member must be visible ──────────────
         expect(
           find.text(_kMemberName),
           findsOneWidget,
-          reason: 'Added member name must appear on the review screen',
+          reason: 'Added member name must appear on the household detail screen',
         );
-
-        // ── POST household + member to server, then warmSync ───────────────
-        await t.tap(find.text(EnrollmentStrings.saveHousehold));
-        await _settle(t, 15);
-
         expect(
-          find.text(EnrollmentStrings.enrollmentSuccess),
+          find.text(HouseholdDetailStrings.addMember),
           findsOneWidget,
-          reason: 'Success snackbar expected after server POST with member',
-        );
-
-        await _settle(t, 3);
-        expect(
-          find.text(MissionDashboardStrings.addHousehold),
-          findsOneWidget,
-          reason: 'Dashboard must be reached after enrollment with member',
+          reason: 'Detail screen must remain after standalone member add',
         );
       },
     );
