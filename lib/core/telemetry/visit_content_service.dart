@@ -57,6 +57,7 @@ class VisitContentService {
         referralRecommendation: existing?.referralRecommendation,
         summaryStartedAt: existing?.summaryStartedAt,
         summaryEndAt: existing?.summaryEndAt,
+        helpfulnessVote: existing?.helpfulnessVote,
         uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
         uploadedAt: existing?.uploadedAt,
       ),
@@ -88,6 +89,7 @@ class VisitContentService {
         whatsappSummary: existing?.whatsappSummary,
         referralRecommendation: existing?.referralRecommendation,
         summaryEndAt: existing?.summaryEndAt,
+        helpfulnessVote: existing?.helpfulnessVote,
         uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
         uploadedAt: existing?.uploadedAt,
       ),
@@ -125,6 +127,42 @@ class VisitContentService {
             ? null
             : referralRecommendation?.trim(),
         summaryEndAt: at,
+        helpfulnessVote: existing?.helpfulnessVote,
+        uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
+        uploadedAt: existing?.uploadedAt,
+      ),
+    );
+  }
+
+  /// Thumbs up/down on the Step 3 AI counselling message (LEAP-68).
+  Future<void> recordHelpfulnessVote({
+    required String visitUuid,
+    required String patientId,
+    required String vote,
+  }) async {
+    if (!AppConfig.visitContentTelemetryEnabled) return;
+    final normalized = vote == VisitContentHelpfulnessVote.down
+        ? VisitContentHelpfulnessVote.down
+        : VisitContentHelpfulnessVote.up;
+    final at = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await _upsert(
+      visitUuid: visitUuid,
+      patientId: patientId,
+      occurredAt: at,
+      merge: (existing) => VisitContentEntry(
+        id: existing?.id ?? _uuid.v4(),
+        visitUuid: visitUuid,
+        patientId: patientId,
+        occurredAt: existing == null ? at : _maxInt(existing.occurredAt, at),
+        skUserId: existing?.skUserId,
+        capturedTenantId: existing?.capturedTenantId,
+        transcript: existing?.transcript,
+        transcriptCapturedAt: existing?.transcriptCapturedAt,
+        whatsappSummary: existing?.whatsappSummary,
+        referralRecommendation: existing?.referralRecommendation,
+        summaryStartedAt: existing?.summaryStartedAt,
+        summaryEndAt: existing?.summaryEndAt,
+        helpfulnessVote: normalized,
         uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
         uploadedAt: existing?.uploadedAt,
       ),
@@ -145,7 +183,8 @@ class VisitContentService {
         before.whatsappSummary != after.whatsappSummary ||
         before.referralRecommendation != after.referralRecommendation ||
         before.summaryStartedAt != after.summaryStartedAt ||
-        before.summaryEndAt != after.summaryEndAt;
+        before.summaryEndAt != after.summaryEndAt ||
+        before.helpfulnessVote != after.helpfulnessVote;
   }
 
   /// Keeps pending rows pending; re-queues uploaded rows when payload grows.
@@ -185,6 +224,7 @@ class VisitContentService {
         referralRecommendation: entry.referralRecommendation,
         summaryStartedAt: entry.summaryStartedAt,
         summaryEndAt: entry.summaryEndAt,
+        helpfulnessVote: entry.helpfulnessVote,
         skUserId: userId,
         capturedTenantId: tenantId,
         uploadStatus: uploadStatus,
