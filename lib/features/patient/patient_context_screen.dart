@@ -23,7 +23,9 @@ import '../../core/db/immunisation_dao.dart';
 import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
+import '../../core/sync/call_log_sync_service.dart';
 import '../../core/sync/offline_sync_service.dart';
+import 'teleconsult_history_section.dart';
 import '../../core/clinical/ai_context_fields.dart';
 import '../../core/clinical/referral_facility_labels.dart';
 import '../../core/clinical/assessment_raw_normalizer.dart';
@@ -863,6 +865,15 @@ class _PatientContextScreenState
         );
         return;
       }
+      // Best-effort, like the rest of this manual refresh action -- "refresh
+      // this patient" also picks up any brand-new Shukhee calls, independent
+      // of the household/patient bundle sync above.
+      try {
+        await context.read<CallLogSyncService>().pull();
+      } catch (e) {
+        debugPrint('[PatientContextScreen] call-log history pull failed: $e');
+      }
+      if (!mounted) return;
       final data = await _fetchData();
       if (!mounted) return;
       setState(() {
@@ -1355,6 +1366,9 @@ class _PatientContextScreenState
                       isLoading: remoteLoading,
                       pregnancySnapshot: snap,
                     ),
+
+                    // ── Teleconsult history (synced from Frappe) ──────────
+                    TeleconsultHistorySection(patientId: widget.patientId),
 
                     // ── Action row ────────────────────────────────────────
                     PatientActionsRow(

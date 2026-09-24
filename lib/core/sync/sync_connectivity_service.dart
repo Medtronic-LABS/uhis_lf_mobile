@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../auth/auth_repository.dart';
 import '../auth/auth_state.dart';
 import '../../features/visit/assessment_repository.dart';
+import 'call_log_sync_service.dart';
 import 'offline_push_service.dart';
 import 'offline_sync_service.dart';
 
@@ -33,17 +34,25 @@ class SyncConnectivityService {
     required OfflinePushService pushService,
     required AuthState authState,
     required AuthRepository authRepo,
+    CallLogSyncService? callLogSync,
   })  : _assessmentRepo = assessmentRepo,
         _syncService = syncService,
         _pushService = pushService,
         _authState = authState,
-        _authRepo = authRepo;
+        _authRepo = authRepo,
+        _callLogSync = callLogSync;
 
   final AssessmentRepository _assessmentRepo;
   final OfflineSyncService _syncService;
   final OfflinePushService _pushService;
   final AuthState _authState;
   final AuthRepository _authRepo;
+
+  /// Optional -- null in any test/harness that doesn't wire it. Piggybacks
+  /// on this same connectivity-restored trigger (see `_triggerSync`) so a
+  /// patient's Shukhee call/prescription/clinicalData history stays fresh
+  /// without a dedicated timer.
+  final CallLogSyncService? _callLogSync;
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   Timer? _retryTimer;
@@ -152,6 +161,10 @@ class SyncConnectivityService {
         })
         .then((_) {
           debugPrint('[SyncConnectivity] AutomaticSync warm pull complete');
+          return _callLogSync?.pull();
+        })
+        .then((_) {
+          debugPrint('[SyncConnectivity] AutomaticSync call-log history pull complete');
         })
         .catchError((Object e) {
           debugPrint('[SyncConnectivity] AutomaticSync error — scheduling retry in ${_retryDelay.inSeconds}s: $e');

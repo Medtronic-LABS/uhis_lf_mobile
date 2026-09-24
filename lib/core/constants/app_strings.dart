@@ -4225,6 +4225,11 @@ abstract final class TeleconsultStrings {
   static String get tryAgain => getTranslatedString('Teleconsult.tryAgain', 'Try again');
   static String get continueWithoutCall => getTranslatedString('Teleconsult.continueWithoutCall', 'Continue without teleconsult');
 
+  // ── Call history (Patient Details, synced from Frappe) ──────────────────────
+  static String get historyTitle => getTranslatedString('Teleconsult.historyTitle', 'Teleconsult History');
+  static String get historyDetailTitle => getTranslatedString('Teleconsult.historyDetailTitle', 'Teleconsult');
+  static String get historyReasonLabel => getTranslatedString('Teleconsult.historyReasonLabel', 'Reason');
+
   // ── Not-provisioned state ───────────────────────────────────────────────────
   static String get notProvisionedTitle => getTranslatedString('Teleconsult.notProvisionedTitle', 'Teleconsult not set up');
   static String get notProvisionedBody => getTranslatedString('Teleconsult.notProvisionedBody', "Teleconsult isn't set up for your account yet. Contact your supervisor.");

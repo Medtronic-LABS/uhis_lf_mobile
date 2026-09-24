@@ -10,7 +10,7 @@
 ///
 /// UI matches design mockups for this flow as closely as the real data
 /// allows -- the wrap-up screen's "Doctor's Summary" card
-/// ([_ClinicalDataCard]) renders Shukhee's own `appointment.clinicalData`
+/// ([ClinicalDataCard]) renders Shukhee's own `appointment.clinicalData`
 /// (diagnosis, medicines, follow-up) once a consultation completes, added
 /// per their 2026-09-22 API update; Rx ID still isn't part of their
 /// contract, so that specific field stays out. The live call screen
@@ -35,15 +35,12 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:provider/provider.dart';
 import 'package:shukhee_sdk/shukhee_sdk.dart';
 
-import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/local_assessment_dao.dart';
@@ -53,7 +50,9 @@ import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/counselling_launcher.dart';
+import 'clinical_data_card.dart';
 import 'pdf_viewer_screen.dart';
+import 'shukhee_client_factory.dart';
 import 'teleconsult_clinical_data.dart';
 import 'teleconsult_permission_service.dart';
 
@@ -203,7 +202,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   @override
   void initState() {
     super.initState();
-    _client = widget.client ?? _buildDefaultClient();
+    _client = widget.client ?? buildShukheeClient(context);
     _permissionService = widget.permissionService ?? TeleconsultPermissionService();
     _prescriptionDao = widget.prescriptionDao ?? context.read<TeleconsultPrescriptionDao>();
     _clinicalDataBuilder = widget.clinicalDataBuilder ??
@@ -218,90 +217,6 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
     _liveTimer?.cancel();
     _connectingMinDurationTimer?.cancel();
     super.dispose();
-  }
-
-  ShukheeClient _buildDefaultClient() {
-    final apiClient = context.read<ApiClient>();
-    final config = ShukheeConfig(
-      baseUrl: AppConfig.shukheeApiBaseUrl,
-      // ApiClient.exportAuthToken() returns the full "Bearer <token>" string
-      // verbatim (its own request interceptor uses it as-is, with no scheme
-      // prepended -- see api_client.dart's onRequest handlers) -- but
-      // shukhee_sdk's authTokenProvider contract expects just the raw token
-      // and prepends "Bearer " itself. Strip it here so the two don't stack
-      // into "Bearer Bearer <token>", which the real auth-service rejects
-      // with 400 (confirmed live against the sandbox this session).
-      authTokenProvider: () async {
-        final raw = apiClient.exportAuthToken();
-        if (raw == null) return null;
-        const prefix = 'Bearer ';
-        return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
-      },
-      // The backend's real (Phase 2) auth validation needs this to call the
-      // legacy platform's own /authenticate endpoint -- see shukhee_sdk's
-      // ShukheeConfig.tenantIdProvider doc for why.
-      tenantIdProvider: () async => apiClient.tenantId,
-    );
-    return ShukheeClient(
-      config,
-      // Debug-only: shukhee_sdk builds its own internal Dio with no logging
-      // (it has no dependency on this app's ConsoleLog/[PayloadDebug]
-      // convention), so every Shukhee HTTP call is otherwise invisible on
-      // device. Injecting our own Dio here (same BaseOptions the SDK would
-      // have built itself) lets _shukheeDebugInterceptor observe exactly
-      // what's sent/received without touching the shared SDK package.
-      dio: kDebugMode ? _buildDebugDio(config) : null,
-    );
-  }
-
-  /// Debug-only Dio, mirroring the BaseOptions shukhee_sdk would have built
-  /// internally, plus a request/response/error logging interceptor -- see
-  /// [_buildDefaultClient]. `[ShukheeDebug]` tag, visible via `adb logcat`.
-  static Dio _buildDebugDio(ShukheeConfig config) {
-    final dio = Dio(BaseOptions(
-      baseUrl: config.baseUrl,
-      connectTimeout: config.connectTimeout,
-      receiveTimeout: config.receiveTimeout,
-    ));
-    dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          final data = options.data;
-          String bodyDesc;
-          if (data is FormData) {
-            final fields = {for (final f in data.fields) f.key: f.value};
-            final files = {
-              for (final f in data.files) f.key: '${f.value.filename} (${f.value.length}b)',
-            };
-            bodyDesc = 'fields=$fields'
-                '${files.isNotEmpty ? ' files=$files' : ''}';
-          } else {
-            bodyDesc = data?.toString() ?? '(none)';
-          }
-          ConsoleLog.banner(
-            '[ShukheeDebug] --> ${options.method} ${options.path}\n'
-            'headers: ${options.headers}\n'
-            'body: $bodyDesc',
-          );
-          handler.next(options);
-        },
-        onResponse: (response, handler) {
-          ConsoleLog.success(
-            '[ShukheeDebug] <-- ${response.statusCode} ${response.requestOptions.path}',
-          );
-          ConsoleLog.json('[ShukheeDebug] response body', response.data);
-          handler.next(response);
-        },
-        onError: (e, handler) {
-          ConsoleLog.warn(
-            '[ShukheeDebug] <-- ERROR ${e.response?.statusCode} ${e.requestOptions.path}: '
-            '${e.response?.data ?? e.message}',
-          );
-          handler.next(e);
-        },
-      ),
-    );
-    return dio;
   }
 
   Future<void> _submitBooking({
@@ -1653,7 +1568,7 @@ class _WrapUpView extends StatelessWidget {
           _RecordSharedBanner(clinicalContextSummary: clinicalContextSummary, visitNumber: visitNumber),
           const SizedBox(height: AppSpacing.h6xl),
           if (status?.clinicalData != null) ...[
-            _ClinicalDataCard(data: status!.clinicalData!),
+            ClinicalDataCard(data: status!.clinicalData!),
             const SizedBox(height: AppSpacing.h6xl),
           ],
           if (hasPrescription && log != null)
@@ -1708,139 +1623,6 @@ class _WrapUpView extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Structured, read-only summary of Shukhee's `appointment.clinicalData`
-/// (diagnosis, prescribed medicines, meal instructions, vitals the doctor
-/// recorded, follow-up) -- only ever shown once [ShukheeStatus.clinicalData]
-/// is non-null, i.e. the consultation completed under an app version that
-/// requests this field. Renders each section only when non-empty rather
-/// than always showing every label -- Shukhee's own doctors don't
-/// necessarily fill in every field for every consultation.
-class _ClinicalDataCard extends StatelessWidget {
-  const _ClinicalDataCard({required this.data});
-
-  final ShukheeClinicalData data;
-
-  @override
-  Widget build(BuildContext context) {
-    final sections = <Widget?>[
-      _bulletSection(TeleconsultStrings.chiefComplaintsLabel, data.chiefComplaints),
-      _bulletSection(TeleconsultStrings.diagnosisLabel, data.diagnosis),
-      _bulletSection(TeleconsultStrings.labTestsLabel, data.labTest),
-      _bulletSection(TeleconsultStrings.adviceLabel, data.advice),
-      _bulletSection(TeleconsultStrings.drugHistoryLabel, data.drugHistory),
-      _medicineSection(),
-      _mealInstructionSection(),
-      _lastVitalSection(),
-      _followUpSection(),
-    ].whereType<Widget>().toList();
-
-    if (sections.isEmpty) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            TeleconsultStrings.clinicalSummaryTitle,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          for (final section in sections) ...[section, const SizedBox(height: AppSpacing.sm)],
-        ],
-      ),
-    );
-  }
-
-  Widget? _bulletSection(String label, List<String> items) {
-    if (items.isEmpty) return null;
-    return _LabeledSection(label: label, child: Text(items.join(', ')));
-  }
-
-  Widget? _medicineSection() {
-    if (data.medicine.isEmpty) return null;
-    return _LabeledSection(
-      label: TeleconsultStrings.medicinesLabel,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: data.medicine.map((m) {
-          final name = m.brandName ?? m.genericName ?? '';
-          final details = [m.strength, m.dosage, m.frequency, m.instruction]
-              .where((v) => v != null && v.isNotEmpty)
-              .join(' · ');
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Text(details.isEmpty ? name : '$name — $details'),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget? _mealInstructionSection() {
-    if (data.mealInstruction.isEmpty) return null;
-    return _LabeledSection(
-      label: TeleconsultStrings.mealInstructionsLabel,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: data.mealInstruction.map((m) {
-          final label = [m.mealType, m.instruction].where((v) => v != null && v.isNotEmpty).join(': ');
-          return Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(label));
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget? _lastVitalSection() {
-    final vital = data.lastVital;
-    if (vital == null) return null;
-    final parts = <String>[
-      if (vital.temperature != null) '${vital.temperature}°',
-      if (vital.pulseRate != null) '${vital.pulseRate} bpm',
-      if (vital.bloodPressure != null) '${vital.bloodPressure} mmHg',
-      if (vital.spo2 != null) 'SpO₂ ${vital.spo2}%',
-    ];
-    if (parts.isEmpty) return null;
-    return _LabeledSection(label: TeleconsultStrings.lastVitalsLabel, child: Text(parts.join(' · ')));
-  }
-
-  Widget? _followUpSection() {
-    final parts = <String>[
-      if (data.followUpComment != null && data.followUpComment!.isNotEmpty) data.followUpComment!,
-      if (data.followUpDay != null && data.followUpDay!.isNotEmpty) '${data.followUpDay} days',
-      if (data.followUpDate != null && data.followUpDate!.isNotEmpty) data.followUpDate!,
-    ];
-    if (parts.isEmpty) return null;
-    return _LabeledSection(label: TeleconsultStrings.followUpLabel, child: Text(parts.join(' · ')));
-  }
-}
-
-class _LabeledSection extends StatelessWidget {
-  const _LabeledSection({required this.label, required this.child});
-
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted),
-        ),
-        const SizedBox(height: 2),
-        DefaultTextStyle.merge(style: const TextStyle(fontSize: 13), child: child),
-      ],
     );
   }
 }

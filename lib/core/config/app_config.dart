@@ -366,6 +366,25 @@ class AppConfig {
     return '$apiBaseUrl$_shukheeGatewaySegment';
   }
 
+  /// Base URL of the same `frappe-uhis-next` backend's `spice_next_core` app
+  /// (currently only `spice_next_core.api.sync.pull`, consumed by
+  /// `CallLogSyncClient`) -- deliberately its own named getter rather than
+  /// reusing [shukheeApiBaseUrl], even though both currently resolve to the
+  /// same gateway segment on the same Frappe site (Frappe dispatches by the
+  /// full dotted method path internally, not by a per-app nginx route). If
+  /// the two apps are ever split behind different gateway paths, only this
+  /// getter needs to change.
+  ///
+  /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
+  ///   appended, same as [shukheeApiBaseUrl].
+  /// - Local override: set `SPICE_NEXT_CORE_API_BASE_URL` to a complete base
+  ///   URL, same convention as `SHUKHEE_API_BASE_URL`.
+  static String get spiceNextCoreApiBaseUrl {
+    const local = String.fromEnvironment('SPICE_NEXT_CORE_API_BASE_URL', defaultValue: '');
+    if (local.isNotEmpty) return local;
+    return '$apiBaseUrl$_shukheeGatewaySegment';
+  }
+
   /// Feature flag: whether the real Shukhee teleconsult flow is wired up.
   /// Default off -- this integrates against a real third-party vendor with
   /// per-SK provisioning requirements on the backend (an Active `UHIS

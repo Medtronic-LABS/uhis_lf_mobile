@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 42;
+  static const int schemaVersion = 43;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -58,6 +58,7 @@ class AppDatabase {
   static const String tableRxBuddyCheckins = 'rx_buddy_checkins';
   static const String tableHealthFacilities = 'health_facilities';
   static const String tableTeleconsultPrescriptions = 'teleconsult_prescriptions';
+  static const String tableCallLogHistory = 'call_log_history';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -230,7 +231,8 @@ class AppDatabase {
       CREATE TABLE $tableSyncMeta (
         entity TEXT PRIMARY KEY,
         last_sync_time INTEGER,
-        last_full_sync_at INTEGER
+        last_full_sync_at INTEGER,
+        cursor INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tablePatientProgrammes (
@@ -753,6 +755,38 @@ class AppDatabase {
         invoice_bytes BLOB,
         created_at INTEGER NOT NULL
       )''');
+
+    // v43 — call_log_history: a patient's full Shukhee call/prescription/
+    // clinicalData history, synced in from Frappe's Call Logs doctype via
+    // spice_next_core.api.sync.pull (see lib/core/sync/call_log_sync_service.dart)
+    // -- distinct from tableTeleconsultPrescriptions above, which is
+    // single-row-per-visit and only ever populated by THIS device's own live
+    // call. `id` is the backend's stable Call Logs docname, not a visit id --
+    // a patient can have many historical calls, including ones made from a
+    // different device. prescription_link/invoice_link are presence flags
+    // only (never bytes) -- documents are always fetched live, on demand,
+    // when the user taps to view them (see TeleconsultCallDetailScreen).
+    await db.execute('''
+      CREATE TABLE $tableCallLogHistory (
+        id TEXT PRIMARY KEY,
+        sync_seq INTEGER NOT NULL,
+        patient_id TEXT,
+        encounter_id TEXT,
+        status TEXT,
+        appointment_status TEXT,
+        doctor_name TEXT,
+        doctor_speciality TEXT,
+        doctor_facility TEXT,
+        reason TEXT,
+        clinical_data TEXT,
+        prescription_link TEXT,
+        invoice_link TEXT,
+        call_date INTEGER,
+        updated_at INTEGER NOT NULL,
+        raw_json TEXT NOT NULL
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_call_log_history_patient ON $tableCallLogHistory(patient_id, call_date DESC)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -1884,6 +1918,34 @@ class AppDatabase {
           created_at INTEGER NOT NULL
         )''');
     }
+    if (from < 43) {
+      // v43 — see createSchema's identical block for why this table/column
+      // exist.
+      try {
+        await db.execute('ALTER TABLE $tableSyncMeta ADD COLUMN cursor INTEGER');
+      } catch (_) {/* column already present — no-op */}
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableCallLogHistory (
+          id TEXT PRIMARY KEY,
+          sync_seq INTEGER NOT NULL,
+          patient_id TEXT,
+          encounter_id TEXT,
+          status TEXT,
+          appointment_status TEXT,
+          doctor_name TEXT,
+          doctor_speciality TEXT,
+          doctor_facility TEXT,
+          reason TEXT,
+          clinical_data TEXT,
+          prescription_link TEXT,
+          invoice_link TEXT,
+          call_date INTEGER,
+          updated_at INTEGER NOT NULL,
+          raw_json TEXT NOT NULL
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_call_log_history_patient ON $tableCallLogHistory(patient_id, call_date DESC)');
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -1900,7 +1962,7 @@ class AppDatabase {
     tableChatMessages, tableCoachingFaqs,
     tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
     tableTreatmentDetails, tableRxBuddyCheckins,
-    tableHealthFacilities, tableTeleconsultPrescriptions,
+    tableHealthFacilities, tableTeleconsultPrescriptions, tableCallLogHistory,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

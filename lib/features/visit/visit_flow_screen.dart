@@ -1409,10 +1409,22 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
   Future<void> _loadPatientPhone() async {
     debugPrint('[_Step3AiRecoState] _loadPatientPhone');
-    final member = await context
-        .read<MemberDao>()
-        .getByPatientId(widget.patientId);
+    // widget.patientId isn't reliably one single kind of id -- "Start Visit"/
+    // household chips pass whichever id they have on hand (members.id,
+    // members.patient_id, members.fhir_id), the exact same ambiguity
+    // PatientDao.byAnyId already exists to resolve for name/dob/gender.
+    // getByPatientId alone (a single exact `patient_id` match) silently
+    // returns null, and thus never fills the phone field, whenever
+    // widget.patientId happens to be one of the other id kinds instead.
+    final memberDao = context.read<MemberDao>();
+    final member = await memberDao.getByPatientId(widget.patientId) ??
+        await memberDao.getById(widget.patientId) ??
+        await memberDao.getByFhirId(widget.patientId);
     final phone = member?.phone;
+    debugPrint(
+      '[_Step3AiRecoState] _loadPatientPhone: patientId=${widget.patientId} '
+      'memberFound=${member != null} phone=${phone ?? "(none)"}',
+    );
     if (mounted && phone != null && phone.isNotEmpty) {
       setState(() => _patientPhone = phone);
     }
