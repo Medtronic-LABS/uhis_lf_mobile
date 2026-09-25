@@ -110,7 +110,8 @@ class NabaReferralAssessment {
   });
 
   /// Wire assessment type: `ANC`, `NCD`, `PNC_MOTHER`, `CHILDHOOD_VISIT`,
-  /// `PWPROFILE`, `FAMILY_PLANNING`, …
+  /// `PREGNANCYOUTCOME`, `CHILD_IMMUNIZATION`, `PWPROFILE`,
+  /// `FAMILY_PLANNING`, …
   final String assessmentType;
 
   /// Clinical fields for this assessment type (referral inputs, or form
@@ -129,6 +130,7 @@ class NabaRequest {
   const NabaRequest({
     required this.requestId,
     required this.patientId,
+    this.visitUuid,
     this.appLanguage = 'bn',
     this.visitType = 'routine',
     this.aiScribeConfidence = 1.0,
@@ -156,6 +158,10 @@ class NabaRequest {
 
   final String requestId;
   final String patientId;
+
+  /// Per-visit telemetry correlator (same as visit-content / value-audit /
+  /// `visit_completed`). Distinct from [requestId], which is the encounter id.
+  final String? visitUuid;
 
   /// SK's app locale (`bn` / `en`). The backend appends an output-language
   /// instruction keyed off this, so clinical copy — including the referral
@@ -195,6 +201,7 @@ class NabaRequest {
   Map<String, dynamic> toJson() => {
         'requestId': requestId,
         'patientId': patientId,
+        if (visitUuid != null && visitUuid!.isNotEmpty) 'visitUuid': visitUuid,
         'appLanguage': appLanguage,
         'visitType': visitType,
         'aiScribeConfidence': aiScribeConfidence,
