@@ -10,13 +10,12 @@ library;
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:shukhee_sdk/shukhee_sdk.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/db/call_log_history_dao.dart';
 import '../../core/theme/app_theme.dart';
-import 'clinical_data_card.dart';
 import 'document_download_button.dart';
+import 'json_key_value_view.dart';
 import 'shukhee_client_factory.dart';
 
 class TeleconsultCallDetailScreen extends StatelessWidget {
@@ -27,9 +26,8 @@ class TeleconsultCallDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final clinicalDataJson = row.clinicalDataJson;
-    final clinicalData = clinicalDataJson == null
-        ? null
-        : ShukheeClinicalData.fromJson(jsonDecode(clinicalDataJson) as Map<String, dynamic>);
+    final clinicalData =
+        clinicalDataJson == null ? null : jsonDecode(clinicalDataJson) as Map<String, dynamic>;
     final client = (row.hasPrescription || row.hasInvoice) ? buildShukheeClient(context) : null;
 
     return Scaffold(
@@ -70,7 +68,7 @@ class TeleconsultCallDetailScreen extends StatelessWidget {
             const SizedBox(height: AppSpacing.h6xl),
           ],
           if (clinicalData != null) ...[
-            ClinicalDataCard(data: clinicalData),
+            JsonKeyValueView(data: clinicalData, title: TeleconsultStrings.clinicalSummaryTitle),
             const SizedBox(height: AppSpacing.h6xl),
           ],
           if (row.hasPrescription || row.hasInvoice)
