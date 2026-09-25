@@ -245,6 +245,11 @@ class Endpoints {
   static const String telemetryVisitContent =
       '/ai-scribe/telemetry/visit-content';
 
+  /// AI assistant ("Ask") question/answer PHI text, gated separately from
+  /// usage telemetry. Server: ai-scribe-service `app/api/assistant_content.py`.
+  static const String telemetryAssistantContent =
+      '/ai-scribe/telemetry/assistant-content';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>

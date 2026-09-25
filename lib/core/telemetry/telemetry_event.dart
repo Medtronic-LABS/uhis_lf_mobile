@@ -31,6 +31,13 @@ abstract final class TelemetryEventType {
 
   /// One per share tap on the counselling screen (report metric 5).
   static const String counsellingShare = 'counselling_share';
+
+  /// One per question answered by the patient AI assistant ("Ask" chatbot).
+  /// Carries only non-PHI signal — latency, a within-session repeat flag, and
+  /// the app language. The question and answer text are PHI and are NEVER put
+  /// on a telemetry event (this table is excluded from the logout wipe because
+  /// it holds no patient data); they ride a separate gated content stream.
+  static const String assistantAsk = 'assistant_ask';
 }
 
 /// Lifecycle of a row's journey to the (not yet built) server.
@@ -196,6 +203,18 @@ const int kTelemetryPayloadVersion = 3;
 /// registry key. A constant rather than a literal at the send site so adding a
 /// second feature is a new constant, not a search for string duplicates.
 const String kTelemetryAiFeatureScribe = 'scribe';
+
+/// The patient AI assistant ("Ask") feature registry key on the server.
+const String kTelemetryAiFeatureAssistant = 'assistant';
+
+/// The server feature key for an event type. Sent on the ingest envelope so
+/// each row is attributed to the right feature descriptor. Defaults to scribe
+/// — every event type that predates the assistant feature belongs to it, so a
+/// row with no explicit mapping reads exactly as before.
+String telemetryAiFeatureForEvent(String eventType) =>
+    eventType == TelemetryEventType.assistantAsk
+        ? kTelemetryAiFeatureAssistant
+        : kTelemetryAiFeatureScribe;
 
 /// Body of a [TelemetryEventType.visitCompleted] event — report metrics 1-4.
 class VisitCompletedPayload {
@@ -403,5 +422,63 @@ class CounsellingSharePayload {
             TelemetryShareSurface.counselling,
         hasMessage: json['hasMessage'] == true,
         launched: json['launched'] == true,
+      );
+}
+
+/// Body of a [TelemetryEventType.assistantAsk] event.
+///
+/// Non-PHI by construction — counts, a flag, a duration, a coarse category.
+/// The question and answer TEXT are deliberately absent: they are PHI and must
+/// not enter [TelemetryEvent] (see the event-type doc). The report's
+/// Question / AI Response columns are backfilled server-side from a separate
+/// gated content stream.
+class AssistantAskPayload {
+  const AssistantAskPayload({
+    required this.askedAgain,
+    required this.appLanguage,
+    this.generationMs,
+    this.context = 'patient-scoped',
+    this.deceasedContext = false,
+  });
+
+  /// True when the SK re-asked the same question earlier in this chat session.
+  /// Within-session only; the global repeat rate is recomputed server-side.
+  final bool askedAgain;
+
+  /// `bn` | `en` — the app language the answer was produced in.
+  final String appLanguage;
+
+  /// Round-trip time to produce the answer, ms. Null when not measured. This
+  /// is the client-observed time (includes network) until the service returns
+  /// a server-measured value.
+  final int? generationMs;
+
+  /// `patient-scoped` | `community-health-worker`.
+  final String context;
+
+  /// True when the question was asked about a patient marked deceased
+  /// ([PatientAiContext.isDeceased] at ask time). Non-PHI — a flag, not the
+  /// patient's identity. Lets the report audit the LEAP-50 guardrail (the
+  /// assistant must decline routine care guidance for a deceased member)
+  /// without reading every answer's free text.
+  final bool deceasedContext;
+
+  Map<String, dynamic> toJson() => {
+        'askedAgain': askedAgain,
+        'appLanguage': appLanguage,
+        'context': context,
+        'deceasedContext': deceasedContext,
+        // Omitted rather than null so a reader tells "not measured" from a
+        // real zero — matching the other payloads in this file.
+        if (generationMs != null) 'generationMs': generationMs,
+      };
+
+  static AssistantAskPayload fromJson(Map<String, dynamic> json) =>
+      AssistantAskPayload(
+        askedAgain: json['askedAgain'] == true,
+        appLanguage: json['appLanguage']?.toString() ?? 'bn',
+        generationMs: (json['generationMs'] as num?)?.toInt(),
+        context: json['context']?.toString() ?? 'patient-scoped',
+        deceasedContext: json['deceasedContext'] == true,
       );
 }

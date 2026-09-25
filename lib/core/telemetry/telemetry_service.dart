@@ -152,6 +152,36 @@ class TelemetryService {
     );
   }
 
+  /// Records one patient AI assistant ("Ask") question — LEAP-47.
+  ///
+  /// Non-PHI only: latency, a within-session repeat flag, and the app
+  /// language. The question and answer text are PHI and are never passed here
+  /// — they must not enter the telemetry table.
+  Future<void> recordAssistantAsk({
+    required bool askedAgain,
+    required String appLanguage,
+    int? generationMs,
+    String context = 'patient-scoped',
+    bool deceasedContext = false,
+    String? correlator,
+    DateTime? occurredAt,
+  }) async {
+    await _insert(
+      eventType: TelemetryEventType.assistantAsk,
+      payload: AssistantAskPayload(
+        askedAgain: askedAgain,
+        appLanguage: appLanguage,
+        generationMs: generationMs,
+        context: context,
+        deceasedContext: deceasedContext,
+      ).toJson(),
+      // The per-ask correlator rides the event's visit_uuid slot — the join
+      // key the server uses to attach the gated question/answer content.
+      visitUuid: correlator,
+      occurredAt: occurredAt,
+    );
+  }
+
   Future<void> _insert({
     required String eventType,
     required Map<String, dynamic> payload,
