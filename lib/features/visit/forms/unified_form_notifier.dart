@@ -3458,8 +3458,23 @@ class UnifiedFormNotifier extends ChangeNotifier {
       ));
     }
 
+    if (_activeFormTypes.contains('pregnancyOutcome')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'PREGNANCYOUTCOME',
+        referralInputs: compact(
+          UnifiedPayloadMapper.pregnancyOutcomeDetailsForNaba(_data),
+        ),
+      ));
+    }
+
     return List<NabaReferralAssessment>.unmodifiable(out);
   }
+
+  @visibleForTesting
+  List<NabaReferralAssessment> buildNabaReferralAssessmentsForTesting({
+    required bool isNcdFollowUp,
+  }) =>
+      _buildNabaReferralAssessments(isNcdFollowUp: isNcdFollowUp);
 
   /// Today's ANC vitals snapshot from the in-progress form (for AI-trend).
   VisitVitals _todayAncVisitVitals() {

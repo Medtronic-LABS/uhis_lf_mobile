@@ -766,7 +766,17 @@ class _VisitFlowState extends State<VisitFlowScreen> {
               _referredReasons = reasons;
               _referralFacility = facility;
               _pwRiskFactors = pwRisks;
-              _nabaReferralAssessments = nabaAssessments;
+              // Keep EPI assessment stamped on the vaccination step when the
+              // unified form rebuilds NABA inputs for other programmes.
+              final epiAssessments = _nabaReferralAssessments
+                  .where((a) => a.assessmentType == 'CHILD_IMMUNIZATION')
+                  .toList();
+              _nabaReferralAssessments = [
+                ...epiAssessments,
+                ...nabaAssessments.where(
+                  (a) => a.assessmentType != 'CHILD_IMMUNIZATION',
+                ),
+              ];
               _step = 2;
             });
           },
@@ -1529,6 +1539,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final apiClient = context.read<ApiClient>(); // read before any await
     final toggles =
         context.read<AiFeatureTogglesNotifier>().toggles; // ditto
+    final visitUuid =
+        context.read<TelemetryService>().ensureVisitUuid(widget.visitId);
     await _loadVitalsAndLabs();
     if (!toggles.step3SummaryEnabled &&
         !toggles.step3ReferralAlertEnabled &&
@@ -1569,6 +1581,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       final req = NabaRequest(
         requestId: widget.visitId,
         patientId: widget.patientId,
+        visitUuid: visitUuid,
         // Same contract as briefing (symptom_picker_screen) and the assistant:
         // drives the backend's output-language instruction.
         appLanguage: AppLocale.isBangla ? 'bn' : 'en',
