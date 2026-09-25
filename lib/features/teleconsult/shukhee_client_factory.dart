@@ -14,6 +14,7 @@ import 'package:shukhee_sdk/shukhee_sdk.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/debug/console_log.dart';
+import '../../core/i18n/app_locale.dart';
 
 ShukheeClient buildShukheeClient(BuildContext context) {
   final apiClient = context.read<ApiClient>();
@@ -36,6 +37,13 @@ ShukheeClient buildShukheeClient(BuildContext context) {
     // legacy platform's own /authenticate endpoint -- see shukhee_sdk's
     // ShukheeConfig.tenantIdProvider doc for why.
     tenantIdProvider: () async => apiClient.tenantId,
+    // Sent as `_lang` -- Frappe's own request bootstrap
+    // (`HTTPRequest.set_lang`) reads `form_dict._lang` ahead of anything
+    // else, so every `frappe.throw(_("..."))` error this app's Shukhee
+    // calls can raise comes back in whichever language the app is
+    // currently showing. See shukhee_sdk's ShukheeConfig.languageCodeProvider
+    // doc for the full mechanism.
+    languageCodeProvider: () async => AppLocale.isBangla ? 'bn' : 'en',
   );
   return ShukheeClient(
     config,
