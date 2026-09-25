@@ -249,6 +249,23 @@ class EncounterDao {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// All local encounter ids for a patient -- the join key
+  /// `TeleconsultHistorySection` uses to match a synced-in Call Logs row
+  /// (keyed by `encounter_id`, Shukhee's own `encounterId`, which
+  /// `TeleconsultScreen` sends as `widget.visitId` == `encounters.id`) back
+  /// to the right patient, since Call Logs' own `patient` Link is not
+  /// populated by the mobile app today (see `CallLogSyncService`'s doc
+  /// comment).
+  Future<List<String>> idsForPatient(String patientId) async {
+    final rows = await _db.db.query(
+      AppDatabase.tableEncounters,
+      columns: ['id'],
+      where: 'patient_id = ?',
+      whereArgs: [patientId],
+    );
+    return rows.map((r) => r['id'] as String).toList();
+  }
+
   /// Get all pending encounters that need syncing.
   Future<List<EncounterRow>> pendingSync() async {
     final rows = await _db.db.query(

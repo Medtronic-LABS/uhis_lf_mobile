@@ -134,7 +134,7 @@ void main() {
 
       await service.pull();
 
-      final rows = await dao.getForPatient('patient-1');
+      final rows = await dao.getForEncounters(['encounter-1']);
       // Only CL-1 persisted: PT-1 isn't a Call Logs row, CL-2 isn't completed.
       expect(rows.map((r) => r.id), ['CL-1']);
       expect(rows.single.clinicalDataJson, isNotNull);
@@ -189,7 +189,7 @@ void main() {
       await service.pull();
 
       expect(adapter.callCount, 3);
-      final rows = await dao.getForPatient('patient-1');
+      final rows = await dao.getForEncounters(['encounter-1']);
       expect(rows.map((r) => r.id).toSet(), {'CL-1', 'CL-2', 'CL-3'});
       expect((await syncMeta.read('callLogs'))!.cursor, 3);
     });

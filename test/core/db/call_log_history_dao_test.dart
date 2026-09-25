@@ -27,6 +27,7 @@ void main() {
     String id = 'CL-1',
     int syncSeq = 100,
     String? patientId = 'patient-1',
+    String encounterId = 'encounter-1',
     DateTime? callDate,
     String? clinicalDataJson,
   }) {
@@ -34,7 +35,7 @@ void main() {
       id: id,
       syncSeq: syncSeq,
       patientId: patientId,
-      encounterId: 'encounter-1',
+      encounterId: encounterId,
       status: 'completed',
       appointmentStatus: 'Completed',
       doctorName: 'Dr. Farzana Kabir',
@@ -51,20 +52,20 @@ void main() {
   }
 
   group('CallLogHistoryDao', () {
-    test('getForPatient returns empty list when nothing saved', () async {
+    test('getForEncounters returns empty list when nothing saved', () async {
       final (db, dao) = await openTestDb();
       addTearDown(db.close);
 
-      expect(await dao.getForPatient('patient-1'), isEmpty);
+      expect(await dao.getForEncounters(['encounter-1']), isEmpty);
     });
 
-    test('upsertMany then getForPatient round-trips every field', () async {
+    test('upsertMany then getForEncounters round-trips every field', () async {
       final (db, dao) = await openTestDb();
       addTearDown(db.close);
 
       await dao.upsertMany([makeRow(clinicalDataJson: '{"chiefComplaints":["Fever"]}')]);
 
-      final rows = await dao.getForPatient('patient-1');
+      final rows = await dao.getForEncounters(['encounter-1']);
       expect(rows, hasLength(1));
       final row = rows.single;
       expect(row.id, 'CL-1');
@@ -90,10 +91,10 @@ void main() {
       final (db, dao) = await openTestDb();
       addTearDown(db.close);
 
-      await dao.upsertMany([makeRow(id: 'CL-1', syncSeq: 100, patientId: 'patient-1')]);
-      await dao.upsertMany([makeRow(id: 'CL-1', syncSeq: 200, patientId: 'patient-1')]);
+      await dao.upsertMany([makeRow(id: 'CL-1', syncSeq: 100)]);
+      await dao.upsertMany([makeRow(id: 'CL-1', syncSeq: 200)]);
 
-      final rows = await dao.getForPatient('patient-1');
+      final rows = await dao.getForEncounters(['encounter-1']);
       expect(rows, hasLength(1));
       expect(rows.single.syncSeq, 200);
     });
@@ -104,10 +105,10 @@ void main() {
 
       await dao.upsertMany(const []);
 
-      expect(await dao.getForPatient('patient-1'), isEmpty);
+      expect(await dao.getForEncounters(['encounter-1']), isEmpty);
     });
 
-    test('getForPatient orders newest call first and respects limit', () async {
+    test('getForEncounters orders newest call first', () async {
       final (db, dao) = await openTestDb();
       addTearDown(db.close);
 
@@ -117,31 +118,29 @@ void main() {
         makeRow(id: 'CL-newest', callDate: DateTime.fromMillisecondsSinceEpoch(3000)),
       ]);
 
-      final rows = await dao.getForPatient('patient-1', limit: 2);
-      expect(rows.map((r) => r.id), ['CL-newest', 'CL-new']);
+      final rows = await dao.getForEncounters(['encounter-1']);
+      expect(rows.map((r) => r.id), ['CL-newest', 'CL-new', 'CL-old']);
     });
 
-    test('getForPatients batches a lookup across many patients, skipping ones with no rows', () async {
+    test('getForEncounters batches a lookup across many encounters, skipping ones with no rows', () async {
       final (db, dao) = await openTestDb();
       addTearDown(db.close);
 
       await dao.upsertMany([
-        makeRow(id: 'CL-1', patientId: 'patient-1'),
-        makeRow(id: 'CL-2', patientId: 'patient-2'),
+        makeRow(id: 'CL-1', encounterId: 'encounter-1'),
+        makeRow(id: 'CL-2', encounterId: 'encounter-2'),
       ]);
 
-      final result = await dao.getForPatients(['patient-1', 'patient-2', 'patient-missing']);
+      final rows = await dao.getForEncounters(['encounter-1', 'encounter-2', 'encounter-missing']);
 
-      expect(result.keys, {'patient-1', 'patient-2'});
-      expect(result['patient-1']!.single.id, 'CL-1');
-      expect(result['patient-2']!.single.id, 'CL-2');
+      expect(rows.map((r) => r.id).toSet(), {'CL-1', 'CL-2'});
     });
 
-    test('getForPatients returns empty map for an empty input list', () async {
+    test('getForEncounters returns empty list for an empty input list', () async {
       final (db, dao) = await openTestDb();
       addTearDown(db.close);
 
-      expect(await dao.getForPatients(const []), isEmpty);
+      expect(await dao.getForEncounters(const []), isEmpty);
     });
 
     test('getById returns null when nothing saved for that id', () async {

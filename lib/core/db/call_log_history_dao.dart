@@ -135,38 +135,25 @@ class CallLogHistoryDao {
     await batch.commit(noResult: true);
   }
 
-  Future<List<CallLogHistoryRow>> getForPatient(String patientId, {int limit = 50}) async {
+  /// Looks up by [encounterId] (Call Logs' own `encounter_id`, matched
+  /// against local `encounters.id` via `EncounterDao.idsForPatient`) rather
+  /// than [CallLogHistoryRow.patientId] -- the latter mirrors Call Logs'
+  /// `patient` Link, which the mobile app does not currently populate at
+  /// booking time (no bridge exists yet between this app's own patient
+  /// identity and the Frappe backend's cross-system `Patient` doctype), so
+  /// it is null on every synced-in row today. `encounter_id`, by contrast,
+  /// is already sent and stored unconditionally on every booking -- see
+  /// `TeleconsultHistorySection`.
+  Future<List<CallLogHistoryRow>> getForEncounters(List<String> encounterIds) async {
+    if (encounterIds.isEmpty) return const [];
+    final placeholders = List.filled(encounterIds.length, '?').join(',');
     final rows = await _db.db.query(
       AppDatabase.tableCallLogHistory,
-      where: 'patient_id = ?',
-      whereArgs: [patientId],
+      where: 'encounter_id IN ($placeholders)',
+      whereArgs: encounterIds,
       orderBy: 'call_date DESC',
-      limit: limit,
     );
     return rows.map(CallLogHistoryRow.fromDb).toList();
-  }
-
-  /// Batched lookup for a screen rendering many patients at once -- follows
-  /// this codebase's established `...ForMany`/`...ForVisits` convention (see
-  /// e.g. `TeleconsultPrescriptionDao.getForVisits`) rather than one query
-  /// per patient.
-  Future<Map<String, List<CallLogHistoryRow>>> getForPatients(List<String> patientIds) async {
-    if (patientIds.isEmpty) return const {};
-    final placeholders = List.filled(patientIds.length, '?').join(',');
-    final rows = await _db.db.query(
-      AppDatabase.tableCallLogHistory,
-      where: 'patient_id IN ($placeholders)',
-      whereArgs: patientIds,
-      orderBy: 'call_date DESC',
-    );
-    final result = <String, List<CallLogHistoryRow>>{};
-    for (final row in rows) {
-      final parsed = CallLogHistoryRow.fromDb(row);
-      final patientId = parsed.patientId;
-      if (patientId == null) continue;
-      (result[patientId] ??= []).add(parsed);
-    }
-    return result;
   }
 
   Future<CallLogHistoryRow?> getById(String id) async {

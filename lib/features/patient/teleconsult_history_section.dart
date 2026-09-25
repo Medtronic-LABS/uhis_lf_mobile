@@ -16,6 +16,7 @@ import 'package:shukhee_sdk/shukhee_sdk.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/call_log_history_dao.dart';
+import '../../core/db/encounter_dao.dart';
 import '../../core/theme/app_theme.dart';
 import '../teleconsult/teleconsult_call_detail_screen.dart';
 
@@ -43,9 +44,23 @@ class _TeleconsultHistorySectionState extends State<TeleconsultHistorySection> {
     if (oldWidget.patientId != widget.patientId) _load();
   }
 
+  /// Strips a FHIR-style `Resource/id` prefix -- `encounters.patient_id` is
+  /// queried with the bare id elsewhere on this screen (see
+  /// `VitalsRepository._bareId`); mirrored here so `EncounterDao.idsForPatient`
+  /// resolves against the same value regardless of which form
+  /// `widget.patientId` arrives in.
+  static String _bareId(String id) {
+    final slash = id.lastIndexOf('/');
+    return slash < 0 ? id : id.substring(slash + 1);
+  }
+
   Future<void> _load() async {
-    final dao = context.read<CallLogHistoryDao>();
-    final rows = await dao.getForPatient(widget.patientId);
+    final encounterDao = context.read<EncounterDao>();
+    final callDao = context.read<CallLogHistoryDao>();
+    final encounterIds = await encounterDao.idsForPatient(_bareId(widget.patientId));
+    final rows = encounterIds.isEmpty
+        ? const <CallLogHistoryRow>[]
+        : await callDao.getForEncounters(encounterIds);
     if (mounted) setState(() => _rows = rows);
   }
 
