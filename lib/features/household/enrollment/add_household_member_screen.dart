@@ -611,6 +611,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           if (data.nidNumber != null) _brnCtrl.text = data.nidNumber!;
           if (data.name != null) _nameCtrl.text = data.name!;
           _applyDateOfBirth(EnrollmentDob.parse(data.dateOfBirth));
+          final scannedGender = _matchGender(data.gender?.label);
+          if (scannedGender != null) _gender = scannedGender;
         });
         final nid = data.nidNumber;
         if (nid != null) await _lookupExisting(nid);
