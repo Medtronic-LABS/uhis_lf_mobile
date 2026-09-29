@@ -18,6 +18,7 @@ import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
 import '../../core/risk/anc_status.dart';
 import '../../core/sync/offline_push_service.dart';
+import '../../core/sync/shukhee_encounter_attach_service.dart';
 import '../../core/sync/sync_activity.dart';
 import '../patient/followup_call_service.dart';
 import 'forms/pregnancy_outcome_side_effects.dart';
@@ -41,12 +42,17 @@ class AssessmentRepository extends ChangeNotifier {
     AssessmentDao? historyDao,
     FollowUpCallService? followUpCalls,
     MemberDao? memberDao,
+    // Durably attaches a visit's FHIR Encounter id onto its local Shukhee
+    // Call Logs row the moment this push's poll resolves it -- see
+    // ShukheeEncounterAttachService.attachForVisit.
+    ShukheeEncounterAttachService? encounterAttach,
   })  : _dao = dao,
         _api = api,
         _auth = auth,
         _historyDao = historyDao,
         _followUpCalls = followUpCalls,
-        _memberDao = memberDao;
+        _memberDao = memberDao,
+        _encounterAttach = encounterAttach;
 
   final LocalAssessmentDao _dao;
   final ApiClient _api;
@@ -59,6 +65,7 @@ class AssessmentRepository extends ChangeNotifier {
   final FollowUpCallService? _followUpCalls;
   // New household members (e.g. live-birth babies) ride the same push.
   final MemberDao? _memberDao;
+  final ShukheeEncounterAttachService? _encounterAttach;
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -558,6 +565,7 @@ class AssessmentRepository extends ChangeNotifier {
               : poll.assessmentFhirIdByReference[entity.referenceId];
           if (ok && fhirId != null && fhirId.isNotEmpty) {
             await _dao.applyFhirIdByReferenceId(entity.referenceId!, fhirId);
+            _encounterAttach?.attachFromOtherDetails(entity.otherDetails, fhirId);
           }
         }
 

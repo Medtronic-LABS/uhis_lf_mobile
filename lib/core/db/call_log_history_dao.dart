@@ -34,6 +34,7 @@ class CallLogHistoryRow {
     this.callDate,
     required this.updatedAt,
     required this.rawJson,
+    this.fhirEncounterId,
   });
 
   final String id;
@@ -52,6 +53,14 @@ class CallLogHistoryRow {
   final DateTime? callDate;
   final DateTime updatedAt;
   final String rawJson;
+
+  /// Server-assigned FHIR Encounter id for the visit this call was booked
+  /// from -- attached after the fact server-side (see
+  /// shukhee_integration.api.consultation.attach_fhir_encounter_id), unlike
+  /// [encounterId] which is the app's own client-minted visit id sent at
+  /// booking time. Survives a full local data wipe or a new device, since
+  /// it rides along in the ordinary Call Logs pull once the backend has it.
+  final String? fhirEncounterId;
 
   bool get hasPrescription => prescriptionLink != null && prescriptionLink!.isNotEmpty;
   bool get hasInvoice => invoiceLink != null && invoiceLink!.isNotEmpty;
@@ -75,6 +84,7 @@ class CallLogHistoryRow {
       callDate: callDateMs == null ? null : DateTime.fromMillisecondsSinceEpoch(callDateMs),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
       rawJson: row['raw_json'] as String,
+      fhirEncounterId: row['fhir_encounter_id'] as String?,
     );
   }
 
@@ -95,6 +105,7 @@ class CallLogHistoryRow {
         'call_date': callDate?.millisecondsSinceEpoch,
         'updated_at': updatedAt.millisecondsSinceEpoch,
         'raw_json': rawJson,
+        'fhir_encounter_id': fhirEncounterId,
       };
 }
 
@@ -135,25 +146,65 @@ class CallLogHistoryDao {
     await batch.commit(noResult: true);
   }
 
-  /// Looks up by [encounterId] (Call Logs' own `encounter_id`, matched
-  /// against local `encounters.id` via `EncounterDao.idsForPatient`) rather
-  /// than [CallLogHistoryRow.patientId] -- the latter mirrors Call Logs'
-  /// `patient` Link, which the mobile app does not currently populate at
-  /// booking time (no bridge exists yet between this app's own patient
-  /// identity and the Frappe backend's cross-system `Patient` doctype), so
-  /// it is null on every synced-in row today. `encounter_id`, by contrast,
-  /// is already sent and stored unconditionally on every booking -- see
+  /// Looks up by [encounterId] OR [CallLogHistoryRow.fhirEncounterId] --
+  /// matched against local `encounters.id` via `EncounterDao.idsForPatient`
+  /// -- rather than [CallLogHistoryRow.patientId], which mirrors Call Logs'
+  /// `patient` Link, still unpopulated at booking time today (no bridge
+  /// exists yet between this app's own patient identity and the Frappe
+  /// backend's cross-system `Patient` doctype), so it is null on every
+  /// synced-in row.
+  ///
+  /// `encounter_id` (the app's own client-minted visit id, sent at booking
+  /// time) is the only join key for a call made before
+  /// `attach_fhir_encounter_id` shipped, or one this device never learned
+  /// the FHIR id for. `fhir_encounter_id` (server-attached after the fact,
+  /// once the visit's own assessment-history sync resolves it) is the
+  /// durable one -- it matches `encounters.id` even after a full local data
+  /// wipe or on a different device, since it rides along in the ordinary
+  /// Call Logs pull. Checking both keeps every call matchable regardless of
+  /// which id happened to land in `encounters.id` for a given visit -- see
   /// `TeleconsultHistorySection`.
   Future<List<CallLogHistoryRow>> getForEncounters(List<String> encounterIds) async {
     if (encounterIds.isEmpty) return const [];
     final placeholders = List.filled(encounterIds.length, '?').join(',');
     final rows = await _db.db.query(
       AppDatabase.tableCallLogHistory,
-      where: 'encounter_id IN ($placeholders)',
-      whereArgs: encounterIds,
+      where: 'encounter_id IN ($placeholders) OR fhir_encounter_id IN ($placeholders)',
+      whereArgs: [...encounterIds, ...encounterIds],
       orderBy: 'call_date DESC',
     );
     return rows.map(CallLogHistoryRow.fromDb).toList();
+  }
+
+  /// Rows that have a Shukhee `encounter_id` (a call was actually booked
+  /// from this visit) but no [CallLogHistoryRow.fhirEncounterId] yet -- the
+  /// candidates `OfflineSyncService`'s assessment-history persist step
+  /// should attempt to attach a FHIR id to on this sync pass. Cheap to call
+  /// on every sync since it only ever returns a handful of rows in
+  /// practice (one per Shukhee call this device has made that hasn't been
+  /// durably attached server-side yet).
+  Future<List<CallLogHistoryRow>> getPendingFhirAttach() async {
+    final rows = await _db.db.query(
+      AppDatabase.tableCallLogHistory,
+      where: "encounter_id IS NOT NULL AND encounter_id != '' "
+          'AND fhir_encounter_id IS NULL',
+    );
+    return rows.map(CallLogHistoryRow.fromDb).toList();
+  }
+
+  /// Stamps [fhirEncounterId] onto the row keyed by [id] (the Call Logs
+  /// docname) once `attach_fhir_encounter_id` confirms the backend has it --
+  /// stops `getPendingFhirAttach` from retrying an already-succeeded
+  /// attach on the next sync pass. A later regular Call Logs pull would
+  /// eventually write the same value anyway (see `upsertMany`); this just
+  /// avoids the redundant network call in the meantime.
+  Future<void> stampFhirEncounterId(String id, String fhirEncounterId) async {
+    await _db.db.update(
+      AppDatabase.tableCallLogHistory,
+      {'fhir_encounter_id': fhirEncounterId},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<CallLogHistoryRow?> getById(String id) async {

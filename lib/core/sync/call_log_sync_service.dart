@@ -94,6 +94,7 @@ class CallLogSyncService {
       callDate: _parseServerDatetime(callDateRaw),
       updatedAt: DateTime.now(),
       rawJson: jsonEncode(doc),
+      fhirEncounterId: doc['fhir_encounter_id'] as String?,
     );
   }
 

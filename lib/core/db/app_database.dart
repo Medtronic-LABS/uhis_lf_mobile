@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 50;
+  static const int schemaVersion = 51;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -898,7 +898,8 @@ class AppDatabase {
         invoice_link TEXT,
         call_date INTEGER,
         updated_at INTEGER NOT NULL,
-        raw_json TEXT NOT NULL
+        raw_json TEXT NOT NULL,
+        fhir_encounter_id TEXT
       )''');
     await db.execute(
         'CREATE INDEX idx_call_log_history_patient ON $tableCallLogHistory(patient_id, call_date DESC)');
@@ -2244,10 +2245,24 @@ class AppDatabase {
           invoice_link TEXT,
           call_date INTEGER,
           updated_at INTEGER NOT NULL,
-          raw_json TEXT NOT NULL
+          raw_json TEXT NOT NULL,
+          fhir_encounter_id TEXT
         )''');
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_call_log_history_patient ON $tableCallLogHistory(patient_id, call_date DESC)');
+    }
+    if (from < 51) {
+      // v51 — fhir_encounter_id: the visit's server-assigned FHIR Encounter
+      // id, attached after the fact once OfflineSyncService's own
+      // assessment-history sync learns it (see
+      // shukhee_integration.api.consultation.attach_fhir_encounter_id on the
+      // backend). Unlike encounter_id (the app's own client-minted visit id,
+      // sent at booking time), this survives a full local data wipe or a
+      // new device -- CallLogHistoryDao.getForEncounters matches on either.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableCallLogHistory ADD COLUMN fhir_encounter_id TEXT');
+      } catch (_) {/* column already present — no-op */}
     }
   }
 

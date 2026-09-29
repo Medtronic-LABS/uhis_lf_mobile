@@ -95,6 +95,8 @@ import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
 import 'core/sync/call_log_sync_client.dart';
 import 'core/sync/call_log_sync_service.dart';
+import 'core/sync/shukhee_encounter_attach_service.dart';
+import 'core/sync/shukhee_encounter_link_client.dart';
 import 'core/version/app_update_flow.dart';
 import 'core/version/app_version_enforcer.dart';
 import 'core/version/app_version_info.dart';
@@ -213,6 +215,29 @@ class _UhisNextAppState extends State<UhisNextApp>
     dao: _callLogHistoryDao,
     syncMeta: _syncMetaDao,
   );
+  // Same auth pattern as _callLogSyncClient above -- this hits
+  // shukhee_integration rather than spice_next_core, but both currently
+  // resolve to the same Frappe site/gateway (see AppConfig.shukheeApiBaseUrl's
+  // doc comment).
+  late final ShukheeEncounterLinkClient _shukheeEncounterLinkClient =
+      ShukheeEncounterLinkClient(
+    baseUrl: AppConfig.shukheeApiBaseUrl,
+    authTokenProvider: () async {
+      final raw = widget.api.exportAuthToken();
+      if (raw == null) return null;
+      const prefix = 'Bearer ';
+      return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+    },
+    tenantIdProvider: () async => widget.api.tenantId,
+  );
+  // Shared by OfflineSyncService (pull-side catch-up), OfflinePushService and
+  // AssessmentRepository (push-side, fires within seconds of a visit
+  // finishing) -- see ShukheeEncounterAttachService's own doc comment.
+  late final ShukheeEncounterAttachService _shukheeEncounterAttach =
+      ShukheeEncounterAttachService(
+    callLogHistory: _callLogHistoryDao,
+    linkClient: _shukheeEncounterLinkClient,
+  );
   late final TelemetryDao _telemetryDao = TelemetryDao(widget.appDb);
   late final TelemetryService _telemetryService = TelemetryService(
     dao: _telemetryDao,
@@ -272,6 +297,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     pregnancyEpisode: _pregnancyEpisodeDao,
     treatmentPresence: _treatmentPresenceDao,
     encounterDao: _encounterDao,
+    encounterAttach: _shukheeEncounterAttach,
     // CCE: project followUp / assessment-history referrals into `referrals`.
     referrals: _referralDao,
     // P1: share the same UserHierarchyService instance so OfflineSyncService
@@ -338,6 +364,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     historyDao: _assessmentDao,
     followUpCalls: _followUpCallService,
     memberDao: _memberDao,
+    encounterAttach: _shukheeEncounterAttach,
   );
   late final OfflinePushService _offlinePush = OfflinePushService(
     api: widget.api,
@@ -346,6 +373,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     members: _memberDao,
     assessments: _localAssessmentDao,
     followUpCalls: _followUpCallService,
+    encounterAttach: _shukheeEncounterAttach,
   );
   /// Runs the Android dataSync foreground service for as long as any sync is
   /// in flight, so a pull that outlives the 30 s screen timeout is not frozen

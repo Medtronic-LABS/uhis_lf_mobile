@@ -35,6 +35,7 @@ import '../../core/api/scribe_api_service.dart';
 import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/audio_sample_dao.dart';
+import '../../core/db/encounter_dao.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
@@ -202,6 +203,44 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       _canonicalPatientId = widget.patientId;
     }
     return _canonicalPatientId!;
+  }
+
+  /// Writes a still-[SyncStatus.pending] draft row into `encounters` keyed by
+  /// [widget.visitId] -- the same client-minted UUID Shukhee is given as
+  /// `encounter_id` at teleconsult booking time, and that
+  /// `TeleconsultPrescriptionDao` keys its own row by (see
+  /// `TeleconsultScreen._savePrescriptionToVisit`).
+  ///
+  /// Without this row, `EncounterDao.findPendingDraftId` (used by
+  /// `OfflineSyncService`'s assessment-history sync to reconcile a
+  /// server-assigned encounter id back onto the original client id) has
+  /// nothing to match against. The first sync then writes `encounters.id` as
+  /// the server's own encounter id instead, and any join keyed on the
+  /// original visit id -- `TeleconsultHistorySection`'s
+  /// `EncounterDao.idsForPatient` -> `CallLogHistoryDao.getForEncounters` --
+  /// silently stops matching from that point on: a Shukhee call/prescription
+  /// shows fine right after the call, then disappears from the patient
+  /// timeline the next time the visit's assessment syncs (e.g. on the next
+  /// login), because `EncounterDao.upsertMany`'s only other caller
+  /// (`OfflineSyncService`) never had a pending row to reconcile onto.
+  ///
+  /// Fired once the programme is confirmed (Step 1 -> Step 2 advance) since
+  /// that's the earliest point the real [Programme] is known -- matches the
+  /// value `OfflineSyncService.findPendingDraftId` compares against.
+  Future<void> _recordPendingEncounter(Programme programme) async {
+    if (widget.patientId.isEmpty) return;
+    try {
+      await context.read<EncounterDao>().upsert(EncounterRow(
+            id: widget.visitId,
+            patientId: widget.patientId,
+            programme: programme.name,
+            startedAt: DateTime.now().millisecondsSinceEpoch,
+            status: EncounterStatus.draft,
+            syncStatus: SyncStatus.pending,
+          ));
+    } catch (e) {
+      debugPrint('[VisitFlow] pending encounter write failed: $e');
+    }
   }
 
   @override
@@ -775,6 +814,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
               _nabaReferralAssessments = nabaAssessments;
               _step = 2;
             });
+            _recordPendingEncounter(programme);
           },
         );
       case 2:

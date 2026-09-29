@@ -52,6 +52,7 @@ Map<String, dynamic> _callLogChange({
   String status = 'completed',
   String? patient = 'patient-1',
   Map<String, dynamic>? clinicalData,
+  String? fhirEncounterId,
 }) {
   return {
     'doctype': 'Call Logs',
@@ -62,6 +63,7 @@ Map<String, dynamic> _callLogChange({
       'name': name,
       'patient': patient,
       'encounter_id': 'encounter-1',
+      'fhir_encounter_id': ?fhirEncounterId,
       'status': status,
       'appointment_status': 'Completed',
       'doctor_name': 'Dr. Farzana Kabir',
@@ -139,6 +141,48 @@ void main() {
       expect(rows.map((r) => r.id), ['CL-1']);
       expect(rows.single.clinicalDataJson, isNotNull);
       expect(jsonDecode(rows.single.clinicalDataJson!), {'chiefComplaints': ['Fever']});
+    });
+
+    test('a synced fhir_encounter_id is persisted onto the row', () async {
+      final (db, dao, syncMeta) = await openTestDb();
+      addTearDown(db.close);
+
+      final (client, _) = buildClient([
+        _page({
+          'contract_version': 1,
+          'changes': [
+            _callLogChange(name: 'CL-1', syncSeq: 1, fhirEncounterId: 'fhir-enc-1'),
+          ],
+          'next_cursor': 1,
+          'has_more': false,
+        }),
+      ]);
+      final service = CallLogSyncService(client: client, dao: dao, syncMeta: syncMeta);
+
+      await service.pull();
+
+      final row = await dao.getById('CL-1');
+      expect(row!.fhirEncounterId, 'fhir-enc-1');
+    });
+
+    test('a missing fhir_encounter_id persists as null (call made before the backend field existed)', () async {
+      final (db, dao, syncMeta) = await openTestDb();
+      addTearDown(db.close);
+
+      final (client, _) = buildClient([
+        _page({
+          'contract_version': 1,
+          'changes': [_callLogChange(name: 'CL-1', syncSeq: 1)],
+          'next_cursor': 1,
+          'has_more': false,
+        }),
+      ]);
+      final service = CallLogSyncService(client: client, dao: dao, syncMeta: syncMeta);
+
+      await service.pull();
+
+      final row = await dao.getById('CL-1');
+      expect(row!.fhirEncounterId, isNull);
     });
 
     test('cursor advances to next_cursor even on an all-non-Call-Logs page', () async {

@@ -27,7 +27,8 @@ void main() {
     String id = 'CL-1',
     int syncSeq = 100,
     String? patientId = 'patient-1',
-    String encounterId = 'encounter-1',
+    String? encounterId = 'encounter-1',
+    String? fhirEncounterId,
     DateTime? callDate,
     String? clinicalDataJson,
   }) {
@@ -48,6 +49,7 @@ void main() {
       callDate: callDate ?? DateTime.fromMillisecondsSinceEpoch(1700000000000),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(1700000000000),
       rawJson: '{"name":"$id"}',
+      fhirEncounterId: fhirEncounterId,
     );
   }
 
@@ -85,6 +87,63 @@ void main() {
       expect(row.hasInvoice, isTrue);
       expect(row.callDate, DateTime.fromMillisecondsSinceEpoch(1700000000000));
       expect(row.rawJson, '{"name":"CL-1"}');
+      expect(row.fhirEncounterId, isNull);
+    });
+
+    test('getForEncounters matches on fhir_encounter_id when encounter_id does not match', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.upsertMany([
+        makeRow(id: 'CL-1', encounterId: 'client-uuid-1', fhirEncounterId: 'fhir-enc-1'),
+      ]);
+
+      // encounters.id now holds the server's own FHIR id (e.g. after a full
+      // local wipe wiped out the client-side reconciliation) -- the lookup
+      // must still find this row via fhir_encounter_id.
+      final rows = await dao.getForEncounters(['fhir-enc-1']);
+      expect(rows, hasLength(1));
+      expect(rows.single.id, 'CL-1');
+    });
+
+    test('getForEncounters matches a row via either id without duplicating it', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.upsertMany([
+        makeRow(id: 'CL-1', encounterId: 'client-uuid-1', fhirEncounterId: 'fhir-enc-1'),
+      ]);
+
+      final rows = await dao.getForEncounters(['client-uuid-1', 'fhir-enc-1']);
+      expect(rows, hasLength(1));
+    });
+
+    test('getPendingFhirAttach returns rows with an encounter_id but no fhir_encounter_id', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.upsertMany([
+        makeRow(id: 'CL-pending', encounterId: 'client-uuid-1'),
+        makeRow(id: 'CL-attached', encounterId: 'client-uuid-2', fhirEncounterId: 'fhir-enc-2'),
+        makeRow(id: 'CL-no-booking', encounterId: null),
+      ]);
+
+      final pending = await dao.getPendingFhirAttach();
+      expect(pending.map((r) => r.id), ['CL-pending']);
+    });
+
+    test('stampFhirEncounterId sets the field and removes the row from the pending list', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.upsertMany([makeRow(id: 'CL-1', encounterId: 'client-uuid-1')]);
+      expect(await dao.getPendingFhirAttach(), hasLength(1));
+
+      await dao.stampFhirEncounterId('CL-1', 'fhir-enc-1');
+
+      expect(await dao.getPendingFhirAttach(), isEmpty);
+      final row = await dao.getById('CL-1');
+      expect(row!.fhirEncounterId, 'fhir-enc-1');
     });
 
     test('upsertMany replaces the prior row for the same id (no duplicate rows)', () async {
