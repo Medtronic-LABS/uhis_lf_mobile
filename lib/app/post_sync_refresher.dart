@@ -7,6 +7,7 @@ import '../core/telemetry/telemetry_upload_log.dart';
 import '../core/telemetry/telemetry_uploader.dart';
 import '../core/telemetry/value_audit_uploader.dart';
 import '../core/telemetry/visit_content_uploader.dart';
+import '../core/telemetry/assistant_content_uploader.dart';
 import '../features/dashboard/mission_dashboard_repository.dart';
 import '../features/referral/referral_repository.dart';
 import '../features/worklist/worklist_repository.dart';
@@ -31,13 +32,15 @@ class PostSyncRefresher {
     TelemetryUploader? telemetry,
     ValueAuditUploader? valueAudit,
     VisitContentUploader? visitContent,
+    AssistantContentUploader? assistantContent,
   })  : _progress = progress,
         _worklist = worklist,
         _referrals = referrals,
         _mission = mission,
         _telemetry = telemetry,
         _valueAudit = valueAudit,
-        _visitContent = visitContent;
+        _visitContent = visitContent,
+        _assistantContent = assistantContent;
 
   final Stream<SyncProgress> _progress;
   final WorklistRepository _worklist;
@@ -56,6 +59,10 @@ class PostSyncRefresher {
 
   /// Visit-scoped AI content (transcript + summary text).
   final VisitContentUploader? _visitContent;
+
+  /// AI assistant ("Ask") question/answer PHI content — drained on the same
+  /// trigger through its own uploader, gated independently.
+  final AssistantContentUploader? _assistantContent;
 
   StreamSubscription<SyncProgress>? _sub;
 
@@ -94,6 +101,7 @@ class PostSyncRefresher {
     unawaited(_flushTelemetry());
     unawaited(_flushValueAudit());
     unawaited(_flushVisitContent());
+    unawaited(_flushAssistantContent());
   }
 
   void attach() {
@@ -143,6 +151,20 @@ class PostSyncRefresher {
       }
     } on Object catch (e) {
       telemetryUploadLog('[PostSync] visit content flush failed: $e');
+    }
+  }
+
+  Future<void> _flushAssistantContent() async {
+    final uploader = _assistantContent;
+    if (uploader == null) return;
+    try {
+      final sent = await uploader.uploadPending();
+      if (sent > 0) {
+        telemetryUploadLog(
+            '[PostSync] assistant content uploaded $sent row(s)');
+      }
+    } on Object catch (e) {
+      telemetryUploadLog('[PostSync] assistant content flush failed: $e');
     }
   }
 
