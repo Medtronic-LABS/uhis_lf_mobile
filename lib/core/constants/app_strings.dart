@@ -5241,6 +5241,17 @@ abstract final class EnrollmentStrings {
   static String get postScanCreateOptionTitle => getTranslatedString('Enrollment.postScanCreateOptionTitle', 'Create new household');
   static String get postScanCreateOptionSubtitle => getTranslatedString('Enrollment.postScanCreateOptionSubtitle', 'Register this member under a new household');
 
+  // ── Member scan review (editable "what we found" step) ───────────────────
+  static String get nidReviewTitle => getTranslatedString('Enrollment.nidReviewTitle', 'Check the details');
+  static String get nidReviewSubtitle => getTranslatedString('Enrollment.nidReviewSubtitle', 'Confirm or correct what was read from the card before filling the form.');
+  static String get nidReviewNameLabel => getTranslatedString('Enrollment.nidReviewNameLabel', 'Name');
+  static String get nidReviewNameHint => getTranslatedString('Enrollment.nidReviewNameHint', 'Type the name as printed');
+  static String get nidReviewGenderHint => getTranslatedString('Enrollment.nidReviewGenderHint', 'Gender is not printed in English on most cards — please select.');
+  static String get nidReviewConfirm => getTranslatedString('Enrollment.nidReviewConfirm', 'Confirm & fill form');
+  static String get nidReviewRescan => getTranslatedString('Enrollment.nidReviewRescan', 'Rescan');
+  static String get nidUploadLabel => getTranslatedString('Enrollment.nidUploadLabel', 'Upload');
+  static String get nidCouldNotReadCard => getTranslatedString('Enrollment.nidCouldNotReadCard', "Couldn't read the card — try a clearer photo.");
+
   // ── Mobile / ID number validation messages ──────────────────────────────
   static String mobileStartsWithError(String prefix) => getTranslatedString('Enrollment.mobileStartsWithError', 'Phone number should starts with {prefix}', params: {'prefix': prefix}, localizeDigits: false);
   static String mobileLengthError(int maxLength) => getTranslatedString('Enrollment.mobileLengthError', 'Mobile number must be {maxLength} digits', params: {'maxLength': '$maxLength'});
