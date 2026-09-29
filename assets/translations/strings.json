@@ -3375,6 +3375,38 @@
     "bn": " · {weeks} সপ্তাহের গর্ভবতী",
     "en": " · {weeks} weeks pregnant"
   },
+  "TeleconsultConsent.agreeButton": {
+    "bn": "আমি সম্মত",
+    "en": "I Agree"
+  },
+  "TeleconsultConsent.checkboxLabel": {
+    "bn": "আমি রোগীকে এটি ব্যাখ্যা করেছি এবং তিনি এই টেলিকনসাল্ট কলে সম্মত আছেন।",
+    "en": "I have explained this to the patient and they consent to this teleconsult call."
+  },
+  "TeleconsultConsent.declineButton": {
+    "bn": "প্রত্যাখ্যান",
+    "en": "Decline"
+  },
+  "TeleconsultConsent.errorMessage": {
+    "bn": "সম্মতি ফর্ম লোড করা যায়নি। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
+    "en": "Could not load the consent form. Please check your connection and try again."
+  },
+  "TeleconsultConsent.loadingMessage": {
+    "bn": "সম্মতি ফর্ম লোড হচ্ছে…",
+    "en": "Loading consent form…"
+  },
+  "TeleconsultConsent.patientContextLabel": {
+    "bn": "রোগী: {patientLabel}",
+    "en": "For: {patientLabel}"
+  },
+  "TeleconsultConsent.retryButton": {
+    "bn": "আবার চেষ্টা করুন",
+    "en": "Retry"
+  },
+  "TeleconsultConsent.title": {
+    "bn": "রোগীর সম্মতি",
+    "en": "Patient Consent"
+  },
   "Training.allModulesTitle": {
     "bn": "সকল মডিউল",
     "en": "All Modules"

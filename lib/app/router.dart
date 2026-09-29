@@ -29,6 +29,7 @@ import '../features/counselling/counselling_screen.dart';
 import '../core/config/app_config.dart';
 import '../features/debug/telemetry_viewer_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
+import '../features/teleconsult/teleconsult_consent_screen.dart';
 import '../features/assistant/assistant_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
 import '../features/patient/enroll/programme_enroll_screen.dart';
@@ -472,6 +473,24 @@ GoRouter buildRouter(AuthState auth) {
               isPostpartum: extra?['isPostpartum'] as bool? ?? false,
               postpartumWeeks: extra?['postpartumWeeks'] as int?,
               origin: origin,
+            ),
+          );
+        },
+      ),
+      // Patient-consent gate -- pushed before /teleconsult from
+      // `_TeleconsultButtonState._onTap`. Returns bool: true = consented,
+      // false/null = declined.
+      GoRoute(
+        path: '/teleconsult/consent',
+        name: 'teleconsult-consent',
+        pageBuilder: (context, state) {
+          final extra = state.extra is Map<String, dynamic>
+              ? state.extra as Map<String, dynamic>
+              : <String, dynamic>{};
+          return MaterialPage(
+            key: const ValueKey('teleconsult-consent-page'),
+            child: TeleconsultConsentScreen(
+              patientLabel: extra['patientLabel'] as String?,
             ),
           );
         },

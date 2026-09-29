@@ -6528,6 +6528,28 @@ abstract final class ConsentStrings {
   static String get declineCancel => getTranslatedString('declineCancel', 'Go back');
 }
 
+/// Strings for [TeleconsultConsentScreen] -- the patient-consent gate shown
+/// before every "Call a doctor now" teleconsult booking. The consent body
+/// itself is server-delivered HTML (see `ShukheeConsentClient`), never a
+/// hardcoded fallback; these strings cover only the surrounding chrome
+/// (title, loading/error state, action buttons).
+abstract final class TeleconsultConsentStrings {
+  TeleconsultConsentStrings._();
+
+  static String get title => getTranslatedString('TeleconsultConsent.title', 'Patient Consent');
+  static String patientContextLabel(String patientLabel) => getTranslatedString(
+        'TeleconsultConsent.patientContextLabel',
+        'For: {patientLabel}',
+        params: {'patientLabel': patientLabel},
+      );
+  static String get loadingMessage => getTranslatedString('TeleconsultConsent.loadingMessage', 'Loading consent form…');
+  static String get errorMessage => getTranslatedString('TeleconsultConsent.errorMessage', 'Could not load the consent form. Please check your connection and try again.');
+  static String get retryButton => getTranslatedString('TeleconsultConsent.retryButton', 'Retry');
+  static String get checkboxLabel => getTranslatedString('TeleconsultConsent.checkboxLabel', 'I have explained this to the patient and they consent to this teleconsult call.');
+  static String get agreeButton => getTranslatedString('TeleconsultConsent.agreeButton', 'I Agree');
+  static String get declineButton => getTranslatedString('TeleconsultConsent.declineButton', 'Decline');
+}
+
 /// Labels and coded values shown in the assessment detail sheets.
 ///
 /// The sheets previously rendered wire codes verbatim — `HIGH_RISK_PW`,

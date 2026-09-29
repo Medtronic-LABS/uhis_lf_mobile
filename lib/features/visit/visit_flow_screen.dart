@@ -4394,25 +4394,36 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
 
   static const _pink = Color(0xFFEC4899);
 
-  void _onTap(BuildContext context) => context.push(
-        '/teleconsult',
-        extra: {
-          'patientLabel': widget.patientLabel,
-          'patientId': widget.patientId,
-          if (widget.visitId != null) 'visitId': widget.visitId,
-          if (widget.patientPhone != null) 'patientPhone': widget.patientPhone,
-          if (widget.reason != null) 'reason': widget.reason,
-          if (widget.patientGender != null) 'patientGender': widget.patientGender,
-          if (widget.patientDob != null) 'patientDob': widget.patientDob,
-          if (widget.visitNumber != null) 'visitNumber': widget.visitNumber,
-          if (widget.gestationalWeeks != null) 'gestationalWeeks': widget.gestationalWeeks,
-          if (widget.clinicalContextSummary != null)
-            'clinicalContextSummary': widget.clinicalContextSummary,
-          if (widget.confirmedSymptoms.isNotEmpty) 'confirmedSymptoms': widget.confirmedSymptoms,
-          if (widget.referredReasons.isNotEmpty) 'referredReasons': widget.referredReasons,
-          if (widget.whatsappMessage != null) 'whatsappMessage': widget.whatsappMessage,
-        },
-      );
+  /// Gates the real Shukhee booking flow behind a full-screen patient-consent
+  /// page (`/teleconsult/consent`) -- see `TeleconsultConsentScreen`. Only
+  /// proceeds to `/teleconsult` when the SK confirms consent (`true`);
+  /// declining or backing out (`false`/`null`) leaves the SK on this screen.
+  Future<void> _onTap(BuildContext context) async {
+    final agreed = await context.push<bool>(
+      '/teleconsult/consent',
+      extra: {'patientLabel': widget.patientLabel},
+    );
+    if (agreed != true || !context.mounted) return;
+    context.push(
+      '/teleconsult',
+      extra: {
+        'patientLabel': widget.patientLabel,
+        'patientId': widget.patientId,
+        if (widget.visitId != null) 'visitId': widget.visitId,
+        if (widget.patientPhone != null) 'patientPhone': widget.patientPhone,
+        if (widget.reason != null) 'reason': widget.reason,
+        if (widget.patientGender != null) 'patientGender': widget.patientGender,
+        if (widget.patientDob != null) 'patientDob': widget.patientDob,
+        if (widget.visitNumber != null) 'visitNumber': widget.visitNumber,
+        if (widget.gestationalWeeks != null) 'gestationalWeeks': widget.gestationalWeeks,
+        if (widget.clinicalContextSummary != null)
+          'clinicalContextSummary': widget.clinicalContextSummary,
+        if (widget.confirmedSymptoms.isNotEmpty) 'confirmedSymptoms': widget.confirmedSymptoms,
+        if (widget.referredReasons.isNotEmpty) 'referredReasons': widget.referredReasons,
+        if (widget.whatsappMessage != null) 'whatsappMessage': widget.whatsappMessage,
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
