@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 51;
+  static const int schemaVersion = 52;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -73,6 +73,10 @@ class AppDatabase {
   static const String tableVisitContentTelemetry = 'visit_content_telemetry';
   static const String tableTeleconsultPrescriptions = 'teleconsult_prescriptions';
   static const String tableCallLogHistory = 'call_log_history';
+
+  /// AI assistant ("Ask") question/answer text. PHI — wiped on SK handover.
+  static const String tableAssistantContentTelemetry =
+      'assistant_content_telemetry';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -841,6 +845,7 @@ class AppDatabase {
         referral_recommendation TEXT,
         summary_started_at INTEGER,
         summary_end_at INTEGER,
+        helpfulness_vote TEXT,
         sk_user_id TEXT,
         captured_tenant_id INTEGER,
         occurred_at INTEGER NOT NULL,
@@ -854,12 +859,12 @@ class AppDatabase {
         'CREATE INDEX idx_visit_content_visit '
         'ON $tableVisitContentTelemetry(visit_uuid)');
 
-    // v49 — teleconsult_prescriptions: persists a completed teleconsult's
+    // v50 — teleconsult_prescriptions: persists a completed teleconsult's
     // prescription/invoice bytes against the visit that requested the call
     // (encounters.id), so the patient timeline can show a "view prescription"
     // icon on that visit's entry without a network re-fetch. See
-    // lib/core/db/teleconsult_prescription_dao.dart. (Renumbered from v42 —
-    // develop independently claimed v42-48 for the tables above.)
+    // lib/core/db/teleconsult_prescription_dao.dart. (Renumbered from v42,
+    // then v49 — develop independently claimed v42-49 for the tables above.)
     await db.execute('''
       CREATE TABLE $tableTeleconsultPrescriptions (
         visit_id TEXT PRIMARY KEY,
@@ -870,7 +875,7 @@ class AppDatabase {
         created_at INTEGER NOT NULL
       )''');
 
-    // v50 — call_log_history: a patient's full Shukhee call/prescription/
+    // v51 — call_log_history: a patient's full Shukhee call/prescription/
     // clinicalData history, synced in from Frappe's Call Logs doctype via
     // spice_next_core.api.sync.pull (see lib/core/sync/call_log_sync_service.dart)
     // -- distinct from tableTeleconsultPrescriptions above, which is
@@ -880,7 +885,7 @@ class AppDatabase {
     // different device. prescription_link/invoice_link are presence flags
     // only (never bytes) -- documents are always fetched live, on demand,
     // when the user taps to view them (see TeleconsultCallDetailScreen).
-    // (Renumbered from v43 for the same reason as v49 above.)
+    // (Renumbered from v43, then v50 for the same reason as v50 above.)
     await db.execute('''
       CREATE TABLE $tableCallLogHistory (
         id TEXT PRIMARY KEY,
@@ -903,6 +908,24 @@ class AppDatabase {
       )''');
     await db.execute(
         'CREATE INDEX idx_call_log_history_patient ON $tableCallLogHistory(patient_id, call_date DESC)');
+
+    await db.execute('''
+      CREATE TABLE $tableAssistantContentTelemetry (
+        id TEXT PRIMARY KEY,
+        correlator TEXT NOT NULL UNIQUE,
+          patient_id TEXT,
+        question TEXT,
+        answer TEXT,
+        app_language TEXT,
+        sk_user_id TEXT,
+        captured_tenant_id INTEGER,
+        occurred_at INTEGER NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_assistant_content_upload '
+        'ON $tableAssistantContentTelemetry(upload_status)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -910,6 +933,38 @@ class AppDatabase {
   /// reason [createSchema] is public — [AppDatabase.open]'s real SQLCipher
   /// path isn't usable from a plain `flutter test` environment.
   static Future<void> onUpgrade(Database db, int from, int to) async {
+    if (from < 49) {
+      // v49 — which patient the assistant question was about. Devices that
+      // reached v48 created the table without it, so ADD it here; fresh
+      // installs (and upgrades from <48) get it in the CREATE above.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableAssistantContentTelemetry ADD COLUMN patient_id TEXT');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 48) {
+      // v48 — the AI assistant ("Ask") PHI content stream: question + answer
+      // text, keyed by the per-ask correlator. Its own table (not on
+      // telemetry_events, which forbids free text), and IN [_allTables] so a
+      // different-SK login wipes it.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableAssistantContentTelemetry (
+          id TEXT PRIMARY KEY,
+          correlator TEXT NOT NULL UNIQUE,
+          patient_id TEXT,
+          question TEXT,
+          answer TEXT,
+          app_language TEXT,
+          sk_user_id TEXT,
+          captured_tenant_id INTEGER,
+          occurred_at INTEGER NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_assistant_content_upload '
+          'ON $tableAssistantContentTelemetry(upload_status)');
+    }
     if (from < 2) {
       // Add risk + programme columns to the existing patients row.
       // SQLite has no IF NOT EXISTS for ADD COLUMN, so each ALTER is wrapped
@@ -2180,6 +2235,17 @@ class AppDatabase {
         );
       }
     }
+    if (from < 49) {
+      // v49 — Step 3 counselling helpfulness vote (LEAP-68).
+      try {
+        await db.execute(
+          'ALTER TABLE $tableVisitContentTelemetry '
+          'ADD COLUMN helpfulness_vote TEXT',
+        );
+      } catch (_) {
+        /* column already present */
+      }
+    }
     if (from < 48) {
       // v48 — training audio sample queue for voice sample collection.
       // Additive; safe on devices arriving from any prior version.
@@ -2209,9 +2275,10 @@ class AppDatabase {
         'ON $tableAudioSamples(next_retry_at)',
       );
     }
-    if (from < 49) {
-      // v49 — see createSchema's identical block for why this table exists.
-      // (Renumbered from v42 — develop independently claimed v42-48 above.)
+    if (from < 50) {
+      // v50 — see createSchema's identical block for why this table exists.
+      // (Renumbered from v42, then v49 — develop independently claimed
+      // v42-49 above, including its own v48/v49 for assistant_content_telemetry.)
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $tableTeleconsultPrescriptions (
           visit_id TEXT PRIMARY KEY,
@@ -2222,9 +2289,10 @@ class AppDatabase {
           created_at INTEGER NOT NULL
         )''');
     }
-    if (from < 50) {
-      // v50 — see createSchema's identical block for why this table/column
-      // exist. (Renumbered from v43 for the same reason as v49 above.)
+    if (from < 51) {
+      // v51 — see createSchema's identical block for why this table/column
+      // exist. (Renumbered from v43, then v50 for the same reason as v50
+      // above.)
       try {
         await db.execute('ALTER TABLE $tableSyncMeta ADD COLUMN cursor INTEGER');
       } catch (_) {/* column already present — no-op */}
@@ -2251,8 +2319,8 @@ class AppDatabase {
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_call_log_history_patient ON $tableCallLogHistory(patient_id, call_date DESC)');
     }
-    if (from < 51) {
-      // v51 — fhir_encounter_id: the visit's server-assigned FHIR Encounter
+    if (from < 52) {
+      // v52 — fhir_encounter_id: the visit's server-assigned FHIR Encounter
       // id, attached after the fact once OfflineSyncService's own
       // assessment-history sync learns it (see
       // shukhee_integration.api.consultation.attach_fhir_encounter_id on the
@@ -2297,6 +2365,7 @@ class AppDatabase {
     tableAiValueAudit,
     tableVisitContentTelemetry,
     tableTeleconsultPrescriptions, tableCallLogHistory,
+    tableAssistantContentTelemetry,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the
