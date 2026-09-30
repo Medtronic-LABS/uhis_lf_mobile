@@ -46,6 +46,8 @@ import 'core/db/patient_programmes_dao.dart';
 import 'core/db/pregnancy_episode_dao.dart';
 import 'core/db/pregnancy_snapshot_dao.dart';
 import 'core/db/treatment_presence_dao.dart';
+import 'core/db/teleconsult_prescription_dao.dart';
+import 'core/db/call_log_history_dao.dart';
 import 'core/db/referral_dao.dart';
 import 'core/db/sync_meta_dao.dart';
 import 'core/risk/risk_scoring_service.dart';
@@ -63,6 +65,9 @@ import 'core/telemetry/visit_content_uploader.dart';
 import 'core/telemetry/assistant_content_dao.dart';
 import 'core/telemetry/assistant_content_service.dart';
 import 'core/telemetry/assistant_content_uploader.dart';
+import 'core/telemetry/teleconsult_consent_log_dao.dart';
+import 'core/telemetry/teleconsult_consent_log_service.dart';
+import 'core/telemetry/teleconsult_consent_log_uploader.dart';
 import 'core/sync/offline_sync_service.dart';
 import 'app/post_sync_refresher.dart';
 import 'core/sync/sync_foreground_controller.dart';
@@ -94,6 +99,10 @@ import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
+import 'core/sync/call_log_sync_client.dart';
+import 'core/sync/call_log_sync_service.dart';
+import 'core/sync/shukhee_encounter_attach_service.dart';
+import 'core/sync/shukhee_encounter_link_client.dart';
 import 'core/version/app_update_flow.dart';
 import 'core/version/app_version_enforcer.dart';
 import 'core/version/app_version_info.dart';
@@ -192,6 +201,49 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
   late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
+  late final TeleconsultPrescriptionDao _teleconsultPrescriptionDao =
+      TeleconsultPrescriptionDao(widget.appDb);
+  late final CallLogHistoryDao _callLogHistoryDao = CallLogHistoryDao(widget.appDb);
+  late final CallLogSyncClient _callLogSyncClient = CallLogSyncClient(
+    baseUrl: AppConfig.spiceNextCoreApiBaseUrl,
+    // Same "strip the Bearer prefix" reasoning as
+    // features/teleconsult/shukhee_client_factory.dart's buildShukheeClient.
+    authTokenProvider: () async {
+      final raw = widget.api.exportAuthToken();
+      if (raw == null) return null;
+      const prefix = 'Bearer ';
+      return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+    },
+    tenantIdProvider: () async => widget.api.tenantId,
+  );
+  late final CallLogSyncService _callLogSync = CallLogSyncService(
+    client: _callLogSyncClient,
+    dao: _callLogHistoryDao,
+    syncMeta: _syncMetaDao,
+  );
+  // Same auth pattern as _callLogSyncClient above -- this hits
+  // shukhee_integration rather than spice_next_core, but both currently
+  // resolve to the same Frappe site/gateway (see AppConfig.shukheeApiBaseUrl's
+  // doc comment).
+  late final ShukheeEncounterLinkClient _shukheeEncounterLinkClient =
+      ShukheeEncounterLinkClient(
+    baseUrl: AppConfig.shukheeApiBaseUrl,
+    authTokenProvider: () async {
+      final raw = widget.api.exportAuthToken();
+      if (raw == null) return null;
+      const prefix = 'Bearer ';
+      return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+    },
+    tenantIdProvider: () async => widget.api.tenantId,
+  );
+  // Shared by OfflineSyncService (pull-side catch-up), OfflinePushService and
+  // AssessmentRepository (push-side, fires within seconds of a visit
+  // finishing) -- see ShukheeEncounterAttachService's own doc comment.
+  late final ShukheeEncounterAttachService _shukheeEncounterAttach =
+      ShukheeEncounterAttachService(
+    callLogHistory: _callLogHistoryDao,
+    linkClient: _shukheeEncounterLinkClient,
+  );
   late final TelemetryDao _telemetryDao = TelemetryDao(widget.appDb);
   late final TelemetryService _telemetryService = TelemetryService(
     dao: _telemetryDao,
@@ -237,6 +289,19 @@ class _UhisNextAppState extends State<UhisNextApp>
   );
   late final AssistantContentUploader _assistantContentUploader =
       AssistantContentUploader(_assistantContentDao, widget.api);
+  late final TeleconsultConsentLogDao _teleconsultConsentLogDao =
+      TeleconsultConsentLogDao(widget.appDb);
+  late final TeleconsultConsentLogService _teleconsultConsentLogService =
+      TeleconsultConsentLogService(
+    dao: _teleconsultConsentLogDao,
+    userIdResolver: widget.authRepo.userId,
+    tenantIdResolver: () async {
+      final raw = await widget.authRepo.currentTenantId();
+      return raw == null ? null : int.tryParse(raw);
+    },
+  );
+  late final TeleconsultConsentLogUploader _teleconsultConsentLogUploader =
+      TeleconsultConsentLogUploader(_teleconsultConsentLogDao, widget.api);
   late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
     households: _householdDao,
     members: _memberDao,
@@ -264,6 +329,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     pregnancyEpisode: _pregnancyEpisodeDao,
     treatmentPresence: _treatmentPresenceDao,
     encounterDao: _encounterDao,
+    encounterAttach: _shukheeEncounterAttach,
     // CCE: project followUp / assessment-history referrals into `referrals`.
     referrals: _referralDao,
     // P1: share the same UserHierarchyService instance so OfflineSyncService
@@ -330,6 +396,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     historyDao: _assessmentDao,
     followUpCalls: _followUpCallService,
     memberDao: _memberDao,
+    encounterAttach: _shukheeEncounterAttach,
   );
   late final OfflinePushService _offlinePush = OfflinePushService(
     api: widget.api,
@@ -338,6 +405,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     members: _memberDao,
     assessments: _localAssessmentDao,
     followUpCalls: _followUpCallService,
+    encounterAttach: _shukheeEncounterAttach,
   );
   /// Runs the Android dataSync foreground service for as long as any sync is
   /// in flight, so a pull that outlives the 30 s screen timeout is not frozen
@@ -353,6 +421,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     valueAudit: _valueAuditUploader,
     visitContent: _visitContentUploader,
     assistantContent: _assistantContentUploader,
+    teleconsultConsentLog: _teleconsultConsentLogUploader,
   );
   late final SyncForegroundController _syncForeground = SyncForegroundController(
     progress: _sync.progressStream,
@@ -376,6 +445,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     pushService: _offlinePush,
     authState: widget.authState,
     authRepo: widget.authRepo,
+    callLogSync: _callLogSync,
     flushUploadQueues: _postSync.flushUploadQueues,
   );
   late final AppVersionEnforcer _appVersionEnforcer =
@@ -554,6 +624,9 @@ class _UhisNextAppState extends State<UhisNextApp>
                 )),
         // Visit flow providers
         Provider<EncounterDao>.value(value: _encounterDao),
+        Provider<TeleconsultPrescriptionDao>.value(value: _teleconsultPrescriptionDao),
+        Provider<CallLogHistoryDao>.value(value: _callLogHistoryDao),
+        Provider<CallLogSyncService>.value(value: _callLogSync),
         Provider<TelemetryDao>.value(value: _telemetryDao),
         Provider<TelemetryService>.value(value: _telemetryService),
         Provider<TelemetryUploader>.value(value: _telemetryUploader),
@@ -567,6 +640,12 @@ class _UhisNextAppState extends State<UhisNextApp>
             value: _assistantContentService),
         Provider<AssistantContentUploader>.value(
             value: _assistantContentUploader),
+        Provider<TeleconsultConsentLogDao>.value(
+            value: _teleconsultConsentLogDao),
+        Provider<TeleconsultConsentLogService>.value(
+            value: _teleconsultConsentLogService),
+        Provider<TeleconsultConsentLogUploader>.value(
+            value: _teleconsultConsentLogUploader),
         Provider<EncounterRepository>(
             create: (ctx) => EncounterRepository(
                   widget.api,

@@ -38,6 +38,7 @@ import '../models/referral.dart';
 import '../referral/referral_ingest_mapper.dart';
 import 'latest_visit_follow_up.dart';
 import 'pregnancy_delivery_sync.dart';
+import 'shukhee_encounter_attach_service.dart';
 import 'sync_activity.dart';
 import 'sync_progress.dart';
 import 'sync_report.dart';
@@ -65,6 +66,12 @@ class OfflineSyncService extends ChangeNotifier {
     PregnancyEpisodeDao? pregnancyEpisode,
     TreatmentPresenceDao? treatmentPresence,
     EncounterDao? encounterDao,
+    // Durably attaches a visit's FHIR Encounter id onto its local Call Logs
+    // row, run as a best-effort step of the assessment-history persist path
+    // so the Shukhee call/prescription link survives a full local data wipe
+    // or a new device. Also fed (much sooner) from OfflinePushService's and
+    // AssessmentRepository's push+poll paths -- see ShukheeEncounterAttachService.
+    ShukheeEncounterAttachService? encounterAttach,
     // CCE: ingest open referrals from followUps / assessment history into
     // the local `referrals` table (SLA recompute runs after sync in UI).
     ReferralDao? referrals,
@@ -87,6 +94,7 @@ class OfflineSyncService extends ChangeNotifier {
         _pregnancyEpisode = pregnancyEpisode,
         _treatmentPresence = treatmentPresence,
         _encounterDao = encounterDao,
+        _encounterAttach = encounterAttach,
         _referrals = referrals,
         _hierarchy = hierarchy,
         _healthFacilities = healthFacilities;
@@ -114,6 +122,7 @@ class OfflineSyncService extends ChangeNotifier {
   final PregnancyEpisodeDao? _pregnancyEpisode;
   final TreatmentPresenceDao? _treatmentPresence;
   final EncounterDao? _encounterDao;
+  final ShukheeEncounterAttachService? _encounterAttach;
   final ReferralDao? _referrals;
   // P1: shared hierarchy service — avoids second user-data call on full sync
   final UserHierarchyService? _hierarchy;
@@ -1840,33 +1849,63 @@ class OfflineSyncService extends ChangeNotifier {
         );
       }
 
-      // Write encounter rows with extracted vitals so VitalsRepository can
-      // render Recent Vitals without a new network call. Only rows that carry
-      // clinical assessmentDetails (NCD/ANC/PNC have BP/weight etc.) get an
-      // encounter row; rows with no vitals content are skipped.
-      int vitalsWritten = 0;
+      // Write an encounter row for every assessment-history item, not just
+      // ones carrying extractable vitals (NCD/ANC/PNC have BP/weight etc. --
+      // Eye Care/Cataract and other vitals-less programmes do not). Vitals
+      // are an optional enrichment (VitalsRepository's own
+      // recentWithVitalsForPatient already filters on vitals_json being
+      // non-null/non-empty, so a null here is invisible to it), never a
+      // gate on the row's existence -- gating on vitals meant the
+      // `encounters` table never reflected a vitals-less visit at all once
+      // synced, silently breaking anything keyed off `encounters.id` for
+      // that visit (e.g. TeleconsultHistorySection's encounter_id join for a
+      // Shukhee call booked from an Eye Care visit).
+      int encounterRowsWritten = 0;
+      // client-minted draft id -> the server's own FHIR Encounter id for the
+      // same visit, collected below whenever findPendingDraftId reconciles
+      // one -- fed to _attachPendingFhirEncounterIds afterward so a Shukhee
+      // Call Logs row for that same visit can have its FHIR id durably
+      // attached server-side (see that method's doc comment).
+      final draftToServerEncounterId = <String, String>{};
       if (_encounterDao != null) {
+        final encounterDao = _encounterDao;
         final encounterRows = <EncounterRow>[];
         for (final item in items) {
           final patientId = memberToPatient[item.householdMemberId];
           if (patientId == null || patientId.isEmpty) continue;
           final vitals = _vitalsFromAssessmentRaw(item.rawJson);
-          if (vitals == null) continue;
-          encounterRows.add(EncounterRow(
-            id: item.encounterId,
+          final programme = (item.serviceProvided ?? 'assessment').toLowerCase();
+          // Reconcile onto a matching local draft's own id when one exists,
+          // so anything already anchored to that client-minted id (e.g. a
+          // Shukhee Call Logs row's encounter_id) doesn't go stale the
+          // moment this device syncs -- see EncounterDao.findPendingDraftId.
+          final draftId = await encounterDao.findPendingDraftId(
             patientId: patientId,
-            programme: (item.serviceProvided ?? 'assessment').toLowerCase(),
+            programme: programme,
+            around: item.visitDate,
+          );
+          if (draftId != null) {
+            draftToServerEncounterId[draftId] = item.encounterId;
+          }
+          encounterRows.add(EncounterRow(
+            id: draftId ?? item.encounterId,
+            patientId: patientId,
+            programme: programme,
             startedAt: item.visitDate.millisecondsSinceEpoch,
             completedAt: item.visitDate.millisecondsSinceEpoch,
             status: EncounterStatus.synced,
             syncStatus: SyncStatus.synced,
-            vitalsJson: jsonEncode(vitals),
+            serverVisitId: draftId != null ? item.encounterId : null,
+            vitalsJson: vitals == null ? null : jsonEncode(vitals),
           ));
         }
         if (encounterRows.isNotEmpty) {
-          await _encounterDao.upsertMany(encounterRows);
-          vitalsWritten = encounterRows.length;
+          await encounterDao.upsertMany(encounterRows);
+          encounterRowsWritten = encounterRows.length;
         }
+      }
+      if (draftToServerEncounterId.isNotEmpty) {
+        await _encounterAttach?.attachAll(draftToServerEncounterId);
       }
 
       // Write assessment rows keyed by FHIR patient ID so AssessmentDao queries
@@ -1917,7 +1956,7 @@ class OfflineSyncService extends ChangeNotifier {
       debugPrint(
         '[SyncPersist] assessmentHistory=${items.length} '
         'programmes=$progUpdated visitSchedule=$schedUpdated '
-        'encounters=$vitalsWritten assessments=${assessmentRows.length} '
+        'encounters=$encounterRowsWritten assessments=${assessmentRows.length} '
         'referrals=$referralCount',
       );
       return referralCount;
@@ -1928,6 +1967,30 @@ class OfflineSyncService extends ChangeNotifier {
       return null;
     }
   }
+
+  /// Best-effort: for every visit this sync pass just reconciled onto its
+  /// original client-minted id ([draftToServerEncounterId], keyed by that
+  /// draft id -> the server's own FHIR Encounter id), durably attaches the
+  /// FHIR id onto that visit's local Shukhee Call Logs row, if any
+  /// ([ShukheeEncounterAttachService.attachAll]).
+  ///
+  /// This is a redundant catch-up path: `OfflinePushService`/
+  /// `AssessmentRepository`'s push+poll normally attaches this far sooner
+  /// (seconds after the visit, not on the next full sync) -- see
+  /// `ShukheeEncounterAttachService.attachForVisit`. This one covers a call
+  /// whose push/poll never ran on this device (offline for a long stretch,
+  /// or synced in from a different device).
+  ///
+  /// Test-only entry point -- lets a test exercise this step directly
+  /// against a real in-memory `CallLogHistoryDao` + a scripted
+  /// `ShukheeEncounterLinkClient`, without needing to mock the full
+  /// assessment-history HTTP fetch this is normally reached through. Same
+  /// pattern as `AppDatabase.forTesting`.
+  @visibleForTesting
+  Future<void> attachPendingFhirEncounterIdsForTest(
+    Map<String, String> draftToServerEncounterId,
+  ) =>
+      _encounterAttach?.attachAll(draftToServerEncounterId) ?? Future.value();
 
   /// Calls `POST /spice-service/static-data/user-data`, extracts village IDs
   /// and the user's FHIR Practitioner ID, persists both, and returns the list.

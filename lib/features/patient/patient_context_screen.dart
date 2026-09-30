@@ -16,12 +16,19 @@ import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/phi_screen.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
+import '../../core/db/call_log_history_dao.dart';
+import '../../core/db/teleconsult_prescription_dao.dart';
+import '../teleconsult/document_download_button.dart';
+import '../teleconsult/pdf_viewer_screen.dart';
+import '../teleconsult/shukhee_client_factory.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/immunisation_dao.dart';
 import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
+import '../../core/sync/call_log_sync_service.dart';
 import '../../core/sync/offline_sync_service.dart';
+import 'teleconsult_history_section.dart';
 import '../../core/clinical/ai_context_fields.dart';
 import '../../core/clinical/referral_facility_labels.dart';
 import '../../core/clinical/assessment_raw_normalizer.dart';
@@ -262,6 +269,18 @@ class PatientOrMemberData {
           'referralStatus': draftRaw['referralStatus'],
         if (draftRaw['isReferred'] != null)
           'isReferred': draftRaw['isReferred'],
+        // The synced row's own `id` becomes the merged identity (a
+        // server-assigned encounterId, unrelated to the client-generated
+        // visit UUID) -- but TeleconsultScreen saved the prescription under
+        // that original client UUID, before this visit ever synced. Carry
+        // it forward here so _visitIdForAssessment can still recover it
+        // post-merge; without this line, once a visit's draft pairs with
+        // its synced counterpart, the icon permanently disappears from the
+        // timeline even though the row in teleconsult_prescriptions is
+        // still there (confirmed live: visitId flips from a UUID to a
+        // small numeric id the moment `member-assessment-history` re-syncs).
+        if (draftRaw['encounterId'] != null)
+          'encounterId': draftRaw['encounterId'],
       },
     );
   }
@@ -586,12 +605,27 @@ class _PatientContextScreenState
           }
         }
 
+        // otherDetails stashes the visit/encounter id (see
+        // AssessmentRepository's enrichedOtherDetails) -- surfacing it here
+        // lets _visitIdForAssessment resolve the real visit id for a draft
+        // that hasn't synced yet (its own MemberAssessment.id is only this
+        // draft row's local UUID, not the visit id).
+        String? encounterId;
+        final odRaw = d.otherDetails;
+        if (odRaw != null && odRaw.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(odRaw);
+            if (decoded is Map) encounterId = decoded['encounterId'] as String?;
+          } catch (_) {}
+        }
+
         final localRaw = <String, dynamic>{
           'isReferred': d.isReferred,
           'referralStatus': d.referralStatus,
           'syncStatus': d.syncStatus.name,
           'assessmentDetails': details,
           if (customStatus != null) 'customStatus': customStatus,
+          if (encounterId != null) 'encounterId': encounterId,
         };
 
         out.add(MemberAssessment(
@@ -937,6 +971,15 @@ class _PatientContextScreenState
         );
         return;
       }
+      // Best-effort, like the rest of this manual refresh action -- "refresh
+      // this patient" also picks up any brand-new Shukhee calls, independent
+      // of the household/patient bundle sync above.
+      try {
+        await context.read<CallLogSyncService>().pull();
+      } catch (e) {
+        debugPrint('[PatientContextScreen] call-log history pull failed: $e');
+      }
+      if (!mounted) return;
       final data = await _fetchData();
       if (!mounted) return;
       setState(() {
@@ -1436,6 +1479,9 @@ class _PatientContextScreenState
                       pregnancySnapshot: snap,
                     ),
 
+                    // ── Teleconsult history (synced from Frappe) ──────────
+                    TeleconsultHistorySection(patientId: widget.patientId),
+
                     // ── Action row ────────────────────────────────────────
                     PatientActionsRow(
                       patientId: widget.patientId,
@@ -1692,6 +1738,17 @@ String? _pncVisitNumberFrom(MemberAssessment a, Map<String, dynamic> raw) {
 /// summaries — mirrors Spice `MemberAssessmentHistoryAdapterUtil.shouldShowReferralStatus`.
 bool _shouldShowReferralStatus(Programme prog) =>
     prog != Programme.familyPlanning;
+
+/// The visit/encounter id for [a], for looking up a
+/// [TeleconsultPrescriptionDao] row. For a server-synced assessment,
+/// `MemberAssessment.id` already *is* the encounter id (see
+/// `OfflineSyncService`'s sync-time write). For a local draft it's only
+/// this draft row's own UUID -- the real encounter id is stashed in
+/// `rawJson['encounterId']` instead (see the local-drafts fetch above).
+/// Falls back to [MemberAssessment.id] when absent, which simply won't
+/// match any teleconsult record (no false positives, just a miss).
+String? _visitIdForAssessment(MemberAssessment a) =>
+    a.rawJson['encounterId'] as String? ?? a.id;
 
 _TimelineEntry _assessmentToEntry(MemberAssessment a, {bool showAsReferral = true}) {
   final raw = _normalizeRaw(a.rawJson);
@@ -4227,6 +4284,33 @@ class _DetailRow extends StatelessWidget {
 
 // ─── Combined Timeline ─────────────────────────────────────────────────────
 
+/// A visit's prescription/invoice from either source available for it --
+/// [local] (this device's own live call, actual bytes already on disk via
+/// `TeleconsultPrescriptionDao`) and/or [remote] (any device's call, synced in
+/// from Frappe via `CallLogHistoryDao` -- only a presence flag + `encounter_id`
+/// / `fhir_encounter_id`, bytes fetched live on demand).
+///
+/// [local] is local-only and has no sync-back path, so after a full data wipe
+/// or on a different device it is always null even for a visit that really
+/// does have a saved document -- [remote] is what survives that, since its
+/// `fhir_encounter_id` link is durable (see `ShukheeEncounterAttachService`).
+/// Prefer [local] when present (already-downloaded bytes, no network call);
+/// fall back to [remote] otherwise (see `DocumentDownloadButton`'s live-fetch
+/// pattern, reused here).
+class _PrescriptionRef {
+  const _PrescriptionRef({this.local, this.remote});
+
+  final TeleconsultPrescriptionRow? local;
+  final CallLogHistoryRow? remote;
+
+  bool get hasAnyDocument =>
+      (local?.hasAnyDocument ?? false) ||
+      (remote?.hasPrescription ?? false) ||
+      (remote?.hasInvoice ?? false);
+
+  String? get doctorName => local?.doctorName ?? remote?.doctorName;
+}
+
 // _BpLineChart removed
 /// [entries] are newest-first (pending at top, oldest at bottom).
 class _CombinedTimeline extends StatefulWidget {
@@ -4247,6 +4331,111 @@ class _CombinedTimeline extends StatefulWidget {
 class _CombinedTimelineState extends State<_CombinedTimeline> {
   static const _kInitialCount = 3;
   bool _expanded = false;
+
+  /// Visit id → prescription (local bytes and/or a durable remote link), for
+  /// every visit among [widget.entries] that has one. Fetched once per
+  /// entry-list change (not per row) — follows the `...ForMany` batched-lookup
+  /// convention already used elsewhere on this screen (see
+  /// `AssessmentDao.forMany`) rather than a query per row.
+  Map<String, _PrescriptionRef> _prescriptions = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrescriptions();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CombinedTimeline oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.entries, widget.entries)) {
+      _loadPrescriptions();
+    }
+  }
+
+  Future<void> _loadPrescriptions() async {
+    final visitIds = <String>{
+      for (final entry in widget.entries)
+        for (final a in entry.tapSources)
+          if (_visitIdForAssessment(a) case final id?) id,
+    }.toList();
+    if (visitIds.isEmpty) {
+      if (_prescriptions.isNotEmpty && mounted) setState(() => _prescriptions = const {});
+      return;
+    }
+    final localDao = context.read<TeleconsultPrescriptionDao>();
+    final callLogDao = context.read<CallLogHistoryDao>();
+    final localResult = await localDao.getForVisits(visitIds);
+    // getForEncounters matches each row by encounter_id OR fhir_encounter_id
+    // (see CallLogHistoryDao) -- attribute each returned row back to
+    // whichever of visitIds it actually matched, since the two ids on the
+    // same row can differ (client UUID vs the server FHIR id once synced).
+    final remoteRows = await callLogDao.getForEncounters(visitIds);
+    final remoteByVisitId = <String, CallLogHistoryRow>{};
+    for (final id in visitIds) {
+      for (final row in remoteRows) {
+        if (row.encounterId == id || row.fhirEncounterId == id) {
+          remoteByVisitId[id] = row;
+          break;
+        }
+      }
+    }
+
+    final combined = <String, _PrescriptionRef>{};
+    for (final id in visitIds) {
+      final ref = _PrescriptionRef(local: localResult[id], remote: remoteByVisitId[id]);
+      if (ref.hasAnyDocument) combined[id] = ref;
+    }
+
+    ConsoleLog.step('[TeleconsultPrescription] timeline lookup: checked ${visitIds.length} '
+        'visit id(s), found ${combined.length} with a saved prescription/invoice '
+        '(local=${localResult.length} remote=${remoteByVisitId.length}). '
+        'checked=$visitIds matched=${combined.keys.toList()}');
+    if (combined.isNotEmpty) {
+      // Which visible row(s) each matched visit id resolves from -- more
+      // than one row per id here is exactly what would render as a
+      // "duplicate" prescription (see _prescriptionFor's claiming logic,
+      // which is the presentation-layer guard against it).
+      for (final matchedId in combined.keys) {
+        final rowTitles = [
+          for (final entry in widget.entries)
+            if (entry.tapSources.any((a) => _visitIdForAssessment(a) == matchedId)) entry.title,
+        ];
+        ConsoleLog.step('[TeleconsultPrescription]   visitId=$matchedId appears on '
+            '${rowTitles.length} timeline row(s): $rowTitles');
+      }
+    }
+    if (mounted) setState(() => _prescriptions = combined);
+  }
+
+  /// Whether the row for [entry] should show a prescription icon at all --
+  /// true if *any* of its [tapSources] has one, since a visit-day row can
+  /// fold in more than one distinct visit (each with its own encounter id)
+  /// and only one of them may actually have gone through a teleconsult call.
+  /// This only decides whether the icon appears; it never decides *which*
+  /// document is shown -- that's always resolved per the specific assessment
+  /// actually opened (see [_openVisitDayDetail]'s use of [_prescriptions]
+  /// directly), never blanket-applied to every visit folded into the row.
+  ///
+  /// [claimedVisitIds] additionally guards against the same visit surfacing
+  /// as more than one *top-level* row (a synced/local pairing gap elsewhere
+  /// on this screen can leave one visit's draft and synced copies
+  /// unmerged) -- without this, the same visit's icon would light up two
+  /// separate rows. Only the first (most recent, since [widget.entries] is
+  /// date-sorted) row claims a given visit id; later rows with the same id
+  /// don't show the icon again.
+  bool _rowHasPrescription(_TimelineEntry entry, Set<String> claimedVisitIds) {
+    for (final a in entry.tapSources) {
+      final visitId = _visitIdForAssessment(a);
+      if (visitId == null || claimedVisitIds.contains(visitId)) continue;
+      final row = _prescriptions[visitId];
+      if (row != null && row.hasAnyDocument) {
+        claimedVisitIds.add(visitId);
+        return true;
+      }
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4269,11 +4458,14 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
           ? widget.entries
           : widget.entries.take(_kInitialCount).toList();
       final entryRows = <Widget>[];
+      final claimedVisitIds = <String>{};
       for (int i = 0; i < visible.length; i++) {
         entryRows.add(_TimelineEntryRow(
           entry: visible[i],
           isLast: i == visible.length - 1 && (!hasMore || _expanded),
           pregnancySnapshot: widget.pregnancySnapshot,
+          showPrescriptionIcon: _rowHasPrescription(visible[i], claimedVisitIds),
+          prescriptions: _prescriptions,
         ));
       }
       Widget? showMoreBtn;
@@ -4337,11 +4529,23 @@ class _TimelineEntryRow extends StatelessWidget {
     required this.entry,
     required this.isLast,
     this.pregnancySnapshot,
+    this.showPrescriptionIcon = false,
+    this.prescriptions = const {},
   });
 
   final _TimelineEntry entry;
   final bool isLast;
   final PregnancySnapshotRow? pregnancySnapshot;
+
+  /// Whether *any* visit folded into this row has a saved prescription --
+  /// governs only whether the icon appears, never which document it opens.
+  final bool showPrescriptionIcon;
+
+  /// Visit id → prescription, for resolving exactly which document belongs
+  /// to whichever specific assessment ends up opened (a multi-visit day can
+  /// fold together visits that are NOT the same encounter, so the row-level
+  /// icon must never imply every one of them shares the same prescription).
+  final Map<String, _PrescriptionRef> prescriptions;
 
   static const _dotSize = 24.0;
   static const _lineWidth = 1.5;
@@ -4387,6 +4591,8 @@ class _TimelineEntryRow extends StatelessWidget {
               child: _TimelineEntryCard(
                 entry: entry,
                 pregnancySnapshot: pregnancySnapshot,
+                showPrescriptionIcon: showPrescriptionIcon,
+                prescriptions: prescriptions,
               ),
             ),
           ),
@@ -4402,10 +4608,51 @@ class _TimelineEntryCard extends StatelessWidget {
   const _TimelineEntryCard({
     required this.entry,
     this.pregnancySnapshot,
+    this.showPrescriptionIcon = false,
+    this.prescriptions = const {},
   });
 
   final _TimelineEntry entry;
   final PregnancySnapshotRow? pregnancySnapshot;
+  final bool showPrescriptionIcon;
+
+  /// Visit id → prescription (see `TeleconsultScreen._savePrescriptionToVisit`).
+  /// Looked up per specific assessment, never blanket-applied to the whole
+  /// row -- a visit-day row can fold together visits that are NOT the same
+  /// encounter, so only the one that actually has a saved document should
+  /// ever open it.
+  final Map<String, _PrescriptionRef> prescriptions;
+
+  /// The first tapSource (and its prescription) that actually has a saved
+  /// document, or null if none do. Used both to decide what the icon opens
+  /// directly and, for a single-source row, what the whole-card tap opens.
+  (MemberAssessment, _PrescriptionRef)? get _matchingSource {
+    for (final a in entry.tapSources) {
+      final visitId = _visitIdForAssessment(a);
+      final ref = visitId == null ? null : prescriptions[visitId];
+      if (ref != null && ref.hasAnyDocument) return (a, ref);
+    }
+    return null;
+  }
+
+  Future<void> _openPrescription(BuildContext context) async {
+    final match = _matchingSource;
+    if (match == null) return;
+    final ref = match.$2;
+    final local = ref.local;
+    if (local != null && (local.prescriptionBytes != null || local.invoiceBytes != null)) {
+      final bytes = local.prescriptionBytes ?? local.invoiceBytes!;
+      final title = local.prescriptionBytes != null
+          ? TeleconsultStrings.viewPrescription
+          : TeleconsultStrings.viewInvoice;
+      _openPrescriptionDocument(context, title: title, bytes: bytes);
+      return;
+    }
+    final remote = ref.remote;
+    if (remote != null && (remote.hasPrescription || remote.hasInvoice)) {
+      await _fetchAndOpenRemoteDocument(context, remote);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4419,6 +4666,7 @@ class _TimelineEntryCard extends StatelessWidget {
                 context,
                 entry: entry,
                 pregnancySnapshot: pregnancySnapshot,
+                prescriptions: prescriptions,
               ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4453,6 +4701,28 @@ class _TimelineEntryCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (showPrescriptionIcon) ...[
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: (_matchingSource?.$2.local?.prescriptionBytes != null ||
+                          _matchingSource?.$2.remote?.hasPrescription == true)
+                      ? TeleconsultStrings.viewPrescription
+                      : TeleconsultStrings.viewInvoice,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => _openPrescription(context),
+                    child: const Padding(
+                      padding: EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.medication_liquid_outlined,
+                        size: 15,
+                        color: AppColors.aiPurple,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 4),
               Text(
                 entry.relativeDate,
                 style: const TextStyle(
@@ -4601,10 +4871,25 @@ class _TimelineShimmer extends StatelessWidget {
 
 /// Opens assessment detail for a Care History row. Same-day multi-programme
 /// visits prompt which assessment to open; a single source opens directly.
+/// Resolves the prescription for one specific assessment (never for a whole
+/// visit-day row) -- a multi-source day can fold together visits that are
+/// NOT the same encounter, so this must key off [a]'s own visit id, not
+/// "does anything in this row have one".
+_PrescriptionRef? _prescriptionForAssessment(
+  MemberAssessment a,
+  Map<String, _PrescriptionRef> prescriptions,
+) {
+  final visitId = _visitIdForAssessment(a);
+  if (visitId == null) return null;
+  final ref = prescriptions[visitId];
+  return (ref != null && ref.hasAnyDocument) ? ref : null;
+}
+
 Future<void> _openVisitDayDetail(
   BuildContext context, {
   required _TimelineEntry entry,
   PregnancySnapshotRow? pregnancySnapshot,
+  Map<String, _PrescriptionRef> prescriptions = const {},
 }) async {
   final sources = entry.tapSources;
   if (sources.isEmpty) return;
@@ -4613,47 +4898,66 @@ Future<void> _openVisitDayDetail(
       context,
       sources.first,
       pregnancySnapshot: pregnancySnapshot,
+      prescription: _prescriptionForAssessment(sources.first, prescriptions),
     );
     return;
   }
 
-  // Pair each assessment with the matching segment of the joined title.
-  final titleParts = entry.title.split(' · ');
+  // Row labels come straight from each assessment's own type + time, not
+  // from splitting entry.title -- that title's own parts are deduplicated
+  // when two same-day assessments share a display name (e.g. two Eye Care
+  // visits), so titleParts.length can be shorter than sources.length, and
+  // zipping them by index silently mislabels or blanks out later rows.
   final chosen = await showModalBottomSheet<MemberAssessment>(
     context: context,
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (ctx) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Text(
-              PatientDetailStrings.assessmentsThisVisit,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          for (var i = 0; i < sources.length; i++)
-            ListTile(
-              title: Text(
-                i < titleParts.length ? titleParts[i] : sources[i].type,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                PatientDetailStrings.assessmentsThisVisit,
                 style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
                 ),
               ),
-              trailing: const Icon(Icons.chevron_right_rounded, size: 20),
-              onTap: () => Navigator.of(ctx).pop(sources[i]),
             ),
-          const SizedBox(height: 8),
-        ],
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: sources.length,
+                itemBuilder: (context, i) {
+                  final a = sources[i];
+                  final label = ProgrammeLabels.of(Programme.fromString(a.type));
+                  return ListTile(
+                    title: Text(
+                      '$label — ${DateFormat.jm().format(a.date)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+                    onTap: () => Navigator.of(ctx).pop(a),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     ),
   );
@@ -4662,7 +4966,53 @@ Future<void> _openVisitDayDetail(
     context,
     chosen,
     pregnancySnapshot: pregnancySnapshot,
+    // Resolved from `chosen` specifically -- a multi-source day can fold
+    // together visits that are NOT the same encounter, so only the one the
+    // SK actually picked should ever show a prescription, never whichever
+    // sibling visit that day happened to have one.
+    prescription: _prescriptionForAssessment(chosen, prescriptions),
   );
+}
+
+void _openPrescriptionDocument(
+  BuildContext context, {
+  required String title,
+  required Uint8List bytes,
+}) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(builder: (_) => PdfViewerScreen(title: title, bytes: bytes)),
+  );
+}
+
+/// Fetches a historical call's prescription/invoice live, on tap -- same
+/// idiom as [DocumentDownloadButton] (used for this same document in
+/// `TeleconsultCallDetailScreen`), reused here for the timeline icon's
+/// tap-to-view where a button widget doesn't fit the UI. Prescription is
+/// preferred over invoice when a call happens to have both, matching the
+/// icon's own tooltip preference.
+Future<void> _fetchAndOpenRemoteDocument(
+  BuildContext context,
+  CallLogHistoryRow remote,
+) async {
+  final docType = remote.hasPrescription ? 'prescription' : 'invoice';
+  final title = remote.hasPrescription
+      ? TeleconsultStrings.viewPrescription
+      : TeleconsultStrings.viewInvoice;
+  try {
+    final client = buildShukheeClient(context);
+    final result = await client.downloadDocument(callLog: remote.id, docType: docType);
+    if (!context.mounted) return;
+    _openPrescriptionDocument(
+      context,
+      title: title,
+      bytes: Uint8List.fromList(result.bytes),
+    );
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(TeleconsultStrings.documentOpenFailed)),
+    );
+  }
 }
 
 // ─── Timeline Event Sheet ──────────────────────────────────────────────────
@@ -4673,15 +5023,22 @@ class _TimelineEventSheet extends StatelessWidget {
   const _TimelineEventSheet({
     required this.assessment,
     this.pregnancySnapshot,
+    this.prescription,
   });
 
   final MemberAssessment assessment;
   final PregnancySnapshotRow? pregnancySnapshot;
 
+  /// This visit's saved teleconsult prescription/invoice, if any -- local
+  /// bytes (see `TeleconsultScreen._savePrescriptionToVisit`) and/or a durable
+  /// remote link (see `_CombinedTimelineState._loadPrescriptions`).
+  final _PrescriptionRef? prescription;
+
   static void show(
     BuildContext context,
     MemberAssessment assessment, {
     PregnancySnapshotRow? pregnancySnapshot,
+    _PrescriptionRef? prescription,
   }) {
     showModalBottomSheet<void>(
       context: context,
@@ -4692,6 +5049,7 @@ class _TimelineEventSheet extends StatelessWidget {
       builder: (_) => _TimelineEventSheet(
         assessment: assessment,
         pregnancySnapshot: pregnancySnapshot,
+        prescription: prescription,
       ),
     );
   }
@@ -5179,6 +5537,78 @@ class _TimelineEventSheet extends StatelessWidget {
                     }(),
                     style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.5),
                   ),
+                ],
+                if (prescription != null && prescription!.hasAnyDocument) ...[
+                  const Divider(height: 24),
+                  Text(
+                    TeleconsultStrings.prescriptionTitle,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMid),
+                  ),
+                  if (prescription!.doctorName != null && prescription!.doctorName!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      TeleconsultStrings.doctorNameOnly(prescription!.doctorName!),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Builder(builder: (context) {
+                    final local = prescription!.local;
+                    final remote = prescription!.remote;
+                    // Local (already-downloaded) bytes win when present -- no
+                    // network call needed. Otherwise fall back to a live fetch
+                    // from the durable remote link (see
+                    // `_fetchAndOpenRemoteDocument`/`DocumentDownloadButton`'s
+                    // same idiom in `TeleconsultCallDetailScreen`).
+                    final needsRemoteClient = (local?.prescriptionBytes == null &&
+                            remote?.hasPrescription == true) ||
+                        (local?.invoiceBytes == null && remote?.hasInvoice == true);
+                    final client = needsRemoteClient ? buildShukheeClient(context) : null;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        if (local?.prescriptionBytes != null)
+                          OutlinedButton.icon(
+                            onPressed: () => _openPrescriptionDocument(
+                              context,
+                              title: TeleconsultStrings.viewPrescription,
+                              bytes: local!.prescriptionBytes!,
+                            ),
+                            icon: const Icon(Icons.description_outlined, size: 16),
+                            label: Text(TeleconsultStrings.viewPrescription),
+                          )
+                        else if (remote?.hasPrescription == true)
+                          DocumentDownloadButton(
+                            client: client!,
+                            callLog: remote!.id,
+                            docType: 'prescription',
+                            title: TeleconsultStrings.viewPrescription,
+                            buttonLabel: TeleconsultStrings.viewPrescription,
+                            icon: Icons.description_outlined,
+                          ),
+                        if (local?.invoiceBytes != null)
+                          OutlinedButton.icon(
+                            onPressed: () => _openPrescriptionDocument(
+                              context,
+                              title: TeleconsultStrings.viewInvoice,
+                              bytes: local!.invoiceBytes!,
+                            ),
+                            icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                            label: Text(TeleconsultStrings.viewInvoice),
+                          )
+                        else if (remote?.hasInvoice == true)
+                          DocumentDownloadButton(
+                            client: client!,
+                            callLog: remote!.id,
+                            docType: 'invoice',
+                            title: TeleconsultStrings.viewInvoice,
+                            buttonLabel: TeleconsultStrings.viewInvoice,
+                            icon: Icons.receipt_long_outlined,
+                          ),
+                      ],
+                    );
+                  }),
                 ],
               ],
             ),

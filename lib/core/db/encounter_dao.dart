@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:sqflite/sqflite.dart';
 
+import '../models/programme.dart';
 import '../time/calendar_day.dart';
 import 'app_database.dart';
 
@@ -247,6 +248,76 @@ class EncounterDao {
   Future<EncounterRow?> lastForPatient(String patientId) async {
     final rows = await recentForPatient(patientId, limit: 1);
     return rows.isEmpty ? null : rows.first;
+  }
+
+  /// All local encounter ids for a patient -- the join key
+  /// `TeleconsultHistorySection` uses to match a synced-in Call Logs row
+  /// (keyed by `encounter_id`, Shukhee's own `encounterId`, which
+  /// `TeleconsultScreen` sends as `widget.visitId` == `encounters.id`) back
+  /// to the right patient, since Call Logs' own `patient` Link is not
+  /// populated by the mobile app today (see `CallLogSyncService`'s doc
+  /// comment).
+  Future<List<String>> idsForPatient(String patientId) async {
+    final rows = await _db.db.query(
+      AppDatabase.tableEncounters,
+      columns: ['id'],
+      where: 'patient_id = ?',
+      whereArgs: [patientId],
+    );
+    return rows.map((r) => r['id'] as String).toList();
+  }
+
+  /// Finds a still-[SyncStatus.pending] local draft for [patientId]/
+  /// [programme] whose own [EncounterRow.startedAt] falls within [window] of
+  /// [around] -- used by `OfflineSyncService`'s assessment-history ingestion
+  /// to reconcile an incoming item's server-assigned `encounterId` back onto
+  /// the original client-minted draft id, so a draft's id (already anchored
+  /// elsewhere -- e.g. a Shukhee Call Logs row's `encounter_id`, sent at
+  /// booking time as `encounters.id`) survives the sync instead of being
+  /// silently orphaned by a brand-new row keyed by the server's own id.
+  ///
+  /// [programme] is matched via [Programme.fromString] rather than a raw
+  /// string comparison -- the draft's own `programme` column is stamped from
+  /// the enum's `.name` at "Start Visit" time (e.g. `"eyeCare"`), while the
+  /// assessment-history item's `serviceProvided` arrives in the server's own
+  /// convention (e.g. `"eye_care"`); comparing the parsed enum on both sides
+  /// normalizes across that difference the same way every other same-visit
+  /// grouping in this codebase already does. No wire field carries the
+  /// original draft id directly, so this is a best-effort, not a guaranteed,
+  /// match -- returns the closest-in-time candidate, or null if none falls
+  /// inside the window.
+  Future<String?> findPendingDraftId({
+    required String patientId,
+    required String programme,
+    required DateTime around,
+    Duration window = const Duration(hours: 20),
+  }) async {
+    final rows = await _db.db.query(
+      AppDatabase.tableEncounters,
+      columns: ['id', 'programme', 'started_at'],
+      where: 'patient_id = ? AND sync_status = ?',
+      whereArgs: [patientId, SyncStatus.pending.name],
+    );
+    if (rows.isEmpty) return null;
+
+    final targetProgramme = Programme.fromString(programme);
+    final aroundMs = around.millisecondsSinceEpoch;
+    final windowMs = window.inMilliseconds;
+
+    String? bestId;
+    int? bestDelta;
+    for (final row in rows) {
+      if (Programme.fromString(row['programme'] as String) != targetProgramme) {
+        continue;
+      }
+      final delta = ((row['started_at'] as int) - aroundMs).abs();
+      if (delta > windowMs) continue;
+      if (bestDelta == null || delta < bestDelta) {
+        bestDelta = delta;
+        bestId = row['id'] as String;
+      }
+    }
+    return bestId;
   }
 
   /// Get all pending encounters that need syncing.
