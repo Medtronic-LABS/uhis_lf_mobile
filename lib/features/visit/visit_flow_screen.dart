@@ -4579,7 +4579,12 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
   Future<void> _onTap(BuildContext context) async {
     final agreed = await context.push<bool>(
       '/teleconsult/consent',
-      extra: {'patientLabel': widget.patientLabel},
+      extra: {
+        'patientLabel': widget.patientLabel,
+        'patientId': widget.patientId,
+        if (widget.visitId != null) 'visitId': widget.visitId,
+        if (widget.patientDob != null) 'patientDob': widget.patientDob,
+      },
     );
     if (agreed != true || !context.mounted) return;
     context.push(

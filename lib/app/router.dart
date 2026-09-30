@@ -490,6 +490,9 @@ GoRouter buildRouter(AuthState auth) {
           return MaterialPage(
             key: const ValueKey('teleconsult-consent-page'),
             child: TeleconsultConsentScreen(
+              patientId: extra['patientId'] as String? ?? '',
+              visitId: extra['visitId'] as String?,
+              patientDob: extra['patientDob'] as String?,
               patientLabel: extra['patientLabel'] as String?,
             ),
           );

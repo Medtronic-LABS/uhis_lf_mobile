@@ -14,6 +14,8 @@
 /// when declined. The caller only proceeds to `/teleconsult` on `true`.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:go_router/go_router.dart';
@@ -23,6 +25,7 @@ import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
+import '../../core/telemetry/teleconsult_consent_log_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'shukhee_consent_client.dart';
 
@@ -47,10 +50,37 @@ ShukheeConsentClient _buildConsentClient(BuildContext context) {
 }
 
 class TeleconsultConsentScreen extends StatefulWidget {
-  const TeleconsultConsentScreen({super.key, this.patientLabel});
+  const TeleconsultConsentScreen({
+    super.key,
+    required this.patientId,
+    this.visitId,
+    this.patientDob,
+    this.patientLabel,
+    @visibleForTesting this.consentClientBuilder,
+  });
+
+  /// Who the consent decision is about -- logged by
+  /// [TeleconsultConsentLogService], never sent to the `get_consent` fetch
+  /// itself.
+  final String patientId;
+
+  /// The visit/encounter the consent was captured during, if any.
+  final String? visitId;
+
+  /// The patient's date of birth (ISO 8601), if known -- logged alongside the
+  /// decision so age is visible in the audit trail (see
+  /// `TeleconsultConsentLogEntry.patientDob`'s doc comment for why this is
+  /// the raw fact and not a derived flag).
+  final String? patientDob;
 
   /// Shown for display context only -- never sent to the consent endpoint.
   final String? patientLabel;
+
+  /// Test seam overriding how the [ShukheeConsentClient] is built, mirroring
+  /// `TeleconsultScreen`'s injected `client` param. Production always uses
+  /// the default ([_buildConsentClient]).
+  @visibleForTesting
+  final ShukheeConsentClient Function(BuildContext)? consentClientBuilder;
 
   @override
   State<TeleconsultConsentScreen> createState() => _TeleconsultConsentScreenState();
@@ -67,8 +97,25 @@ class _TeleconsultConsentScreenState extends State<TeleconsultConsentScreen> {
   }
 
   Future<ShukheeConsentContent> _fetch() {
-    final client = _buildConsentClient(context);
+    final client = (widget.consentClientBuilder ?? _buildConsentClient)(context);
     return client.fetchConsent(lng: AppLocale.isBangla ? 'bn' : 'en');
+  }
+
+  /// Fires the fire-and-forget consent-decision log, then pops with the
+  /// decision -- log failure must never delay or block this navigation (see
+  /// [TeleconsultConsentLogService.record]'s own "never throws" contract).
+  void _decide(ShukheeConsentContent content, {required bool agreed}) {
+    unawaited(
+      context.read<TeleconsultConsentLogService>().record(
+            patientId: widget.patientId,
+            visitId: widget.visitId,
+            agreed: agreed,
+            lng: content.lng,
+            consentVersion: content.version,
+            patientDob: widget.patientDob,
+          ),
+    );
+    context.pop(agreed);
   }
 
   void _retry() {
@@ -106,8 +153,8 @@ class _TeleconsultConsentScreenState extends State<TeleconsultConsentScreen> {
               patientLabel: widget.patientLabel,
               agreed: _agreed,
               onAgreedChanged: (v) => setState(() => _agreed = v ?? false),
-              onAgree: () => context.pop(true),
-              onDecline: () => context.pop(false),
+              onAgree: () => _decide(snapshot.data!, agreed: true),
+              onDecline: () => _decide(snapshot.data!, agreed: false),
             );
           },
         ),

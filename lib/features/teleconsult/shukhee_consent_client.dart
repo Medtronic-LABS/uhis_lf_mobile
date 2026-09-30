@@ -5,13 +5,24 @@ import '../../core/debug/console_log.dart';
 /// Consent HTML content fetched live from the Shukhee/Frappe backend for the
 /// pre-teleconsult consent gate -- see [ShukheeConsentClient].
 class ShukheeConsentContent {
-  const ShukheeConsentContent({required this.lng, required this.html});
+  const ShukheeConsentContent({
+    required this.lng,
+    required this.html,
+    this.version,
+  });
 
   /// The language the backend actually served -- the server falls back to
   /// 'en' when the requested language isn't configured, so this may differ
   /// from the language [ShukheeConsentClient.fetchConsent] was asked for.
   final String lng;
   final String html;
+
+  /// The consent copy's version, echoed back by `get_consent` -- logged
+  /// alongside the SK's Agree/Decline decision (see
+  /// `TeleconsultConsentLogEntry.consentVersion`) so the audit trail records
+  /// exactly which copy the patient saw. Null against a backend that hasn't
+  /// been updated to return it yet.
+  final String? version;
 }
 
 /// Raised by [ShukheeConsentClient.fetchConsent] on any failure. Deliberately
@@ -89,12 +100,16 @@ class ShukheeConsentClient {
     final data = _unwrapMessage(response.data);
     final html = data['consent'];
     final responseLng = data['lng'];
+    final responseVersion = data['version'];
     if (html is! String || html.isEmpty) {
       throw ShukheeConsentException('Consent response missing "consent" HTML.');
     }
     return ShukheeConsentContent(
       lng: responseLng is String && responseLng.isNotEmpty ? responseLng : lng,
       html: html,
+      version: responseVersion is String && responseVersion.isNotEmpty
+          ? responseVersion
+          : null,
     );
   }
 
