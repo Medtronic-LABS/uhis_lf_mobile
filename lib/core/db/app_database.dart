@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 52;
+  static const int schemaVersion = 53;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -77,6 +77,11 @@ class AppDatabase {
   /// AI assistant ("Ask") question/answer text. PHI — wiped on SK handover.
   static const String tableAssistantContentTelemetry =
       'assistant_content_telemetry';
+
+  /// Teleconsult patient-consent Agree/Decline decisions. PHI (patient id +
+  /// dob) — wiped on SK handover, same treatment as
+  /// [tableAssistantContentTelemetry].
+  static const String tableTeleconsultConsentLog = 'teleconsult_consent_log';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -926,6 +931,26 @@ class AppDatabase {
     await db.execute(
         'CREATE INDEX idx_assistant_content_upload '
         'ON $tableAssistantContentTelemetry(upload_status)');
+
+    // v53 — teleconsult patient-consent decision audit queue.
+    await db.execute('''
+      CREATE TABLE $tableTeleconsultConsentLog (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        visit_id TEXT,
+        decision TEXT NOT NULL,
+        lng TEXT NOT NULL,
+        consent_version TEXT,
+        patient_dob TEXT,
+        sk_user_id TEXT,
+        captured_tenant_id INTEGER,
+        occurred_at INTEGER NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_teleconsult_consent_log_upload '
+        'ON $tableTeleconsultConsentLog(upload_status)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -2332,6 +2357,27 @@ class AppDatabase {
             'ALTER TABLE $tableCallLogHistory ADD COLUMN fhir_encounter_id TEXT');
       } catch (_) {/* column already present — no-op */}
     }
+    if (from < 53) {
+      // v53 — see createSchema's identical block for why this table exists.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableTeleconsultConsentLog (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          visit_id TEXT,
+          decision TEXT NOT NULL,
+          lng TEXT NOT NULL,
+          consent_version TEXT,
+          patient_dob TEXT,
+          sk_user_id TEXT,
+          captured_tenant_id INTEGER,
+          occurred_at INTEGER NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_teleconsult_consent_log_upload '
+          'ON $tableTeleconsultConsentLog(upload_status)');
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -2366,6 +2412,7 @@ class AppDatabase {
     tableVisitContentTelemetry,
     tableTeleconsultPrescriptions, tableCallLogHistory,
     tableAssistantContentTelemetry,
+    tableTeleconsultConsentLog,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the
