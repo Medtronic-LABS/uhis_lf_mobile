@@ -87,16 +87,28 @@ void main() {
     expect((await dao.counts()).pending, 1);
   });
 
-  test('api payload uses ISO instants and camelCase keys', () {
+  test(
+      'api payload is the flat snake_case shape record_consent_decision reads',
+      () {
     final json = _entry(
       visitId: 'visit-9',
       decision: TeleconsultConsentDecision.declined,
       lng: 'bn',
     ).toApiJson();
 
-    expect(json['occurredAt'], '2026-09-09T08:00:00.000Z');
-    expect(json['patientId'], 'patient-1');
-    expect(json['visitId'], 'visit-9');
+    // No `id`/`sk_user_id`/`captured_tenant_id`/`occurred_at` -- those are
+    // local-only bookkeeping or server-resolved, not part of the wire
+    // contract (see toApiJson's doc comment).
+    expect(json.keys.toSet(), {
+      'patient_id',
+      'visit_id',
+      'decision',
+      'lng',
+      'consent_version',
+      'patient_dob',
+    });
+    expect(json['patient_id'], 'patient-1');
+    expect(json['visit_id'], 'visit-9');
     expect(json['decision'], TeleconsultConsentDecision.declined);
     expect(json['lng'], 'bn');
   });

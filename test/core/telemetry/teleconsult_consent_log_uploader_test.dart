@@ -4,6 +4,12 @@
 /// server confirms it.** HTTP is faked at Dio's [HttpClientAdapter] seam, so
 /// no server and no extra test dependency -- same approach as
 /// `telemetry_uploader_test.dart`.
+///
+/// `record_consent_decision` is a single-record endpoint (see
+/// `TeleconsultConsentLogEntry.toApiJson`'s doc comment) -- one POST per
+/// pending row, response wrapped in Frappe's `{"message": {...}}` envelope,
+/// unlike the batch `{"entries": [...]}` / `{"acceptedIds": [...]}` shape the
+/// other telemetry uploaders use.
 library;
 
 import 'dart:convert';
@@ -19,12 +25,17 @@ import 'package:uhis_next/core/telemetry/teleconsult_consent_log_dao.dart';
 import 'package:uhis_next/core/telemetry/teleconsult_consent_log_entry.dart';
 import 'package:uhis_next/core/telemetry/teleconsult_consent_log_uploader.dart';
 
-/// Returns a canned response for every request, recording what was sent.
+/// Returns a response per request, indexed by call order -- lets a test
+/// script "first call succeeds, second fails" since each pending row now
+/// gets its own independent request rather than one shared batch response.
 class _FakeAdapter implements HttpClientAdapter {
-  _FakeAdapter({required this.statusCode, required this.body});
+  _FakeAdapter(this._responses);
 
-  final int statusCode;
-  final Object? body;
+  /// Convenience for "every request gets this same response".
+  _FakeAdapter.always(int statusCode, Object? body)
+      : this([(statusCode, body)]);
+
+  final List<(int statusCode, Object? body)> _responses;
   final List<RequestOptions> requests = [];
 
   @override
@@ -33,7 +44,10 @@ class _FakeAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    final index = requests.length;
     requests.add(options);
+    final (statusCode, body) =
+        index < _responses.length ? _responses[index] : _responses.last;
     return ResponseBody.fromString(
       jsonEncode(body),
       statusCode,
@@ -88,6 +102,8 @@ void main() {
         visitId: 'visit-$i',
         decision: TeleconsultConsentDecision.agreed,
         lng: 'en',
+        consentVersion: '2',
+        patientDob: '2000-01-01',
         occurredAt: DateTime.utc(2026, 9, 4, 10, i).millisecondsSinceEpoch,
       ));
     }
@@ -100,10 +116,10 @@ void main() {
   }
 
   group('successful upload', () {
-    test('marks exactly the ids the server accepted', () async {
+    test('marks every row the server confirms', () async {
       await seed(3);
-      final adapter = _FakeAdapter(statusCode: 200, body: {
-        'acceptedIds': ['c0', 'c1', 'c2'],
+      final adapter = _FakeAdapter.always(200, {
+        'message': {'logged': true},
       });
 
       final sent = await uploaderWith(adapter).uploadPending();
@@ -111,44 +127,53 @@ void main() {
       expect(sent, 3);
       expect(await dao.pending(), isEmpty);
       expect((await dao.counts()).total, 3);
+      expect(adapter.requests, hasLength(3));
     });
 
-    test('a partial acceptedIds leaves the rest pending', () async {
+    test('stops at the first failure, leaving the rest pending', () async {
       await seed(3);
-      final adapter = _FakeAdapter(statusCode: 200, body: {
-        'acceptedIds': ['c0', 'c1'],
-      });
+      // First row's request succeeds; the second (and everything after it)
+      // fails -- the loop must stop there rather than skip ahead.
+      final adapter = _FakeAdapter([
+        (200, {'message': {'logged': true}}),
+        (500, {'detail': 'boom'}),
+      ]);
 
       final sent = await uploaderWith(adapter).uploadPending();
 
-      expect(sent, 2);
-      expect((await dao.pending()).map((e) => e.id), ['c2']);
+      expect(sent, 1);
+      expect((await dao.pending()).map((e) => e.id), ['c1', 'c2']);
     });
 
-    test('sends the wire shape the server expects', () async {
+    test('sends the single-record snake_case wire shape the server expects',
+        () async {
       await seed(1);
-      final adapter = _FakeAdapter(statusCode: 200, body: {
-        'acceptedIds': ['c0'],
+      final adapter = _FakeAdapter.always(200, {
+        'message': {'logged': true},
       });
 
       await uploaderWith(adapter).uploadPending();
 
-      final adapterUsed = adapter;
-      final sentBody = adapterUsed.requests.single.data as Map<String, dynamic>;
-      final entries = sentBody['entries'] as List;
-      final entry = entries.single as Map<String, dynamic>;
-      expect(entry['id'], 'c0');
-      expect(entry['patientId'], 'patient-0');
-      expect(entry['decision'], TeleconsultConsentDecision.agreed);
-      // occurredAt goes as an ISO-8601 UTC instant, not epoch millis.
-      expect(entry['occurredAt'], '2026-09-04T10:00:00.000Z');
+      final sentBody =
+          adapter.requests.single.data as Map<String, dynamic>;
+      // Flat single-record body -- no {"entries": [...]} wrapper, no `id`/
+      // `sk_user_id`/`captured_tenant_id`/`occurred_at` (those are local-only
+      // bookkeeping or server-resolved, not part of the wire contract).
+      expect(sentBody, {
+        'patient_id': 'patient-0',
+        'visit_id': 'visit-0',
+        'decision': TeleconsultConsentDecision.agreed,
+        'lng': 'en',
+        'consent_version': '2',
+        'patient_dob': '2000-01-01',
+      });
     });
   });
 
   group('failure never loses data', () {
     test('a 404 (endpoint not built yet) leaves every row pending', () async {
       await seed(2);
-      final adapter = _FakeAdapter(statusCode: 404, body: {'detail': 'not found'});
+      final adapter = _FakeAdapter.always(404, {'detail': 'not found'});
 
       final sent = await uploaderWith(adapter).uploadPending();
 
@@ -158,15 +183,15 @@ void main() {
 
     test('a 500 leaves every row pending and does not throw', () async {
       await seed(2);
-      final adapter = _FakeAdapter(statusCode: 500, body: {'detail': 'boom'});
+      final adapter = _FakeAdapter.always(500, {'detail': 'boom'});
 
       await expectLater(uploaderWith(adapter).uploadPending(), completes);
       expect((await dao.pending()), hasLength(2));
     });
 
-    test('a 200 with no acceptedIds marks nothing', () async {
+    test('a 200 with no "logged" flag marks nothing', () async {
       await seed(2);
-      final adapter = _FakeAdapter(statusCode: 200, body: {'ok': true});
+      final adapter = _FakeAdapter.always(200, {'message': {'ok': true}});
 
       final sent = await uploaderWith(adapter).uploadPending();
 
@@ -176,7 +201,7 @@ void main() {
   });
 
   test('an empty queue makes no request at all', () async {
-    final adapter = _FakeAdapter(statusCode: 200, body: {'acceptedIds': []});
+    final adapter = _FakeAdapter.always(200, {'message': {'logged': true}});
 
     expect(await uploaderWith(adapter).uploadPending(), 0);
     expect(adapter.requests, isEmpty);

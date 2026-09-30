@@ -112,21 +112,21 @@ class TeleconsultConsentLogEntry {
         uploadedAt: row['uploaded_at'] as int?,
       );
 
-  /// Wire shape the server's record_consent_decision batch ingest expects
-  /// (camelCase, ISO timestamp) -- mirrors
-  /// [AssistantContentEntry.toApiJson].
+  /// Wire shape `shukhee_integration.api.consent.record_consent_decision`
+  /// actually reads -- snake_case, one record per call (that endpoint
+  /// inserts exactly one `Shukhee Consent Log` row; there is no batch
+  /// variant). `occurred_at` is deliberately NOT sent -- the server stamps
+  /// its own `frappe.utils.now_datetime()` rather than trusting a
+  /// client-supplied capture time, and `id`/`sk_user_id`/`captured_tenant_id`
+  /// are local-only bookkeeping the server doesn't read (identity is
+  /// resolved server-side from the auth token instead -- see
+  /// `record_consent_decision`'s own doc comment).
   Map<String, dynamic> toApiJson() => {
-        'id': id,
-        'patientId': patientId,
-        'visitId': visitId,
+        'patient_id': patientId,
+        'visit_id': visitId,
         'decision': decision,
         'lng': lng,
-        'consentVersion': consentVersion,
-        'patientDob': patientDob,
-        'skUserId': skUserId,
-        'capturedTenantId': capturedTenantId,
-        'occurredAt':
-            DateTime.fromMillisecondsSinceEpoch(occurredAt, isUtc: true)
-                .toIso8601String(),
+        'consent_version': consentVersion,
+        'patient_dob': patientDob,
       };
 }

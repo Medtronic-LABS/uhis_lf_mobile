@@ -45,13 +45,22 @@ class TeleconsultConsentLogUploader {
         final batch = await _dao.pending(limit: batchSize);
         if (batch.isEmpty) break;
 
-        final ids =
-            await _postBatch(batch.map((e) => e.toApiJson()).toList());
-        if (ids == null) break;
-        await _dao.markUploaded(ids);
-        accepted += ids.length;
-
-        if (batch.length < batchSize) break;
+        // record_consent_decision is a single-record endpoint (it inserts
+        // exactly one Shukhee Consent Log row per call, per the plan/backend
+        // implementation) -- unlike AssistantContentUploader's endpoint,
+        // there is no `{"entries": [...]}` batch variant to post to, so each
+        // pending row gets its own request. Stop at the first failure and
+        // leave the rest pending for the next flush, same conservative
+        // posture as the batch uploaders.
+        var postedAny = false;
+        for (final entry in batch) {
+          final ok = await _postOne(entry.toApiJson());
+          if (!ok) break;
+          await _dao.markUploaded([entry.id]);
+          accepted += 1;
+          postedAny = true;
+        }
+        if (!postedAny || batch.length < batchSize) break;
       }
       final after = await _dao.counts();
       if (after.pending > 0) {
@@ -87,41 +96,43 @@ class TeleconsultConsentLogUploader {
     return headers;
   }
 
-  Future<List<String>?> _postBatch(List<Map<String, dynamic>> rows) async {
+  /// Posts one row to `record_consent_decision` -- a single-record endpoint
+  /// (see [TeleconsultConsentLogEntry.toApiJson]'s doc comment), not a batch
+  /// ingest. Returns whether the server accepted it.
+  Future<bool> _postOne(Map<String, dynamic> row) async {
     const path = Endpoints.shukheeRecordConsentDecision;
-    telemetryUploadLog(
-      '[TeleconsultConsentLog] POST $path — posting ${rows.length} record(s)',
-    );
     try {
       final res = await _dio.post<dynamic>(
         path,
-        data: {'entries': rows},
+        data: row,
         options: Options(headers: _authHeaders()),
       );
+      // Frappe wraps a whitelisted method's return dict as
+      // {"message": {...}} -- same unwrap ShukheeConsentClient applies to
+      // get_consent's response.
       final body = res.data;
-      if (body is Map && body['acceptedIds'] is List) {
-        final ids =
-            (body['acceptedIds'] as List).map((e) => e.toString()).toList();
+      final message = body is Map && body['message'] is Map
+          ? body['message'] as Map
+          : body;
+      if (message is Map && message['logged'] == true) {
         telemetryUploadLog(
-          '[TeleconsultConsentLog] POST $path — accepted ${ids.length}/'
-          '${rows.length} record(s) (HTTP ${res.statusCode})',
-        );
-        return ids;
+            '[TeleconsultConsentLog] POST $path — accepted (HTTP ${res.statusCode})');
+        return true;
       }
       telemetryUploadLog(
           '[TeleconsultConsentLog] unexpected response shape: $body');
-      return null;
+      return false;
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
         telemetryUploadLog(
             '[TeleconsultConsentLog] POST $path — endpoint disabled (404), '
-            '${rows.length} record(s) left pending');
+            'record left pending');
       } else {
         telemetryUploadLog('[TeleconsultConsentLog] POST $path failed '
             '(HTTP ${e.response?.statusCode}, ${e.type.name}) — '
-            '${rows.length} record(s) left pending');
+            'record left pending');
       }
-      return null;
+      return false;
     }
   }
 }
