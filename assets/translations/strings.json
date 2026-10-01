@@ -13767,6 +13767,142 @@
     "bn": "সপ্তাহ ৪",
     "en": "W4"
   },
+  "Performance.dashboardTab": {
+    "bn": "ড্যাশবোর্ড",
+    "en": "Dashboard"
+  },
+  "Performance.dashboardServicesTab": {
+    "bn": "সেবা প্রদান করুন",
+    "en": "Services"
+  },
+  "Performance.dashboardDemographicTab": {
+    "bn": "জনতাত্ত্বিক",
+    "en": "Demographic"
+  },
+  "Performance.dashboardFrom": {
+    "bn": "হতে",
+    "en": "From"
+  },
+  "Performance.dashboardTo": {
+    "bn": "পর্যন্ত",
+    "en": "To"
+  },
+  "Performance.dashboardFilterTitle": {
+    "bn": "ফিল্টার",
+    "en": "Filters"
+  },
+  "Performance.dashboardFilterSs": {
+    "bn": "SS নাম",
+    "en": "Shasthya Shebika"
+  },
+  "Performance.dashboardFilterSubVillage": {
+    "bn": "গ্রাম",
+    "en": "Sub-village"
+  },
+  "Performance.dashboardFilterApply": {
+    "bn": "সাবমিট",
+    "en": "Apply"
+  },
+  "Performance.dashboardLoadError": {
+    "bn": "ড্যাশবোর্ড লোড করা যায়নি",
+    "en": "Could not load dashboard"
+  },
+  "Performance.kpiPwRegistration": {
+    "bn": "গর্ভবতী রেজিস্ট্রেশন",
+    "en": "Pregnancy registration"
+  },
+  "Performance.kpiAnc": {
+    "bn": "গর্ভবতী সেবা (এএনসি)",
+    "en": "ANC services"
+  },
+  "Performance.kpiPw4MonthAnc": {
+    "bn": "প্রথম চার মাসে চিহ্নিত এবং প্রথম এএনসি সেবা",
+    "en": "PW identified < 4 months & got ANC"
+  },
+  "Performance.kpiAnc3Plus": {
+    "bn": "গর্ভকালীন সময়ে একই মাকে ৩ অথবা ৩+ ANC সেবা",
+    "en": "3/3+ ANC services"
+  },
+  "Performance.kpiPregnancyOutcome": {
+    "bn": "ডেলিভারি রেজিস্ট্রেশন",
+    "en": "Pregnancy Outcome"
+  },
+  "Performance.kpiPnc": {
+    "bn": "PNC সেবা (ডেলিভারির পর যেকোনো সময়)",
+    "en": "PNC services"
+  },
+  "Performance.kpiHighRiskPw": {
+    "bn": "উচ্চ ঝুঁকিপূর্ণ গর্ভবতী মা",
+    "en": "Highrisk pregnant women"
+  },
+  "Performance.kpiChildVisit": {
+    "bn": "0–24 মাস বয়সী শিশু কাউন্সেলিং",
+    "en": "Under-2 children counselled"
+  },
+  "Performance.kpiHouseholdRegistered": {
+    "bn": "খানা নিবন্ধন",
+    "en": "Households Registered"
+  },
+  "Performance.kpiTotalHousehold": {
+    "bn": "মোট পরিবার",
+    "en": "Total Household"
+  },
+  "Performance.kpiTotalMember": {
+    "bn": "মোট সদস্য",
+    "en": "Total Member"
+  },
+  "Performance.kpiTotalPregnantWomen": {
+    "bn": "মোট গর্ভবতী নারী",
+    "en": "Total Pregnant Women"
+  },
+  "Performance.kpiFamilyPlanning": {
+    "bn": "পরিবার পরিকল্পনা কাউন্সেলিংয়ের সংখ্যা",
+    "en": "Family planning counselled"
+  },
+  "Performance.kpiOtherServices": {
+    "bn": "সংক্রামক রোগের সেবা",
+    "en": "CD services"
+  },
+  "Performance.kpiNcdScreening": {
+    "bn": "এনসিডি স্ক্রিনিং",
+    "en": "NCD screening"
+  },
+  "Performance.kpiNcdReferred": {
+    "bn": "এনসিডি এর জন্য রেফার ",
+    "en": "NCD referred"
+  },
+  "Performance.kpiNcdFollowUp": {
+    "bn": "এনসিডি মূল্যায়ন",
+    "en": "NCD follow-up assessment"
+  },
+  "Performance.kpiTotalNcd": {
+    "bn": "সর্বমোট এনসিডি সেবা",
+    "en": "Total NCD services"
+  },
+  "Performance.kpiLinkedToCare": {
+    "bn": "লিংক টু কেয়ার",
+    "en": "Linked to care"
+  },
+  "Performance.kpiEyeScreening": {
+    "bn": "সর্বমোট চক্ষু পরীক্ষা",
+    "en": "Total eye screening"
+  },
+  "Performance.kpiGlassesSold": {
+    "bn": "চশমা বিক্রয়",
+    "en": "Glasses sold"
+  },
+  "Performance.kpiCataract": {
+    "bn": "ক্যাটারেক্ট স্ক্রিনিং",
+    "en": "Cataract screening"
+  },
+  "Performance.kpiNcdInCataractCamp": {
+    "bn": "ক্যাটারেক্ট ক্যাম্পে এনসিডি সেবা",
+    "en": "NCD services in cataract camp"
+  },
+  "Performance.kpiReferredOperation": {
+    "bn": "অপারেশনের জন্য রেফার",
+    "en": "Patients referred for operation"
+  },
   "Pin.backTooltip": {
     "bn": "পেছনে",
     "en": "Back"

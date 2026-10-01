@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 49;
+  static const int schemaVersion = 50;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -42,6 +42,8 @@ class AppDatabase {
   static const String tableLocalAssessments = 'local_assessments';
   static const String tablePregnancySnapshot = 'patient_pregnancy_snapshot';
   static const String tablePregnancyEpisodes = 'pregnancy_episodes';
+  static const String tableMemberAssessmentHistory = 'member_assessment_history';
+  static const String tableSsLinkedVillages = 'shasthya_shebika_linked_villages';
   static const String tableTreatmentPresence = 'patient_treatment_presence';
   static const String tableAssessmentDraft = 'assessment_draft';
   static const String tableAiSuggestions = 'ai_suggestions';
@@ -528,6 +530,41 @@ class AppDatabase {
       'CREATE INDEX idx_pregnancy_episodes_patient_started '
       'ON $tablePregnancyEpisodes(patient_id, started_at DESC)',
     );
+    await db.execute('''
+      CREATE TABLE $tableMemberAssessmentHistory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        member_id INTEGER,
+        member_fhir_id TEXT,
+        visit_date TEXT NOT NULL,
+        service_provided TEXT,
+        encounter_id TEXT,
+        custom_status TEXT,
+        latest_visit INTEGER NOT NULL DEFAULT 0,
+        referral_status TEXT,
+        referral_reason TEXT,
+        next_follow_up_date TEXT,
+        practitioner_id TEXT,
+        observations_json TEXT,
+        shasthya_shebika_id TEXT
+      )''');
+    await db.execute(
+      'CREATE INDEX idx_mah_visit_date ON $tableMemberAssessmentHistory(visit_date)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_mah_member_id ON $tableMemberAssessmentHistory(member_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_mah_encounter ON $tableMemberAssessmentHistory(encounter_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_mah_member_service_visit ON $tableMemberAssessmentHistory(member_id, service_provided, visit_date)',
+    );
+    await db.execute('''
+      CREATE TABLE $tableSsLinkedVillages (
+        shasthya_shebika_id TEXT NOT NULL,
+        sub_village_id TEXT NOT NULL,
+        PRIMARY KEY (shasthya_shebika_id, sub_village_id)
+      )''');
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
         patient_id TEXT PRIMARY KEY,
@@ -2193,6 +2230,44 @@ class AppDatabase {
         /* column already present */
       }
     }
+    if (from < 50) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableMemberAssessmentHistory (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          member_id INTEGER,
+          member_fhir_id TEXT,
+          visit_date TEXT NOT NULL,
+          service_provided TEXT,
+          encounter_id TEXT,
+          custom_status TEXT,
+          latest_visit INTEGER NOT NULL DEFAULT 0,
+          referral_status TEXT,
+          referral_reason TEXT,
+          next_follow_up_date TEXT,
+          practitioner_id TEXT,
+          observations_json TEXT,
+          shasthya_shebika_id TEXT
+        )''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mah_visit_date ON $tableMemberAssessmentHistory(visit_date)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mah_member_id ON $tableMemberAssessmentHistory(member_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mah_encounter ON $tableMemberAssessmentHistory(encounter_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mah_member_service_visit '
+        'ON $tableMemberAssessmentHistory(member_id, service_provided, visit_date)',
+      );
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableSsLinkedVillages (
+          shasthya_shebika_id TEXT NOT NULL,
+          sub_village_id TEXT NOT NULL,
+          PRIMARY KEY (shasthya_shebika_id, sub_village_id)
+        )''');
+    }
     if (from < 48) {
       // v48 — training audio sample queue for voice sample collection.
       // Additive; safe on devices arriving from any prior version.
@@ -2244,6 +2319,8 @@ class AppDatabase {
     tableReferrals, tableReferralStatusEvents, tableNotificationLog,
     tableEncounters, tableLocalAssessments, tablePregnancySnapshot,
     tablePregnancyEpisodes,
+    tableMemberAssessmentHistory,
+    tableSsLinkedVillages,
     tableTreatmentPresence, tableAssessmentDraft, tableAiSuggestions,
     tableEvalLog, tableAiResponseCache, tableCoachingModules, tableCoachingProgress,
     tableChatMessages, tableCoachingFaqs,

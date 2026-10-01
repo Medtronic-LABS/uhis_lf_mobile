@@ -10,6 +10,7 @@ import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
+import 'sk_kpi_dashboard_tab.dart';
 import 'sk_performance_repository.dart';
 import '../../core/i18n/app_date_format.dart';
 
@@ -85,7 +86,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 3, vsync: this);
     _load();
   }
 
@@ -142,6 +143,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
           tabs: [
             Tab(text: PerformanceStrings.performanceTab),
             Tab(text: PerformanceStrings.myPatientsTab),
+            Tab(text: PerformanceStrings.dashboardTab),
           ],
         ),
       ),
@@ -215,6 +217,9 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
               );
             },
           ),
+
+          // ── Tab 2: UHIS-style KPI dashboard ─────────────────────────────
+          const SkKpiDashboardTab(),
         ],
       ),
     );
