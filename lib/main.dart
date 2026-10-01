@@ -40,6 +40,10 @@ import 'core/db/immunisation_dao.dart';
 import 'features/visit/immunisation/immunisation_repository.dart';
 import 'core/db/local_assessment_dao.dart';
 import 'core/db/local_dashboard_repository.dart';
+import 'core/db/member_assessment_history_dao.dart';
+import 'core/db/member_assessment_history_writer.dart';
+import 'core/db/spice_dashboard_dao.dart';
+import 'core/db/ss_linked_village_dao.dart';
 import 'core/db/member_dao.dart';
 import 'core/db/patient_dao.dart';
 import 'core/db/patient_programmes_dao.dart';
@@ -71,6 +75,7 @@ import 'core/sync/offline_push_service.dart';
 import 'features/dashboard/dashboard_filter_state.dart';
 import 'features/dashboard/dashboard_repository.dart';
 import 'features/dashboard/mission_dashboard_repository.dart';
+import 'features/dashboard/sk_spice_dashboard_repository.dart';
 import 'features/lock/lock_barrier.dart';
 import 'features/patient/followup_call_service.dart';
 import 'features/patient/followup_repository.dart';
@@ -192,6 +197,25 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
   late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
+  late final MemberAssessmentHistoryDao _mahDao =
+      MemberAssessmentHistoryDao(widget.appDb);
+  late final SsLinkedVillageDao _ssLinkedVillageDao =
+      SsLinkedVillageDao(widget.appDb);
+  late final MemberAssessmentHistoryWriter _mahWriter =
+      MemberAssessmentHistoryWriter(
+    mah: _mahDao,
+    members: _memberDao,
+    appDb: widget.appDb,
+  );
+  late final SpiceDashboardDao _spiceDashboardDao =
+      SpiceDashboardDao(widget.appDb);
+  late final SkSpiceDashboardRepository _skSpiceDashboardRepo =
+      SkSpiceDashboardRepository(
+    dashboard: _spiceDashboardDao,
+    mah: _mahDao,
+    mahWriter: _mahWriter,
+    auth: widget.authRepo,
+  );
   late final TelemetryDao _telemetryDao = TelemetryDao(widget.appDb);
   late final TelemetryService _telemetryService = TelemetryService(
     dao: _telemetryDao,
@@ -270,6 +294,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // can reuse already-fetched static-data without a second user-data call.
     hierarchy: _userHierarchy,
     healthFacilities: _healthFacilityDao,
+    assessmentHistoryWriter: _mahWriter,
   );
   late final WorklistRepository _worklist = WorklistRepository(
     patients: _patientDao,
@@ -330,6 +355,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     historyDao: _assessmentDao,
     followUpCalls: _followUpCallService,
     memberDao: _memberDao,
+    assessmentHistoryWriter: _mahWriter,
   );
   late final OfflinePushService _offlinePush = OfflinePushService(
     api: widget.api,
@@ -366,6 +392,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     widget.api,
     widget.authRepo,
     healthFacilities: _healthFacilityDao,
+    ssLinkedVillages: _ssLinkedVillageDao,
   );
 
   // Connectivity-aware auto-sync: outbound push + inbound warm pull on reconnect
@@ -530,6 +557,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<PriorityScorer>.value(value: _priorityScorer),
         Provider<ReferralRepository>.value(value: _referrals),
         Provider<MissionDashboardRepository>.value(value: _missionDashboard),
+        Provider<SkSpiceDashboardRepository>.value(
+            value: _skSpiceDashboardRepo),
         Provider<PatientDao>.value(value: _patientDao),
         Provider<HouseholdDao>.value(value: _householdDao),
         Provider<MemberDao>.value(value: _memberDao),

@@ -21,6 +21,7 @@ import '../db/follow_up_dao.dart';
 import '../db/health_facility_dao.dart';
 import '../db/household_dao.dart';
 import '../db/immunisation_dao.dart';
+import '../db/member_assessment_history_writer.dart';
 import '../db/member_dao.dart';
 import '../db/patient_dao.dart';
 import '../db/patient_programmes_dao.dart';
@@ -72,6 +73,7 @@ class OfflineSyncService extends ChangeNotifier {
     // instead of making a second user-data HTTP call on every full sync.
     UserHierarchyService? hierarchy,
     HealthFacilityDao? healthFacilities,
+    MemberAssessmentHistoryWriter? assessmentHistoryWriter,
   })  : _api = api,
         _auth = auth,
         _db = db,
@@ -89,7 +91,8 @@ class OfflineSyncService extends ChangeNotifier {
         _encounterDao = encounterDao,
         _referrals = referrals,
         _hierarchy = hierarchy,
-        _healthFacilities = healthFacilities;
+        _healthFacilities = healthFacilities,
+        _assessmentHistoryWriter = assessmentHistoryWriter;
 
   static const String _entityKey = 'worklist';
 
@@ -118,6 +121,7 @@ class OfflineSyncService extends ChangeNotifier {
   // P1: shared hierarchy service — avoids second user-data call on full sync
   final UserHierarchyService? _hierarchy;
   final HealthFacilityDao? _healthFacilities;
+  final MemberAssessmentHistoryWriter? _assessmentHistoryWriter;
 
   bool _running = false;
 
@@ -1891,6 +1895,8 @@ class OfflineSyncService extends ChangeNotifier {
       if (assessmentRows.isNotEmpty) {
         await _assessments.upsertMany(assessmentRows);
       }
+
+      await _assessmentHistoryWriter?.upsertFromHistoryItems(items);
 
       // CCE: open referred visits → local referrals table (dedupe by encounter).
       var referralCount = 0;
