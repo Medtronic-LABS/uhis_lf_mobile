@@ -131,6 +131,20 @@ Future<void> _fillAndSubmitBookingForm(
   await tester.pump(const Duration(milliseconds: 300));
 }
 
+/// Every `_SpecialityChip` wraps its content in its own `Semantics(button:
+/// true, ...)` node (`teleconsult_screen.dart`), with a non-null `label` only
+/// when that card is gender-disabled -- read directly off each widget's
+/// `properties`, same minimal pattern as `ai_scribe_banner_test.dart`'s
+/// `_bannerSemanticsLabel`, rather than standing up the full semantics-tree
+/// binding (`tester.ensureSemantics()`) just to check label text.
+Set<String> _disabledSpecialitySemanticsLabels(WidgetTester tester) {
+  return tester
+      .widgetList<Semantics>(find.byType(Semantics))
+      .map((s) => s.properties.label)
+      .whereType<String>()
+      .toSet();
+}
+
 void main() {
   // TeleconsultScreen resolves its TeleconsultPrescriptionDao up front, in
   // initState (see teleconsult_screen.dart) -- it must keep working after the
@@ -328,6 +342,11 @@ void main() {
         patientId: 'p1',
         patientPhone: '+8801000000000',
         reason: 'Fever',
+        // Maternity Coach is gated to female patients (see the dedicated
+        // gender-gating test group below); this test is about selection
+        // highlighting, not gating, so it needs a gender that leaves every
+        // card tappable.
+        patientGender: 'Female',
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
@@ -342,6 +361,67 @@ void main() {
     await tester.pump();
 
     expect(selectedLabels(), {TeleconsultStrings.specialityMaternityCoach});
+    // No disabled-card semantics on any card for a female patient.
+    expect(_disabledSpecialitySemanticsLabels(tester), isEmpty);
+  });
+
+  testWidgets('Maternity Coach is disabled and not selectable for a male patient', (tester) async {
+    final client = _FailingShukheeClient(() => const ShukheeBookingException('should not be called'));
+
+    await tester.pumpWidget(
+      _wrap(TeleconsultScreen(
+        patientLabel: 'Test Patient',
+        patientId: 'p1',
+        patientPhone: '+8801000000000',
+        reason: 'Fever',
+        patientGender: 'Male',
+        client: client,
+        prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
+        permissionService: _FakePermissionService(),
+      )),
+    );
+    await tester.pump(); // let the speciality grid load
+
+    await tester.tap(find.text(TeleconsultStrings.specialityMaternityCoach));
+    await tester.pump();
+
+    // Tapping the disabled card is a no-op -- selection stays on the default.
+    final selectedText = tester.widget<Text>(
+      find.text(TeleconsultStrings.specialityGeneralPhysician),
+    );
+    expect(selectedText.style?.color, AppColors.navy);
+    expect(client.specialities, isEmpty);
+    expect(
+      _disabledSpecialitySemanticsLabels(tester),
+      contains(TeleconsultStrings.specialityFemaleOnlySemantic(TeleconsultStrings.specialityMaternityCoach)),
+    );
+  });
+
+  testWidgets('Maternity Coach is disabled by default when patient gender is unspecified', (tester) async {
+    final client = _FailingShukheeClient(() => const ShukheeBookingException('should not be called'));
+
+    await tester.pumpWidget(
+      _wrap(TeleconsultScreen(
+        patientLabel: 'Test Patient',
+        patientId: 'p1',
+        patientPhone: '+8801000000000',
+        reason: 'Fever',
+        client: client,
+        prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
+        permissionService: _FakePermissionService(),
+      )),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text(TeleconsultStrings.specialityMaternityCoach));
+    await tester.pump();
+
+    final selectedText = tester.widget<Text>(
+      find.text(TeleconsultStrings.specialityGeneralPhysician),
+    );
+    expect(selectedText.style?.color, AppColors.navy);
   });
 
   testWidgets('blocks booking entirely when camera/mic permission is denied', (tester) async {

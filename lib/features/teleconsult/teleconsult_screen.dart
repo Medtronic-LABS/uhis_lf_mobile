@@ -520,6 +520,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         return _BookingFormView(
           client: _client,
           initialPhone: widget.patientPhone,
+          patientGender: widget.patientGender,
           onSubmit: _submitBooking,
         );
       case _Stage.connecting:
@@ -725,10 +726,16 @@ String _avatarInitials(String name) {
 /// everything else (reason, patient name/dob/gender) was already derived by
 /// the caller (Visit flow Step 3) from data on hand.
 class _BookingFormView extends StatefulWidget {
-  const _BookingFormView({required this.client, required this.initialPhone, required this.onSubmit});
+  const _BookingFormView({
+    required this.client,
+    required this.initialPhone,
+    required this.patientGender,
+    required this.onSubmit,
+  });
 
   final ShukheeClient client;
   final String? initialPhone;
+  final String? patientGender;
   final Future<void> Function({
     required String contactNumber,
     required String speciality,
@@ -808,12 +815,26 @@ class _BookingFormViewState extends State<_BookingFormView> {
     if (!mounted) return;
     final defaultEntry = fetched.firstWhere(
       (s) => s.title.trim().toLowerCase() == 'general physician',
-      orElse: () => fetched.first,
+      orElse: () => fetched.firstWhere(
+        (s) => !_isSpecialityDisabled(s.title),
+        orElse: () => fetched.first,
+      ),
     );
     setState(() {
       _specialities = fetched;
       _selectedTitle = defaultEntry.title;
     });
+  }
+
+  /// Maternity Coach is only a valid teleconsult option for a female patient
+  /// -- gated on [ShukheeSpeciality.title] for the same reason selection
+  /// itself is (see the doc above [_selectedSpeciality]): every speciality
+  /// currently shares the same specialityId, so title is the only field
+  /// that actually identifies "Maternity Coach".
+  bool _isSpecialityDisabled(String title) {
+    if (title != 'Maternity Coach') return false;
+    final gender = widget.patientGender?.trim().toLowerCase();
+    return gender != 'female' && gender != 'f';
   }
 
   // Selection is tracked by [ShukheeSpeciality.title], not .specialityId --
@@ -984,6 +1005,7 @@ class _BookingFormViewState extends State<_BookingFormView> {
                           return _SpecialityChip(
                             label: _specialityLabel(s.title),
                             selected: s.title == _selectedTitle,
+                            isDisabled: _isSpecialityDisabled(s.title),
                             onTap: () => setState(() => _selectedTitle = s.title),
                           );
                         }).toList(),
@@ -1076,31 +1098,44 @@ class _BookingFormViewState extends State<_BookingFormView> {
 }
 
 class _SpecialityChip extends StatelessWidget {
-  const _SpecialityChip({required this.label, required this.selected, required this.onTap});
+  const _SpecialityChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.isDisabled = false,
+  });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final bool isDisabled;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.field),
-      onTap: onTap,
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? AppColors.catFacilitySurface : Colors.white,
-          border: Border.all(color: selected ? AppColors.catFacilityBorder : AppColors.border, width: selected ? 1.5 : 1),
+    return Semantics(
+      label: isDisabled ? TeleconsultStrings.specialityFemaleOnlySemantic(label) : null,
+      button: true,
+      child: Opacity(
+        opacity: isDisabled ? 0.45 : 1.0,
+        child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.field),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected ? AppColors.navy : AppColors.textMuted,
+          onTap: isDisabled ? null : onTap,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? AppColors.catFacilitySurface : Colors.white,
+              border: Border.all(color: selected ? AppColors.catFacilityBorder : AppColors.border, width: selected ? 1.5 : 1),
+              borderRadius: BorderRadius.circular(AppRadius.field),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? AppColors.navy : AppColors.textMuted,
+              ),
+            ),
           ),
         ),
       ),

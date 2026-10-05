@@ -3315,6 +3315,10 @@
     "bn": "ডায়াবেটিস কোচ",
     "en": "Diabetic Coach"
   },
+  "Teleconsult.specialityFemaleOnlySemantic": {
+    "bn": "{label}, শুধুমাত্র নারী রোগীদের জন্য উপলব্ধ",
+    "en": "{label}, available for female patients only"
+  },
   "Teleconsult.specialityGeneralPhysician": {
     "bn": "জেনারেল ফিজিশিয়ান",
     "en": "General Physician"

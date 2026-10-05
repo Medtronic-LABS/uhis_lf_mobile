@@ -4304,6 +4304,11 @@ abstract final class TeleconsultStrings {
   static String get specialitySexualWellness => getTranslatedString('Teleconsult.specialitySexualWellness', 'Sexual Wellness');
   static String get specialityDiabeticCoach => getTranslatedString('Teleconsult.specialityDiabeticCoach', 'Diabetic Coach');
   static String get specialityMaternityCoach => getTranslatedString('Teleconsult.specialityMaternityCoach', 'Maternity Coach');
+  static String specialityFemaleOnlySemantic(String label) => getTranslatedString(
+        'Teleconsult.specialityFemaleOnlySemantic',
+        '{label}, available for female patients only',
+        params: {'label': label},
+      );
   static String get contactNumberLabel => getTranslatedString('Teleconsult.contactNumberLabel', 'Contact Number');
   static String get contactNumberRequired => getTranslatedString('Teleconsult.contactNumberRequired', 'Enter a contact number to continue.');
   static String get documentTypePrescription => getTranslatedString('Teleconsult.documentTypePrescription', 'Prescription');
