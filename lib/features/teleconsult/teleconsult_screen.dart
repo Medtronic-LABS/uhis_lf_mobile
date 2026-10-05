@@ -48,11 +48,13 @@ import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/db/teleconsult_prescription_dao.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
+import '../../core/i18n/app_locale.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/counselling_launcher.dart';
 import 'clinical_data_card.dart';
 import 'pdf_viewer_screen.dart';
 import 'shukhee_client_factory.dart';
+import 'shukhee_consent_client.dart';
 import 'teleconsult_clinical_data.dart';
 import 'teleconsult_permission_service.dart';
 
@@ -96,10 +98,13 @@ class TeleconsultScreen extends StatefulWidget {
     this.whatsappMessage,
     this.confirmedSymptoms = const <String>{},
     this.referredReasons = const [],
+    this.consentVersion,
+    this.consentLng,
     @visibleForTesting this.client,
     @visibleForTesting this.permissionService,
     @visibleForTesting this.prescriptionDao,
     @visibleForTesting this.clinicalDataBuilder,
+    @visibleForTesting this.consentClient,
   });
 
   final String patientLabel;
@@ -150,6 +155,15 @@ class TeleconsultScreen extends StatefulWidget {
   /// visit raised no risk flags.
   final List<String> referredReasons;
 
+  /// The consent copy version/language the SK just accepted on
+  /// `TeleconsultConsentScreen` -- attached to the resulting Call Logs row
+  /// once booking succeeds (see `_submitBooking`), since that row doesn't
+  /// exist yet at consent time. Every decision (including declines) is
+  /// already durably recorded in `Shukhee Consent Log`; this is only a
+  /// convenience denormalization for viewing a specific call.
+  final String? consentVersion;
+  final String? consentLng;
+
   /// Test-only injection points — real callers never pass these; the screen
   /// builds its own instances from [AppConfig]/the widget tree's [Provider]s
   /// otherwise.
@@ -157,6 +171,7 @@ class TeleconsultScreen extends StatefulWidget {
   final TeleconsultPermissionService? permissionService;
   final TeleconsultPrescriptionDao? prescriptionDao;
   final TeleconsultClinicalDataBuilder? clinicalDataBuilder;
+  final ShukheeConsentClient? consentClient;
 
   @override
   State<TeleconsultScreen> createState() => _TeleconsultScreenState();
@@ -175,6 +190,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   // _submitBooking's clinicalData assembly runs before any context.read
   // would still be safe if it were deferred.
   late final TeleconsultClinicalDataBuilder _clinicalDataBuilder;
+  late final ShukheeConsentClient _consentClient;
   final _callViewKey = GlobalKey();
 
   _Stage _stage = _Stage.booking;
@@ -210,6 +226,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
           assessmentDao: context.read<LocalAssessmentDao>(),
           pregnancySnapshotDao: context.read<PregnancySnapshotDao>(),
         );
+    _consentClient = widget.consentClient ?? buildShukheeConsentClient(context);
   }
 
   @override
@@ -276,6 +293,13 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       );
       if (!mounted) return;
       setState(() => _booking = booking);
+      // Best-effort denormalization -- never blocks or fails the booking
+      // flow (see ShukheeConsentClient.attachConsentToCall's doc comment).
+      unawaited(_consentClient.attachConsentToCall(
+        callLog: booking.callLog,
+        consentVersion: widget.consentVersion,
+        lng: widget.consentLng ?? (AppLocale.isBangla ? 'bn' : 'en'),
+      ));
       unawaited(_pollInBackground(booking.callLog));
     } on ShukheeException catch (e) {
       if (mounted) _handleError(e);

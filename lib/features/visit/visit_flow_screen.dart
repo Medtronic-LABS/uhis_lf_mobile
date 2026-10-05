@@ -67,6 +67,7 @@ import 'pathway/pathway_engine.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../patient/followup_call_service.dart';
 import '../scribe/scribe_controller.dart';
+import '../teleconsult/teleconsult_consent_screen.dart' show TeleconsultConsentDecision;
 import '../scribe/scribe_permission_service.dart';
 import '../worklist/worklist_repository.dart';
 import 'forms/childhood_visit.dart';
@@ -4574,10 +4575,12 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
 
   /// Gates the real Shukhee booking flow behind a full-screen patient-consent
   /// page (`/teleconsult/consent`) -- see `TeleconsultConsentScreen`. Only
-  /// proceeds to `/teleconsult` when the SK confirms consent (`true`);
-  /// declining or backing out (`false`/`null`) leaves the SK on this screen.
+  /// proceeds to `/teleconsult` when the SK confirms consent (`agreed:
+  /// true`); declining or backing out leaves the SK on this screen. The
+  /// accepted `version`/`lng` are forwarded so `TeleconsultScreen` can attach
+  /// them to the resulting Call Logs row once booking succeeds.
   Future<void> _onTap(BuildContext context) async {
-    final agreed = await context.push<bool>(
+    final result = await context.push<TeleconsultConsentDecision>(
       '/teleconsult/consent',
       extra: {
         'patientLabel': widget.patientLabel,
@@ -4586,7 +4589,7 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
         if (widget.patientDob != null) 'patientDob': widget.patientDob,
       },
     );
-    if (agreed != true || !context.mounted) return;
+    if (result?.agreed != true || !context.mounted) return;
     context.push(
       '/teleconsult',
       extra: {
@@ -4604,6 +4607,8 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
         if (widget.confirmedSymptoms.isNotEmpty) 'confirmedSymptoms': widget.confirmedSymptoms,
         if (widget.referredReasons.isNotEmpty) 'referredReasons': widget.referredReasons,
         if (widget.whatsappMessage != null) 'whatsappMessage': widget.whatsappMessage,
+        'consentVersion': result!.version,
+        'consentLng': result.lng,
       },
     );
   }

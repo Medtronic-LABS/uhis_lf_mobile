@@ -1,6 +1,33 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/api/api_client.dart';
+import '../../core/config/app_config.dart';
 import '../../core/debug/console_log.dart';
+
+/// Builds a [ShukheeConsentClient] wired to this app's own authenticated
+/// session ([ApiClient]) -- same token-stripping/tenantId convention as
+/// `shukhee_client_factory.dart`'s `buildShukheeClient`, kept here (rather
+/// than there) since that file's own doc comment scopes it to building "the
+/// app's one real `ShukheeClient`" (the `shukhee_sdk` client specifically),
+/// not every Shukhee-family client. Shared by both
+/// `TeleconsultConsentScreen` (fetching consent copy) and `TeleconsultScreen`
+/// (attaching the accepted version to the resulting call) so the header-
+/// building logic isn't duplicated between them.
+ShukheeConsentClient buildShukheeConsentClient(BuildContext context) {
+  final apiClient = context.read<ApiClient>();
+  return ShukheeConsentClient(
+    baseUrl: AppConfig.shukheeApiBaseUrl,
+    authTokenProvider: () async {
+      final raw = apiClient.exportAuthToken();
+      if (raw == null) return null;
+      const prefix = 'Bearer ';
+      return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+    },
+    tenantIdProvider: () async => apiClient.tenantId,
+  );
+}
 
 /// Consent HTML content fetched live from the Shukhee/Frappe backend for the
 /// pre-teleconsult consent gate -- see [ShukheeConsentClient].
@@ -111,6 +138,40 @@ class ShukheeConsentClient {
           ? responseVersion
           : null,
     );
+  }
+
+  static const String attachConsentPath =
+      '/api/method/shukhee_integration.api.consent.attach_consent_to_call';
+
+  /// Denormalizes the accepted consent version/language onto the `Call Logs`
+  /// row a successful booking just created -- called once from
+  /// `TeleconsultScreen._submitBooking` right after `startConsultation`
+  /// returns, since the consent gate runs before that row exists. Returns
+  /// true once the backend confirms the attach. Returns false, never throws,
+  /// on any failure (unknown `call_log`, network error, etc.) -- this is
+  /// always best-effort and must never block or fail the booking flow it's
+  /// called from, mirroring `ShukheeEncounterLinkClient.attachFhirEncounterId`.
+  Future<bool> attachConsentToCall({
+    required String callLog,
+    String? consentVersion,
+    required String lng,
+  }) async {
+    try {
+      final headers = await _authHeaders();
+      final response = await _dio.post<Map<String, dynamic>>(
+        attachConsentPath,
+        data: {
+          'call_log': callLog,
+          'consent_version': consentVersion,
+          'lng': lng,
+        },
+        options: Options(headers: headers),
+      );
+      final data = _unwrapMessage(response.data);
+      return data['attached'] == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<Map<String, String>> _authHeaders() async {

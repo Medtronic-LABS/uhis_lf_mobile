@@ -9,6 +9,10 @@
 /// `connected` stage.
 library;
 
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shukhee_sdk/shukhee_sdk.dart';
@@ -19,9 +23,43 @@ import 'package:uhis_next/core/db/local_assessment_dao.dart';
 import 'package:uhis_next/core/db/pregnancy_snapshot_dao.dart';
 import 'package:uhis_next/core/db/teleconsult_prescription_dao.dart';
 import 'package:uhis_next/core/theme/app_theme.dart';
+import 'package:uhis_next/features/teleconsult/shukhee_consent_client.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_clinical_data.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_permission_service.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_screen.dart';
+
+/// Never actually hit -- every test here keeps `startConsultation` failing
+/// (see this file's top doc comment), so `_submitBooking` never reaches the
+/// `attachConsentToCall` call this would otherwise respond to. Exists purely
+/// so `TeleconsultScreen`'s `initState` doesn't fall back to
+/// `buildShukheeConsentClient(context)`, which needs a `Provider<ApiClient>`
+/// this bare `MaterialApp` test tree doesn't supply.
+ShukheeConsentClient _fakeConsentClient() {
+  final adapter = _NeverCalledAdapter();
+  final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))..httpClientAdapter = adapter;
+  return ShukheeConsentClient(
+    baseUrl: 'https://example.test',
+    authTokenProvider: () async => 'test-token',
+    dio: dio,
+  );
+}
+
+class _NeverCalledAdapter implements HttpClientAdapter {
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final bytes = utf8.encode(jsonEncode({'message': {'attached': false}}));
+    return ResponseBody.fromBytes(bytes, 200, headers: {
+      'content-type': ['application/json; charset=utf-8'],
+    });
+  }
+}
 
 /// Records every [startConsultation] call and always fails it with
 /// [exceptionBuilder]'s result -- keeps every test on this side of the
@@ -186,6 +224,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -210,6 +249,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -240,6 +280,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -281,6 +322,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -306,6 +348,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -350,6 +393,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -378,6 +422,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -410,6 +455,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -436,6 +482,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(granted: false),
       )),
     );
@@ -460,6 +507,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -483,6 +531,7 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
+        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -518,4 +567,12 @@ void main() {
   // call, and an ad hoc version of this test (a fake client that succeeds
   // startConsultation) reached the same save line before being removed for
   // that reason.
+  //
+  // The same constraint applies to `_submitBooking`'s `attachConsentToCall`
+  // call (teleconsult_screen.dart, right after `setState(() => _booking =
+  // booking);`) -- it only fires once `startConsultation` succeeds, which is
+  // exactly the path that can't be driven to completion in this harness. Also
+  // confirmed manually instead: booking a real call in the local env and
+  // checking via `bench console` that the resulting Call Logs row's
+  // consent_version/consent_lng matched what the consent screen showed.
 }

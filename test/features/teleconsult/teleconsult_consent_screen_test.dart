@@ -125,7 +125,7 @@ void main() {
   /// Pumps [TeleconsultConsentScreen] pushed on top of a `/home` route (so
   /// `context.pop` has somewhere to land), wired to [logService] and
   /// [consentClientBuilder]. Returns the router and the push's result future.
-  Future<(GoRouter, Future<bool?>)> pumpConsentScreen(
+  Future<(GoRouter, Future<TeleconsultConsentDecision?>)> pumpConsentScreen(
     WidgetTester tester, {
     required _FakeConsentLogService logService,
     required ShukheeConsentClient Function(BuildContext) consentClientBuilder,
@@ -158,7 +158,7 @@ void main() {
       ),
     );
     await tester.pump();
-    final resultFuture = router.push<bool>('/consent');
+    final resultFuture = router.push<TeleconsultConsentDecision>('/consent');
     return (router, resultFuture);
   }
 
@@ -181,7 +181,10 @@ void main() {
     await tester.tap(find.text(TeleconsultConsentStrings.agreeButton));
     await tester.pumpAndSettle();
 
-    expect(await resultFuture, isTrue);
+    final decision = await resultFuture;
+    expect(decision?.agreed, isTrue);
+    expect(decision?.version, '2');
+    expect(decision?.lng, 'en');
     expect(find.text('home-route'), findsOneWidget);
     expect(logService.calls, hasLength(1));
     expect(logService.calls.single, {
@@ -208,7 +211,10 @@ void main() {
     await tester.tap(find.text(TeleconsultConsentStrings.declineButton));
     await tester.pumpAndSettle();
 
-    expect(await resultFuture, isFalse);
+    final decision = await resultFuture;
+    expect(decision?.agreed, isFalse);
+    expect(decision?.version, '3');
+    expect(decision?.lng, 'bn');
     expect(find.text('home-route'), findsOneWidget);
     expect(logService.calls, hasLength(1));
     expect(logService.calls.single['agreed'], isFalse);
@@ -235,7 +241,8 @@ void main() {
     // The screen already popped -- proven by the route stack landing back on
     // /home -- even though logService.record()'s future is still pending.
     expect(find.text('home-route'), findsOneWidget);
-    expect(await resultFuture, isFalse);
+    final decision = await resultFuture;
+    expect(decision?.agreed, isFalse);
     expect(logService.calls, hasLength(1));
 
     // Let the pending future resolve so it doesn't leak into another test.

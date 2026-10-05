@@ -10,8 +10,11 @@
 /// hardcoded fallback on failure (this is a compliance-sensitive gate: a
 /// fetch failure blocks the call entirely and offers only a retry).
 ///
-/// Returns `true` via [GoRouter.pop] when the SK confirms consent, `false`
-/// when declined. The caller only proceeds to `/teleconsult` on `true`.
+/// Returns a [TeleconsultConsentDecision] via [GoRouter.pop] -- `agreed:
+/// false` when declined. The caller only proceeds to `/teleconsult` on
+/// `agreed: true`, and threads `version`/`lng` through to the booking call
+/// so the accepted version can be attached to the resulting Call Logs row
+/// (see `TeleconsultScreen._submitBooking`).
 library;
 
 import 'dart:async';
@@ -21,32 +24,25 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/api/api_client.dart';
-import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/telemetry/teleconsult_consent_log_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'shukhee_consent_client.dart';
 
-/// Builds a [ShukheeConsentClient] wired to this app's own authenticated
-/// session ([ApiClient]) -- same token-stripping/tenantId convention as
-/// `shukhee_client_factory.dart`'s `buildShukheeClient`, kept local here
-/// (rather than added to that file) since that file's own doc comment scopes
-/// it to building "the app's one real `ShukheeClient`" (the `shukhee_sdk`
-/// client specifically), not every Shukhee-family client.
-ShukheeConsentClient _buildConsentClient(BuildContext context) {
-  final apiClient = context.read<ApiClient>();
-  return ShukheeConsentClient(
-    baseUrl: AppConfig.shukheeApiBaseUrl,
-    authTokenProvider: () async {
-      final raw = apiClient.exportAuthToken();
-      if (raw == null) return null;
-      const prefix = 'Bearer ';
-      return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
-    },
-    tenantIdProvider: () async => apiClient.tenantId,
-  );
+/// The result popped by [TeleconsultConsentScreen] -- carries the accepted
+/// consent version/language forward so the booking call can attach them to
+/// the resulting Call Logs row, not just the bare Agree/Decline bit.
+class TeleconsultConsentDecision {
+  const TeleconsultConsentDecision({
+    required this.agreed,
+    required this.version,
+    required this.lng,
+  });
+
+  final bool agreed;
+  final String? version;
+  final String lng;
 }
 
 class TeleconsultConsentScreen extends StatefulWidget {
@@ -78,7 +74,7 @@ class TeleconsultConsentScreen extends StatefulWidget {
 
   /// Test seam overriding how the [ShukheeConsentClient] is built, mirroring
   /// `TeleconsultScreen`'s injected `client` param. Production always uses
-  /// the default ([_buildConsentClient]).
+  /// the default ([buildShukheeConsentClient]).
   @visibleForTesting
   final ShukheeConsentClient Function(BuildContext)? consentClientBuilder;
 
@@ -97,7 +93,7 @@ class _TeleconsultConsentScreenState extends State<TeleconsultConsentScreen> {
   }
 
   Future<ShukheeConsentContent> _fetch() {
-    final client = (widget.consentClientBuilder ?? _buildConsentClient)(context);
+    final client = (widget.consentClientBuilder ?? buildShukheeConsentClient)(context);
     return client.fetchConsent(lng: AppLocale.isBangla ? 'bn' : 'en');
   }
 
@@ -115,7 +111,11 @@ class _TeleconsultConsentScreenState extends State<TeleconsultConsentScreen> {
             patientDob: widget.patientDob,
           ),
     );
-    context.pop(agreed);
+    context.pop(TeleconsultConsentDecision(
+      agreed: agreed,
+      version: content.version,
+      lng: content.lng,
+    ));
   }
 
   void _retry() {

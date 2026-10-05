@@ -521,6 +521,8 @@ GoRouter buildRouter(AuthState auth) {
               whatsappMessage: extra['whatsappMessage'] as String?,
               confirmedSymptoms: (extra['confirmedSymptoms'] as Set<String>?) ?? const <String>{},
               referredReasons: (extra['referredReasons'] as List<String>?) ?? const [],
+              consentVersion: extra['consentVersion'] as String?,
+              consentLng: extra['consentLng'] as String?,
             ),
           );
         },

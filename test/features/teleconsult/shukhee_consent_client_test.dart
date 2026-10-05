@@ -116,4 +116,75 @@ void main() {
       expect(adapter.requests, isEmpty);
     });
   });
+
+  group('ShukheeConsentClient.attachConsentToCall', () {
+    test('returns true and posts the expected body on a confirmed attach', () async {
+      final (client, adapter) = buildClient([
+        (_) async => _jsonResponse({'message': {'attached': true}}),
+      ]);
+
+      final result = await client.attachConsentToCall(
+        callLog: 'CL-1',
+        consentVersion: '2',
+        lng: 'en',
+      );
+
+      expect(result, isTrue);
+      expect(adapter.requests, hasLength(1));
+      final sent = adapter.requests.single.data as Map<String, dynamic>;
+      expect(sent, {'call_log': 'CL-1', 'consent_version': '2', 'lng': 'en'});
+      expect(adapter.requests.single.path, ShukheeConsentClient.attachConsentPath);
+      expect(adapter.requests.single.headers['X-Auth-Token'], 'Bearer test-token');
+      expect(adapter.requests.single.headers['tenantId'], 'tenant-1');
+    });
+
+    test('returns false when the backend reports the call_log was unknown', () async {
+      final (client, _) = buildClient([
+        (_) async => _jsonResponse({'message': {'attached': false}}),
+      ]);
+
+      final result = await client.attachConsentToCall(
+        callLog: 'CL-missing',
+        consentVersion: '2',
+        lng: 'en',
+      );
+
+      expect(result, isFalse);
+    });
+
+    test('returns false (never throws) on a network/HTTP error', () async {
+      final (client, _) = buildClient([
+        (_) async => _jsonResponse({'exc_type': 'ValidationError'}, statusCode: 417),
+      ]);
+
+      final result = await client.attachConsentToCall(
+        callLog: 'CL-1',
+        consentVersion: '2',
+        lng: 'en',
+      );
+
+      expect(result, isFalse);
+    });
+
+    test('returns false without making a request when no auth token is available', () async {
+      final adapter = _ScriptedAdapter([
+        (_) async => _jsonResponse({'message': {'attached': true}}),
+      ]);
+      final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))..httpClientAdapter = adapter;
+      final client = ShukheeConsentClient(
+        baseUrl: 'https://example.test',
+        authTokenProvider: () async => null,
+        dio: dio,
+      );
+
+      final result = await client.attachConsentToCall(
+        callLog: 'CL-1',
+        consentVersion: '2',
+        lng: 'en',
+      );
+
+      expect(result, isFalse);
+      expect(adapter.requests, isEmpty);
+    });
+  });
 }
