@@ -36,6 +36,7 @@ class ShukheeConsentContent {
     required this.lng,
     required this.html,
     this.version,
+    this.versionId,
   });
 
   /// The language the backend actually served -- the server falls back to
@@ -44,12 +45,21 @@ class ShukheeConsentContent {
   final String lng;
   final String html;
 
-  /// The consent copy's version, echoed back by `get_consent` -- logged
+  /// The consent copy's version label, echoed back by `get_consent` -- logged
   /// alongside the SK's Agree/Decline decision (see
-  /// `TeleconsultConsentLogEntry.consentVersion`) so the audit trail records
-  /// exactly which copy the patient saw. Null against a backend that hasn't
-  /// been updated to return it yet.
+  /// `TeleconsultConsentLogEntry.consentVersion`) so the audit trail is
+  /// human-readable without following a link. Null against a backend that
+  /// hasn't been updated to return it yet.
   final String? version;
+
+  /// The `Shukhee Consent Version` snapshot row backing this exact response --
+  /// must be carried forward unchanged (never re-derived later) and echoed
+  /// back via `record_consent_decision`/`attach_consent_to_call`, since the
+  /// live `Shukhee Consent` row this was fetched from may be edited again
+  /// before either of those calls happens. See that endpoint's own doc
+  /// comment for why re-resolving "the current version" later is unsafe.
+  /// Null against a backend that hasn't been updated to return it yet.
+  final String? versionId;
 }
 
 /// Raised by [ShukheeConsentClient.fetchConsent] on any failure. Deliberately
@@ -128,6 +138,7 @@ class ShukheeConsentClient {
     final html = data['consent'];
     final responseLng = data['lng'];
     final responseVersion = data['version'];
+    final responseVersionId = data['version_id'];
     if (html is! String || html.isEmpty) {
       throw ShukheeConsentException('Consent response missing "consent" HTML.');
     }
@@ -137,7 +148,18 @@ class ShukheeConsentClient {
       version: responseVersion is String && responseVersion.isNotEmpty
           ? responseVersion
           : null,
+      versionId: _asNonEmptyString(responseVersionId),
     );
+  }
+
+  /// Shukhee Consent Version's name is an autoincrement doctype id -- Frappe's JSON
+  /// layer normally serializes that as a string like every other Link value, but this
+  /// accepts a bare number too rather than silently dropping a valid id over a type
+  /// quirk.
+  static String? _asNonEmptyString(dynamic value) {
+    if (value is String && value.isNotEmpty) return value;
+    if (value is num) return value.toString();
+    return null;
   }
 
   static const String attachConsentPath =
@@ -146,14 +168,19 @@ class ShukheeConsentClient {
   /// Denormalizes the accepted consent version/language onto the `Call Logs`
   /// row a successful booking just created -- called once from
   /// `TeleconsultScreen._submitBooking` right after `startConsultation`
-  /// returns, since the consent gate runs before that row exists. Returns
-  /// true once the backend confirms the attach. Returns false, never throws,
-  /// on any failure (unknown `call_log`, network error, etc.) -- this is
-  /// always best-effort and must never block or fail the booking flow it's
-  /// called from, mirroring `ShukheeEncounterLinkClient.attachFhirEncounterId`.
+  /// returns, since the consent gate runs before that row exists. [versionId]
+  /// (from `ShukheeConsentContent.versionId`) is what the backend actually
+  /// links `Call Logs.consent_version` to -- [consentVersion] is kept only as
+  /// a human-readable echo in the audit log, not resolved server-side.
+  /// Returns true once the backend confirms the attach. Returns false, never
+  /// throws, on any failure (unknown `call_log`, network error, etc.) -- this
+  /// is always best-effort and must never block or fail the booking flow
+  /// it's called from, mirroring
+  /// `ShukheeEncounterLinkClient.attachFhirEncounterId`.
   Future<bool> attachConsentToCall({
     required String callLog,
     String? consentVersion,
+    String? versionId,
     required String lng,
   }) async {
     try {
@@ -163,6 +190,7 @@ class ShukheeConsentClient {
         data: {
           'call_log': callLog,
           'consent_version': consentVersion,
+          'version_id': versionId,
           'lng': lng,
         },
         options: Options(headers: headers),

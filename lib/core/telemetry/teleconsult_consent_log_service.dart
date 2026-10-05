@@ -40,6 +40,7 @@ class TeleconsultConsentLogService {
     required bool agreed,
     required String lng,
     String? consentVersion,
+    String? versionId,
     String? patientDob,
     DateTime? occurredAt,
   }) async {
@@ -56,6 +57,7 @@ class TeleconsultConsentLogService {
             : TeleconsultConsentDecision.declined,
         lng: lng,
         consentVersion: consentVersion,
+        versionId: versionId,
         patientDob: patientDob,
         skUserId: userId,
         capturedTenantId: tenantId,

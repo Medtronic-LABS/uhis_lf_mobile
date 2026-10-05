@@ -40,6 +40,7 @@ class TeleconsultConsentLogEntry {
     required this.occurredAt,
     this.visitId,
     this.consentVersion,
+    this.versionId,
     this.patientDob,
     this.skUserId,
     this.capturedTenantId,
@@ -67,6 +68,13 @@ class TeleconsultConsentLogEntry {
   /// `shukhee_integration.api.consent.get_consent`.
   final String? consentVersion;
 
+  /// The exact Shukhee Consent Version snapshot the patient saw -- what the
+  /// backend actually links `Shukhee Consent Log.consent_version` to;
+  /// [consentVersion] is kept only as a human-readable label. See
+  /// `ShukheeConsentContent.versionId`'s own doc comment for why this must be
+  /// carried forward unchanged, not re-derived later.
+  final String? versionId;
+
   /// Raw ISO date, for age-visibility in the audit trail -- no derived
   /// "is minor" flag, just the raw fact.
   final String? patientDob;
@@ -87,6 +95,7 @@ class TeleconsultConsentLogEntry {
         'decision': decision,
         'lng': lng,
         'consent_version': consentVersion,
+        'version_id': versionId,
         'patient_dob': patientDob,
         'sk_user_id': skUserId,
         'captured_tenant_id': capturedTenantId,
@@ -103,6 +112,7 @@ class TeleconsultConsentLogEntry {
         decision: row['decision'] as String,
         lng: row['lng'] as String,
         consentVersion: row['consent_version'] as String?,
+        versionId: row['version_id'] as String?,
         patientDob: row['patient_dob'] as String?,
         skUserId: row['sk_user_id'] as String?,
         capturedTenantId: row['captured_tenant_id'] as int?,
@@ -127,6 +137,7 @@ class TeleconsultConsentLogEntry {
         'decision': decision,
         'lng': lng,
         'consent_version': consentVersion,
+        'version_id': versionId,
         'patient_dob': patientDob,
       };
 }

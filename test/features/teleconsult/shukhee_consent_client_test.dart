@@ -53,10 +53,15 @@ void main() {
   }
 
   group('ShukheeConsentClient.fetchConsent', () {
-    test('returns the lng/html and posts the expected body on success', () async {
+    test('returns the lng/html/versionId and posts the expected body on success', () async {
       final (client, adapter) = buildClient([
         (_) async => _jsonResponse({
-              'message': {'lng': 'bn', 'consent': '<p>বাংলা সম্মতি</p>'},
+              'message': {
+                'lng': 'bn',
+                'consent': '<p>বাংলা সম্মতি</p>',
+                'version': '2',
+                'version_id': '7',
+              },
             }),
       ]);
 
@@ -64,12 +69,26 @@ void main() {
 
       expect(result.lng, 'bn');
       expect(result.html, '<p>বাংলা সম্মতি</p>');
+      expect(result.version, '2');
+      expect(result.versionId, '7');
       expect(adapter.requests, hasLength(1));
       final sent = adapter.requests.single.data as Map<String, dynamic>;
       expect(sent, {'lng': 'bn'});
       expect(adapter.requests.single.path, ShukheeConsentClient.consentPath);
       expect(adapter.requests.single.headers['X-Auth-Token'], 'Bearer test-token');
       expect(adapter.requests.single.headers['tenantId'], 'tenant-1');
+    });
+
+    test('accepts a bare numeric version_id, not just a string', () async {
+      final (client, _) = buildClient([
+        (_) async => _jsonResponse({
+              'message': {'lng': 'en', 'consent': '<p>English</p>', 'version_id': 7},
+            }),
+      ]);
+
+      final result = await client.fetchConsent(lng: 'en');
+
+      expect(result.versionId, '7');
     });
 
     test('surfaces the server-side language fallback when it differs from the request', () async {
@@ -126,13 +145,14 @@ void main() {
       final result = await client.attachConsentToCall(
         callLog: 'CL-1',
         consentVersion: '2',
+        versionId: '7',
         lng: 'en',
       );
 
       expect(result, isTrue);
       expect(adapter.requests, hasLength(1));
       final sent = adapter.requests.single.data as Map<String, dynamic>;
-      expect(sent, {'call_log': 'CL-1', 'consent_version': '2', 'lng': 'en'});
+      expect(sent, {'call_log': 'CL-1', 'consent_version': '2', 'version_id': '7', 'lng': 'en'});
       expect(adapter.requests.single.path, ShukheeConsentClient.attachConsentPath);
       expect(adapter.requests.single.headers['X-Auth-Token'], 'Bearer test-token');
       expect(adapter.requests.single.headers['tenantId'], 'tenant-1');

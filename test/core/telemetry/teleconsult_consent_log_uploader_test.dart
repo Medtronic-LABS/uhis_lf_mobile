@@ -103,6 +103,7 @@ void main() {
         decision: TeleconsultConsentDecision.agreed,
         lng: 'en',
         consentVersion: '2',
+        versionId: 'VER-2',
         patientDob: '2000-01-01',
         occurredAt: DateTime.utc(2026, 9, 4, 10, i).millisecondsSinceEpoch,
       ));
@@ -165,6 +166,7 @@ void main() {
         'decision': TeleconsultConsentDecision.agreed,
         'lng': 'en',
         'consent_version': '2',
+        'version_id': 'VER-2',
         'patient_dob': '2000-01-01',
       });
     });

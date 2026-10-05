@@ -99,6 +99,7 @@ class TeleconsultScreen extends StatefulWidget {
     this.confirmedSymptoms = const <String>{},
     this.referredReasons = const [],
     this.consentVersion,
+    this.consentVersionId,
     this.consentLng,
     @visibleForTesting this.client,
     @visibleForTesting this.permissionService,
@@ -162,6 +163,12 @@ class TeleconsultScreen extends StatefulWidget {
   /// already durably recorded in `Shukhee Consent Log`; this is only a
   /// convenience denormalization for viewing a specific call.
   final String? consentVersion;
+
+  /// The exact Shukhee Consent Version snapshot the SK saw -- what
+  /// `_submitBooking` actually links `Call Logs.consent_version` to;
+  /// [consentVersion] is kept only for display/audit readability. See
+  /// `ShukheeConsentContent.versionId`'s own doc comment.
+  final String? consentVersionId;
   final String? consentLng;
 
   /// Test-only injection points — real callers never pass these; the screen
@@ -298,6 +305,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       unawaited(_consentClient.attachConsentToCall(
         callLog: booking.callLog,
         consentVersion: widget.consentVersion,
+        versionId: widget.consentVersionId,
         lng: widget.consentLng ?? (AppLocale.isBangla ? 'bn' : 'en'),
       ));
       unawaited(_pollInBackground(booking.callLog));

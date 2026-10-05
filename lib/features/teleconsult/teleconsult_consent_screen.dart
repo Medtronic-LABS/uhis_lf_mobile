@@ -37,11 +37,17 @@ class TeleconsultConsentDecision {
   const TeleconsultConsentDecision({
     required this.agreed,
     required this.version,
+    required this.versionId,
     required this.lng,
   });
 
   final bool agreed;
   final String? version;
+
+  /// The exact Shukhee Consent Version snapshot the patient saw -- must be
+  /// carried forward unchanged (see `ShukheeConsentContent.versionId`'s own
+  /// doc comment).
+  final String? versionId;
   final String lng;
 }
 
@@ -108,12 +114,14 @@ class _TeleconsultConsentScreenState extends State<TeleconsultConsentScreen> {
             agreed: agreed,
             lng: content.lng,
             consentVersion: content.version,
+            versionId: content.versionId,
             patientDob: widget.patientDob,
           ),
     );
     context.pop(TeleconsultConsentDecision(
       agreed: agreed,
       version: content.version,
+      versionId: content.versionId,
       lng: content.lng,
     ));
   }

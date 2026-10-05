@@ -4608,6 +4608,7 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
         if (widget.referredReasons.isNotEmpty) 'referredReasons': widget.referredReasons,
         if (widget.whatsappMessage != null) 'whatsappMessage': widget.whatsappMessage,
         'consentVersion': result!.version,
+        'consentVersionId': result.versionId,
         'consentLng': result.lng,
       },
     );

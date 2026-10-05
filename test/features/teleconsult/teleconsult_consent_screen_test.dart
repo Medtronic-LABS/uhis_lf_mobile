@@ -55,10 +55,11 @@ ShukheeConsentClient _fakeConsentClient({
   String lng = 'en',
   String html = '<p>Test consent copy</p>',
   String? version = '2',
+  String? versionId = 'VER-2',
 }) {
   final adapter = _ScriptedAdapter(
     (_) async => _jsonResponse({
-      'message': {'lng': lng, 'consent': html, 'version': version},
+      'message': {'lng': lng, 'consent': html, 'version': version, 'version_id': versionId},
     }),
   );
   final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
@@ -89,6 +90,7 @@ class _FakeConsentLogService extends TeleconsultConsentLogService {
     required bool agreed,
     required String lng,
     String? consentVersion,
+    String? versionId,
     String? patientDob,
     DateTime? occurredAt,
   }) async {
@@ -98,6 +100,7 @@ class _FakeConsentLogService extends TeleconsultConsentLogService {
       'agreed': agreed,
       'lng': lng,
       'consentVersion': consentVersion,
+      'versionId': versionId,
       'patientDob': patientDob,
     });
     final gate = blockOn;
@@ -168,7 +171,8 @@ void main() {
     final (_, resultFuture) = await pumpConsentScreen(
       tester,
       logService: logService,
-      consentClientBuilder: (_) => _fakeConsentClient(lng: 'en', version: '2'),
+      consentClientBuilder: (_) =>
+          _fakeConsentClient(lng: 'en', version: '2', versionId: 'VER-2'),
       patientId: 'patient-42',
       visitId: 'visit-7',
       patientDob: '1990-01-01',
@@ -184,6 +188,7 @@ void main() {
     final decision = await resultFuture;
     expect(decision?.agreed, isTrue);
     expect(decision?.version, '2');
+    expect(decision?.versionId, 'VER-2');
     expect(decision?.lng, 'en');
     expect(find.text('home-route'), findsOneWidget);
     expect(logService.calls, hasLength(1));
@@ -193,6 +198,7 @@ void main() {
       'agreed': true,
       'lng': 'en',
       'consentVersion': '2',
+      'versionId': 'VER-2',
       'patientDob': '1990-01-01',
     });
   });
@@ -203,7 +209,8 @@ void main() {
     final (_, resultFuture) = await pumpConsentScreen(
       tester,
       logService: logService,
-      consentClientBuilder: (_) => _fakeConsentClient(lng: 'bn', version: '3'),
+      consentClientBuilder: (_) =>
+          _fakeConsentClient(lng: 'bn', version: '3', versionId: 'VER-3'),
       patientId: 'patient-9',
     );
     await tester.pumpAndSettle();
@@ -214,12 +221,14 @@ void main() {
     final decision = await resultFuture;
     expect(decision?.agreed, isFalse);
     expect(decision?.version, '3');
+    expect(decision?.versionId, 'VER-3');
     expect(decision?.lng, 'bn');
     expect(find.text('home-route'), findsOneWidget);
     expect(logService.calls, hasLength(1));
     expect(logService.calls.single['agreed'], isFalse);
     expect(logService.calls.single['lng'], 'bn');
     expect(logService.calls.single['consentVersion'], '3');
+    expect(logService.calls.single['versionId'], 'VER-3');
   });
 
   testWidgets(

@@ -522,6 +522,7 @@ GoRouter buildRouter(AuthState auth) {
               confirmedSymptoms: (extra['confirmedSymptoms'] as Set<String>?) ?? const <String>{},
               referredReasons: (extra['referredReasons'] as List<String>?) ?? const [],
               consentVersion: extra['consentVersion'] as String?,
+              consentVersionId: extra['consentVersionId'] as String?,
               consentLng: extra['consentLng'] as String?,
             ),
           );

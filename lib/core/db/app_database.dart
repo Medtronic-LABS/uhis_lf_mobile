@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 53;
+  static const int schemaVersion = 54;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -933,6 +933,8 @@ class AppDatabase {
         'ON $tableAssistantContentTelemetry(upload_status)');
 
     // v53 — teleconsult patient-consent decision audit queue.
+    // v54 added version_id (see createSchema's doc comment on that column,
+    // mirrored in the _onUpgrade ALTER TABLE block below).
     await db.execute('''
       CREATE TABLE $tableTeleconsultConsentLog (
         id TEXT PRIMARY KEY,
@@ -941,6 +943,7 @@ class AppDatabase {
         decision TEXT NOT NULL,
         lng TEXT NOT NULL,
         consent_version TEXT,
+        version_id TEXT,
         patient_dob TEXT,
         sk_user_id TEXT,
         captured_tenant_id INTEGER,
@@ -2377,6 +2380,15 @@ class AppDatabase {
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_teleconsult_consent_log_upload '
           'ON $tableTeleconsultConsentLog(upload_status)');
+    }
+    if (from < 54) {
+      // v54 — version_id: the exact Shukhee Consent Version snapshot the
+      // patient saw, alongside consent_version's human-readable label (see
+      // TeleconsultConsentLogEntry.versionId's own doc comment).
+      try {
+        await db.execute(
+            'ALTER TABLE $tableTeleconsultConsentLog ADD COLUMN version_id TEXT');
+      } catch (_) {/* column already present — no-op */}
     }
   }
 

@@ -105,6 +105,7 @@ void main() {
       'decision',
       'lng',
       'consent_version',
+      'version_id',
       'patient_dob',
     });
     expect(json['patient_id'], 'patient-1');
