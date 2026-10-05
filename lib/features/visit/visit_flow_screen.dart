@@ -3729,6 +3729,7 @@ class _AiCounsellingCardState extends State<_AiCounsellingCard> {
         surface: TelemetryShareSurface.visitFlow,
         hasMessage: true,
         launched: launched,
+        visitUuid: widget.visitUuid,
       );
 
   Future<void> _onVote(String vote) async {

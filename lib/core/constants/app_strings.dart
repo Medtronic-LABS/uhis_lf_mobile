@@ -4971,6 +4971,75 @@ abstract final class PerformanceStrings {
 
   static String get performanceTab => getTranslatedString('Performance.performanceTab', 'Performance');
   static String get myPatientsTab => getTranslatedString('Performance.myPatientsTab', 'My Patients');
+  static String get dashboardTab => getTranslatedString('Performance.dashboardTab', 'Dashboard');
+  static String get dashboardServicesTab =>
+      getTranslatedString('Performance.dashboardServicesTab', 'Services');
+  static String get dashboardDemographicTab =>
+      getTranslatedString('Performance.dashboardDemographicTab', 'Demographic');
+
+  static String get dashboardFrom =>
+      getTranslatedString('Performance.dashboardFrom', 'From');
+  static String get dashboardTo =>
+      getTranslatedString('Performance.dashboardTo', 'To');
+  static String get dashboardFilterTitle =>
+      getTranslatedString('Performance.dashboardFilterTitle', 'Filters');
+  static String get dashboardFilterSs =>
+      getTranslatedString('Performance.dashboardFilterSs', 'Shasthya Shebika');
+  static String get dashboardFilterSubVillage =>
+      getTranslatedString('Performance.dashboardFilterSubVillage', 'Sub-village');
+  static String get dashboardFilterApply =>
+      getTranslatedString('Performance.dashboardFilterApply', 'Apply');
+  static String get dashboardLoadError =>
+      getTranslatedString('Performance.dashboardLoadError', 'Could not load dashboard');
+
+  static String get kpiPwRegistration => getTranslatedString(
+      'Performance.kpiPwRegistration', 'Pregnancy registration');
+  static String get kpiAnc =>
+      getTranslatedString('Performance.kpiAnc', 'ANC services');
+  static String get kpiPw4MonthAnc => getTranslatedString(
+      'Performance.kpiPw4MonthAnc', 'PW identified < 4 months & got ANC');
+  static String get kpiAnc3Plus =>
+      getTranslatedString('Performance.kpiAnc3Plus', '3/3+ ANC services');
+  static String get kpiPregnancyOutcome => getTranslatedString(
+      'Performance.kpiPregnancyOutcome', 'Pregnancy Outcome');
+  static String get kpiPnc =>
+      getTranslatedString('Performance.kpiPnc', 'PNC services');
+  static String get kpiHighRiskPw => getTranslatedString(
+      'Performance.kpiHighRiskPw', 'Highrisk pregnant women');
+  static String get kpiChildVisit => getTranslatedString(
+      'Performance.kpiChildVisit', 'Under-2 children counselled');
+  static String get kpiHouseholdRegistered => getTranslatedString(
+      'Performance.kpiHouseholdRegistered', 'Households Registered');
+  static String get kpiTotalHousehold => getTranslatedString(
+      'Performance.kpiTotalHousehold', 'Total Household');
+  static String get kpiTotalMember =>
+      getTranslatedString('Performance.kpiTotalMember', 'Total Member');
+  static String get kpiTotalPregnantWomen => getTranslatedString(
+      'Performance.kpiTotalPregnantWomen', 'Total Pregnant Women');
+  static String get kpiFamilyPlanning => getTranslatedString(
+      'Performance.kpiFamilyPlanning', 'Family planning counselled');
+  static String get kpiOtherServices =>
+      getTranslatedString('Performance.kpiOtherServices', 'CD services');
+  static String get kpiNcdScreening =>
+      getTranslatedString('Performance.kpiNcdScreening', 'NCD screening');
+  static String get kpiNcdReferred =>
+      getTranslatedString('Performance.kpiNcdReferred', 'NCD referred');
+  static String get kpiNcdFollowUp => getTranslatedString(
+      'Performance.kpiNcdFollowUp', 'NCD follow-up assessment');
+  static String get kpiTotalNcd =>
+      getTranslatedString('Performance.kpiTotalNcd', 'Total NCD services');
+  static String get kpiLinkedToCare =>
+      getTranslatedString('Performance.kpiLinkedToCare', 'Linked to care');
+  static String get kpiEyeScreening => getTranslatedString(
+      'Performance.kpiEyeScreening', 'Total eye screening');
+  static String get kpiGlassesSold =>
+      getTranslatedString('Performance.kpiGlassesSold', 'Glasses sold');
+  static String get kpiCataract =>
+      getTranslatedString('Performance.kpiCataract', 'Cataract screening');
+  static String get kpiNcdInCataractCamp => getTranslatedString(
+      'Performance.kpiNcdInCataractCamp', 'NCD services in cataract camp');
+  static String get kpiReferredOperation => getTranslatedString(
+      'Performance.kpiReferredOperation', 'Patients referred for operation');
 
   // Namespaced separately from PatientContextStrings.serviceLabel /
   // HouseholdDetailStrings.lastVisitDate, which carry the same English for

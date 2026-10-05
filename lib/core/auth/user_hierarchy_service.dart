@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../config/app_config.dart';
 import '../db/health_facility_dao.dart';
+import '../db/ss_linked_village_dao.dart';
 import 'auth_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -273,11 +274,14 @@ class UserHierarchyService extends ChangeNotifier {
     this._api,
     this._auth, {
     HealthFacilityDao? healthFacilities,
-  }) : _healthFacilities = healthFacilities;
+    SsLinkedVillageDao? ssLinkedVillages,
+  })  : _healthFacilities = healthFacilities,
+        _ssLinkedVillages = ssLinkedVillages;
 
   final ApiClient _api;
   final AuthRepository _auth;
   final HealthFacilityDao? _healthFacilities;
+  final SsLinkedVillageDao? _ssLinkedVillages;
 
   List<SsWorker>? _ssWorkers;
   List<VillageRef>? _villages;
@@ -509,6 +513,14 @@ class UserHierarchyService extends ChangeNotifier {
     }
     debugPrint(
         '[UserHierarchyService] Saved ${ssIds.length} SS worker IDs: $ssIds');
+
+    if (_ssLinkedVillages != null && _ssWorkers != null) {
+      try {
+        await _ssLinkedVillages!.replaceFromSsWorkers(_ssWorkers!);
+      } on Object catch (e) {
+        debugPrint('[UserHierarchyService] SS linked villages persist failed: $e');
+      }
+    }
 
     // Persist FHIR Practitioner ID and org FHIR ID so OfflineSyncService can
     // read them from AuthRepository without a second user-data call (P1).

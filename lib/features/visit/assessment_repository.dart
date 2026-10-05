@@ -12,6 +12,7 @@ import '../../core/config/app_config.dart';
 import '../../core/version/app_version_info.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
+import '../../core/db/member_assessment_history_writer.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/pregnancy_episode_dao.dart';
 import '../../core/models/json_read.dart';
@@ -46,13 +47,15 @@ class AssessmentRepository extends ChangeNotifier {
     // Call Logs row the moment this push's poll resolves it -- see
     // ShukheeEncounterAttachService.attachForVisit.
     ShukheeEncounterAttachService? encounterAttach,
+    MemberAssessmentHistoryWriter? assessmentHistoryWriter,
   })  : _dao = dao,
         _api = api,
         _auth = auth,
         _historyDao = historyDao,
         _followUpCalls = followUpCalls,
         _memberDao = memberDao,
-        _encounterAttach = encounterAttach;
+        _encounterAttach = encounterAttach,
+        _assessmentHistoryWriter = assessmentHistoryWriter;
 
   final LocalAssessmentDao _dao;
   final ApiClient _api;
@@ -66,6 +69,7 @@ class AssessmentRepository extends ChangeNotifier {
   // New household members (e.g. live-birth babies) ride the same push.
   final MemberDao? _memberDao;
   final ShukheeEncounterAttachService? _encounterAttach;
+  final MemberAssessmentHistoryWriter? _assessmentHistoryWriter;
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -161,6 +165,7 @@ class AssessmentRepository extends ChangeNotifier {
     );
 
     await _dao.insert(entity);
+    await _assessmentHistoryWriter?.upsertFromLocal(entity);
     await _refreshPendingCount();
 
     return id;
