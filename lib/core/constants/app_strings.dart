@@ -5527,15 +5527,26 @@ abstract final class EpiStrings {
       getTranslatedString('Epi.scanUploadLabel', 'Upload');
   static String get scanReadingCard =>
       getTranslatedString('Epi.scanReadingCard', 'Reading card…');
-  static String scanVaccineFound(String name) => getTranslatedString(
-        'Epi.scanVaccineFound',
-        '$name found',
-        params: {'name': name},
-      );
+  static String scanVaccineFound(String name, [String? date]) =>
+      date == null
+          ? getTranslatedString(
+              'Epi.scanVaccineFound',
+              '$name found',
+              params: {'name': name},
+            )
+          : getTranslatedString(
+              'Epi.scanVaccineFoundWithDate',
+              '$name found · $date',
+              params: {'name': name, 'date': date},
+            );
   static String get scanCameraUnavailable => getTranslatedString(
         'Epi.scanCameraUnavailable',
         'Camera unavailable — grant permission or upload an image',
       );
+  static String get scanEngineGemini =>
+      getTranslatedString('Epi.scanEngineGemini', 'Gemini Vision');
+  static String get scanEngineOffline =>
+      getTranslatedString('Epi.scanEngineOffline', 'ML Kit (offline)');
 }
 
 /// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral
