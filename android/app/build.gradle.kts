@@ -52,7 +52,7 @@ android {
         // service-specific URLs (e.g. coaching backend) without hardcoding a host.
         buildConfigField(
             "String", "API_BASE_URL",
-            "\"${dartDefines["API_BASE_URL"] ?: "https://spice-dev-backend.uhis.labsplatform.com/"}\""
+            "\"${dartDefines["API_BASE_URL"] ?: dartDefines["BASE_URL"] ?: "https://spice-dev-backend.uhis.labsplatform.com/"}\""
         )
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.medtroniclabs.uhis_next"

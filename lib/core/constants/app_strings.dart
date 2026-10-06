@@ -4978,6 +4978,19 @@ abstract final class PerformanceStrings {
   static String get dashboardDemographicTab =>
       getTranslatedString('Performance.dashboardDemographicTab', 'Demographic');
 
+  static String get dashboardSubTabAll =>
+      getTranslatedString('Performance.dashboardSubTabAll', 'All');
+  static String get dashboardSubTabRmnch =>
+      getTranslatedString('Performance.dashboardSubTabRmnch', 'RMNCH');
+  static String get dashboardSubTabCd =>
+      getTranslatedString('Performance.dashboardSubTabCd', 'CD Services');
+  static String get dashboardSubTabNcd =>
+      getTranslatedString('Performance.dashboardSubTabNcd', 'NCD');
+  static String get dashboardSubTabEye =>
+      getTranslatedString('Performance.dashboardSubTabEye', 'Eye care');
+  static String get dashboardSubTabCataract =>
+      getTranslatedString('Performance.dashboardSubTabCataract', 'Cataract');
+
   static String get dashboardFrom =>
       getTranslatedString('Performance.dashboardFrom', 'From');
   static String get dashboardTo =>
