@@ -539,6 +539,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Refresh server-side feature flags on every sign-in (fresh login or
     // biometric/PIN restore). Non-fatal — defaults remain if the call fails.
     unawaited(_userHierarchy.refreshFeatureFlags());
+    unawaited(_userHierarchy.refreshShukheeControls());
     if (_sdkInitialized) return;
     _sdkInitialized = true;
     final token = await widget.authRepo.getToken();

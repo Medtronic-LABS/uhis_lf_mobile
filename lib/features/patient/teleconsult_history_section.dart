@@ -6,6 +6,7 @@
 /// folding into that per-visit-day row model.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -37,6 +38,9 @@ class _TeleconsultHistorySectionState extends State<TeleconsultHistorySection> {
   void initState() {
     super.initState();
     _load();
+    // Keep the backend kill-switch fresh on every mount, same reasoning as
+    // _TeleconsultButtonState in visit_flow_screen.dart.
+    unawaited(context.read<UserHierarchyService>().refreshShukheeControls());
   }
 
   @override

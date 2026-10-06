@@ -4558,6 +4558,14 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
       final online = results.any((r) => r != ConnectivityResult.none);
       if (mounted) setState(() => _isOnline = online);
     });
+    // Re-check the backend kill-switch live every time this button mounts
+    // (i.e. every time Step 3 loads), rather than relying on the value
+    // fetched at login -- the flag (and the SK's own Shukhee account
+    // mapping) can change server-side at any time. Fire-and-forget: the
+    // fetch is non-fatal and silently no-ops when offline (see
+    // UserHierarchyService._fetchShukheeControls), so this needs no
+    // explicit online gating of its own.
+    unawaited(context.read<UserHierarchyService>().refreshShukheeControls());
   }
 
   Future<void> _checkConnectivity() async {
