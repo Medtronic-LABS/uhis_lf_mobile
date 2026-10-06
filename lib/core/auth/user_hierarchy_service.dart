@@ -251,6 +251,37 @@ class FeatureFlags {
   static const FeatureFlags defaults = FeatureFlags();
 }
 
+/// Server-side kill-switch fetched from
+/// `shukhee_integration.api.settings.get_controls` -- a DIFFERENT backend/
+/// auth posture than [FeatureFlags] (POST + X-Auth-Token against
+/// [AppConfig.shukheeApiBaseUrl], not an open GET against the ai-scribe
+/// service), so kept as its own class rather than folded into FeatureFlags:
+/// one service's unreachability must never blank out the other's
+/// already-fetched value.
+///
+/// Defaults OFF so an unreachable server (or a backend whose gateway route
+/// for shukhee_integration isn't live yet) never shows the teleconsult
+/// feature. The mobile app ANDs this with the build-time
+/// [AppConfig.teleconsultEnabled] flag -- see [isTeleconsultVisible].
+class ShukheeControls {
+  const ShukheeControls({this.teleconsultEnabled = false});
+
+  factory ShukheeControls.fromJson(Map<String, dynamic> json) {
+    final raw = json['teleconsultEnabled'];
+    return ShukheeControls(teleconsultEnabled: raw is bool ? raw : false);
+  }
+
+  final bool teleconsultEnabled;
+
+  static const ShukheeControls defaults = ShukheeControls();
+}
+
+/// Both the build-time compiled flag AND the backend-driven kill-switch
+/// must be true for the Shukhee teleconsult feature to be visible -- see
+/// [ShukheeControls] and [AppConfig.teleconsultEnabled].
+bool isTeleconsultVisible({required bool buildFlag, required bool backendFlag}) =>
+    buildFlag && backendFlag;
+
 /// Fetches and caches the full static-data hierarchy from
 /// `POST /spice-service/static-data/user-data`.
 ///
@@ -290,6 +321,7 @@ class UserHierarchyService extends ChangeNotifier {
   List<int> _workflowIds = const [];
   HealthFacilityRef? _defaultFacility;
   FeatureFlags _featureFlags = FeatureFlags.defaults;
+  ShukheeControls _shukheeControls = ShukheeControls.defaults;
   bool _loading = false;
   String? _error;
 
@@ -309,6 +341,7 @@ class UserHierarchyService extends ChangeNotifier {
   List<int> get workflowIds => _workflowIds;
   HealthFacilityRef? get defaultFacility => _defaultFacility;
   FeatureFlags get featureFlags => _featureFlags;
+  ShukheeControls get shukheeControls => _shukheeControls;
   bool get loading => _loading;
   String? get error => _error;
 
@@ -318,12 +351,18 @@ class UserHierarchyService extends ChangeNotifier {
   /// fire-and-forget, never throws. Called by main.dart on every sign-in.
   Future<void> refreshFeatureFlags() => _fetchFeatureFlags();
 
+  /// Fetch the Shukhee teleconsult kill-switch immediately. Safe to call
+  /// anytime — fire-and-forget, never throws. Called alongside
+  /// [refreshFeatureFlags] wherever that's called from.
+  Future<void> refreshShukheeControls() => _fetchShukheeControls();
+
   Future<void> prefetch({bool forceRefresh = false}) async {
     if (!forceRefresh && _ready) {
       // Hierarchy data is cached — still fetch feature flags once per session.
       if (!_flagsFetched) {
         _flagsFetched = true;
         unawaited(_fetchFeatureFlags());
+        unawaited(_fetchShukheeControls());
       }
       return;
     }
@@ -376,6 +415,7 @@ class UserHierarchyService extends ChangeNotifier {
       _flagsFetched = true;
       // Fire-and-forget: flags failure must never fail the hierarchy load.
       unawaited(_fetchFeatureFlags());
+      unawaited(_fetchShukheeControls());
 
       debugPrint(
           '[UserHierarchyService] Loaded: ${_ssWorkers!.length} SS, '
@@ -581,6 +621,7 @@ class UserHierarchyService extends ChangeNotifier {
     // but enrollment only needs the lists.
     // Re-fetch server-side feature flags on every app start (not just fresh login).
     unawaited(_fetchFeatureFlags());
+    unawaited(_fetchShukheeControls());
     return true;
   }
 
@@ -616,6 +657,47 @@ class UserHierarchyService extends ChangeNotifier {
     }
   }
 
+  /// Fetches the server-side Shukhee teleconsult kill-switch from
+  /// [Endpoints.shukheeGetControls] (against [AppConfig.shukheeApiBaseUrl],
+  /// authenticated -- a different base/auth posture than [_fetchFeatureFlags]).
+  ///
+  /// Non-fatal — any error (including the "no gateway route yet" 404 some
+  /// backends currently return) leaves [ShukheeControls.defaults]
+  /// (`teleconsultEnabled: false`) in place, same posture as
+  /// [_fetchFeatureFlags].
+  Future<void> _fetchShukheeControls() async {
+    try {
+      final raw = _api.exportAuthToken();
+      if (raw == null) return; // not authenticated yet
+      const prefix = 'Bearer ';
+      final token = raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+      final tempDio = Dio(BaseOptions(
+        baseUrl: AppConfig.shukheeApiBaseUrl,
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ));
+      final headers = <String, String>{'X-Auth-Token': 'Bearer $token'};
+      final tenantId = _api.tenantId;
+      if (tenantId != null && tenantId.isNotEmpty) headers['tenantId'] = tenantId;
+      final resp = await tempDio.post(
+        Endpoints.shukheeGetControls,
+        options: Options(headers: headers),
+      );
+      final data = resp.data;
+      final message = data is Map && data['message'] is Map
+          ? Map<String, dynamic>.from(data['message'] as Map)
+          : (data is Map ? Map<String, dynamic>.from(data) : null);
+      if (message != null) {
+        _shukheeControls = ShukheeControls.fromJson(message);
+        notifyListeners();
+        debugPrint('[UserHierarchyService] ShukheeControls: '
+            'teleconsultEnabled=${_shukheeControls.teleconsultEnabled}');
+      }
+    } catch (e) {
+      debugPrint('[UserHierarchyService] _fetchShukheeControls failed (non-fatal): $e');
+    }
+  }
+
   void invalidate() {
     _ssWorkers = null;
     _villages = null;
@@ -624,6 +706,7 @@ class UserHierarchyService extends ChangeNotifier {
     _workflowIds = const [];
     _defaultFacility = null;
     _featureFlags = FeatureFlags.defaults;
+    _shukheeControls = ShukheeControls.defaults;
     _error = null;
     _ready = false;
     _flagsFetched = false;

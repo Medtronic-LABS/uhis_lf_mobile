@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 /// Build-time configuration. Every value is sourced via
 /// [String.fromEnvironment], which is populated by either
 /// `--dart-define=KEY=VALUE` or `--dart-define-from-file=env.*.json`
@@ -381,5 +383,104 @@ class AppConfig {
   static const bool useDynamicForms = bool.fromEnvironment(
     'USE_DYNAMIC_FORMS',
     defaultValue: true,
+  );
+
+  // ── Shukhee teleconsult ────────────────────────────────────────────────
+
+  /// Path segment nginx routes to `frappe-uhis-next`'s `shukhee_integration`
+  /// app, appended to [apiBaseUrl] for dev/prod -- same gateway host as every
+  /// other service; [ShukheeConfig]'s own endpoint paths
+  /// (`/api/method/shukhee_integration.api.consultation.*`) are unaffected
+  /// either way, only this base segment differs.
+  static const String _shukheeGatewaySegment = 'admin-api';
+
+  /// Joins [apiBaseUrl] with a gateway path segment, normalizing the slash
+  /// between them regardless of whether `API_BASE_URL` was supplied with or
+  /// without a trailing slash -- a bare `'$apiBaseUrl$segment'` concatenation
+  /// silently produces a malformed host (e.g.
+  /// `uhis-next-backend.labsplatform.comadmin-api`, a real production
+  /// incident this fixes) whenever the build's `API_BASE_URL` dart-define
+  /// has no trailing slash, since the one in [apiBaseUrl]'s own default
+  /// value masks the bug for every build that copies that convention.
+  static String _joinGatewaySegment(String segment) =>
+      joinUrlSegment(apiBaseUrl, segment);
+
+  /// Pure join logic, factored out so it's testable independent of
+  /// [apiBaseUrl]'s compile-time `--dart-define` value.
+  @visibleForTesting
+  static String joinUrlSegment(String base, String segment) {
+    final trimmedBase = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+    return '$trimmedBase/$segment';
+  }
+
+  /// Base URL of the backend exposing the Shukhee consultation endpoints.
+  ///
+  /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
+  ///   appended, e.g. `https://spice-dev-backend.uhis.labsplatform.com/admin-api`.
+  /// - Local override: set `SHUKHEE_API_BASE_URL` to a complete base URL
+  ///   (e.g. `http://10.0.2.2:8000`) pointing directly at a local
+  ///   `frappe-uhis-next` instance -- used verbatim, no gateway segment
+  ///   appended, since a direct local instance isn't behind that route.
+  static String get shukheeApiBaseUrl {
+    const local = String.fromEnvironment('SHUKHEE_API_BASE_URL', defaultValue: '');
+    if (local.isNotEmpty) return local;
+    return _joinGatewaySegment(_shukheeGatewaySegment);
+  }
+
+  /// Base URL of the same `frappe-uhis-next` backend's `spice_next_core` app
+  /// (currently only `spice_next_core.api.sync.pull`, consumed by
+  /// `CallLogSyncClient`) -- deliberately its own named getter rather than
+  /// reusing [shukheeApiBaseUrl], even though both currently resolve to the
+  /// same gateway segment on the same Frappe site (Frappe dispatches by the
+  /// full dotted method path internally, not by a per-app nginx route). If
+  /// the two apps are ever split behind different gateway paths, only this
+  /// getter needs to change.
+  ///
+  /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
+  ///   appended, same as [shukheeApiBaseUrl].
+  /// - Local override: set `SPICE_NEXT_CORE_API_BASE_URL` to a complete base
+  ///   URL, same convention as `SHUKHEE_API_BASE_URL`.
+  static String get spiceNextCoreApiBaseUrl {
+    const local = String.fromEnvironment('SPICE_NEXT_CORE_API_BASE_URL', defaultValue: '');
+    if (local.isNotEmpty) return local;
+    return _joinGatewaySegment(_shukheeGatewaySegment);
+  }
+
+  /// Feature flag: whether the real Shukhee teleconsult flow is wired up.
+  /// Default off -- this integrates against a real third-party vendor with
+  /// per-SK provisioning requirements on the backend (an Active `UHIS
+  /// Shukhee User` record) that may not be set up for every environment's
+  /// user base yet; flip per-environment once confirmed.
+  static const bool teleconsultEnabled = bool.fromEnvironment(
+    'TELECONSULT_ENABLED',
+    defaultValue: false,
+  );
+
+  /// Max attempts / delay for polling consultation status after booking.
+  /// Delay mirrors the desk-side admin UI's own polling cadence for the same
+  /// backend endpoint (4s), proven against the live Shukhee sandbox. The
+  /// budget this pair spans (~20 minutes) covers the *entire* call, not just
+  /// booking acceptance -- `get_consultation_status` is only marked
+  /// `completed` once the doctor actually ends the call, so a shorter budget
+  /// (previously ~2 minutes) timed out mid-call and showed "Doctor not
+  /// available" even though a doctor had answered (confirmed live: Call Logs
+  /// stuck at `accepted` with no Shukhee call ever actually rejected/
+  /// cancelled/on-hold).
+  static int get teleconsultPollMaxAttempts =>
+      int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_MAX_ATTEMPTS')) ?? 300;
+
+  static int get teleconsultPollDelaySeconds =>
+      int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_DELAY_SECONDS')) ?? 4;
+
+  /// Fallback contact number offered (pre-filled, not silently applied) when
+  /// a patient/household has no phone number on file. The SK facilitates the
+  /// teleconsult call on the patient's behalf -- Shukhee's booking API still
+  /// requires *some* valid contact number on the request even though the SK's
+  /// own device is what actually joins the call, so this exists to unblock
+  /// that case rather than dead-end the flow. Empty by default outside dev --
+  /// blank means the phone-prompt sheet shows no pre-fill, same as before.
+  static const String teleconsultDefaultPhone = String.fromEnvironment(
+    'TELECONSULT_DEFAULT_PHONE',
+    defaultValue: '',
   );
 }

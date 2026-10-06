@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  meta: ^1.15.0
   cupertino_icons: ^1.0.8
   dio: ^5.7.0
   dio_cookie_manager: ^3.1.1
@@ -36,6 +37,7 @@ dependencies:
   flutter_svg: ^2.0.10+1
   permission_handler: ^11.3.1
   path_provider: ^2.1.4
+  pdfx: ^2.11.0
   record: ^7.0.0
   speech_to_text: ^7.0.0
   web_socket_channel: ^3.0.1
@@ -50,7 +52,12 @@ dependencies:
   flutter_tesseract_ocr:
     path: plugins/flutter_tesseract_ocr
   package_info_plus: ^9.0.1
+  shukhee_sdk:
+    git:
+      url: git@github.com:Medtronic-LABS/shukhee_sdk.git
+      ref: main
   in_app_update: ^4.2.3
+  flutter_html: 3.0.0-beta.2
 
 dev_dependencies:
   flutter_test:

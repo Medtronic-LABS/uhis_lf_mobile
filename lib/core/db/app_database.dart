@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 50;
+  static const int schemaVersion = 55;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -73,10 +73,17 @@ class AppDatabase {
 
   /// Transcript + Step 3 summary text for product QA. PHI — wiped on SK handover.
   static const String tableVisitContentTelemetry = 'visit_content_telemetry';
+  static const String tableTeleconsultPrescriptions = 'teleconsult_prescriptions';
+  static const String tableCallLogHistory = 'call_log_history';
 
   /// AI assistant ("Ask") question/answer text. PHI — wiped on SK handover.
   static const String tableAssistantContentTelemetry =
       'assistant_content_telemetry';
+
+  /// Teleconsult patient-consent Agree/Decline decisions. PHI (patient id +
+  /// dob) — wiped on SK handover, same treatment as
+  /// [tableAssistantContentTelemetry].
+  static const String tableTeleconsultConsentLog = 'teleconsult_consent_log';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -250,7 +257,8 @@ class AppDatabase {
       CREATE TABLE $tableSyncMeta (
         entity TEXT PRIMARY KEY,
         last_sync_time INTEGER,
-        last_full_sync_at INTEGER
+        last_full_sync_at INTEGER,
+        cursor INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tablePatientProgrammes (
@@ -530,6 +538,9 @@ class AppDatabase {
       'CREATE INDEX idx_pregnancy_episodes_patient_started '
       'ON $tablePregnancyEpisodes(patient_id, started_at DESC)',
     );
+    // v55 — member assessment history + SS-linked villages (in-app dashboard,
+    // develop PR #704; renumbered from develop's own v50 — v50-54 were
+    // already claimed on this branch by the time it merged develop again).
     await db.execute('''
       CREATE TABLE $tableMemberAssessmentHistory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -893,6 +904,56 @@ class AppDatabase {
         'CREATE INDEX idx_visit_content_visit '
         'ON $tableVisitContentTelemetry(visit_uuid)');
 
+    // v50 — teleconsult_prescriptions: persists a completed teleconsult's
+    // prescription/invoice bytes against the visit that requested the call
+    // (encounters.id), so the patient timeline can show a "view prescription"
+    // icon on that visit's entry without a network re-fetch. See
+    // lib/core/db/teleconsult_prescription_dao.dart. (Renumbered from v42,
+    // then v49 — develop independently claimed v42-49 for the tables above.)
+    await db.execute('''
+      CREATE TABLE $tableTeleconsultPrescriptions (
+        visit_id TEXT PRIMARY KEY,
+        call_log TEXT NOT NULL,
+        doctor_name TEXT,
+        prescription_bytes BLOB,
+        invoice_bytes BLOB,
+        created_at INTEGER NOT NULL
+      )''');
+
+    // v51 — call_log_history: a patient's full Shukhee call/prescription/
+    // clinicalData history, synced in from Frappe's Call Logs doctype via
+    // spice_next_core.api.sync.pull (see lib/core/sync/call_log_sync_service.dart)
+    // -- distinct from tableTeleconsultPrescriptions above, which is
+    // single-row-per-visit and only ever populated by THIS device's own live
+    // call. `id` is the backend's stable Call Logs docname, not a visit id --
+    // a patient can have many historical calls, including ones made from a
+    // different device. prescription_link/invoice_link are presence flags
+    // only (never bytes) -- documents are always fetched live, on demand,
+    // when the user taps to view them (see TeleconsultCallDetailScreen).
+    // (Renumbered from v43, then v50 for the same reason as v50 above.)
+    await db.execute('''
+      CREATE TABLE $tableCallLogHistory (
+        id TEXT PRIMARY KEY,
+        sync_seq INTEGER NOT NULL,
+        patient_id TEXT,
+        encounter_id TEXT,
+        status TEXT,
+        appointment_status TEXT,
+        doctor_name TEXT,
+        doctor_speciality TEXT,
+        doctor_facility TEXT,
+        reason TEXT,
+        clinical_data TEXT,
+        prescription_link TEXT,
+        invoice_link TEXT,
+        call_date INTEGER,
+        updated_at INTEGER NOT NULL,
+        raw_json TEXT NOT NULL,
+        fhir_encounter_id TEXT
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_call_log_history_patient ON $tableCallLogHistory(patient_id, call_date DESC)');
+
     await db.execute('''
       CREATE TABLE $tableAssistantContentTelemetry (
         id TEXT PRIMARY KEY,
@@ -910,6 +971,29 @@ class AppDatabase {
     await db.execute(
         'CREATE INDEX idx_assistant_content_upload '
         'ON $tableAssistantContentTelemetry(upload_status)');
+
+    // v53 — teleconsult patient-consent decision audit queue.
+    // v54 added version_id (see createSchema's doc comment on that column,
+    // mirrored in the _onUpgrade ALTER TABLE block below).
+    await db.execute('''
+      CREATE TABLE $tableTeleconsultConsentLog (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        visit_id TEXT,
+        decision TEXT NOT NULL,
+        lng TEXT NOT NULL,
+        consent_version TEXT,
+        version_id TEXT,
+        patient_dob TEXT,
+        sk_user_id TEXT,
+        captured_tenant_id INTEGER,
+        occurred_at INTEGER NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_teleconsult_consent_log_upload '
+        'ON $tableTeleconsultConsentLog(upload_status)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -2230,7 +2314,9 @@ class AppDatabase {
         /* column already present */
       }
     }
-    if (from < 50) {
+    if (from < 55) {
+      // v55 — see createSchema's identical block for why this table exists
+      // (renumbered from develop's own v50 — v50-54 already claimed above).
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $tableMemberAssessmentHistory (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2297,6 +2383,93 @@ class AppDatabase {
         'ON $tableAudioSamples(next_retry_at)',
       );
     }
+    if (from < 50) {
+      // v50 — see createSchema's identical block for why this table exists.
+      // (Renumbered from v42, then v49 — develop independently claimed
+      // v42-49 above, including its own v48/v49 for assistant_content_telemetry.)
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableTeleconsultPrescriptions (
+          visit_id TEXT PRIMARY KEY,
+          call_log TEXT NOT NULL,
+          doctor_name TEXT,
+          prescription_bytes BLOB,
+          invoice_bytes BLOB,
+          created_at INTEGER NOT NULL
+        )''');
+    }
+    if (from < 51) {
+      // v51 — see createSchema's identical block for why this table/column
+      // exist. (Renumbered from v43, then v50 for the same reason as v50
+      // above.)
+      try {
+        await db.execute('ALTER TABLE $tableSyncMeta ADD COLUMN cursor INTEGER');
+      } catch (_) {/* column already present — no-op */}
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableCallLogHistory (
+          id TEXT PRIMARY KEY,
+          sync_seq INTEGER NOT NULL,
+          patient_id TEXT,
+          encounter_id TEXT,
+          status TEXT,
+          appointment_status TEXT,
+          doctor_name TEXT,
+          doctor_speciality TEXT,
+          doctor_facility TEXT,
+          reason TEXT,
+          clinical_data TEXT,
+          prescription_link TEXT,
+          invoice_link TEXT,
+          call_date INTEGER,
+          updated_at INTEGER NOT NULL,
+          raw_json TEXT NOT NULL,
+          fhir_encounter_id TEXT
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_call_log_history_patient ON $tableCallLogHistory(patient_id, call_date DESC)');
+    }
+    if (from < 52) {
+      // v52 — fhir_encounter_id: the visit's server-assigned FHIR Encounter
+      // id, attached after the fact once OfflineSyncService's own
+      // assessment-history sync learns it (see
+      // shukhee_integration.api.consultation.attach_fhir_encounter_id on the
+      // backend). Unlike encounter_id (the app's own client-minted visit id,
+      // sent at booking time), this survives a full local data wipe or a
+      // new device -- CallLogHistoryDao.getForEncounters matches on either.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableCallLogHistory ADD COLUMN fhir_encounter_id TEXT');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 53) {
+      // v53 — see createSchema's identical block for why this table exists.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableTeleconsultConsentLog (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          visit_id TEXT,
+          decision TEXT NOT NULL,
+          lng TEXT NOT NULL,
+          consent_version TEXT,
+          patient_dob TEXT,
+          sk_user_id TEXT,
+          captured_tenant_id INTEGER,
+          occurred_at INTEGER NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER
+        )''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_teleconsult_consent_log_upload '
+          'ON $tableTeleconsultConsentLog(upload_status)');
+    }
+    if (from < 54) {
+      // v54 — version_id: the exact Shukhee Consent Version snapshot the
+      // patient saw, alongside consent_version's human-readable label (see
+      // TeleconsultConsentLogEntry.versionId's own doc comment).
+      try {
+        await db.execute(
+            'ALTER TABLE $tableTeleconsultConsentLog ADD COLUMN version_id TEXT');
+      } catch (_) {/* column already present — no-op */}
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -2331,7 +2504,9 @@ class AppDatabase {
     // See the doc on that constant for why the two differ.
     tableAiValueAudit,
     tableVisitContentTelemetry,
+    tableTeleconsultPrescriptions, tableCallLogHistory,
     tableAssistantContentTelemetry,
+    tableTeleconsultConsentLog,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

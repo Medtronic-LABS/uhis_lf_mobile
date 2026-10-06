@@ -17,6 +17,8 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
     this.allowDeselect = true,
     this.errorText,
     this.optionLabel,
+    this.selectedFillColor,
+    this.selectedBorderColor,
     super.key,
   });
 
@@ -31,6 +33,13 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
   /// Optional display label for an option id (e.g. Bangla "হ্যাঁ" for "Yes").
   /// Wire value stays [options] entry; UI text uses this when provided.
   final String Function(String option)? optionLabel;
+
+  /// Override the selected pill's fill/border color (default: solid
+  /// [AppColors.navy] fill, no border, white text). When [selectedBorderColor]
+  /// is given, the selected pill renders as a bordered outline instead of a
+  /// solid fill (matching call sites that want a lighter selected treatment).
+  final Color? selectedFillColor;
+  final Color? selectedBorderColor;
 
   @override
   Widget build(BuildContext context) {
@@ -97,10 +106,12 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? AppColors.navy
+                              ? (selectedFillColor ?? AppColors.navy)
                               : AppColors.cardSurface,
                           border: isSelected
-                              ? null
+                              ? (selectedBorderColor != null
+                                  ? Border.all(color: selectedBorderColor!, width: 1.5)
+                                  : null)
                               : Border.all(
                                   color: AppColors.border,
                                   width: 1,
@@ -115,7 +126,7 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
                                 ? FontWeight.w600
                                 : FontWeight.w500,
                             color: isSelected
-                                ? Colors.white
+                                ? (selectedBorderColor != null ? AppColors.navy : Colors.white)
                                 : AppColors.textMuted,
                           ),
                         ),
