@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 /// Build-time configuration. Every value is sourced via
 /// [String.fromEnvironment], which is populated by either
 /// `--dart-define=KEY=VALUE` or `--dart-define-from-file=env.*.json`
@@ -392,6 +394,25 @@ class AppConfig {
   /// either way, only this base segment differs.
   static const String _shukheeGatewaySegment = 'admin-api';
 
+  /// Joins [apiBaseUrl] with a gateway path segment, normalizing the slash
+  /// between them regardless of whether `API_BASE_URL` was supplied with or
+  /// without a trailing slash -- a bare `'$apiBaseUrl$segment'` concatenation
+  /// silently produces a malformed host (e.g.
+  /// `uhis-next-backend.labsplatform.comadmin-api`, a real production
+  /// incident this fixes) whenever the build's `API_BASE_URL` dart-define
+  /// has no trailing slash, since the one in [apiBaseUrl]'s own default
+  /// value masks the bug for every build that copies that convention.
+  static String _joinGatewaySegment(String segment) =>
+      joinUrlSegment(apiBaseUrl, segment);
+
+  /// Pure join logic, factored out so it's testable independent of
+  /// [apiBaseUrl]'s compile-time `--dart-define` value.
+  @visibleForTesting
+  static String joinUrlSegment(String base, String segment) {
+    final trimmedBase = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+    return '$trimmedBase/$segment';
+  }
+
   /// Base URL of the backend exposing the Shukhee consultation endpoints.
   ///
   /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
@@ -403,7 +424,7 @@ class AppConfig {
   static String get shukheeApiBaseUrl {
     const local = String.fromEnvironment('SHUKHEE_API_BASE_URL', defaultValue: '');
     if (local.isNotEmpty) return local;
-    return '$apiBaseUrl$_shukheeGatewaySegment';
+    return _joinGatewaySegment(_shukheeGatewaySegment);
   }
 
   /// Base URL of the same `frappe-uhis-next` backend's `spice_next_core` app
@@ -422,7 +443,7 @@ class AppConfig {
   static String get spiceNextCoreApiBaseUrl {
     const local = String.fromEnvironment('SPICE_NEXT_CORE_API_BASE_URL', defaultValue: '');
     if (local.isNotEmpty) return local;
-    return '$apiBaseUrl$_shukheeGatewaySegment';
+    return _joinGatewaySegment(_shukheeGatewaySegment);
   }
 
   /// Feature flag: whether the real Shukhee teleconsult flow is wired up.
