@@ -4281,6 +4281,7 @@ abstract final class NabaStrings {
   static String get callDoctorNowBn => getTranslatedString('Naba.callDoctorNowBn', 'ডাক্তারকে ফোন করন');
   static String get callDoctorOfflineHint => getTranslatedString('callDoctorOfflineHint', 'Available when online');
   static String get callDoctorUnavailableHint => getTranslatedString('callDoctorUnavailableHint', 'Teleconsult is not available in this region yet');
+  static String get callDoctorRefreshTooltip => getTranslatedString('callDoctorRefreshTooltip', 'Check again');
 
   static String get fallbackNotice => getTranslatedString('fallbackNotice', 'AI service was unavailable. Care plan is based on clinical guidelines. Review and adjust based on your assessment.');
 }

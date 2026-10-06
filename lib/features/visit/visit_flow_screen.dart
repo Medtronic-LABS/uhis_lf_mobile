@@ -4548,6 +4548,7 @@ class _TeleconsultButton extends StatefulWidget {
 
 class _TeleconsultButtonState extends State<_TeleconsultButton> {
   bool _isOnline = false;
+  bool _refreshingControls = false;
   StreamSubscription<List<ConnectivityResult>>? _sub;
 
   @override
@@ -4572,6 +4573,17 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
     final results = await Connectivity().checkConnectivity();
     final online = results.any((r) => r != ConnectivityResult.none);
     if (mounted) setState(() => _isOnline = online);
+  }
+
+  /// Manual re-check against the backend -- lets the SK confirm "is it
+  /// enabled yet" right now (e.g. right after an admin flips the Shukhee
+  /// Settings checkbox or sets up their UHIS Shukhee User mapping) without
+  /// needing to leave this screen or relaunch the app.
+  Future<void> _refreshControls() async {
+    if (_refreshingControls) return;
+    setState(() => _refreshingControls = true);
+    await context.read<UserHierarchyService>().refreshShukheeControls();
+    if (mounted) setState(() => _refreshingControls = false);
   }
 
   @override
@@ -4636,7 +4648,7 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
     final hint = !featureVisible
         ? NabaStrings.callDoctorUnavailableHint
         : NabaStrings.callDoctorOfflineHint;
-    return Tooltip(
+    final button = Tooltip(
       message: enabled ? '' : hint,
       child: SizedBox(
         width: double.infinity,
@@ -4678,6 +4690,32 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
           ),
         ),
       ),
+    );
+    // Only offer a manual re-check when the feature isn't already usable --
+    // nothing to refresh once it's enabled, and _isOnline already updates
+    // itself live via the connectivity listener above.
+    if (enabled) return button;
+    return Row(
+      children: [
+        Expanded(child: button),
+        const SizedBox(width: 8),
+        Tooltip(
+          message: NabaStrings.callDoctorRefreshTooltip,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: _refreshingControls
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : IconButton(
+                    onPressed: _refreshControls,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 }
