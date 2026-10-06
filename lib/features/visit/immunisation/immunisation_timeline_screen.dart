@@ -18,6 +18,7 @@ import '../triage/child_assessment_section.dart';
 import 'child_immunization_dto.dart';
 import 'epi_card_scan_screen.dart';
 import 'epi_card_scanner.dart';
+import 'epi_date_extraction_repository.dart';
 import 'epi_schedule_engine.dart';
 import 'epi_visit_summary.dart';
 import 'immunisation_repository.dart';
@@ -511,7 +512,8 @@ class _ImmunisationTimelineScreenState
                   _matchedVaccineNames(milestones).isNotEmpty)
                 _ScanTimelineBanner(
                   vaccineNames: _matchedVaccineNames(milestones),
-                  datePrefilled: _scanResult!.extractedDate != null,
+                  datePrefilled: _scanResult!.dateByCode.isNotEmpty ||
+                      _scanResult!.extractedDate != null,
                   onReview: () =>
                       _reviewMatchedMilestones(milestones, patientName),
                   onDismiss: () => setState(() {
@@ -708,10 +710,25 @@ class _ImmunisationTimelineScreenState
         if (dobStr != null && dobStr.isNotEmpty) {
           patientDob = DateTime.tryParse(dobStr);
         }
-        // Pre-fill date from card scan if scan matched any vaccine in this milestone.
+        // Pre-fill date from card scan if scan matched any vaccine in this
+        // milestone. Online (Gemini) path gives a per-vaccine-code date;
+        // offline (ML Kit/Tesseract) path only ever has the single
+        // best-effort regex date, applied to every matched milestone alike.
         final milestoneCodes = milestone.vaccines.map((v) => v.code).toSet();
-        final scanMatched = _scanResult != null &&
-            _scanResult!.matchedCodes.any(milestoneCodes.contains);
+        final scanResult = _scanResult;
+        DateTime? resolvedPrefill;
+        if (scanResult != null) {
+          for (final code in milestoneCodes) {
+            final perCode = scanResult.dateByCode[code];
+            if (perCode != null) {
+              resolvedPrefill = perCode;
+              break;
+            }
+          }
+          resolvedPrefill ??= scanResult.matchedCodes.any(milestoneCodes.contains)
+              ? scanResult.extractedDate
+              : null;
+        }
         return _UpdateStatusSheet(
           milestone: milestone,
           patientId: _patientKey,
@@ -724,7 +741,7 @@ class _ImmunisationTimelineScreenState
           householdId: _patient?.householdId,
           householdMemberLocalId: widget.householdMemberLocalId,
           dob: patientDob,
-          prefilledDate: scanMatched ? _scanResult!.extractedDate : null,
+          prefilledDate: resolvedPrefill,
           onRecorded: () {
             setState(() => _loading = true);
             _load();
@@ -785,11 +802,13 @@ class _ImmunisationTimelineScreenState
       for (final v in milestones.expand((m) => m.vaccines))
         v.code: EpiVaccineStrings.display(v.code, v.display),
     };
+    final dateExtractionRepo = context.read<EpiDateExtractionRepository>();
     final result = await Navigator.of(context).push<EpiScanResult>(
       MaterialPageRoute(
         builder: (_) => EpiCardScanScreen(
           targetCodes: allCodes,
           codeLabels: codeLabels,
+          dateExtractionRepo: dateExtractionRepo,
         ),
       ),
     );

@@ -227,6 +227,11 @@ class Endpoints {
   // ── AI Assistant: conversational Q&A ────────────────────────────────────
   static const String assistantAsk = '/ai-scribe/assistant/ask';
 
+  // ── AI Card Extraction: Gemini-vision read of scanned programme cards ────
+  // (EPI vaccination booklet today; ANC/NCD cards reserved for later).
+  static const String cardExtractionExtract =
+      '/ai-scribe/card-extraction/extract';
+
   // ── Telemetry: AI Scribe adoption / accuracy reporting ───────────────────
   /// Batch-ingest of `telemetry_events` rows queued on device. Idempotent on
   /// each event's client-generated id, so a retry after a lost response

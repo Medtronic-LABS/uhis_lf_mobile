@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
@@ -7,26 +8,44 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'epi_date_extraction_repository.dart';
+
+/// Which engine produced an [EpiScanResult] — surfaced to the SK as a small
+/// badge on the scanning-preview screen so it's clear which read the card.
+enum EpiScanEngine { geminiVision, mlKitOffline }
+
 /// Result of an EPI card scan — vaccine codes matched in the OCR text plus
-/// the first parseable date found on the card.
+/// whatever dates could be read.
 class EpiScanResult {
   const EpiScanResult({
     required this.matchedCodes,
     this.extractedDate,
     required this.rawText,
+    this.engine = EpiScanEngine.mlKitOffline,
+    this.dateByCode = const {},
   });
 
   /// Vaccine codes (from [EpiCardScanner._aliases]) found in the OCR output.
   final List<String> matchedCodes;
 
-  /// First date pattern successfully parsed from the OCR text. Null if no
-  /// recognisable date was present.
+  /// Offline path only: first printed-looking date pattern parsed from the
+  /// OCR text by regex. Handwritten dates are not reliably read this way —
+  /// this is a best-effort fallback, not the primary date source once the
+  /// online Gemini path is available.
   final DateTime? extractedDate;
 
   /// Full OCR text — retained for debug logging / future improvements.
   final String rawText;
 
-  bool get anyMatched => matchedCodes.isNotEmpty || extractedDate != null;
+  /// Which engine produced this result.
+  final EpiScanEngine engine;
+
+  /// Online path only: per-vaccine-code handwritten dates Gemini read.
+  /// Empty on the offline path.
+  final Map<String, DateTime> dateByCode;
+
+  bool get anyMatched =>
+      matchedCodes.isNotEmpty || extractedDate != null || dateByCode.isNotEmpty;
 }
 
 /// Where the card image comes from — keeps the `image_picker` transport type
@@ -133,9 +152,49 @@ abstract final class EpiCardScanner {
 
   /// Runs OCR on an already-acquired [image] (captured or uploaded by the
   /// scan screen) and returns matched codes + extracted date for [targetCodes].
+  ///
+  /// Always offline (ML Kit + Tesseract) — see [scanImageAuto] for the
+  /// online-preferred dispatch used by the scan screen.
   static Future<EpiScanResult> scanImage(
           File image, List<String> targetCodes) =>
       _scanFile(image, targetCodes);
+
+  /// Picks the scan engine once, up front, based on connectivity:
+  ///
+  ///  * Online — sends [image] to Gemini vision via [dateExtractionRepo],
+  ///    which reads vaccine names **and** per-vaccine handwritten dates in a
+  ///    single call. Falls back to the offline path below if the call fails
+  ///    (network drop mid-call, timeout, 5xx).
+  ///  * Offline — runs the existing on-device ML Kit + Tesseract pass
+  ///    ([scanImage]), names only, exactly as before.
+  ///
+  /// The caller (scan screen) checks connectivity itself first so it can
+  /// show the right engine badge before OCR starts; this method re-derives
+  /// the same decision so it is also safe to call directly in tests/other
+  /// callers without duplicating the connectivity check.
+  static Future<EpiScanResult> scanImageAuto(
+    File image,
+    List<String> targetCodes,
+    EpiDateExtractionRepository dateExtractionRepo,
+  ) async {
+    final connectivity = await Connectivity().checkConnectivity();
+    final isOnline = connectivity.any((r) => r != ConnectivityResult.none);
+    if (isOnline) {
+      try {
+        final result = await dateExtractionRepo.extractEpiDates(image);
+        return EpiScanResult(
+          matchedCodes: result.matchedCodes,
+          dateByCode: result.dateByCode,
+          rawText: '',
+          engine: EpiScanEngine.geminiVision,
+        );
+      } on EpiDateExtractionException catch (e) {
+        debugPrint('[EpiCardScanner] Gemini vision extraction failed, '
+            'falling back to offline OCR: $e');
+      }
+    }
+    return scanImage(image, targetCodes);
+  }
 
   /// Pure text-matching path — exposed for unit tests (no camera/ML Kit needed).
   static EpiScanResult matchText(String ocrText, List<String> targetCodes) =>
