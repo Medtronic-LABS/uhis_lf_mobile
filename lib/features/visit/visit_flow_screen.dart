@@ -4617,9 +4617,15 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = _isOnline && AppConfig.teleconsultEnabled;
+    final backendEnabled =
+        context.watch<UserHierarchyService>().shukheeControls.teleconsultEnabled;
+    final featureVisible = isTeleconsultVisible(
+      buildFlag: AppConfig.teleconsultEnabled,
+      backendFlag: backendEnabled,
+    );
+    final enabled = _isOnline && featureVisible;
     final bg = enabled ? _pink : _pink.withValues(alpha: 0.35);
-    final hint = !AppConfig.teleconsultEnabled
+    final hint = !featureVisible
         ? NabaStrings.callDoctorUnavailableHint
         : NabaStrings.callDoctorOfflineHint;
     return Tooltip(

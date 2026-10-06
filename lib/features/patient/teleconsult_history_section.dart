@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shukhee_sdk/shukhee_sdk.dart';
 
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/call_log_history_dao.dart';
@@ -66,7 +67,14 @@ class _TeleconsultHistorySectionState extends State<TeleconsultHistorySection> {
 
   @override
   Widget build(BuildContext context) {
-    if (!AppConfig.teleconsultEnabled) return const SizedBox.shrink();
+    final backendEnabled =
+        context.watch<UserHierarchyService>().shukheeControls.teleconsultEnabled;
+    if (!isTeleconsultVisible(
+      buildFlag: AppConfig.teleconsultEnabled,
+      backendFlag: backendEnabled,
+    )) {
+      return const SizedBox.shrink();
+    }
     final rows = _rows;
     if (rows == null || rows.isEmpty) return const SizedBox.shrink();
 

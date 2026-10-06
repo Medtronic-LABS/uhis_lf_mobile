@@ -311,4 +311,12 @@ class Endpoints {
   /// [AppConfig.apiBaseUrl] -- same base as `ShukheeConsentClient.consentPath`.
   static const String shukheeRecordConsentDecision =
       '/api/method/shukhee_integration.api.consent.record_consent_decision';
+
+  /// `shukhee_integration.api.settings.get_controls` -- server-side
+  /// kill-switch for the Shukhee teleconsult feature (see
+  /// `UserHierarchyService.shukheeControls`). Same base as
+  /// [shukheeRecordConsentDecision]: relative to [AppConfig.shukheeApiBaseUrl],
+  /// not [AppConfig.apiBaseUrl].
+  static const String shukheeGetControls =
+      '/api/method/shukhee_integration.api.settings.get_controls';
 }
