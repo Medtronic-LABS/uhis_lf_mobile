@@ -463,8 +463,18 @@ class _ImmunisationTimelineScreenState
       // embedded (visit-flow, no AppBar) contexts, same pattern as ANC's
       // _AncScanFab, replacing both this screen's former AppBar icon button
       // and its inline row (two redundant entry points for the same action).
+      // Lifted clear of _SubmitBar — that bar is laid out inline in the body
+      // Column, not as a Scaffold bottomNavigationBar, so Scaffold has no way
+      // to auto-reserve space for it; this offset mirrors _SubmitBar's own
+      // height (vertical padding + button + safe-area bottom inset).
       floatingActionButton: (!_loading && _error == null && _milestones != null)
-          ? _EpiScanFab(scanning: _scanning, onTap: _scanning ? null : _scanWholeCard)
+          ? Padding(
+              padding: EdgeInsets.only(
+                  bottom: 80 + MediaQuery.of(context).padding.bottom),
+              child: _EpiScanFab(
+                  scanning: _scanning,
+                  onTap: _scanning ? null : _scanWholeCard),
+            )
           : null,
     );
   }

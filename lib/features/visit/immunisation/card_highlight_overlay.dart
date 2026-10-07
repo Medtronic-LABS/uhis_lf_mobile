@@ -127,3 +127,43 @@ class CardHighlightOverlays extends StatelessWidget {
     );
   }
 }
+
+/// Card-aligned box frame shown over the live camera preview — the same
+/// capture-alignment hint for every card-scan screen (EPI, ANC), since a
+/// handwritten card photo's accuracy depends on it filling the frame
+/// squarely regardless of which card is being scanned.
+class CardAlignmentGuide extends StatelessWidget {
+  const CardAlignmentGuide({required this.hint});
+
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AspectRatio(
+            aspectRatio: 1.5,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 28),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white, width: 2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            hint,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

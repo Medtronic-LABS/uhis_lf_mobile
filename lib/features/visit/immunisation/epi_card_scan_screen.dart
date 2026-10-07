@@ -253,7 +253,8 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
               ),
 
             // Card-shaped alignment guide + hint (only over a live preview).
-            if (_cameraReady) const _AlignmentGuide(),
+            if (_cameraReady)
+              CardAlignmentGuide(hint: EpiStrings.scanFrameHint),
 
             // Close button.
             Positioned(
@@ -563,39 +564,6 @@ class _FoundEntry {
   final String? date;
 }
 
-class _AlignmentGuide extends StatelessWidget {
-  const _AlignmentGuide();
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AspectRatio(
-            aspectRatio: 1.5,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 28),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white, width: 2),
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            EpiStrings.scanFrameHint,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _BottomControls extends StatelessWidget {
   const _BottomControls({

@@ -279,6 +279,11 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
             else
               const Center(
                   child: CircularProgressIndicator(color: Colors.white)),
+
+            // Card-shaped alignment guide + hint (only over a live preview).
+            if (_cameraReady)
+              CardAlignmentGuide(hint: EpiStrings.scanFrameHint),
+
             Positioned(
               top: 8,
               left: 8,
