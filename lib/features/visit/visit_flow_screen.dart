@@ -3180,7 +3180,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           _BottomCtaBar(
             accepted: _accepted,
             patientLabel: widget.patientLabel,
-            memberId: widget.memberId,
+            patientId: widget.patientId,
             visitId: widget.visitId,
             patientPhone: _patientPhone,
             teleconsultReason: _deriveTeleconsultReason(
@@ -4631,6 +4631,7 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
         'consentVersion': result!.version,
         'consentVersionId': result.versionId,
         'consentLng': result.lng,
+        'itemsChecked': result.itemsChecked,
       },
     );
   }
@@ -4724,8 +4725,8 @@ class _BottomCtaBar extends StatelessWidget {
   const _BottomCtaBar({
     required this.accepted,
     required this.onAccepted,
+    required this.patientId,
     this.patientLabel,
-    this.memberId,
     this.visitId,
     this.patientPhone,
     this.teleconsultReason,
@@ -4741,7 +4742,15 @@ class _BottomCtaBar extends StatelessWidget {
   final bool accepted;
   final VoidCallback onAccepted;
   final String? patientLabel;
-  final String? memberId;
+
+  /// The real Patient id (see [_Step3AiReco.patientId]'s own doc comment) --
+  /// threaded to [_TeleconsultButton] for both the consent-decision record
+  /// and the booking call. NOT the household member id: an earlier version
+  /// of this bar used `memberId` here, which is null/empty for some visits
+  /// and made every teleconsult consent decision for them permanently
+  /// unrecordable server-side (`record_consent_decision` requires a
+  /// non-empty `patient_id`).
+  final String patientId;
   final String? visitId;
   final String? patientPhone;
   final String? teleconsultReason;
@@ -4768,7 +4777,7 @@ class _BottomCtaBar extends StatelessWidget {
               // Teleconsult first — primary visual weight (pink filled)
               _TeleconsultButton(
                 patientLabel: patientLabel ?? '',
-                patientId: memberId ?? '',
+                patientId: patientId,
                 visitId: visitId,
                 patientPhone: patientPhone,
                 reason: teleconsultReason,

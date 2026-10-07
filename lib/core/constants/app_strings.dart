@@ -6663,7 +6663,6 @@ abstract final class TeleconsultConsentStrings {
   static String get loadingMessage => getTranslatedString('TeleconsultConsent.loadingMessage', 'Loading consent form…');
   static String get errorMessage => getTranslatedString('TeleconsultConsent.errorMessage', 'Could not load the consent form. Please check your connection and try again.');
   static String get retryButton => getTranslatedString('TeleconsultConsent.retryButton', 'Retry');
-  static String get checkboxLabel => getTranslatedString('TeleconsultConsent.checkboxLabel', 'I have explained this to the patient and they consent to this teleconsult call.');
   static String get agreeButton => getTranslatedString('TeleconsultConsent.agreeButton', 'I Agree');
   static String get declineButton => getTranslatedString('TeleconsultConsent.declineButton', 'Decline');
 }
