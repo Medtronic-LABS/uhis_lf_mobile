@@ -1,30 +1,4 @@
-/// Normalized (0-1) bounding box of the located visit column, relative to
-/// the full card photo — lets the scan screen draw a highlight without any
-/// separate CV pass. Null unless the backend's 3 independent reads reached
-/// IoU consensus on roughly the same column (see
-/// `card_extraction_service._consensus_bounding_box`) — advisory only, not
-/// a guarantee the values inside it are correct.
-class AncColumnBoundingBox {
-  const AncColumnBoundingBox({
-    required this.xMin,
-    required this.yMin,
-    required this.xMax,
-    required this.yMax,
-  });
-
-  final double xMin;
-  final double yMin;
-  final double xMax;
-  final double yMax;
-
-  factory AncColumnBoundingBox.fromJson(Map<String, dynamic> json) =>
-      AncColumnBoundingBox(
-        xMin: (json['xMin'] as num).toDouble(),
-        yMin: (json['yMin'] as num).toDouble(),
-        xMax: (json['xMax'] as num).toDouble(),
-        yMax: (json['yMax'] as num).toDouble(),
-      );
-}
+import '../immunisation/card_extraction_transport.dart' show CardBoundingBox;
 
 /// Data models for the Gemini-vision ANC card visit-vitals extraction
 /// response. Mirrors `epi_date_extraction_models.dart`'s shape, but the card
@@ -86,7 +60,7 @@ class AncVisitExtraction {
 
   /// Null unless the backend's independent reads reached consensus on the
   /// column's location (see class doc comment above).
-  final AncColumnBoundingBox? columnBoundingBox;
+  final CardBoundingBox? columnBoundingBox;
 
   factory AncVisitExtraction.fromJson(Map<String, dynamic> json) =>
       AncVisitExtraction(
@@ -109,7 +83,7 @@ class AncVisitExtraction {
         confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
         rawText: json['rawText'] as String?,
         columnBoundingBox: json['columnBoundingBox'] != null
-            ? AncColumnBoundingBox.fromJson(
+            ? CardBoundingBox.fromJson(
                 json['columnBoundingBox'] as Map<String, dynamic>)
             : null,
       );

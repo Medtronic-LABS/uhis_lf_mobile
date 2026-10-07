@@ -6,6 +6,34 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/endpoints.dart';
 import '../../../core/config/app_config.dart';
 
+/// Normalized (0-1) bounding box, relative to the full card photo — lets a
+/// scan screen draw a highlight without any separate CV pass. Shared by
+/// every programme (ANC's located visit column, EPI's not-given vaccine
+/// rows): null unless the backend's independent reads reached IoU
+/// consensus on roughly the same region — advisory only, never a guarantee
+/// the values in/around it are correct.
+class CardBoundingBox {
+  const CardBoundingBox({
+    required this.xMin,
+    required this.yMin,
+    required this.xMax,
+    required this.yMax,
+  });
+
+  final double xMin;
+  final double yMin;
+  final double xMax;
+  final double yMax;
+
+  factory CardBoundingBox.fromJson(Map<String, dynamic> json) =>
+      CardBoundingBox(
+        xMin: (json['xMin'] as num).toDouble(),
+        yMin: (json['yMin'] as num).toDouble(),
+        xMax: (json['xMax'] as num).toDouble(),
+        yMax: (json['yMax'] as num).toDouble(),
+      );
+}
+
 /// Typed failure for a card-extraction call — never leak a raw [DioException]
 /// (or its stack trace) up to the UI layer. Shared by every programme's
 /// repository (EPI, ANC, ...) so each can catch/map its own exception type.

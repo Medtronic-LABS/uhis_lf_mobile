@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -7,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../immunisation/card_extraction_transport.dart' show CardBoundingBox;
+import '../immunisation/card_highlight_overlay.dart';
 import '../immunisation/epi_card_scanner.dart' show EpiCardScanner;
 import 'anc_visit_extraction_models.dart';
 import 'anc_visit_extraction_repository.dart';
@@ -49,7 +50,7 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
   /// Field/value lines revealed one-by-one as the scan "finds" them.
   final List<_FoundEntry> _found = [];
   String? _error;
-  AncColumnBoundingBox? _columnBox;
+  CardBoundingBox? _columnBox;
 
   @override
   void initState() {
@@ -353,58 +354,11 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
   }
 }
 
-/// Resolves a [File] image's natural pixel dimensions — needed to map the
-/// backend's normalized column bounding box onto screen coordinates once
-/// `Image.file` has laid it out with `BoxFit.contain` (which letterboxes
-/// unless the photo's aspect ratio exactly matches the available space).
-Future<Size> _resolveImageSize(File file) {
-  final completer = Completer<Size>();
-  final provider = FileImage(file);
-  late ImageStreamListener listener;
-  final stream = provider.resolve(const ImageConfiguration());
-  listener = ImageStreamListener(
-    (info, _) {
-      if (!completer.isCompleted) {
-        completer.complete(
-          Size(info.image.width.toDouble(), info.image.height.toDouble()),
-        );
-      }
-      stream.removeListener(listener);
-    },
-    onError: (error, stackTrace) {
-      if (!completer.isCompleted) completer.completeError(error, stackTrace);
-      stream.removeListener(listener);
-    },
-  );
-  stream.addListener(listener);
-  return completer.future;
-}
-
-/// Maps a normalized (0-1) box onto the actual on-screen rect of a
-/// `BoxFit.contain`-laid-out image, given the container size it's
-/// rendered into and the image's natural pixel size.
-Rect _containFitRect(Size container, Size imageSize, AncColumnBoundingBox box) {
-  final scale = (container.width / imageSize.width <
-          container.height / imageSize.height)
-      ? container.width / imageSize.width
-      : container.height / imageSize.height;
-  final displayedW = imageSize.width * scale;
-  final displayedH = imageSize.height * scale;
-  final offsetX = (container.width - displayedW) / 2;
-  final offsetY = (container.height - displayedH) / 2;
-  return Rect.fromLTRB(
-    offsetX + box.xMin * displayedW,
-    offsetY + box.yMin * displayedH,
-    offsetX + box.xMax * displayedW,
-    offsetY + box.yMax * displayedH,
-  );
-}
-
 /// Captured image under a sweeping scan line while extraction runs —
 /// mirrors `EpiCardScanScreen`'s `_ScanningPreview`. When [columnBox] is
 /// non-null (the backend's 3 reads reached consensus on where the targeted
 /// visit column is), draws a translucent highlight over it once the image's
-/// natural size is known — advisory only, see [AncColumnBoundingBox]'s doc
+/// natural size is known — advisory only, see [CardBoundingBox]'s doc
 /// comment.
 class _ScanningPreview extends StatelessWidget {
   const _ScanningPreview({
@@ -419,7 +373,7 @@ class _ScanningPreview extends StatelessWidget {
   final Animation<double> sweep;
   final List<_FoundEntry> found;
   final int visitNumber;
-  final AncColumnBoundingBox? columnBox;
+  final CardBoundingBox? columnBox;
 
   @override
   Widget build(BuildContext context) {
@@ -431,39 +385,7 @@ class _ScanningPreview extends StatelessWidget {
         ),
         if (columnBox != null)
           Positioned.fill(
-            child: FutureBuilder<Size>(
-              future: _resolveImageSize(image),
-              builder: (context, snapshot) {
-                final imgSize = snapshot.data;
-                if (imgSize == null) return const SizedBox.shrink();
-                return LayoutBuilder(
-                  builder: (context, constraints) {
-                    final rect = _containFitRect(
-                        constraints.biggest, imgSize, columnBox!);
-                    // A fresh inner Stack — `Positioned` only works as a
-                    // direct Stack child, and the outer screen Stack is too
-                    // far up the tree (through FutureBuilder/LayoutBuilder,
-                    // neither of which is a Stack) to apply to directly.
-                    return Stack(
-                      children: [
-                        Positioned.fromRect(
-                          rect: rect,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color:
-                                  const Color(0xFF34D399).withValues(alpha: 0.18),
-                              border: Border.all(
-                                  color: const Color(0xFF34D399), width: 2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
+            child: CardHighlightOverlay(image: image, box: columnBox!),
           ),
         Positioned.fill(
           child: AnimatedBuilder(

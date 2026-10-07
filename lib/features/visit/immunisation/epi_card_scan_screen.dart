@@ -8,7 +8,9 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/i18n/app_date_format.dart';
+import 'card_highlight_overlay.dart';
 import 'epi_card_scanner.dart';
+import 'epi_date_extraction_models.dart' show UnmatchedVaccineRow;
 import 'epi_date_extraction_repository.dart';
 
 /// Full-screen "scan" surface for the EPI card — a live rear-camera viewfinder
@@ -60,6 +62,9 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
 
   /// Matched vaccine labels revealed one-by-one as the scan "finds" them.
   final List<_FoundEntry> _found = [];
+
+  /// Online path only: vaccines with no legible date, for row highlighting.
+  List<UnmatchedVaccineRow> _unmatchedRows = const [];
 
   /// Which engine is running this scan — decided once, before OCR starts,
   /// from the connectivity check in [_runOcr].
@@ -185,6 +190,9 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
     if (mounted && result.engine != _engine) {
       setState(() => _engine = result.engine);
     }
+    if (mounted && result.unmatchedRows.isNotEmpty) {
+      setState(() => _unmatchedRows = result.unmatchedRows);
+    }
 
     // Reveal each matched vaccine one-by-one over the preview — the scan
     // "finding" them — then pop the (already-complete) result. Online
@@ -223,6 +231,7 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
             sweep: _sweepCtrl,
             found: _found,
             engine: _engine,
+            unmatchedRows: _unmatchedRows,
           ),
         ),
       );
@@ -283,12 +292,20 @@ class _ScanningPreview extends StatelessWidget {
     required this.sweep,
     required this.found,
     required this.engine,
+    this.unmatchedRows = const [],
   });
 
   final File image;
   final Animation<double> sweep;
   final List<_FoundEntry> found;
   final EpiScanEngine engine;
+
+  /// Vaccines with no legible date — highlighted in amber directly on the
+  /// photo, so the SK can see which doses are missing at a glance. Only
+  /// codes the backend's independent reads agreed closely enough on a row
+  /// location for; others are silently omitted (no highlight) rather than
+  /// guessed (see `UnmatchedVaccineRow`'s doc comment).
+  final List<UnmatchedVaccineRow> unmatchedRows;
 
   @override
   Widget build(BuildContext context) {
@@ -301,6 +318,17 @@ class _ScanningPreview extends StatelessWidget {
         Positioned.fill(
           child: Container(color: Colors.black.withValues(alpha: 0.25)),
         ),
+        if (unmatchedRows.isNotEmpty)
+          Positioned.fill(
+            child: CardHighlightOverlays(
+              image: image,
+              boxes: [
+                for (final row in unmatchedRows)
+                  if (row.rowBoundingBox != null) row.rowBoundingBox!,
+              ],
+              color: const Color(0xFFFBBF24),
+            ),
+          ),
         // Sweeping scan line.
         Positioned.fill(
           child: AnimatedBuilder(
