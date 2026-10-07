@@ -187,6 +187,10 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
         AncScanStrings.ttTdLabel,
         visit.ttTdCompleted != null ? (visit.ttTdCompleted! ? '✓' : '✗') : null,
       ),
+      _FoundEntry(
+        AncScanStrings.usgLabel,
+        visit.usgDone != null ? (visit.usgDone! ? '✓' : '✗') : null,
+      ),
     ];
   }
 

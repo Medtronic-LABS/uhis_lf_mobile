@@ -7305,6 +7305,8 @@ abstract final class AncScanStrings {
       getTranslatedString('Anc.ttTdLabel', 'TT/TD completed');
   static String get edemaLabel =>
       getTranslatedString('Anc.edemaLabel', 'Edema');
+  static String get usgLabel =>
+      getTranslatedString('Anc.usgLabel', 'Ultrasound (USG)');
   static String get notFoundValue =>
       getTranslatedString('Anc.notFoundValue', 'Not found');
   static String get valuesDisagreeWarning => getTranslatedString(

@@ -21,6 +21,7 @@ class AncVisitExtraction {
     this.urinaryBilirubinPresent,
     this.edemaPresent,
     this.ttTdCompleted,
+    this.usgDone,
     this.confidence = 0.0,
     this.rawText,
     this.columnBoundingBox,
@@ -51,6 +52,12 @@ class AncVisitExtraction {
   final bool? edemaPresent;
   final bool? ttTdCompleted;
 
+  /// USG (ultrasound) done/not-done row. Same true="+"/checkmark/"Done",
+  /// false="-"/cross/"Not done", null=not recorded/illegible/not on this
+  /// card convention — mapped to the form's "ultrasound" field (option ids
+  /// "done"/"notDone") by `UnifiedFormNotifier._ancScanFieldMap`.
+  final bool? usgDone;
+
   /// Model-reported confidence (0-1) for this visit column overall.
   final double confidence;
 
@@ -80,6 +87,7 @@ class AncVisitExtraction {
         urinaryBilirubinPresent: json['urinaryBilirubinPresent'] as bool?,
         edemaPresent: json['edemaPresent'] as bool?,
         ttTdCompleted: json['ttTdCompleted'] as bool?,
+        usgDone: json['usgDone'] as bool?,
         confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
         rawText: json['rawText'] as String?,
         columnBoundingBox: json['columnBoundingBox'] != null
@@ -102,7 +110,8 @@ class AncVisitExtraction {
       urinaryAlbuminPresent != null ||
       urinaryBilirubinPresent != null ||
       edemaPresent != null ||
-      ttTdCompleted != null;
+      ttTdCompleted != null ||
+      usgDone != null;
 }
 
 /// Result of a Gemini-vision ANC visit extraction call.

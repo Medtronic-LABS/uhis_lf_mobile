@@ -14678,5 +14678,141 @@
   "Triage.symptom.bleeding": {
     "bn": "রক্তক্ষরণ",
     "en": "Bleeding"
+  },
+  "Epi.scanCardCta": {
+    "en": "Scan EPI card",
+    "bn": "ইপিআই কার্ড স্ক্যান করুন"
+  },
+  "Epi.scanAncCardCta": {
+    "en": "Scan card",
+    "bn": "কার্ড স্ক্যান করুন"
+  },
+  "Epi.scanCardSubtitle": {
+    "en": "Photograph the booklet to detect which vaccines were given · enter dates manually",
+    "bn": "কোন টিকা দেওয়া হয়েছে তা শনাক্ত করতে বইটির ছবি তুলুন · তারিখ নিজে লিখুন"
+  },
+  "Epi.scanResultBanner": {
+    "en": "{count} {unit} found · Review and save",
+    "bn": "{count}টি টিকা পাওয়া গেছে · পর্যালোচনা করে সংরক্ষণ করুন"
+  },
+  "Epi.scanDatePrefilled": {
+    "en": "Date pre-filled from card · Edit if needed",
+    "bn": "কার্ড থেকে তারিখ আগে থেকে পূরণ করা হয়েছে · প্রয়োজনে সম্পাদনা করুন"
+  },
+  "Epi.scanFailed": {
+    "en": "Couldn't read card — please enter manually",
+    "bn": "কার্ড পড়া যায়নি — অনুগ্রহ করে নিজে লিখুন"
+  },
+  "Epi.scanning": {
+    "en": "Scanning…",
+    "bn": "স্ক্যান করা হচ্ছে…"
+  },
+  "Epi.scanReviewCta": {
+    "en": "Review & update →",
+    "bn": "পর্যালোচনা ও হালনাগাদ করুন →"
+  },
+  "Epi.scanFrameHint": {
+    "en": "Fill the frame · hold flat · avoid glare",
+    "bn": "ফ্রেম পূর্ণ করুন · সমতল রাখুন · আলোর প্রতিফলন এড়িয়ে চলুন"
+  },
+  "Epi.scanDatesFlagged": {
+    "en": "Dates look textbook-perfect — double-check against the card",
+    "bn": "তারিখগুলো অস্বাভাবিক রকম নিখুঁত মনে হচ্ছে — কার্ডের সাথে আবার মিলিয়ে দেখুন"
+  },
+  "Epi.scanUploadLabel": {
+    "en": "Upload",
+    "bn": "আপলোড করুন"
+  },
+  "Epi.scanReadingCard": {
+    "en": "Reading card…",
+    "bn": "কার্ড পড়া হচ্ছে…"
+  },
+  "Epi.scanNoDateFound": {
+    "en": "No date found",
+    "bn": "কোনো তারিখ পাওয়া যায়নি"
+  },
+  "Epi.scanCameraUnavailable": {
+    "en": "Camera unavailable — grant permission or upload an image",
+    "bn": "ক্যামেরা পাওয়া যাচ্ছে না — অনুমতি দিন অথবা একটি ছবি আপলোড করুন"
+  },
+  "Epi.scanEngineGemini": {
+    "en": "Gemini Vision",
+    "bn": "জেমিনি ভিশন"
+  },
+  "Epi.scanEngineOffline": {
+    "en": "ML Kit (offline)",
+    "bn": "এমএল কিট (অফলাইন)"
+  },
+  "Anc.scanningVisit": {
+    "en": "Scanning ANC Visit {n}",
+    "bn": "এএনসি ভিজিট {n} স্ক্যান করা হচ্ছে"
+  },
+  "Anc.visitColumnFound": {
+    "en": "Visit {n} column located",
+    "bn": "ভিজিট {n}-এর কলাম পাওয়া গেছে"
+  },
+  "Anc.scanFieldFound": {
+    "en": "{label} found · {value}",
+    "bn": "{label} পাওয়া গেছে · {value}"
+  },
+  "Anc.scanFieldNotFound": {
+    "en": "{label} not found",
+    "bn": "{label} পাওয়া যায়নি"
+  },
+  "Anc.weightLabel": {
+    "en": "Weight",
+    "bn": "ওজন"
+  },
+  "Anc.bpLabel": {
+    "en": "Blood pressure",
+    "bn": "রক্তচাপ"
+  },
+  "Anc.fundalHeightLabel": {
+    "en": "Fundal height",
+    "bn": "জরায়ুর উচ্চতা"
+  },
+  "Anc.hemoglobinLabel": {
+    "en": "Hemoglobin",
+    "bn": "হিমোগ্লোবিন"
+  },
+  "Anc.glucoseLabel": {
+    "en": "Glucose",
+    "bn": "গ্লুকোজ"
+  },
+  "Anc.pulseLabel": {
+    "en": "Pulse",
+    "bn": "নাড়ির গতি"
+  },
+  "Anc.temperatureLabel": {
+    "en": "Temperature",
+    "bn": "তাপমাত্রা"
+  },
+  "Anc.urinaryAlbuminLabel": {
+    "en": "Urinary albumin",
+    "bn": "মূত্রে এলবুমিন"
+  },
+  "Anc.urinaryBilirubinLabel": {
+    "en": "Urinary bilirubin",
+    "bn": "মূত্রে বিলিরুবিন"
+  },
+  "Anc.ttTdLabel": {
+    "en": "TT/TD completed",
+    "bn": "টিটি/টিডি সম্পন্ন"
+  },
+  "Anc.edemaLabel": {
+    "en": "Edema",
+    "bn": "ইডিমা"
+  },
+  "Anc.usgLabel": {
+    "en": "Ultrasound (USG)",
+    "bn": "আল্ট্রাসাউন্ড (ইউএসজি)"
+  },
+  "Anc.notFoundValue": {
+    "en": "Not found",
+    "bn": "পাওয়া যায়নি"
+  },
+  "Anc.valuesDisagreeWarning": {
+    "en": "Some values disagree across reads — double-check the card",
+    "bn": "কয়েকটি মান একাধিক রিডিং-এ ভিন্ন হয়েছে — কার্ডের সাথে আবার মিলিয়ে দেখুন"
   }
 }

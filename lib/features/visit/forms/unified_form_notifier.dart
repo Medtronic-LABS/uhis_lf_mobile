@@ -2124,6 +2124,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
           'edema': visit.edemaPresent! ? 'present' : 'absent',
         if (visit.ttTdCompleted != null)
           'ttTdCompleted': visit.ttTdCompleted! ? 'yes' : 'no',
+        if (visit.usgDone != null)
+          'ultrasound': visit.usgDone! ? 'done' : 'notDone',
       };
 
   /// Applies a Gemini-vision ANC card scan's result ([visit]) to this form —
