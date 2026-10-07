@@ -8,7 +8,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/constants/app_strings.dart';
 import '../immunisation/card_extraction_transport.dart' show CardBoundingBox;
 import '../immunisation/card_highlight_overlay.dart';
-import '../immunisation/epi_card_scanner.dart' show EpiCardScanner;
 import 'anc_visit_extraction_models.dart';
 import 'anc_visit_extraction_repository.dart';
 
@@ -225,26 +224,6 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
       });
     }
     await Future<void>.delayed(const Duration(milliseconds: 260));
-
-    // Shows the literal handwriting BEFORE the parsed fields below, so the
-    // reveal reads as one flow — "here's what's written" then "here's what
-    // we parsed from it" — rather than a disconnected note trailing after
-    // every field. Bengali digits transliterated to ASCII so a misread
-    // (e.g. ৩/৮/৯/০ confusion) is visible without reading Bengali numeral
-    // shapes. One block for the whole visit column, not per-field — the
-    // backend tracks rawText per visit, not per individual field (see
-    // AncVisitExtraction's doc comment), so it can't yet sit next to one
-    // specific line like Hemoglobin alone.
-    if (visit.rawText != null && visit.rawText!.isNotEmpty) {
-      if (!mounted) return;
-      await Future<void>.delayed(const Duration(milliseconds: 220));
-      setState(() => _found.add(_FoundEntry(
-            AncScanStrings.asWrittenLabel,
-            EpiCardScanner.normalizeBengaliDigits(visit.rawText!),
-            isRawText: true,
-            flagged: result.flagged,
-          )));
-    }
 
     for (final entry in _entriesFor(visit)) {
       if (!mounted) return;
@@ -483,9 +462,8 @@ class _RevealTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final markers = entries.where((e) => !e.isRawText && e.value == '');
-    final rawTextEntries = entries.where((e) => e.isRawText);
-    final fieldEntries = entries.where((e) => !e.isRawText && e.value != '');
+    final markers = entries.where((e) => e.value == '');
+    final fieldEntries = entries.where((e) => e.value != '');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,7 +488,7 @@ class _RevealTable extends StatelessWidget {
               ),
             ),
           ),
-        if (rawTextEntries.isNotEmpty || fieldEntries.isNotEmpty)
+        if (fieldEntries.isNotEmpty)
           Container(
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.6),
@@ -521,8 +499,7 @@ class _RevealTable extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                for (final r in rawTextEntries) _RawTextRow(r),
-                if (fieldEntries.isNotEmpty) const _TableHeaderRow(),
+                const _TableHeaderRow(),
                 for (final (i, f) in fieldEntries.indexed)
                   _TableFieldRow(
                     f,
@@ -546,40 +523,6 @@ class _RevealTable extends StatelessWidget {
         ),
         child: child,
       );
-}
-
-/// Full-width row at the top of the table showing the verbatim handwriting
-/// (digit-transliterated) — see [_FoundEntry]'s doc comment.
-class _RawTextRow extends StatelessWidget {
-  const _RawTextRow(this.entry);
-
-  final _FoundEntry entry;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = entry.flagged ? const Color(0xFFFBBF24) : Colors.white70;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.white24, width: 1)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.text_snippet_outlined, size: 14, color: color),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              '${entry.label}: ${entry.value}',
-              style: TextStyle(
-                  color: color, fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _TableHeaderRow extends StatelessWidget {
@@ -658,22 +601,11 @@ class _TableFieldRow extends StatelessWidget {
 
 /// A revealed field's label + formatted value (null = not found on the
 /// card; `''` is reserved for the column-located marker, not a real field).
-/// [isRawText] marks the single "as written on card" block (verbatim
-/// handwriting, digit-transliterated) — rendered distinctly from a normal
-/// found/not-found field line; [flagged] (only meaningful when
-/// [isRawText] is true) emphasizes it in amber when the card was flagged.
 class _FoundEntry {
-  const _FoundEntry(
-    this.label,
-    this.value, {
-    this.isRawText = false,
-    this.flagged = false,
-  });
+  const _FoundEntry(this.label, this.value);
 
   final String label;
   final String? value;
-  final bool isRawText;
-  final bool flagged;
 }
 
 class _ErrorOverlay extends StatelessWidget {
