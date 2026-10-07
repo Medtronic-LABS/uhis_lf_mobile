@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../immunisation/epi_card_scanner.dart' show EpiCardScanner;
 import 'anc_visit_extraction_models.dart';
 import 'anc_visit_extraction_repository.dart';
 
@@ -228,6 +229,24 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
       if (!mounted) return;
       await Future<void>.delayed(const Duration(milliseconds: 220));
       setState(() => _found.add(entry));
+    }
+
+    // Shows the literal handwriting behind every value above, Bengali
+    // digits transliterated to ASCII so a misread (e.g. ৩/৮/৯/০ confusion)
+    // is visible at a glance without needing to read Bengali numeral
+    // shapes. Currently one block for the whole visit column — the backend
+    // doesn't track rawText per individual field yet, only per visit (see
+    // AncVisitExtraction's doc comment) — so it can't be attached to one
+    // specific field line like Hemoglobin alone.
+    if (visit.rawText != null && visit.rawText!.isNotEmpty) {
+      if (!mounted) return;
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+      setState(() => _found.add(_FoundEntry(
+            AncScanStrings.asWrittenLabel,
+            EpiCardScanner.normalizeBengaliDigits(visit.rawText!),
+            isRawText: true,
+            flagged: result.flagged,
+          )));
     }
     await Future<void>.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
@@ -541,22 +560,48 @@ class _FoundRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (entry.isRawText) {
+      final color = entry.flagged ? const Color(0xFFFBBF24) : Colors.white70;
+      return _animatedEntry(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(12),
+              border: entry.flagged
+                  ? Border.all(color: color, width: 1)
+                  : null,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.text_snippet_outlined, size: 14, color: color),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    '${entry.label}: ${entry.value}',
+                    style: TextStyle(
+                        color: color, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final found = entry.value != null;
     final text = entry.value == ''
         ? entry.label
         : found
             ? AncScanStrings.fieldFound(entry.label, entry.value!)
             : AncScanStrings.fieldNotFound(entry.label);
-    return TweenAnimationBuilder<double>(
-      key: ValueKey(entry.label),
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOut,
-      builder: (context, t, child) => Opacity(
-        opacity: t,
-        child: Transform.translate(offset: Offset(0, (1 - t) * 8), child: child),
-      ),
-      child: Padding(
+    return _animatedEntry(
+      Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -591,15 +636,38 @@ class _FoundRow extends StatelessWidget {
       ),
     );
   }
+
+  Widget _animatedEntry(Widget child) => TweenAnimationBuilder<double>(
+        key: ValueKey(entry.label),
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+        builder: (context, t, c) => Opacity(
+          opacity: t,
+          child: Transform.translate(offset: Offset(0, (1 - t) * 8), child: c),
+        ),
+        child: child,
+      );
 }
 
 /// A revealed field's label + formatted value (null = not found on the
 /// card; `''` is reserved for the column-located marker, not a real field).
+/// [isRawText] marks the single "as written on card" block (verbatim
+/// handwriting, digit-transliterated) — rendered distinctly from a normal
+/// found/not-found field line; [flagged] (only meaningful when
+/// [isRawText] is true) emphasizes it in amber when the card was flagged.
 class _FoundEntry {
-  const _FoundEntry(this.label, this.value);
+  const _FoundEntry(
+    this.label,
+    this.value, {
+    this.isRawText = false,
+    this.flagged = false,
+  });
 
   final String label;
   final String? value;
+  final bool isRawText;
+  final bool flagged;
 }
 
 class _ErrorOverlay extends StatelessWidget {

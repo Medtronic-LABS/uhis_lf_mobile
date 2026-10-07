@@ -7315,6 +7315,8 @@ abstract final class AncScanStrings {
       getTranslatedString('Anc.ttTdLabel', 'TT/TD completed');
   static String get edemaLabel =>
       getTranslatedString('Anc.edemaLabel', 'Edema');
+  static String get asWrittenLabel =>
+      getTranslatedString('Anc.asWrittenLabel', 'As written on card');
   static String get valuesDisagreeWarning => getTranslatedString(
         'Anc.valuesDisagreeWarning',
         'Some values disagree across reads — double-check the card',
