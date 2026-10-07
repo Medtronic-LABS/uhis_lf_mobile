@@ -14067,6 +14067,30 @@
     "bn": "জনতাত্ত্বিক",
     "en": "Demographic"
   },
+  "Performance.dashboardSubTabAll": {
+    "bn": "সব",
+    "en": "All"
+  },
+  "Performance.dashboardSubTabRmnch": {
+    "bn": "RMNCH",
+    "en": "RMNCH"
+  },
+  "Performance.dashboardSubTabCd": {
+    "bn": "সংক্রামক রোগের সেবা",
+    "en": "CD Services"
+  },
+  "Performance.dashboardSubTabNcd": {
+    "bn": "এনসিডি",
+    "en": "NCD"
+  },
+  "Performance.dashboardSubTabEye": {
+    "bn": "চক্ষু পরীক্ষা",
+    "en": "Eye care"
+  },
+  "Performance.dashboardSubTabCataract": {
+    "bn": "ক্যাটারাক্ট",
+    "en": "Cataract"
+  },
   "Performance.dashboardFrom": {
     "bn": "হতে",
     "en": "From"

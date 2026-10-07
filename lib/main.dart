@@ -95,6 +95,7 @@ import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
+import 'features/visit/immunisation/epi_date_extraction_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'core/config/app_config.dart';
 import 'core/services/micro_coaching_service.dart';
@@ -687,6 +688,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<VisitBriefingRepository>(
             create: (_) =>
                 VisitBriefingRepository(widget.api, cache: _aiCacheDao)),
+        // AI Card Extraction — Gemini-vision date read for scanned EPI cards
+        Provider<EpiDateExtractionRepository>(
+            create: (_) => EpiDateExtractionRepository(widget.api)),
         // AI Assistant — conversational Q&A (Tab 3)
         Provider<AssistantRepository>(
             create: (_) => AssistantRepository(widget.api)),

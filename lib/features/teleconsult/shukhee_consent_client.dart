@@ -62,11 +62,11 @@ class ShukheeConsentContent {
   final String lng;
   final String html;
 
-  /// The consent copy's version label, echoed back by `get_consent` -- logged
-  /// alongside the SK's Agree/Decline decision (see
-  /// `TeleconsultConsentLogEntry.consentVersion`) so the audit trail is
-  /// human-readable without following a link. Null against a backend that
-  /// hasn't been updated to return it yet.
+  /// The consent copy's version label, echoed back by `get_consent` -- carried
+  /// into `Call Logs.consent_version` (Agree) or `Shukhee Consent
+  /// Decline.consent_version` (Decline) so the audit trail is human-readable
+  /// without following a link. Null against a backend that hasn't been
+  /// updated to return it yet.
   final String? version;
 
   /// The `Shukhee Consent Version` snapshot row backing this exact response --

@@ -4978,6 +4978,19 @@ abstract final class PerformanceStrings {
   static String get dashboardDemographicTab =>
       getTranslatedString('Performance.dashboardDemographicTab', 'Demographic');
 
+  static String get dashboardSubTabAll =>
+      getTranslatedString('Performance.dashboardSubTabAll', 'All');
+  static String get dashboardSubTabRmnch =>
+      getTranslatedString('Performance.dashboardSubTabRmnch', 'RMNCH');
+  static String get dashboardSubTabCd =>
+      getTranslatedString('Performance.dashboardSubTabCd', 'CD Services');
+  static String get dashboardSubTabNcd =>
+      getTranslatedString('Performance.dashboardSubTabNcd', 'NCD');
+  static String get dashboardSubTabEye =>
+      getTranslatedString('Performance.dashboardSubTabEye', 'Eye care');
+  static String get dashboardSubTabCataract =>
+      getTranslatedString('Performance.dashboardSubTabCataract', 'Cataract');
+
   static String get dashboardFrom =>
       getTranslatedString('Performance.dashboardFrom', 'From');
   static String get dashboardTo =>
@@ -5754,15 +5767,26 @@ abstract final class EpiStrings {
       getTranslatedString('Epi.scanUploadLabel', 'Upload');
   static String get scanReadingCard =>
       getTranslatedString('Epi.scanReadingCard', 'Reading card…');
-  static String scanVaccineFound(String name) => getTranslatedString(
-        'Epi.scanVaccineFound',
-        '$name found',
-        params: {'name': name},
-      );
+  static String scanVaccineFound(String name, [String? date]) =>
+      date == null
+          ? getTranslatedString(
+              'Epi.scanVaccineFound',
+              '$name found',
+              params: {'name': name},
+            )
+          : getTranslatedString(
+              'Epi.scanVaccineFoundWithDate',
+              '$name found · $date',
+              params: {'name': name, 'date': date},
+            );
   static String get scanCameraUnavailable => getTranslatedString(
         'Epi.scanCameraUnavailable',
         'Camera unavailable — grant permission or upload an image',
       );
+  static String get scanEngineGemini =>
+      getTranslatedString('Epi.scanEngineGemini', 'Gemini Vision');
+  static String get scanEngineOffline =>
+      getTranslatedString('Epi.scanEngineOffline', 'ML Kit (offline)');
 }
 
 /// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral
