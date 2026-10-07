@@ -336,18 +336,16 @@ class _ScanningPreview extends StatelessWidget {
             child: _EngineBadge(engine: engine),
           ),
         ),
-        // "✓ vaccine found" reveal — grows as OCR results stream in.
-        Positioned(
-          top: 60,
-          left: 16,
-          right: 16,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final entry in found) _FoundRow(entry.name, entry.date),
-            ],
+        // "✓ vaccine found" reveal — grows as OCR results stream in, laid
+        // out as a bordered Vaccine/Date table (mirrors AncCardScanScreen's
+        // _RevealTable).
+        if (found.isNotEmpty)
+          Positioned(
+            top: 60,
+            left: 16,
+            right: 16,
+            child: _EpiRevealTable(entries: found),
           ),
-        ),
         // "Reading card…" label.
         Positioned(
           left: 0,
@@ -410,50 +408,118 @@ class _EngineBadge extends StatelessWidget {
   }
 }
 
-/// A single "✓ <vaccine> found" line that fades + slides in on reveal.
-/// When [date] is non-null (Gemini vision read a handwritten date for this
-/// vaccine), it's appended after the name.
-class _FoundRow extends StatelessWidget {
-  const _FoundRow(this.name, [this.date]);
+/// Bordered "box table" of every matched vaccine and its date — mirrors
+/// AncCardScanScreen's `_RevealTable`. Every entry here is a vaccine the
+/// scan actually matched (unmatched vaccines simply never appear), so
+/// there's no "not found" row here — a missing [date] just shows as
+/// "No date" in the Date column, not an amber warning.
+class _EpiRevealTable extends StatelessWidget {
+  const _EpiRevealTable({required this.entries});
 
-  final String name;
-  final String? date;
+  final List<_FoundEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white24, width: 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _EpiTableHeaderRow(),
+          for (final (i, e) in entries.indexed)
+            _EpiTableRow(e, showDivider: i < entries.length - 1),
+        ],
+      ),
+    );
+  }
+}
+
+class _EpiTableHeaderRow extends StatelessWidget {
+  const _EpiTableHeaderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(
+        color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w700);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.white24, width: 1)),
+      ),
+      child: const Row(
+        children: [
+          Expanded(flex: 3, child: Text('VACCINE', style: style)),
+          Expanded(flex: 2, child: Text('DATE', style: style)),
+        ],
+      ),
+    );
+  }
+}
+
+class _EpiTableRow extends StatelessWidget {
+  const _EpiTableRow(this.entry, {required this.showDivider});
+
+  final _FoundEntry entry;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
-      key: ValueKey(name),
+      key: ValueKey(entry.name),
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOut,
       builder: (context, t, child) => Opacity(
         opacity: t,
-        child: Transform.translate(offset: Offset(0, (1 - t) * 8), child: child),
+        child: Transform.translate(offset: Offset(0, (1 - t) * 6), child: child),
       ),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.55),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.check_circle_rounded,
-                  color: Color(0xFF34D399), size: 16),
-              const SizedBox(width: 6),
-              Text(
-                EpiStrings.scanVaccineFound(name, date),
-                style: const TextStyle(
-                  color: Colors.white,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          border: showDivider
+              ? const Border(
+                  bottom: BorderSide(color: Colors.white12, width: 1))
+              : null,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.check_circle_rounded,
+                      color: Color(0xFF34D399), size: 14),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(entry.name,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                entry.date ?? EpiStrings.scanNoDateFound,
+                style: TextStyle(
+                  color: entry.date != null
+                      ? const Color(0xFF34D399)
+                      : Colors.white38,
                   fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

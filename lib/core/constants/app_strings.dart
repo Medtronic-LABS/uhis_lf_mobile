@@ -5775,18 +5775,8 @@ abstract final class EpiStrings {
       getTranslatedString('Epi.scanUploadLabel', 'Upload');
   static String get scanReadingCard =>
       getTranslatedString('Epi.scanReadingCard', 'Reading card…');
-  static String scanVaccineFound(String name, [String? date]) =>
-      date == null
-          ? getTranslatedString(
-              'Epi.scanVaccineFound',
-              '$name found',
-              params: {'name': name},
-            )
-          : getTranslatedString(
-              'Epi.scanVaccineFoundWithDate',
-              '$name found · $date',
-              params: {'name': name, 'date': date},
-            );
+  static String get scanNoDateFound =>
+      getTranslatedString('Epi.scanNoDateFound', 'No date found');
   static String get scanCameraUnavailable => getTranslatedString(
         'Epi.scanCameraUnavailable',
         'Camera unavailable — grant permission or upload an image',
@@ -7317,6 +7307,8 @@ abstract final class AncScanStrings {
       getTranslatedString('Anc.edemaLabel', 'Edema');
   static String get asWrittenLabel =>
       getTranslatedString('Anc.asWrittenLabel', 'As written on card');
+  static String get notFoundValue =>
+      getTranslatedString('Anc.notFoundValue', 'Not found');
   static String get valuesDisagreeWarning => getTranslatedString(
         'Anc.valuesDisagreeWarning',
         'Some values disagree across reads — double-check the card',

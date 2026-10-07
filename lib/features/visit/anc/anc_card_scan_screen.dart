@@ -225,19 +225,15 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
     }
     await Future<void>.delayed(const Duration(milliseconds: 260));
 
-    for (final entry in _entriesFor(visit)) {
-      if (!mounted) return;
-      await Future<void>.delayed(const Duration(milliseconds: 220));
-      setState(() => _found.add(entry));
-    }
-
-    // Shows the literal handwriting behind every value above, Bengali
-    // digits transliterated to ASCII so a misread (e.g. ৩/৮/৯/০ confusion)
-    // is visible at a glance without needing to read Bengali numeral
-    // shapes. Currently one block for the whole visit column — the backend
-    // doesn't track rawText per individual field yet, only per visit (see
-    // AncVisitExtraction's doc comment) — so it can't be attached to one
-    // specific field line like Hemoglobin alone.
+    // Shows the literal handwriting BEFORE the parsed fields below, so the
+    // reveal reads as one flow — "here's what's written" then "here's what
+    // we parsed from it" — rather than a disconnected note trailing after
+    // every field. Bengali digits transliterated to ASCII so a misread
+    // (e.g. ৩/৮/৯/০ confusion) is visible without reading Bengali numeral
+    // shapes. One block for the whole visit column, not per-field — the
+    // backend tracks rawText per visit, not per individual field (see
+    // AncVisitExtraction's doc comment), so it can't yet sit next to one
+    // specific line like Hemoglobin alone.
     if (visit.rawText != null && visit.rawText!.isNotEmpty) {
       if (!mounted) return;
       await Future<void>.delayed(const Duration(milliseconds: 220));
@@ -247,6 +243,12 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
             isRawText: true,
             flagged: result.flagged,
           )));
+    }
+
+    for (final entry in _entriesFor(visit)) {
+      if (!mounted) return;
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+      setState(() => _found.add(entry));
     }
     await Future<void>.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
@@ -510,15 +512,13 @@ class _ScanningPreview extends StatelessWidget {
             ),
           ),
         ),
-        Positioned(
-          top: 60,
-          left: 16,
-          right: 16,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [for (final entry in found) _FoundRow(entry)],
+        if (found.isNotEmpty)
+          Positioned(
+            top: 60,
+            left: 16,
+            right: 16,
+            child: _RevealTable(entries: found),
           ),
-        ),
         Positioned(
           left: 0,
           right: 0,
@@ -549,96 +549,72 @@ class _ScanningPreview extends StatelessWidget {
   }
 }
 
-/// One reveal line — "✓ <label> found · <value>" (green) when [value] is
-/// non-null, "⚠ <label> not found" (amber) when the field came back empty.
-/// A bare column-located marker (`value == ''`, see [_asColumnMarker]) has
-/// no "· value" suffix.
-class _FoundRow extends StatelessWidget {
-  const _FoundRow(this.entry);
+/// Wraps the revealed entries into one bordered "box table": a
+/// column-located caption line, then a box containing the raw-text row
+/// (full width, when present) and a Field/Value table for every scanned
+/// field — rows stagger in as the scan "finds" them, same timing as before,
+/// just laid out as table rows instead of floating pills.
+class _RevealTable extends StatelessWidget {
+  const _RevealTable({required this.entries});
 
-  final _FoundEntry entry;
+  final List<_FoundEntry> entries;
 
   @override
   Widget build(BuildContext context) {
-    if (entry.isRawText) {
-      final color = entry.flagged ? const Color(0xFFFBBF24) : Colors.white70;
-      return _animatedEntry(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(12),
-              border: entry.flagged
-                  ? Border.all(color: color, width: 1)
-                  : null,
+    final markers = entries.where((e) => !e.isRawText && e.value == '');
+    final rawTextEntries = entries.where((e) => e.isRawText);
+    final fieldEntries = entries.where((e) => !e.isRawText && e.value != '');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final m in markers)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _animatedRow(
+              m.label,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.check_circle_rounded,
+                      color: Color(0xFF34D399), size: 16),
+                  const SizedBox(width: 6),
+                  Text(m.label,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+        if (rawTextEntries.isNotEmpty || fieldEntries.isNotEmpty)
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white24, width: 1),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.text_snippet_outlined, size: 14, color: color),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    '${entry.label}: ${entry.value}',
-                    style: TextStyle(
-                        color: color, fontSize: 11, fontWeight: FontWeight.w600),
+                for (final r in rawTextEntries) _RawTextRow(r),
+                if (fieldEntries.isNotEmpty) const _TableHeaderRow(),
+                for (final (i, f) in fieldEntries.indexed)
+                  _TableFieldRow(
+                    f,
+                    showDivider: i < fieldEntries.length - 1,
                   ),
-                ),
               ],
             ),
           ),
-        ),
-      );
-    }
-
-    final found = entry.value != null;
-    final text = entry.value == ''
-        ? entry.label
-        : found
-            ? AncScanStrings.fieldFound(entry.label, entry.value!)
-            : AncScanStrings.fieldNotFound(entry.label);
-    return _animatedEntry(
-      Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.55),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                found || entry.value == ''
-                    ? Icons.check_circle_rounded
-                    : Icons.warning_amber_rounded,
-                color: found || entry.value == ''
-                    ? const Color(0xFF34D399)
-                    : const Color(0xFFFBBF24),
-                size: 16,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                text,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      ],
     );
   }
 
-  Widget _animatedEntry(Widget child) => TweenAnimationBuilder<double>(
-        key: ValueKey(entry.label),
+  Widget _animatedRow(String key, Widget child) => TweenAnimationBuilder<double>(
+        key: ValueKey(key),
         tween: Tween(begin: 0, end: 1),
         duration: const Duration(milliseconds: 260),
         curve: Curves.easeOut,
@@ -648,6 +624,114 @@ class _FoundRow extends StatelessWidget {
         ),
         child: child,
       );
+}
+
+/// Full-width row at the top of the table showing the verbatim handwriting
+/// (digit-transliterated) — see [_FoundEntry]'s doc comment.
+class _RawTextRow extends StatelessWidget {
+  const _RawTextRow(this.entry);
+
+  final _FoundEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = entry.flagged ? const Color(0xFFFBBF24) : Colors.white70;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.white24, width: 1)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.text_snippet_outlined, size: 14, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '${entry.label}: ${entry.value}',
+              style: TextStyle(
+                  color: color, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TableHeaderRow extends StatelessWidget {
+  const _TableHeaderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(
+        color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w700);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.white24, width: 1)),
+      ),
+      child: const Row(
+        children: [
+          Expanded(flex: 3, child: Text('FIELD', style: style)),
+          Expanded(flex: 2, child: Text('VALUE', style: style)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TableFieldRow extends StatelessWidget {
+  const _TableFieldRow(this.entry, {required this.showDivider});
+
+  final _FoundEntry entry;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    final found = entry.value != null;
+    final color = found ? Colors.white : const Color(0xFFFBBF24);
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(entry.label),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(offset: Offset(0, (1 - t) * 6), child: child),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          border: showDivider
+              ? const Border(
+                  bottom: BorderSide(color: Colors.white12, width: 1))
+              : null,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Text(entry.label,
+                  style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                found ? entry.value! : AncScanStrings.notFoundValue,
+                style: TextStyle(
+                    color: color, fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// A revealed field's label + formatted value (null = not found on the
