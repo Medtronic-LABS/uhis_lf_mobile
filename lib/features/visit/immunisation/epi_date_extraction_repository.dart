@@ -33,14 +33,23 @@ class EpiDateExtractionRepository {
 
   final ApiClient _client;
 
+  /// The backend majority-votes 3 independent Gemini calls per card (see
+  /// `card_extraction_service._majority_vote`) to catch the model's
+  /// run-to-run non-determinism on handwritten dates — field-measured at
+  /// up to ~130s end-to-end (Gemini throttles concurrent calls on the same
+  /// API key, so 3-in-parallel isn't 3x faster than 1). This request-level
+  /// timeout is set well above that, independent of [ApiClient]'s shorter
+  /// global default which the rest of the app's fast endpoints rely on.
+  static const _voteCallTimeout = Duration(seconds: 180);
+
   (Dio, String) _resolve(String gatewayPath, String directPath) {
     final aiUrl = AppConfig.aiServiceBaseUrl;
     if (aiUrl.isNotEmpty) {
       final direct = Dio(BaseOptions(
         baseUrl: aiUrl,
         connectTimeout: const Duration(seconds: 5),
-        sendTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: _voteCallTimeout,
+        receiveTimeout: _voteCallTimeout,
       ));
       _client.attachAiServiceAuth(direct);
       return (direct, directPath);
@@ -70,7 +79,17 @@ class EpiDateExtractionRepository {
       ),
     });
     try {
-      final response = await dio.post<dynamic>(path, data: form);
+      final response = await dio.post<dynamic>(
+        path,
+        data: form,
+        // Per-request override — the gateway path's [dio] is [ApiClient]'s
+        // shared instance, whose global timeout is sized for the rest of
+        // the app's fast endpoints, not this call's ~130s vote latency.
+        options: Options(
+          sendTimeout: _voteCallTimeout,
+          receiveTimeout: _voteCallTimeout,
+        ),
+      );
       final raw = response.data;
       if (raw is! Map<String, dynamic>) {
         throw const EpiDateExtractionException(

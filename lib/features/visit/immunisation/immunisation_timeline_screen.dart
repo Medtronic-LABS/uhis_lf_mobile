@@ -514,6 +514,7 @@ class _ImmunisationTimelineScreenState
                   vaccineNames: _matchedVaccineNames(milestones),
                   datePrefilled: _scanResult!.dateByCode.isNotEmpty ||
                       _scanResult!.extractedDate != null,
+                  flagged: _scanResult!.flagged,
                   onReview: () =>
                       _reviewMatchedMilestones(milestones, patientName),
                   onDismiss: () => setState(() {
@@ -2244,12 +2245,14 @@ class _ScanTimelineBanner extends StatelessWidget {
   const _ScanTimelineBanner({
     required this.vaccineNames,
     required this.datePrefilled,
+    this.flagged = false,
     required this.onReview,
     required this.onDismiss,
   });
 
   final List<String> vaccineNames;
   final bool datePrefilled;
+  final bool flagged;
   final VoidCallback onReview;
   final VoidCallback onDismiss;
 
@@ -2302,6 +2305,28 @@ class _ScanTimelineBanner extends StatelessWidget {
                         EpiStrings.scanDatePrefilled,
                         style:
                             const TextStyle(fontSize: 11, color: _kGreen),
+                      ),
+                    ),
+                  if (flagged)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded,
+                              size: 14, color: Color(0xFFB45309)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              EpiStrings.scanDatesFlagged,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFB45309),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   if (vaccineNames.isNotEmpty) ...[
