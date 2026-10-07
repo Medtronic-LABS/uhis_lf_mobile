@@ -302,21 +302,13 @@ class Endpoints {
   /// Server-side feature flags for mobile clients.
   static const String aiScribeConfig = '/ai-scribe/config';
 
-  // ── Shukhee integration: teleconsult consent audit log ───────────────────
-  /// `shukhee_integration.api.consent.record_consent_decision` -- inserts one
-  /// `Shukhee Consent Log` row per call (see `TeleconsultConsentLogUploader`,
-  /// which posts its pending queue one row per request, not as a batch).
-  /// Unlike every other path in this file, this one is relative to
-  /// [AppConfig.shukheeApiBaseUrl] (the Shukhee/Frappe backend), not
-  /// [AppConfig.apiBaseUrl] -- same base as `ShukheeConsentClient.consentPath`.
-  static const String shukheeRecordConsentDecision =
-      '/api/method/shukhee_integration.api.consent.record_consent_decision';
-
+  // ── Shukhee integration ───────────────────────────────────────────────────
   /// `shukhee_integration.api.settings.get_controls` -- server-side
   /// kill-switch for the Shukhee teleconsult feature (see
-  /// `UserHierarchyService.shukheeControls`). Same base as
-  /// [shukheeRecordConsentDecision]: relative to [AppConfig.shukheeApiBaseUrl],
-  /// not [AppConfig.apiBaseUrl].
+  /// `UserHierarchyService.shukheeControls`). Unlike every other path in this
+  /// file, this one is relative to [AppConfig.shukheeApiBaseUrl] (the
+  /// Shukhee/Frappe backend), not [AppConfig.apiBaseUrl] -- same base as
+  /// `ShukheeConsentClient.consentPath`/`declinePath`.
   static const String shukheeGetControls =
       '/api/method/shukhee_integration.api.settings.get_controls';
 }

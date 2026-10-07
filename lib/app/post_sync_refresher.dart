@@ -8,7 +8,6 @@ import '../core/telemetry/telemetry_uploader.dart';
 import '../core/telemetry/value_audit_uploader.dart';
 import '../core/telemetry/visit_content_uploader.dart';
 import '../core/telemetry/assistant_content_uploader.dart';
-import '../core/telemetry/teleconsult_consent_log_uploader.dart';
 import '../features/dashboard/mission_dashboard_repository.dart';
 import '../features/referral/referral_repository.dart';
 import '../features/worklist/worklist_repository.dart';
@@ -34,7 +33,6 @@ class PostSyncRefresher {
     ValueAuditUploader? valueAudit,
     VisitContentUploader? visitContent,
     AssistantContentUploader? assistantContent,
-    TeleconsultConsentLogUploader? teleconsultConsentLog,
   })  : _progress = progress,
         _worklist = worklist,
         _referrals = referrals,
@@ -42,8 +40,7 @@ class PostSyncRefresher {
         _telemetry = telemetry,
         _valueAudit = valueAudit,
         _visitContent = visitContent,
-        _assistantContent = assistantContent,
-        _teleconsultConsentLog = teleconsultConsentLog;
+        _assistantContent = assistantContent;
 
   final Stream<SyncProgress> _progress;
   final WorklistRepository _worklist;
@@ -66,10 +63,6 @@ class PostSyncRefresher {
   /// AI assistant ("Ask") question/answer PHI content — drained on the same
   /// trigger through its own uploader, gated independently.
   final AssistantContentUploader? _assistantContent;
-
-  /// Teleconsult patient-consent Agree/Decline decision audit queue —
-  /// drained on the same trigger through its own uploader.
-  final TeleconsultConsentLogUploader? _teleconsultConsentLog;
 
   StreamSubscription<SyncProgress>? _sub;
 
@@ -109,7 +102,6 @@ class PostSyncRefresher {
     unawaited(_flushValueAudit());
     unawaited(_flushVisitContent());
     unawaited(_flushAssistantContent());
-    unawaited(_flushTeleconsultConsentLog());
   }
 
   void attach() {
@@ -173,21 +165,6 @@ class PostSyncRefresher {
       }
     } on Object catch (e) {
       telemetryUploadLog('[PostSync] assistant content flush failed: $e');
-    }
-  }
-
-  Future<void> _flushTeleconsultConsentLog() async {
-    final uploader = _teleconsultConsentLog;
-    if (uploader == null) return;
-    try {
-      final sent = await uploader.uploadPending();
-      if (sent > 0) {
-        telemetryUploadLog(
-            '[PostSync] teleconsult consent log uploaded $sent row(s)');
-      }
-    } on Object catch (e) {
-      telemetryUploadLog(
-          '[PostSync] teleconsult consent log flush failed: $e');
     }
   }
 

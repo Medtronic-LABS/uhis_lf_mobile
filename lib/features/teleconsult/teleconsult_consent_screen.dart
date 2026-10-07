@@ -12,9 +12,13 @@
 ///
 /// Returns a [TeleconsultConsentDecision] via [GoRouter.pop] -- `agreed:
 /// false` when declined. The caller only proceeds to `/teleconsult` on
-/// `agreed: true`, and threads `version`/`lng` through to the booking call
-/// so the accepted version can be attached to the resulting Call Logs row
-/// (see `TeleconsultScreen._submitBooking`).
+/// `agreed: true`, threading `version`/`versionId`/`lng`/`itemsChecked`
+/// through to the booking call so it can embed them directly onto the
+/// resulting Call Logs row in the same request (see
+/// `TeleconsultScreen._submitBooking`) -- there is no separate consent
+/// doctype or later linking step for an Agreed decision. A Decline is
+/// recorded immediately, here, via [ShukheeConsentClient.recordDecline] --
+/// see [_decide]'s own doc comment for why that's the only place it can be.
 library;
 
 import 'dart:async';
@@ -24,21 +28,24 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
-import '../../core/telemetry/teleconsult_consent_log_service.dart';
 import '../../core/theme/app_theme.dart';
+import 'consent_template_filler.dart';
 import 'shukhee_consent_client.dart';
 
 /// The result popped by [TeleconsultConsentScreen] -- carries the accepted
-/// consent version/language forward so the booking call can attach them to
-/// the resulting Call Logs row, not just the bare Agree/Decline bit.
+/// consent version/language/items forward so the booking call can embed them
+/// directly onto the resulting Call Logs row, not just the bare Agree/Decline
+/// bit.
 class TeleconsultConsentDecision {
   const TeleconsultConsentDecision({
     required this.agreed,
     required this.version,
     required this.versionId,
     required this.lng,
+    this.itemsChecked,
   });
 
   final bool agreed;
@@ -49,6 +56,25 @@ class TeleconsultConsentDecision {
   /// doc comment).
   final String? versionId;
   final String lng;
+
+  /// One entry per `ShukheeConsentContent.items`, positional -- null when
+  /// that list was empty (nothing to tick, nothing to echo back).
+  final List<bool>? itemsChecked;
+}
+
+/// CHW display name for the `{{chw_name}}` token (purely cosmetic -- see
+/// `fillConsentTemplate`'s own doc comment), tolerating a missing
+/// [UserHierarchyService] provider rather than requiring every widget test
+/// of this screen to wire up a full fake auth stack just for one display
+/// field. Production always has this provider registered at the app root
+/// (see `main.dart`); only test harnesses that don't need CHW-name coverage
+/// skip it.
+String? _watchChwName(BuildContext context) {
+  try {
+    return context.watch<UserHierarchyService>().skProfile?.name;
+  } on Object {
+    return null;
+  }
 }
 
 class TeleconsultConsentScreen extends StatefulWidget {
@@ -61,18 +87,17 @@ class TeleconsultConsentScreen extends StatefulWidget {
     @visibleForTesting this.consentClientBuilder,
   });
 
-  /// Who the consent decision is about -- logged by
-  /// [TeleconsultConsentLogService], never sent to the `get_consent` fetch
-  /// itself.
+  /// Who the consent decision is about -- sent to [ShukheeConsentClient.recordDecline] on
+  /// Decline, or threaded through to `TeleconsultScreen`/`start_consultation` on Agree
+  /// (never sent to the `get_consent` fetch itself).
   final String patientId;
 
   /// The visit/encounter the consent was captured during, if any.
   final String? visitId;
 
-  /// The patient's date of birth (ISO 8601), if known -- logged alongside the
-  /// decision so age is visible in the audit trail (see
-  /// `TeleconsultConsentLogEntry.patientDob`'s doc comment for why this is
-  /// the raw fact and not a derived flag).
+  /// The patient's date of birth (ISO 8601), if known -- recorded alongside the
+  /// decision so age is visible in the audit trail (raw fact, not a derived
+  /// "is minor" flag).
   final String? patientDob;
 
   /// Shown for display context only -- never sent to the consent endpoint.
@@ -90,7 +115,10 @@ class TeleconsultConsentScreen extends StatefulWidget {
 
 class _TeleconsultConsentScreenState extends State<TeleconsultConsentScreen> {
   late Future<ShukheeConsentContent> _future;
-  bool _agreed = false;
+
+  /// One entry per [ShukheeConsentContent.items], positional -- initialized
+  /// once content loads (see [_onContentLoaded]), reset on retry.
+  List<bool> _itemChecked = const [];
 
   @override
   void initState() {
@@ -103,38 +131,66 @@ class _TeleconsultConsentScreenState extends State<TeleconsultConsentScreen> {
     return client.fetchConsent(lng: AppLocale.isBangla ? 'bn' : 'en');
   }
 
-  /// Fires the fire-and-forget consent-decision log, then pops with the
-  /// decision -- log failure must never delay or block this navigation (see
-  /// [TeleconsultConsentLogService.record]'s own "never throws" contract).
+  /// Runs once per successful fetch (including after a retry) -- sizes the
+  /// per-item checkbox state to match this response's own `items` list,
+  /// since a retry could in principle return a different-length list than
+  /// the previous attempt.
+  void _onContentLoaded(ShukheeConsentContent content) {
+    if (_itemChecked.length != content.items.length) {
+      _itemChecked = List<bool>.filled(content.items.length, false);
+    }
+  }
+
+  bool _mandatoryUnmet(ShukheeConsentContent content) {
+    for (var i = 0; i < content.items.length; i++) {
+      final checked = i < _itemChecked.length && _itemChecked[i];
+      if (content.items[i].mandatory && !checked) return true;
+    }
+    return false;
+  }
+
+  /// On Agree, never calls the network here at all -- the decision (including
+  /// which items were ticked) is carried forward via the popped
+  /// [TeleconsultConsentDecision] and sent as part of the booking call itself
+  /// (`start_consultation`), which embeds it directly onto the Call Logs row
+  /// it creates. There is no Call Logs row to embed anything on for a
+  /// Decline, so that's the one case recorded here instead -- fired
+  /// immediately, fire-and-forget (never awaited, never blocks this
+  /// navigation), via [ShukheeConsentClient.recordDecline], which never
+  /// throws on its own.
   void _decide(ShukheeConsentContent content, {required bool agreed}) {
-    unawaited(
-      context.read<TeleconsultConsentLogService>().record(
-            patientId: widget.patientId,
-            visitId: widget.visitId,
-            agreed: agreed,
-            lng: content.lng,
-            consentVersion: content.version,
-            versionId: content.versionId,
-            patientDob: widget.patientDob,
-          ),
-    );
+    final itemsChecked = content.items.isEmpty ? null : List<bool>.of(_itemChecked);
+    if (!agreed) {
+      final client = (widget.consentClientBuilder ?? buildShukheeConsentClient)(context);
+      unawaited(
+        client.recordDecline(
+          patientId: widget.patientId,
+          visitId: widget.visitId,
+          lng: content.lng,
+          versionId: content.versionId,
+          patientDob: widget.patientDob,
+        ),
+      );
+    }
     context.pop(TeleconsultConsentDecision(
       agreed: agreed,
       version: content.version,
       versionId: content.versionId,
       lng: content.lng,
+      itemsChecked: itemsChecked,
     ));
   }
 
   void _retry() {
     setState(() {
-      _agreed = false;
+      _itemChecked = const [];
       _future = _fetch();
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final chwName = _watchChwName(context);
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
@@ -156,13 +212,28 @@ class _TeleconsultConsentScreenState extends State<TeleconsultConsentScreen> {
             if (snapshot.hasError) {
               return _ErrorState(onRetry: _retry);
             }
+            final content = snapshot.data!;
+            _onContentLoaded(content);
+            final filledHtml = fillConsentTemplate(
+              content.html,
+              participantName: widget.patientLabel ?? widget.patientId,
+              participantId: widget.patientId,
+              dateTime: DateTime.now(),
+              lng: content.lng,
+              chwName: chwName,
+              consentVersion: content.version,
+            );
             return _LoadedState(
-              content: snapshot.data!,
+              content: content,
+              html: filledHtml,
               patientLabel: widget.patientLabel,
-              agreed: _agreed,
-              onAgreedChanged: (v) => setState(() => _agreed = v ?? false),
-              onAgree: () => _decide(snapshot.data!, agreed: true),
-              onDecline: () => _decide(snapshot.data!, agreed: false),
+              itemChecked: _itemChecked,
+              onItemToggled: (index, value) => setState(() {
+                _itemChecked = List<bool>.of(_itemChecked)..[index] = value;
+              }),
+              canAgree: content.items.isEmpty || !_mandatoryUnmet(content),
+              onAgree: () => _decide(content, agreed: true),
+              onDecline: () => _decide(content, agreed: false),
             );
           },
         ),
@@ -226,17 +297,30 @@ class _ErrorState extends StatelessWidget {
 class _LoadedState extends StatelessWidget {
   const _LoadedState({
     required this.content,
-    required this.agreed,
-    required this.onAgreedChanged,
+    required this.html,
+    required this.itemChecked,
+    required this.onItemToggled,
+    required this.canAgree,
     required this.onAgree,
     required this.onDecline,
     this.patientLabel,
   });
 
   final ShukheeConsentContent content;
+
+  /// [content.html] with `{{token}}` placeholders already substituted for
+  /// live display (see `fillConsentTemplate`) -- rendered as-is, never
+  /// [content.html] directly.
+  final String html;
   final String? patientLabel;
-  final bool agreed;
-  final ValueChanged<bool?> onAgreedChanged;
+
+  /// One entry per [ShukheeConsentContent.items], positional.
+  final List<bool> itemChecked;
+  final void Function(int index, bool value) onItemToggled;
+
+  /// False while any mandatory item (see [ConsentItem.mandatory]) is
+  /// unchecked -- optional items never block proceeding.
+  final bool canAgree;
   final VoidCallback onAgree;
   final VoidCallback onDecline;
 
@@ -261,22 +345,34 @@ class _LoadedState extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                 ],
-                Html(data: content.html),
+                Html(data: html),
                 const SizedBox(height: 20),
-                _AgreementCheckbox(value: agreed, onChanged: onAgreedChanged),
+                for (var i = 0; i < content.items.length; i++) ...[
+                  _ConsentItemCheckbox(
+                    item: content.items[i],
+                    value: i < itemChecked.length && itemChecked[i],
+                    onChanged: (v) => onItemToggled(i, v ?? false),
+                  ),
+                  const SizedBox(height: 8),
+                ],
               ],
             ),
           ),
         ),
-        _ActionBar(agreed: agreed, onAgree: onAgree, onDecline: onDecline),
+        _ActionBar(canAgree: canAgree, onAgree: onAgree, onDecline: onDecline),
       ],
     );
   }
 }
 
-class _AgreementCheckbox extends StatelessWidget {
-  const _AgreementCheckbox({required this.value, required this.onChanged});
+class _ConsentItemCheckbox extends StatelessWidget {
+  const _ConsentItemCheckbox({
+    required this.item,
+    required this.value,
+    required this.onChanged,
+  });
 
+  final ConsentItem item;
   final bool value;
   final ValueChanged<bool?> onChanged;
 
@@ -311,13 +407,28 @@ class _AgreementCheckbox extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                TeleconsultConsentStrings.checkboxLabel,
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.6,
-                  color: value ? AppColors.navy : AppColors.textPrimary,
-                  fontWeight: value ? FontWeight.w600 : FontWeight.normal,
+              child: Text.rich(
+                TextSpan(
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.6,
+                    color: value ? AppColors.navy : AppColors.textPrimary,
+                    fontWeight: value ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                  children: [
+                    // A bare "*" needs no translation, unlike a "Required"
+                    // word would -- same convention as a required
+                    // form-field marker.
+                    if (item.mandatory)
+                      const TextSpan(
+                        text: '* ',
+                        style: TextStyle(
+                          color: AppColors.statusCritical,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    TextSpan(text: item.description),
+                  ],
                 ),
               ),
             ),
@@ -330,12 +441,12 @@ class _AgreementCheckbox extends StatelessWidget {
 
 class _ActionBar extends StatelessWidget {
   const _ActionBar({
-    required this.agreed,
+    required this.canAgree,
     required this.onAgree,
     required this.onDecline,
   });
 
-  final bool agreed;
+  final bool canAgree;
   final VoidCallback onAgree;
   final VoidCallback onDecline;
 
@@ -364,7 +475,7 @@ class _ActionBar extends StatelessWidget {
           Expanded(
             flex: 2,
             child: FilledButton(
-              onPressed: agreed ? onAgree : null,
+              onPressed: canAgree ? onAgree : null,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.navy,
                 disabledBackgroundColor: AppColors.border,
