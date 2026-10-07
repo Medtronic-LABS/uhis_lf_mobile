@@ -18,6 +18,9 @@ import '../../../core/i18n/app_locale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/form_fields/age_or_dob_field.dart';
 import '../widgets/form_fields/radio_form_field.dart';
+import '../anc/anc_card_scan_screen.dart';
+import '../anc/anc_visit_extraction_models.dart';
+import '../anc/anc_visit_extraction_repository.dart';
 import 'canonical_visit_data.dart';
 import 'childhood_visit.dart';
 import 'form_config.dart';
@@ -627,7 +630,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         return GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
           behavior: HitTestBehavior.opaque,
-          child: Column(
+          child: Stack(
+            children: [
+              Column(
           children: [
             // ── Step 2 AI Scribe banner — the SAME widget as Step 1, in
             // live-first mode. When the programme mix supports auto-fill
@@ -695,6 +700,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
               ),
             ),
           ],
+          ),
+              if (isAnc)
+                const Positioned(
+                  right: AppSpacing.xxl,
+                  bottom: AppSpacing.xxl,
+                  child: _AncScanFab(),
+                ),
+            ],
           ),
         );
       },
@@ -1946,19 +1959,96 @@ class _DateSubBox extends StatelessWidget {
   }
 }
 
-// ── AI-filled badge wrap ──────────────────────────────────────────────────────
+// ── ANC card scan floating button ─────────────────────────────────────────────
 
-/// Overlays a small "AI — verify" pill on a form field whose current value
-/// was filled by the realtime ASR scribe and not yet reviewed by the SK.
-/// The badge disappears as soon as the SK edits the field (source flips to
-/// [FieldSource.aiModified] in [UnifiedFormNotifier.updateField]).
-class _AiFilledBadgeWrap extends StatelessWidget {
-  const _AiFilledBadgeWrap({required this.child});
+/// Floating "📷 Scan card" button, pinned to the bottom-right of the ANC
+/// assessment form — reachable from anywhere while scrolling a long combined
+/// visit, rather than tied to one section's header. Targets the scan at
+/// whichever visit the SK is currently recording (`ancVisitNumber`, already
+/// tracked by the form) — see [AncCardScanScreen]/[AncVisitExtractionRepository].
+class _AncScanFab extends StatelessWidget {
+  const _AncScanFab();
 
-  final Widget child;
+  Future<void> _scan(BuildContext context) async {
+    final notifier = context.read<UnifiedFormNotifier>();
+    // `ancVisitNumber` is normally only assigned inside `submit()` — the SK
+    // needs it here, mid-visit, well before that — so this resolves the same
+    // value `submit()` would later assign (a pure read, see
+    // `resolveCurrentAncVisitNumber`'s doc comment) rather than reading a
+    // field that's still unset at this point in the flow.
+    final visitNumber = await notifier.resolveCurrentAncVisitNumber();
+    if (!context.mounted) return;
+    if (visitNumber < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(EpiStrings.scanFailed)),
+      );
+      return;
+    }
+    final repo = context.read<AncVisitExtractionRepository>();
+    final result = await Navigator.of(context).push<AncVisitExtractionResult?>(
+      MaterialPageRoute(
+        builder: (_) =>
+            AncCardScanScreen(visitNumber: visitNumber, repository: repo),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+    final visit = result.visit;
+    if (visit == null || !visit.anyFieldFound) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(EpiStrings.scanFailed)),
+      );
+      return;
+    }
+    final applied = notifier.applyScannedAncVisit(visit);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.flagged && result.flagReason != null
+            ? '$applied field(s) filled from card · ${Step2AsrStrings.scanFilledBadge} — double-check against the card'
+            : '$applied field(s) filled from card'),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    return FloatingActionButton.extended(
+      heroTag: 'ancScanFab',
+      backgroundColor: AppColors.statusInfo,
+      foregroundColor: Colors.white,
+      onPressed: () => _scan(context),
+      icon: const Icon(Icons.photo_camera_outlined, size: 18),
+      label: Text(
+        EpiStrings.scanAncCardCta,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+// ── AI-filled badge wrap ──────────────────────────────────────────────────────
+
+/// Overlays a small "AI — verify" (or "📷 Scanned") pill on a form field
+/// whose current value was filled by the realtime ASR scribe or a camera
+/// card scan, and not yet reviewed by the SK. The badge disappears as soon
+/// as the SK edits the field (source flips to [FieldSource.aiModified] /
+/// [FieldSource.scanModified] in [UnifiedFormNotifier.updateField]).
+class _AiFilledBadgeWrap extends StatelessWidget {
+  const _AiFilledBadgeWrap({required this.child, this.isScan = false});
+
+  final Widget child;
+
+  /// True shows the camera-scan variant (distinct icon/color/label) instead
+  /// of the AI Scribe variant — lets the SK tell the two fill provenances
+  /// apart at a glance.
+  final bool isScan;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isScan ? AppColors.statusInfo : AppColors.aiPurple;
+    final icon = isScan ? Icons.photo_camera_outlined : Icons.auto_awesome;
+    final label = isScan
+        ? Step2AsrStrings.scanFilledBadge
+        : Step2AsrStrings.aiFilledBadge;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -1970,17 +2060,16 @@ class _AiFilledBadgeWrap extends StatelessWidget {
             padding:
                 const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
             decoration: BoxDecoration(
-              color: AppColors.aiPurple,
+              color: color,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.auto_awesome,
-                    size: 10, color: Colors.white),
+                Icon(icon, size: 10, color: Colors.white),
                 const SizedBox(width: 3),
                 Text(
-                  Step2AsrStrings.aiFilledBadge,
+                  label,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 9,
@@ -2228,6 +2317,8 @@ class _SectionCard extends StatelessWidget {
     final notifier = context.watch<UnifiedFormNotifier>();
     bool aiPending(String fieldId) =>
         notifier.fieldSource(fieldId) == FieldSource.aiPending;
+    bool scanPending(String fieldId) =>
+        notifier.fieldSource(fieldId) == FieldSource.scanPending;
 
     final fieldWidgets = <Widget>[];
     // Sequential question numbering (matches the design mockup) — scoped to
@@ -2384,6 +2475,8 @@ class _SectionCard extends StatelessWidget {
 
       if (badgeIds.any(aiPending)) {
         child = _AiFilledBadgeWrap(child: child);
+      } else if (badgeIds.any(scanPending)) {
+        child = _AiFilledBadgeWrap(child: child, isScan: true);
       }
 
       // Zero-height anchor so a failed submit can scroll straight to this
@@ -2428,6 +2521,9 @@ class _SectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ANC's "Scan card" entry point is a screen-level floating button
+          // (see `_AncScanFab` in this screen's root Stack) — reachable
+          // while scrolling, rather than tied to this one section's header.
           if (section.title.isNotEmpty) ...[
             Text(
               FormSectionStrings.headerFor(section.sectionId, section.title),

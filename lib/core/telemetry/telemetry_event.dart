@@ -197,7 +197,7 @@ class TelemetryEvent {
 /// `aiOverridden` were added, and `manual` narrowed to mean "the SK typed it".
 /// A v1 row has none of those keys — readers must default them to empty rather
 /// than present a zero as a finding.
-const int kTelemetryPayloadVersion = 3;
+const int kTelemetryPayloadVersion = 4;
 
 /// The AI feature these events belong to, matching the server's feature
 /// registry key. A constant rather than a literal at the send site so adding a
@@ -229,6 +229,10 @@ class VisitCompletedPayload {
     this.prefilled = const [],
     this.derived = const [],
     this.aiOverridden = const [],
+    this.scanUsed = false,
+    this.scanFilled = const [],
+    this.scanCorrected = const [],
+    this.scanAcceptedUnchanged = const [],
     this.scribeStartedAtMs,
     this.scribeEndedAtMs,
     this.manualEditingMs,
@@ -280,6 +284,19 @@ class VisitCompletedPayload {
   /// ever placed to be edited.
   final List<String> aiOverridden;
 
+  /// True when any field on the form was filled via a camera card scan
+  /// (EPI/ANC Gemini-vision extraction) — the scan counterpart to
+  /// [scribeUsed]. Distinct metric since the capture mechanism (camera vs
+  /// voice) is a different signal worth reporting separately.
+  final bool scanUsed;
+
+  /// Field ids filled via camera scan, by provenance bucket — same shape as
+  /// [aiFilled]/[aiCorrected]/[aiAcceptedUnchanged] but for scan origin.
+  /// [scanFilled] is the union of [scanCorrected] and [scanAcceptedUnchanged].
+  final List<String> scanFilled;
+  final List<String> scanCorrected;
+  final List<String> scanAcceptedUnchanged;
+
   final List<String> empty;
 
   /// Wall-clock bounds of the scribe session(s), epoch ms, or null when AI
@@ -318,6 +335,7 @@ class VisitCompletedPayload {
   Map<String, dynamic> toJson() => {
         'programmes': programmes,
         'scribeUsed': scribeUsed,
+        'scanUsed': scanUsed,
         if (durationMs != null) 'durationMs': durationMs,
         'fields': {
           'aiFilled': aiFilled,
@@ -328,6 +346,10 @@ class VisitCompletedPayload {
           'derived': derived,
           'aiOverridden': aiOverridden,
           'empty': empty,
+          if (scanFilled.isNotEmpty) 'scanFilled': scanFilled,
+          if (scanCorrected.isNotEmpty) 'scanCorrected': scanCorrected,
+          if (scanAcceptedUnchanged.isNotEmpty)
+            'scanAcceptedUnchanged': scanAcceptedUnchanged,
         },
         'denominators': {
           'libraryTotal': libraryTotal,
@@ -352,6 +374,7 @@ class VisitCompletedPayload {
     return VisitCompletedPayload(
       programmes: _strings(json['programmes']),
       scribeUsed: json['scribeUsed'] == true,
+      scanUsed: json['scanUsed'] == true,
       durationMs: (json['durationMs'] as num?)?.toInt(),
       scribeStartedAtMs: (json['scribeStartedAt'] as num?)?.toInt(),
       scribeEndedAtMs: (json['scribeEndedAt'] as num?)?.toInt(),
@@ -368,6 +391,9 @@ class VisitCompletedPayload {
       prefilled: _strings(fields['prefilled']),
       derived: _strings(fields['derived']),
       aiOverridden: _strings(fields['aiOverridden']),
+      scanFilled: _strings(fields['scanFilled']),
+      scanCorrected: _strings(fields['scanCorrected']),
+      scanAcceptedUnchanged: _strings(fields['scanAcceptedUnchanged']),
       empty: _strings(fields['empty']),
       libraryTotal: (denominators['libraryTotal'] as num?)?.toInt() ?? 0,
       renderedTotal: (denominators['renderedTotal'] as num?)?.toInt() ?? 0,
