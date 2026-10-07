@@ -21,6 +21,8 @@ class EpiScanResult {
     required this.rawText,
     this.engine = EpiScanEngine.mlKitOffline,
     this.dateByCode = const {},
+    this.flagged = false,
+    this.flagReason,
   });
 
   /// Vaccine codes (from [EpiCardScanner._aliases]) found in the OCR output.
@@ -41,6 +43,12 @@ class EpiScanResult {
   /// Online path only: per-vaccine-code handwritten dates Gemini read.
   /// Empty on the offline path.
   final Map<String, DateTime> dateByCode;
+
+  /// Online path only: true when the backend's regularity heuristic flagged
+  /// this card's dates as suspiciously schedule-templated — see
+  /// `EpiDateExtractionResult.flagged`. Always false offline (no dates read).
+  final bool flagged;
+  final String? flagReason;
 
   bool get anyMatched =>
       matchedCodes.isNotEmpty || extractedDate != null || dateByCode.isNotEmpty;
@@ -176,6 +184,8 @@ abstract final class EpiCardScanner {
           dateByCode: result.dateByCode,
           rawText: '',
           engine: EpiScanEngine.geminiVision,
+          flagged: result.flagged,
+          flagReason: result.flagReason,
         );
       } on EpiDateExtractionException catch (e) {
         debugPrint('[EpiCardScanner] Gemini vision extraction failed, '

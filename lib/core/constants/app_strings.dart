@@ -5522,7 +5522,12 @@ abstract final class EpiStrings {
   static String get scanReviewCta =>
       getTranslatedString('Epi.scanReviewCta', 'Review & update →');
   static String get scanFrameHint => getTranslatedString(
-        'Epi.scanFrameHint', 'Align the vaccination card in the frame');
+        'Epi.scanFrameHint',
+        'Fill the frame · hold flat · avoid glare');
+  static String get scanDatesFlagged => getTranslatedString(
+        'Epi.scanDatesFlagged',
+        'Dates look textbook-perfect — double-check against the card',
+      );
   static String get scanUploadLabel =>
       getTranslatedString('Epi.scanUploadLabel', 'Upload');
   static String get scanReadingCard =>

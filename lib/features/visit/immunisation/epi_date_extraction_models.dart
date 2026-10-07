@@ -43,9 +43,21 @@ class EpiDoseExtraction {
 /// Result of a Gemini-vision card extraction call — the online counterpart
 /// to [EpiCardScanner]'s offline name-only match.
 class EpiDateExtractionResult {
-  const EpiDateExtractionResult({required this.doses});
+  const EpiDateExtractionResult({
+    required this.doses,
+    this.flagged = false,
+    this.flagReason,
+  });
 
   final List<EpiDoseExtraction> doses;
+
+  /// True when the backend's regularity heuristic flagged this card's dates
+  /// as suspiciously "textbook perfect" — a signal the model may have
+  /// pattern-completed toward the standard schedule instead of reading the
+  /// ink. Does not replace human review (always required); it's an extra
+  /// "double-check this one" prompt surfaced on top of it.
+  final bool flagged;
+  final String? flagReason;
 
   factory EpiDateExtractionResult.fromJson(Map<String, dynamic> json) =>
       EpiDateExtractionResult(
@@ -54,6 +66,8 @@ class EpiDateExtractionResult {
                     EpiDoseExtraction.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             const [],
+        flagged: json['flagged'] as bool? ?? false,
+        flagReason: json['flagReason'] as String?,
       );
 
   /// All vaccine codes Gemini matched on the card, regardless of whether a
