@@ -21,6 +21,9 @@ import '../widgets/form_fields/radio_form_field.dart';
 import '../anc/anc_card_scan_screen.dart';
 import '../anc/anc_visit_extraction_models.dart';
 import '../anc/anc_visit_extraction_repository.dart';
+import '../ncd/ncd_card_scan_screen.dart';
+import '../ncd/ncd_visit_extraction_models.dart';
+import '../ncd/ncd_visit_extraction_repository.dart';
 import 'canonical_visit_data.dart';
 import 'childhood_visit.dart';
 import 'form_config.dart';
@@ -517,6 +520,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         //   • Vitals trend card    → last item before submit
         final items = <Widget>[];
         final isAnc = renderFormTypes.contains('anc');
+        final isNcd = renderFormTypes.contains('ncd');
 
         // ── Gestational age card (ANC) — top of scroll area ────────────────
         final cardLmp = notifier.lmpDate ??
@@ -706,6 +710,12 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   right: AppSpacing.xxl,
                   bottom: AppSpacing.xxl,
                   child: _AncScanFab(),
+                ),
+              if (isNcd)
+                const Positioned(
+                  right: AppSpacing.xxl,
+                  bottom: AppSpacing.xxl,
+                  child: _NcdScanFab(),
                 ),
             ],
           ),
@@ -2019,6 +2029,67 @@ class _AncScanFab extends StatelessWidget {
       icon: const Icon(Icons.photo_camera_outlined, size: 18),
       label: Text(
         EpiStrings.scanAncCardCta,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+// ── NCD card scan floating button ─────────────────────────────────────────────
+
+/// Floating "📷 Scan card" button, pinned to the bottom-right of the NCD
+/// assessment form — same reachable-while-scrolling reasoning as
+/// [_AncScanFab]. Targets the scan at whichever visit the SK is currently
+/// recording ([UnifiedFormNotifier.resolveCurrentNcdVisitNumber]) — see
+/// [NcdCardScanScreen]/[NcdVisitExtractionRepository].
+class _NcdScanFab extends StatelessWidget {
+  const _NcdScanFab();
+
+  Future<void> _scan(BuildContext context) async {
+    final notifier = context.read<UnifiedFormNotifier>();
+    final visitNumber = await notifier.resolveCurrentNcdVisitNumber();
+    if (!context.mounted) return;
+    if (visitNumber < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(EpiStrings.scanFailed)),
+      );
+      return;
+    }
+    final repo = context.read<NcdVisitExtractionRepository>();
+    final result = await Navigator.of(context).push<NcdVisitExtractionResult?>(
+      MaterialPageRoute(
+        builder: (_) =>
+            NcdCardScanScreen(visitNumber: visitNumber, repository: repo),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+    final visit = result.visit;
+    if (visit == null || !visit.anyFieldFound) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(EpiStrings.scanFailed)),
+      );
+      return;
+    }
+    final applied = notifier.applyScannedNcdVisit(visit);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.flagged && result.flagReason != null
+            ? '$applied field(s) filled from card · ${Step2AsrStrings.scanFilledBadge} — double-check against the card'
+            : '$applied field(s) filled from card'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton.extended(
+      heroTag: 'ncdScanFab',
+      backgroundColor: AppColors.statusInfo,
+      foregroundColor: Colors.white,
+      onPressed: () => _scan(context),
+      icon: const Icon(Icons.photo_camera_outlined, size: 18),
+      label: Text(
+        EpiStrings.scanNcdCardCta,
         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
       ),
     );

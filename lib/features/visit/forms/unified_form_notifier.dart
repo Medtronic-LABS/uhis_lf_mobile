@@ -29,6 +29,7 @@ import '../../../core/risk/ncd_status.dart';
 import '../../../core/risk/pnc_status.dart';
 import '../../../core/risk/pregnancy_outcome_status.dart';
 import '../anc/anc_visit_extraction_models.dart';
+import '../ncd/ncd_visit_extraction_models.dart';
 import '../../../core/risk/pw_risk_factors.dart';
 import '../../../core/time/calendar_day.dart';
 import '../../referral/referral_repository.dart';
@@ -300,6 +301,16 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (existing != null) return existing;
     final localId = await _localPatientId();
     return _pregnancySnapshotDao.nextAncVisitNo(localId, memberId: _memberId);
+  }
+
+  /// Resolves which NCD visit is currently being recorded, for the card-scan
+  /// button — same "pure read, safe to call mid-visit" reasoning as
+  /// [resolveCurrentAncVisitNumber], but NCD has no dedicated server-synced
+  /// visit counter (`PregnancySnapshotDao` is pregnancy-episode-scoped, not
+  /// applicable here) — see
+  /// `AssessmentRepository.priorNcdVisitCount`'s doc comment.
+  Future<int> resolveCurrentNcdVisitNumber() async {
+    return 1 + await _assessmentRepo.priorNcdVisitCount(_patientId);
   }
 
   int? _asInt(dynamic value) {
@@ -2146,6 +2157,47 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _fieldSources[fieldId] = FieldSource.scanPending;
       appliedCount++;
       debugPrint('[AncScan] APPLIED [$fieldId] = ${entry.value}');
+    }
+    if (appliedCount > 0) {
+      _saveDraft();
+      notifyListeners();
+    }
+    return appliedCount;
+  }
+
+  // Maps `NcdVisitExtraction`'s fields to this form's field ids (from
+  // `assets/forms/layout_manifests.json`'s `ncdBiometrics`/`bpLog`/
+  // `glucoseLog` sections). `visitDate` has no form-field counterpart today,
+  // so it's read-only context, not applied here. `glucoseType` is already
+  // the app's own option id ("fbs"/"rbs" — set by the backend prompt to
+  // match `field_library.json` exactly), never a raw card label.
+  static Map<String, dynamic> _ncdScanFieldMap(NcdVisitExtraction visit) => {
+        if (visit.weightKg != null) 'weight': visit.weightKg,
+        if (visit.heightCm != null) 'height': visit.heightCm,
+        if (visit.bpSystolic != null) 'systolic': visit.bpSystolic,
+        if (visit.bpDiastolic != null) 'diastolic': visit.bpDiastolic,
+        if (visit.glucoseMmolL != null) 'glucose': visit.glucoseMmolL,
+        if (visit.glucoseType != null) 'glucoseType': visit.glucoseType,
+      };
+
+  /// Applies a Gemini-vision NCD card scan's result ([visit]) to this form —
+  /// the camera-scan counterpart to [applyScannedAncVisit]. Never overwrites
+  /// a field the SK already typed/edited (same `_isSkOwned` guard). Returns
+  /// the number of fields actually applied, for the caller's confirmation
+  /// UI / telemetry.
+  int applyScannedNcdVisit(NcdVisitExtraction visit) {
+    var appliedCount = 0;
+    for (final entry in _ncdScanFieldMap(visit).entries) {
+      final fieldId = entry.key;
+      if (_isSkOwned(fieldId)) {
+        debugPrint('[NcdScan] SKIPPED [$fieldId] SK-owned — '
+            'value "${entry.value}" NOT applied');
+        continue;
+      }
+      _data = _data.setValue(fieldId, entry.value);
+      _fieldSources[fieldId] = FieldSource.scanPending;
+      appliedCount++;
+      debugPrint('[NcdScan] APPLIED [$fieldId] = ${entry.value}');
     }
     if (appliedCount > 0) {
       _saveDraft();

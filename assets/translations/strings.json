@@ -14814,5 +14814,37 @@
   "Anc.valuesDisagreeWarning": {
     "en": "Some values disagree across reads — double-check the card",
     "bn": "কয়েকটি মান একাধিক রিডিং-এ ভিন্ন হয়েছে — কার্ডের সাথে আবার মিলিয়ে দেখুন"
+  },
+  "Ncd.scanningVisit": {
+    "en": "Scanning NCD Visit {n}",
+    "bn": "এনসিডি ভিজিট {n} স্ক্যান করা হচ্ছে"
+  },
+  "Ncd.visitRowFound": {
+    "en": "Visit {n} row located",
+    "bn": "ভিজিট {n}-এর সারি পাওয়া গেছে"
+  },
+  "Ncd.weightLabel": {
+    "en": "Weight",
+    "bn": "ওজন"
+  },
+  "Ncd.heightLabel": {
+    "en": "Height",
+    "bn": "উচ্চতা"
+  },
+  "Ncd.bpLabel": {
+    "en": "Blood pressure",
+    "bn": "রক্তচাপ"
+  },
+  "Ncd.glucoseLabel": {
+    "en": "Blood glucose",
+    "bn": "রক্তে গ্লুকোজ"
+  },
+  "Ncd.notFoundValue": {
+    "en": "Not found",
+    "bn": "পাওয়া যায়নি"
+  },
+  "Epi.scanNcdCardCta": {
+    "en": "Scan card",
+    "bn": "কার্ড স্ক্যান করুন"
   }
 }

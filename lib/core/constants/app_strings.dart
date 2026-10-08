@@ -5743,6 +5743,8 @@ abstract final class EpiStrings {
       getTranslatedString('Epi.scanCardCta', 'Scan EPI card');
   static String get scanAncCardCta =>
       getTranslatedString('Epi.scanAncCardCta', 'Scan card');
+  static String get scanNcdCardCta =>
+      getTranslatedString('Epi.scanNcdCardCta', 'Scan card');
   static String get scanCardSubtitle => getTranslatedString(
         'Epi.scanCardSubtitle',
         'Photograph the booklet to detect which vaccines were given · enter dates manually',
@@ -7313,4 +7315,29 @@ abstract final class AncScanStrings {
         'Anc.valuesDisagreeWarning',
         'Some values disagree across reads — double-check the card',
       );
+}
+
+abstract final class NcdScanStrings {
+  NcdScanStrings._();
+
+  static String scanningVisit(int visitNumber) => getTranslatedString(
+        'Ncd.scanningVisit',
+        'Scanning NCD Visit {n}',
+        params: {'n': '$visitNumber'},
+      );
+  static String visitRowFound(int visitNumber) => getTranslatedString(
+        'Ncd.visitRowFound',
+        'Visit {n} row located',
+        params: {'n': '$visitNumber'},
+      );
+  static String get weightLabel =>
+      getTranslatedString('Ncd.weightLabel', 'Weight');
+  static String get heightLabel =>
+      getTranslatedString('Ncd.heightLabel', 'Height');
+  static String get bpLabel =>
+      getTranslatedString('Ncd.bpLabel', 'Blood pressure');
+  static String get glucoseLabel =>
+      getTranslatedString('Ncd.glucoseLabel', 'Blood glucose');
+  static String get notFoundValue =>
+      getTranslatedString('Ncd.notFoundValue', 'Not found');
 }

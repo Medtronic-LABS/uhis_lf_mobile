@@ -86,8 +86,9 @@ class CardExtractionTransport {
   }
 
   /// Sends [cardImage] to the card-extraction service for [programme],
-  /// optionally pinning [visitNumber] (ANC only — selects which visit column
-  /// on the card to read), and returns the raw decoded JSON response.
+  /// optionally pinning [visitNumber] (ANC/NCD only — selects which visit
+  /// column/row on the card to read), and returns the raw decoded JSON
+  /// response.
   ///
   /// Throws [CardExtractionTransportException] on any failure (network,
   /// timeout, non-2xx, or an unexpected response shape) — callers map this
