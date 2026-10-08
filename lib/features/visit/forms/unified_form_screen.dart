@@ -705,6 +705,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             ),
           ],
           ),
+              // A combined visit can have both ANC and NCD active at once —
+              // stack the second FAB above the first (same spot would make
+              // one of them untappable, hidden directly behind the other)
+              // rather than assuming only one programme's scan is ever
+              // relevant per visit.
               if (isAnc)
                 const Positioned(
                   right: AppSpacing.xxl,
@@ -712,10 +717,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   child: _AncScanFab(),
                 ),
               if (isNcd)
-                const Positioned(
+                Positioned(
                   right: AppSpacing.xxl,
-                  bottom: AppSpacing.xxl,
-                  child: _NcdScanFab(),
+                  bottom: isAnc ? AppSpacing.xxl + 64 : AppSpacing.xxl,
+                  child: const _NcdScanFab(),
                 ),
             ],
           ),
