@@ -2171,11 +2171,20 @@ class UnifiedFormNotifier extends ChangeNotifier {
   // so it's read-only context, not applied here. `glucoseType` is already
   // the app's own option id ("fbs"/"rbs" — set by the backend prompt to
   // match `field_library.json` exactly), never a raw card label.
+  //
+  // BP is NOT two flat `systolic`/`diastolic` fields on this form (unlike
+  // ANC's vitals section) — NCD renders a single composite `bpLogDetails`
+  // widget (`_BpReadingField` in unified_form_screen.dart) backed by
+  // `List<Map>` readings (`BpLogDetails.toJson()`'s shape), the same wire
+  // format `BpHistoryDao` already reads back out. Writing flat
+  // systolic/diastolic here silently applies to nothing the UI renders.
   static Map<String, dynamic> _ncdScanFieldMap(NcdVisitExtraction visit) => {
         if (visit.weightKg != null) 'weight': visit.weightKg,
         if (visit.heightCm != null) 'height': visit.heightCm,
-        if (visit.bpSystolic != null) 'systolic': visit.bpSystolic,
-        if (visit.bpDiastolic != null) 'diastolic': visit.bpDiastolic,
+        if (visit.bpSystolic != null && visit.bpDiastolic != null)
+          'bpLogDetails': [
+            {'systolic': visit.bpSystolic, 'diastolic': visit.bpDiastolic},
+          ],
         if (visit.glucoseMmolL != null) 'glucose': visit.glucoseMmolL,
         if (visit.glucoseType != null) 'glucoseType': visit.glucoseType,
       };
