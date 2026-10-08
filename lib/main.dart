@@ -96,6 +96,8 @@ import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
 import 'features/visit/immunisation/epi_date_extraction_repository.dart';
+import 'features/visit/anc/anc_visit_extraction_repository.dart';
+import 'features/visit/ncd/ncd_visit_extraction_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'core/config/app_config.dart';
 import 'core/services/micro_coaching_service.dart';
@@ -691,6 +693,12 @@ class _UhisNextAppState extends State<UhisNextApp>
         // AI Card Extraction — Gemini-vision date read for scanned EPI cards
         Provider<EpiDateExtractionRepository>(
             create: (_) => EpiDateExtractionRepository(widget.api)),
+        // AI Card Extraction — Gemini-vision vitals read for scanned ANC cards
+        Provider<AncVisitExtractionRepository>(
+            create: (_) => AncVisitExtractionRepository(widget.api)),
+        // AI Card Extraction — Gemini-vision vitals read for scanned NCD cards
+        Provider<NcdVisitExtractionRepository>(
+            create: (_) => NcdVisitExtractionRepository(widget.api)),
         // AI Assistant — conversational Q&A (Tab 3)
         Provider<AssistantRepository>(
             create: (_) => AssistantRepository(widget.api)),

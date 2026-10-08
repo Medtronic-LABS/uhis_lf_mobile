@@ -1,3 +1,26 @@
+import 'card_extraction_transport.dart' show CardBoundingBox;
+
+/// A vaccine from the known-code list with no legible date on the card —
+/// its row location (independent of the blank date cell), for highlighting
+/// which doses are missing directly on the photo. Null box when the votes
+/// didn't agree closely enough on where the row is (see
+/// `card_extraction_service._merge_unmatched_rows`) — never guessed.
+class UnmatchedVaccineRow {
+  const UnmatchedVaccineRow({required this.vaccineCode, this.rowBoundingBox});
+
+  final String vaccineCode;
+  final CardBoundingBox? rowBoundingBox;
+
+  factory UnmatchedVaccineRow.fromJson(Map<String, dynamic> json) =>
+      UnmatchedVaccineRow(
+        vaccineCode: json['vaccineCode'] as String? ?? '',
+        rowBoundingBox: json['rowBoundingBox'] != null
+            ? CardBoundingBox.fromJson(
+                json['rowBoundingBox'] as Map<String, dynamic>)
+            : null,
+      );
+}
+
 /// Data models for the Gemini-vision EPI card date-extraction response.
 class EpiDoseExtraction {
   const EpiDoseExtraction({
@@ -45,11 +68,16 @@ class EpiDoseExtraction {
 class EpiDateExtractionResult {
   const EpiDateExtractionResult({
     required this.doses,
+    this.unmatchedRows = const [],
     this.flagged = false,
     this.flagReason,
   });
 
   final List<EpiDoseExtraction> doses;
+
+  /// Vaccines with no legible date — for row highlighting. See
+  /// [UnmatchedVaccineRow]'s doc comment.
+  final List<UnmatchedVaccineRow> unmatchedRows;
 
   /// True when the backend's regularity heuristic flagged this card's dates
   /// as suspiciously "textbook perfect" — a signal the model may have
@@ -64,6 +92,11 @@ class EpiDateExtractionResult {
         doses: (json['doses'] as List<dynamic>?)
                 ?.map((e) =>
                     EpiDoseExtraction.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            const [],
+        unmatchedRows: (json['unmatchedRows'] as List<dynamic>?)
+                ?.map((e) =>
+                    UnmatchedVaccineRow.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             const [],
         flagged: json['flagged'] as bool? ?? false,

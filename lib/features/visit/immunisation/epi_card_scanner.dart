@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'epi_date_extraction_models.dart' show UnmatchedVaccineRow;
 import 'epi_date_extraction_repository.dart';
 
 /// Which engine produced an [EpiScanResult] — surfaced to the SK as a small
@@ -23,6 +24,7 @@ class EpiScanResult {
     required this.rawText,
     this.engine = EpiScanEngine.mlKitOffline,
     this.dateByCode = const {},
+    this.unmatchedRows = const [],
     this.flagged = false,
     this.flagReason,
   });
@@ -45,6 +47,11 @@ class EpiScanResult {
   /// Online path only: per-vaccine-code handwritten dates Gemini read.
   /// Empty on the offline path.
   final Map<String, DateTime> dateByCode;
+
+  /// Online path only: vaccines with no legible date, with a row location
+  /// for highlighting which doses are missing. Empty on the offline path
+  /// (no backend box-location call there).
+  final List<UnmatchedVaccineRow> unmatchedRows;
 
   /// Online path only: true when the backend's regularity heuristic flagged
   /// this card's dates as suspiciously schedule-templated — see
@@ -193,6 +200,7 @@ abstract final class EpiCardScanner {
         return EpiScanResult(
           matchedCodes: result.matchedCodes,
           dateByCode: result.dateByCode,
+          unmatchedRows: result.unmatchedRows,
           rawText: '',
           engine: EpiScanEngine.geminiVision,
           flagged: result.flagged,
