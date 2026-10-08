@@ -5742,9 +5742,9 @@ abstract final class EpiStrings {
   static String get scanCardCta =>
       getTranslatedString('Epi.scanCardCta', 'Scan EPI card');
   static String get scanAncCardCta =>
-      getTranslatedString('Epi.scanAncCardCta', 'Scan card');
+      getTranslatedString('Epi.scanAncCardCta', 'Scan ANC card');
   static String get scanNcdCardCta =>
-      getTranslatedString('Epi.scanNcdCardCta', 'Scan card');
+      getTranslatedString('Epi.scanNcdCardCta', 'Scan NCD card');
   static String get scanCardSubtitle => getTranslatedString(
         'Epi.scanCardSubtitle',
         'Photograph the booklet to detect which vaccines were given · enter dates manually',

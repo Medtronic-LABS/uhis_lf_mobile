@@ -14684,8 +14684,8 @@
     "bn": "ইপিআই কার্ড স্ক্যান করুন"
   },
   "Epi.scanAncCardCta": {
-    "en": "Scan card",
-    "bn": "কার্ড স্ক্যান করুন"
+    "en": "Scan ANC card",
+    "bn": "এএনসি কার্ড স্ক্যান করুন"
   },
   "Epi.scanCardSubtitle": {
     "en": "Photograph the booklet to detect which vaccines were given · enter dates manually",
@@ -14844,7 +14844,7 @@
     "bn": "পাওয়া যায়নি"
   },
   "Epi.scanNcdCardCta": {
-    "en": "Scan card",
-    "bn": "কার্ড স্ক্যান করুন"
+    "en": "Scan NCD card",
+    "bn": "এনসিডি কার্ড স্ক্যান করুন"
   }
 }
