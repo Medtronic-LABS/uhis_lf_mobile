@@ -105,8 +105,24 @@ abstract final class PregnancyDetailRebuilder {
           _intObs(firstPncObs, const ['parity']),
       pregnantWomanExistingIllness:
           latestAncObs['pregnantWomanExistingIllness']?.toString(),
+      highRiskPregnantWoman: _riskObs(latestAncObs, 'highRiskPregnantWoman'),
       gapsInAnc: latestAncObs['gapsInAnc']?.toString(),
+      typeOfAbortion: _stringObs(outcomeObs, const ['typeOfAbortion']),
     );
+  }
+
+  /// Spice stores [highRiskPregnantWoman] as JSON map text when present.
+  static String? _riskObs(Map<String, dynamic> obs, String key) {
+    final v = obs[key];
+    if (v == null) return null;
+    if (v is String) {
+      final s = v.trim();
+      return s.isEmpty ? null : s;
+    }
+    if (v is Map && v.isNotEmpty) {
+      return jsonEncode(v);
+    }
+    return null;
   }
 
   static Map<String, dynamic> _obsMap(String? json) {
@@ -158,7 +174,9 @@ class PregnancyDetailRow {
     this.gravida,
     this.parity,
     this.pregnantWomanExistingIllness,
+    this.highRiskPregnantWoman,
     this.gapsInAnc,
+    this.typeOfAbortion,
   });
 
   final int? id;
@@ -174,7 +192,9 @@ class PregnancyDetailRow {
   final int? gravida;
   final int? parity;
   final String? pregnantWomanExistingIllness;
+  final String? highRiskPregnantWoman;
   final String? gapsInAnc;
+  final String? typeOfAbortion;
 
   Map<String, Object?> toDb() => {
         if (id != null) 'id': id,
@@ -190,7 +210,9 @@ class PregnancyDetailRow {
         'gravida': gravida,
         'parity': parity,
         'pregnant_woman_existing_illness': pregnantWomanExistingIllness,
+        'high_risk_pregnant_woman': highRiskPregnantWoman,
         'gaps_in_anc': gapsInAnc,
+        'type_of_abortion': typeOfAbortion,
       };
 
   static PregnancyDetailRow fromDb(Map<String, Object?> row) {
@@ -209,7 +231,9 @@ class PregnancyDetailRow {
       parity: row['parity'] as int?,
       pregnantWomanExistingIllness:
           row['pregnant_woman_existing_illness'] as String?,
+      highRiskPregnantWoman: row['high_risk_pregnant_woman'] as String?,
       gapsInAnc: row['gaps_in_anc'] as String?,
+      typeOfAbortion: row['type_of_abortion'] as String?,
     );
   }
 }

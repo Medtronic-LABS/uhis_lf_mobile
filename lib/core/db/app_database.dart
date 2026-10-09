@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 57;
+  static const int schemaVersion = 58;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -588,7 +588,9 @@ class AppDatabase {
         gravida INTEGER,
         parity INTEGER,
         pregnant_woman_existing_illness TEXT,
-        gaps_in_anc TEXT
+        gaps_in_anc TEXT,
+        high_risk_pregnant_woman TEXT,
+        type_of_abortion TEXT
       )''');
     await db.execute(
       'CREATE INDEX idx_pregnancy_detail_member '
@@ -2496,6 +2498,21 @@ class AppDatabase {
         await db.execute(
             'ALTER TABLE teleconsult_consent_log ADD COLUMN items_checked TEXT');
       } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 58) {
+      // v58 — Spice PregnancyDetail fields used by service-recipient SQL.
+      Future<void> addPdCol(String sql) async {
+        try {
+          await db.execute(sql);
+        } catch (_) {/* already present */}
+      }
+
+      await addPdCol(
+        'ALTER TABLE $tablePregnancyDetail ADD COLUMN high_risk_pregnant_woman TEXT',
+      );
+      await addPdCol(
+        'ALTER TABLE $tablePregnancyDetail ADD COLUMN type_of_abortion TEXT',
+      );
     }
     if (from < 57) {
       // v57 — teleconsult_consent_log retired: an Agreed consent decision is

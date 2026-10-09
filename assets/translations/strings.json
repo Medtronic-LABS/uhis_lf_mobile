@@ -2903,6 +2903,86 @@
     "bn": "সদস্য আইডি পাওয়া যায়নি",
     "en": "Member ID not available"
   },
+  "ServiceFilter.allMembers": {
+    "bn": "সব সদস্য তালিকা",
+    "en": "All member list"
+  },
+  "ServiceFilter.cataract": {
+    "bn": "ক্যাটারাক্ট স্ক্রিনিং",
+    "en": "Cataract Screening"
+  },
+  "ServiceFilter.childrenUnderTwo": {
+    "bn": "শিশু তালিকা (২ বছরের নিচের)",
+    "en": "Child List (under-2)"
+  },
+  "ServiceFilter.dropdownItem": {
+    "bn": "{name} ({count})",
+    "en": "{name} ({count})"
+  },
+  "ServiceFilter.emptyDash": {
+    "bn": "--",
+    "en": "--"
+  },
+  "ServiceFilter.expectedDelivery": {
+    "bn": "সম্ভাব্য ডেলিভারি তালিকা",
+    "en": "Expected delivery list"
+  },
+  "ServiceFilter.externalMembers": {
+    "bn": "বহিরাগত সদস্য তালিকা",
+    "en": "External member list"
+  },
+  "ServiceFilter.externalPw": {
+    "bn": "বহিরাগত গর্ভবতী মায়ের তালিকা",
+    "en": "External PW list"
+  },
+  "ServiceFilter.eye": {
+    "bn": "চক্ষু পরীক্ষা স্ক্রিনিং",
+    "en": "Eye Screening"
+  },
+  "ServiceFilter.familyPlanning": {
+    "bn": "পরিবার পরিকল্পনা কাউন্সেলিং তালিকা",
+    "en": "Family planning counseling list"
+  },
+  "ServiceFilter.highRiskPw": {
+    "bn": "উচ্চ ঝুঁকিপূর্ণ গর্ভবতী মায়ের তালিকা",
+    "en": "High risk PW women list"
+  },
+  "ServiceFilter.memberSearchHint": {
+    "bn": "সদস্যের নাম / জাতীয় পরিচয় পত্র (NID) বা জন্ম নিবন্ধন নম্বর (BRN) / ফোন",
+    "en": "Member Name / National ID or BRN / Phone"
+  },
+  "ServiceFilter.ncd": {
+    "bn": "এনসিডি সেবাসমূহ",
+    "en": "NCD Services"
+  },
+  "ServiceFilter.otherServices": {
+    "bn": "সংক্রামক রোগ",
+    "en": "Communicable Diseases"
+  },
+  "ServiceFilter.pendingDelivery": {
+    "bn": "পেন্ডিং ডেলিভারি লিস্ট",
+    "en": "Pending Delivery List"
+  },
+  "ServiceFilter.pncMothers": {
+    "bn": "প্রসবোত্তর মায়ের তালিকা",
+    "en": "Postnatal Mothers List"
+  },
+  "ServiceFilter.pregnantWomen": {
+    "bn": "গর্ভবতী মায়ের তালিকা",
+    "en": "Pregnant Women List"
+  },
+  "ServiceFilter.recentService": {
+    "bn": "সাম্প্রতিক সেবা",
+    "en": "Recent service"
+  },
+  "ServiceFilter.recentServiceDate": {
+    "bn": "সাম্প্রতিক সেবার তারিখ",
+    "en": "Recent service date"
+  },
+  "ServiceFilter.ssName": {
+    "bn": "SS নাম",
+    "en": "SS Name"
+  },
   "SelectHousehold.emptyState": {
     "bn": "কোনো খানা পাওয়া যায়নি",
     "en": "No households found"
