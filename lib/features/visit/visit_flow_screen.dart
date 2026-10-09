@@ -62,6 +62,7 @@ import '../../core/models/programme.dart';
 import '../../core/risk/ncd_status.dart';
 import '../../core/theme/app_theme.dart';
 import 'naba/naba_models.dart';
+import 'naba/prior_visit_mapper.dart';
 import 'naba/naba_repository.dart';
 import 'pathway/pathway_engine.dart';
 import '../dashboard/mission_dashboard_repository.dart';
@@ -1631,7 +1632,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         context.read<AiFeatureTogglesNotifier>().toggles; // ditto
     final visitUuid =
         context.read<TelemetryService>().ensureVisitUuid(widget.visitId);
+    final assessmentRepo = context.read<AssessmentRepository>(); // ditto
     await _loadVitalsAndLabs();
+    final priorVisits = await _loadPriorVisits(assessmentRepo);
     if (!toggles.step3SummaryEnabled &&
         !toggles.step3ReferralAlertEnabled &&
         !toggles.step3WhatsAppEnabled) {
@@ -1686,6 +1689,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
         currentVitals: _loadedVitals,
         labResults: _loadedLabs,
+        // Oldest-first: the backend slices the TAIL of this list, so a
+        // newest-first list would deliver the three oldest visits instead.
+        priorVisits: priorVisits,
         assessments: assessments,
         // Same clinical copy the Step 3 referral card shows offline / as fallback.
         isReferred: widget.referralRecommended,
@@ -1742,6 +1748,55 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       return _ruleBasedNaba();
     }
   }
+
+  /// The patient's earlier encounters, oldest-first, at most three.
+  ///
+  /// Without these the backend's prompt reads the literal "No prior visit
+  /// history" and the model reasons as though every patient were a first-ever
+  /// contact, which makes any guideline pointer about trends, repeat readings
+  /// or doses already given unsatisfiable.
+  ///
+  /// Three, because the server keeps `visits[-3:]`. Sending more sets
+  /// `contextTruncated` on the response for no benefit, so the trimming
+  /// happens here.
+  ///
+  /// Never throws: a visit must not fail to generate a recommendation because
+  /// its history could not be read.
+  Future<List<NabaPriorVisit>> _loadPriorVisits(
+    AssessmentRepository assessmentRepo,
+  ) async {
+    try {
+      final history = await assessmentRepo.visitHistory(
+        widget.patientId,
+        // Both ids: local rows are filed under the screen's patient id while
+        // synced rows use the member key, so one alone hides half the history.
+        alsoId: widget.memberId,
+        // The visit in progress is already saved by the time Step 3 runs —
+        // without this it arrives as the most recent "prior" visit, repeating
+        // today's readings and flattening the trend.
+        excludeEncounterId: widget.visitId,
+        excludeVisitsOn: DateTime.now(),
+      );
+      final selected = history.length <= _kMaxPriorVisits
+          ? history
+          : history.sublist(history.length - _kMaxPriorVisits);
+      // A lookup miss and a genuinely new patient both produce an empty list,
+      // and both make the prompt assert the patient has no history — so say
+      // which ids were tried.
+      debugPrint(
+        '[NABA] priorVisits: patientId ${widget.patientId}'
+        '${widget.memberId != null ? ' (+member ${widget.memberId})' : ''}'
+        ' → ${history.length} encounter(s), sending ${selected.length}',
+      );
+      return selected.map(PriorVisitMapper.from).toList(growable: false);
+    } on Object catch (e) {
+      debugPrint('[NABA] prior visit history unavailable: $e');
+      return const [];
+    }
+  }
+
+  /// Matches `_MAX_PRIOR_VISITS` in the NABA service.
+  static const int _kMaxPriorVisits = 3;
 
   Future<void> _loadVitalsAndLabs() async {
     debugPrint('[_Step3AiRecoState] _loadVitalsAndLabs');

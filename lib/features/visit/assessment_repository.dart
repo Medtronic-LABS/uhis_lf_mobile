@@ -15,6 +15,8 @@ import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_assessment_history_writer.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/pregnancy_episode_dao.dart';
+import '../../core/models/assessment_history_item.dart';
+import '../../core/models/custom_status_parse.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
 import '../../core/risk/anc_status.dart';
@@ -1168,6 +1170,147 @@ class AssessmentRepository extends ChangeNotifier {
       fromAssessments: fromAssessments,
       fromLocal: fromLocal,
     );
+  }
+
+  /// Every prior encounter for one patient, across all programmes.
+  ///
+  /// The programme-agnostic sibling of [ancVitalsHistory], which cannot be
+  /// reused here: it filters to ANC and returns [VisitVitals], which carries
+  /// no referral status or follow-up — the actions a prior visit is mostly
+  /// useful for. Same plumbing underneath ([_idsFor], [_historyRows],
+  /// [_localRows]) and the same contract: synced `assessments` are the source
+  /// of truth, local rows merge in by calendar day, result is **oldest-first**.
+  ///
+  /// Oldest-first is not cosmetic. The NABA backend slices the TAIL of this
+  /// list (`visits[-3:]`), so a newest-first list silently delivers the three
+  /// *oldest* visits — which reads as a worsening trend when it may be
+  /// improving.
+  ///
+  /// [excludeEncounterId] and [excludeVisitsOn] drop the visit in progress.
+  /// Both are needed: the caller's encounter id matches synced rows, while a
+  /// just-submitted local row is filed under its own local uuid and can only
+  /// be recognised by its date.
+  Future<List<AssessmentHistoryItem>> visitHistory(
+    String patientId, {
+    String? alsoId,
+    Iterable<String>? extraIds,
+    String? excludeEncounterId,
+    DateTime? excludeVisitsOn,
+  }) async {
+    final ids = _idsFor(patientId, alsoId, extraIds: extraIds);
+    if (ids.isEmpty) return const [];
+
+    // 1. Synced history — carries the flat `observations` map, so this is
+    //    where vitals come from.
+    final fromAssessments = <AssessmentHistoryItem>[];
+    for (final row in await _historyRows(ids)) {
+      final item = AssessmentHistoryItem.fromAssessmentRow(row.toDb());
+      if (item != null) fromAssessments.add(item);
+    }
+
+    // 2. Local submissions — a visit that happened but has not synced yet.
+    final fromLocal = <AssessmentHistoryItem>[];
+    for (final row in await _localRows(ids)) {
+      final item = _historyItemFromLocal(row);
+      if (item != null) fromLocal.add(item);
+    }
+
+    return _mergeHistoryByVisitDay(
+      fromAssessments: fromAssessments,
+      fromLocal: fromLocal,
+      excludeEncounterId: excludeEncounterId,
+      excludeVisitsOn: excludeVisitsOn,
+    );
+  }
+
+  /// One un-synced local row as a history item.
+  ///
+  /// `observations` stays null: that key is the flat server shape
+  /// (`bp: "144/91"`), whereas a local row holds the nested form JSON
+  /// (`bpLog.avgSystolic`). Rather than invent a second parse path, a
+  /// local-only visit reports that it happened without vitals — and
+  /// [_mergeHistoryByVisitDay] carries a synced row's observations across
+  /// when both exist for the same day.
+  static AssessmentHistoryItem? _historyItemFromLocal(
+    LocalAssessmentEntity row,
+  ) {
+    final memberId = row.memberId ?? row.patientId;
+    final visitAt = row.createdAt;
+    if (memberId == null || memberId.isEmpty || visitAt == null) return null;
+    return AssessmentHistoryItem(
+      householdMemberId: memberId,
+      encounterId: row.id,
+      visitDate: visitAt,
+      serviceProvided: row.assessmentType,
+      referralStatus: row.referralStatus,
+      referralReason: row.referredReasons,
+      customStatus: CustomStatusParse.decodeTokens(row.customStatus),
+    );
+  }
+
+  /// Test seam for the merge: the real [visitHistory] needs DAOs, but the
+  /// ordering and exclusion rules are pure and are the part that matters —
+  /// the NABA backend slices the tail of this list.
+  @visibleForTesting
+  static List<AssessmentHistoryItem> mergeHistoryForTesting({
+    required List<AssessmentHistoryItem> fromAssessments,
+    required List<AssessmentHistoryItem> fromLocal,
+    String? excludeEncounterId,
+    DateTime? excludeVisitsOn,
+  }) =>
+      _mergeHistoryByVisitDay(
+        fromAssessments: fromAssessments,
+        fromLocal: fromLocal,
+        excludeEncounterId: excludeEncounterId,
+        excludeVisitsOn: excludeVisitsOn,
+      );
+
+  /// Merges synced and local history by calendar day, oldest-first.
+  ///
+  /// Mirrors [_mergeAncVitalsByVisitDay] — that one is typed to [VisitVitals]
+  /// and cannot be shared — including local-wins-on-the-same-day and unique
+  /// synthetic keys so undated rows are never collapsed together.
+  ///
+  /// One deliberate difference: when a local row displaces a synced row for
+  /// the same day, the synced row's `observations` are carried over. A local
+  /// row never has them, so letting it win outright would discard that day's
+  /// vitals — losing the readings this whole change exists to supply.
+  static List<AssessmentHistoryItem> _mergeHistoryByVisitDay({
+    required List<AssessmentHistoryItem> fromAssessments,
+    required List<AssessmentHistoryItem> fromLocal,
+    String? excludeEncounterId,
+    DateTime? excludeVisitsOn,
+  }) {
+    String dayKey(DateTime d) {
+      final local = d.toLocal();
+      return '${local.year.toString().padLeft(4, '0')}-'
+          '${local.month.toString().padLeft(2, '0')}-'
+          '${local.day.toString().padLeft(2, '0')}';
+    }
+
+    final skipDay =
+        excludeVisitsOn == null ? null : dayKey(excludeVisitsOn);
+    bool excluded(AssessmentHistoryItem i) =>
+        (excludeEncounterId != null && i.encounterId == excludeEncounterId) ||
+        (skipDay != null && dayKey(i.visitDate) == skipDay);
+
+    final byDay = <String, AssessmentHistoryItem>{};
+    for (final item in fromAssessments) {
+      if (excluded(item)) continue;
+      byDay[dayKey(item.visitDate)] = item;
+    }
+    for (final item in fromLocal) {
+      if (excluded(item)) continue;
+      final key = dayKey(item.visitDate);
+      final displaced = byDay[key];
+      byDay[key] = (item.observations == null && displaced?.observations != null)
+          ? item.copyWithObservations(displaced!.observations)
+          : item;
+    }
+
+    final merged = byDay.values.toList()
+      ..sort((a, b) => a.visitDate.compareTo(b.visitDate));
+    return merged;
   }
 
   /// Builds a [VisitVitals] snapshot from one ANC assessment's raw

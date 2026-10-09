@@ -77,12 +77,18 @@ class NabaVitalSnapshot {
       };
 }
 
+/// One earlier encounter, as the backend's `PriorVisitSummary`.
+///
+/// [date] is an ISO-8601 string, never an epoch int: the server declares it
+/// `date: str` and Pydantic does not coerce int to str, so a number 422s the
+/// whole request.
 class NabaPriorVisit {
   const NabaPriorVisit({
     required this.date,
     this.programme,
     this.keyFindings = const [],
     this.actionsTaken = const [],
+    this.vitals,
   });
 
   final String date;
@@ -90,11 +96,20 @@ class NabaPriorVisit {
   final List<String> keyFindings;
   final List<String> actionsTaken;
 
+  /// What was measured at that visit, for trend and repeat-reading reasoning.
+  ///
+  /// Reuses [NabaVitalSnapshot] rather than declaring its own shape: its field
+  /// names and types already match the server's `VitalSnapshot`, and every one
+  /// is null-guarded in `toJson`, so a value that could not be parsed is
+  /// omitted rather than sent as an empty string — which would 422.
+  final NabaVitalSnapshot? vitals;
+
   Map<String, dynamic> toJson() => {
         'date': date,
         if (programme != null) 'programme': programme,
         'keyFindings': keyFindings,
         'actionsTaken': actionsTaken,
+        if (vitals != null) 'vitals': vitals!.toJson(),
       };
 }
 
