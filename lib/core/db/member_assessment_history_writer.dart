@@ -21,6 +21,9 @@ class MemberAssessmentHistoryWriter {
   final MemberDao _members;
   final AppDatabase _appDb;
 
+  /// Clears MAH before a full assessment-history pull (Spice initial sync parity).
+  Future<void> clearAllForFullSync() => _mah.deleteAll();
+
   /// Rebuild MAH from the synced [assessments] cache (same source Spice persists after sync).
   Future<int> rebuildFromAssessmentsTable() async {
     const table = AppDatabase.tableAssessments;
@@ -143,7 +146,7 @@ class MemberAssessmentHistoryWriter {
       memberId: memberId,
       memberFhirId: item.householdMemberId,
       visitDate: item.visitDate.toUtc().toIso8601String(),
-      serviceProvided: item.serviceProvided?.toLowerCase(),
+      serviceProvided: _normalizeServiceProvided(item.serviceProvided),
       encounterId: item.encounterId,
       customStatus: item.customStatus.isEmpty
           ? null
@@ -205,8 +208,17 @@ class MemberAssessmentHistoryWriter {
   }
 
   /// Maps Flutter assessment types to Spice `serviceProvided` wire tags.
+  static String? _normalizeServiceProvided(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final normalized = raw.trim().replaceAll('-', '_');
+    return wireServiceProvided(normalized);
+  }
+
   static String wireServiceProvided(String assessmentType) {
-    switch (assessmentType.toUpperCase()) {
+    final key = assessmentType.trim().replaceAll('-', '_');
+    switch (key.toUpperCase()) {
+      case 'EYECARE':
+        return 'eye_care';
       case 'PNC_MOTHER':
       case 'PNC':
         return 'pnc_mother';

@@ -83,6 +83,11 @@ class MemberAssessmentHistoryDao {
 
   static const String tableName = 'member_assessment_history';
 
+  /// UHIS `deleteAllMemberAssessmentHistory()` on first full download.
+  Future<void> deleteAll() async {
+    await _db.db.delete(tableName);
+  }
+
   Future<void> upsertMany(List<MemberAssessmentHistoryRow> rows) async {
     if (rows.isEmpty) return;
     await _db.db.transaction((tx) async {
@@ -99,31 +104,6 @@ class MemberAssessmentHistoryDao {
             where: 'encounter_id = ? AND LOWER(service_provided) = ?',
             whereArgs: [encounterId, service],
           );
-          final memberId = row.memberId;
-          final memberFhir = row.memberFhirId?.trim();
-          if (memberId != null || (memberFhir != null && memberFhir.isNotEmpty)) {
-            await tx.rawDelete(
-              '''
-DELETE FROM $tableName
-WHERE LOWER(service_provided) = ?
-  AND date(datetime(visit_date, 'localtime')) = date(datetime(?, 'localtime'))
-  AND encounter_id != ?
-  AND (
-    (? IS NOT NULL AND member_id = ?)
-    OR (? IS NOT NULL AND member_fhir_id = ?)
-  )
-''',
-              [
-                service,
-                row.visitDate,
-                encounterId,
-                memberId,
-                memberId,
-                memberFhir,
-                memberFhir,
-              ],
-            );
-          }
         }
         await tx.insert(tableName, dbRow);
       }
@@ -298,6 +278,45 @@ AND EXISTS (
       await _db.db.rawQuery('SELECT COUNT(*) FROM $tableName'),
     );
     return v ?? 0;
+  }
+
+  static const _motherServiceTypes = [
+    'pwprofile',
+    'anc',
+    'pnc_mother',
+    'pregnancyoutcome',
+  ];
+
+  /// Distinct local member ids with mother-side MAH (Spice dashboard rebuild input).
+  Future<List<int>> distinctMemberLocalIdsWithMotherHistory() async {
+    const types = _motherServiceTypes;
+    final ph = List.filled(types.length, '?').join(',');
+    final rows = await _db.db.rawQuery('''
+SELECT DISTINCT member_id FROM $tableName
+WHERE member_id IS NOT NULL
+  AND LOWER(service_provided) IN ($ph)
+''', types);
+    return rows
+        .map((r) => r['member_id'] as int?)
+        .whereType<int>()
+        .toList();
+  }
+
+  /// Spice [getMemberAssessmentHistoryByMemberLocalIdsAndTypes].
+  Future<List<MemberAssessmentHistoryRow>> getByMemberLocalIdsAndServiceTypes(
+    List<int> memberLocalIds,
+    List<String> serviceTypesLower,
+  ) async {
+    if (memberLocalIds.isEmpty || serviceTypesLower.isEmpty) return [];
+    final idPh = List.filled(memberLocalIds.length, '?').join(',');
+    final svcPh = List.filled(serviceTypesLower.length, '?').join(',');
+    final rows = await _db.db.rawQuery('''
+SELECT * FROM $tableName
+WHERE member_id IN ($idPh)
+  AND LOWER(service_provided) IN ($svcPh)
+ORDER BY member_id ASC, visit_date ASC, id ASC
+''', [...memberLocalIds, ...serviceTypesLower]);
+    return rows.map(MemberAssessmentHistoryRow.fromDb).toList();
   }
 
   /// One-time bootstrap from legacy [assessments] rows after MAH ships.

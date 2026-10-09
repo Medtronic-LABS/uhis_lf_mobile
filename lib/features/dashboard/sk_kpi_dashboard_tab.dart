@@ -563,7 +563,7 @@ class _SpiceKpiCard extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    title.toUpperCase(),
+                    title,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,

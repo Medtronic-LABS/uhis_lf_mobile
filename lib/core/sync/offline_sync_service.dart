@@ -401,6 +401,7 @@ class OfflineSyncService extends ChangeNotifier {
       final historyReferrals = await _syncAssessmentHistoryProgrammes(
         villageIds,
         since: historySince,
+        replaceMahOnFullSync: fullSync,
       );
 
       // UHIS parity: persist the server's response `lastSyncTime` (echo of
@@ -1654,6 +1655,7 @@ class OfflineSyncService extends ChangeNotifier {
   Future<int?> _syncAssessmentHistoryProgrammes(
     List<int> villageIds, {
     DateTime? since,
+    bool replaceMahOnFullSync = false,
   }) async {
     if (_members == null) return 0;
     try {
@@ -1662,6 +1664,14 @@ class OfflineSyncService extends ChangeNotifier {
         since: since,
       );
       if (items.isEmpty) return 0;
+
+      if (replaceMahOnFullSync) {
+        await _assessmentHistoryWriter?.clearAllForFullSync();
+        debugPrint(
+          '[OfflineSyncService] full sync — replaced MAH with '
+          '${items.length} assessment-history row(s)',
+        );
+      }
 
       // Collect unique member IDs and bulk-resolve to patient IDs.
       final memberIds = items
@@ -1936,6 +1946,11 @@ class OfflineSyncService extends ChangeNotifier {
       }
 
       await _assessmentHistoryWriter?.upsertFromHistoryItems(items);
+      if (replaceMahOnFullSync) {
+        // Pending visits live in local_assessments, not server history — restore
+        // them into MAH before post-sync/dashboard so KPIs are not briefly empty.
+        await _assessmentHistoryWriter?.rebuildFromLocalAssessments();
+      }
 
       // CCE: open referred visits → local referrals table (dedupe by encounter).
       var referralCount = 0;

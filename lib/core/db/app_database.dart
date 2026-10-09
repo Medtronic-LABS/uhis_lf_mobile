@@ -42,6 +42,7 @@ class AppDatabase {
   static const String tableLocalAssessments = 'local_assessments';
   static const String tablePregnancySnapshot = 'patient_pregnancy_snapshot';
   static const String tablePregnancyEpisodes = 'pregnancy_episodes';
+  static const String tablePregnancyDetail = 'pregnancy_detail';
   static const String tableMemberAssessmentHistory = 'member_assessment_history';
   static const String tableSsLinkedVillages = 'shasthya_shebika_linked_villages';
   static const String tableTreatmentPresence = 'patient_treatment_presence';
@@ -571,6 +572,28 @@ class AppDatabase {
         sub_village_id TEXT NOT NULL,
         PRIMARY KEY (shasthya_shebika_id, sub_village_id)
       )''');
+    // v56 — materialized Spice PregnancyDetail for UHIS dashboard SQL parity.
+    await db.execute('''
+      CREATE TABLE $tablePregnancyDetail (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        household_member_local_id INTEGER NOT NULL,
+        household_member_fhir_id TEXT,
+        pregnancy_episode_id TEXT NOT NULL UNIQUE,
+        last_menstrual_period TEXT,
+        estimated_delivery_date TEXT,
+        date_of_delivery TEXT,
+        start_at TEXT,
+        end_at TEXT,
+        anc_visit_no INTEGER,
+        gravida INTEGER,
+        parity INTEGER,
+        pregnant_woman_existing_illness TEXT,
+        gaps_in_anc TEXT
+      )''');
+    await db.execute(
+      'CREATE INDEX idx_pregnancy_detail_member '
+      'ON $tablePregnancyDetail(household_member_local_id)',
+    );
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
         patient_id TEXT PRIMARY KEY,
@@ -2286,6 +2309,29 @@ class AppDatabase {
         /* column already present */
       }
     }
+    if (from < 56) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tablePregnancyDetail (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          household_member_local_id INTEGER NOT NULL,
+          household_member_fhir_id TEXT,
+          pregnancy_episode_id TEXT NOT NULL UNIQUE,
+          last_menstrual_period TEXT,
+          estimated_delivery_date TEXT,
+          date_of_delivery TEXT,
+          start_at TEXT,
+          end_at TEXT,
+          anc_visit_no INTEGER,
+          gravida INTEGER,
+          parity INTEGER,
+          pregnant_woman_existing_illness TEXT,
+          gaps_in_anc TEXT
+        )''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_pregnancy_detail_member '
+        'ON $tablePregnancyDetail(household_member_local_id)',
+      );
+    }
     if (from < 55) {
       // v55 — see createSchema's identical block for why this table exists
       // (renumbered from develop's own v50 — v50-54 already claimed above).
@@ -2483,6 +2529,7 @@ class AppDatabase {
     tableReferrals, tableReferralStatusEvents, tableNotificationLog,
     tableEncounters, tableLocalAssessments, tablePregnancySnapshot,
     tablePregnancyEpisodes,
+    tablePregnancyDetail,
     tableMemberAssessmentHistory,
     tableSsLinkedVillages,
     tableTreatmentPresence, tableAssessmentDraft, tableAiSuggestions,

@@ -1,3 +1,4 @@
+import 'custom_status_parse.dart';
 import 'json_read.dart';
 
 /// One row of the offline-sync member-assessment-history endpoint
@@ -63,15 +64,8 @@ class AssessmentHistoryItem {
       followUp = DateTime.fromMillisecondsSinceEpoch(followUpMillis);
     }
 
-    final statusRaw = json['customStatus'];
-    final customStatus = <String>[];
-    if (statusRaw is List) {
-      for (final s in statusRaw) {
-        if (s == null) continue;
-        final str = s.toString().trim();
-        if (str.isNotEmpty) customStatus.add(str);
-      }
-    }
+    final customStatus =
+        CustomStatusParse.fromAssessmentHistoryJson(json);
 
     Map<String, dynamic>? observations;
     final obsRaw = json['observations'];

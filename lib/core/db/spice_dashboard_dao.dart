@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'app_database.dart';
 import 'member_assessment_history_dao.dart';
+import 'pregnancy_detail_dao.dart';
 
 /// KPI counts aligned with Spice [DashboardCountsRow] / [DashboardLocalRepository].
 class SpiceDashboardCounts {
@@ -97,8 +98,7 @@ class SpiceDashboardDao {
   static const _members = AppDatabase.tableMembers;
   static const _households = AppDatabase.tableHouseholds;
   static const _sslv = 'shasthya_shebika_linked_villages';
-  static const _episodes = AppDatabase.tablePregnancyEpisodes;
-  static const _snapshot = AppDatabase.tablePregnancySnapshot;
+  static const _pregnancyDetail = PregnancyDetailDao.tableName;
 
   Future<SpiceDashboardCounts> loadCounts({
     String? startDate,
@@ -342,11 +342,11 @@ WHERE (? IS NULL OR date(datetime(hm.created_at / 1000, 'unixepoch', 'localtime'
     required List<String> subVillageIds,
     required String? userFhirId,
   }) async {
-    // `fm` subquery only — no outer `hh` join; geography uses member/household
-    // sub_village only (`households` has no shasthya_shebika_id in Flutter).
-    final geo = _geoSql('fm', ssIds, subVillageIds, householdAlias: null);
+    final geoFm =
+        _geoSql('fm', ssIds, subVillageIds, householdAlias: null);
     final geoArgs = _geoArgs(ssIds, subVillageIds);
 
+    // Spice getMaternalDashboardCounts — anc3PlusCount (FHIR join only).
     final anc3Sql = '''
 SELECT COUNT(DISTINCT h.member_fhir_id) AS c FROM $_mah AS h
 INNER JOIN (
@@ -354,14 +354,14 @@ INNER JOIN (
     COALESCE(m.sub_village_id, hh.sub_village_id) AS sub_village_id
   FROM $_members AS m
   LEFT JOIN $_households AS hh ON hh.id = m.household_id
-) AS fm ON fm.memberFhirId = h.member_fhir_id OR CAST(fm.memberId AS TEXT) = h.member_fhir_id
+) AS fm ON fm.memberFhirId = h.member_fhir_id
 WHERE LOWER(h.service_provided) = 'anc'
   AND h.member_fhir_id IS NOT NULL AND h.member_fhir_id != ''
   AND (h.practitioner_id IS NULL OR h.practitioner_id IS ?)
   AND CAST(json_extract(h.observations_json, '\$.ancVisitNumber') AS INTEGER) = 3
   AND (? IS NULL OR date(datetime(h.visit_date, 'localtime')) >= ?)
   AND (? IS NULL OR date(datetime(h.visit_date, 'localtime')) <= ?)
-  AND ($geo)
+  AND ($geoFm)
 ''';
     final anc3Args = <Object?>[
       userFhirId,
@@ -376,56 +376,47 @@ WHERE LOWER(h.service_provided) = 'anc'
         ) ??
         0;
 
-    final pwGeo = _geoSqlPw(ssIds, subVillageIds);
-    // Spice `getMaternalDashboardCounts`: latest pregnancy per member + MAH ANC in LMP window.
+    // Spice getMaternalDashboardCounts — PregnancyDetail MAX(id) + memberId ANC link.
     final pwSql = '''
-SELECT COALESCE(SUM(CASE WHEN EXISTS (
-  SELECT 1 FROM $_mah AS hist
-  WHERE ${_sameMemberLp('lp', 'hist')}
-    AND LOWER(hist.service_provided) = 'anc'
-    AND (? IS NULL OR date(datetime(hist.visit_date, 'localtime')) >= ?)
-    AND (? IS NULL OR date(datetime(hist.visit_date, 'localtime')) <= ?)
-    AND (hist.practitioner_id IS NULL OR hist.practitioner_id IS ?)
-    AND lp.lmp_date IS NOT NULL
-    AND date(datetime(hist.visit_date, 'localtime')) >= date(lp.lmp_date / 1000, 'unixepoch', 'localtime')
-    AND date(datetime(hist.visit_date, 'localtime')) <= date(lp.lmp_date / 1000, 'unixepoch', 'localtime', '+4 months')
-) THEN 1 ELSE 0 END), 0) AS c
-FROM (
-  SELECT le.lmp_date, le.member_local_id, le.member_fhir_id, le.sub_village_id
+SELECT COALESCE((
+  SELECT SUM(
+    CASE WHEN EXISTS (
+      SELECT 1 FROM $_mah AS h
+      WHERE h.member_id = lp.household_member_local_id
+        AND LOWER(h.service_provided) = 'anc'
+        AND (? IS NULL OR date(datetime(h.visit_date, 'localtime')) >= ?)
+        AND (? IS NULL OR date(datetime(h.visit_date, 'localtime')) <= ?)
+        AND date(datetime(h.visit_date, 'localtime')) >= substr(lp.last_menstrual_period, 1, 10)
+        AND date(datetime(h.visit_date, 'localtime')) <= date(substr(lp.last_menstrual_period, 1, 10), '+4 months')
+        AND (h.practitioner_id IS NULL OR h.practitioner_id IS ?)
+    ) THEN 1 ELSE 0 END
+  )
   FROM (
-    SELECT pe.lmp_date, m.id AS member_local_id, m.fhir_id AS member_fhir_id,
-      COALESCE(m.sub_village_id, hh.sub_village_id) AS sub_village_id,
-      pe.patient_id, pe.started_at
-    FROM $_episodes pe
-    INNER JOIN $_members m ON m.patient_id = pe.patient_id
-    LEFT JOIN $_households hh ON hh.id = m.household_id
-    WHERE pe.lmp_date IS NOT NULL
-      AND (pe.delivery_date_millis IS NULL OR pe.delivery_date_millis = 0)
-      AND (pe.edd_date IS NULL OR date(pe.edd_date / 1000, 'unixepoch', 'localtime') > date('now', '-45 days'))
-  ) AS le
+    SELECT pd.*
+    FROM $_pregnancyDetail AS pd
+    INNER JOIN (
+      SELECT household_member_local_id, MAX(id) AS max_id
+      FROM $_pregnancyDetail
+      GROUP BY household_member_local_id
+    ) AS latest
+      ON latest.household_member_local_id = pd.household_member_local_id
+     AND latest.max_id = pd.id
+  ) AS lp
   INNER JOIN (
-    SELECT patient_id, MAX(started_at) AS max_started
-    FROM $_episodes
-    WHERE lmp_date IS NOT NULL
-      AND (delivery_date_millis IS NULL OR delivery_date_millis = 0)
-    GROUP BY patient_id
-  ) AS latest ON latest.patient_id = le.patient_id AND latest.max_started = le.started_at
-  UNION ALL
-  SELECT ps.lmp_date, m.id AS member_local_id, m.fhir_id AS member_fhir_id,
-    COALESCE(m.sub_village_id, hh.sub_village_id) AS sub_village_id
-  FROM $_snapshot ps
-  INNER JOIN $_members m ON m.patient_id = ps.patient_id
-  LEFT JOIN $_households hh ON hh.id = m.household_id
-  WHERE ps.lmp_date IS NOT NULL
-    AND (ps.delivery_date_millis IS NULL OR ps.delivery_date_millis = 0)
-    AND (ps.edd_date IS NULL OR date(ps.edd_date / 1000, 'unixepoch', 'localtime') > date('now', '-45 days'))
-    AND NOT EXISTS (
-      SELECT 1 FROM $_episodes pe
-      WHERE pe.patient_id = ps.patient_id AND pe.lmp_date IS NOT NULL
-        AND (pe.delivery_date_millis IS NULL OR pe.delivery_date_millis = 0)
+    SELECT m.id AS member_id,
+      COALESCE(m.sub_village_id, hh.sub_village_id) AS sub_village_id
+    FROM $_members AS m
+    LEFT JOIN $_households AS hh ON hh.id = m.household_id
+  ) AS fm ON fm.member_id = lp.household_member_local_id
+  WHERE (lp.date_of_delivery IS NULL OR lp.date_of_delivery = '')
+    AND lp.last_menstrual_period IS NOT NULL
+    AND lp.last_menstrual_period != ''
+    AND (
+      lp.estimated_delivery_date IS NULL
+      OR substr(lp.estimated_delivery_date, 1, 10) > date('now', '-45 days')
     )
-) AS lp
-WHERE ($pwGeo)
+    AND ($geoFm)
+), 0) AS c
 ''';
     final pwArgs = <Object?>[
       startDate,
@@ -474,20 +465,6 @@ WHERE ($pwGeo)
     return '1';
   }
 
-  String _geoSqlPw(List<String> ssIds, List<String> subVillageIds) {
-    if (subVillageIds.isNotEmpty) {
-      final ph = List.filled(subVillageIds.length, '?').join(',');
-      return 'lp.sub_village_id IN ($ph)';
-    }
-    if (ssIds.isNotEmpty) {
-      final ph = List.filled(ssIds.length, '?').join(',');
-      return '''lp.sub_village_id IN (
-        SELECT DISTINCT sslv.sub_village_id FROM $_sslv AS sslv
-        WHERE sslv.shasthya_shebika_id IN ($ph))''';
-    }
-    return '1';
-  }
-
   /// Spice dashboard referral de-dupe (`memberId` OR `memberFhirId` only).
   static String _sameMemberSpiceSql(String hAlias, String pAlias) => '''
 (
@@ -501,25 +478,6 @@ WHERE ($pwGeo)
   /// Exact Spice `ncdFollowUpReferralCount` referral-status match.
   static String _spiceReferralStatus(String col) =>
       "($col IS NOT NULL AND ($col = 'Referred' OR $col LIKE 'Referred To%'))";
-
-  static String _sameMemberLp(String lpAlias, String histAlias) => '''
-(
-  ($lpAlias.member_local_id IS NOT NULL AND $histAlias.member_id = $lpAlias.member_local_id)
-  OR (
-    NULLIF($lpAlias.member_fhir_id, '') IS NOT NULL
-    AND $histAlias.member_fhir_id = $lpAlias.member_fhir_id
-  )
-  OR (
-    $lpAlias.member_local_id IS NOT NULL
-    AND NULLIF($histAlias.member_fhir_id, '') IS NOT NULL
-    AND CAST($lpAlias.member_local_id AS TEXT) = $histAlias.member_fhir_id
-  )
-  OR (
-    $histAlias.member_id IS NOT NULL
-    AND NULLIF($lpAlias.member_fhir_id, '') IS NOT NULL
-    AND CAST($histAlias.member_id AS TEXT) = $lpAlias.member_fhir_id
-  )
-)''';
 
   /// Same member as Spice linked-to-care (local id and/or FHIR id).
   static String _sameMemberSql(String hAlias, String pAlias) => '''

@@ -47,6 +47,7 @@ import 'core/db/ss_linked_village_dao.dart';
 import 'core/db/member_dao.dart';
 import 'core/db/patient_dao.dart';
 import 'core/db/patient_programmes_dao.dart';
+import 'core/db/pregnancy_detail_dao.dart';
 import 'core/db/pregnancy_episode_dao.dart';
 import 'core/db/pregnancy_snapshot_dao.dart';
 import 'core/db/treatment_presence_dao.dart';
@@ -261,11 +262,17 @@ class _UhisNextAppState extends State<UhisNextApp>
   );
   late final SpiceDashboardDao _spiceDashboardDao =
       SpiceDashboardDao(widget.appDb);
+  late final PregnancyDetailDao _pregnancyDetailDao = PregnancyDetailDao(
+    widget.appDb,
+    _mahDao,
+    _memberDao,
+  );
   late final SkSpiceDashboardRepository _skSpiceDashboardRepo =
       SkSpiceDashboardRepository(
     dashboard: _spiceDashboardDao,
     mah: _mahDao,
     mahWriter: _mahWriter,
+    pregnancyDetail: _pregnancyDetailDao,
     auth: widget.authRepo,
   );
   late final TelemetryDao _telemetryDao = TelemetryDao(widget.appDb);
@@ -434,6 +441,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     valueAudit: _valueAuditUploader,
     visitContent: _visitContentUploader,
     assistantContent: _assistantContentUploader,
+    skDashboardMah: _skSpiceDashboardRepo,
   );
   late final SyncForegroundController _syncForeground = SyncForegroundController(
     progress: _sync.progressStream,

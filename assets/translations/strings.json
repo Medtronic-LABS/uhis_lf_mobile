@@ -14129,7 +14129,7 @@
   },
   "Performance.kpiPw4MonthAnc": {
     "bn": "প্রথম চার মাসে চিহ্নিত এবং প্রথম এএনসি সেবা",
-    "en": "PW identified < 4 months & got ANC"
+    "en": "PW Registered within 3 Months and Received ANC"
   },
   "Performance.kpiAnc3Plus": {
     "bn": "গর্ভকালীন সময়ে একই মাকে ৩ অথবা ৩+ ANC সেবা",
