@@ -698,6 +698,7 @@ abstract final class Step2AsrStrings {
   static String get tapToEdit => getTranslatedString('tapToEdit', 'Review highlighted fields in the form below.');
   static String get unmappedLabel => getTranslatedString('unmappedLabel', 'Not matched:');
   static String get aiFilledBadge => getTranslatedString('aiFilledBadge', 'AI · verify');
+  static String get scanFilledBadge => getTranslatedString('scanFilledBadge', '📷 Scanned');
 
   static String filledCount(int n) => '$n $fieldsFilled';
 }
@@ -5741,6 +5742,10 @@ abstract final class EpiStrings {
 
   static String get scanCardCta =>
       getTranslatedString('Epi.scanCardCta', 'Scan EPI card');
+  static String get scanAncCardCta =>
+      getTranslatedString('Epi.scanAncCardCta', 'Scan ANC card');
+  static String get scanNcdCardCta =>
+      getTranslatedString('Epi.scanNcdCardCta', 'Scan NCD card');
   static String get scanCardSubtitle => getTranslatedString(
         'Epi.scanCardSubtitle',
         'Photograph the booklet to detect which vaccines were given · enter dates manually',
@@ -5763,20 +5768,26 @@ abstract final class EpiStrings {
   static String get scanReviewCta =>
       getTranslatedString('Epi.scanReviewCta', 'Review & update →');
   static String get scanFrameHint => getTranslatedString(
-        'Epi.scanFrameHint', 'Align the vaccination card in the frame');
+        'Epi.scanFrameHint',
+        'Fill the frame · hold flat · avoid glare');
+  static String get scanDatesFlagged => getTranslatedString(
+        'Epi.scanDatesFlagged',
+        'Dates look textbook-perfect — double-check against the card',
+      );
   static String get scanUploadLabel =>
       getTranslatedString('Epi.scanUploadLabel', 'Upload');
   static String get scanReadingCard =>
       getTranslatedString('Epi.scanReadingCard', 'Reading card…');
-  static String scanVaccineFound(String name) => getTranslatedString(
-        'Epi.scanVaccineFound',
-        '$name found',
-        params: {'name': name},
-      );
+  static String get scanNoDateFound =>
+      getTranslatedString('Epi.scanNoDateFound', 'No date found');
   static String get scanCameraUnavailable => getTranslatedString(
         'Epi.scanCameraUnavailable',
         'Camera unavailable — grant permission or upload an image',
       );
+  static String get scanEngineGemini =>
+      getTranslatedString('Epi.scanEngineGemini', 'Gemini Vision');
+  static String get scanEngineOffline =>
+      getTranslatedString('Epi.scanEngineOffline', 'ML Kit (offline)');
 }
 
 /// EPI-specific Step 3 (AI recommendation) copy — visit summary, referral
@@ -6653,7 +6664,6 @@ abstract final class TeleconsultConsentStrings {
   static String get loadingMessage => getTranslatedString('TeleconsultConsent.loadingMessage', 'Loading consent form…');
   static String get errorMessage => getTranslatedString('TeleconsultConsent.errorMessage', 'Could not load the consent form. Please check your connection and try again.');
   static String get retryButton => getTranslatedString('TeleconsultConsent.retryButton', 'Retry');
-  static String get checkboxLabel => getTranslatedString('TeleconsultConsent.checkboxLabel', 'I have explained this to the patient and they consent to this teleconsult call.');
   static String get agreeButton => getTranslatedString('TeleconsultConsent.agreeButton', 'I Agree');
   static String get declineButton => getTranslatedString('TeleconsultConsent.declineButton', 'Decline');
 }
@@ -7248,4 +7258,87 @@ abstract final class TelemetryStrings {
       params: {'path': path}, localizeDigits: false);
   static String visitsInRange(int count) => getTranslatedString(
       'Telemetry.visitsInRange', '{count} visits', params: {'count': '$count'});
+}
+
+/// Copy for the ANC card-scan sweep/reveal screen (mirrors
+/// `EpiStrings`'s scan-reveal strings, but visit-targeted rather than
+/// dose-targeted — see `AncCardScanScreen`).
+abstract final class AncScanStrings {
+  AncScanStrings._();
+
+  static String scanningVisit(int visitNumber) => getTranslatedString(
+        'Anc.scanningVisit',
+        'Scanning ANC Visit {n}',
+        params: {'n': '$visitNumber'},
+      );
+  static String visitColumnFound(int visitNumber) => getTranslatedString(
+        'Anc.visitColumnFound',
+        'Visit {n} column located',
+        params: {'n': '$visitNumber'},
+      );
+  static String fieldFound(String label, String value) => getTranslatedString(
+        'Anc.scanFieldFound',
+        '{label} found · {value}',
+        params: {'label': label, 'value': value},
+      );
+  static String fieldNotFound(String label) => getTranslatedString(
+        'Anc.scanFieldNotFound',
+        '{label} not found',
+        params: {'label': label},
+      );
+  static String get weightLabel =>
+      getTranslatedString('Anc.weightLabel', 'Weight');
+  static String get bpLabel =>
+      getTranslatedString('Anc.bpLabel', 'Blood pressure');
+  static String get fundalHeightLabel =>
+      getTranslatedString('Anc.fundalHeightLabel', 'Fundal height');
+  static String get hemoglobinLabel =>
+      getTranslatedString('Anc.hemoglobinLabel', 'Hemoglobin');
+  static String get glucoseLabel =>
+      getTranslatedString('Anc.glucoseLabel', 'Glucose');
+  static String get pulseLabel =>
+      getTranslatedString('Anc.pulseLabel', 'Pulse');
+  static String get temperatureLabel =>
+      getTranslatedString('Anc.temperatureLabel', 'Temperature');
+  static String get urinaryAlbuminLabel =>
+      getTranslatedString('Anc.urinaryAlbuminLabel', 'Urinary albumin');
+  static String get urinaryBilirubinLabel =>
+      getTranslatedString('Anc.urinaryBilirubinLabel', 'Urinary bilirubin');
+  static String get ttTdLabel =>
+      getTranslatedString('Anc.ttTdLabel', 'TT/TD completed');
+  static String get edemaLabel =>
+      getTranslatedString('Anc.edemaLabel', 'Edema');
+  static String get usgLabel =>
+      getTranslatedString('Anc.usgLabel', 'Ultrasound (USG)');
+  static String get notFoundValue =>
+      getTranslatedString('Anc.notFoundValue', 'Not found');
+  static String get valuesDisagreeWarning => getTranslatedString(
+        'Anc.valuesDisagreeWarning',
+        'Some values disagree across reads — double-check the card',
+      );
+}
+
+abstract final class NcdScanStrings {
+  NcdScanStrings._();
+
+  static String scanningVisit(int visitNumber) => getTranslatedString(
+        'Ncd.scanningVisit',
+        'Scanning NCD Visit {n}',
+        params: {'n': '$visitNumber'},
+      );
+  static String visitRowFound(int visitNumber) => getTranslatedString(
+        'Ncd.visitRowFound',
+        'Visit {n} row located',
+        params: {'n': '$visitNumber'},
+      );
+  static String get weightLabel =>
+      getTranslatedString('Ncd.weightLabel', 'Weight');
+  static String get heightLabel =>
+      getTranslatedString('Ncd.heightLabel', 'Height');
+  static String get bpLabel =>
+      getTranslatedString('Ncd.bpLabel', 'Blood pressure');
+  static String get glucoseLabel =>
+      getTranslatedString('Ncd.glucoseLabel', 'Blood glucose');
+  static String get notFoundValue =>
+      getTranslatedString('Ncd.notFoundValue', 'Not found');
 }

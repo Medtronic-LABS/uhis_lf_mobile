@@ -70,9 +70,6 @@ import 'core/telemetry/visit_content_uploader.dart';
 import 'core/telemetry/assistant_content_dao.dart';
 import 'core/telemetry/assistant_content_service.dart';
 import 'core/telemetry/assistant_content_uploader.dart';
-import 'core/telemetry/teleconsult_consent_log_dao.dart';
-import 'core/telemetry/teleconsult_consent_log_service.dart';
-import 'core/telemetry/teleconsult_consent_log_uploader.dart';
 import 'core/sync/offline_sync_service.dart';
 import 'app/post_sync_refresher.dart';
 import 'core/sync/sync_foreground_controller.dart';
@@ -99,6 +96,9 @@ import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
+import 'features/visit/immunisation/epi_date_extraction_repository.dart';
+import 'features/visit/anc/anc_visit_extraction_repository.dart';
+import 'features/visit/ncd/ncd_visit_extraction_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'core/config/app_config.dart';
 import 'core/services/micro_coaching_service.dart';
@@ -320,19 +320,6 @@ class _UhisNextAppState extends State<UhisNextApp>
   );
   late final AssistantContentUploader _assistantContentUploader =
       AssistantContentUploader(_assistantContentDao, widget.api);
-  late final TeleconsultConsentLogDao _teleconsultConsentLogDao =
-      TeleconsultConsentLogDao(widget.appDb);
-  late final TeleconsultConsentLogService _teleconsultConsentLogService =
-      TeleconsultConsentLogService(
-    dao: _teleconsultConsentLogDao,
-    userIdResolver: widget.authRepo.userId,
-    tenantIdResolver: () async {
-      final raw = await widget.authRepo.currentTenantId();
-      return raw == null ? null : int.tryParse(raw);
-    },
-  );
-  late final TeleconsultConsentLogUploader _teleconsultConsentLogUploader =
-      TeleconsultConsentLogUploader(_teleconsultConsentLogDao, widget.api);
   late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
     households: _householdDao,
     members: _memberDao,
@@ -454,7 +441,6 @@ class _UhisNextAppState extends State<UhisNextApp>
     valueAudit: _valueAuditUploader,
     visitContent: _visitContentUploader,
     assistantContent: _assistantContentUploader,
-    teleconsultConsentLog: _teleconsultConsentLogUploader,
     skDashboardMah: _skSpiceDashboardRepo,
   );
   late final SyncForegroundController _syncForeground = SyncForegroundController(
@@ -678,12 +664,6 @@ class _UhisNextAppState extends State<UhisNextApp>
             value: _assistantContentService),
         Provider<AssistantContentUploader>.value(
             value: _assistantContentUploader),
-        Provider<TeleconsultConsentLogDao>.value(
-            value: _teleconsultConsentLogDao),
-        Provider<TeleconsultConsentLogService>.value(
-            value: _teleconsultConsentLogService),
-        Provider<TeleconsultConsentLogUploader>.value(
-            value: _teleconsultConsentLogUploader),
         Provider<EncounterRepository>(
             create: (ctx) => EncounterRepository(
                   widget.api,
@@ -718,6 +698,15 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<VisitBriefingRepository>(
             create: (_) =>
                 VisitBriefingRepository(widget.api, cache: _aiCacheDao)),
+        // AI Card Extraction — Gemini-vision date read for scanned EPI cards
+        Provider<EpiDateExtractionRepository>(
+            create: (_) => EpiDateExtractionRepository(widget.api)),
+        // AI Card Extraction — Gemini-vision vitals read for scanned ANC cards
+        Provider<AncVisitExtractionRepository>(
+            create: (_) => AncVisitExtractionRepository(widget.api)),
+        // AI Card Extraction — Gemini-vision vitals read for scanned NCD cards
+        Provider<NcdVisitExtractionRepository>(
+            create: (_) => NcdVisitExtractionRepository(widget.api)),
         // AI Assistant — conversational Q&A (Tab 3)
         Provider<AssistantRepository>(
             create: (_) => AssistantRepository(widget.api)),

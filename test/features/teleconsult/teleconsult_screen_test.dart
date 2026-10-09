@@ -9,10 +9,6 @@
 /// `connected` stage.
 library;
 
-import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shukhee_sdk/shukhee_sdk.dart';
@@ -23,43 +19,9 @@ import 'package:uhis_next/core/db/local_assessment_dao.dart';
 import 'package:uhis_next/core/db/pregnancy_snapshot_dao.dart';
 import 'package:uhis_next/core/db/teleconsult_prescription_dao.dart';
 import 'package:uhis_next/core/theme/app_theme.dart';
-import 'package:uhis_next/features/teleconsult/shukhee_consent_client.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_clinical_data.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_permission_service.dart';
 import 'package:uhis_next/features/teleconsult/teleconsult_screen.dart';
-
-/// Never actually hit -- every test here keeps `startConsultation` failing
-/// (see this file's top doc comment), so `_submitBooking` never reaches the
-/// `attachConsentToCall` call this would otherwise respond to. Exists purely
-/// so `TeleconsultScreen`'s `initState` doesn't fall back to
-/// `buildShukheeConsentClient(context)`, which needs a `Provider<ApiClient>`
-/// this bare `MaterialApp` test tree doesn't supply.
-ShukheeConsentClient _fakeConsentClient() {
-  final adapter = _NeverCalledAdapter();
-  final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))..httpClientAdapter = adapter;
-  return ShukheeConsentClient(
-    baseUrl: 'https://example.test',
-    authTokenProvider: () async => 'test-token',
-    dio: dio,
-  );
-}
-
-class _NeverCalledAdapter implements HttpClientAdapter {
-  @override
-  void close({bool force = false}) {}
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async {
-    final bytes = utf8.encode(jsonEncode({'message': {'attached': false}}));
-    return ResponseBody.fromBytes(bytes, 200, headers: {
-      'content-type': ['application/json; charset=utf-8'],
-    });
-  }
-}
 
 /// Records every [startConsultation] call and always fails it with
 /// [exceptionBuilder]'s result -- keeps every test on this side of the
@@ -83,6 +45,9 @@ class _FailingShukheeClient extends ShukheeClient {
   final List<String?> encounterIds = [];
   final List<String> specialities = [];
   final List<Map<String, List<ShukheeMediaFile>>> mediaGroupsCalls = [];
+  final List<String?> versionIds = [];
+  final List<String?> lngs = [];
+  final List<List<bool>?> itemsCheckedCalls = [];
   int callCount = 0;
 
   /// Mirrors the real Shukhee sandbox's live speciality list (confirmed via
@@ -111,6 +76,9 @@ class _FailingShukheeClient extends ShukheeClient {
     String? patientGender,
     Map<String, List<ShukheeMediaFile>> mediaGroups = const {},
     Map<String, dynamic>? clinicalData,
+    String? versionId,
+    String? lng,
+    List<bool>? itemsChecked,
   }) async {
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     callCount++;
@@ -119,6 +87,9 @@ class _FailingShukheeClient extends ShukheeClient {
     encounterIds.add(encounterId);
     specialities.add(requestedSpeciality);
     mediaGroupsCalls.add(mediaGroups);
+    versionIds.add(versionId);
+    lngs.add(lng);
+    itemsCheckedCalls.add(itemsChecked);
     throw exceptionBuilder();
   }
 }
@@ -224,7 +195,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -249,7 +219,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -280,7 +249,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -322,7 +290,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -348,7 +315,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -393,7 +359,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -422,7 +387,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -455,7 +419,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -482,7 +445,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(granted: false),
       )),
     );
@@ -507,7 +469,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -531,7 +492,6 @@ void main() {
         client: client,
         prescriptionDao: testDao,
         clinicalDataBuilder: testClinicalDataBuilder,
-        consentClient: _fakeConsentClient(),
         permissionService: _FakePermissionService(),
       )),
     );
@@ -554,6 +514,63 @@ void main() {
     expect(client.specialities, ['General Physician', 'General Physician']);
   });
 
+  testWidgets(
+      'passes the consent decision (versionId/lng/itemsChecked) through to the booking call',
+      (tester) async {
+    final client = _FailingShukheeClient(() => const ShukheeBookingException('boom'));
+
+    await tester.pumpWidget(
+      _wrap(TeleconsultScreen(
+        patientLabel: 'Test Patient',
+        patientId: 'p1',
+        patientPhone: '+8801000000000',
+        reason: 'Fever',
+        consentVersionId: 'VER-2',
+        consentLng: 'bn',
+        itemsChecked: const [true, false],
+        client: client,
+        prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
+        permissionService: _FakePermissionService(),
+      )),
+    );
+
+    await _fillAndSubmitBookingForm(tester);
+
+    // Embedded directly in the same request that books the call -- no
+    // separate consent doctype or later linking step (see
+    // ShukheeClient.startConsultation's own doc comment).
+    expect(client.versionIds.single, 'VER-2');
+    expect(client.lngs.single, 'bn');
+    expect(client.itemsCheckedCalls.single, [true, false]);
+  });
+
+  testWidgets('omits the consent decision fields when none was carried forward',
+      (tester) async {
+    final client = _FailingShukheeClient(() => const ShukheeBookingException('boom'));
+
+    await tester.pumpWidget(
+      _wrap(TeleconsultScreen(
+        patientLabel: 'Test Patient',
+        patientId: 'p1',
+        patientPhone: '+8801000000000',
+        reason: 'Fever',
+        client: client,
+        prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
+        permissionService: _FakePermissionService(),
+      )),
+    );
+
+    await _fillAndSubmitBookingForm(tester);
+
+    expect(client.versionIds.single, isNull);
+    // Defaults to the app's current language rather than omitting it
+    // entirely -- see _submitBooking's own `widget.consentLng ?? ...` fallback.
+    expect(client.lngs.single, isNotNull);
+    expect(client.itemsCheckedCalls.single, isNull);
+  });
+
   // NOTE: the background-poll-survives-disposal fix in teleconsult_screen.dart
   // (removing the `mounted` guard around _savePrescriptionToVisit, resolving
   // TeleconsultPrescriptionDao in initState) has no widget test here. A
@@ -568,11 +585,12 @@ void main() {
   // startConsultation) reached the same save line before being removed for
   // that reason.
   //
-  // The same constraint applies to `_submitBooking`'s `attachConsentToCall`
-  // call (teleconsult_screen.dart, right after `setState(() => _booking =
-  // booking);`) -- it only fires once `startConsultation` succeeds, which is
-  // exactly the path that can't be driven to completion in this harness. Also
-  // confirmed manually instead: booking a real call in the local env and
+  // The same constraint applies to confirming the embedded consent fields
+  // actually land on the resulting Call Logs row (as opposed to merely being
+  // passed into startConsultation's arguments, which the two tests above do
+  // cover) -- that only happens once startConsultation succeeds server-side.
+  // Confirmed manually instead: booking a real call in the local env and
   // checking via `bench console` that the resulting Call Logs row's
-  // consent_version/consent_lng matched what the consent screen showed.
+  // consent_version/consent_lng/consent_items/consent_filled_text matched
+  // what the consent screen showed.
 }

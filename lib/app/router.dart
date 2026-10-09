@@ -524,6 +524,7 @@ GoRouter buildRouter(AuthState auth) {
               consentVersion: extra['consentVersion'] as String?,
               consentVersionId: extra['consentVersionId'] as String?,
               consentLng: extra['consentLng'] as String?,
+              itemsChecked: extra['itemsChecked'] as List<bool>?,
             ),
           );
         },

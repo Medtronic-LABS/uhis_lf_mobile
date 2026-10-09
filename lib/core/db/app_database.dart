@@ -23,7 +23,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 56;
+  static const int schemaVersion = 57;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -80,11 +80,6 @@ class AppDatabase {
   /// AI assistant ("Ask") question/answer text. PHI — wiped on SK handover.
   static const String tableAssistantContentTelemetry =
       'assistant_content_telemetry';
-
-  /// Teleconsult patient-consent Agree/Decline decisions. PHI (patient id +
-  /// dob) — wiped on SK handover, same treatment as
-  /// [tableAssistantContentTelemetry].
-  static const String tableTeleconsultConsentLog = 'teleconsult_consent_log';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -994,29 +989,6 @@ class AppDatabase {
     await db.execute(
         'CREATE INDEX idx_assistant_content_upload '
         'ON $tableAssistantContentTelemetry(upload_status)');
-
-    // v53 — teleconsult patient-consent decision audit queue.
-    // v54 added version_id (see createSchema's doc comment on that column,
-    // mirrored in the _onUpgrade ALTER TABLE block below).
-    await db.execute('''
-      CREATE TABLE $tableTeleconsultConsentLog (
-        id TEXT PRIMARY KEY,
-        patient_id TEXT NOT NULL,
-        visit_id TEXT,
-        decision TEXT NOT NULL,
-        lng TEXT NOT NULL,
-        consent_version TEXT,
-        version_id TEXT,
-        patient_dob TEXT,
-        sk_user_id TEXT,
-        captured_tenant_id INTEGER,
-        occurred_at INTEGER NOT NULL,
-        upload_status TEXT NOT NULL DEFAULT 'pending',
-        uploaded_at INTEGER
-      )''');
-    await db.execute(
-        'CREATE INDEX idx_teleconsult_consent_log_upload '
-        'ON $tableTeleconsultConsentLog(upload_status)');
   }
 
   /// Runs the incremental migration chain. Exposed (not private) so tests
@@ -2487,9 +2459,11 @@ class AppDatabase {
       } catch (_) {/* column already present — no-op */}
     }
     if (from < 53) {
-      // v53 — see createSchema's identical block for why this table exists.
+      // v53 — teleconsult patient-consent decision audit queue (table name
+      // kept as a literal: v57, below, drops it again, and nothing else in
+      // this app still needs a constant for it).
       await db.execute('''
-        CREATE TABLE IF NOT EXISTS $tableTeleconsultConsentLog (
+        CREATE TABLE IF NOT EXISTS teleconsult_consent_log (
           id TEXT PRIMARY KEY,
           patient_id TEXT NOT NULL,
           visit_id TEXT,
@@ -2505,16 +2479,33 @@ class AppDatabase {
         )''');
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_teleconsult_consent_log_upload '
-          'ON $tableTeleconsultConsentLog(upload_status)');
+          'ON teleconsult_consent_log(upload_status)');
     }
     if (from < 54) {
       // v54 — version_id: the exact Shukhee Consent Version snapshot the
-      // patient saw, alongside consent_version's human-readable label (see
-      // TeleconsultConsentLogEntry.versionId's own doc comment).
+      // patient saw, alongside consent_version's human-readable label.
       try {
         await db.execute(
-            'ALTER TABLE $tableTeleconsultConsentLog ADD COLUMN version_id TEXT');
+            'ALTER TABLE teleconsult_consent_log ADD COLUMN version_id TEXT');
       } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 56) {
+      // v56 — items_checked: which structured consent checkboxes were
+      // ticked, positional to get_consent's own `items` order.
+      try {
+        await db.execute(
+            'ALTER TABLE teleconsult_consent_log ADD COLUMN items_checked TEXT');
+      } catch (_) {/* column already present — no-op */}
+    }
+    if (from < 57) {
+      // v57 — teleconsult_consent_log retired: an Agreed consent decision is
+      // now embedded directly onto its Call Logs row by the backend's own
+      // start_consultation (sent in the same booking request -- booking
+      // already requires live connectivity, so no local queue is needed), and
+      // a Declined one is sent immediately, fire-and-forget, via
+      // ShukheeConsentClient.recordDecline. No successor table -- nothing
+      // left to carry forward from whatever this device had queued.
+      await db.execute('DROP TABLE IF EXISTS teleconsult_consent_log');
     }
   }
 
@@ -2553,7 +2544,6 @@ class AppDatabase {
     tableVisitContentTelemetry,
     tableTeleconsultPrescriptions, tableCallLogHistory,
     tableAssistantContentTelemetry,
-    tableTeleconsultConsentLog,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

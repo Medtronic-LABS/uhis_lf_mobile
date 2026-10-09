@@ -29,6 +29,22 @@ ShukheeConsentClient buildShukheeConsentClient(BuildContext context) {
   );
 }
 
+/// A single checkbox item shown below the consent body -- `get_consent` returns these
+/// as a structured list so the app renders real checkboxes instead of embedding
+/// "[ ] ..." text inside the consent HTML itself. [mandatory] items must all be ticked
+/// before the SK/patient can proceed (Agree); optional ones never block proceeding.
+class ConsentItem {
+  const ConsentItem({required this.description, required this.mandatory});
+
+  factory ConsentItem.fromJson(Map<String, dynamic> json) => ConsentItem(
+        description: json['description'] as String? ?? '',
+        mandatory: json['mandatory'] == true,
+      );
+
+  final String description;
+  final bool mandatory;
+}
+
 /// Consent HTML content fetched live from the Shukhee/Frappe backend for the
 /// pre-teleconsult consent gate -- see [ShukheeConsentClient].
 class ShukheeConsentContent {
@@ -37,6 +53,7 @@ class ShukheeConsentContent {
     required this.html,
     this.version,
     this.versionId,
+    this.items = const [],
   });
 
   /// The language the backend actually served -- the server falls back to
@@ -45,21 +62,28 @@ class ShukheeConsentContent {
   final String lng;
   final String html;
 
-  /// The consent copy's version label, echoed back by `get_consent` -- logged
-  /// alongside the SK's Agree/Decline decision (see
-  /// `TeleconsultConsentLogEntry.consentVersion`) so the audit trail is
-  /// human-readable without following a link. Null against a backend that
-  /// hasn't been updated to return it yet.
+  /// The consent copy's version label, echoed back by `get_consent` -- carried
+  /// into `Call Logs.consent_version` (Agree) or `Shukhee Consent
+  /// Decline.consent_version` (Decline) so the audit trail is human-readable
+  /// without following a link. Null against a backend that hasn't been
+  /// updated to return it yet.
   final String? version;
 
   /// The `Shukhee Consent Version` snapshot row backing this exact response --
-  /// must be carried forward unchanged (never re-derived later) and echoed
-  /// back via `record_consent_decision`/`attach_consent_to_call`, since the
-  /// live `Shukhee Consent` row this was fetched from may be edited again
-  /// before either of those calls happens. See that endpoint's own doc
-  /// comment for why re-resolving "the current version" later is unsafe.
-  /// Null against a backend that hasn't been updated to return it yet.
+  /// must be carried forward unchanged (never re-derived later) and echoed back
+  /// via `start_consultation` (Agree -- see `TeleconsultScreen._submitBooking`)
+  /// or `record_consent_decline` (Decline), since the live `Shukhee Consent`
+  /// row this was fetched from may be edited again before either of those
+  /// calls happens. Null against a backend that hasn't been updated to return
+  /// it yet.
   final String? versionId;
+
+  /// The structured checkbox list rendered below the consent body (see [ConsentItem]).
+  /// Which ones get ticked is echoed back positionally via `start_consultation`'s
+  /// `items_checked` on Agree -- empty against a backend that hasn't been updated to
+  /// return this yet, in which case no checkboxes render at all (matches the gate's own
+  /// fail-closed posture: nothing to tick, nothing blocks Agree).
+  final List<ConsentItem> items;
 }
 
 /// Raised by [ShukheeConsentClient.fetchConsent] on any failure. Deliberately
@@ -139,6 +163,7 @@ class ShukheeConsentClient {
     final responseLng = data['lng'];
     final responseVersion = data['version'];
     final responseVersionId = data['version_id'];
+    final responseItems = data['items'];
     if (html is! String || html.isEmpty) {
       throw ShukheeConsentException('Consent response missing "consent" HTML.');
     }
@@ -149,6 +174,12 @@ class ShukheeConsentClient {
           ? responseVersion
           : null,
       versionId: _asNonEmptyString(responseVersionId),
+      items: responseItems is List
+          ? responseItems
+              .whereType<Map<String, dynamic>>()
+              .map(ConsentItem.fromJson)
+              .toList(growable: false)
+          : const [],
     );
   }
 
@@ -162,41 +193,41 @@ class ShukheeConsentClient {
     return null;
   }
 
-  static const String attachConsentPath =
-      '/api/method/shukhee_integration.api.consent.attach_consent_to_call';
+  static const String declinePath =
+      '/api/method/shukhee_integration.api.consent.record_consent_decline';
 
-  /// Denormalizes the accepted consent version/language onto the `Call Logs`
-  /// row a successful booking just created -- called once from
-  /// `TeleconsultScreen._submitBooking` right after `startConsultation`
-  /// returns, since the consent gate runs before that row exists. [versionId]
-  /// (from `ShukheeConsentContent.versionId`) is what the backend actually
-  /// links `Call Logs.consent_version` to -- [consentVersion] is kept only as
-  /// a human-readable echo in the audit log, not resolved server-side.
-  /// Returns true once the backend confirms the attach. Returns false, never
-  /// throws, on any failure (unknown `call_log`, network error, etc.) -- this
-  /// is always best-effort and must never block or fail the booking flow
-  /// it's called from, mirroring
-  /// `ShukheeEncounterLinkClient.attachFhirEncounterId`.
-  Future<bool> attachConsentToCall({
-    required String callLog,
-    String? consentVersion,
-    String? versionId,
+  /// Records a Decline of the teleconsult consent gate -- the only server-side
+  /// record a decline gets, since declining never leads to booking (no Call
+  /// Logs row for an Agreed decision to be embedded on instead -- see
+  /// `api.consultation.start_consultation`'s own doc comment on that side).
+  /// Called once, immediately, from `TeleconsultConsentScreen._decide` when
+  /// the SK taps Decline -- fire-and-forget, with no local queue/retry behind
+  /// it (an offline decline is simply lost, an accepted gap -- declining
+  /// itself has no connectivity requirement, so there's nothing else to
+  /// gate it on). Never throws; returns true once the backend confirms the
+  /// row was logged, false on any failure.
+  Future<bool> recordDecline({
+    required String patientId,
+    String? visitId,
     required String lng,
+    String? versionId,
+    String? patientDob,
   }) async {
     try {
       final headers = await _authHeaders();
       final response = await _dio.post<Map<String, dynamic>>(
-        attachConsentPath,
+        declinePath,
         data: {
-          'call_log': callLog,
-          'consent_version': consentVersion,
-          'version_id': versionId,
+          'patient_id': patientId,
+          'visit_id': visitId,
           'lng': lng,
+          'version_id': versionId,
+          'patient_dob': patientDob,
         },
         options: Options(headers: headers),
       );
       final data = _unwrapMessage(response.data);
-      return data['attached'] == true;
+      return data['logged'] == true;
     } catch (_) {
       return false;
     }

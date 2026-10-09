@@ -71,6 +71,7 @@ void main() {
       expect(result.html, '<p>বাংলা সম্মতি</p>');
       expect(result.version, '2');
       expect(result.versionId, '7');
+      expect(result.items, isEmpty);
       expect(adapter.requests, hasLength(1));
       final sent = adapter.requests.single.data as Map<String, dynamic>;
       expect(sent, {'lng': 'bn'});
@@ -89,6 +90,29 @@ void main() {
       final result = await client.fetchConsent(lng: 'en');
 
       expect(result.versionId, '7');
+    });
+
+    test('parses items into ConsentItem, coercing mandatory to a bool', () async {
+      final (client, _) = buildClient([
+        (_) async => _jsonResponse({
+              'message': {
+                'lng': 'en',
+                'consent': '<p>English</p>',
+                'items': [
+                  {'description': 'Mandatory item', 'mandatory': true},
+                  {'description': 'Optional item', 'mandatory': false},
+                ],
+              },
+            }),
+      ]);
+
+      final result = await client.fetchConsent(lng: 'en');
+
+      expect(result.items, hasLength(2));
+      expect(result.items[0].description, 'Mandatory item');
+      expect(result.items[0].mandatory, isTrue);
+      expect(result.items[1].description, 'Optional item');
+      expect(result.items[1].mandatory, isFalse);
     });
 
     test('surfaces the server-side language fallback when it differs from the request', () async {
@@ -136,40 +160,33 @@ void main() {
     });
   });
 
-  group('ShukheeConsentClient.attachConsentToCall', () {
-    test('returns true and posts the expected body on a confirmed attach', () async {
+  group('ShukheeConsentClient.recordDecline', () {
+    test('returns true and posts the expected body on a confirmed log', () async {
       final (client, adapter) = buildClient([
-        (_) async => _jsonResponse({'message': {'attached': true}}),
+        (_) async => _jsonResponse({'message': {'logged': true}}),
       ]);
 
-      final result = await client.attachConsentToCall(
-        callLog: 'CL-1',
-        consentVersion: '2',
-        versionId: '7',
+      final result = await client.recordDecline(
+        patientId: 'PAT-1',
+        visitId: 'VISIT-1',
         lng: 'en',
+        versionId: '7',
+        patientDob: '1990-01-01',
       );
 
       expect(result, isTrue);
       expect(adapter.requests, hasLength(1));
       final sent = adapter.requests.single.data as Map<String, dynamic>;
-      expect(sent, {'call_log': 'CL-1', 'consent_version': '2', 'version_id': '7', 'lng': 'en'});
-      expect(adapter.requests.single.path, ShukheeConsentClient.attachConsentPath);
+      expect(sent, {
+        'patient_id': 'PAT-1',
+        'visit_id': 'VISIT-1',
+        'lng': 'en',
+        'version_id': '7',
+        'patient_dob': '1990-01-01',
+      });
+      expect(adapter.requests.single.path, ShukheeConsentClient.declinePath);
       expect(adapter.requests.single.headers['X-Auth-Token'], 'Bearer test-token');
       expect(adapter.requests.single.headers['tenantId'], 'tenant-1');
-    });
-
-    test('returns false when the backend reports the call_log was unknown', () async {
-      final (client, _) = buildClient([
-        (_) async => _jsonResponse({'message': {'attached': false}}),
-      ]);
-
-      final result = await client.attachConsentToCall(
-        callLog: 'CL-missing',
-        consentVersion: '2',
-        lng: 'en',
-      );
-
-      expect(result, isFalse);
     });
 
     test('returns false (never throws) on a network/HTTP error', () async {
@@ -177,18 +194,14 @@ void main() {
         (_) async => _jsonResponse({'exc_type': 'ValidationError'}, statusCode: 417),
       ]);
 
-      final result = await client.attachConsentToCall(
-        callLog: 'CL-1',
-        consentVersion: '2',
-        lng: 'en',
-      );
+      final result = await client.recordDecline(patientId: 'PAT-1', lng: 'en');
 
       expect(result, isFalse);
     });
 
     test('returns false without making a request when no auth token is available', () async {
       final adapter = _ScriptedAdapter([
-        (_) async => _jsonResponse({'message': {'attached': true}}),
+        (_) async => _jsonResponse({'message': {'logged': true}}),
       ]);
       final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))..httpClientAdapter = adapter;
       final client = ShukheeConsentClient(
@@ -197,11 +210,7 @@ void main() {
         dio: dio,
       );
 
-      final result = await client.attachConsentToCall(
-        callLog: 'CL-1',
-        consentVersion: '2',
-        lng: 'en',
-      );
+      final result = await client.recordDecline(patientId: 'PAT-1', lng: 'en');
 
       expect(result, isFalse);
       expect(adapter.requests, isEmpty);

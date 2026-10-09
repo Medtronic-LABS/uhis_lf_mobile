@@ -54,7 +54,6 @@ import '../../core/utils/counselling_launcher.dart';
 import 'clinical_data_card.dart';
 import 'pdf_viewer_screen.dart';
 import 'shukhee_client_factory.dart';
-import 'shukhee_consent_client.dart';
 import 'teleconsult_clinical_data.dart';
 import 'teleconsult_permission_service.dart';
 
@@ -101,11 +100,11 @@ class TeleconsultScreen extends StatefulWidget {
     this.consentVersion,
     this.consentVersionId,
     this.consentLng,
+    this.itemsChecked,
     @visibleForTesting this.client,
     @visibleForTesting this.permissionService,
     @visibleForTesting this.prescriptionDao,
     @visibleForTesting this.clinicalDataBuilder,
-    @visibleForTesting this.consentClient,
   });
 
   final String patientLabel;
@@ -157,19 +156,22 @@ class TeleconsultScreen extends StatefulWidget {
   final List<String> referredReasons;
 
   /// The consent copy version/language the SK just accepted on
-  /// `TeleconsultConsentScreen` -- attached to the resulting Call Logs row
-  /// once booking succeeds (see `_submitBooking`), since that row doesn't
-  /// exist yet at consent time. Every decision (including declines) is
-  /// already durably recorded in `Shukhee Consent Log`; this is only a
-  /// convenience denormalization for viewing a specific call.
+  /// `TeleconsultConsentScreen` -- sent as part of the same booking request
+  /// `_submitBooking` makes (see `ShukheeClient.startConsultation`'s own doc
+  /// comment), which embeds it directly onto the Call Logs row it creates.
+  /// No separate consent doctype, no later linking step.
   final String? consentVersion;
 
-  /// The exact Shukhee Consent Version snapshot the SK saw -- what
-  /// `_submitBooking` actually links `Call Logs.consent_version` to;
-  /// [consentVersion] is kept only for display/audit readability. See
-  /// `ShukheeConsentContent.versionId`'s own doc comment.
+  /// The exact Shukhee Consent Version snapshot the SK saw -- what actually
+  /// gets linked to `Call Logs.consent_version`; [consentVersion] is kept
+  /// only for display/audit readability. See `ShukheeConsentContent.versionId`'s
+  /// own doc comment.
   final String? consentVersionId;
   final String? consentLng;
+
+  /// One entry per the consent screen's own item list, positional -- see
+  /// `TeleconsultConsentDecision.itemsChecked`'s own doc comment.
+  final List<bool>? itemsChecked;
 
   /// Test-only injection points — real callers never pass these; the screen
   /// builds its own instances from [AppConfig]/the widget tree's [Provider]s
@@ -178,7 +180,6 @@ class TeleconsultScreen extends StatefulWidget {
   final TeleconsultPermissionService? permissionService;
   final TeleconsultPrescriptionDao? prescriptionDao;
   final TeleconsultClinicalDataBuilder? clinicalDataBuilder;
-  final ShukheeConsentClient? consentClient;
 
   @override
   State<TeleconsultScreen> createState() => _TeleconsultScreenState();
@@ -197,7 +198,6 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   // _submitBooking's clinicalData assembly runs before any context.read
   // would still be safe if it were deferred.
   late final TeleconsultClinicalDataBuilder _clinicalDataBuilder;
-  late final ShukheeConsentClient _consentClient;
   final _callViewKey = GlobalKey();
 
   _Stage _stage = _Stage.booking;
@@ -233,7 +233,6 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
           assessmentDao: context.read<LocalAssessmentDao>(),
           pregnancySnapshotDao: context.read<PregnancySnapshotDao>(),
         );
-    _consentClient = widget.consentClient ?? buildShukheeConsentClient(context);
   }
 
   @override
@@ -297,17 +296,17 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         patientGender: widget.patientGender,
         mediaGroups: mediaGroups,
         clinicalData: clinicalData,
+        // The consent decision captured on the gate screen just before this
+        // one -- the backend embeds these directly onto the Call Logs row
+        // this same call creates (no separate consent doctype, no later
+        // linking step; see ShukheeClient.startConsultation's own doc
+        // comment).
+        versionId: widget.consentVersionId,
+        lng: widget.consentLng ?? (AppLocale.isBangla ? 'bn' : 'en'),
+        itemsChecked: widget.itemsChecked,
       );
       if (!mounted) return;
       setState(() => _booking = booking);
-      // Best-effort denormalization -- never blocks or fails the booking
-      // flow (see ShukheeConsentClient.attachConsentToCall's doc comment).
-      unawaited(_consentClient.attachConsentToCall(
-        callLog: booking.callLog,
-        consentVersion: widget.consentVersion,
-        versionId: widget.consentVersionId,
-        lng: widget.consentLng ?? (AppLocale.isBangla ? 'bn' : 'en'),
-      ));
       unawaited(_pollInBackground(booking.callLog));
     } on ShukheeException catch (e) {
       if (mounted) _handleError(e);

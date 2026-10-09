@@ -691,6 +691,24 @@ class AssessmentRepository extends ChangeNotifier {
     return rows.any((r) => _isNcdKind(r.kind?.toUpperCase() ?? ''));
   }
 
+  /// Number of NCD visits already recorded for [patientId], across this
+  /// device's unsynced rows and synced history — the row number the NCD
+  /// card scan targets is `priorNcdVisitCount(...) + 1` ("this visit"), same
+  /// "prior count + 1" convention as ANC's server-synced `ancVisitNo`, just
+  /// without a dedicated snapshot counter since NCD visits aren't
+  /// pregnancy-episode-scoped.
+  Future<int> priorNcdVisitCount(String patientId) async {
+    if (patientId.isEmpty) return 0;
+    final localRows = await _dao.getByPatientId(patientId);
+    var count =
+        localRows.where((r) => r.assessmentType.toUpperCase() == 'NCD').length;
+    if (_historyDao == null) return count;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = historyMap[patientId] ?? const [];
+    count += rows.where((r) => _isNcdKind(r.kind?.toUpperCase() ?? '')).length;
+    return count;
+  }
+
   /// Number of childhood visits already recorded for [patientId], across this
   /// device's unsynced rows and synced history. Spice keeps the same counter in
   /// `PregnancyDetail.childVisitNo` and submits `childVisitNo + 1` as
