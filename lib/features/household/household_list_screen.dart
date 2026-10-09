@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -28,7 +30,11 @@ import 'member_assessment_lookup.dart';
 import 'enrollment/enrollment_dob.dart';
 import 'enrollment/enrollment_entry_sheet.dart';
 import 'enrollment/nid_ocr_service.dart';
+import '../../core/db/service_member_dao.dart';
 import 'household_detail_screen.dart';
+import 'members_service_type_dropdown.dart';
+import 'service_member_list_tile.dart';
+import 'service_static_filter.dart';
 
 /// Watches the Patients branch navigator; registered in `router.dart`.
 ///
@@ -54,7 +60,10 @@ class HouseholdListScreen extends StatefulWidget {
 
 class _HouseholdListScreenState extends State<HouseholdListScreen>
     with RouteAware {
-  Future<List<_HouseholdItem>>? _future;
+  List<_HouseholdItem>? _householdItems;
+  bool _householdsLoading = false;
+  Object? _householdLoadError;
+  int _householdLoadGeneration = 0;
   final ScrollController _scrollController = ScrollController();
 
   // Search
@@ -73,6 +82,15 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
   String? _selectedInlineVillageId;
 
   bool _refreshing = false;
+
+  /// UHIS service-recipient cohort (dropdown above village chips).
+  ServiceStaticFilter _serviceFilter = ServiceStaticFilter.allMembers;
+  final List<ServiceStaticFilter> _allowedServiceFilters =
+      ServiceStaticFilter.allowedForSk();
+  Map<ServiceStaticFilter, int> _serviceCounts = {};
+  /// All-member count for navy header — always roster-wide (ignores village chip).
+  int? _rosterAllMembersCount;
+  Future<List<ServiceMemberListRow>>? _serviceMembersFuture;
 
   @override
   void initState() {
@@ -169,8 +187,97 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     });
 
     setState(() {
-      _future = _fetchHouseholds(householdDao, memberDao, repo);
+      if (_householdItems == null) _householdsLoading = true;
+      _householdLoadError = null;
     });
+    unawaited(
+      _reloadHouseholdList(householdDao, memberDao, repo),
+    );
+    _loadServiceFilterMeta();
+  }
+
+  Future<void> _loadServiceFilterMeta() async {
+    if (!mounted) return;
+    final dao = context.read<ServiceMemberDao>();
+    try {
+      final searchForDropdown = _serviceFilter == ServiceStaticFilter.allMembers
+          ? ''
+          : _searchController.text.trim();
+      final villageId = _selectedInlineVillageId;
+      if (villageId == null) {
+        final counts = await dao.countForFilters(
+          filters: _allowedServiceFilters,
+          searchInput: searchForDropdown,
+          subVillageId: null,
+        );
+        if (!mounted) return;
+        setState(() {
+          _serviceCounts = counts;
+          _rosterAllMembersCount = counts[ServiceStaticFilter.allMembers];
+        });
+      } else {
+        final results = await Future.wait<Map<ServiceStaticFilter, int>>([
+          dao.countForFilters(
+            filters: _allowedServiceFilters,
+            searchInput: searchForDropdown,
+            subVillageId: villageId,
+          ),
+          dao.countForFilters(
+            filters: const [ServiceStaticFilter.allMembers],
+            subVillageId: null,
+          ),
+        ]);
+        if (!mounted) return;
+        setState(() {
+          _serviceCounts = results[0];
+          _rosterAllMembersCount =
+              results[1][ServiceStaticFilter.allMembers];
+        });
+      }
+      if (_serviceFilter != ServiceStaticFilter.allMembers) {
+        _reloadServiceMembers();
+      }
+    } catch (e, st) {
+      debugPrint('[HouseholdList] service filter meta failed: $e\n$st');
+    }
+  }
+
+  void _reloadServiceMembers() {
+    final dao = context.read<ServiceMemberDao>();
+    setState(() {
+      _serviceMembersFuture = dao.getMembers(
+        filter: _serviceFilter,
+        searchInput: _searchController.text.trim(),
+        subVillageId: _selectedInlineVillageId,
+      );
+    });
+  }
+
+  void _onServiceFilterSelected(ServiceStaticFilter filter) {
+    setState(() {
+      _serviceFilter = filter;
+      if (filter == ServiceStaticFilter.allMembers) {
+        _serviceMembersFuture = null;
+      }
+    });
+    if (filter != ServiceStaticFilter.allMembers) {
+      _reloadServiceMembers();
+    }
+  }
+
+  /// Navy subtitle counts — same scope as dropdown **All member list**
+  /// ([ServiceMemberDao] `household_id IS NOT NULL`), not the orphan bucket.
+  (int households, int members) _headerRosterTotals(
+    List<_HouseholdItem> items,
+  ) {
+    final linkedHouseholds =
+        items.where((h) => (h.id ?? '').isNotEmpty).toList();
+    final membersFromCards = linkedHouseholds.fold<int>(
+      0,
+      (sum, h) => sum + (h.memberCount ?? 0),
+    );
+    final members = _rosterAllMembersCount ?? membersFromCards;
+    return (linkedHouseholds.length, members);
   }
 
   Future<void> _refreshFromServer() async {
@@ -194,142 +301,216 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     }
   }
 
-  /// Fetches households from LOCAL SQLite first (instant), falls back to API.
-  Future<List<_HouseholdItem>> _fetchHouseholds(
+  /// Loads roster from SQLite: show household cards immediately, then badges.
+  Future<void> _reloadHouseholdList(
     HouseholdDao householdDao,
     MemberDao memberDao,
     DashboardRepository repo,
   ) async {
-    debugPrint('[_HouseholdListScreenState] _fetchHouseholds');
+    final generation = ++_householdLoadGeneration;
+    debugPrint('[_HouseholdListScreenState] _reloadHouseholdList gen=$generation');
     try {
-      final localHouseholds = await householdDao.getAll(limit: 1000);
+      final loaded = await Future.wait<Object?>([
+        householdDao.getAll(limit: 1000),
+        memberDao.getAllGroupedByHousehold(),
+      ]);
+      if (!mounted || generation != _householdLoadGeneration) return;
+      final localHouseholds = loaded[0]! as List<HouseholdEntity>;
+      final membersByHousehold =
+          loaded[1]! as Map<String, List<HouseholdMemberEntity>>;
 
-      // Get members grouped by household — search + village tabs are the
-      // only filtering on this screen (the location/sub-village/SS-worker
-      // sheet was removed; it's not in the mockup).
-      final membersByHousehold = await memberDao.getAllGroupedByHousehold();
-
-      // Use members directly grouped by household (bypass household table)
-      // to ensure all members are shown even when household records are stale.
+      List<_HouseholdItem> items;
       if (membersByHousehold.isNotEmpty) {
-        // Batch-load programmes for all members in one SQL round-trip.
-        final allEntities = membersByHousehold.values.expand((e) => e).toList();
-        final allLookupKeys = <String>{
-          for (final e in allEntities) ...memberAssessmentLookupKeysFromEntity(e),
-        }.toList();
-        final appDb = context.read<AppDatabase>();
-        final programmesDao = PatientProgrammesDao(appDb);
-        final programmesByPatient = await programmesDao.programmesForMany(
-          allLookupKeys,
+        items = _buildHouseholdItemsSkeleton(
+          membersByHousehold,
+          localHouseholds,
         );
-        // Visit counts so a non-queue member's badge is visit-count-aware
-        // ("ANC Visit 3 due"), identical to the dashboard's real badge —
-        // same DAO/kind-lists WorklistRepository uses (programme_reason.dart).
-        final assessmentDao = AssessmentDao(appDb);
-        final localAssessmentDao = LocalAssessmentDao(appDb);
-        final ancSyncedCounts = await assessmentDao.visitCountsByPatients(
-          allLookupKeys,
-          ancVisitKinds,
-        );
-        final pncSyncedCounts = await assessmentDao.visitCountsByPatients(
-          allLookupKeys,
-          pncVisitKinds,
-        );
-        final ancLocalCounts = await localAssessmentDao.visitCountsByPatients(
-          allLookupKeys,
-          ancVisitKinds,
-        );
-        final pncLocalCounts = await localAssessmentDao.visitCountsByPatients(
-          allLookupKeys,
-          pncLocalVisitKinds,
-        );
-        final assessmentsByPatient = await assessmentDao.forMany(allLookupKeys);
-        final localServices =
-            await localAssessmentDao.latestLocalServiceForMany(allLookupKeys);
-
-        final items = <_HouseholdItem>[];
-        for (final entry in membersByHousehold.entries) {
-          final hhId = entry.key;
-          final members = entry.value;
-          // Create household item from member data
-          final firstMember = members.first;
-          final memberList = members.map((e) {
-            final lookupKeys = memberAssessmentLookupKeysFromEntity(e);
-            final tableKey = memberSideTableKey(e);
-            final progs = tableKey != null
-                ? (programmesByPatient[tableKey] ?? const <Programme>{})
-                : const <Programme>{};
-            final recentService = resolveRecentServiceKind(
-              lookupKeys: lookupKeys,
-              syncedByKey: assessmentsByPatient,
-              localLatestByPatientId: localServices,
-            );
-            return _HouseholdMember.fromEntity(
-              e,
-              programmes: progs,
-              ancVisitCount: combinedVisitCount(
-                lookupKeys: lookupKeys,
-                syncedCounts: ancSyncedCounts,
-                localPendingCounts: ancLocalCounts,
-              ),
-              pncVisitCount: combinedVisitCount(
-                lookupKeys: lookupKeys,
-                syncedCounts: pncSyncedCounts,
-                localPendingCounts: pncLocalCounts,
-              ),
-              recentService: recentService,
-            );
-          }).toList();
-
-          // Find household head to derive household name
-          final head = memberList.firstWhere(
-            (m) => m.isHouseholdHead == true,
-            orElse: () => memberList.first,
-          );
-          // Use head's name as household name, or fallback to "Household #ID"
-          final householdName = head.name != null
-              ? HouseholdListStrings.namedHousehold(head.name!)
-              : (hhId.isNotEmpty ? '#$hhId' : null);
-
-          items.add(
-            _HouseholdItem(
-              id: hhId,
-              householdNo: hhId,
-              name: householdName,
-              village: firstMember.subVillageId,
-              memberCount: members.length,
-              members: memberList,
-            ),
-          );
-        }
-
-        // Merge in households that have no members yet (e.g. newly created).
-        // The member-grouped loop only covers households with ≥1 member;
-        // memberless ones exist in the household table but have no entry in
-        // membersByHousehold, so they are silently dropped otherwise.
-        final coveredIds = membersByHousehold.keys.toSet();
-        for (final hh in localHouseholds) {
-          if (!coveredIds.contains(hh.id)) {
-            items.add(_HouseholdItem.fromEntity(hh, []));
-          }
-        }
-        return items;
+      } else if (localHouseholds.isNotEmpty) {
+        items = localHouseholds
+            .map((hh) => _HouseholdItem.fromEntity(hh, []))
+            .toList();
+      } else {
+        final rawList = await repo.getHouseholdsWithMembers();
+        if (!mounted || generation != _householdLoadGeneration) return;
+        items = rawList.map((raw) => _HouseholdItem.fromJson(raw)).toList();
+        setState(() {
+          _householdItems = items;
+          _householdsLoading = false;
+          _householdLoadError = null;
+        });
+        return;
       }
 
-      // Fallback to household table if no members
-      if (localHouseholds.isNotEmpty) {
-        final items = localHouseholds.map((hh) {
-          return _HouseholdItem.fromEntity(hh, []);
-        }).toList();
-        return items;
-      }
+      setState(() {
+        _householdItems = items;
+        _householdsLoading = false;
+        _householdLoadError = null;
+      });
 
-      // Fallback to API if local cache is empty
-      final rawList = await repo.getHouseholdsWithMembers();
-      return rawList.map((raw) => _HouseholdItem.fromJson(raw)).toList();
-    } catch (_) {
-      rethrow;
+      if (membersByHousehold.isEmpty) return;
+
+      final appDb = context.read<AppDatabase>();
+      final enriched = await _enrichHouseholdItems(
+        membersByHousehold,
+        localHouseholds,
+        appDb,
+      );
+      if (!mounted || generation != _householdLoadGeneration) return;
+      setState(() => _householdItems = enriched);
+    } catch (e, st) {
+      debugPrint('[HouseholdList] load failed: $e\n$st');
+      if (!mounted || generation != _householdLoadGeneration) return;
+      setState(() {
+        _householdLoadError = e;
+        _householdsLoading = false;
+      });
     }
+  }
+
+  List<_HouseholdItem> _buildHouseholdItemsSkeleton(
+    Map<String, List<HouseholdMemberEntity>> membersByHousehold,
+    List<HouseholdEntity> localHouseholds,
+  ) {
+    final items = <_HouseholdItem>[];
+    for (final entry in membersByHousehold.entries) {
+      final hhId = entry.key;
+      final members = entry.value;
+      final firstMember = members.first;
+      final memberList =
+          members.map((e) => _HouseholdMember.fromEntity(e)).toList();
+      final head = memberList.firstWhere(
+        (m) => m.isHouseholdHead == true,
+        orElse: () => memberList.first,
+      );
+      final householdName = head.name != null
+          ? HouseholdListStrings.namedHousehold(head.name!)
+          : (hhId.isNotEmpty ? '#$hhId' : null);
+      items.add(
+        _HouseholdItem(
+          id: hhId,
+          householdNo: hhId,
+          name: householdName,
+          village: firstMember.subVillageId,
+          memberCount: members.length,
+          members: memberList,
+        ),
+      );
+    }
+    final coveredIds = membersByHousehold.keys.toSet();
+    for (final hh in localHouseholds) {
+      if (!coveredIds.contains(hh.id)) {
+        items.add(_HouseholdItem.fromEntity(hh, []));
+      }
+    }
+    return items;
+  }
+
+  Future<List<_HouseholdItem>> _enrichHouseholdItems(
+    Map<String, List<HouseholdMemberEntity>> membersByHousehold,
+    List<HouseholdEntity> localHouseholds,
+    AppDatabase appDb,
+  ) async {
+    final allEntities =
+        membersByHousehold.values.expand((e) => e).toList(growable: false);
+    if (allEntities.isEmpty) {
+      return _buildHouseholdItemsSkeleton(membersByHousehold, localHouseholds);
+    }
+
+    final tableKeys = <String>{
+      for (final e in allEntities)
+        if (memberSideTableKey(e) != null) memberSideTableKey(e)!,
+    }.toList();
+    final allLookupKeys = <String>{
+      for (final e in allEntities) ...memberAssessmentLookupKeysFromEntity(e),
+    }.toList();
+
+    final programmesDao = PatientProgrammesDao(appDb);
+    final assessmentDao = AssessmentDao(appDb);
+    final localAssessmentDao = LocalAssessmentDao(appDb);
+
+    final results = await Future.wait<Object?>([
+      programmesDao.programmesForMany(tableKeys),
+      assessmentDao.latestAssessmentForMany(allLookupKeys),
+      assessmentDao.visitCountsByPatients(allLookupKeys, ancVisitKinds),
+      assessmentDao.visitCountsByPatients(allLookupKeys, pncVisitKinds),
+      localAssessmentDao.visitCountsByPatients(allLookupKeys, ancVisitKinds),
+      localAssessmentDao.visitCountsByPatients(
+        allLookupKeys,
+        pncLocalVisitKinds,
+      ),
+      localAssessmentDao.latestLocalServiceForMany(allLookupKeys),
+    ]);
+
+    final programmesByPatient =
+        results[0]! as Map<String, Set<Programme>>;
+    final latestSynced = results[1]! as Map<String, AssessmentRow>;
+    final assessmentsByPatient = {
+      for (final e in latestSynced.entries) e.key: [e.value],
+    };
+    final ancSyncedCounts = results[2]! as Map<String, int>;
+    final pncSyncedCounts = results[3]! as Map<String, int>;
+    final ancLocalCounts = results[4]! as Map<String, int>;
+    final pncLocalCounts = results[5]! as Map<String, int>;
+    final localServices =
+        results[6]! as Map<String, ({String type, int at})>;
+
+    final items = <_HouseholdItem>[];
+    for (final entry in membersByHousehold.entries) {
+      final hhId = entry.key;
+      final members = entry.value;
+      final firstMember = members.first;
+      final memberList = members.map((e) {
+        final lookupKeys = memberAssessmentLookupKeysFromEntity(e);
+        final tableKey = memberSideTableKey(e);
+        final progs = tableKey != null
+            ? (programmesByPatient[tableKey] ?? const <Programme>{})
+            : const <Programme>{};
+        final recentService = resolveRecentServiceKind(
+          lookupKeys: lookupKeys,
+          syncedByKey: assessmentsByPatient,
+          localLatestByPatientId: localServices,
+        );
+        return _HouseholdMember.fromEntity(
+          e,
+          programmes: progs,
+          ancVisitCount: combinedVisitCount(
+            lookupKeys: lookupKeys,
+            syncedCounts: ancSyncedCounts,
+            localPendingCounts: ancLocalCounts,
+          ),
+          pncVisitCount: combinedVisitCount(
+            lookupKeys: lookupKeys,
+            syncedCounts: pncSyncedCounts,
+            localPendingCounts: pncLocalCounts,
+          ),
+          recentService: recentService,
+        );
+      }).toList();
+      final head = memberList.firstWhere(
+        (m) => m.isHouseholdHead == true,
+        orElse: () => memberList.first,
+      );
+      final householdName = head.name != null
+          ? HouseholdListStrings.namedHousehold(head.name!)
+          : (hhId.isNotEmpty ? '#$hhId' : null);
+      items.add(
+        _HouseholdItem(
+          id: hhId,
+          householdNo: hhId,
+          name: householdName,
+          village: firstMember.subVillageId,
+          memberCount: members.length,
+          members: memberList,
+        ),
+      );
+    }
+    final coveredIds = membersByHousehold.keys.toSet();
+    for (final hh in localHouseholds) {
+      if (!coveredIds.contains(hh.id)) {
+        items.add(_HouseholdItem.fromEntity(hh, []));
+      }
+    }
+    return items;
   }
 
   @override
@@ -346,83 +527,33 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
           bottom: false,
           child: Column(
             children: [
-              FutureBuilder<List<_HouseholdItem>>(
-                future: _future,
-                builder: (context, snapshot) {
-                  final items = snapshot.data ?? const <_HouseholdItem>[];
-                  final filtered = _filterByVillage(items);
-                  final totalMembers = filtered.fold<int>(
-                    0,
-                    (sum, h) => sum + (h.memberCount ?? 0),
+              Builder(
+                builder: (context) {
+                  final items = _householdItems ?? const <_HouseholdItem>[];
+                  final (householdCount, memberCount) =
+                      _headerRosterTotals(items);
+                  return _buildHeader(
+                    context,
+                    householdCount,
+                    memberCount,
                   );
-                  return _buildHeader(context, filtered.length, totalMembers);
                 },
               ),
               // 12px gap — matches the Home dashboard's own spacing between
               // its header and PatientFilterPanel/village-tab row.
               const SizedBox(height: AppSpacing.xl),
+              MembersServiceTypeDropdown(
+                filters: _allowedServiceFilters,
+                selected: _serviceFilter,
+                counts: _serviceCounts,
+                onSelected: _onServiceFilterSelected,
+              ),
+              const SizedBox(height: AppSpacing.xl),
               _buildVillageTabRow(),
               Expanded(
-                child: _future == null
-                    ? const SizedBox.shrink()
-                    : FutureBuilder<List<_HouseholdItem>>(
-                        future: _future,
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            );
-                          }
-                          if (snapshot.hasError) {
-                            // ignore: avoid_print
-                            print('[HouseholdList] Error: ${snapshot.error}');
-                            return Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.error_outline, size: 48),
-                                  const SizedBox(height: 16),
-                                  Text(HouseholdListStrings.loadError),
-                                  const SizedBox(height: 8),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 32,
-                                    ),
-                                    child: Text(
-                                      '${snapshot.error}',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodySmall,
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  FilledButton.tonal(
-                                    onPressed: () => setState(_loadData),
-                                    child: Text(CommonStrings.retry),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                          final items = snapshot.data ?? [];
-                          if (items.isEmpty) {
-                            return Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(32),
-                                child: EmptyStateCard(
-                                  icon: Icons.people_outline,
-                                  iconColor: AppColors.textMuted,
-                                  iconBg: AppColors.border,
-                                  title: HouseholdListStrings.noMembers,
-                                ),
-                              ),
-                            );
-                          }
-                          return _buildHouseholdsList(context, items);
-                        },
-                      ),
+                child: _serviceFilter == ServiceStaticFilter.allMembers
+                    ? _buildAllMembersHouseholdBody(context)
+                    : _buildServiceMembersBody(context),
               ),
             ],
           ),
@@ -431,6 +562,107 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     );
   }
 
+  /// Household cards with head + expand — default when dropdown is All member list.
+  Widget _buildAllMembersHouseholdBody(BuildContext context) {
+    if (_householdsLoading && _householdItems == null) {
+      return const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    if (_householdLoadError != null && _householdItems == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48),
+            const SizedBox(height: 16),
+            Text(HouseholdListStrings.loadError),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                '$_householdLoadError',
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.tonal(
+              onPressed: _loadData,
+              child: Text(CommonStrings.retry),
+            ),
+          ],
+        ),
+      );
+    }
+    final items = _householdItems ?? const <_HouseholdItem>[];
+    if (items.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: EmptyStateCard(
+            icon: Icons.people_outline,
+            iconColor: AppColors.textMuted,
+            iconBg: AppColors.border,
+            title: HouseholdListStrings.noMembers,
+          ),
+        ),
+      );
+    }
+    return _buildHouseholdsList(context, items);
+  }
+
+  /// UHIS-style flat list for a specific service cohort (not All member list).
+  Widget _buildServiceMembersBody(BuildContext context) {
+    final future = _serviceMembersFuture;
+    if (future == null) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    return FutureBuilder<List<ServiceMemberListRow>>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Text('${snapshot.error}'),
+            ),
+          );
+        }
+        final rows = snapshot.data ?? [];
+        if (rows.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: EmptyStateCard(
+                icon: Icons.person_search_outlined,
+                iconColor: AppColors.textMuted,
+                iconBg: AppColors.border,
+                title: HouseholdListStrings.noMembers,
+              ),
+            ),
+          );
+        }
+        return ListView.separated(
+          controller: _scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          itemCount: rows.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final row = rows[index];
+            final info = _MemberInfo.fromServiceRow(row);
+            return ServiceMemberListTile(
+              row: row,
+              onTap: () => _navigateToMemberDetail(context, info),
+            );
+          },
+        );
+      },
+    );
+  }
 
   /// Households matching the selected village tab (search is applied
   /// per-item in [_buildHouseholdsList] since it also needs the member list).
@@ -528,6 +760,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
                     controller: _searchController,
                     onChanged: (v) {
                       setState(() => _searchQuery = v.trim().toLowerCase());
+                      _loadServiceFilterMeta();
                     },
                     style: const TextStyle(
                       fontFamily: AppFonts.body,
@@ -536,7 +769,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
                     decoration: InputDecoration(
                       isDense: true,
                       filled: false,
-                      hintText: HouseholdListStrings.searchHint,
+                      hintText:
+                          _serviceFilter == ServiceStaticFilter.allMembers
+                              ? HouseholdListStrings.searchHint
+                              : ServiceMemberFilterStrings.memberSearchHint,
                       // fontSize matches the Home dashboard's own search bar
                       // hint (DashboardSearchField, fontSize: 14).
                       hintStyle: TextStyle(
@@ -563,7 +799,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
                   GestureDetector(
                     onTap: () {
                       _searchController.clear();
-                      setState(() { _searchQuery = ''; });
+                      setState(() => _searchQuery = '');
+                      _loadServiceFilterMeta();
                     },
                     child: Icon(
                       Icons.clear,
@@ -610,13 +847,19 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
               VillageFilterTab(
                 label: MissionDashboardStrings.allVillages,
                 isActive: _selectedInlineVillageId == null,
-                onTap: () => setState(() => _selectedInlineVillageId = null),
+                onTap: () {
+                  setState(() => _selectedInlineVillageId = null);
+                  _loadServiceFilterMeta();
+                },
               ),
               for (final v in _inlineVillages)
                 VillageFilterTab(
                   label: titleCaseWords(v.name),
                   isActive: _selectedInlineVillageId == v.id,
-                  onTap: () => setState(() => _selectedInlineVillageId = v.id),
+                  onTap: () {
+                    setState(() => _selectedInlineVillageId = v.id);
+                    _loadServiceFilterMeta();
+                  },
                 ),
             ],
           ),
@@ -666,9 +909,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
         final highlightPrimary = primary != null &&
             q.isNotEmpty &&
             (primary.name?.toLowerCase().contains(q) ?? false);
-        debugPrint(
-          '[HouseholdList] card ${item.householdNo}: primary=${primary?.name} highlightPrimary=$highlightPrimary query="$q"',
-        );
         return _HouseholdCard(
           item: item,
           villageDisplayName: _villageDisplayName(item.village),
@@ -1654,6 +1894,26 @@ class _MemberInfo {
       );
 
   /// Create from _HouseholdMember and household context.
+  factory _MemberInfo.fromServiceRow(ServiceMemberListRow row) {
+    final m = row.member;
+    return _MemberInfo(
+      id: m.id,
+      patientId: m.patientId,
+      name: m.name,
+      relation: m.relation,
+      gender: m.gender,
+      age: _calculateAge(m.dob),
+      ageLabel: ageDisplayLabel(m.dob),
+      dateOfBirth: m.dob,
+      phoneNumber: m.phone,
+      isPregnant: m.isPregnant,
+      householdId: m.householdId,
+      subVillageId: m.subVillageId,
+      recentService: row.recentServiceKind,
+      isActive: m.isActive,
+    );
+  }
+
   factory _MemberInfo.fromMember(
     _HouseholdMember member,
     _HouseholdItem household,

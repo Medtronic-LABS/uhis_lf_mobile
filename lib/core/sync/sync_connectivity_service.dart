@@ -124,7 +124,11 @@ class SyncConnectivityService {
   /// Call after login / unlock when the session is ready so pending outbound
   /// work is pushed even if the offline→online edge was already consumed
   /// (e.g. network returned while locked, or app opened already online).
-  void syncIfSessionReady() {
+  ///
+  /// Set [includeWarmPull] false on Home open — SK should not re-download the
+  /// full patient bundle every time they land on the dashboard; pull remains
+  /// on login/unlock, connectivity restore, and manual refresh.
+  void syncIfSessionReady({bool includeWarmPull = true}) {
     if (_authState.status == AuthStatus.signedIn &&
         !_authState.locked &&
         _authRepo.hasSessionCredentials) {
@@ -132,10 +136,10 @@ class SyncConnectivityService {
       // the session is ready rather than waiting for warmSync to complete.
       _flushUploadQueues?.call();
     }
-    _triggerSync();
+    _triggerSync(includeWarmPull: includeWarmPull);
   }
 
-  void _triggerSync() {
+  void _triggerSync({bool includeWarmPull = true}) {
     // Only sync when the user has an active authenticated session.
     if (_authState.status != AuthStatus.signedIn || _authState.locked) {
       debugPrint('[SyncConnectivity] Skipping auto-sync — not signed-in or session locked');
@@ -168,15 +172,22 @@ class SyncConnectivityService {
             syncMode: 'AutomaticSync',
           );
         })
-        .then((n) {
+        .then((n) async {
           if (n > 0) {
             debugPrint('[SyncConnectivity] AutomaticSync pushed $n assessment(s)');
           }
+          if (!includeWarmPull) {
+            debugPrint(
+              '[SyncConnectivity] Skipping warm pull (push-only automatic sync)',
+            );
+            return;
+          }
           // Warm pull after push so the worklist refreshes with any server updates.
-          return _syncService.warmSync();
+          await _syncService.warmSync();
+          debugPrint('[SyncConnectivity] AutomaticSync warm pull complete');
         })
         .then((_) {
-          debugPrint('[SyncConnectivity] AutomaticSync warm pull complete');
+          if (!includeWarmPull) return null;
           return _callLogSync?.pull();
         })
         .then((_) {

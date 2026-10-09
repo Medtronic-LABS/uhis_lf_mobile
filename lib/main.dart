@@ -45,6 +45,7 @@ import 'core/db/member_assessment_history_writer.dart';
 import 'core/db/spice_dashboard_dao.dart';
 import 'core/db/ss_linked_village_dao.dart';
 import 'core/db/member_dao.dart';
+import 'core/db/service_member_dao.dart';
 import 'core/db/patient_dao.dart';
 import 'core/db/patient_programmes_dao.dart';
 import 'core/db/pregnancy_detail_dao.dart';
@@ -200,6 +201,8 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final SyncMetaDao _syncMetaDao = SyncMetaDao(widget.appDb);
   late final HouseholdDao _householdDao = HouseholdDao(widget.appDb);
   late final MemberDao _memberDao = MemberDao(widget.appDb);
+  late final ServiceMemberDao _serviceMemberDao =
+      ServiceMemberDao(widget.appDb);
   late final PregnancySnapshotDao _pregnancySnapshotDao =
       PregnancySnapshotDao(widget.appDb);
   late final PregnancyEpisodeDao _pregnancyEpisodeDao =
@@ -627,6 +630,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<PatientDao>.value(value: _patientDao),
         Provider<HouseholdDao>.value(value: _householdDao),
         Provider<MemberDao>.value(value: _memberDao),
+        Provider<ServiceMemberDao>.value(value: _serviceMemberDao),
         Provider<FollowUpDao>.value(value: _followUpDao),
         Provider<FollowUpCallService>.value(value: _followUpCallService),
         Provider<AssessmentDao>.value(value: _assessmentDao),

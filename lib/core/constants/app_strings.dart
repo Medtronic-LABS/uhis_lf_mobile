@@ -1025,6 +1025,64 @@ abstract final class HouseholdListStrings {
   static String refreshFailed(String error) => getTranslatedString('HouseholdList.refreshFailed', 'Refresh failed: {error}', params: {'error': '$error'});
 }
 
+/// UHIS service-recipient dropdown (Spice [ServiceStaticFilter] labels).
+abstract final class ServiceMemberFilterStrings {
+  ServiceMemberFilterStrings._();
+
+  // English fallbacks mirror Spice [ServiceStaticFilter.value] / strings.xml.
+  static String get allMembers =>
+      getTranslatedString('ServiceFilter.allMembers', 'All member list');
+  static String get externalMembers =>
+      getTranslatedString('ServiceFilter.externalMembers', 'External member list');
+  static String get childrenUnderTwo =>
+      getTranslatedString('ServiceFilter.childrenUnderTwo', 'Child List (under-2)');
+  static String get pregnantWomen =>
+      getTranslatedString('ServiceFilter.pregnantWomen', 'Pregnant Women List');
+  static String get externalPregnantWomen =>
+      getTranslatedString('ServiceFilter.externalPw', 'External PW list');
+  static String get highRiskPregnantWomen =>
+      getTranslatedString('ServiceFilter.highRiskPw', 'High risk PW women list');
+  static String get familyPlanningCounselling => getTranslatedString(
+        'ServiceFilter.familyPlanning',
+        'Family planning counseling list',
+      );
+  static String get postnatalCareMothers =>
+      getTranslatedString('ServiceFilter.pncMothers', 'Postnatal Mothers List');
+  static String get expectedDeliveries =>
+      getTranslatedString('ServiceFilter.expectedDelivery', 'Expected delivery list');
+  static String get pendingDeliveries =>
+      getTranslatedString('ServiceFilter.pendingDelivery', 'Pending Delivery List');
+  static String get ncdServices =>
+      getTranslatedString('ServiceFilter.ncd', 'NCD Services');
+  static String get cataractScreening =>
+      getTranslatedString('ServiceFilter.cataract', 'Cataract Screening');
+  static String get eyeScreening =>
+      getTranslatedString('ServiceFilter.eye', 'Eye Screening');
+  static String get otherServices =>
+      getTranslatedString('ServiceFilter.otherServices', 'Communicable Diseases');
+
+  static String dropdownLabel(String name, int count) =>
+      getTranslatedString(
+        'ServiceFilter.dropdownItem',
+        '{name} ({count})',
+        params: {'name': name, 'count': '$count'},
+      );
+
+  static String get memberSearchHint => getTranslatedString(
+        'ServiceFilter.memberSearchHint',
+        'Member Name / National ID or BRN / Phone',
+      );
+
+  static String get recentServiceLabel =>
+      getTranslatedString('ServiceFilter.recentService', 'Recent service');
+  static String get recentServiceDateLabel =>
+      getTranslatedString('ServiceFilter.recentServiceDate', 'Recent service date');
+  static String get ssNameLabel =>
+      getTranslatedString('ServiceFilter.ssName', 'SS Name');
+  static String get recentServiceEmpty =>
+      getTranslatedString('ServiceFilter.emptyDash', '--');
+}
+
 /// Household detail screen strings.
 /// Shared date-formatting copy. Single home for month abbreviations, which
 /// were previously duplicated as a raw `['Jan', 'Feb', …]` array in three files.

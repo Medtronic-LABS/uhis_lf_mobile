@@ -84,22 +84,32 @@ class PatientProgrammesDao {
   /// Bulk read — returns a `patientId → Set<Programme>` map for the IDs given.
   /// Single SQL round-trip; used by the worklist repo to attach programme
   /// sets to a page of patient rows.
+  static const _readChunkSize = 500;
+
   Future<Map<String, Set<Programme>>> programmesForMany(
       List<String> patientIds) async {
     if (patientIds.isEmpty) return const <String, Set<Programme>>{};
-    final placeholders = List.filled(patientIds.length, '?').join(',');
-    final rows = await _db.db.rawQuery(
-      'SELECT patient_id, programme FROM ${AppDatabase.tablePatientProgrammes} '
-      'WHERE patient_id IN ($placeholders)',
-      patientIds,
-    );
     final out = <String, Set<Programme>>{};
-    for (final r in rows) {
-      final pid = r['patient_id'] as String?;
-      final tag = r['programme'] as String?;
-      final p = Programme.fromWireTag(tag);
-      if (pid == null || p == null) continue;
-      (out[pid] ??= <Programme>{}).add(p);
+    for (var i = 0; i < patientIds.length; i += _readChunkSize) {
+      final chunk = patientIds.sublist(
+        i,
+        i + _readChunkSize > patientIds.length
+            ? patientIds.length
+            : i + _readChunkSize,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.db.rawQuery(
+        'SELECT patient_id, programme FROM ${AppDatabase.tablePatientProgrammes} '
+        'WHERE patient_id IN ($placeholders)',
+        chunk,
+      );
+      for (final r in rows) {
+        final pid = r['patient_id'] as String?;
+        final tag = r['programme'] as String?;
+        final p = Programme.fromWireTag(tag);
+        if (pid == null || p == null) continue;
+        (out[pid] ??= <Programme>{}).add(p);
+      }
     }
     return out;
   }
