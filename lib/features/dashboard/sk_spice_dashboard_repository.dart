@@ -1,6 +1,7 @@
 import '../../core/auth/auth_repository.dart';
 import '../../core/db/member_assessment_history_dao.dart';
 import '../../core/db/member_assessment_history_writer.dart';
+import '../../core/db/pregnancy_detail_dao.dart';
 import '../../core/db/spice_dashboard_dao.dart';
 
 /// Loads SK KPI dashboard from local [member_assessment_history] (Spice SQL parity).
@@ -9,21 +10,33 @@ class SkSpiceDashboardRepository {
     required SpiceDashboardDao dashboard,
     required MemberAssessmentHistoryDao mah,
     required MemberAssessmentHistoryWriter mahWriter,
+    required PregnancyDetailDao pregnancyDetail,
     required AuthRepository auth,
   })  : _dashboard = dashboard,
         _mah = mah,
         _mahWriter = mahWriter,
+        _pregnancyDetail = pregnancyDetail,
         _auth = auth;
 
   final SpiceDashboardDao _dashboard;
   final MemberAssessmentHistoryDao _mah;
   final MemberAssessmentHistoryWriter _mahWriter;
+  final PregnancyDetailDao _pregnancyDetail;
   final AuthRepository _auth;
 
   bool _mahHydrated = false;
 
   /// Call after offline sync so the next dashboard load rebuilds MAH from SQLite.
   void invalidateMahCache() => _mahHydrated = false;
+
+  /// Re-upsert MAH from synced [assessments] + [local_assessments] using current
+  /// parse/normalize rules (e.g. after a pull with `customStatus` fixes).
+  Future<void> refreshMahFromLocalCaches() async {
+    await _mahWriter.rebuildFromAssessmentsTable();
+    await _mahWriter.rebuildFromLocalAssessments();
+    await _pregnancyDetail.rebuildAllFromMah();
+    _mahHydrated = true;
+  }
 
   Future<SpiceDashboardCounts> load({
     required DateTime from,
@@ -40,6 +53,7 @@ class SkSpiceDashboardRepository {
       await _mahWriter.rebuildFromAssessmentsTable();
       await _mahWriter.rebuildFromLocalAssessments();
     }
+    await _pregnancyDetail.rebuildAllFromMah();
 
     final start = _dateYmd(from);
     final end = _dateYmd(to);

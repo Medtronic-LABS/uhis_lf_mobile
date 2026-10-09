@@ -5011,7 +5011,8 @@ abstract final class PerformanceStrings {
   static String get kpiAnc =>
       getTranslatedString('Performance.kpiAnc', 'ANC services');
   static String get kpiPw4MonthAnc => getTranslatedString(
-      'Performance.kpiPw4MonthAnc', 'PW identified < 4 months & got ANC');
+      'Performance.kpiPw4MonthAnc',
+      'PW Registered within 3 Months and Received ANC');
   static String get kpiAnc3Plus =>
       getTranslatedString('Performance.kpiAnc3Plus', '3/3+ ANC services');
   static String get kpiPregnancyOutcome => getTranslatedString(

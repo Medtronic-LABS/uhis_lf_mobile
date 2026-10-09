@@ -10,6 +10,7 @@ import '../core/telemetry/visit_content_uploader.dart';
 import '../core/telemetry/assistant_content_uploader.dart';
 import '../core/telemetry/teleconsult_consent_log_uploader.dart';
 import '../features/dashboard/mission_dashboard_repository.dart';
+import '../features/dashboard/sk_spice_dashboard_repository.dart';
 import '../features/referral/referral_repository.dart';
 import '../features/worklist/worklist_repository.dart';
 
@@ -35,10 +36,12 @@ class PostSyncRefresher {
     VisitContentUploader? visitContent,
     AssistantContentUploader? assistantContent,
     TeleconsultConsentLogUploader? teleconsultConsentLog,
+    SkSpiceDashboardRepository? skDashboardMah,
   })  : _progress = progress,
         _worklist = worklist,
         _referrals = referrals,
         _mission = mission,
+        _skDashboardMah = skDashboardMah,
         _telemetry = telemetry,
         _valueAudit = valueAudit,
         _visitContent = visitContent,
@@ -49,6 +52,9 @@ class PostSyncRefresher {
   final WorklistRepository _worklist;
   final ReferralRepository _referrals;
   final MissionDashboardRepository _mission;
+
+  /// Refreshes SK KPI MAH from local caches after a successful pull.
+  final SkSpiceDashboardRepository? _skDashboardMah;
 
   /// Optional so existing constructions and tests are unaffected. A completed
   /// sync is the app's most reliable proof of connectivity, which makes it the
@@ -238,6 +244,16 @@ class PostSyncRefresher {
       // Order matters: the worklist recompute writes the risk/next-due columns
       // the mission queue reads, so refreshing the dashboard first would show
       // pre-sync ordering.
+      final mah = _skDashboardMah;
+      if (mah != null) {
+        try {
+          await mah.refreshMahFromLocalCaches();
+          debugPrint(
+              '[PostSync] SK MAH refresh ${watch.elapsedMilliseconds}ms');
+        } catch (e) {
+          debugPrint('[PostSync] SK MAH refresh failed: $e');
+        }
+      }
       await _worklist.recomputeAllAfterSync();
       debugPrint('[PostSync] worklist recompute ${watch.elapsedMilliseconds}ms');
       await _referrals.recomputeAllAfterSync();

@@ -105,7 +105,6 @@ abstract final class SkDashboardCardCatalog {
       (title: PerformanceStrings.kpiPw4MonthAnc, count: c.pwIdentifiedFirst4MonthsWithAncCount),
       (title: PerformanceStrings.kpiAnc3Plus, count: c.anc3PlusCount),
       (title: PerformanceStrings.kpiPregnancyOutcome, count: c.pregnancyOutcomeCount),
-      (title: PerformanceStrings.kpiPnc, count: c.pncCount),
       (title: PerformanceStrings.kpiHighRiskPw, count: c.highRiskPregnantWomenCount),
       (title: PerformanceStrings.kpiChildVisit, count: c.childVisitCount),
       (title: PerformanceStrings.kpiHouseholdRegistered, count: c.householdRegisteredCount),
