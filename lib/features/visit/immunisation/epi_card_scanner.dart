@@ -24,6 +24,7 @@ class EpiScanResult {
     required this.rawText,
     this.engine = EpiScanEngine.mlKitOffline,
     this.dateByCode = const {},
+    this.confidenceByCode = const {},
     this.unmatchedRows = const [],
     this.flagged = false,
     this.flagReason,
@@ -47,6 +48,11 @@ class EpiScanResult {
   /// Online path only: per-vaccine-code handwritten dates Gemini read.
   /// Empty on the offline path.
   final Map<String, DateTime> dateByCode;
+
+  /// Online path only: model-reported confidence (0-1) per dated vaccine
+  /// code — drives the scan-review sheet's "Read clearly" vs "Confirm date"
+  /// badge. Empty on the offline path (no per-dose confidence signal there).
+  final Map<String, double> confidenceByCode;
 
   /// Online path only: vaccines with no legible date, with a row location
   /// for highlighting which doses are missing. Empty on the offline path
@@ -200,6 +206,7 @@ abstract final class EpiCardScanner {
         return EpiScanResult(
           matchedCodes: result.matchedCodes,
           dateByCode: result.dateByCode,
+          confidenceByCode: result.confidenceByCode,
           unmatchedRows: result.unmatchedRows,
           rawText: '',
           engine: EpiScanEngine.geminiVision,

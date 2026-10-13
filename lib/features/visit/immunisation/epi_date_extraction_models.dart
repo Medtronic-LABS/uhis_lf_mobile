@@ -120,4 +120,14 @@ class EpiDateExtractionResult {
     }
     return map;
   }
+
+  /// Per-vaccine-code confidence, for doses with a readable date. Drives the
+  /// scan-review sheet's "Read clearly" vs "Confirm date" badge.
+  Map<String, double> get confidenceByCode {
+    final map = <String, double>{};
+    for (final d in doses) {
+      if (d.date != null) map.putIfAbsent(d.vaccineCode, () => d.confidence);
+    }
+    return map;
+  }
 }

@@ -14707,6 +14707,58 @@
     "en": "Date cannot be before the patient's date of birth",
     "bn": "তারিখ রোগীর জন্ম তারিখের আগে হতে পারবে না"
   },
+  "Epi.dateBeforeEligibleAgeError": {
+    "en": "Too early for this dose — check the child's age against this vaccine's schedule",
+    "bn": "এই ডোজের জন্য এখনো সময় হয়নি — টিকার সময়সূচির সাথে শিশুর বয়স মিলিয়ে দেখুন"
+  },
+  "Epi.scanReviewTitle": {
+    "en": "Review scanned vaccines",
+    "bn": "স্ক্যান করা টিকা পর্যালোচনা করুন"
+  },
+  "Epi.scanReviewDobLabel": {
+    "en": "DOB",
+    "bn": "জন্ম তারিখ"
+  },
+  "Epi.scanReviewDosesRead": {
+    "en": "{count} doses read",
+    "bn": "{count}টি ডোজ পড়া হয়েছে"
+  },
+  "Epi.scanReviewToConfirm": {
+    "en": "{count} to confirm",
+    "bn": "{count}টি নিশ্চিত করতে হবে"
+  },
+  "Epi.scanReviewNotOnCard": {
+    "en": "{count} not on card",
+    "bn": "{count}টি কার্ডে নেই"
+  },
+  "Epi.scanReviewInstructions": {
+    "en": "Check each date against the card and fix anything the scan got wrong. Then tap Update to save everything in one go.",
+    "bn": "কার্ডের সাথে প্রতিটি তারিখ মিলিয়ে দেখুন এবং স্ক্যানে কোনো ভুল থাকলে ঠিক করুন। তারপর সব একসাথে সংরক্ষণ করতে Update-এ ট্যাপ করুন।"
+  },
+  "Epi.scanReviewUpdateCta": {
+    "en": "Update {count} doses",
+    "bn": "{count}টি ডোজ হালনাগাদ করুন"
+  },
+  "Epi.scanReviewRetakePhoto": {
+    "en": "Retake photo",
+    "bn": "আবার ছবি তুলুন"
+  },
+  "Epi.scanReviewReadClearly": {
+    "en": "✓ Read clearly",
+    "bn": "✓ স্পষ্ট পড়া গেছে"
+  },
+  "Epi.scanReviewConfirmDate": {
+    "en": "Confirm date",
+    "bn": "তারিখ নিশ্চিত করুন"
+  },
+  "Epi.scanReviewNotOnCardBadge": {
+    "en": "Not on card",
+    "bn": "কার্ডে নেই"
+  },
+  "Epi.scanReviewAddDate": {
+    "en": "+ Add date",
+    "bn": "+ তারিখ যোগ করুন"
+  },
   "Epi.scanning": {
     "en": "Scanning…",
     "bn": "স্ক্যান করা হচ্ছে…"

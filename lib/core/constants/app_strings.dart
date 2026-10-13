@@ -5766,6 +5766,10 @@ abstract final class EpiStrings {
         'Epi.dateBeforeDobError',
         "Date cannot be before the patient's date of birth",
       );
+  static String get dateBeforeEligibleAgeError => getTranslatedString(
+        'Epi.dateBeforeEligibleAgeError',
+        'Too early for this dose — check the child\'s age against this vaccine\'s schedule',
+      );
   static String get scanning =>
       getTranslatedString('Epi.scanning', 'Scanning…');
   static String get scanReviewCta =>
@@ -5783,6 +5787,45 @@ abstract final class EpiStrings {
       getTranslatedString('Epi.scanReadingCard', 'Reading card…');
   static String get scanNoDateFound =>
       getTranslatedString('Epi.scanNoDateFound', 'No date found');
+  static String get scanReviewTitle =>
+      getTranslatedString('Epi.scanReviewTitle', 'Review scanned vaccines');
+  static String get scanReviewDobLabel =>
+      getTranslatedString('Epi.scanReviewDobLabel', 'DOB');
+  static String scanReviewDosesRead(int count) => getTranslatedString(
+        'Epi.scanReviewDosesRead',
+        '$count ${count == 1 ? 'dose' : 'doses'} read',
+        params: {'count': '$count'},
+      );
+  static String scanReviewToConfirm(int count) => getTranslatedString(
+        'Epi.scanReviewToConfirm',
+        '$count to confirm',
+        params: {'count': '$count'},
+      );
+  static String scanReviewNotOnCard(int count) => getTranslatedString(
+        'Epi.scanReviewNotOnCard',
+        '$count not on card',
+        params: {'count': '$count'},
+      );
+  static String get scanReviewInstructions => getTranslatedString(
+        'Epi.scanReviewInstructions',
+        'Check each date against the card and fix anything the scan got '
+            'wrong. Then tap Update to save everything in one go.',
+      );
+  static String scanReviewUpdateCta(int count) => getTranslatedString(
+        'Epi.scanReviewUpdateCta',
+        'Update $count ${count == 1 ? 'dose' : 'doses'}',
+        params: {'count': '$count'},
+      );
+  static String get scanReviewRetakePhoto =>
+      getTranslatedString('Epi.scanReviewRetakePhoto', 'Retake photo');
+  static String get scanReviewReadClearly =>
+      getTranslatedString('Epi.scanReviewReadClearly', '✓ Read clearly');
+  static String get scanReviewConfirmDate =>
+      getTranslatedString('Epi.scanReviewConfirmDate', 'Confirm date');
+  static String get scanReviewNotOnCardBadge =>
+      getTranslatedString('Epi.scanReviewNotOnCardBadge', 'Not on card');
+  static String get scanReviewAddDate =>
+      getTranslatedString('Epi.scanReviewAddDate', '+ Add date');
   static String get scanCameraUnavailable => getTranslatedString(
         'Epi.scanCameraUnavailable',
         'Camera unavailable — grant permission or upload an image',
