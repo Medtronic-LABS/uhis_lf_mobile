@@ -32,6 +32,8 @@ import '../../scribe/form_field_schema_builder.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/widgets/ai_scribe_banner.dart';
 import 'triage_symptom_mapper.dart';
+import 'form_bound_text_field.dart';
+import 'form_control_sync.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
 import 'vitals_trend.dart';
@@ -3700,8 +3702,8 @@ class _SectionCard extends StatelessWidget {
         // inputType 0 = text (e.g. newWorseningSymptoms comment field) — no
         // numeric keyboard, no unit, no parse. Render as plain text input.
         if (ref.inputType == 0 && def.unitMeasurement == null) {
-          return TextFormField(
-            initialValue: currentValue?.toString(),
+          return FormBoundTextField(
+            value: currentValue?.toString(),
             style: Theme.of(context).textTheme.bodyMedium,
             decoration: _filledInputDecoration(hintText: def.displayHint),
             maxLines: 3,
@@ -4377,7 +4379,7 @@ class _EmojiTile extends StatelessWidget {
 /// with a single self-contained card.  Both fields are still written to
 /// [CanonicalVisitData] under their original IDs so the payload mapper is
 /// unaffected.
-class _BloodGlucoseEntryField extends StatefulWidget {
+class _BloodGlucoseEntryField extends StatelessWidget {
   const _BloodGlucoseEntryField({
     super.key,
     required this.options,
@@ -4406,59 +4408,9 @@ class _BloodGlucoseEntryField extends StatefulWidget {
   final FormFieldValidator<String>? valueValidator;
 
   @override
-  State<_BloodGlucoseEntryField> createState() =>
-      _BloodGlucoseEntryFieldState();
-}
-
-class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
-  late final TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    debugPrint('[_BloodGlucoseEntryFieldState] initState');
-    _ctrl = TextEditingController(
-      text: widget.glucoseValue?.toString() ?? '',
-    );
-  }
-
-  @override
-  void didUpdateWidget(_BloodGlucoseEntryField old) {
-    super.didUpdateWidget(old);
-    if (old.glucoseValue != widget.glucoseValue) {
-      final newText = widget.glucoseValue?.toString() ?? '';
-      if (_ctrl.text != newText) {
-        final ctrlNum = double.tryParse(_ctrl.text);
-        final newNum = double.tryParse(newText);
-        final sameValue =
-            ctrlNum != null && newNum != null && ctrlNum == newNum;
-        if (!sameValue) {
-          // Defer so controller updates never fire mid-build (Form setState).
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || _ctrl.text == newText) return;
-            final curNum = double.tryParse(_ctrl.text);
-            final tgtNum = double.tryParse(newText);
-            if (curNum != null && tgtNum != null && curNum == tgtNum) return;
-            _ctrl.text = newText;
-            _ctrl.selection =
-                TextSelection.collapsed(offset: newText.length);
-          });
-        }
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    debugPrint('[_BloodGlucoseEntryFieldState] dispose');
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final currentType = widget.glucoseType;
-    final glucoseNum = _VitalStatusEval.asDouble(widget.glucoseValue);
+    final currentType = glucoseType;
+    final glucoseNum = _VitalStatusEval.asDouble(glucoseValue);
 
     // Route value to fasting vs random threshold depending on selected type.
     final fastingVal = currentType == 'fbs' ? glucoseNum : null;
@@ -4470,8 +4422,8 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
       subLabel: UnifiedFormStrings.bloodGlucoseEntryUnit,
       emoji: '🩸',
       emojiBg: const Color(0xFFFEE2E2),
-      isMandatory: widget.isMandatory,
-      hasError: widget.hasError,
+      isMandatory: isMandatory,
+      hasError: hasError,
       statusBadge: status != null
           ? _VitalBadge(label: status.label, color: status.color)
           : null,
@@ -4481,18 +4433,18 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
         children: [
           // ── Type toggle row ─────────────────────────────────────────────
           Row(
-            children: List.generate(widget.options.length, (i) {
-              final opt = widget.options[i];
+            children: List.generate(options.length, (i) {
+              final opt = options[i];
               final isSelected = currentType == opt.id;
               return Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(
-                    right: i < widget.options.length - 1 ? AppSpacing.xs : 0,
+                    right: i < options.length - 1 ? AppSpacing.xs : 0,
                   ),
                   child: GestureDetector(
                     onTap: () {
                       // Tap again to deselect.
-                      widget.onTypeChanged(isSelected ? null : opt.id);
+                      onTypeChanged(isSelected ? null : opt.id);
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
@@ -4528,8 +4480,8 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
           ),
           const SizedBox(height: AppSpacing.sm),
           // ── Value input ─────────────────────────────────────────────────
-          TextFormField(
-            controller: _ctrl,
+          FormBoundTextField(
+            value: glucoseValue?.toString(),
             keyboardType: TextInputType.number,
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
@@ -4540,12 +4492,12 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
               suffixText: UnifiedFormStrings.bloodGlucoseEntryUnit,
             ),
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            validator: widget.valueValidator,
+            validator: valueValidator,
             onChanged: (v) {
               if (v.isEmpty) {
-                widget.onValueChanged(null);
+                onValueChanged(null);
               } else {
-                widget.onValueChanged(double.tryParse(v) ?? v);
+                onValueChanged(double.tryParse(v) ?? v);
               }
             },
           ),
@@ -4555,7 +4507,7 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
   }
 }
 
-class _NumericField extends StatefulWidget {
+class _NumericField extends StatelessWidget {
   const _NumericField({
     super.key,
     required this.isDecimal,
@@ -4576,77 +4528,14 @@ class _NumericField extends StatefulWidget {
   final bool readOnly;
 
   @override
-  State<_NumericField> createState() => _NumericFieldState();
-}
-
-class _NumericFieldState extends State<_NumericField> {
-  late final TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    debugPrint('[_NumericFieldState] initState');
-    _ctrl = TextEditingController(text: widget.initialValue ?? '');
-  }
-
-  @override
-  void didUpdateWidget(_NumericField old) {
-    super.didUpdateWidget(old);
-    if (old.initialValue != widget.initialValue) {
-      final newText = widget.initialValue ?? '';
-      if (_ctrl.text != newText) {
-        // Skip the update when the controller text and the incoming value
-        // represent the same number but differ only in float representation
-        // (e.g. "1" vs "1.0").  Without this guard, storing a parsed double
-        // after every keystroke causes "120" to become "1.20": the controller
-        // is reset to "1.0" after the first "1", and the next character
-        // inserts at the wrong cursor position.
-        final ctrlNum = double.tryParse(_ctrl.text);
-        final newNum = double.tryParse(newText);
-        final sameValue =
-            ctrlNum != null && newNum != null && ctrlNum == newNum;
-        if (!sameValue) {
-          // Defer so TextEditingController.text= never fires mid-build.
-          // It notifies TextFormField → FormState._forceRebuild → setState(),
-          // which crashes if called during the build phase.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || _ctrl.text == newText) return;
-            final curNum = double.tryParse(_ctrl.text);
-            final tgtNum = double.tryParse(newText);
-            if (curNum != null && tgtNum != null && curNum == tgtNum) return;
-            _ctrl.text = newText;
-            _ctrl.selection =
-                TextSelection.collapsed(offset: newText.length);
-          });
-        }
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    debugPrint('[_NumericFieldState] dispose');
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final readOnly = widget.readOnly;
-    return TextFormField(
-      controller: _ctrl,
+    return FormBoundTextField(
+      value: initialValue,
       readOnly: readOnly,
       enabled: !readOnly,
-      // Use the plain number keyboard for ALL numeric fields — even decimal
-      // ones.  Some Android keyboards in currency/decimal mode auto-insert a
-      // decimal point when `decimal: true` is set, causing "190" to appear
-      // as "1.90" without the user intending it.  The plain number keyboard
-      // never auto-inserts a point; users who need decimals (e.g. temperature
-      // "36.5") can still type the "." manually since the formatter below
-      // allows it.
       keyboardType: TextInputType.number,
       inputFormatters: [
-        if (widget.isDecimal)
+        if (isDecimal)
           FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
         else
           FilteringTextInputFormatter.digitsOnly,
@@ -4657,17 +4546,17 @@ class _NumericFieldState extends State<_NumericField> {
                 : null,
           ),
       decoration: _filledInputDecoration(
-        hintText: widget.hint,
-        suffixText: widget.unit,
+        hintText: hint,
+        suffixText: unit,
       ).copyWith(
         fillColor: readOnly
             ? Theme.of(context).colorScheme.surfaceContainerHighest
                 .withValues(alpha: 0.55)
             : null,
       ),
-      onChanged: readOnly ? null : widget.onChanged,
+      onChanged: readOnly ? (_) {} : (v) => onChanged(v.isEmpty ? null : v),
       autovalidateMode: AutovalidateMode.onUserInteraction,
-      validator: widget.validator,
+      validator: validator,
     );
   }
 }
@@ -4769,11 +4658,13 @@ class _DateField extends StatefulWidget {
 
 class _DateFieldState extends State<_DateField> {
   late final TextEditingController _ctrl;
+  late final FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
     debugPrint('[_DateFieldState] initState');
+    _focusNode = FocusNode();
     _ctrl = TextEditingController(text: widget.currentValue ?? '');
   }
 
@@ -4781,17 +4672,18 @@ class _DateFieldState extends State<_DateField> {
   void didUpdateWidget(_DateField old) {
     super.didUpdateWidget(old);
     if (old.currentValue != widget.currentValue) {
-      // Defer the controller update so it never fires inside a build phase.
-      // Setting TextEditingController.text= triggers FormField.didChange →
-      // FormState._forceRebuild → setState(), which crashes if called mid-build.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _ctrl.text = widget.currentValue ?? '';
-      });
+      FormControlSync.applyExternalText(
+        mounted: () => mounted,
+        focusNode: _focusNode,
+        controller: _ctrl,
+        newText: widget.currentValue ?? '',
+      );
     }
   }
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _ctrl.dispose();
     debugPrint('[_DateFieldState] dispose');
     super.dispose();
@@ -4802,6 +4694,7 @@ class _DateFieldState extends State<_DateField> {
     return TextFormField(
       readOnly: true,
       controller: _ctrl,
+      focusNode: _focusNode,
       style: Theme.of(context).textTheme.bodyMedium,
       decoration: _filledInputDecoration(
         suffixIcon: const Icon(
@@ -4843,6 +4736,45 @@ class _DateFieldState extends State<_DateField> {
 
 // ── BP reading field ──────────────────────────────────────────────────────────
 
+/// Controllers + focus nodes for one NCD BP log row.
+class _BpReadingRowHandles {
+  _BpReadingRowHandles({
+    required this.systolic,
+    required this.diastolic,
+    required this.pulse,
+    required this.systolicFocus,
+    required this.diastolicFocus,
+    required this.pulseFocus,
+  });
+
+  factory _BpReadingRowHandles.fromReading(Map<String, dynamic> r) {
+    return _BpReadingRowHandles(
+      systolic: TextEditingController(text: r['systolic']?.toString() ?? ''),
+      diastolic: TextEditingController(text: r['diastolic']?.toString() ?? ''),
+      pulse: TextEditingController(text: r['pulse']?.toString() ?? ''),
+      systolicFocus: FocusNode(),
+      diastolicFocus: FocusNode(),
+      pulseFocus: FocusNode(),
+    );
+  }
+
+  final TextEditingController systolic;
+  final TextEditingController diastolic;
+  final TextEditingController pulse;
+  final FocusNode systolicFocus;
+  final FocusNode diastolicFocus;
+  final FocusNode pulseFocus;
+
+  void dispose() {
+    systolic.dispose();
+    diastolic.dispose();
+    pulse.dispose();
+    systolicFocus.dispose();
+    diastolicFocus.dispose();
+    pulseFocus.dispose();
+  }
+}
+
 /// Multi-reading BP widget matching Android's `bpLogDetails` wire format.
 ///
 /// Supports up to 3 readings (Android parity). Each row captures systolic and
@@ -4868,8 +4800,7 @@ class _BpReadingField extends StatefulWidget {
 }
 
 class _BpReadingFieldState extends State<_BpReadingField> {
-  // One triplet of controllers per row (up to _maxReadings).
-  late List<(TextEditingController, TextEditingController, TextEditingController)> _rows;
+  late List<_BpReadingRowHandles> _rows;
 
   @override
   void initState() {
@@ -4877,74 +4808,64 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     _rows = _buildRows(widget.readings);
   }
 
-  List<(TextEditingController, TextEditingController, TextEditingController)> _buildRows(
-    List<Map<String, dynamic>> readings,
-  ) {
+  List<_BpReadingRowHandles> _buildRows(List<Map<String, dynamic>> readings) {
     final source = readings.isNotEmpty ? readings : [const <String, dynamic>{}];
-    return source.map((r) {
-      return (
-        TextEditingController(text: r['systolic']?.toString() ?? ''),
-        TextEditingController(text: r['diastolic']?.toString() ?? ''),
-        TextEditingController(text: r['pulse']?.toString() ?? ''),
-      );
-    }).toList();
+    return source.map(_BpReadingRowHandles.fromReading).toList();
   }
 
   @override
   void didUpdateWidget(_BpReadingField old) {
     super.didUpdateWidget(old);
     if (old.readings != widget.readings) {
-      // Sync only rows that haven't changed length; rebuild otherwise.
       if (widget.readings.length != _rows.length) {
-        for (final (s, d, p) in _rows) {
-          s.dispose();
-          d.dispose();
-          p.dispose();
+        for (final row in _rows) {
+          row.dispose();
         }
         setState(() => _rows = _buildRows(widget.readings));
       } else {
         for (var i = 0; i < _rows.length; i++) {
           final r = widget.readings[i];
-          final (s, d, p) = _rows[i];
-          _syncCtrl(s, r['systolic']?.toString() ?? '');
-          _syncCtrl(d, r['diastolic']?.toString() ?? '');
-          _syncCtrl(p, r['pulse']?.toString() ?? '');
+          final row = _rows[i];
+          _syncCtrl(row.systolic, row.systolicFocus, r['systolic']?.toString() ?? '');
+          _syncCtrl(row.diastolic, row.diastolicFocus, r['diastolic']?.toString() ?? '');
+          _syncCtrl(row.pulse, row.pulseFocus, r['pulse']?.toString() ?? '');
         }
       }
     }
   }
 
-  void _syncCtrl(TextEditingController ctrl, String newText) {
-    if (ctrl.text == newText) return;
-    // Defer so controller updates never fire mid-build (Form setState).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || ctrl.text == newText) return;
-      ctrl.text = newText;
-      ctrl.selection = TextSelection.collapsed(offset: newText.length);
-    });
+  void _syncCtrl(
+    TextEditingController ctrl,
+    FocusNode focusNode,
+    String newText,
+  ) {
+    FormControlSync.applyExternalText(
+      mounted: () => mounted,
+      focusNode: focusNode,
+      controller: ctrl,
+      newText: newText,
+    );
   }
 
   @override
   void dispose() {
-    for (final (s, d, p) in _rows) {
-      s.dispose();
-      d.dispose();
-      p.dispose();
+    for (final row in _rows) {
+      row.dispose();
     }
     super.dispose();
   }
 
   void _emit() {
     final out = <Map<String, dynamic>>[];
-    for (final (s, d, p) in _rows) {
-      final sys = int.tryParse(s.text);
-      final dia = int.tryParse(d.text);
+    for (final row in _rows) {
+      final sys = int.tryParse(row.systolic.text);
+      final dia = int.tryParse(row.diastolic.text);
       if (sys == null && dia == null) continue;
       final reading = <String, dynamic>{};
       if (sys != null) reading['systolic'] = sys;
       if (dia != null) reading['diastolic'] = dia;
       if (widget.showPulse) {
-        final pulse = int.tryParse(p.text);
+        final pulse = int.tryParse(row.pulse.text);
         if (pulse != null) reading['pulse'] = pulse;
       }
       out.add(reading);
@@ -4955,20 +4876,13 @@ class _BpReadingFieldState extends State<_BpReadingField> {
   void _addRow() {
     if (_rows.length >= _BpReadingField._maxReadings) return;
     setState(() {
-      _rows.add((
-        TextEditingController(),
-        TextEditingController(),
-        TextEditingController(),
-      ));
+      _rows.add(_BpReadingRowHandles.fromReading(const {}));
     });
   }
 
   void _removeRow(int index) {
     if (_rows.length <= 1) return;
-    final (s, d, p) = _rows[index];
-    s.dispose();
-    d.dispose();
-    p.dispose();
+    _rows[index].dispose();
     setState(() => _rows.removeAt(index));
     _emit();
   }
@@ -5007,9 +4921,7 @@ class _BpReadingFieldState extends State<_BpReadingField> {
               ),
             ),
           _BpReadingRow(
-            sysCtrl: _rows[i].$1,
-            diaCtrl: _rows[i].$2,
-            pulseCtrl: _rows[i].$3,
+            row: _rows[i],
             showPulse: widget.showPulse,
             onChanged: (_) => _emit(),
           ),
@@ -5036,16 +4948,12 @@ class _BpReadingFieldState extends State<_BpReadingField> {
 /// Single systolic / diastolic / optional pulse row inside [_BpReadingField].
 class _BpReadingRow extends StatelessWidget {
   const _BpReadingRow({
-    required this.sysCtrl,
-    required this.diaCtrl,
-    required this.pulseCtrl,
+    required this.row,
     required this.onChanged,
     this.showPulse = false,
   });
 
-  final TextEditingController sysCtrl;
-  final TextEditingController diaCtrl;
-  final TextEditingController pulseCtrl;
+  final _BpReadingRowHandles row;
   final ValueChanged<void> onChanged;
   final bool showPulse;
 
@@ -5059,7 +4967,8 @@ class _BpReadingRow extends StatelessWidget {
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpSystolicLabel,
-            controller: sysCtrl,
+            controller: row.systolic,
+            focusNode: row.systolicFocus,
             suffixText: UnifiedFormStrings.bpUnit,
             validator: _SectionCard._numericRangeValidator('systolic'),
           ),
@@ -5079,7 +4988,8 @@ class _BpReadingRow extends StatelessWidget {
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpDiastolicLabel,
-            controller: diaCtrl,
+            controller: row.diastolic,
+            focusNode: row.diastolicFocus,
             validator: _SectionCard._numericRangeValidator('diastolic'),
           ),
         ),
@@ -5090,7 +5000,8 @@ class _BpReadingRow extends StatelessWidget {
             child: _bpCell(
               context,
               caption: UnifiedFormStrings.bpPulseLabel,
-              controller: pulseCtrl,
+              controller: row.pulse,
+              focusNode: row.pulseFocus,
               suffixText: UnifiedFormStrings.bpPulseUnit,
             ),
           ),
@@ -5103,11 +5014,13 @@ class _BpReadingRow extends StatelessWidget {
     BuildContext context, {
     required String caption,
     required TextEditingController controller,
+    required FocusNode focusNode,
     String? suffixText,
     FormFieldValidator<String>? validator,
   }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       style: Theme.of(context).textTheme.bodyMedium,
