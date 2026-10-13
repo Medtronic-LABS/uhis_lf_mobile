@@ -1,6 +1,7 @@
 import '../visit/forms/form_config.dart';
 
-/// Mirrors Spice `DashboardFragment` NCD / eye / cataract visibility for SK.
+/// Leapfrog app is SK-only: NCD / eye / cataract tiles follow activated workflows
+/// (Spice `hasNcdWorkflow()` etc.), not FO/PO-only dashboard rules.
 class SkDashboardGating {
   const SkDashboardGating({
     required this.showNcd,
