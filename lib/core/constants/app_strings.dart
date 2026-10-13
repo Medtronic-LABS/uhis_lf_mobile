@@ -5762,6 +5762,10 @@ abstract final class EpiStrings {
         'Epi.scanFailed',
         "Couldn't read card — please enter manually",
       );
+  static String get dateBeforeDobError => getTranslatedString(
+        'Epi.dateBeforeDobError',
+        "Date cannot be before the patient's date of birth",
+      );
   static String get scanning =>
       getTranslatedString('Epi.scanning', 'Scanning…');
   static String get scanReviewCta =>

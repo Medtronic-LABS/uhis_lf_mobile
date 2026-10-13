@@ -1556,6 +1556,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   bool _referring = false;
 
   late DateTime _givenDate;
+  String? _dateError;
   final TextEditingController _notesCtrl = TextEditingController();
 
   final TextEditingController _reasonCtrl = TextEditingController();
@@ -1569,6 +1570,18 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   void initState() {
     super.initState();
     _givenDate = widget.prefilledDate ?? DateTime.now();
+    _dateError = _validateGivenDate(_givenDate);
+  }
+
+  /// Returns an error message if [date] falls before the patient's DOB,
+  /// null otherwise. A scan-prefilled date can still land before DOB even
+  /// though the picker itself is bounded.
+  String? _validateGivenDate(DateTime date) {
+    final dob = widget.dob;
+    if (dob != null && date.isBefore(DateTime(dob.year, dob.month, dob.day))) {
+      return EpiStrings.dateBeforeDobError;
+    }
+    return null;
   }
 
   @override
@@ -1599,6 +1612,12 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
       }
       if (_selectedFacilityId == null) {
         setState(() => _facilityError = EpiStrings.referralFacilityRequired);
+        return;
+      }
+    } else {
+      final dateError = _validateGivenDate(_givenDate);
+      if (dateError != null) {
+        setState(() => _dateError = dateError);
         return;
       }
     }
@@ -1836,6 +1855,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
                     _SectionLabel(EpiStrings.dateAdministered),
                     _DateField(
                       date: _givenDate,
+                      errorText: _dateError,
                       onTap: () async {
                         final picked = await showDatePicker(
                           context: context,
@@ -1844,7 +1864,10 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
                           lastDate: DateTime.now(),
                         );
                         if (picked != null) {
-                          setState(() => _givenDate = picked);
+                          setState(() {
+                            _givenDate = picked;
+                            _dateError = _validateGivenDate(picked);
+                          });
                         }
                       },
                     ),
@@ -2133,9 +2156,10 @@ class _VaccineCard extends StatelessWidget {
 }
 
 class _DateField extends StatelessWidget {
-  const _DateField({required this.date, required this.onTap});
+  const _DateField({required this.date, required this.onTap, this.errorText});
   final DateTime date;
   final VoidCallback onTap;
+  final String? errorText;
 
   String _format(DateTime d) {
     final day = d.day.toString().padLeft(2, '0');
@@ -2145,28 +2169,48 @@ class _DateField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _format(date),
-                style: const TextStyle(fontSize: 15, color: AppColors.navy),
+    final hasError = errorText != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: hasError ? _kRed : const Color(0xFFE5E7EB),
+                width: 1.5,
               ),
             ),
-            const Icon(Icons.calendar_today_outlined,
-                size: 18, color: AppColors.textMuted),
-          ],
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _format(date),
+                    style:
+                        const TextStyle(fontSize: 15, color: AppColors.navy),
+                  ),
+                ),
+                const Icon(Icons.calendar_today_outlined,
+                    size: 18, color: AppColors.textMuted),
+              ],
+            ),
+          ),
         ),
-      ),
+        if (hasError) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              errorText!,
+              style: const TextStyle(fontSize: 11, color: _kRed),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

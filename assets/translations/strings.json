@@ -14703,6 +14703,10 @@
     "en": "Couldn't read card — please enter manually",
     "bn": "কার্ড পড়া যায়নি — অনুগ্রহ করে নিজে লিখুন"
   },
+  "Epi.dateBeforeDobError": {
+    "en": "Date cannot be before the patient's date of birth",
+    "bn": "তারিখ রোগীর জন্ম তারিখের আগে হতে পারবে না"
+  },
   "Epi.scanning": {
     "en": "Scanning…",
     "bn": "স্ক্যান করা হচ্ছে…"
