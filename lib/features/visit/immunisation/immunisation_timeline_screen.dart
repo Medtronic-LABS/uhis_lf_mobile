@@ -19,7 +19,9 @@ import 'child_immunization_dto.dart';
 import 'epi_card_scan_screen.dart';
 import 'epi_card_scanner.dart';
 import 'epi_date_extraction_repository.dart';
+import 'epi_date_validator.dart';
 import 'epi_schedule_engine.dart';
+import 'epi_scan_review_sheet.dart';
 import 'epi_visit_summary.dart';
 import 'immunisation_repository.dart';
 
@@ -750,31 +752,77 @@ class _ImmunisationTimelineScreenState
     for (final v in milestones.expand((m) => m.vaccines)) {
       if (!matched.contains(v.code)) continue;
       // Skip doses already recorded — the scan confirms them but there's
-      // nothing to update; re-listing them reads as "do this again".
-      if (v.status == VaccineStatus.completed) continue;
+      // nothing to update; re-listing them reads as "do this again". Skip
+      // doses not yet eligible by age too — same reasoning as
+      // _reviewMatchedMilestones: a training card can carry every milestone
+      // regardless of this child's real age, so a match alone doesn't mean
+      // the dose is reviewable.
+      if (v.status != VaccineStatus.dueNow && v.status != VaccineStatus.missed) {
+        continue;
+      }
       final label = EpiVaccineStrings.display(v.code, v.display);
       if (!names.contains(label)) names.add(label);
     }
     return names;
   }
 
-  /// Opens the review sheet for each milestone the scan matched, in schedule
-  /// order, one after another — the SK confirms and saves each (dates entered
-  /// manually) without hunting for the rows. Nothing is auto-saved.
+  /// Opens one consolidated review sheet covering every milestone the scan
+  /// matched — the SK confirms/edits each dose and saves everything in one
+  /// go, rather than stepping through a sheet per milestone. Nothing is
+  /// auto-saved. Returns to this via "Retake photo" by relaunching the scan.
   Future<void> _reviewMatchedMilestones(
       List<VaccineMilestone> milestones, String patientName) async {
     final result = _scanResult;
     if (result == null) return;
     final matched = result.matchedCodes.toSet();
-    // Only milestones that still have a matched, not-yet-recorded dose — a
-    // fully-completed milestone has nothing to update.
+    // Only milestones with a matched dose that's actually eligible today —
+    // dueNow (scheduledDate <= today) or missed. A training card can carry
+    // every milestone up to 9 months regardless of this child's real age;
+    // without this filter a 2-month-old's scan would surface the 9-month
+    // dose as reviewable just because the card happened to have it filled
+    // in. upcoming/notYetDue milestones are excluded outright here, not
+    // merely flagged — this child could not actually have received them yet.
     final toReview = milestones
         .where((m) => m.vaccines.any((v) =>
-            matched.contains(v.code) && v.status != VaccineStatus.completed))
+            matched.contains(v.code) &&
+            (v.status == VaccineStatus.dueNow ||
+                v.status == VaccineStatus.missed)))
         .toList();
-    for (final milestone in toReview) {
-      if (!mounted) return;
-      await _showUpdateSheet(milestone, patientName);
+    if (toReview.isEmpty || !mounted) return;
+
+    DateTime? patientDob;
+    final dobStr = _patient?.dob ?? widget.dob;
+    if (dobStr != null && dobStr.isNotEmpty) {
+      patientDob = DateTime.tryParse(dobStr);
+    }
+
+    final retake = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => EpiScanReviewSheet(
+        milestones: toReview,
+        scanResult: result,
+        patient: _patient,
+        patientId: _patientKey,
+        patientName: patientName,
+        ageLabel: _ageLabel(_patient),
+        dob: patientDob,
+        encounterId: widget.encounterId,
+        memberId: widget.memberId,
+        householdId: _patient?.householdId,
+        householdMemberLocalId: widget.householdMemberLocalId,
+        onSaved: () {
+          setState(() => _loading = true);
+          _load();
+        },
+      ),
+    );
+    if (retake == true && mounted) {
+      await _scanWholeCard();
     }
   }
 
@@ -1556,6 +1604,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   bool _referring = false;
 
   late DateTime _givenDate;
+  String? _dateError;
   final TextEditingController _notesCtrl = TextEditingController();
 
   final TextEditingController _reasonCtrl = TextEditingController();
@@ -1569,7 +1618,17 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   void initState() {
     super.initState();
     _givenDate = widget.prefilledDate ?? DateTime.now();
+    _dateError = _validateGivenDate(_givenDate);
   }
+
+  /// A scan-prefilled date can still land before DOB — or before this
+  /// milestone's minimum eligible age — even though the picker itself is
+  /// bounded to DOB. See [validateVaccinationDate].
+  String? _validateGivenDate(DateTime date) => validateVaccinationDate(
+        date,
+        dob: widget.dob,
+        earliestEligibleDate: widget.milestone.scheduledDate,
+      );
 
   @override
   void dispose() {
@@ -1599,6 +1658,12 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
       }
       if (_selectedFacilityId == null) {
         setState(() => _facilityError = EpiStrings.referralFacilityRequired);
+        return;
+      }
+    } else {
+      final dateError = _validateGivenDate(_givenDate);
+      if (dateError != null) {
+        setState(() => _dateError = dateError);
         return;
       }
     }
@@ -1836,15 +1901,30 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
                     _SectionLabel(EpiStrings.dateAdministered),
                     _DateField(
                       date: _givenDate,
+                      errorText: _dateError,
                       onTap: () async {
+                        // Floored at DOB only, not this milestone's own
+                        // eligible-age date — a scan-prefilled date can
+                        // land before that floor, which would make
+                        // initialDate < firstDate and crash showDatePicker.
+                        // _validateGivenDate() catches the eligible-age
+                        // violation instead, for both manual and
+                        // scan-prefilled dates.
+                        final firstDate = widget.dob ?? DateTime(2020);
+                        final initialDate = _givenDate.isBefore(firstDate)
+                            ? firstDate
+                            : _givenDate;
                         final picked = await showDatePicker(
                           context: context,
-                          initialDate: _givenDate,
-                          firstDate: widget.dob ?? DateTime(2020),
+                          initialDate: initialDate,
+                          firstDate: firstDate,
                           lastDate: DateTime.now(),
                         );
                         if (picked != null) {
-                          setState(() => _givenDate = picked);
+                          setState(() {
+                            _givenDate = picked;
+                            _dateError = _validateGivenDate(picked);
+                          });
                         }
                       },
                     ),
@@ -2133,9 +2213,10 @@ class _VaccineCard extends StatelessWidget {
 }
 
 class _DateField extends StatelessWidget {
-  const _DateField({required this.date, required this.onTap});
+  const _DateField({required this.date, required this.onTap, this.errorText});
   final DateTime date;
   final VoidCallback onTap;
+  final String? errorText;
 
   String _format(DateTime d) {
     final day = d.day.toString().padLeft(2, '0');
@@ -2145,28 +2226,48 @@ class _DateField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _format(date),
-                style: const TextStyle(fontSize: 15, color: AppColors.navy),
+    final hasError = errorText != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: hasError ? _kRed : const Color(0xFFE5E7EB),
+                width: 1.5,
               ),
             ),
-            const Icon(Icons.calendar_today_outlined,
-                size: 18, color: AppColors.textMuted),
-          ],
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _format(date),
+                    style:
+                        const TextStyle(fontSize: 15, color: AppColors.navy),
+                  ),
+                ),
+                const Icon(Icons.calendar_today_outlined,
+                    size: 18, color: AppColors.textMuted),
+              ],
+            ),
+          ),
         ),
-      ),
+        if (hasError) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              errorText!,
+              style: const TextStyle(fontSize: 11, color: _kRed),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
