@@ -102,6 +102,7 @@ import 'features/visit/anc/anc_visit_extraction_repository.dart';
 import 'features/visit/ncd/ncd_visit_extraction_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'core/config/app_config.dart';
+import 'core/widgets/environment_banner.dart';
 import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
@@ -784,6 +785,27 @@ class _UhisNextAppState extends State<UhisNextApp>
                   themeMode: themeProvider.mode,
                   routerConfig: _router,
                   debugShowCheckedModeBanner: false,
+                  // Wraps every route with a single insertion point — the
+                  // "LW Training" build's persistent non-production warning.
+                  // Renders nothing (and this whole wrapper is a no-op) on
+                  // the production build.
+                  builder: (context, child) => AppConfig.showEnvironmentBanner
+                      ? Column(
+                          children: [
+                            const EnvironmentBanner(),
+                            // The banner's SafeArea already takes the status
+                            // bar inset; without this every screen below would
+                            // pad for it again (e.g. the dashboard header).
+                            Expanded(
+                              child: MediaQuery.removePadding(
+                                context: context,
+                                removeTop: true,
+                                child: child!,
+                              ),
+                            ),
+                          ],
+                        )
+                      : child!,
                 ),
               ),
             ),

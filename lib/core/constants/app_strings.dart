@@ -123,6 +123,12 @@ abstract final class CommonStrings {
   static String get comingSoon => getTranslatedString('Common.comingSoon', 'Coming soon');
   /// Spice R.string.ok
   static String get ok => getTranslatedString('ok', 'OK');
+  /// Persistent top banner shown only on the "LW Training" build
+  /// (AppConfig.isTrainingBuild) — see EnvironmentBanner.
+  static String get trainingBannerMessage => getTranslatedString(
+        'trainingBannerMessage',
+        'TRAINING BUILD — Not for real patient data',
+      );
 }
 
 /// Forced app-update dialog — Spice Android `R.string.alert`,
