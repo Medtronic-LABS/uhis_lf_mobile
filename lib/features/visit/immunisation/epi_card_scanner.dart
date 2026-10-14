@@ -69,6 +69,20 @@ class EpiScanResult {
       matchedCodes.isNotEmpty || extractedDate != null || dateByCode.isNotEmpty;
 }
 
+/// Quality signals detected in a captured card photo, checked before the
+/// image is sent to Gemini — a blurry or glare-heavy capture (e.g.
+/// photographing a screen rather than the physical card, or a shaky
+/// handheld shot) degrades date-extraction accuracy more than the server's
+/// multi-vote self-consistency checks can recover from. Heuristic and
+/// advisory only — [EpiCardScanner.assessCaptureQuality] never blocks a
+/// scan, it only lets the UI offer a retake before spending the call.
+class CardCaptureQuality {
+  const CardCaptureQuality({required this.isBlurry, required this.hasGlare});
+  final bool isBlurry;
+  final bool hasGlare;
+  bool get hasIssue => isBlurry || hasGlare;
+}
+
 /// Where the card image comes from — keeps the `image_picker` transport type
 /// out of the UI layer, which only chooses one of these.
 enum EpiScanSource { camera, gallery }
@@ -202,7 +216,8 @@ abstract final class EpiCardScanner {
     final isOnline = connectivity.any((r) => r != ConnectivityResult.none);
     if (isOnline) {
       try {
-        final result = await dateExtractionRepo.extractEpiDates(image);
+        final prepared = await prepareForVisionUpload(image);
+        final result = await dateExtractionRepo.extractEpiDates(prepared);
         return EpiScanResult(
           matchedCodes: result.matchedCodes,
           dateByCode: result.dateByCode,
@@ -224,6 +239,110 @@ abstract final class EpiCardScanner {
   /// Pure text-matching path — exposed for unit tests (no camera/ML Kit needed).
   static EpiScanResult matchText(String ocrText, List<String> targetCodes) =>
       _match(ocrText, targetCodes);
+
+  /// Checks a freshly captured/picked card photo for blur and glare before
+  /// it's sent to Gemini — cheap, local, heuristic-only. Call this right
+  /// after capture so the scan screen can offer a retake before spending an
+  /// online extraction call on a photo that's unlikely to read well (most
+  /// commonly: photographing a screen displaying the card rather than the
+  /// physical card itself, which compounds glare and a moiré-like softness).
+  static Future<CardCaptureQuality> assessCaptureQuality(
+      File imageFile) async {
+    try {
+      final decoded = img.decodeImage(await imageFile.readAsBytes());
+      if (decoded == null) {
+        return const CardCaptureQuality(isBlurry: false, hasGlare: false);
+      }
+      var small = img.bakeOrientation(decoded);
+      const target = 240;
+      final longest = small.width >= small.height ? small.width : small.height;
+      if (longest > target) {
+        final scale = target / longest;
+        small = img.copyResize(
+          small,
+          width: (small.width * scale).round(),
+          height: (small.height * scale).round(),
+          interpolation: img.Interpolation.average,
+        );
+      }
+
+      // Glare: fraction of near-pure-white pixels — a flash reflection or a
+      // screen's backlight blows out a patch of the image toward white in a
+      // way printed paper under normal light essentially never does.
+      var brightCount = 0;
+      final totalPixels = small.width * small.height;
+      for (final p in small) {
+        if (p.r > 250 && p.g > 250 && p.b > 250) brightCount++;
+      }
+      final hasGlare =
+          totalPixels > 0 && (brightCount / totalPixels) > 0.10;
+
+      // Blur: variance of a Laplacian edge response on a grayscale copy — a
+      // sharp, in-focus photo has strong, varied edge responses; a blurry
+      // one flattens toward a near-uniform response. Threshold is a rough
+      // heuristic tuned conservatively (favours missing mild blur over
+      // false-flagging a legitimately sharp card) since this only ever
+      // prompts a retake, never blocks one.
+      final gray = img.grayscale(small);
+      final edges = img.convolution(gray, filter: const [
+        0, -1, 0, //
+        -1, 4, -1, //
+        0, -1, 0, //
+      ]);
+      double sum = 0, sumSq = 0;
+      var n = 0;
+      for (final p in edges) {
+        final v = p.r.toDouble();
+        sum += v;
+        sumSq += v * v;
+        n++;
+      }
+      final mean = n == 0 ? 0.0 : sum / n;
+      final variance = n == 0 ? 0.0 : (sumSq / n) - (mean * mean);
+      final isBlurry = variance < 8.0;
+
+      return CardCaptureQuality(isBlurry: isBlurry, hasGlare: hasGlare);
+    } on Object catch (e) {
+      debugPrint('[EpiCardScanner] assessCaptureQuality failed: $e');
+      return const CardCaptureQuality(isBlurry: false, hasGlare: false);
+    }
+  }
+
+  /// Prepares a captured card photo for the online Gemini call. Unlike
+  /// [_preprocess] (grayscale + contrast, tuned for the offline ML Kit /
+  /// Tesseract OCR engines), a vision model reads a clean color photo better
+  /// than a grayscale-and-contrast-boosted one — this only bakes in EXIF
+  /// orientation and caps an oversized raw camera capture, so a very large
+  /// sensor photo doesn't balloon the upload for no accuracy benefit.
+  /// Degrades to the original file on any decode/encode failure.
+  static Future<File> prepareForVisionUpload(File src) async {
+    try {
+      final decoded = img.decodeImage(await src.readAsBytes());
+      if (decoded == null) return src;
+      var im = img.bakeOrientation(decoded);
+
+      const maxDimension = 2048;
+      final longest = im.width >= im.height ? im.width : im.height;
+      if (longest > maxDimension) {
+        final scale = maxDimension / longest;
+        im = img.copyResize(
+          im,
+          width: (im.width * scale).round(),
+          height: (im.height * scale).round(),
+          interpolation: img.Interpolation.average,
+        );
+      }
+
+      final dir = await getTemporaryDirectory();
+      final out = File(
+          '${dir.path}/epi_vision_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await out.writeAsBytes(img.encodeJpg(im, quality: 92));
+      return out;
+    } on Object catch (e) {
+      debugPrint('[EpiCardScanner] prepareForVisionUpload failed: $e');
+      return src;
+    }
+  }
 
   /// Normalises Bengali numerals (০–৯) to ASCII (0–9). Exposed for tests.
   static String normalizeBengaliDigits(String s) {
