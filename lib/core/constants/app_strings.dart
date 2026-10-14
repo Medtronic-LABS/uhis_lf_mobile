@@ -5893,6 +5893,29 @@ abstract final class EpiStrings {
       getTranslatedString('Epi.scanReviewNotOnCardBadge', 'Not on card');
   static String get scanReviewAddDate =>
       getTranslatedString('Epi.scanReviewAddDate', '+ Add date');
+  static String get scanQualityWarningTitle => getTranslatedString(
+        'Epi.scanQualityWarningTitle',
+        'Check before scanning',
+      );
+  static String get scanQualityBlurryMessage => getTranslatedString(
+        'Epi.scanQualityBlurryMessage',
+        "This photo looks blurry — dates may not read correctly. "
+            "Hold steady and fill the frame.",
+      );
+  static String get scanQualityGlareMessage => getTranslatedString(
+        'Epi.scanQualityGlareMessage',
+        "This photo has glare or a bright reflection — dates may not read "
+            "correctly. Avoid flash and screen reflections.",
+      );
+  static String get scanQualityBothMessage => getTranslatedString(
+        'Epi.scanQualityBothMessage',
+        "This photo looks blurry and has glare — dates may not read "
+            "correctly. Hold steady, fill the frame, and avoid reflections.",
+      );
+  static String get scanQualityRetake =>
+      getTranslatedString('Epi.scanQualityRetake', 'Retake photo');
+  static String get scanQualityUseAnyway =>
+      getTranslatedString('Epi.scanQualityUseAnyway', 'Use anyway');
   static String get scanCameraUnavailable => getTranslatedString(
         'Epi.scanCameraUnavailable',
         'Camera unavailable — grant permission or upload an image',

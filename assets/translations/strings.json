@@ -14839,6 +14839,30 @@
     "en": "+ Add date",
     "bn": "+ তারিখ যোগ করুন"
   },
+  "Epi.scanQualityWarningTitle": {
+    "en": "Check before scanning",
+    "bn": "স্ক্যান করার আগে পরীক্ষা করুন"
+  },
+  "Epi.scanQualityBlurryMessage": {
+    "en": "This photo looks blurry — dates may not read correctly. Hold steady and fill the frame.",
+    "bn": "ছবিটি অস্পষ্ট মনে হচ্ছে — তারিখ সঠিকভাবে পড়া নাও যেতে পারে। স্থির রাখুন এবং ফ্রেম পূর্ণ করুন।"
+  },
+  "Epi.scanQualityGlareMessage": {
+    "en": "This photo has glare or a bright reflection — dates may not read correctly. Avoid flash and screen reflections.",
+    "bn": "ছবিতে আলোর প্রতিফলন বা উজ্জ্বল ঝলক আছে — তারিখ সঠিকভাবে পড়া নাও যেতে পারে। ফ্ল্যাশ ও পর্দার প্রতিফলন এড়িয়ে চলুন।"
+  },
+  "Epi.scanQualityBothMessage": {
+    "en": "This photo looks blurry and has glare — dates may not read correctly. Hold steady, fill the frame, and avoid reflections.",
+    "bn": "ছবিটি অস্পষ্ট এবং এতে আলোর প্রতিফলন আছে — তারিখ সঠিকভাবে পড়া নাও যেতে পারে। স্থির রাখুন, ফ্রেম পূর্ণ করুন এবং প্রতিফলন এড়িয়ে চলুন।"
+  },
+  "Epi.scanQualityRetake": {
+    "en": "Retake photo",
+    "bn": "আবার ছবি তুলুন"
+  },
+  "Epi.scanQualityUseAnyway": {
+    "en": "Use anyway",
+    "bn": "তবুও ব্যবহার করুন"
+  },
   "Epi.scanning": {
     "en": "Scanning…",
     "bn": "স্ক্যান করা হচ্ছে…"

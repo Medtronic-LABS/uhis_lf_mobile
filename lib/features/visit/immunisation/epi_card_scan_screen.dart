@@ -211,7 +211,13 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
     try {
       final frame = await controller.takePicture();
       if (!mounted) return;
-      await _runOcr(File(frame.path));
+      final image = File(frame.path);
+      if (!await _confirmQualityOrRetake(image)) {
+        if (mounted) setState(() => _busy = false);
+        return;
+      }
+      if (!mounted) return;
+      await _runOcr(image);
     } on CameraException catch (e) {
       debugPrint('EpiCardScanScreen: takePicture failed: $e');
       if (mounted) setState(() => _busy = false);
@@ -230,7 +236,47 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
       setState(() => _busy = false); // cancelled — re-enable controls
       return;
     }
-    await _runOcr(File(picked.path));
+    final image = File(picked.path);
+    if (!await _confirmQualityOrRetake(image)) {
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
+    if (!mounted) return;
+    await _runOcr(image);
+  }
+
+  /// Checked right after capture/pick, before spending an online extraction
+  /// call — a blurry or glare-heavy photo (most commonly: photographing a
+  /// screen showing the card rather than the physical card) is unlikely to
+  /// read well. Advisory only: returns true (proceed) when quality looks
+  /// fine, when the SK chooses "Use anyway", or if the dialog can't be shown
+  /// because the widget unmounted mid-check.
+  Future<bool> _confirmQualityOrRetake(File image) async {
+    final quality = await EpiCardScanner.assessCaptureQuality(image);
+    if (!quality.hasIssue || !mounted) return true;
+    final message = quality.isBlurry && quality.hasGlare
+        ? EpiStrings.scanQualityBothMessage
+        : quality.isBlurry
+            ? EpiStrings.scanQualityBlurryMessage
+            : EpiStrings.scanQualityGlareMessage;
+    final useAnyway = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(EpiStrings.scanQualityWarningTitle),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(EpiStrings.scanQualityRetake),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(EpiStrings.scanQualityUseAnyway),
+          ),
+        ],
+      ),
+    );
+    return useAnyway ?? false;
   }
 
   /// Shows the chosen image with the scan-line sweep while OCR runs — Gemini
