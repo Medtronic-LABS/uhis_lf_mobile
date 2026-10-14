@@ -1179,6 +1179,27 @@ class LocalAssessmentDao {
     return (result.first['count'] as int) > 0;
   }
 
+  /// One-time (per app process) wrapper around [syncPatientIdsFromMemberLinks].
+  ///
+  /// The raw backfill runs two table-wide UPDATEs and must not run on every
+  /// patient-profile open — that write lock starves concurrent reads (Care
+  /// History, dashboard, background sync) and triggers sqflite "database has
+  /// been locked" warnings.
+  static bool _patientIdBackfillDone = false;
+  static Future<void>? _patientIdBackfillFuture;
+
+  Future<void> ensurePatientIdsFromMemberLinks() async {
+    if (_patientIdBackfillDone) return;
+    _patientIdBackfillFuture ??= () async {
+      try {
+        await syncPatientIdsFromMemberLinks();
+      } finally {
+        _patientIdBackfillDone = true;
+      }
+    }();
+    await _patientIdBackfillFuture;
+  }
+
   /// Repairs assessment rows saved before identity resolution was fixed:
   /// copies [members.id] into [patient_id] and backfills [household_member_local_id]
   /// when only the server FHIR id was stored.

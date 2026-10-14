@@ -1668,6 +1668,13 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         ];
       }
 
+      final gestationalWeeks = resolveNabaGestationalWeeks(
+        visitGestationalWeeks: widget.gestationalWeeks,
+        lmpMs: widget.lmpMs,
+        assessments: assessments,
+      );
+      final isPregnant = resolveNabaIsPregnant(programmes);
+
       final req = NabaRequest(
         requestId: widget.visitId,
         patientId: widget.patientId,
@@ -1679,10 +1686,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         ageYears: widget.patientAge,
         sex: widget.patientGender,
         activeProgrammes: programmes,
-        gestationalWeeks: widget.gestationalWeeks,
-        isPregnant: (widget.gestationalWeeks != null || widget.lmpMs != null) &&
-            (widget.confirmedProgrammes.contains(Programme.anc) ||
-             widget.confirmedProgrammes.contains(Programme.pnc)),
+        gestationalWeeks: gestationalWeeks,
+        isPregnant: isPregnant ? true : null,
         manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
         currentVitals: _loadedVitals,
         labResults: _loadedLabs,

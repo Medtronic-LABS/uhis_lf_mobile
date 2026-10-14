@@ -502,9 +502,12 @@ class _PatientContextScreenState
   /// offline-first contract (architecture.md §3.1). Returns deduped list
   /// sorted DESC by date.
   Future<List<MemberAssessment>> _localAssessmentsFor(String patientId) async {
-    final lookupKeys = await _assessmentLookupKeys(patientId);
+    // Capture before any await — this runs inside Future.wait during _fetchData
+    // and the screen may pop before parallel work finishes.
+    final memberDao = context.read<MemberDao>();
     final assessments = context.read<AssessmentDao>();
     final localDrafts = context.read<LocalAssessmentDao>();
+    final lookupKeys = await _assessmentLookupKeys(patientId);
 
     final out = <MemberAssessment>[];
     final seenSyncedIds = <String>{};
@@ -548,7 +551,7 @@ class _PatientContextScreenState
     // [PatientOrMemberData.assessments], so that it also covers records that
     // only came back over the network.
     try {
-      await localDrafts.syncPatientIdsFromMemberLinks();
+      await localDrafts.ensurePatientIdsFromMemberLinks();
 
       final draftsById = <String, LocalAssessmentEntity>{};
       void absorb(Iterable<LocalAssessmentEntity> rows) {
@@ -562,7 +565,6 @@ class _PatientContextScreenState
       // PW/ANC saves after member sync: visit flow passes FHIR memberId, so
       // householdMemberLocalId was 0 and patient_id could be null/wrong until
       // identity resolution is fixed — still find rows by local member PK.
-      final memberDao = context.read<MemberDao>();
       for (final key in lookupKeys) {
         final member = await memberDao.getById(key) ??
             await memberDao.getByPatientId(key) ??
@@ -579,12 +581,9 @@ class _PatientContextScreenState
       }
 
       final drafts = draftsById.values.toList();
-      // ignore: avoid_print
-      print('[PatientContextScreen] localDrafts lookupKeys=$lookupKeys count=${drafts.length}');
+      debugPrint(
+          '[PatientContextScreen] localDrafts lookupKeys=$lookupKeys count=${drafts.length}');
       for (final d in drafts) {
-        // ignore: avoid_print
-        print('[PatientContextScreen]   draft id=${d.id} type=${d.assessmentType} syncStatus=${d.syncStatus.name} storedPatientId=${d.patientId}');
-
         Map<String, dynamic> details = const {};
         try {
           final decoded = jsonDecode(d.assessmentDetails);

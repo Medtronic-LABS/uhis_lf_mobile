@@ -925,13 +925,11 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
               : null,
           otherMembers: others,
           isExpanded: _expandedHouseholdIds.contains(id),
-          onToggleExpanded: id.isEmpty
-              ? null
-              : () => setState(() {
-                  if (!_expandedHouseholdIds.remove(id)) {
-                    _expandedHouseholdIds.add(id);
-                  }
-                }),
+          onToggleExpanded: () => setState(() {
+            if (!_expandedHouseholdIds.remove(id)) {
+              _expandedHouseholdIds.add(id);
+            }
+          }),
           onMemberTap: (other) => _navigateToMemberDetail(
             context,
             _MemberInfo.fromMember(other, item),
@@ -975,13 +973,16 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     final localId = item.id ?? '';
     if (localId.isEmpty) return;
 
+    // Load household row while the NID overlay is up so manual-register does
+    // not wait on SQLite after the sheet closes.
+    final householdFuture = context.read<HouseholdDao>().getById(localId);
+
     // Use the screen State's context — not a ListView itemBuilder context,
     // which is deactivated after the async scanner closes.
     final result = await showNidScannerForMember(context);
     if (!mounted || result == null) return;
 
-    final householdEntity =
-        await context.read<HouseholdDao>().getById(localId);
+    final householdEntity = await householdFuture;
     if (!mounted) return;
 
     final serverHouseholdId = householdEntity?.fhirId ?? localId;
