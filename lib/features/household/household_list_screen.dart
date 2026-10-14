@@ -14,6 +14,7 @@ import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/roster_revision.dart';
+import '../../core/mission/mission_schedule_urgency.dart';
 import '../../core/mission/programme_reason.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/programme.dart';
@@ -29,6 +30,7 @@ import '../visit/widgets/mission_queue_card.dart' show PatientBadgeRow, programm
 import 'member_assessment_lookup.dart';
 import 'enrollment/enrollment_dob.dart';
 import 'enrollment/enrollment_entry_sheet.dart';
+import 'enrollment/link_member_route_extra.dart';
 import 'enrollment/nid_ocr_service.dart';
 import '../../core/db/service_member_dao.dart';
 import 'household_detail_screen.dart';
@@ -45,6 +47,124 @@ import 'service_static_filter.dart';
 /// observer lets it notice and re-read.
 final RouteObserver<ModalRoute<void>> patientsRouteObserver =
     RouteObserver<ModalRoute<void>>();
+
+bool _householdKeyMatchesEntity(HouseholdEntity hh, String key) {
+  final k = key.trim();
+  if (k.isEmpty) return false;
+  if (hh.id == k) return true;
+  final fhir = hh.fhirId?.trim();
+  if (fhir != null && fhir.isNotEmpty && fhir == k) return true;
+  final ref = hh.referenceId?.trim();
+  if (ref != null && ref.isNotEmpty && ref == k) return true;
+  return false;
+}
+
+/// Resolves a member-group map key (local PK, FHIR id, or empty) to a row in
+/// [localHouseholds], using member FK / reference / household FHIR ids.
+HouseholdEntity? _householdEntityForMemberGroup(
+  String memberGroupKey,
+  List<HouseholdMemberEntity> members,
+  List<HouseholdEntity> localHouseholds,
+) {
+  final groupKey = memberGroupKey.trim();
+  if (groupKey.isNotEmpty) {
+    for (final hh in localHouseholds) {
+      if (_householdKeyMatchesEntity(hh, groupKey)) return hh;
+    }
+  }
+  for (final m in members) {
+    for (final candidate in [
+      m.householdId,
+      m.householdReferenceId,
+    ]) {
+      final k = candidate?.trim();
+      if (k == null || k.isEmpty) continue;
+      for (final hh in localHouseholds) {
+        if (_householdKeyMatchesEntity(hh, k)) return hh;
+      }
+    }
+    final hhFhir = m.householdFhirId?.trim();
+    if (hhFhir != null && hhFhir.isNotEmpty) {
+      for (final hh in localHouseholds) {
+        if (hh.fhirId?.trim() == hhFhir) return hh;
+      }
+    }
+  }
+  return null;
+}
+
+Map<String, dynamic> _rawJsonForHouseholdEntity(
+  HouseholdEntity hh,
+  int memberCount,
+) {
+  return {
+    'id': hh.id,
+    'name': hh.name,
+    'householdNo': hh.householdNo,
+    'village': hh.village,
+    'villageId': hh.villageId,
+    if (hh.fhirId != null && hh.fhirId!.trim().isNotEmpty) 'fhirId': hh.fhirId,
+    if (hh.subVillageId != null && hh.subVillageId!.trim().isNotEmpty)
+      'subVillageId': hh.subVillageId,
+    if (hh.subVillageName != null && hh.subVillageName!.trim().isNotEmpty)
+      'subVillageName': hh.subVillageName,
+    if (hh.headPhoneNumber != null && hh.headPhoneNumber!.trim().isNotEmpty)
+      'headPhoneNumber': hh.headPhoneNumber,
+    'noOfPeople': memberCount > 0 ? memberCount : hh.memberCount,
+  };
+}
+
+_HouseholdItem? _householdItemFromMemberGroup({
+  required String memberGroupKey,
+  required List<HouseholdMemberEntity> memberEntities,
+  required List<_HouseholdMember> memberList,
+  required List<HouseholdEntity> localHouseholds,
+}) {
+  final entity = _householdEntityForMemberGroup(
+    memberGroupKey,
+    memberEntities,
+    localHouseholds,
+  );
+  final localId = entity?.id ??
+      (memberGroupKey.trim().isNotEmpty ? memberGroupKey.trim() : null);
+  if (localId == null || localId.isEmpty) return null;
+
+  final firstMember = memberEntities.first;
+  final head = memberList.firstWhere(
+    (m) => m.isHouseholdHead == true,
+    orElse: () => memberList.first,
+  );
+  final householdName = head.name != null
+      ? HouseholdListStrings.namedHousehold(head.name!)
+      : (entity?.name?.trim().isNotEmpty == true
+            ? entity!.name
+            : '#${entity?.householdNo ?? localId}');
+
+  return _HouseholdItem(
+    id: localId,
+    name: householdName,
+    householdNo: entity?.householdNo ?? localId,
+    village: entity?.village ?? firstMember.villageId,
+    subVillage: entity?.subVillageName,
+    memberCount: memberList.length,
+    members: memberList,
+    rawJson: entity != null
+        ? _rawJsonForHouseholdEntity(entity, memberList.length)
+        : null,
+  );
+}
+
+void _appendUncoveredLocalHouseholds(
+  List<_HouseholdItem> items,
+  List<HouseholdEntity> localHouseholds,
+) {
+  final covered = items.map((i) => i.id).whereType<String>().toSet();
+  for (final hh in localHouseholds) {
+    if (!covered.contains(hh.id)) {
+      items.add(_HouseholdItem.fromEntity(hh, []));
+    }
+  }
+}
 
 /// The Patients tab — a single household-card list matching the v13
 /// mockup's `#householdsScreen` exactly (navy header, village tabs, search,
@@ -64,6 +184,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
   bool _householdsLoading = false;
   Object? _householdLoadError;
   int _householdLoadGeneration = 0;
+
+  /// False while the skeleton roster is shown — service badges stay hidden
+  /// until [_enrichHouseholdItems] finishes (no "New visit" flash).
+  bool _householdMemberBadgesReady = false;
   final ScrollController _scrollController = ScrollController();
 
   // Search
@@ -309,6 +433,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
   ) async {
     final generation = ++_householdLoadGeneration;
     debugPrint('[_HouseholdListScreenState] _reloadHouseholdList gen=$generation');
+    _householdMemberBadgesReady = false;
     try {
       final loaded = await Future.wait<Object?>([
         householdDao.getAll(limit: 1000),
@@ -337,6 +462,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
           _householdItems = items;
           _householdsLoading = false;
           _householdLoadError = null;
+          _householdMemberBadgesReady = true;
         });
         return;
       }
@@ -345,6 +471,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
         _householdItems = items;
         _householdsLoading = false;
         _householdLoadError = null;
+        _householdMemberBadgesReady = membersByHousehold.isEmpty;
       });
 
       if (membersByHousehold.isEmpty) return;
@@ -356,13 +483,17 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
         appDb,
       );
       if (!mounted || generation != _householdLoadGeneration) return;
-      setState(() => _householdItems = enriched);
+      setState(() {
+        _householdItems = enriched;
+        _householdMemberBadgesReady = true;
+      });
     } catch (e, st) {
       debugPrint('[HouseholdList] load failed: $e\n$st');
       if (!mounted || generation != _householdLoadGeneration) return;
       setState(() {
         _householdLoadError = e;
         _householdsLoading = false;
+        _householdMemberBadgesReady = true;
       });
     }
   }
@@ -373,35 +504,19 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
   ) {
     final items = <_HouseholdItem>[];
     for (final entry in membersByHousehold.entries) {
-      final hhId = entry.key;
       final members = entry.value;
-      final firstMember = members.first;
+      if (members.isEmpty) continue;
       final memberList =
           members.map((e) => _HouseholdMember.fromEntity(e)).toList();
-      final head = memberList.firstWhere(
-        (m) => m.isHouseholdHead == true,
-        orElse: () => memberList.first,
+      final item = _householdItemFromMemberGroup(
+        memberGroupKey: entry.key,
+        memberEntities: members,
+        memberList: memberList,
+        localHouseholds: localHouseholds,
       );
-      final householdName = head.name != null
-          ? HouseholdListStrings.namedHousehold(head.name!)
-          : (hhId.isNotEmpty ? '#$hhId' : null);
-      items.add(
-        _HouseholdItem(
-          id: hhId,
-          householdNo: hhId,
-          name: householdName,
-          village: firstMember.subVillageId,
-          memberCount: members.length,
-          members: memberList,
-        ),
-      );
+      if (item != null) items.add(item);
     }
-    final coveredIds = membersByHousehold.keys.toSet();
-    for (final hh in localHouseholds) {
-      if (!coveredIds.contains(hh.id)) {
-        items.add(_HouseholdItem.fromEntity(hh, []));
-      }
-    }
+    _appendUncoveredLocalHouseholds(items, localHouseholds);
     return items;
   }
 
@@ -456,9 +571,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
 
     final items = <_HouseholdItem>[];
     for (final entry in membersByHousehold.entries) {
-      final hhId = entry.key;
       final members = entry.value;
-      final firstMember = members.first;
+      if (members.isEmpty) continue;
       final memberList = members.map((e) {
         final lookupKeys = memberAssessmentLookupKeysFromEntity(e);
         final tableKey = memberSideTableKey(e);
@@ -486,30 +600,15 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
           recentService: recentService,
         );
       }).toList();
-      final head = memberList.firstWhere(
-        (m) => m.isHouseholdHead == true,
-        orElse: () => memberList.first,
+      final item = _householdItemFromMemberGroup(
+        memberGroupKey: entry.key,
+        memberEntities: members,
+        memberList: memberList,
+        localHouseholds: localHouseholds,
       );
-      final householdName = head.name != null
-          ? HouseholdListStrings.namedHousehold(head.name!)
-          : (hhId.isNotEmpty ? '#$hhId' : null);
-      items.add(
-        _HouseholdItem(
-          id: hhId,
-          householdNo: hhId,
-          name: householdName,
-          village: firstMember.subVillageId,
-          memberCount: members.length,
-          members: memberList,
-        ),
-      );
+      if (item != null) items.add(item);
     }
-    final coveredIds = membersByHousehold.keys.toSet();
-    for (final hh in localHouseholds) {
-      if (!coveredIds.contains(hh.id)) {
-        items.add(_HouseholdItem.fromEntity(hh, []));
-      }
-    }
+    _appendUncoveredLocalHouseholds(items, localHouseholds);
     return items;
   }
 
@@ -909,13 +1008,16 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
         final highlightPrimary = primary != null &&
             q.isNotEmpty &&
             (primary.name?.toLowerCase().contains(q) ?? false);
+        final badgePending = !_householdMemberBadgesReady;
         return _HouseholdCard(
           item: item,
           villageDisplayName: _villageDisplayName(item.village),
+          serviceBadgePending: badgePending,
           primaryMemberRow: primary != null
               ? _buildMemberRow(
                   context,
                   _MemberInfo.fromMember(primary, item),
+                  serviceBadgePending: badgePending,
                 )
               : const SizedBox.shrink(),
           highlightPrimary: highlightPrimary,
@@ -970,59 +1072,99 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
 
   /// Opens the NID scanner then the add-member form for [item]'s household.
   Future<void> _addMemberToHousehold(_HouseholdItem item) async {
-    final localId = item.id ?? '';
-    if (localId.isEmpty) return;
-
-    // Load household row while the NID overlay is up so manual-register does
-    // not wait on SQLite after the sheet closes.
-    final householdFuture = context.read<HouseholdDao>().getById(localId);
+    final localId = _localHouseholdIdForAddMember(item);
+    if (localId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(HouseholdListStrings.addMemberNoHousehold)),
+        );
+      }
+      return;
+    }
 
     // Use the screen State's context — not a ListView itemBuilder context,
     // which is deactivated after the async scanner closes.
     final result = await showNidScannerForMember(context);
     if (!mounted || result == null) return;
 
-    final householdEntity = await householdFuture;
-    if (!mounted) return;
-
-    final serverHouseholdId = householdEntity?.fhirId ?? localId;
-
-    final villageId = householdEntity?.villageId ??
-        item.members.firstOrNull?.villageId ??
-        item.rawJson?['villageId'] as String? ??
-        '';
-    final subVillageId = householdEntity?.subVillageId ?? '';
-    final subVillageName = householdEntity?.subVillageName ?? '';
-    final memberNames = item.members
-        .map((m) => m.name)
-        .whereType<String>()
-        .where((n) => n.isNotEmpty)
-        .toList();
-    final head = _headMember(item.members);
-    final extra = <String, dynamic>{
-      'householdId': serverHouseholdId,
-      'householdReferenceId': localId,
-      'householdName': item.name ?? '',
-      'householdNo': item.householdNo ?? '',
-      'headName': head?.name ?? '',
-      'headPhoneNumber': head?.phoneNumber?.trim().isNotEmpty == true
-          ? head!.phoneNumber!.trim()
-          : householdEntity?.headPhoneNumber?.trim(),
-      'villageId': villageId,
-      'villageName': item.village ?? '',
-      'subVillageId': subVillageId,
-      'subVillageName': subVillageName,
-      'memberNames': memberNames,
-    };
-    if (result.status == NidScanStatus.success && result.data != null) {
-      extra['fromNidScan'] = true;
-      extra['nidNumber'] = result.data!.nidNumber;
-      extra['name'] = result.data!.name;
-      extra['dateOfBirth'] = result.data!.dateOfBirth;
-    }
+    final itemForLink = item.id == localId
+        ? item
+        : _HouseholdItem(
+            id: localId,
+            name: item.name,
+            householdNo: item.householdNo,
+            village: item.village,
+            subVillage: item.subVillage,
+            memberCount: item.memberCount,
+            members: item.members,
+            rawJson: item.rawJson,
+          );
+    final extra = _linkMemberExtraFromHouseholdItem(itemForLink, result);
     if (!mounted) return;
     await context.push('/household/enrollment/link-member', extra: extra);
     if (mounted) _loadData();
+  }
+
+  String _localHouseholdIdForAddMember(_HouseholdItem item) {
+    final fromId = item.id?.trim();
+    if (fromId != null && fromId.isNotEmpty) return fromId;
+    final fromRaw = item.rawJson?['id']?.toString().trim();
+    if (fromRaw != null && fromRaw.isNotEmpty) return fromRaw;
+    for (final m in item.members) {
+      final hh = m.householdId?.trim();
+      if (hh != null && hh.isNotEmpty) return hh;
+    }
+    return '';
+  }
+
+  Map<String, dynamic> _linkMemberExtraFromHouseholdItem(
+    _HouseholdItem item,
+    NidScanResult result,
+  ) {
+    final localId = _localHouseholdIdForAddMember(item);
+    final raw = item.rawJson;
+    final first = item.members.firstOrNull;
+    _HouseholdMember? subMember;
+    for (final m in item.members) {
+      if (m.subVillageId?.trim().isNotEmpty == true) {
+        subMember = m;
+        break;
+      }
+    }
+    subMember ??= first;
+    final head = _headMember(item.members);
+    final headPhone = head?.phoneNumber?.trim();
+    final headPhoneFromHousehold =
+        raw?['headPhoneNumber'] as String? ?? raw?['head_phone_number'] as String?;
+
+    return buildLinkMemberRouteExtra(
+      localHouseholdId: localId,
+      householdFhirId: raw?['fhirId'] as String?,
+      householdName: item.name ?? '',
+      householdNo: item.householdNo ?? '',
+      villageName: item.village ?? '',
+      villageId: raw?['villageId'] as String? ??
+          subMember?.subVillageId ??
+          first?.villageId ??
+          '',
+      subVillageId: raw?['subVillageId'] as String? ??
+          subMember?.subVillageId ??
+          '',
+      subVillageName: raw?['subVillageName'] as String? ??
+          subMember?.subVillageName ??
+          item.subVillage ??
+          '',
+      memberNames: item.members
+          .map((m) => m.name)
+          .whereType<String>()
+          .where((n) => n.isNotEmpty)
+          .toList(),
+      headName: head?.name ?? '',
+      headPhoneNumber: headPhone?.isNotEmpty == true
+          ? headPhone!
+          : (headPhoneFromHousehold?.trim() ?? ''),
+      scanResult: result,
+    );
   }
 
   void _navigateToMemberDetail(BuildContext context, _MemberInfo member) {
@@ -1059,10 +1201,16 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
   /// Member row matching the v14 wireframe — uses [PatientBadgeRow] with the
   /// same latest-service badge as the household detail screen, plus a
   /// [_TierStatusPill] when the member has an active queue entry.
-  Widget _buildMemberRow(BuildContext context, _MemberInfo member) {
+  Widget _buildMemberRow(
+    BuildContext context,
+    _MemberInfo member, {
+    bool serviceBadgePending = false,
+  }) {
     final pid = member.patientId ?? member.id;
     final queueItem = pid != null ? _queueItems[pid] : null;
-    final tier = queueItem?.tier;
+    final scheduleTier = queueItem != null
+        ? missionScheduleTierForDisplay(queueItem)
+        : null;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -1079,13 +1227,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
             householdName: member.householdName,
             useLatestServiceBadge: true,
             recentServiceKind: member.recentService,
+            serviceBadgePending: serviceBadgePending,
             isDeceased: !member.isActive,
             onTap: () => _navigateToMemberDetail(context, member),
           ),
         ),
-        if (tier != null && tier != DashboardTier.upcoming) ...[
+        if (scheduleTier != null && scheduleTier != DashboardTier.upcoming) ...[
           const SizedBox(width: 8),
-          _TierStatusPill(tier: tier),
+          _TierStatusPill(tier: scheduleTier),
         ],
       ],
     );
@@ -1165,6 +1314,7 @@ class _HouseholdCard extends StatelessWidget {
     required this.onMemberTap,
     this.onTap,
     this.onAddMember,
+    this.serviceBadgePending = false,
   });
 
   final _HouseholdItem item;
@@ -1187,6 +1337,7 @@ class _HouseholdCard extends StatelessWidget {
   final void Function(_HouseholdMember other) onMemberTap;
   final VoidCallback? onTap;
   final VoidCallback? onAddMember;
+  final bool serviceBadgePending;
 
   @override
   Widget build(BuildContext context) {
@@ -1244,42 +1395,42 @@ class _HouseholdCard extends StatelessWidget {
                       onTap: onTap,
                       borderRadius: BorderRadius.circular(6),
                       child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontFamily: AppFonts.display,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              color: AppColors.navy,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (villageDisplayName != null &&
+                              villageDisplayName!.isNotEmpty) ...[
+                            const SizedBox(height: 1),
                             Text(
-                              title,
+                              villageDisplayName!,
                               style: const TextStyle(
-                                fontFamily: AppFonts.display,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12,
-                                color: AppColors.navy,
+                                fontSize: 9.5,
+                                color: AppColors.textMuted,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (villageDisplayName != null &&
-                                villageDisplayName!.isNotEmpty) ...[
-                              const SizedBox(height: 1),
-                              Text(
-                                villageDisplayName!,
-                                style: const TextStyle(
-                                  fontSize: 9.5,
-                                  color: AppColors.textMuted,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
                           ],
-                        ),
+                        ],
                       ),
                     ),
-                    if (onAddMember != null) ...[
-                      const SizedBox(width: 8),
-                      _HouseholdAddMemberButton(onPressed: onAddMember!),
-                    ],
+                  ),
+                  if (onAddMember != null) ...[
+                    const SizedBox(width: 8),
+                    _HouseholdAddMemberButton(onPressed: onAddMember!),
                   ],
-                ),
+                ],
               ),
             ),
+          ),
           if (primaryRelation != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
@@ -1346,6 +1497,7 @@ class _HouseholdCard extends StatelessWidget {
                           for (final other in otherMembers)
                             _OtherMemberRow(
                               member: other,
+                              serviceBadgePending: serviceBadgePending,
                               isHighlighted: searchQuery.isNotEmpty &&
                                   (other.name
                                           ?.toLowerCase()
@@ -1409,11 +1561,13 @@ class _OtherMemberRow extends StatelessWidget {
   const _OtherMemberRow({
     required this.member,
     required this.onTap,
+    this.serviceBadgePending = false,
     this.isHighlighted = false,
   });
 
   final _HouseholdMember member;
   final VoidCallback onTap;
+  final bool serviceBadgePending;
   final bool isHighlighted;
 
   @override
@@ -1436,19 +1590,24 @@ class _OtherMemberRow extends StatelessWidget {
     final hasPhone = phone != null && phone.isNotEmpty;
 
     final deceased = !member.isActive;
-    final badge = deceased
-        ? null
-        : patientBadgeLabel(
-            latestServiceKind: member.recentService,
-            programmes: member.programmes,
-            ancVisitCount: member.ancVisitCount,
-            pncVisitCount: member.pncVisitCount,
-          );
-    final tagLabel =
-        deceased ? MemberDeceasedStrings.deceased : badge!.reason;
+    final showServiceBadge = !serviceBadgePending || deceased;
+    ({String reason, Programme badgeProgramme})? badge;
+    if (showServiceBadge && !deceased) {
+      badge = patientBadgeLabel(
+        latestServiceKind: member.recentService,
+        programmes: member.programmes,
+        ancVisitCount: member.ancVisitCount,
+        pncVisitCount: member.pncVisitCount,
+      );
+    }
+    final tagLabel = deceased
+        ? MemberDeceasedStrings.deceased
+        : badge?.reason;
     final (badgeBg, badgeFg) = deceased
         ? (AppColors.progressTrack, AppColors.textMuted)
-        : programmeBadgeColors(badge!.badgeProgramme);
+        : badge != null
+            ? programmeBadgeColors(badge.badgeProgramme)
+            : (AppColors.progressTrack, AppColors.textMuted);
 
     final row = InkWell(
       onTap: onTap,
@@ -1510,21 +1669,22 @@ class _OtherMemberRow extends StatelessWidget {
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: badgeBg,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                tagLabel,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: badgeFg,
+            if (tagLabel != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  tagLabel,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: badgeFg,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -1680,16 +1840,10 @@ class _HouseholdItem {
       latitude: null,
       longitude: null,
       members: memberList,
-      rawJson: {
-        'id': hh.id,
-        'name': hh.name,
-        'householdNo': hh.householdNo,
-        'village': hh.village,
-        'villageId': hh.villageId,
-        'noOfPeople': memberList.isNotEmpty
-            ? memberList.length
-            : hh.memberCount,
-      },
+      rawJson: _rawJsonForHouseholdEntity(
+        hh,
+        memberList.isNotEmpty ? memberList.length : (hh.memberCount ?? 0),
+      ),
     );
   }
 }
