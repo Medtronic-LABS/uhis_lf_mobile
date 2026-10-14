@@ -22,6 +22,7 @@ import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/models/programme.dart';
 import '../../../core/risk/pregnancy_cohort_rules.dart';
+import '../../../core/risk/pregnancy_rmnch_menu_gating.dart';
 import '../../../core/time/calendar_day.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/db/patient_programmes_dao.dart';
@@ -335,11 +336,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       // silently drop later. Deliberately NOT used to gate _isPW/ANC below —
       // ANC must stay selectable for an already-pregnant woman.
       final openEpisode = await episodeDao.openEpisodeFor(ctx.patientId);
+      final relevantEpisode =
+          PregnancyRmnchMenuGating.episodeForMenus(openEpisode);
       final mostRecentEpisode = await episodeDao.mostRecentFor(ctx.patientId);
       debugPrint(
         '[PwLockDebug] patientId=${ctx.patientId} isPw=$isPw '
         'activeProgrammes=${ctx.activeProgrammes} isPregnant=${ctx.isPregnant} '
-        'openEpisode=${openEpisode?.id} '
+        'openEpisode=${openEpisode?.id} relevantEpisode=${relevantEpisode?.id} '
         'mostRecentEpisode=${mostRecentEpisode?.id} '
         'mostRecentClosedAt=${mostRecentEpisode?.closedAt} '
         'mostRecentLmp=${mostRecentEpisode?.obstetric.lmpDate}',
@@ -377,17 +380,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           // (e.g. skip enrolled PNC while still pregnant). SK can still add
           // or remove cards after load.
           ..addAll(enrolledSeed);
-        if (openEpisode != null) {
-          // Already registered — PW is locked in the grid (see
-          // _InlineServiceSelector._isLocked) so this should rarely matter,
-          // but keeps _selectedProgrammes honest if enrolledSeed pre-ticked
-          // it. Does NOT touch _isPW — ANC's own lock reads that flag
-          // separately and must stay unlocked for an already-pregnant woman.
+        if (relevantEpisode != null &&
+            PregnancyRmnchMenuGating.isPwRegistrationLocked(
+              relevantEpisode.obstetric,
+            )) {
           _selectedProgrammes.remove(Programme.pw);
         }
         if (ancRevisitStatus.tooSoon ||
             ctx.isPostpartum ||
-            _isAncEarlyLmpBlockedFromEpisode(openEpisode)) {
+            PregnancyRmnchMenuGating.isAncEarlyLmpBlocked(
+              relevantEpisode?.obstetric,
+            )) {
           // Within the revisit interval, postpartum, or LMP < 6 weeks — ANC is
           // locked in the grid (see ProgrammeGridSync.isAncGridLocked), keeps
           // _selectedProgrammes honest if enrolledSeed/pathways pre-ticked it.
@@ -400,7 +403,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _isDelivery = false;
         _ancVisitedToday = ancToday;
         _ancRevisitStatus = ancRevisitStatus;
-        _openPregnancyEpisode = openEpisode;
+        // Spice `MetaRepository.setCustomStatus` — only RMNCH-relevant episodes
+        // gate PW/ANC/PO/FP; stale open rows are ignored for Step 1.
+        _openPregnancyEpisode = relevantEpisode;
         _isLoading = false;
       });
       debugPrint(
@@ -644,8 +649,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// True when the open pregnancy episode has LMP recorded but fewer than
   /// 6 weeks have elapsed — mirrors Android `getANCPNCStatus()` ANC gate.
   bool _isAncEarlyLmpBlockedFromEpisode(PregnancyEpisodeRow? episode) {
-    if (episode == null) return false;
-    return !PregnancyCohortRules.isAncEligible(episode.obstetric);
+    return PregnancyRmnchMenuGating.isAncEarlyLmpBlocked(episode?.obstetric);
   }
 
   /// Handles a [ServiceSelectionResult] from [_finalizeStep1Selection].
@@ -2421,10 +2425,8 @@ class _InlineServiceSelector extends StatelessWidget {
   /// the ANC card and shows the last-visit date/next-due date.
   final _AncRevisitStatus ancRevisitStatus;
 
-  /// The patient's currently open pregnancy episode, if any — locks the PW
-  /// card and shows its LMP/EDD. Deliberately independent of [isPW]: ANC's
-  /// own lock reads [isPW], not this field, so ANC stays selectable for an
-  /// already-pregnant woman regardless of this value.
+  /// RMNCH-relevant open episode (Spice `memberPregnancyDetail`) — stale /
+  /// lapsed pregnancies are nulled so Step 1 matches Spice Assessment menus.
   final PregnancyEpisodeRow? openPregnancyEpisode;
 
   final void Function(Programme programme, bool selected) onProgrammeToggle;
@@ -2502,20 +2504,23 @@ class _InlineServiceSelector extends StatelessWidget {
     if (card.isVaccination) return vaccinationLocked;
     if (card.programme == Programme.imci) return false;
     final ctx = patientContext;
-    final pregnant = ctx.isPregnant && !ctx.isPostpartum;
-    // PW: starts a new pregnancy registration — never requires prior pregnancy record.
-    // Blocked during a delivery visit, when already postpartum, or when this
-    // patient already has an open pregnancy episode (re-registration would
-    // only be silently dropped later by ServiceSelectionResolver).
+    // PW: Spice `isPWProfileMenuDisable` + delivery/postpartum visit guards.
     if (card.isPW) {
-      return isDelivery || ctx.isPostpartum || openPregnancyEpisode != null;
+      return isDelivery ||
+          ctx.isPostpartum ||
+          PregnancyRmnchMenuGating.isPwRegistrationLocked(
+            openPregnancyEpisode?.obstetric,
+          );
     }
     if (card.programme == Programme.anc) {
-      final ancEarlyLmpBlocked = openPregnancyEpisode != null &&
-          !PregnancyCohortRules.isAncEligible(openPregnancyEpisode!.obstetric);
+      final obstetric = openPregnancyEpisode?.obstetric;
+      final ancEarlyLmpBlocked =
+          PregnancyRmnchMenuGating.isAncEarlyLmpBlocked(obstetric);
+      final inPncWorkflow =
+          PregnancyRmnchMenuGating.isPncWorkflow(obstetric);
       return ProgrammeGridSync.isAncGridLocked(
-        isPostpartum: ctx.isPostpartum,
-        isPwGateOpen: isPW,
+        isPostpartum: ctx.isPostpartum || inPncWorkflow,
+        isPwGateOpen: isPW || openPregnancyEpisode != null,
         isDeliveryVisit: isDelivery,
         ancRevisitTooSoon: ancRevisitStatus.tooSoon,
         ancEarlyLmpBlocked: ancEarlyLmpBlocked,
@@ -2523,20 +2528,24 @@ class _InlineServiceSelector extends StatelessWidget {
     }
     if (card.isDelivery) {
       return ProgrammeGridSync.isPregnancyOutcomeLocked(
-        isPregnant: ctx.isPregnant,
-        isPostpartum: ctx.isPostpartum,
-        hasOpenPregnancyEpisode: openPregnancyEpisode != null,
+        isPostpartumFromContext: ctx.isPostpartum,
+        relevantObstetric: openPregnancyEpisode?.obstetric,
       );
     }
-    // PNC requires PO first (PW+ANC parity): PO visit selected, or postpartum
-    // (delivery already on record). Prerequisite PO for new pregnancies is
-    // backfilled at Continue when symptoms surface PNC alone.
     if (card.programme == Programme.pnc) {
-      if (ctx.isPostpartum) return false;
+      if (ctx.isPostpartum ||
+          PregnancyRmnchMenuGating.isPncWorkflow(
+            openPregnancyEpisode?.obstetric,
+          )) {
+        return false;
+      }
       return !isDelivery;
     }
-    // FP is contraindicated during active pregnancy; available post-delivery.
-    if (card.programme == Programme.familyPlanning) return pregnant;
+    if (card.programme == Programme.familyPlanning) {
+      return PregnancyRmnchMenuGating.isFamilyPlanningLocked(
+        openPregnancyEpisode?.obstetric,
+      );
+    }
     return false;
   }
 
@@ -2583,15 +2592,25 @@ class _InlineServiceSelector extends StatelessWidget {
   String _lockMessageFor(_ServiceCardDef card) {
     final ctx = patientContext;
     if (card.isPW) {
-      if (openPregnancyEpisode != null) return AppStrings.pwAlreadyEnrolledMessage;
+      if (PregnancyRmnchMenuGating.isPwRegistrationLocked(
+        openPregnancyEpisode?.obstetric,
+      )) {
+        return AppStrings.pwAlreadyEnrolledMessage;
+      }
       if (isDelivery) return TriageStrings.ancDeliveryConflictHint;
       if (ctx.isPostpartum) return TriageStrings.pwLockedPostpartumHint;
     }
     if (card.programme == Programme.anc) {
-      if (ctx.isPostpartum) return TriageStrings.ancLockedPostpartumHint;
+      if (ctx.isPostpartum ||
+          PregnancyRmnchMenuGating.isPncWorkflow(
+            openPregnancyEpisode?.obstetric,
+          )) {
+        return TriageStrings.ancLockedPostpartumHint;
+      }
       if (isDelivery) return TriageStrings.ancDeliveryConflictHint;
-      if (openPregnancyEpisode != null &&
-          !PregnancyCohortRules.isAncEligible(openPregnancyEpisode!.obstetric)) {
+      if (PregnancyRmnchMenuGating.isAncEarlyLmpBlocked(
+        openPregnancyEpisode?.obstetric,
+      )) {
         return AppStrings.ancLockedEarlyLmpHint;
       }
       if (ancRevisitStatus.tooSoon) {
@@ -2704,7 +2723,11 @@ class _InlineServiceSelector extends StatelessWidget {
                     isLocked: _isLocked(c),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
-                    subtitle: (c.isPW && openPregnancyEpisode != null)
+                    subtitle: (c.isPW &&
+                            openPregnancyEpisode != null &&
+                            PregnancyRmnchMenuGating.isPwRegistrationLocked(
+                              openPregnancyEpisode!.obstetric,
+                            ))
                         ? _pwEpisodeSubtitle(openPregnancyEpisode!)
                         : null,
                     onTap: () => _handleTap(context, c),

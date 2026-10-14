@@ -110,6 +110,7 @@ class MissionQueueItem {
     this.village,
     this.programmes = const <Programme>{},
     required this.reason,
+    this.badgeProgramme,
     this.daysOverdue,
     required this.aiInsight,
     this.aiDrivers = const [],
@@ -187,6 +188,10 @@ class MissionQueueItem {
 
   /// Primary reason for appearing in queue (e.g., "Missed ANC", "Referral Delay").
   final String reason;
+
+  /// Programme key for badge colour — may differ from [primaryProgramme] when
+  /// ANC is suppressed after pregnancy outcome while [programmes] still lists ANC.
+  final Programme? badgeProgramme;
 
   /// Days overdue if applicable.
   final int? daysOverdue;
@@ -295,6 +300,7 @@ class MissionQueueItem {
     String? village,
     Set<Programme>? programmes,
     String? reason,
+    Programme? badgeProgramme,
     int? daysOverdue,
     String? aiInsight,
     List<String>? aiDrivers,
@@ -331,6 +337,7 @@ class MissionQueueItem {
       village: village ?? this.village,
       programmes: programmes ?? this.programmes,
       reason: reason ?? this.reason,
+      badgeProgramme: badgeProgramme ?? this.badgeProgramme,
       daysOverdue: daysOverdue ?? this.daysOverdue,
       aiInsight: aiInsight ?? this.aiInsight,
       aiDrivers: aiDrivers ?? this.aiDrivers,
@@ -447,6 +454,9 @@ class MissionQueueItem {
   /// Falls back to [Programme.unknown] when no programme is tagged so callers
   /// always get a non-null value (matches `VisitLandingScreen` convention).
   Programme get primaryProgramme => primaryProgrammeOf(programmes);
+
+  /// Programme for visit badge styling (respects PO → PNC suppression).
+  Programme get badgePrimaryProgramme => badgeProgramme ?? primaryProgramme;
 
   /// Programme emoji for display.
   String get programmeEmoji {

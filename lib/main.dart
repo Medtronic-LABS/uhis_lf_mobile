@@ -367,6 +367,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     risk: _risk,
     localAssessments: _localAssessmentDao,
     assessments: _assessmentDao,
+    pregnancySnapshots: _pregnancySnapshotDao,
   );
   late final PatientRepository _patientRepo = PatientRepository(
     patients: _patientDao,

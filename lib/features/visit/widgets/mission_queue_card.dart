@@ -295,7 +295,7 @@ class MissionReasonBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = programmeBadgeColors(item.primaryProgramme);
+    final (bg, fg) = programmeBadgeColors(item.badgePrimaryProgramme);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -324,6 +324,7 @@ class MissionReasonBadge extends StatelessWidget {
 (Color, Color) programmeBadgeColors(Programme programme) {
   switch (programme) {
     case Programme.anc:
+    case Programme.pw:
       return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
     case Programme.pnc:
       return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
@@ -333,6 +334,8 @@ class MissionReasonBadge extends StatelessWidget {
       return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
     case Programme.tb:
       return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
+    case Programme.familyPlanning:
+      return (const Color(0xFFFDF2F8), const Color(0xFF831843));
     default:
       return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
   }
@@ -407,31 +410,16 @@ class PatientBadgeRow extends StatelessWidget {
       badgeLabel = MemberDeceasedStrings.deceased;
       badgeBg = AppColors.progressTrack;
       badgeFg = AppColors.textMuted;
-    } else if (useLatestServiceBadge) {
-      final serviceKind = recentServiceKind?.trim();
-      final hasService = serviceKind != null && serviceKind.isNotEmpty;
-      badgeLabel = hasService
-          ? ProgrammeLabels.forServiceKind(serviceKind)
-          : HouseholdListStrings.enrolledTag;
-      final serviceProgramme =
-          hasService ? Programme.fromString(serviceKind) : null;
-      if (hasService &&
-          serviceProgramme != null &&
-          serviceProgramme != Programme.unknown) {
-        (badgeBg, badgeFg) = programmeBadgeColors(serviceProgramme);
-      } else {
-        badgeBg = AppColors.statusSuccessSurface;
-        badgeFg = AppColors.statusSuccessAction;
-      }
     } else {
-      badgeLabel = programmeReason(
+      final badge = patientBadgeLabel(
+        latestServiceKind:
+            useLatestServiceBadge ? recentServiceKind : null,
         programmes: programmes,
         ancVisitCount: ancVisitCount,
         pncVisitCount: pncVisitCount,
       );
-      (badgeBg, badgeFg) = programmeBadgeColors(
-        primaryProgrammeOf(programmes),
-      );
+      badgeLabel = badge.reason;
+      (badgeBg, badgeFg) = programmeBadgeColors(badge.badgeProgramme);
     }
 
     final address = [
