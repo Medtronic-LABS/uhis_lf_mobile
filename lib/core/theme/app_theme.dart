@@ -18,6 +18,10 @@ import '../models/programme.dart';
 abstract final class AppColors {
   AppColors._();
 
+  // "LW Training" build only — the thin top banner (EnvironmentBanner).
+  static const Color trainingBanner     = Color(0xFFF2B193);
+  static const Color trainingBannerText = Color(0xFF7C2D12);
+
   // ─── Brand — primary palette ───────────────────────────────
   // HTML: --navy, --navy-dark; s1 gradient uses #2D3F7A as mid-stop
   static const Color navy         = Color(0xFF1B2B5E);

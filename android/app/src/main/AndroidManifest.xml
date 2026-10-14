@@ -64,7 +64,7 @@
     </queries>
     
     <application
-        android:label="LEAPWELL"
+        android:label="@string/app_name"
         android:name=".MainApplication"
         android:icon="@mipmap/ic_launcher"
         android:largeHeap="true"

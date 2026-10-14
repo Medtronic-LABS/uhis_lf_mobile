@@ -78,5 +78,5 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: uhis-next-apk-${{ github.sha }}
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-prod-release.apk
           if-no-files-found: error

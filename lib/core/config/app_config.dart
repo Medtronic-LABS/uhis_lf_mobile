@@ -10,6 +10,21 @@ import 'package:meta/meta.dart';
 class AppConfig {
   AppConfig._();
 
+  /// Set at build time via `--dart-define=APP_FLAVOR=training`. Drives the
+  /// thin persistent non-production banner at the top of every screen;
+  /// everything else looks like production.
+  /// Matches the Android `training` product flavor
+  /// (`android/app/build.gradle.kts`), which gives that build a distinct
+  /// `applicationId` so it can be installed alongside the production app.
+  static bool get isTrainingBuild =>
+      const String.fromEnvironment('APP_FLAVOR', defaultValue: 'production') ==
+      'training';
+
+  /// Whether the training build shows its top banner (EnvironmentBanner).
+  /// Off for now; turn on with `--dart-define=SHOW_ENV_BANNER=true`.
+  static bool get showEnvironmentBanner =>
+      isTrainingBuild && const bool.fromEnvironment('SHOW_ENV_BANNER');
+
   /// Base URL for the UHIS nginx gateway.
   /// Android emulator → `http://10.0.2.2`. Physical device → host LAN IP.
   /// Production/Dev server → `https://spice-qa-backend.uhis.labsplatform.com/`
