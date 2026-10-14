@@ -2138,6 +2138,8 @@ abstract final class MissionDashboardStrings {
   static String get ncdCheckup => getTranslatedString('ncdCheckup', 'NCD checkup');
   static String get tbCheck => getTranslatedString('tbCheck', 'TB check');
   static String get newVisit => getTranslatedString('newVisit', 'New visit');
+  static String get pregnancyOutcomeBadge =>
+      getTranslatedString('pregnancyOutcomeTitle', 'Pregnancy Outcome');
   static String get aiPrioritisedBecause => getTranslatedString('aiPrioritisedBecause', 'AI Prioritised because:');
   static String get reason => getTranslatedString('reason', 'Reason');
 
@@ -6577,8 +6579,7 @@ abstract final class ProgrammeLabels {
       case Programme.nutrition:
         return getTranslatedString('Worklist.programmeNutrition', 'Nutrition');
       case Programme.familyPlanning:
-        return getTranslatedString(
-            'Worklist.programmeFamilyPlanning', 'Family Planning');
+        return PatientContextStrings.familyPlanningLabel;
       case Programme.cataract:
         return getTranslatedString('Worklist.programmeCataract', 'Cataract');
       case Programme.eyeCare:
@@ -6610,6 +6611,9 @@ abstract final class ProgrammeLabels {
     }
     if (compact == 'PNCMOTHER') {
       return getTranslatedString('Worklist.programmePnc', 'PNC');
+    }
+    if (compact.contains('FAMILYPLANNING') || compact == 'FP') {
+      return PatientContextStrings.familyPlanningLabel;
     }
     final prog = Programme.fromString(kind);
     if (prog != Programme.unknown) return of(prog);

@@ -125,4 +125,16 @@ void main() {
       expect(PregnancyCohortRules.isAncEligible(r, now: now), isFalse);
     });
   });
+
+  group('PregnancyCohortRules.isRelevantForRmnchMenus', () {
+    test('false when EDD is more than 45 days overdue', () {
+      final r = row(lmpDaysAgo: 990, eddDaysFromNow: -700);
+      expect(PregnancyCohortRules.isRelevantForRmnchMenus(r, now: now), isFalse);
+    });
+
+    test('true in postnatal window after delivery', () {
+      final r = row(lmpDaysAgo: 200, deliveryDaysAgo: 10);
+      expect(PregnancyCohortRules.isRelevantForRmnchMenus(r, now: now), isTrue);
+    });
+  });
 }

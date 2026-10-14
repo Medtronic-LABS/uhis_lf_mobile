@@ -515,7 +515,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     await _startVisitByPatientId(
       patientId: patientId,
-      programme: item.primaryProgramme,
+      programme: item.badgePrimaryProgramme,
       patientName: item.patientName,
       patientAge: item.age,
       householdId: item.householdId,

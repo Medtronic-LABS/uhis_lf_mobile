@@ -569,7 +569,7 @@ class MissionDashboardService {
 
     final priority = _bandToPriority(entry.band);
     final aiInsight = _buildAiInsight(drivers);
-    final reason = _programmeReason(entry);
+    final badge = _patientBadge(entry);
     final deceased = data.deceasedFor(entry.patientId);
 
     return MissionQueueItem(
@@ -592,7 +592,8 @@ class MissionDashboardService {
       phoneNumber: entry.phoneNumber,
       village: entry.householdName ?? entry.villageName ?? entry.villageId,
       programmes: entry.programmes,
-      reason: reason,
+      reason: badge.reason,
+      badgeProgramme: badge.badgeProgramme,
       daysOverdue: entry.nextDueAt != null
           ? CalendarDay.daysBetween(entry.nextDueAt!, now).clamp(0, 999)
           : null,
@@ -725,8 +726,11 @@ class MissionDashboardService {
   /// Replaces the raw risk-driver reason text with an actionable badge
   /// label. Delegates to the shared `programmeReason()` (also used by the
   /// Patients/household list) so the two surfaces can't drift apart again.
-  static String _programmeReason(WorklistEntry entry) {
-    return shared.programmeReason(
+  static ({String reason, Programme badgeProgramme}) _patientBadge(
+    WorklistEntry entry,
+  ) {
+    return shared.patientBadgeLabel(
+      latestServiceKind: entry.latestServiceKind,
       programmes: entry.programmes,
       ancVisitCount: entry.ancVisitCount,
       pncVisitCount: entry.pncVisitCount,

@@ -37,6 +37,14 @@ abstract final class PregnancyCohortRules {
     return DateTime.fromMillisecondsSinceEpoch(eddMs).isAfter(cutoff);
   }
 
+  /// Active or postnatal — still in an RMNCH care episode (Spice
+  /// `isRelevantForRmnchMenus`). When false, menu gating treats the member
+  /// as having no actionable pregnancy (PW / PO / FP re-enable).
+  static bool isRelevantForRmnchMenus(PregnancySnapshotRow? row, {DateTime? now}) {
+    return isActivePregnancy(row, now: now) ||
+        isPostnatal(row, now: now);
+  }
+
   /// True while delivery was recorded within the last [postnatalWindowDays]
   /// days.
   static bool isPostnatal(PregnancySnapshotRow? row, {DateTime? now}) {

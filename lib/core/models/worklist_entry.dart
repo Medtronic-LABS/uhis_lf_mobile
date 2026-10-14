@@ -31,6 +31,10 @@ class WorklistEntry {
     this.lastVisitAt,
     this.ancVisitCount = 0,
     this.pncVisitCount = 0,
+    this.deliveryDateMillis,
+    this.pregnancyOutcomeCount = 0,
+    this.familyPlanningVisitCount = 0,
+    this.latestServiceKind,
   });
 
   final String patientId;
@@ -62,6 +66,18 @@ class WorklistEntry {
   /// the visit-count-aware dashboard card label (e.g. "ANC Visit 3 due").
   final int ancVisitCount;
   final int pncVisitCount;
+
+  /// From [PregnancySnapshotRow.deliveryDateMillis] when the episode is closed.
+  final int? deliveryDateMillis;
+
+  /// Completed PO assessments (synced + local) — backs badge when delivery
+  /// was not yet written to the snapshot row.
+  final int pregnancyOutcomeCount;
+
+  final int familyPlanningVisitCount;
+
+  /// Newest synced/local assessment type — drives the roster badge (strict latest).
+  final String? latestServiceKind;
 
   bool get isUrgent => band == Band.band1;
 

@@ -1435,22 +1435,19 @@ class _OtherMemberRow extends StatelessWidget {
     final hasPhone = phone != null && phone.isNotEmpty;
 
     final deceased = !member.isActive;
-    final serviceKind = member.recentService?.trim();
-    final hasService = serviceKind != null && serviceKind.isNotEmpty;
-    final tagLabel = deceased
-        ? MemberDeceasedStrings.deceased
-        : hasService
-            ? ProgrammeLabels.forServiceKind(serviceKind)
-            : HouseholdListStrings.enrolledTag;
-    final serviceProgramme =
-        hasService ? Programme.fromString(serviceKind) : null;
+    final badge = deceased
+        ? null
+        : patientBadgeLabel(
+            latestServiceKind: member.recentService,
+            programmes: member.programmes,
+            ancVisitCount: member.ancVisitCount,
+            pncVisitCount: member.pncVisitCount,
+          );
+    final tagLabel =
+        deceased ? MemberDeceasedStrings.deceased : badge!.reason;
     final (badgeBg, badgeFg) = deceased
         ? (AppColors.progressTrack, AppColors.textMuted)
-        : hasService &&
-                serviceProgramme != null &&
-                serviceProgramme != Programme.unknown
-            ? programmeBadgeColors(serviceProgramme)
-            : (lc.statusSuccessSurface, lc.statusSuccessAction);
+        : programmeBadgeColors(badge!.badgeProgramme);
 
     final row = InkWell(
       onTap: onTap,
