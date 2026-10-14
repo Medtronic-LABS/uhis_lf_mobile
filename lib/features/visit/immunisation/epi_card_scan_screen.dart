@@ -8,10 +8,34 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/i18n/app_date_format.dart';
+import '../../../core/telemetry/epi_card_telemetry.dart';
 import 'card_highlight_overlay.dart';
 import 'epi_card_scanner.dart';
 import 'epi_date_extraction_models.dart' show UnmatchedVaccineRow;
 import 'epi_date_extraction_repository.dart';
+
+/// Returned when the scan screen closes — [scanResult] is null when the SK
+/// dismissed without a successful read; attempt counts support telemetry only.
+class EpiCardScanCloseResult {
+  const EpiCardScanCloseResult({
+    this.scanResult,
+    required this.attemptCount,
+    required this.successfulAttemptCount,
+  });
+
+  final EpiScanResult? scanResult;
+  final int attemptCount;
+  final int successfulAttemptCount;
+}
+
+/// Optional telemetry hook — one call per OCR attempt; must not throw.
+typedef EpiCardScanAttemptHook = void Function({
+  required int attemptIndex,
+  required bool success,
+  required String failureReason,
+  required String engine,
+  required int matchedVaccineCount,
+});
 
 /// Full-screen "scan" surface for the EPI card — a live rear-camera viewfinder
 /// with a capture button and an in-frame "upload from gallery" affordance, the
@@ -33,6 +57,7 @@ class EpiCardScanScreen extends StatefulWidget {
     required this.targetCodes,
     required this.codeLabels,
     required this.dateExtractionRepo,
+    this.onScanAttempt,
   });
 
   /// Vaccine codes the OCR should match against (the timeline's full set).
@@ -44,6 +69,9 @@ class EpiCardScanScreen extends StatefulWidget {
   /// Online date-extraction client — used when connectivity is available;
   /// see [EpiCardScanner.scanImageAuto].
   final EpiDateExtractionRepository dateExtractionRepo;
+
+  /// When set, invoked after each photo OCR attempt (telemetry only).
+  final EpiCardScanAttemptHook? onScanAttempt;
 
   @override
   State<EpiCardScanScreen> createState() => _EpiCardScanScreenState();
@@ -69,6 +97,61 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
   /// Which engine is running this scan — decided once, before OCR starts,
   /// from the connectivity check in [_runOcr].
   EpiScanEngine _engine = EpiScanEngine.mlKitOffline;
+
+  int _attemptCount = 0;
+  int _successfulAttemptCount = 0;
+
+  void _popClose([EpiScanResult? result]) {
+    if (!mounted) return;
+    Navigator.of(context).pop(EpiCardScanCloseResult(
+      scanResult: result,
+      attemptCount: _attemptCount,
+      successfulAttemptCount: _successfulAttemptCount,
+    ));
+  }
+
+  String _engineWire(EpiScanEngine engine) => switch (engine) {
+        EpiScanEngine.geminiVision => 'gemini_vision',
+        EpiScanEngine.mlKitOffline => 'mlkit_offline',
+      };
+
+  String _failureReason({required bool success, Object? scanError}) {
+    if (success) return '';
+    if (scanError != null) {
+      final msg = scanError.toString().toLowerCase();
+      if (msg.contains('timeout')) {
+        return EpiCardScanFailureReasonWire.timeout;
+      }
+      if (msg.contains('socket') ||
+          msg.contains('network') ||
+          msg.contains('connection')) {
+        return EpiCardScanFailureReasonWire.network;
+      }
+      if (msg.contains('500') || msg.contains('502') || msg.contains('503')) {
+        return EpiCardScanFailureReasonWire.serverError;
+      }
+      return EpiCardScanFailureReasonWire.exception;
+    }
+    return EpiCardScanFailureReasonWire.noMatch;
+  }
+
+  void _recordAttempt({
+    required EpiScanResult result,
+    Object? scanError,
+  }) {
+    final success = result.anyMatched;
+    _attemptCount++;
+    if (success) _successfulAttemptCount++;
+    final hook = widget.onScanAttempt;
+    if (hook == null) return;
+    hook(
+      attemptIndex: _attemptCount,
+      success: success,
+      failureReason: _failureReason(success: success, scanError: scanError),
+      engine: _engineWire(result.engine),
+      matchedVaccineCount: result.matchedCodes.length,
+    );
+  }
 
   @override
   void initState() {
@@ -172,6 +255,7 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
     });
 
     EpiScanResult result;
+    Object? scanError;
     try {
       result = await EpiCardScanner.scanImageAuto(
         image,
@@ -181,9 +265,11 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
     } on Object catch (e) {
       // Any OCR failure degrades to an empty result → the timeline shows the
       // amber "couldn't read card" banner rather than an unhandled error.
+      scanError = e;
       debugPrint('EpiCardScanScreen: OCR failed: $e');
       result = const EpiScanResult(matchedCodes: [], rawText: '');
     }
+    _recordAttempt(result: result, scanError: scanError);
     if (!mounted) return;
     // The offline fallback inside scanImageAuto may have silently kicked in
     // (Gemini call failed mid-flight) — reflect the engine it actually used.
@@ -216,7 +302,7 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
     }
     await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
-    Navigator.of(context).pop(result);
+    _popClose(result);
   }
 
   @override
@@ -262,7 +348,7 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
               left: 8,
               child: _RoundIconButton(
                 icon: Icons.close_rounded,
-                onTap: () => Navigator.of(context).maybePop(),
+                onTap: () => _popClose(),
               ),
             ),
 

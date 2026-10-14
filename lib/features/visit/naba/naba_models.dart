@@ -124,6 +124,35 @@ class NabaReferralAssessment {
       };
 }
 
+/// Top-level [NabaRequest.gestationalWeeks]: visit snapshot first, then the
+/// Step 2 ANC assessment, then LMP back-calculation.
+int? resolveNabaGestationalWeeks({
+  int? visitGestationalWeeks,
+  int? lmpMs,
+  List<NabaReferralAssessment> assessments = const [],
+}) {
+  if (visitGestationalWeeks != null) return visitGestationalWeeks;
+  for (final a in assessments) {
+    if (a.assessmentType != 'ANC') continue;
+    final raw = a.referralInputs['gestationalWeeks'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+  }
+  if (lmpMs != null) {
+    final weeks = DateTime.now()
+            .difference(DateTime.fromMillisecondsSinceEpoch(lmpMs))
+            .inDays ~/
+        7;
+    if (weeks >= 0) return weeks;
+  }
+  return null;
+}
+
+/// ANC visits always declare pregnancy for the NABA backend prompt context.
+bool resolveNabaIsPregnant(List<String> activeProgrammes) {
+  return activeProgrammes.any((p) => p.toUpperCase() == 'ANC');
+}
+
 // ── Primary request ───────────────────────────────────────────────────────────
 
 class NabaRequest {

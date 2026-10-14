@@ -21,6 +21,8 @@ library;
 
 import 'dart:convert';
 
+import 'epi_card_telemetry.dart' show kTelemetryAiFeatureEpiCard;
+
 /// Discriminator for [TelemetryEvent.eventType].
 abstract final class TelemetryEventType {
   TelemetryEventType._();
@@ -38,6 +40,18 @@ abstract final class TelemetryEventType {
   /// on a telemetry event (this table is excluded from the logout wipe because
   /// it holds no patient data); they ride a separate gated content stream.
   static const String assistantAsk = 'assistant_ask';
+
+  /// EPI card scan session summary (one per scan-screen open/close).
+  static const String epiCardScanSession = 'epi_card_scan_session';
+
+  /// One OCR attempt (one photo processed) within a scan session.
+  static const String epiCardScanAttempt = 'epi_card_scan_attempt';
+
+  /// Pending vs OCR-detected doses after a successful scan is applied.
+  static const String epiScanDetection = 'epi_scan_detection';
+
+  /// One vaccine dose saved as vaccinated from the update sheet.
+  static const String epiVaccinationUpdate = 'epi_vaccination_update';
 }
 
 /// Lifecycle of a row's journey to the (not yet built) server.
@@ -207,14 +221,26 @@ const String kTelemetryAiFeatureScribe = 'scribe';
 /// The patient AI assistant ("Ask") feature registry key on the server.
 const String kTelemetryAiFeatureAssistant = 'assistant';
 
+const _kEpiCardEventTypes = {
+  TelemetryEventType.epiCardScanSession,
+  TelemetryEventType.epiCardScanAttempt,
+  TelemetryEventType.epiScanDetection,
+  TelemetryEventType.epiVaccinationUpdate,
+};
+
 /// The server feature key for an event type. Sent on the ingest envelope so
 /// each row is attributed to the right feature descriptor. Defaults to scribe
 /// — every event type that predates the assistant feature belongs to it, so a
 /// row with no explicit mapping reads exactly as before.
-String telemetryAiFeatureForEvent(String eventType) =>
-    eventType == TelemetryEventType.assistantAsk
-        ? kTelemetryAiFeatureAssistant
-        : kTelemetryAiFeatureScribe;
+String telemetryAiFeatureForEvent(String eventType) {
+  if (eventType == TelemetryEventType.assistantAsk) {
+    return kTelemetryAiFeatureAssistant;
+  }
+  if (_kEpiCardEventTypes.contains(eventType)) {
+    return kTelemetryAiFeatureEpiCard;
+  }
+  return kTelemetryAiFeatureScribe;
+}
 
 /// Body of a [TelemetryEventType.visitCompleted] event — report metrics 1-4.
 class VisitCompletedPayload {

@@ -802,9 +802,6 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
 
   HouseholdDetailData get household => _household;
 
-  /// Opens the NID scanner (same modal as during enrollment add-member flow).
-  /// On scan success or skip → navigate to LinkMemberScreen pre-filled with
-  /// this household's data.
   Future<void> _showMemberDeceasedDialog() async {
     final householdId = _household.id;
     if (householdId == null) return;
@@ -822,7 +819,12 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     }
   }
 
+  /// NID scanner first; on scan success or manual register → add-member form.
   Future<void> _addMember() async {
+    final localId = _household.id ?? '';
+    final householdFuture =
+        localId.isEmpty ? null : context.read<HouseholdDao>().getById(localId);
+
     final result = await showNidScannerForMember(context);
     if (!mounted) return;
     if (result == null) return;
@@ -830,9 +832,9 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     // Use FHIR household ID for server sync; fall back to local canonical key
     // for unsynced households. Canonical key (_household.id) is the local
     // sequential number and will be rejected by fhir-mapper if sent as-is.
-    final localId = _household.id ?? '';
     final householdEntity =
-        await context.read<HouseholdDao>().getById(localId);
+        householdFuture != null ? await householdFuture : null;
+    if (!mounted) return;
     final serverHouseholdId = householdEntity?.fhirId ?? localId;
 
     // Parent village and sub-village must stay distinct all the way into the

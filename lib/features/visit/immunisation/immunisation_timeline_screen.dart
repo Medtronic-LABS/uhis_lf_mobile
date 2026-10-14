@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/telemetry/epi_card_telemetry.dart';
+import '../../../core/telemetry/telemetry_service.dart';
 import '../../../core/db/assessment_dao.dart';
 import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -104,6 +106,12 @@ class _ImmunisationTimelineScreenState
   EpiScanResult? _scanResult;
   bool _scanning = false;
   String? _scanError;
+
+  /// Latest scan session correlator for dose-update telemetry.
+  String? _lastScanSessionId;
+
+  /// OCR matches from the last successful scan apply (sheet classification).
+  Set<String> _scanMatchedCodesAtApply = const {};
 
   /// Local `patients.id` after [PatientDao.byAnyId] resolution. Household /
   /// Start Visit often pass server `patient_id` or `members.id`; immunisation
@@ -719,6 +727,7 @@ class _ImmunisationTimelineScreenState
               ? scanResult.extractedDate
               : null;
         }
+        final telemetry = ctx.read<TelemetryService>();
         return _UpdateStatusSheet(
           milestone: milestone,
           patientId: _patientKey,
@@ -732,6 +741,9 @@ class _ImmunisationTimelineScreenState
           householdMemberLocalId: widget.householdMemberLocalId,
           dob: patientDob,
           prefilledDate: resolvedPrefill,
+          scanSessionId: _lastScanSessionId,
+          scanMatchedCodes: _scanMatchedCodesAtApply,
+          visitUuid: _telemetryVisitUuid(telemetry),
           onRecorded: () {
             setState(() => _loading = true);
             _load();
@@ -826,6 +838,12 @@ class _ImmunisationTimelineScreenState
     }
   }
 
+  String? _telemetryVisitUuid(TelemetryService telemetry) {
+    final enc = widget.encounterId;
+    if (enc == null || enc.isEmpty) return null;
+    return telemetry.ensureVisitUuid(enc);
+  }
+
   Future<void> _scanWholeCard() async {
     final milestones = _milestones;
     if (milestones == null) return;
@@ -839,26 +857,89 @@ class _ImmunisationTimelineScreenState
         v.code: EpiVaccineStrings.display(v.code, v.display),
     };
     final dateExtractionRepo = context.read<EpiDateExtractionRepository>();
-    final result = await Navigator.of(context).push<EpiScanResult>(
+    final telemetry = context.read<TelemetryService>();
+    final visitUuid = _telemetryVisitUuid(telemetry);
+    final scanSessionId = telemetry.newScanSessionId();
+
+    final closeResult = await Navigator.of(context).push<EpiCardScanCloseResult>(
       MaterialPageRoute(
         builder: (_) => EpiCardScanScreen(
           targetCodes: allCodes,
           codeLabels: codeLabels,
           dateExtractionRepo: dateExtractionRepo,
+          onScanAttempt: ({
+            required int attemptIndex,
+            required bool success,
+            required String failureReason,
+            required String engine,
+            required int matchedVaccineCount,
+          }) {
+            unawaited(
+              telemetry.recordEpiCardScanAttempt(
+                scanSessionId: scanSessionId,
+                attemptIndex: attemptIndex,
+                success: success,
+                failureReason: failureReason,
+                engine: engine,
+                matchedVaccineCount: matchedVaccineCount,
+                visitUuid: visitUuid,
+              ),
+            );
+          },
         ),
       ),
     );
-    if (result == null || !mounted) return;
+    if (!mounted) return;
+
+    final result = closeResult?.scanResult;
+    final appliedToApp = result != null && result.anyMatched;
+    final outcome = closeResult == null
+        ? EpiCardScanSessionOutcomeWire.cancelled
+        : appliedToApp
+            ? EpiCardScanSessionOutcomeWire.success
+            : EpiCardScanSessionOutcomeWire.failed;
+
+    unawaited(
+      telemetry.recordEpiCardScanSession(
+        scanSessionId: scanSessionId,
+        outcome: outcome,
+        attemptCount: closeResult?.attemptCount ?? 0,
+        successfulAttemptCount: closeResult?.successfulAttemptCount ?? 0,
+        appliedToApp: appliedToApp,
+        visitUuid: visitUuid,
+      ),
+    );
+
+    if (result == null) return;
     if (!result.anyMatched) {
       setState(() {
         _scanError = EpiStrings.scanFailed;
         _scanResult = null;
+        _lastScanSessionId = scanSessionId;
+        _scanMatchedCodesAtApply = const {};
       });
       return;
     }
+
+    final pendingKeys = epiPendingVaccineKeys(milestones);
+    final detectedKeys = epiDetectedPendingKeys(
+      pendingKeys: pendingKeys,
+      matchedCodes: result.matchedCodes,
+    );
+    unawaited(
+      telemetry.recordEpiScanDetection(
+        scanSessionId: scanSessionId,
+        pendingVaccineKeys: pendingKeys,
+        detectedVaccineKeys: detectedKeys,
+        visitUuid: visitUuid,
+      ),
+    );
+
     setState(() {
       _scanError = null;
       _scanResult = result;
+      _lastScanSessionId = scanSessionId;
+      _scanMatchedCodesAtApply = result.matchedCodes.toSet();
     });
   }
 }
@@ -1563,6 +1644,9 @@ class _UpdateStatusSheet extends StatefulWidget {
     this.householdMemberLocalId,
     this.dob,
     this.prefilledDate,
+    this.scanSessionId,
+    this.scanMatchedCodes = const {},
+    this.visitUuid,
   });
 
   final VaccineMilestone milestone;
@@ -1594,6 +1678,10 @@ class _UpdateStatusSheet extends StatefulWidget {
   /// a small "from card scan" hint so the SK knows why it's pre-populated.
   final DateTime? prefilledDate;
 
+  final String? scanSessionId;
+  final Set<String> scanMatchedCodes;
+  final String? visitUuid;
+
   @override
   State<_UpdateStatusSheet> createState() => _UpdateStatusSheetState();
 }
@@ -1613,10 +1701,13 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   String? _facilityError;
 
   bool _saving = false;
+  late final int _sheetOpenedAtMs;
+  bool _dateChangedFromPrefill = false;
 
   @override
   void initState() {
     super.initState();
+    _sheetOpenedAtMs = DateTime.now().millisecondsSinceEpoch;
     _givenDate = widget.prefilledDate ?? DateTime.now();
     _dateError = _validateGivenDate(_givenDate);
   }
@@ -1629,6 +1720,44 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
         dob: widget.dob,
         earliestEligibleDate: widget.milestone.scheduledDate,
       );
+
+  Future<void> _emitVaccinationUpdateTelemetry() async {
+    if (_referring) return;
+    final telemetry = context.read<TelemetryService>();
+    final durationMs =
+        DateTime.now().millisecondsSinceEpoch - _sheetOpenedAtMs;
+    final milestoneCodes =
+        widget.milestone.vaccines.map((v) => v.code).toSet();
+    final milestoneScanMatch = milestoneCodes
+        .intersection(widget.scanMatchedCodes)
+        .isNotEmpty;
+    final hadScanPrefill =
+        widget.prefilledDate != null && milestoneScanMatch;
+    final sameDayAsPrefill = widget.prefilledDate != null &&
+        epiSameCalendarDay(_givenDate, widget.prefilledDate!);
+    final ocrAssisted = hadScanPrefill || milestoneScanMatch;
+
+    for (final v in widget.milestone.vaccines) {
+      final ocrDetected = widget.scanMatchedCodes.contains(v.code);
+      final changeType = classifyEpiVaccinationUpdate(
+        ocrDetected: ocrDetected,
+        hadScanPrefill: hadScanPrefill,
+        sameCalendarDayAsPrefill: sameDayAsPrefill,
+        dateChangedFromPrefill: _dateChangedFromPrefill,
+      );
+      await telemetry.recordEpiVaccinationUpdate(
+        vaccineKey: v.code,
+        changeType: epiVaccinationChangeTypeWire(changeType),
+        ocrDetected: ocrDetected,
+        hadScanPrefill: hadScanPrefill,
+        dateChangedFromPrefill: _dateChangedFromPrefill,
+        updateDurationMs: durationMs,
+        ocrAssisted: ocrAssisted,
+        scanSessionId: widget.scanSessionId,
+        visitUuid: widget.visitUuid,
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -1746,6 +1875,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
       );
 
       if (mounted) {
+        unawaited(_emitVaccinationUpdateTelemetry());
         Navigator.of(context).pop();
         widget.onRecorded();
       }
@@ -1921,6 +2051,11 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
                           lastDate: DateTime.now(),
                         );
                         if (picked != null) {
+                          if (widget.prefilledDate != null &&
+                              !epiSameCalendarDay(
+                                  picked, widget.prefilledDate!)) {
+                            _dateChangedFromPrefill = true;
+                          }
                           setState(() {
                             _givenDate = picked;
                             _dateError = _validateGivenDate(picked);

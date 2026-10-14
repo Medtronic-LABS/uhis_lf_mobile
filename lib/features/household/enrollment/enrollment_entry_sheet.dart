@@ -387,12 +387,29 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     }
   }
 
+  /// Pops the overlay immediately and tears down the camera off the hot path
+  /// so "Register manually" can navigate to add-member without a long stall.
+  void _closeScanner(NidScanResult? result) {
+    _sweepCtrl.stop();
+    final controller = _cameraController;
+    _cameraController = null;
+    _cameraReady = false;
+    Navigator.of(context).pop(result);
+    if (controller != null) {
+      controller.dispose().catchError((Object e) {
+        debugPrint('MemberNidScan: camera dispose failed: $e');
+      });
+    }
+  }
+
   @override
   void dispose() {
     debugPrint('[_MemberNidScanOverlayState] dispose');
-    _cameraController?.dispose();
-    _nameCtrl.dispose();
     _sweepCtrl.dispose();
+    _nameCtrl.dispose();
+    final controller = _cameraController;
+    _cameraController = null;
+    controller?.dispose();
     super.dispose();
   }
 
@@ -504,7 +521,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
         : _reviewGender == 'Female'
             ? NidGender.female
             : null;
-    Navigator.of(context).pop(
+    _closeScanner(
       NidScanResult(
         NidScanStatus.success,
         NidCardData(
@@ -550,10 +567,11 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
                 onCapture: _handleCapture,
                 onPickFromGallery: _pickFromGallery,
                 onCreateHousehold: () {},
-                onCancel: () => Navigator.of(context).pop(null),
+                onCancel: () => _closeScanner(null),
                 showCreateHousehold: false,
-                onRegisterManually: () => Navigator.of(context)
-                    .pop(const NidScanResult(NidScanStatus.skipped)),
+                onRegisterManually: () => _closeScanner(
+                  const NidScanResult(NidScanStatus.skipped),
+                ),
               ),
               if (_scanned != null)
                 _MemberReviewSheet(
