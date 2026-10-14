@@ -10,7 +10,6 @@ import '../../core/debug/console_log.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/assessment_dao.dart';
-import '../../core/db/household_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -25,7 +24,7 @@ import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import 'enrollment/enrollment_dob.dart';
 import 'enrollment/enrollment_entry_sheet.dart';
-import 'enrollment/nid_ocr_service.dart';
+import 'enrollment/link_member_route_extra.dart';
 import 'enrollment/widgets/enrollment_sticky_bar.dart';
 import '../visit/widgets/mission_queue_card.dart';
 import '../../core/i18n/app_date_format.dart';
@@ -822,33 +821,11 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   /// NID scanner first; on scan success or manual register → add-member form.
   Future<void> _addMember() async {
     final localId = _household.id ?? '';
-    final householdFuture =
-        localId.isEmpty ? null : context.read<HouseholdDao>().getById(localId);
+    if (localId.isEmpty) return;
 
     final result = await showNidScannerForMember(context);
-    if (!mounted) return;
-    if (result == null) return;
+    if (!mounted || result == null) return;
 
-    // Use FHIR household ID for server sync; fall back to local canonical key
-    // for unsynced households. Canonical key (_household.id) is the local
-    // sequential number and will be rejected by fhir-mapper if sent as-is.
-    final householdEntity =
-        householdFuture != null ? await householdFuture : null;
-    if (!mounted) return;
-    final serverHouseholdId = householdEntity?.fhirId ?? localId;
-
-    // Parent village and sub-village must stay distinct all the way into the
-    // member payload — fall back to a member row only for whichever is missing.
-    final villageId = householdEntity?.villageId ??
-        _household.members.firstOrNull?.villageId ??
-        '';
-    final subVillageId = householdEntity?.subVillageId ?? '';
-    final subVillageName = householdEntity?.subVillageName ?? '';
-    final memberNames = _household.members
-        .map((m) => m.name)
-        .whereType<String>()
-        .where((n) => n.isNotEmpty)
-        .toList();
     HouseholdMemberData? head;
     for (final m in _household.members) {
       if (m.isHead) {
@@ -857,27 +834,26 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       }
     }
     head ??= _household.members.isNotEmpty ? _household.members.first : null;
-    final extra = <String, dynamic>{
-      'householdId': serverHouseholdId,
-      'householdReferenceId': localId,
-      'householdName': _household.name ?? '',
-      'householdNo': _household.householdNo ?? '',
-      'headName': head?.name ?? '',
-      'headPhoneNumber': head?.phoneNumber?.trim().isNotEmpty == true
-          ? head!.phoneNumber!.trim()
-          : householdEntity?.headPhoneNumber?.trim(),
-      'villageId': villageId,
-      'villageName': _household.village ?? '',
-      'subVillageId': subVillageId,
-      'subVillageName': subVillageName,
-      'memberNames': memberNames,
-    };
-    if (result.status == NidScanStatus.success && result.data != null) {
-      extra['fromNidScan'] = true;
-      extra['nidNumber'] = result.data!.nidNumber;
-      extra['name'] = result.data!.name;
-      extra['dateOfBirth'] = result.data!.dateOfBirth;
-    }
+    final firstMember = _household.members.firstOrNull;
+
+    final extra = buildLinkMemberRouteExtra(
+      localHouseholdId: localId,
+      householdFhirId: null,
+      householdName: _household.name ?? '',
+      householdNo: _household.householdNo ?? '',
+      villageName: _household.village ?? '',
+      villageId: firstMember?.villageId ?? '',
+      subVillageId: firstMember?.villageId ?? '',
+      subVillageName: _household.subVillage ?? '',
+      memberNames: _household.members
+          .map((m) => m.name)
+          .whereType<String>()
+          .where((n) => n.isNotEmpty)
+          .toList(),
+      headName: head?.name ?? '',
+      headPhoneNumber: head?.phoneNumber?.trim() ?? '',
+      scanResult: result,
+    );
     if (!mounted) return;
     await context.push('/household/enrollment/link-member', extra: extra);
     // The new member is written to the local DB before the push returns, so a

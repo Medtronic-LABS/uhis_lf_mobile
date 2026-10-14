@@ -999,6 +999,10 @@ abstract final class HouseholdListStrings {
 
   static String get loadError => getTranslatedString('HouseholdList.loadError', 'Could not load data');
   static String get noMembers => getTranslatedString('HouseholdList.noMembers', 'No members found');
+  static String get addMemberNoHousehold => getTranslatedString(
+        'HouseholdList.addMemberNoHousehold',
+        'Could not add a member — household is not linked yet. Try refreshing.',
+      );
   static String get unnamedHousehold => getTranslatedString('HouseholdList.unnamedHousehold', '(Unnamed household)');
   static String get unnamedMember => getTranslatedString('unnamedMember', '(Unnamed)');
 

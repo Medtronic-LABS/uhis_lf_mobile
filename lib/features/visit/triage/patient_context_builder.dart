@@ -249,11 +249,13 @@ class PatientContextBuilder {
     final programmes = await _programmesDao.programmesFor(patientId);
     debugPrint('[PatientCtx] programmes from DB: ${programmes.map((p) => p.name).toList()}');
 
-    // Fetch pregnancy facts if available
-    final pregnancyMap = await _pregnancyDao.getAll();
-    final pregnancyFacts = pregnancyMap[patientId];
-    final pregnancyRowMap = await _pregnancyDao.getAllRows();
-    final pregnancyRow = pregnancyRowMap[patientId];
+    // Per-patient snapshot read — avoid loading the full table on every open
+    // (PatientContextScreen + AI insight each call [build]).
+    final pregnancyRow = await _pregnancyDao.byPatientOrMember(
+      patientId,
+      memberId: patient.patientId,
+    );
+    final pregnancyFacts = pregnancyRow?.facts;
     debugPrint('[PatientCtx] pregnancyFacts from snapshot: ${pregnancyFacts != null} '
         'deliveryDateInSnapshot=${pregnancyRow?.deliveryDateMillis}');
 

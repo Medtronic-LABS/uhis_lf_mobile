@@ -78,6 +78,7 @@ class PatientOrMemberData {
     this.householdMemberLocalId,
     this.isActive = true,
     this.deceasedReason,
+    this.mergedAssessments,
   });
 
   final PatientWithProgrammes? localPatient;
@@ -117,6 +118,10 @@ class PatientOrMemberData {
 
   /// Encoded death reason from the household deceased flow, if recorded.
   final String? deceasedReason;
+
+  /// Pre-merged care history — set once after load so [assessments] is not
+  /// recomputed on every rebuild (O(n²) draft↔sync pairing).
+  final List<MemberAssessment>? mergedAssessments;
 
   bool get isDeceased => !isActive;
 
@@ -195,6 +200,14 @@ class PatientOrMemberData {
   /// single NCD submit rendered as two "NCD Visit" rows. Same-programme rows
   /// inside [_visitMergeWindow] are therefore collapsed into one.
   List<MemberAssessment> get assessments {
+    final cached = mergedAssessments;
+    if (cached != null) return cached;
+    return computeMergedAssessments();
+  }
+
+  /// Merged local + remote assessments (newest first). Expensive — call once
+  /// per load via [withMergedAssessmentsCache].
+  List<MemberAssessment> computeMergedAssessments() {
     final byId = <String, MemberAssessment>{};
     void addAll(List<MemberAssessment> src) {
       for (final a in src) {
@@ -241,6 +254,11 @@ class PatientOrMemberData {
     }
     out.sort((a, b) => b.date.compareTo(a.date));
     return out;
+  }
+
+  PatientOrMemberData withMergedAssessmentsCache() {
+    if (mergedAssessments != null) return this;
+    return copyWith(mergedAssessments: computeMergedAssessments());
   }
 
   /// Folds a local draft into the synced record of the same visit. The synced
@@ -303,6 +321,7 @@ class PatientOrMemberData {
     int? householdMemberLocalId,
     bool? isActive,
     String? deceasedReason,
+    List<MemberAssessment>? mergedAssessments,
   }) {
     return PatientOrMemberData(
       localPatient: localPatient,
@@ -321,6 +340,7 @@ class PatientOrMemberData {
           householdMemberLocalId ?? this.householdMemberLocalId,
       isActive: isActive ?? this.isActive,
       deceasedReason: deceasedReason ?? this.deceasedReason,
+      mergedAssessments: mergedAssessments ?? this.mergedAssessments,
     );
   }
 }
@@ -407,12 +427,11 @@ class _PatientContextScreenState
   PatientOrMemberData? _localSnapshot;
   bool _remoteLoading = false;
 
-  /// Assistant context, assembled proactively as soon as [_future] resolves
-  /// (not lazily on FAB tap) so opening the assistant is instant in the
-  /// common case — clinical-findings/vitals/follow-up aggregation involves
-  /// async local-DB reads (see [_aiContext]), and doing that work while the
-  /// SK is still reading the screen avoids a visible delay on tap.
+  /// Assistant payload ([_aiContext] / [_clinicalContextExtras]) — built lazily
+  /// on FAB tap only; cached here for a second tap in the same session.
   Future<PatientAiContext>? _aiContextFuture;
+  /// Shared with [_AiInsightCard] — one clinical-findings pass per load.
+  Future<_AiInsightResult>? _aiInsightSummaryFuture;
   // True only for the rare case the FAB is tapped before the prefetch above
   // finishes — shows a brief spinner on the FAB instead of nothing happening.
   bool _openingAssistant = false;
@@ -423,22 +442,58 @@ class _PatientContextScreenState
     debugPrint('[_PatientContextScreenState] initState patientId=${widget.patientId}');
     // Initialize directly without setState since widget isn't mounted yet
     _future = _fetchData();
-    _prefetchAiContext(_future!);
+    _prefetchAiInsight(_future!);
   }
 
-  /// Kicks off [_aiContext] the moment [dataFuture] resolves. Fire-and-forget
-  /// by design — a failure here just leaves [_aiContextFuture] null, and the
-  /// FAB falls back to computing it on tap (see the FAB's onPressed).
-  void _prefetchAiContext(Future<PatientOrMemberData> dataFuture) {
+  /// Prefetches only the on-screen AI Insight card — not assistant/FAB context.
+  void _prefetchAiInsight(Future<PatientOrMemberData> dataFuture) {
     dataFuture.then((data) {
       if (!mounted || !data.hasData) return;
-      // Braces, not an arrow: an arrow closure returns the assigned value —
-      // here a Future — and setState() asserts against that, which skipped the
-      // markNeedsBuild() that follows the assert.
-      setState(() {
-        _aiContextFuture = _aiContext(data);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _aiInsightSummaryFuture = _computeAiInsightSummary(data);
+        });
       });
     });
+  }
+
+  PatientOrMemberData _finalizeLoadedData(PatientOrMemberData data) =>
+      data.withMergedAssessmentsCache();
+
+  Future<_AiInsightResult> _computeAiInsightSummary(
+    PatientOrMemberData data,
+  ) async {
+    try {
+      final patientCtx = await resolvePatientContext(
+        context,
+        widget.patientId,
+        data,
+      );
+      if (patientCtx == null) {
+        return const _AiInsightResult(summary: '', patientKnown: false);
+      }
+      final findings = await BriefingFindingsAggregator.build(
+        patientId: widget.patientId,
+        patientCtx: patientCtx,
+        selectedProgrammes: patientCtx.activeProgrammes,
+        assessmentDao: context.read<LocalAssessmentDao>(),
+        historyAssessmentDao: context.read<AssessmentDao>(),
+        followUpRepo: context.read<FollowUpRepository>(),
+        patientDao: context.read<PatientDao>(),
+        immunisationDao: context.read<ImmunisationDao>(),
+        memberDao: context.read<MemberDao>(),
+        remoteAssessments: data.assessments,
+      );
+      return _AiInsightResult(
+        summary: clinicalFindingsSummary(findings),
+        patientKnown: true,
+      );
+    } on Object catch (e, st) {
+      debugPrint('[PatientContext] AI insight summary failed: $e');
+      debugPrint('$st');
+      return const _AiInsightResult(summary: '', patientKnown: false);
+    }
   }
 
   void _load() {
@@ -447,7 +502,8 @@ class _PatientContextScreenState
     setState(() {
       _future = future;
     });
-    _prefetchAiContext(future);
+    _aiContextFuture = null;
+    _prefetchAiInsight(future);
   }
 
   /// Looks up household name from the local DB. Returns null if not found.
@@ -865,12 +921,14 @@ class _PatientContextScreenState
       final info = await _householdInfo(localPatient.patient.householdId);
       ConsoleLog.banner('[PatientCtx] load done=${t0.elapsedMilliseconds}ms'
           ' localAssessments=${localAssessments.length}');
-      return _applyMemberStatus(
-        localOnly.copyWith(
-          householdName: info.name,
-          householdHeadPhone: info.headPhone,
+      return _finalizeLoadedData(
+        _applyMemberStatus(
+          localOnly.copyWith(
+            householdName: info.name,
+            householdHeadPhone: info.headPhone,
+          ),
+          memberEntity,
         ),
-        memberEntity,
       );
     }
 
@@ -882,26 +940,25 @@ class _PatientContextScreenState
     if (member != null) {
       // ignore: avoid_print
       print('[PatientContextScreen] Found local member: ${member.name}');
-      final memberLocalAssessments =
-          await _localAssessmentsFor(widget.patientId);
-      final patientWithProgs = await patientRepo.byId(widget.patientId);
-      final progs = patientWithProgs?.programmes ??
-          _programmesFromAssessments(memberLocalAssessments);
+      final progs = localPatient?.programmes ??
+          _programmesFromAssessments(localAssessments);
       final memberHouseholdInfo = await _householdInfo(member.householdId);
-      return _applyMemberStatus(
-        PatientOrMemberData(
-          remoteMember: member,
-          programmes: progs,
-          localAssessments: memberLocalAssessments,
-          memberId: resolvedMemberId,
-          householdName: memberHouseholdInfo.name,
-          householdHeadPhone: memberHouseholdInfo.headPhone,
-          vitalHistory: vitalHistory,
-          pregnancySnapshot: pregnancySnapshot,
-          enrolledAt: enrolledAt,
-          householdMemberLocalId: resolvedHouseholdMemberLocalId,
+      return _finalizeLoadedData(
+        _applyMemberStatus(
+          PatientOrMemberData(
+            remoteMember: member,
+            programmes: progs,
+            localAssessments: localAssessments,
+            memberId: resolvedMemberId,
+            householdName: memberHouseholdInfo.name,
+            householdHeadPhone: memberHouseholdInfo.headPhone,
+            vitalHistory: vitalHistory,
+            pregnancySnapshot: pregnancySnapshot,
+            enrolledAt: enrolledAt,
+            householdMemberLocalId: resolvedHouseholdMemberLocalId,
+          ),
+          memberEntity,
         ),
-        memberEntity,
       );
     }
 
@@ -913,40 +970,39 @@ class _PatientContextScreenState
       // Use the FHIR ID (member.id) only for resource references, not for encounter.memberId.
       final memberId = data['id']?.toString() ?? widget.patientId;
 
-      final localAssessmentsList =
-          await _localAssessmentsFor(widget.patientId);
-      final patientWithProgs = await patientRepo.byId(widget.patientId);
-      final progs = patientWithProgs?.programmes ??
-          _programmesFromAssessments(localAssessmentsList);
+      final progs = localPatient?.programmes ??
+          _programmesFromAssessments(localAssessments);
       final prePassedHouseholdInfo =
           await _householdInfo(data['householdId']?.toString());
-      return _applyMemberStatus(
-        PatientOrMemberData(
-          remoteMember: MemberHealthDetails(
-            id: memberId,
-            name: data['name'] as String? ??
-                PatientContextStrings.unknownMemberName,
-            gender: data['gender'] as String?,
-            age: data['age'] as int?,
-            dateOfBirth: data['dateOfBirth'] as String?,
-            phoneNumber: data['phoneNumber'] as String?,
-            householdId: data['householdId']?.toString(),
-            isPregnant: data['isPregnant'] as bool? ?? false,
-            patientId: data['patientId'] as String?,
+      return _finalizeLoadedData(
+        _applyMemberStatus(
+          PatientOrMemberData(
+            remoteMember: MemberHealthDetails(
+              id: memberId,
+              name: data['name'] as String? ??
+                  PatientContextStrings.unknownMemberName,
+              gender: data['gender'] as String?,
+              age: data['age'] as int?,
+              dateOfBirth: data['dateOfBirth'] as String?,
+              phoneNumber: data['phoneNumber'] as String?,
+              householdId: data['householdId']?.toString(),
+              isPregnant: data['isPregnant'] as bool? ?? false,
+              patientId: data['patientId'] as String?,
+            ),
+            programmes: progs,
+            localAssessments: localAssessments,
+            memberId: resolvedMemberId,
+            householdName: prePassedHouseholdInfo.name,
+            householdHeadPhone: prePassedHouseholdInfo.headPhone,
+            vitalHistory: vitalHistory,
+            pregnancySnapshot: pregnancySnapshot,
+            enrolledAt: enrolledAt,
+            householdMemberLocalId: resolvedHouseholdMemberLocalId,
+            isActive: data['isActive'] as bool? ?? true,
+            deceasedReason: data['deceasedReason'] as String?,
           ),
-          programmes: progs,
-          localAssessments: localAssessmentsList,
-          memberId: resolvedMemberId,
-          householdName: prePassedHouseholdInfo.name,
-          householdHeadPhone: prePassedHouseholdInfo.headPhone,
-          vitalHistory: vitalHistory,
-          pregnancySnapshot: pregnancySnapshot,
-          enrolledAt: enrolledAt,
-          householdMemberLocalId: resolvedHouseholdMemberLocalId,
-          isActive: data['isActive'] as bool? ?? true,
-          deceasedReason: data['deceasedReason'] as String?,
+          memberEntity,
         ),
-        memberEntity,
       );
     }
 
@@ -984,7 +1040,9 @@ class _PatientContextScreenState
       setState(() {
         _future = Future.value(data);
         _aiInsightRefreshGen++;
-        _aiContextFuture = data.hasData ? _aiContext(data) : null;
+        _aiContextFuture = null;
+        _aiInsightSummaryFuture =
+            data.hasData ? _computeAiInsightSummary(data) : null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(PatientContextStrings.refreshDone)),
@@ -1242,14 +1300,14 @@ class _PatientContextScreenState
     return map.isEmpty ? null : map;
   }
 
-  /// Opens the assistant sheet, awaiting [_aiContextFuture] (already resolved
-  /// in the common case since it's prefetched in [_prefetchAiContext]) or
-  /// computing it fresh if the FAB was tapped before that finished.
+  /// Opens the assistant sheet — [_aiContext] (incl. [_clinicalContextExtras])
+  /// runs here, not at timeline load. Cached in [_aiContextFuture] after first open.
   Future<void> _openAssistant(PatientOrMemberData data) async {
     if (_openingAssistant) return;
     setState(() => _openingAssistant = true);
     try {
-      final ctx = await (_aiContextFuture ?? _aiContext(data));
+      _aiContextFuture ??= _aiContext(data);
+      final ctx = await _aiContextFuture!;
       if (!mounted) return;
       await PatientAiSheet.show(context, ctx);
     } finally {
@@ -1442,6 +1500,7 @@ class _PatientContextScreenState
                       key: ValueKey('ai-insight-$_aiInsightRefreshGen'),
                       patientId: widget.patientId,
                       data: data,
+                      summaryFuture: _aiInsightSummaryFuture,
                       statusLabel: statusLabel,
                       statusBg: statusBg,
                       statusFg: statusFg,
@@ -2961,6 +3020,7 @@ class _AiInsightCard extends StatefulWidget {
     super.key,
     required this.patientId,
     required this.data,
+    this.summaryFuture,
     this.statusLabel,
     this.statusBg = Colors.transparent,
     this.statusFg = Colors.white,
@@ -2972,6 +3032,8 @@ class _AiInsightCard extends StatefulWidget {
   /// Carries the `remoteMember`/merged-assessments fallback this screen
   /// already has for a patient not yet synced to this device's local DB.
   final PatientOrMemberData data;
+  /// When set, reuses the screen-level prefetch instead of duplicating DB work.
+  final Future<_AiInsightResult>? summaryFuture;
   final String? statusLabel;
   final Color statusBg;
   final Color statusFg;
@@ -2996,46 +3058,25 @@ class _AiInsightResult {
 }
 
 class _AiInsightCardState extends State<_AiInsightCard> {
-  late final Future<_AiInsightResult> _summaryFuture;
+  late Future<_AiInsightResult> _summaryFuture;
 
   @override
   void initState() {
     super.initState();
-    _summaryFuture = _computeSummary();
+    _summaryFuture = widget.summaryFuture ?? _emptyInsightFuture();
   }
 
-  Future<_AiInsightResult> _computeSummary() async {
-    try {
-      final patientCtx = await resolvePatientContext(
-        context,
-        widget.patientId,
-        widget.data,
-      );
-      if (patientCtx == null) {
-        return const _AiInsightResult(summary: '', patientKnown: false);
-      }
-      final findings = await BriefingFindingsAggregator.build(
-        patientId: widget.patientId,
-        patientCtx: patientCtx,
-        selectedProgrammes: patientCtx.activeProgrammes,
-        assessmentDao: context.read<LocalAssessmentDao>(),
-        historyAssessmentDao: context.read<AssessmentDao>(),
-        followUpRepo: context.read<FollowUpRepository>(),
-        patientDao: context.read<PatientDao>(),
-        immunisationDao: context.read<ImmunisationDao>(),
-        memberDao: context.read<MemberDao>(),
-        remoteAssessments: widget.data.assessments,
-      );
-      return _AiInsightResult(
-        summary: clinicalFindingsSummary(findings),
-        patientKnown: true,
-      );
-    } on Object catch (e, st) {
-      debugPrint('[AiInsightCard] findings computation failed: $e');
-      debugPrint('[AiInsightCard] $st');
-      return const _AiInsightResult(summary: '', patientKnown: false);
+  @override
+  void didUpdateWidget(covariant _AiInsightCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = widget.summaryFuture;
+    if (next != null && !identical(next, _summaryFuture)) {
+      _summaryFuture = next;
     }
   }
+
+  static Future<_AiInsightResult> _emptyInsightFuture() =>
+      Future.value(const _AiInsightResult(summary: '', patientKnown: false));
 
   void _showDetail(BuildContext context, String summary, {bool patientKnown = true}) {
     final isEmpty = summary.trim().isEmpty;
