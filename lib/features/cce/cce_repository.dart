@@ -54,8 +54,7 @@ class CceRepository {
   ///
   /// Mirrors Android `getReferredFollowUpPatientListLiveData`:
   /// `FollowUp INNER JOIN HouseholdMember ON memberId = fhir_id` with
-  /// `isActive = 1`. Rows without an active local member are dropped — that
-  /// is why CCE can flicker when the member roster has not landed yet.
+  /// `isActive = 1` (applied in [FollowUpDao.openReferredFetched]).
   Future<List<CceAlert>> loadAlerts({int limit = 200}) async {
     final eligible = await _followUps.openReferredFetched(limit: limit);
     if (eligible.isEmpty) return const <CceAlert>[];
@@ -65,11 +64,17 @@ class CceRepository {
     for (final fu in eligible) {
       final mid = _memberIdFrom(fu);
       if (mid != null) memberIds.add(mid);
+      memberIds.add(fu.patientId);
     }
-    final membersByFhirId = <String, HouseholdMemberEntity>{};
-    for (final mid in memberIds) {
-      final m = await _members.getByFhirId(mid);
-      if (m != null) membersByFhirId[mid] = m;
+    final membersByLookupKey = <String, HouseholdMemberEntity>{};
+    for (final key in memberIds) {
+      final m = await _members.getByFhirId(key) ??
+          await _members.getById(key) ??
+          await _members.getByPatientId(key);
+      if (m == null) continue;
+      for (final alias in _memberLookupAliases(m)) {
+        membersByLookupKey[alias] = m;
+      }
     }
 
     final households = <String, HouseholdEntity>{};
@@ -86,7 +91,7 @@ class CceRepository {
     // Assessment history may be keyed by FHIR patient id, member fhir id, or
     // member local id depending on sync remap — query all candidates.
     final assessmentKeySet = <String>{};
-    for (final m in membersByFhirId.values) {
+    for (final m in membersByLookupKey.values) {
       assessmentKeySet.addAll(_assessmentLookupKeys(m));
     }
     final assessmentsByKey = _assessments == null || assessmentKeySet.isEmpty
@@ -97,9 +102,12 @@ class CceRepository {
     final alerts = <CceAlert>[];
     for (final fu in eligible) {
       final memberId = _memberIdFrom(fu);
-      final member = memberId == null ? null : membersByFhirId[memberId];
-      // Android INNER JOIN — no member / inactive member ⇒ not listed.
-      if (memberId == null || member == null || !member.isActive) {
+      final member = _resolveMember(
+        fu,
+        memberId: memberId,
+        byKey: membersByLookupKey,
+      );
+      if (member == null || !member.isActive) {
         continue;
       }
 
@@ -159,6 +167,25 @@ class CceRepository {
       }
     } catch (_) {}
     return null;
+  }
+
+  static Iterable<String> _memberLookupAliases(HouseholdMemberEntity m) sync* {
+    for (final v in [m.fhirId, m.id, m.patientId]) {
+      final s = v?.trim();
+      if (s != null && s.isNotEmpty) yield s;
+    }
+  }
+
+  static HouseholdMemberEntity? _resolveMember(
+    FollowUpRow fu, {
+    required String? memberId,
+    required Map<String, HouseholdMemberEntity> byKey,
+  }) {
+    if (memberId != null) {
+      final hit = byKey[memberId];
+      if (hit != null) return hit;
+    }
+    return byKey[fu.patientId];
   }
 
   /// Keys under which synced assessment history may be stored for [m].

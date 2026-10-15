@@ -1070,6 +1070,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       ),
                       const SizedBox(height: 10),
                       EnrollmentInputField(
+                        key: const ValueKey('add-member-name'),
                         label: EnrollmentStrings.memberNameLabel,
                         hint: EnrollmentStrings.memberNameHint,
                         controller: _nameCtrl,
@@ -1162,6 +1163,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       const SizedBox(height: 14),
                       SizedBox(key: _key('idNumber'), height: 0),
                       EnrollmentInputField(
+                        key: const ValueKey('add-member-id-manual'),
                         label: EnrollmentIdNumber.label(_idType),
                         hint: EnrollmentIdNumber.hint(_idType),
                         controller: _brnCtrl,
@@ -1225,6 +1227,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                             const SizedBox(height: 12),
                             SizedBox(key: _key('idNumber'), height: 0),
                             EnrollmentInputField(
+                              key: const ValueKey('add-member-id-scanned'),
                               label: EnrollmentStrings.nidNumberLabel,
                               hint: EnrollmentStrings.nidNumberHint,
                               controller: _brnCtrl,
@@ -1240,6 +1243,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                             ),
                             const SizedBox(height: 10),
                             EnrollmentInputField(
+                              key: const ValueKey('add-member-name-scanned'),
                               label: EnrollmentStrings.memberNameLabel,
                               hint: EnrollmentStrings.memberNameHint,
                               controller: _nameCtrl,
@@ -1252,6 +1256,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                               onTap: _selectDate,
                               child: AbsorbPointer(
                                 child: EnrollmentInputField(
+                                  key: const ValueKey('add-member-dob-scanned'),
                                   label: EnrollmentStrings.dateOfBirthLabel,
                                   hint: EnrollmentStrings.dateOfBirthHint,
                                   controller: _dobCtrl,
@@ -1325,6 +1330,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     if (_idType == EnrollmentIdNumber.brn) ...[
                       SizedBox(key: _key('idNumber'), height: 0),
                       EnrollmentInputField(
+                        key: const ValueKey('add-member-brn'),
                         label: EnrollmentStrings.brnFieldLabel,
                         hint: EnrollmentStrings.brnNumberHint,
                         controller: _brnCtrl,
@@ -1362,6 +1368,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     ),
                     const SizedBox(height: 10),
                     EnrollmentInputField(
+                      key: const ValueKey('add-member-mobile'),
                       label: EnrollmentStrings.mobileNumberLabel,
                       hint: EnrollmentStrings.mobileNumberHint,
                       controller: _mobileCtrl,
@@ -1393,6 +1400,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                         },
                         child: AbsorbPointer(
                           child: EnrollmentInputField(
+                            key: const ValueKey('add-member-dob'),
                             label: EnrollmentStrings.dateOfBirthLabel,
                             hint: EnrollmentStrings.dateOfBirthHint,
                             controller: _dobCtrl,
@@ -1415,6 +1423,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
                     // Age (always years when typed manually)
                     EnrollmentInputField(
+                      key: const ValueKey('add-member-age'),
                       label: EnrollmentStrings.ageLabel,
                       hint: EnrollmentStrings.ageHint,
                       controller: _ageCtrl,

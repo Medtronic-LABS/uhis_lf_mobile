@@ -7,6 +7,7 @@ import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
 import 'package:uuid/uuid.dart';
 
 import '../debug/console_log.dart';
+import 'follow_up_dao.dart';
 import 'key_store.dart';
 
 /// Local SQLite store for the offline cache (households, members, patients)
@@ -23,7 +24,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 58;
+  static const int schemaVersion = 59;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -2513,6 +2514,10 @@ class AppDatabase {
       await addPdCol(
         'ALTER TABLE $tablePregnancyDetail ADD COLUMN type_of_abortion TEXT',
       );
+    }
+    if (from < 59) {
+      // v59 — CCE ordering: backfill follow_ups.updated_at from bundle JSON.
+      await FollowUpDao.backfillUpdatedAtFromRawJson(db);
     }
     if (from < 57) {
       // v57 — teleconsult_consent_log retired: an Agreed consent decision is
