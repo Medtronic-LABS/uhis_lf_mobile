@@ -71,28 +71,40 @@ class EnrollmentInputField extends StatefulWidget {
 }
 
 class _EnrollmentInputFieldState extends State<EnrollmentInputField> {
-  late TextEditingController _controller;
+  /// Only used when [EnrollmentInputField.controller] is null.
+  TextEditingController? _ownedController;
+
   bool _hasFocus = false;
   String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = widget.controller ??
+  /// Parent-supplied controllers are read each build so reordering fields
+  /// (e.g. after NID scan on Add Member) cannot leave a stale controller on
+  /// the TextField when Flutter reuses this State for a different slot.
+  TextEditingController get _effectiveController {
+    final external = widget.controller;
+    if (external != null) return external;
+    return _ownedController ??=
         TextEditingController(text: widget.initialValue);
   }
 
   @override
-  void dispose() {
-    if (widget.controller == null) {
-      _controller.dispose();
+  void didUpdateWidget(EnrollmentInputField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller ||
+        widget.label != oldWidget.label) {
+      _error = null;
     }
+  }
+
+  @override
+  void dispose() {
+    _ownedController?.dispose();
     super.dispose();
   }
 
   void _validateOnBlur() {
     if (widget.validator != null) {
-      final error = widget.validator!(_controller.text);
+      final error = widget.validator!(_effectiveController.text);
       setState(() => _error = error);
     }
     widget.onBlur?.call();
@@ -157,7 +169,7 @@ class _EnrollmentInputFieldState extends State<EnrollmentInputField> {
               borderRadius: BorderRadius.circular(AppRadius.button),
             ),
             child: TextField(
-              controller: _controller,
+              controller: _effectiveController,
               readOnly: widget.readOnly,
               onChanged: (value) {
                 setState(() => _error = null);

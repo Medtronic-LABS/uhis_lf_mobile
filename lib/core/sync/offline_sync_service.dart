@@ -1418,6 +1418,11 @@ class OfflineSyncService extends ChangeNotifier {
         (kind != null && kind.toLowerCase().contains('lost')) ||
         wireType == 'LOST_TO_FOLLOW_UP';
     final backendId = (raw['id'] as num?)?.toInt();
+    final updatedAt = JsonRead.epochMillis(raw, const [
+          'updatedAt',
+          'updated_at',
+        ]) ??
+        JsonRead.epochMillis(raw, const ['createdAt', 'created_at']);
     return FollowUpRow(
       id: id,
       patientId: patientId,
@@ -1430,6 +1435,7 @@ class OfflineSyncService extends ChangeNotifier {
       referredSiteId: referredSiteId,
       isLost: isLost,
       backendId: backendId,
+      updatedAt: updatedAt,
       rawJson: JsonRead.encode(raw),
     );
   }
