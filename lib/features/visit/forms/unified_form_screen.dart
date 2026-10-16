@@ -14,6 +14,7 @@ import '../../../core/telemetry/visit_content_service.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
+import '../../../core/i18n/app_date_format.dart';
 import '../../../core/i18n/app_locale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/form_fields/age_or_dob_field.dart';
@@ -4660,24 +4661,34 @@ class _DateFieldState extends State<_DateField> {
   late final TextEditingController _ctrl;
   late final FocusNode _focusNode;
 
+  static String _formatDisplay(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    try {
+      return AppDateFormat.dayMonthYearPaddedFmt.format(DateTime.parse(iso));
+    } catch (_) {
+      return iso;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     debugPrint('[_DateFieldState] initState');
     _focusNode = FocusNode();
-    _ctrl = TextEditingController(text: widget.currentValue ?? '');
+    _ctrl = TextEditingController(text: _formatDisplay(widget.currentValue));
   }
 
   @override
   void didUpdateWidget(_DateField old) {
     super.didUpdateWidget(old);
     if (old.currentValue != widget.currentValue) {
-      FormControlSync.applyExternalText(
-        mounted: () => mounted,
-        focusNode: _focusNode,
-        controller: _ctrl,
-        newText: widget.currentValue ?? '',
-      );
+      // Read-only picker field — never skip sync while focused (unlike free
+      // text). After showDatePicker the field keeps focus and FormControlSync
+      // would leave the controller empty even though LMP was saved.
+      final text = _formatDisplay(widget.currentValue);
+      if (_ctrl.text != text) {
+        _ctrl.text = text;
+      }
     }
   }
 
@@ -4727,7 +4738,10 @@ class _DateFieldState extends State<_DateField> {
           lastDate: last,
         );
         if (picked != null) {
-          widget.onChanged(picked.toIso8601String().substring(0, 10));
+          final iso = picked.toIso8601String().substring(0, 10);
+          _focusNode.unfocus();
+          _ctrl.text = _formatDisplay(iso);
+          widget.onChanged(iso);
         }
       },
     );
