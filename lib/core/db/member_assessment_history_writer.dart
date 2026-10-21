@@ -49,27 +49,10 @@ class MemberAssessmentHistoryWriter {
 
   AssessmentHistoryItem? _assessmentHistoryItemFromAssessmentRow(
     Map<String, Object?> row,
-  ) {
-    final encounterId = row['id'] as String?;
-    final raw = row['raw_json'] as String?;
-    if (encounterId == null || encounterId.isEmpty || raw == null) return null;
-    Map<String, dynamic> map;
-    try {
-      map = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-    } catch (_) {
-      return null;
-    }
-    map['encounterId'] ??= encounterId;
-    map['householdMemberId'] ??=
-        JsonRead.firstString(map, const ['householdMemberId', 'memberId']) ??
-            row['patient_id']?.toString();
-    map['serviceProvided'] ??= row['kind']?.toString();
-    final visitMs = row['occurred_at'] as int?;
-    if (visitMs != null && JsonRead.epochMillis(map, const ['visitDate']) == null) {
-      map['visitDate'] = visitMs;
-    }
-    return AssessmentHistoryItem.fromJson(map);
-  }
+  ) =>
+      // One home for the column-into-payload folding: the assessment
+      // repository reads visit history the same way.
+      AssessmentHistoryItem.fromAssessmentRow(row);
 
   Future<void> upsertFromHistoryItems(List<AssessmentHistoryItem> items) async {
     if (items.isEmpty) return;
