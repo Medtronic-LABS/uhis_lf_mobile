@@ -120,12 +120,13 @@ class VisitContentService {
         transcript: existing?.transcript,
         transcriptCapturedAt: existing?.transcriptCapturedAt,
         summaryStartedAt: existing?.summaryStartedAt,
-        whatsappSummary: whatsappSummary?.trim().isEmpty == true
-            ? null
-            : whatsappSummary?.trim(),
-        referralRecommendation: referralRecommendation?.trim().isEmpty == true
-            ? null
-            : referralRecommendation?.trim(),
+        // Preserve, don't blank. Every other field here falls back to
+        // `existing`; these two did not, so a second call carrying only one
+        // of them wiped the other — a WhatsApp summary captured correctly
+        // and then lost to a re-render.
+        whatsappSummary: _prefer(whatsappSummary, existing?.whatsappSummary),
+        referralRecommendation: _prefer(
+            referralRecommendation, existing?.referralRecommendation),
         summaryEndAt: at,
         helpfulnessVote: existing?.helpfulnessVote,
         uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
@@ -196,7 +197,43 @@ class VisitContentService {
     return VisitContentUploadStatus.uploaded;
   }
 
+  /// Keeps [incoming] when it carries text, otherwise [existing].
+  ///
+  /// A capture point with nothing to say for a field must leave what is
+  /// already stored alone — these merges only ever add.
+  static String? _prefer(String? incoming, String? existing) {
+    final trimmed = incoming?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? existing : trimmed;
+  }
+
+  /// Serializes every read-modify-write below.
+  ///
+  /// [_upsert] reads the row, merges, and writes it back, and its callers are
+  /// concurrent: `_recordSummaryStarted` and `_recordSummaryCompleted` are
+  /// both fired with `unawaited` from the Step 3 screen. Interleaved, the
+  /// later writer re-reads a row the earlier one has not yet written and
+  /// stores back the field it had just set — silently dropping a transcript
+  /// or a WhatsApp summary that was captured correctly.
+  Future<void> _writes = Future<void>.value();
+
   Future<void> _upsert({
+    required String visitUuid,
+    required String patientId,
+    required int occurredAt,
+    required VisitContentEntry Function(VisitContentEntry? existing) merge,
+  }) {
+    final next = _writes.then((_) => _upsertNow(
+          visitUuid: visitUuid,
+          patientId: patientId,
+          occurredAt: occurredAt,
+          merge: merge,
+        ));
+    // A failed link must not break the chain for every later write.
+    _writes = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _upsertNow({
     required String visitUuid,
     required String patientId,
     required int occurredAt,

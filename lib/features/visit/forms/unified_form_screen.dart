@@ -179,6 +179,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
   bool? _lastReportedAncSuppressed;
 
+  /// The live transcript, as the banner reports it.
+  ///
+  /// A backstop for [_liveAsrCtrl], which can point at a controller replaced
+  /// on a rebuild whose buffer is empty — that is how a visit with eight
+  /// recorded transcript segments stored none. The banner pushes this
+  /// whenever it grows, so it survives the reference going stale.
+  String? _liveTranscript;
+
   // One GlobalKey per section — used to scroll to the first error section
   // on submit so the SK doesn't have to hunt for the highlighted field.
   final Map<String, GlobalKey> _sectionKeys = {};
@@ -679,6 +687,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                     }
                   },
                   onLiveControllerReady: (ctrl) => _liveAsrCtrl = ctrl,
+                  onLiveTranscript: (t) => _liveTranscript = t,
                   // VisitFormScreen watches ScribeController state and
                   // auto-opens the SOAP review sheet when reviewReady — no
                   // action needed here.
@@ -820,7 +829,13 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         await visitContent.recordTranscript(
           visitUuid: ctx.read<TelemetryService>().ensureVisitUuid(encounterId),
           patientId: patientId,
-          transcript: transcript,
+          // The just-flushed controller first — it includes the final
+          // segments the stop() above captured. The pushed value only as a
+          // backstop, for when that reference points at a rebuilt controller
+          // whose buffer is empty.
+          transcript: (transcript != null && transcript.isNotEmpty)
+              ? transcript
+              : _liveTranscript,
         );
       }
       widget.onSubmitComplete();
