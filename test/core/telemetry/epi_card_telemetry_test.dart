@@ -28,7 +28,7 @@ void main() {
       );
     });
 
-    test('wrongly_marked when SK changed scan-filled date', () {
+    test('date_fixed when SK changed scan-filled date but kept vaccinated', () {
       expect(
         classifyEpiVaccinationUpdate(
           ocrDetected: true,
@@ -36,7 +36,7 @@ void main() {
           sameCalendarDayAsPrefill: false,
           dateChangedFromPrefill: true,
         ),
-        EpiVaccinationChangeType.wronglyMarked,
+        EpiVaccinationChangeType.dateFixed,
       );
     });
   });

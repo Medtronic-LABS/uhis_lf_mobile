@@ -873,6 +873,7 @@ class _ImmunisationTimelineScreenState
             required String failureReason,
             required String engine,
             required int matchedVaccineCount,
+            String? captureQuality,
           }) {
             unawaited(
               telemetry.recordEpiCardScanAttempt(
@@ -882,6 +883,7 @@ class _ImmunisationTimelineScreenState
                 failureReason: failureReason,
                 engine: engine,
                 matchedVaccineCount: matchedVaccineCount,
+                captureQuality: captureQuality,
                 visitUuid: visitUuid,
               ),
             );
@@ -1722,7 +1724,6 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
       );
 
   Future<void> _emitVaccinationUpdateTelemetry() async {
-    if (_referring) return;
     final telemetry = context.read<TelemetryService>();
     final durationMs =
         DateTime.now().millisecondsSinceEpoch - _sheetOpenedAtMs;
@@ -1739,12 +1740,18 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
 
     for (final v in widget.milestone.vaccines) {
       final ocrDetected = widget.scanMatchedCodes.contains(v.code);
-      final changeType = classifyEpiVaccinationUpdate(
-        ocrDetected: ocrDetected,
-        hadScanPrefill: hadScanPrefill,
-        sameCalendarDayAsPrefill: sameDayAsPrefill,
-        dateChangedFromPrefill: _dateChangedFromPrefill,
-      );
+      final EpiVaccinationChangeType changeType;
+      if (_referring) {
+        if (!ocrDetected) continue;
+        changeType = EpiVaccinationChangeType.wronglyMarked;
+      } else {
+        changeType = classifyEpiVaccinationUpdate(
+          ocrDetected: ocrDetected,
+          hadScanPrefill: hadScanPrefill,
+          sameCalendarDayAsPrefill: sameDayAsPrefill,
+          dateChangedFromPrefill: _dateChangedFromPrefill,
+        );
+      }
       await telemetry.recordEpiVaccinationUpdate(
         vaccineKey: v.code,
         changeType: epiVaccinationChangeTypeWire(changeType),
