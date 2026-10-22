@@ -2,10 +2,13 @@ import 'dart:convert';
 
 import '../models/assessment_history_item.dart';
 import '../models/json_read.dart';
+import '../sync/pregnancy_mah_projection.dart';
 import 'app_database.dart';
 import 'local_assessment_dao.dart';
+import 'local_mah_observations.dart';
 import 'member_assessment_history_dao.dart';
 import 'member_dao.dart';
+import 'pregnancy_detail_rebuilder.dart';
 
 /// Writes [MemberAssessmentHistoryRow] on sync ingest and local visit save.
 class MemberAssessmentHistoryWriter {
@@ -13,13 +16,16 @@ class MemberAssessmentHistoryWriter {
     required MemberAssessmentHistoryDao mah,
     required MemberDao members,
     required AppDatabase appDb,
+    PregnancyMahProjection? pregnancyProjection,
   })  : _mah = mah,
         _members = members,
-        _appDb = appDb;
+        _appDb = appDb,
+        _pregnancyProjection = pregnancyProjection;
 
   final MemberAssessmentHistoryDao _mah;
   final MemberDao _members;
   final AppDatabase _appDb;
+  final PregnancyMahProjection? _pregnancyProjection;
 
   /// Clears MAH before a full assessment-history pull (Spice initial sync parity).
   Future<void> clearAllForFullSync() => _mah.deleteAll();
@@ -42,7 +48,10 @@ class MemberAssessmentHistoryWriter {
     const table = AppDatabase.tableLocalAssessments;
     final rows = await _appDb.db.query(table);
     for (final row in rows) {
-      await upsertFromLocal(LocalAssessmentEntity.fromDb(row));
+      await upsertFromLocal(
+        LocalAssessmentEntity.fromDb(row),
+        projectPregnancy: false,
+      );
     }
     return rows.length;
   }
@@ -86,7 +95,10 @@ class MemberAssessmentHistoryWriter {
     await _mah.upsertMany(rows);
   }
 
-  Future<void> upsertFromLocal(LocalAssessmentEntity entity) async {
+  Future<void> upsertFromLocal(
+    LocalAssessmentEntity entity, {
+    bool projectPregnancy = true,
+  }) async {
     var localMemberId = entity.householdMemberLocalId;
     if (localMemberId <= 0) {
       final m = entity.memberId != null
@@ -102,16 +114,20 @@ class MemberAssessmentHistoryWriter {
       details = jsonDecode(entity.assessmentDetails) as Map<String, dynamic>;
     } catch (_) {}
 
-    final observations = _observationsForLocal(entity.assessmentType, details);
+    final observations = LocalMahObservations.build(
+      entity: entity,
+      details: details,
+    );
     final visitAt = entity.createdAt ?? entity.updatedAt ?? DateTime.now();
     final visitDate = visitAt.toUtc().toIso8601String();
+    final serviceProvided = wireServiceProvided(entity.assessmentType);
 
     await _mah.upsertMany([
       MemberAssessmentHistoryRow(
         memberId: localMemberId > 0 ? localMemberId : null,
         memberFhirId: entity.memberId,
         visitDate: visitDate,
-        serviceProvided: wireServiceProvided(entity.assessmentType),
+        serviceProvided: serviceProvided,
         encounterId: encounterId,
         customStatus: entity.customStatus,
         latestVisit: true,
@@ -123,10 +139,16 @@ class MemberAssessmentHistoryWriter {
         referralReason: entity.referredReasons,
         practitionerId: null,
         observationsJson:
-            observations != null ? jsonEncode(observations) : null,
+            observations.isNotEmpty ? jsonEncode(observations) : null,
         shasthyaShebikaId: null,
       ),
     ]);
+
+    if (projectPregnancy &&
+        localMemberId > 0 &&
+        PregnancyDetailRebuilder.isMotherServiceProvided(serviceProvided)) {
+      await _pregnancyProjection?.rebuildMembersAndProject([localMemberId]);
+    }
   }
 
   Future<Map<String, int?>> _resolveLocalMemberIds(List<String> keys) async {
@@ -189,22 +211,6 @@ class MemberAssessmentHistoryWriter {
     } catch (_) {
       return null;
     }
-  }
-
-  static Map<String, dynamic>? _observationsForLocal(
-    String assessmentType,
-    Map<String, dynamic> details,
-  ) {
-    final upper = assessmentType.toUpperCase();
-    if (details.containsKey('observations') &&
-        details['observations'] is Map) {
-      return Map<String, dynamic>.from(details['observations'] as Map);
-    }
-    if (upper == 'ANC' && details.containsKey('anc')) {
-      final anc = details['anc'];
-      if (anc is Map) return Map<String, dynamic>.from(anc);
-    }
-    return details.isEmpty ? null : details;
   }
 
   /// Maps Flutter assessment types to Spice `serviceProvided` wire tags.

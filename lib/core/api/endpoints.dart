@@ -169,8 +169,16 @@ class Endpoints {
   static const String staticMetaPncBaby =
       '/spice-service/static-data/meta-data/mother-neonate-pnc-baby';
 
-  // ── Offline-service: bulk sync ────────────────────────────────────────────
-  /// Bulk pull — households, members, followUps, householdMemberLinks.
+  // ── Offline-service: entity pull (Spice Android parity) ───────────────────
+  static const String offlineSyncHouseholds =
+      '/offline-service/offline-sync/households';
+  static const String offlineSyncMembers =
+      '/offline-service/offline-sync/members';
+  static const String offlineSyncFollowUps =
+      '/offline-service/offline-sync/follow-ups';
+
+  /// Legacy monolithic pull — replaced by [offlineSyncHouseholds] et al.
+  @Deprecated('Use offlineSyncHouseholds/Members/FollowUps')
   static const String offlineSyncFetch =
       '/offline-service/offline-sync/fetch-synced-data';
 

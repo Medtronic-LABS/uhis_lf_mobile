@@ -51,6 +51,7 @@ import 'core/db/patient_programmes_dao.dart';
 import 'core/db/pregnancy_detail_dao.dart';
 import 'core/db/pregnancy_episode_dao.dart';
 import 'core/db/pregnancy_snapshot_dao.dart';
+import 'core/sync/pregnancy_mah_projection.dart';
 import 'core/db/treatment_presence_dao.dart';
 import 'core/db/teleconsult_prescription_dao.dart';
 import 'core/db/call_log_history_dao.dart';
@@ -258,18 +259,26 @@ class _UhisNextAppState extends State<UhisNextApp>
       MemberAssessmentHistoryDao(widget.appDb);
   late final SsLinkedVillageDao _ssLinkedVillageDao =
       SsLinkedVillageDao(widget.appDb);
-  late final MemberAssessmentHistoryWriter _mahWriter =
-      MemberAssessmentHistoryWriter(
-    mah: _mahDao,
-    members: _memberDao,
-    appDb: widget.appDb,
-  );
   late final SpiceDashboardDao _spiceDashboardDao =
       SpiceDashboardDao(widget.appDb);
   late final PregnancyDetailDao _pregnancyDetailDao = PregnancyDetailDao(
     widget.appDb,
     _mahDao,
     _memberDao,
+  );
+  late final PregnancyMahProjection _pregnancyMahProjection =
+      PregnancyMahProjection(
+    pregnancyDetail: _pregnancyDetailDao,
+    pregnancyEpisode: _pregnancyEpisodeDao,
+    pregnancySnapshot: _pregnancySnapshotDao,
+    members: _memberDao,
+  );
+  late final MemberAssessmentHistoryWriter _mahWriter =
+      MemberAssessmentHistoryWriter(
+    mah: _mahDao,
+    members: _memberDao,
+    appDb: widget.appDb,
+    pregnancyProjection: _pregnancyMahProjection,
   );
   late final SkSpiceDashboardRepository _skSpiceDashboardRepo =
       SkSpiceDashboardRepository(
@@ -359,6 +368,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     hierarchy: _userHierarchy,
     healthFacilities: _healthFacilityDao,
     assessmentHistoryWriter: _mahWriter,
+    pregnancyMahProjection: _pregnancyMahProjection,
   );
   late final WorklistRepository _worklist = WorklistRepository(
     patients: _patientDao,
