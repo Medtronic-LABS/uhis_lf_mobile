@@ -198,6 +198,7 @@ class TelemetryService {
     required String failureReason,
     required String engine,
     required int matchedVaccineCount,
+    String? captureQuality,
     String? visitUuid,
     DateTime? occurredAt,
   }) async {
@@ -210,6 +211,7 @@ class TelemetryService {
         failureReason: failureReason,
         engine: engine,
         matchedVaccineCount: matchedVaccineCount,
+        captureQuality: captureQuality,
       ),
       visitUuid: visitUuid,
       occurredAt: occurredAt,
