@@ -25,7 +25,8 @@ abstract final class SkDashboardCardCatalog {
   ) {
     return [
       SkDashboardServicesCategory.rmnch,
-      SkDashboardServicesCategory.cd,
+      // CD Services (communicable-disease KPIs) — Spice-only; not in Leapfrog.
+      // SkDashboardServicesCategory.cd,
       if (gating.showNcd) SkDashboardServicesCategory.ncd,
       if (gating.showEyeCare) SkDashboardServicesCategory.eye,
       if (gating.showCataract) SkDashboardServicesCategory.cataract,
