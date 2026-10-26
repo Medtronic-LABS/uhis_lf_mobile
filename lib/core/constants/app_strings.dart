@@ -5000,7 +5000,6 @@ abstract final class PerformanceStrings {
       AppDateFormat.monthYearFmt.format(date);
 
   // ── Wireframe v2 additions ──────────────────────────────────────────────────
-  static String get appBarSubtitle => getTranslatedString('Performance.appBarSubtitle', 'Jahnara Begum · SK ID 4521 · Manikganj Sadar');
   static String get heroScoreLabel => getTranslatedString('heroScoreLabel', 'PERFORMANCE SCORE');
   static String get heroDesc => getTranslatedString('heroDesc', 'Blends visit completion, referral follow-through & SLA compliance');
   static String get slaLabel => getTranslatedString('slaLabel', 'SLA COMPLIANCE');

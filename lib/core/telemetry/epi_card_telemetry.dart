@@ -53,11 +53,15 @@ EpiVaccinationChangeType classifyEpiVaccinationUpdate({
   if (!ocrDetected) return EpiVaccinationChangeType.missed;
   if (!hadScanPrefill) return EpiVaccinationChangeType.correct;
   if (sameCalendarDayAsPrefill) return EpiVaccinationChangeType.correct;
-  // SK replaced scan-filled date with a new value (product: wrongly_marked).
-  if (dateChangedFromPrefill) {
-    return EpiVaccinationChangeType.wronglyMarked;
-  }
+  // OCR proposed a date; SK kept vaccinated but picked a different day.
   return EpiVaccinationChangeType.dateFixed;
+}
+
+String? epiCardCaptureQualityWire({required bool isBlurry, required bool hasGlare}) {
+  if (isBlurry && hasGlare) return EpiCardCaptureQualityWire.blurryAndGlare;
+  if (isBlurry) return EpiCardCaptureQualityWire.blurry;
+  if (hasGlare) return EpiCardCaptureQualityWire.glare;
+  return null;
 }
 
 bool epiSameCalendarDay(DateTime a, DateTime b) =>
@@ -90,6 +94,15 @@ abstract final class EpiCardScanSessionOutcomeWire {
   static const String success = 'success';
   static const String failed = 'failed';
   static const String cancelled = 'cancelled';
+}
+
+/// Advisory capture-quality flags (pre-OCR), when the SK proceeded anyway.
+abstract final class EpiCardCaptureQualityWire {
+  EpiCardCaptureQualityWire._();
+
+  static const String blurry = 'blurry';
+  static const String glare = 'glare';
+  static const String blurryAndGlare = 'blurry_and_glare';
 }
 
 abstract final class EpiCardScanFailureReasonWire {
@@ -127,6 +140,7 @@ Map<String, dynamic> epiCardScanAttemptPayload({
   required String failureReason,
   required String engine,
   required int matchedVaccineCount,
+  String? captureQuality,
   String cardType = 'epi',
 }) =>
     {
@@ -135,6 +149,7 @@ Map<String, dynamic> epiCardScanAttemptPayload({
       'attemptIndex': attemptIndex,
       'success': success,
       if (!success) 'failureReason': failureReason,
+      if (captureQuality != null) 'captureQuality': captureQuality,
       'engine': engine,
       'matchedVaccineCount': matchedVaccineCount,
     };

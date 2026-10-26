@@ -2,6 +2,7 @@ import '../visit/forms/form_config.dart';
 
 /// Leapfrog app is SK-only: NCD / eye / cataract tiles follow activated workflows
 /// (Spice `hasNcdWorkflow()` etc.), not FO/PO-only dashboard rules.
+/// CD Services programme tab is omitted in [SkDashboardCardCatalog.programmeCategories].
 class SkDashboardGating {
   const SkDashboardGating({
     required this.showNcd,

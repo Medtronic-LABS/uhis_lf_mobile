@@ -35,6 +35,7 @@ typedef EpiCardScanAttemptHook = void Function({
   required String failureReason,
   required String engine,
   required int matchedVaccineCount,
+  String? captureQuality,
 });
 
 /// Full-screen "scan" surface for the EPI card — a live rear-camera viewfinder
@@ -101,6 +102,9 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
   int _attemptCount = 0;
   int _successfulAttemptCount = 0;
 
+  /// Set when the SK proceeds past a blur/glare warning for the current photo.
+  String? _pendingCaptureQuality;
+
   void _popClose([EpiScanResult? result]) {
     if (!mounted) return;
     Navigator.of(context).pop(EpiCardScanCloseResult(
@@ -143,6 +147,8 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
     _attemptCount++;
     if (success) _successfulAttemptCount++;
     final hook = widget.onScanAttempt;
+    final captureQuality = _pendingCaptureQuality;
+    _pendingCaptureQuality = null;
     if (hook == null) return;
     hook(
       attemptIndex: _attemptCount,
@@ -150,6 +156,7 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
       failureReason: _failureReason(success: success, scanError: scanError),
       engine: _engineWire(result.engine),
       matchedVaccineCount: result.matchedCodes.length,
+      captureQuality: captureQuality,
     );
   }
 
@@ -276,6 +283,12 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
         ],
       ),
     );
+    if (useAnyway == true) {
+      _pendingCaptureQuality = epiCardCaptureQualityWire(
+        isBlurry: quality.isBlurry,
+        hasGlare: quality.hasGlare,
+      );
+    }
     return useAnyway ?? false;
   }
 

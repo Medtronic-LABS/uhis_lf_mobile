@@ -260,6 +260,12 @@ SELECT
         AND (LOWER(n.service_provided) = 'ncd' OR (LOWER(n.service_provided) = 'cataract'
         AND n.custom_status IS NOT NULL AND INSTR(n.custom_status, 'NCD_SERVICE_IN_CATARACT_CAMP') > 0))
         AND n.visit_date <= e.visit_date AND n.practitioner_id IS ?
+        AND NOT EXISTS (SELECT 1 FROM $_mah AS n2 WHERE ${_sameMemberSql('e', 'n2')}
+          AND (LOWER(n2.service_provided) = 'ncd' OR (LOWER(n2.service_provided) = 'cataract'
+          AND n2.custom_status IS NOT NULL AND INSTR(n2.custom_status, 'NCD_SERVICE_IN_CATARACT_CAMP') > 0))
+          AND n2.visit_date <= e.visit_date
+          AND (n2.visit_date > n.visit_date OR (n2.visit_date = n.visit_date AND n2.id > n.id))
+        )
     )
   ) AS linkedToCareCount
 FROM $_mah AS h
