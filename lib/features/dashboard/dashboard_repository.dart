@@ -18,7 +18,7 @@ class DashboardRepository extends ApiRepository {
     final m = await _members.count();
     return (households: h, members: m);
   }
-
+  /// Household count from local SQLite (populated by offline sync).
   Future<int> householdCount() async => _households.count();
 
   /// Member count from local SQLite (populated by offline sync).
