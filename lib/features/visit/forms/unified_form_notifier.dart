@@ -12,6 +12,7 @@ import '../../../core/db/patient_dao.dart';
 import '../../../core/telemetry/telemetry_service.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/telemetry/value_audit_dao.dart';
 import '../../../core/telemetry/value_audit_entry.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
@@ -2481,6 +2482,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         }
       }
 
+      final skLocation = await LocationService.getCurrentPosition();
       for (final payload in payloads) {
         ConsoleLog.banner(
           '[PayloadDebug] submit — ${payload.assessmentType} payload:\n'
@@ -2495,6 +2497,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
           patientId: _patientId,
           villageId: _villageId,
           encounterId: _encounterId,
+          latitude: skLocation.latitude,
+          longitude: skLocation.longitude,
           isReferred: isReferred,
           referredReasons: referredReasons.isEmpty ? null : referredReasons,
           customStatus: payload.assessmentType == 'PWPROFILE'

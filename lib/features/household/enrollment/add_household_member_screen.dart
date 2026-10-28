@@ -17,6 +17,7 @@ import '../../../core/db/patient_dao.dart';
 import '../../../core/db/roster_revision.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/models/patient.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
@@ -130,6 +131,8 @@ Future<void> _pushMemberInBackground({
   required String userFhirId,
   required String organizationId,
   required String deviceId,
+  required double latitude,
+  required double longitude,
 }) async {
   try {
     final result = await repo.submitStandaloneMember(
@@ -145,6 +148,8 @@ Future<void> _pushMemberInBackground({
       organizationId: organizationId,
       deviceId: deviceId,
       memberReferenceId: memberLocalId,
+      latitude: latitude,
+      longitude: longitude,
     );
     // Accepted by the server — park it so an Offline Sync started while we are
     // still polling cannot post the same member a second time.
@@ -315,6 +320,12 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
     // Seed guardian candidates + resolve the household head's mobile so the
     // "Head of Household" phone-category option can autofill it.
+    // Spice MemberRegistrationFragment: request location when the form opens,
+    // not only at save — otherwise Geolocator may never surface a dialog.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(LocationService.ensurePermission());
+    });
+
     if (widget.isStandalone) {
       _seedStandaloneHeader();
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadHouseholdMembers());
@@ -668,6 +679,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   Future<void> _handleSaveMember(EnrollmentController controller) async {
     debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
+    if (widget.isStandalone) {
+      await LocationService.ensurePermission();
+      if (!mounted) return;
+    }
     final maritalRequired = _needsMaritalStatus;
     // Skipped for "Not Available", digits-and-length checked for National ID.
     final idError = EnrollmentIdNumber.validate(
@@ -801,9 +816,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       debugPrint('[AddMember] household arg=$hhArg ref=$hhRef '
           '→ local=$localHhId fhir=$householdFhirId');
 
-      // The member inherits the household's location, and the two levels stay
-      // distinct: sending the same id as villageId and subVillageId is what
-      // made fhir-mapper reject these members.
+      // Village hierarchy must stay distinct (same id for village + sub-village
+      // breaks fhir-mapper). SK GPS is stamped separately via [LocationService].
       var villageId = household?.villageId ?? widget.existingVillageId ?? '';
       var villageName = household?.village ?? widget.existingVillageName ?? '';
       var subVillageId =
@@ -846,6 +860,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       debugPrint('[AddMember] village=$villageId/$villageName '
           'subVillage=$subVillageId/$subVillageName');
 
+      final skLocation = await LocationService.getCurrentPosition();
+
       // Patients (and assessment scoping) key off the finest level available.
       final canonicalVillageId =
           subVillageId.isNotEmpty ? subVillageId : villageId;
@@ -875,6 +891,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           isHouseholdHead: false,
           isActive: true,
           isPregnant: false,
+          latitude: skLocation.latitude,
+          longitude: skLocation.longitude,
           createdAt: nowMs,
           updatedAt: nowMs,
           syncStatus: 'NotSynced',
@@ -944,6 +962,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
             userFhirId: userFhirId,
             organizationId: orgId,
             deviceId: deviceId,
+            latitude: skLocation.latitude,
+            longitude: skLocation.longitude,
           ),
         );
       } else {

@@ -20,6 +20,7 @@ import '../../core/models/custom_status_parse.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
 import '../../core/risk/anc_status.dart';
+import '../../core/services/location_service.dart';
 import '../../core/sync/offline_push_service.dart';
 import '../../core/sync/shukhee_encounter_attach_service.dart';
 import '../../core/sync/sync_activity.dart';
@@ -105,6 +106,16 @@ class AssessmentRepository extends ChangeNotifier {
     double longitude = 0.0,
     Map<String, dynamic>? otherDetails,
   }) async {
+    // Android AssessmentRepository.saveAssessment reads CURRENT_LATITUDE/LONGITUDE
+    // from secure prefs at save time; refresh when the caller did not supply coords.
+    var resolvedLat = latitude;
+    var resolvedLng = longitude;
+    if (resolvedLat == 0.0 && resolvedLng == 0.0) {
+      final pos = await LocationService.getCurrentPosition();
+      resolvedLat = pos.latitude;
+      resolvedLng = pos.longitude;
+    }
+
     final id = const Uuid().v4();
     final now = DateTime.now();
     final type = assessmentType.toUpperCase();
@@ -159,8 +170,8 @@ class AssessmentRepository extends ChangeNotifier {
           : null,
       followUpId: followUpId,
       pregnancyEpisodeId: resolvedEpisodeId,
-      latitude: latitude,
-      longitude: longitude,
+      latitude: resolvedLat,
+      longitude: resolvedLng,
       syncStatus: AssessmentSyncStatus.pending,
       createdAt: now,
       updatedAt: now,
@@ -183,6 +194,7 @@ class AssessmentRepository extends ChangeNotifier {
     String? referralFacilityType,
     String? referredSiteId,
   }) async {
+    final position = await LocationService.getCurrentPosition();
     final updated = await _dao.mergeOtherDetailsForEncounter(
       encounterId: encounterId,
       patchFor: (row) => VisitSummaryDetails.patchFor(
@@ -193,7 +205,14 @@ class AssessmentRepository extends ChangeNotifier {
         referredSiteId: referredSiteId,
       ),
     );
-    if (updated > 0) {
+    // Android updateOtherAssessmentDetails overwrites lat/lng with lastLocation
+    // when the visit summary step completes.
+    final geoUpdated = await _dao.updateGeoForEncounter(
+      encounterId: encounterId,
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
+    if (updated > 0 || geoUpdated > 0) {
       debugPrint(
         '[AssessmentRepo] Step 3 summary applied to $updated assessment(s) '
         'encounter=$encounterId nextVisit=$nextVisitDate referred=$isReferred',

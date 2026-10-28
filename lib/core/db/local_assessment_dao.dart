@@ -716,6 +716,27 @@ class LocalAssessmentDao {
     return updated;
   }
 
+  /// Stamps SK GPS on every assessment in [encounterId] (Step 3 / summary parity).
+  Future<int> updateGeoForEncounter({
+    required String encounterId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final rows = await forEncounter(encounterId);
+    if (rows.isEmpty) return 0;
+    final now = DateTime.now();
+    var updated = 0;
+    for (final row in rows) {
+      await update(row.copyWith(
+        latitude: latitude,
+        longitude: longitude,
+        updatedAt: now,
+      ));
+      updated++;
+    }
+    return updated;
+  }
+
   /// Get all assessments eligible for upload.
   ///
   /// Always includes [AssessmentSyncStatus.pending] and
