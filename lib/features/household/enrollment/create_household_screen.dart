@@ -38,12 +38,14 @@ class CreateHouseholdScreen extends StatefulWidget {
     this.scannedNidNumber,
     this.scannedName,
     this.scannedDateOfBirth,
+    this.scannedGender,
   });
 
   final bool fromNidScan;
   final String? scannedNidNumber;
   final String? scannedName;
   final String? scannedDateOfBirth;
+  final String? scannedGender;
 
   @override
   State<CreateHouseholdScreen> createState() => _CreateHouseholdScreenState();
@@ -192,6 +194,11 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
         _applyDateOfBirth(dob);
         _prefilledFromScan = true;
       }
+      final gender = _matchHeadGender(widget.scannedGender);
+      if (gender != null) {
+        _gender = gender;
+        _prefilledFromScan = true;
+      }
     }
 
     // Initialise the household controller after first build.
@@ -317,6 +324,14 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     if (!EnrollmentDob.needsMaritalStatus(dob, ageYears: age.years)) {
       _maritalStatus = null;
     }
+  }
+
+  String? _matchHeadGender(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    for (final g in EnrollmentStrings.gendersHead) {
+      if (g.toLowerCase() == raw.toLowerCase()) return g;
+    }
+    return null;
   }
 
   /// Manual age entry is always whole years. Sets DOB to 01-01 of the

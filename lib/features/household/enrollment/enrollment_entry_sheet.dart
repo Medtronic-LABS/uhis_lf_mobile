@@ -280,6 +280,8 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                         'nidNumber': _scanned?.nidNumber,
                         'name': _scanned?.name,
                         'dateOfBirth': _scanned?.dateOfBirth,
+                        if (_scanned?.gender != null)
+                          'gender': _scanned!.gender!.label,
                       },
                     );
                   },
@@ -292,6 +294,8 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                         'nidNumber': _scanned?.nidNumber,
                         'name': _scanned?.name,
                         'dateOfBirth': _scanned?.dateOfBirth,
+                        if (_scanned?.gender != null)
+                          'gender': _scanned!.gender!.label,
                       },
                     );
                   },

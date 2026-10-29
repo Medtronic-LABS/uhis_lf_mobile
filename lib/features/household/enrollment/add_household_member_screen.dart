@@ -69,6 +69,7 @@ class AddHouseholdMemberScreen extends StatefulWidget {
     this.scannedNidNumber,
     this.scannedName,
     this.scannedDateOfBirth,
+    this.scannedGender,
     this.initialMemberNames = const [],
     this.existingHouseholdName,
     this.existingHeadName,
@@ -93,6 +94,8 @@ class AddHouseholdMemberScreen extends StatefulWidget {
   final String? scannedNidNumber;
   final String? scannedName;
   final String? scannedDateOfBirth;
+  /// Male / Female from NID review (matches [EnrollmentStrings.gendersMember]).
+  final String? scannedGender;
 
   /// Pre-populated member names from the caller (e.g. household detail screen).
   /// When non-empty, skips the DB query in [_loadHouseholdMembers].
@@ -311,11 +314,14 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       if (widget.scannedNidNumber?.isNotEmpty ?? false) {
         _brnCtrl.text = widget.scannedNidNumber!;
         _idType = 'National ID';
+        _nidScanned = true;
       }
       if (widget.scannedName?.isNotEmpty ?? false) {
         _nameCtrl.text = widget.scannedName!;
       }
       _applyDateOfBirth(EnrollmentDob.parse(widget.scannedDateOfBirth));
+      final fromScan = _matchGender(widget.scannedGender);
+      if (fromScan != null) _gender = fromScan;
     }
 
     // Seed guardian candidates + resolve the household head's mobile so the
@@ -622,8 +628,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           if (data.nidNumber != null) _brnCtrl.text = data.nidNumber!;
           if (data.name != null) _nameCtrl.text = data.name!;
           _applyDateOfBirth(EnrollmentDob.parse(data.dateOfBirth));
-          final scannedGender = _matchGender(data.gender?.label);
-          if (scannedGender != null) _gender = scannedGender;
+          _gender = _matchGender(data.gender?.label) ?? _gender;
         });
         final nid = data.nidNumber;
         if (nid != null) await _lookupExisting(nid);
