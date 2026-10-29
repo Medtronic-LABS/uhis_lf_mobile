@@ -346,6 +346,7 @@ GoRouter buildRouter(AuthState auth) {
                   scannedNidNumber: extra?['nidNumber'] as String?,
                   scannedName: extra?['name'] as String?,
                   scannedDateOfBirth: extra?['dateOfBirth'] as String?,
+                  scannedGender: extra?['gender'] as String?,
                 ),
               );
             },
@@ -389,6 +390,7 @@ GoRouter buildRouter(AuthState auth) {
                   scannedNidNumber: extra['nidNumber'] as String?,
                   scannedName: extra['name'] as String?,
                   scannedDateOfBirth: extra['dateOfBirth'] as String?,
+                  scannedGender: extra['gender'] as String?,
                   initialMemberNames: (extra['memberNames'] as List?)
                           ?.whereType<String>()
                           .toList() ??
@@ -429,6 +431,7 @@ GoRouter buildRouter(AuthState auth) {
               scannedNidNumber: extra['nidNumber'] as String?,
               scannedName: extra['name'] as String?,
               scannedDateOfBirth: extra['dateOfBirth'] as String?,
+              scannedGender: extra['gender'] as String?,
             ),
           );
         },
