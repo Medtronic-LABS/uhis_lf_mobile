@@ -36,10 +36,15 @@ Map<String, dynamic> buildLinkMemberRouteExtra({
   };
 
   if (scanResult.status == NidScanStatus.success && scanResult.data != null) {
+    final data = scanResult.data!;
     extra['fromNidScan'] = true;
-    extra['nidNumber'] = scanResult.data!.nidNumber;
-    extra['name'] = scanResult.data!.name;
-    extra['dateOfBirth'] = scanResult.data!.dateOfBirth;
+    extra['nidNumber'] = data.nidNumber;
+    extra['name'] = data.name;
+    extra['dateOfBirth'] = data.dateOfBirth;
+    final genderLabel = data.gender?.label;
+    if (genderLabel != null && genderLabel.isNotEmpty) {
+      extra['gender'] = genderLabel;
+    }
   }
   return extra;
 }

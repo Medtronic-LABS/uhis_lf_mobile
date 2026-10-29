@@ -8,6 +8,11 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Normal permission (no runtime prompt) — without it, Chromium's WebView audio
+         stack fails to select a communication-mode input device for WebRTC calls
+         (teleconsult), logging "Unable to select communication device!" and silently
+         dropping the SK's own mic while video/downlink audio keep working. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <!-- required=false keeps install working on display-only tablets without mic -->
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
     <!-- Referral SLA notification channels (flutter_local_notifications).
