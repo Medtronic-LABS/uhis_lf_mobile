@@ -1,28 +1,57 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-/// Wraps [Geolocator] to fetch the device's current GPS position.
+/// Wraps device GPS for household/member enrollment and assessments.
 ///
-/// Used during household/member enrollment to stamp lat/lng on the payload,
-/// matching the Android SPICE app's FusedLocationProviderClient behaviour.
-/// Falls back to (0.0, 0.0) gracefully when location is unavailable or denied.
+/// Uses [permission_handler] for the runtime prompt (same plugin as onboarding),
+/// then [Geolocator] for the fix — Geolocator-only requests are unreliable on
+/// some Android builds when permission was never granted.
 class LocationService {
   const LocationService._();
 
-  /// Returns the current GPS position, or (0.0, 0.0) on any failure.
+  /// Shows the system location permission dialog when still needed.
   ///
-  /// Requests permission if not yet granted. Uses [LocationAccuracy.high]
-  /// (GPS-grade) to match the Android reference payload precision.
+  /// Matches Spice `withLocationCheck` / `requestLocationPermissions` on member
+  /// registration — call when the add-member screen opens or before save.
+  static Future<bool> ensurePermission() async {
+    if (kIsWeb) return false;
+
+    try {
+      var status = await Permission.locationWhenInUse.status;
+      if (status.isGranted) return true;
+
+      if (status.isDenied || status.isLimited) {
+        status = await Permission.locationWhenInUse.request();
+        if (status.isGranted) return true;
+      }
+
+      if (status.isPermanentlyDenied) {
+        debugPrint('[LocationService] location permanently denied');
+        return false;
+      }
+
+      // Fallback when permission_handler and Geolocator disagree on state.
+      var geo = await Geolocator.checkPermission();
+      if (geo == LocationPermission.denied) {
+        geo = await Geolocator.requestPermission();
+      }
+      return geo == LocationPermission.whileInUse ||
+          geo == LocationPermission.always;
+    } catch (e) {
+      debugPrint('[LocationService] ensurePermission failed: $e');
+      return false;
+    }
+  }
+
+  /// Returns the current GPS position, or (0.0, 0.0) on any failure.
   static Future<({double latitude, double longitude})> getCurrentPosition() async {
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return _zero;
+      if (!await ensurePermission()) return _zero;
 
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint('[LocationService] device location services disabled');
         return _zero;
       }
 
@@ -33,7 +62,8 @@ class LocationService {
         ),
       );
       return (latitude: position.latitude, longitude: position.longitude);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[LocationService] getCurrentPosition failed: $e');
       return _zero;
     }
   }
