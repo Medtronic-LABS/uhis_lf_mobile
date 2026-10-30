@@ -103,4 +103,82 @@ class PregnancyDetailDao {
       );
     }
   }
+
+  Future<List<PregnancyDetailRow>> allDetails() async {
+    final rows = await _db.db.query(tableName);
+    return rows.map(PregnancyDetailRow.fromDb).toList();
+  }
+
+  Future<List<PregnancyDetailRow>> detailsForMemberLocalIds(
+    List<int> memberLocalIds,
+  ) async {
+    if (memberLocalIds.isEmpty) return const [];
+    final placeholders = List.filled(memberLocalIds.length, '?').join(',');
+    final rows = await _db.db.query(
+      tableName,
+      where: 'household_member_local_id IN ($placeholders)',
+      whereArgs: memberLocalIds,
+    );
+    return rows.map(PregnancyDetailRow.fromDb).toList();
+  }
+
+  Future<void> rebuildForMemberLocalIds(List<int> memberLocalIds) async {
+    final ids = memberLocalIds.where((id) => id > 0).toSet().toList();
+    if (ids.isEmpty) return;
+
+    final history = await _mah.getByMemberLocalIdsAndServiceTypes(
+      ids,
+      PregnancyDetailRebuilder.motherServiceTypes,
+    );
+    final fhirByLocal = await _members.fhirIdsByLocalIds(ids);
+    final grouped = <int, List<MemberAssessmentHistoryRow>>{};
+    for (final row in history) {
+      final memberId = row.memberId;
+      if (memberId == null) continue;
+      grouped.putIfAbsent(memberId, () => []).add(row);
+    }
+
+    final rebuilt = <PregnancyDetailRow>[];
+    for (final memberId in ids) {
+      final rows = grouped[memberId] ?? const [];
+      if (rows.isEmpty) continue;
+      rebuilt.addAll(
+        PregnancyDetailRebuilder.rebuildMotherEpisodes(
+          householdMemberLocalId: memberId,
+          householdMemberFhirId: fhirByLocal[memberId],
+          history: rows,
+        ),
+      );
+    }
+
+    await _db.db.transaction((tx) async {
+      if (rebuilt.isEmpty) {
+        final placeholders = List.filled(ids.length, '?').join(',');
+        await tx.delete(
+          tableName,
+          where: 'household_member_local_id IN ($placeholders)',
+          whereArgs: ids,
+        );
+        return;
+      }
+      await _upsertAllByEpisodeId(tx, rebuilt);
+      final kept = rebuilt.map((d) => d.pregnancyEpisodeId).toSet();
+      final placeholders = List.filled(ids.length, '?').join(',');
+      final stale = await tx.query(
+        tableName,
+        columns: ['id', 'pregnancy_episode_id', 'household_member_local_id'],
+        where: 'household_member_local_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      for (final row in stale) {
+        final episodeId = row['pregnancy_episode_id'] as String?;
+        if (episodeId == null || kept.contains(episodeId)) continue;
+        await tx.delete(
+          tableName,
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
+    });
+  }
 }

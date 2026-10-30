@@ -11,6 +11,12 @@ abstract final class PregnancyDetailRebuilder {
     'pregnancyoutcome',
   ];
 
+  static bool isMotherServiceProvided(String? serviceProvided) {
+    final s = serviceProvided?.toLowerCase();
+    if (s == null || s.isEmpty) return false;
+    return motherServiceTypes.contains(s);
+  }
+
   static List<PregnancyDetailRow> rebuildMotherEpisodes({
     required int householdMemberLocalId,
     required String? householdMemberFhirId,
