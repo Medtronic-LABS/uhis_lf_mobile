@@ -21,6 +21,8 @@ library;
 
 import 'dart:convert';
 
+import 'epi_card_telemetry.dart' show kTelemetryAiFeatureEpiCard;
+
 /// Discriminator for [TelemetryEvent.eventType].
 abstract final class TelemetryEventType {
   TelemetryEventType._();
@@ -31,6 +33,25 @@ abstract final class TelemetryEventType {
 
   /// One per share tap on the counselling screen (report metric 5).
   static const String counsellingShare = 'counselling_share';
+
+  /// One per question answered by the patient AI assistant ("Ask" chatbot).
+  /// Carries only non-PHI signal — latency, a within-session repeat flag, and
+  /// the app language. The question and answer text are PHI and are NEVER put
+  /// on a telemetry event (this table is excluded from the logout wipe because
+  /// it holds no patient data); they ride a separate gated content stream.
+  static const String assistantAsk = 'assistant_ask';
+
+  /// EPI card scan session summary (one per scan-screen open/close).
+  static const String epiCardScanSession = 'epi_card_scan_session';
+
+  /// One OCR attempt (one photo processed) within a scan session.
+  static const String epiCardScanAttempt = 'epi_card_scan_attempt';
+
+  /// Pending vs OCR-detected doses after a successful scan is applied.
+  static const String epiScanDetection = 'epi_scan_detection';
+
+  /// One vaccine dose saved as vaccinated from the update sheet.
+  static const String epiVaccinationUpdate = 'epi_vaccination_update';
 }
 
 /// Lifecycle of a row's journey to the (not yet built) server.
@@ -190,12 +211,36 @@ class TelemetryEvent {
 /// `aiOverridden` were added, and `manual` narrowed to mean "the SK typed it".
 /// A v1 row has none of those keys — readers must default them to empty rather
 /// than present a zero as a finding.
-const int kTelemetryPayloadVersion = 3;
+const int kTelemetryPayloadVersion = 4;
 
 /// The AI feature these events belong to, matching the server's feature
 /// registry key. A constant rather than a literal at the send site so adding a
 /// second feature is a new constant, not a search for string duplicates.
 const String kTelemetryAiFeatureScribe = 'scribe';
+
+/// The patient AI assistant ("Ask") feature registry key on the server.
+const String kTelemetryAiFeatureAssistant = 'assistant';
+
+const _kEpiCardEventTypes = {
+  TelemetryEventType.epiCardScanSession,
+  TelemetryEventType.epiCardScanAttempt,
+  TelemetryEventType.epiScanDetection,
+  TelemetryEventType.epiVaccinationUpdate,
+};
+
+/// The server feature key for an event type. Sent on the ingest envelope so
+/// each row is attributed to the right feature descriptor. Defaults to scribe
+/// — every event type that predates the assistant feature belongs to it, so a
+/// row with no explicit mapping reads exactly as before.
+String telemetryAiFeatureForEvent(String eventType) {
+  if (eventType == TelemetryEventType.assistantAsk) {
+    return kTelemetryAiFeatureAssistant;
+  }
+  if (_kEpiCardEventTypes.contains(eventType)) {
+    return kTelemetryAiFeatureEpiCard;
+  }
+  return kTelemetryAiFeatureScribe;
+}
 
 /// Body of a [TelemetryEventType.visitCompleted] event — report metrics 1-4.
 class VisitCompletedPayload {
@@ -210,6 +255,10 @@ class VisitCompletedPayload {
     this.prefilled = const [],
     this.derived = const [],
     this.aiOverridden = const [],
+    this.scanUsed = false,
+    this.scanFilled = const [],
+    this.scanCorrected = const [],
+    this.scanAcceptedUnchanged = const [],
     this.scribeStartedAtMs,
     this.scribeEndedAtMs,
     this.manualEditingMs,
@@ -261,6 +310,19 @@ class VisitCompletedPayload {
   /// ever placed to be edited.
   final List<String> aiOverridden;
 
+  /// True when any field on the form was filled via a camera card scan
+  /// (EPI/ANC Gemini-vision extraction) — the scan counterpart to
+  /// [scribeUsed]. Distinct metric since the capture mechanism (camera vs
+  /// voice) is a different signal worth reporting separately.
+  final bool scanUsed;
+
+  /// Field ids filled via camera scan, by provenance bucket — same shape as
+  /// [aiFilled]/[aiCorrected]/[aiAcceptedUnchanged] but for scan origin.
+  /// [scanFilled] is the union of [scanCorrected] and [scanAcceptedUnchanged].
+  final List<String> scanFilled;
+  final List<String> scanCorrected;
+  final List<String> scanAcceptedUnchanged;
+
   final List<String> empty;
 
   /// Wall-clock bounds of the scribe session(s), epoch ms, or null when AI
@@ -299,6 +361,7 @@ class VisitCompletedPayload {
   Map<String, dynamic> toJson() => {
         'programmes': programmes,
         'scribeUsed': scribeUsed,
+        'scanUsed': scanUsed,
         if (durationMs != null) 'durationMs': durationMs,
         'fields': {
           'aiFilled': aiFilled,
@@ -309,6 +372,10 @@ class VisitCompletedPayload {
           'derived': derived,
           'aiOverridden': aiOverridden,
           'empty': empty,
+          if (scanFilled.isNotEmpty) 'scanFilled': scanFilled,
+          if (scanCorrected.isNotEmpty) 'scanCorrected': scanCorrected,
+          if (scanAcceptedUnchanged.isNotEmpty)
+            'scanAcceptedUnchanged': scanAcceptedUnchanged,
         },
         'denominators': {
           'libraryTotal': libraryTotal,
@@ -333,6 +400,7 @@ class VisitCompletedPayload {
     return VisitCompletedPayload(
       programmes: _strings(json['programmes']),
       scribeUsed: json['scribeUsed'] == true,
+      scanUsed: json['scanUsed'] == true,
       durationMs: (json['durationMs'] as num?)?.toInt(),
       scribeStartedAtMs: (json['scribeStartedAt'] as num?)?.toInt(),
       scribeEndedAtMs: (json['scribeEndedAt'] as num?)?.toInt(),
@@ -349,6 +417,9 @@ class VisitCompletedPayload {
       prefilled: _strings(fields['prefilled']),
       derived: _strings(fields['derived']),
       aiOverridden: _strings(fields['aiOverridden']),
+      scanFilled: _strings(fields['scanFilled']),
+      scanCorrected: _strings(fields['scanCorrected']),
+      scanAcceptedUnchanged: _strings(fields['scanAcceptedUnchanged']),
       empty: _strings(fields['empty']),
       libraryTotal: (denominators['libraryTotal'] as num?)?.toInt() ?? 0,
       renderedTotal: (denominators['renderedTotal'] as num?)?.toInt() ?? 0,
@@ -403,5 +474,63 @@ class CounsellingSharePayload {
             TelemetryShareSurface.counselling,
         hasMessage: json['hasMessage'] == true,
         launched: json['launched'] == true,
+      );
+}
+
+/// Body of a [TelemetryEventType.assistantAsk] event.
+///
+/// Non-PHI by construction — counts, a flag, a duration, a coarse category.
+/// The question and answer TEXT are deliberately absent: they are PHI and must
+/// not enter [TelemetryEvent] (see the event-type doc). The report's
+/// Question / AI Response columns are backfilled server-side from a separate
+/// gated content stream.
+class AssistantAskPayload {
+  const AssistantAskPayload({
+    required this.askedAgain,
+    required this.appLanguage,
+    this.generationMs,
+    this.context = 'patient-scoped',
+    this.deceasedContext = false,
+  });
+
+  /// True when the SK re-asked the same question earlier in this chat session.
+  /// Within-session only; the global repeat rate is recomputed server-side.
+  final bool askedAgain;
+
+  /// `bn` | `en` — the app language the answer was produced in.
+  final String appLanguage;
+
+  /// Round-trip time to produce the answer, ms. Null when not measured. This
+  /// is the client-observed time (includes network) until the service returns
+  /// a server-measured value.
+  final int? generationMs;
+
+  /// `patient-scoped` | `community-health-worker`.
+  final String context;
+
+  /// True when the question was asked about a patient marked deceased
+  /// ([PatientAiContext.isDeceased] at ask time). Non-PHI — a flag, not the
+  /// patient's identity. Lets the report audit the LEAP-50 guardrail (the
+  /// assistant must decline routine care guidance for a deceased member)
+  /// without reading every answer's free text.
+  final bool deceasedContext;
+
+  Map<String, dynamic> toJson() => {
+        'askedAgain': askedAgain,
+        'appLanguage': appLanguage,
+        'context': context,
+        'deceasedContext': deceasedContext,
+        // Omitted rather than null so a reader tells "not measured" from a
+        // real zero — matching the other payloads in this file.
+        if (generationMs != null) 'generationMs': generationMs,
+      };
+
+  static AssistantAskPayload fromJson(Map<String, dynamic> json) =>
+      AssistantAskPayload(
+        askedAgain: json['askedAgain'] == true,
+        appLanguage: json['appLanguage']?.toString() ?? 'bn',
+        generationMs: (json['generationMs'] as num?)?.toInt(),
+        context: json['context']?.toString() ?? 'patient-scoped',
+        deceasedContext: json['deceasedContext'] == true,
       );
 }

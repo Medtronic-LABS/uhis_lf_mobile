@@ -31,6 +31,12 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Cache Android NDK
+        uses: actions/cache@v5
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ndk-${{ runner.os }}-flutter-3.44.8
+
       - name: Create CI env file
         env:
           API_BASE_URL: ${{ vars.APK_API_BASE_URL }}
@@ -78,5 +84,5 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: uhis-next-apk-${{ github.sha }}
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-prod-release.apk
           if-no-files-found: error

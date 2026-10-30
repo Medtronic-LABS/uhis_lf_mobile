@@ -12,6 +12,7 @@ import '../../../core/db/patient_dao.dart';
 import '../../../core/telemetry/telemetry_service.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/telemetry/value_audit_dao.dart';
 import '../../../core/telemetry/value_audit_entry.dart';
 import '../../../core/db/pregnancy_episode_dao.dart';
@@ -28,6 +29,8 @@ import '../../../core/risk/eye_care_status.dart';
 import '../../../core/risk/ncd_status.dart';
 import '../../../core/risk/pnc_status.dart';
 import '../../../core/risk/pregnancy_outcome_status.dart';
+import '../anc/anc_visit_extraction_models.dart';
+import '../ncd/ncd_visit_extraction_models.dart';
 import '../../../core/risk/pw_risk_factors.dart';
 import '../../../core/time/calendar_day.dart';
 import '../../referral/referral_repository.dart';
@@ -285,6 +288,30 @@ class UnifiedFormNotifier extends ChangeNotifier {
     final visitNo = _asInt(_data.getValue('ancVisitNumber')) ??
         _asInt(_data.getValue('visitNo'));
     return visitNo != null && visitNo > 1;
+  }
+
+  /// Resolves which ANC visit is currently being recorded, for the card-scan
+  /// button — which needs this *during* data entry, not just at [submit]
+  /// time (where `ancVisitNumber` is normally first assigned, from the same
+  /// `_pregnancySnapshotDao.nextAncVisitNo` counter). A pure read: it does
+  /// not persist anything, so calling it here does not disturb or duplicate
+  /// the assignment [submit] does later in the same visit.
+  Future<int> resolveCurrentAncVisitNumber() async {
+    final existing = _asInt(_data.getValue('ancVisitNumber')) ??
+        _asInt(_data.getValue('visitNo'));
+    if (existing != null) return existing;
+    final localId = await _localPatientId();
+    return _pregnancySnapshotDao.nextAncVisitNo(localId, memberId: _memberId);
+  }
+
+  /// Resolves which NCD visit is currently being recorded, for the card-scan
+  /// button — same "pure read, safe to call mid-visit" reasoning as
+  /// [resolveCurrentAncVisitNumber], but NCD has no dedicated server-synced
+  /// visit counter (`PregnancySnapshotDao` is pregnancy-episode-scoped, not
+  /// applicable here) — see
+  /// `AssessmentRepository.priorNcdVisitCount`'s doc comment.
+  Future<int> resolveCurrentNcdVisitNumber() async {
+    return 1 + await _assessmentRepo.priorNcdVisitCount(_patientId);
   }
 
   int? _asInt(dynamic value) {
@@ -944,8 +971,13 @@ class UnifiedFormNotifier extends ChangeNotifier {
     // mirror group, because propagation leaves the whole group `aiModified`.
     final aiOrigin = priorSource == FieldSource.aiPending ||
         priorSource == FieldSource.aiModified;
-    _fieldSources[fieldId] =
-        aiOrigin ? FieldSource.aiModified : FieldSource.manual;
+    final scanOrigin = priorSource == FieldSource.scanPending ||
+        priorSource == FieldSource.scanModified;
+    _fieldSources[fieldId] = aiOrigin
+        ? FieldSource.aiModified
+        : scanOrigin
+            ? FieldSource.scanModified
+            : FieldSource.manual;
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
     }
@@ -1990,7 +2022,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool _isSkOwned(String fieldId) {
     if (fieldId == 'height' && _isHeightLocked()) return true;
     final source = _fieldSources[fieldId];
-    return source == FieldSource.manual || source == FieldSource.aiModified;
+    return source == FieldSource.manual ||
+        source == FieldSource.aiModified ||
+        source == FieldSource.scanModified;
   }
 
   /// Validates and canonicalises [value] against [def].
@@ -2070,6 +2104,116 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (v is num) return v;
     if (v is String) return num.tryParse(v.trim());
     return null;
+  }
+
+  // Maps `AncVisitExtraction`'s fields to this form's field ids (from
+  // `assets/forms/layout_manifests.json`'s `ancSpecificVitals` section).
+  // `visitDate` and `fetalHeartSoundPresent` have no form-field counterpart
+  // today, so they're read-only context, not applied here.
+  static Map<String, dynamic> _ancScanFieldMap(AncVisitExtraction visit) => {
+        if (visit.weightKg != null) 'weight': visit.weightKg,
+        if (visit.bpSystolic != null) 'systolic': visit.bpSystolic,
+        if (visit.bpDiastolic != null) 'diastolic': visit.bpDiastolic,
+        if (visit.fundalHeightCm != null) 'fundalHeight': visit.fundalHeightCm,
+        if (visit.hemoglobinGmDl != null) 'hemoglobin': visit.hemoglobinGmDl,
+        if (visit.glucoseMmolL != null) 'glucose': visit.glucoseMmolL,
+        if (visit.pulseBpm != null) 'pulse': visit.pulseBpm,
+        if (visit.temperatureF != null) 'temperature': visit.temperatureF,
+        // The card marks these with a +/- or checkmark/cross, but the form's
+        // own options are "Present"/"Absent"/"yes"/"no" — never show the
+        // raw card symbol in the UI, only map to the form's existing wire
+        // ids (field_library.json's `optionsList[].id`, not its display
+        // label — note urinaryAlbumin and urinaryBilirubin use different
+        // casing for the same concept ("Present" vs "present"), a
+        // pre-existing inconsistency in that data, not something to "fix"
+        // here).
+        if (visit.urinaryAlbuminPresent != null)
+          'urinaryAlbumin': visit.urinaryAlbuminPresent! ? 'Present' : 'Absent',
+        if (visit.urinaryBilirubinPresent != null)
+          'urinaryBilirubin':
+              visit.urinaryBilirubinPresent! ? 'present' : 'absent',
+        if (visit.edemaPresent != null)
+          'edema': visit.edemaPresent! ? 'present' : 'absent',
+        if (visit.ttTdCompleted != null)
+          'ttTdCompleted': visit.ttTdCompleted! ? 'yes' : 'no',
+        if (visit.usgDone != null)
+          'ultrasound': visit.usgDone! ? 'done' : 'notDone',
+      };
+
+  /// Applies a Gemini-vision ANC card scan's result ([visit]) to this form —
+  /// the camera-scan counterpart to [applyExtractedFields]'s AI-Scribe fill.
+  /// Never overwrites a field the SK already typed/edited (same `_isSkOwned`
+  /// guard as the scribe path). Returns the number of fields actually
+  /// applied, for the caller's confirmation UI / telemetry.
+  int applyScannedAncVisit(AncVisitExtraction visit) {
+    var appliedCount = 0;
+    for (final entry in _ancScanFieldMap(visit).entries) {
+      final fieldId = entry.key;
+      if (_isSkOwned(fieldId)) {
+        debugPrint('[AncScan] SKIPPED [$fieldId] SK-owned — '
+            'value "${entry.value}" NOT applied');
+        continue;
+      }
+      _data = _data.setValue(fieldId, entry.value);
+      _fieldSources[fieldId] = FieldSource.scanPending;
+      appliedCount++;
+      debugPrint('[AncScan] APPLIED [$fieldId] = ${entry.value}');
+    }
+    if (appliedCount > 0) {
+      _saveDraft();
+      notifyListeners();
+    }
+    return appliedCount;
+  }
+
+  // Maps `NcdVisitExtraction`'s fields to this form's field ids (from
+  // `assets/forms/layout_manifests.json`'s `ncdBiometrics`/`bpLog`/
+  // `glucoseLog` sections). `visitDate` has no form-field counterpart today,
+  // so it's read-only context, not applied here. `glucoseType` is already
+  // the app's own option id ("fbs"/"rbs" — set by the backend prompt to
+  // match `field_library.json` exactly), never a raw card label.
+  //
+  // BP is NOT two flat `systolic`/`diastolic` fields on this form (unlike
+  // ANC's vitals section) — NCD renders a single composite `bpLogDetails`
+  // widget (`_BpReadingField` in unified_form_screen.dart) backed by
+  // `List<Map>` readings (`BpLogDetails.toJson()`'s shape), the same wire
+  // format `BpHistoryDao` already reads back out. Writing flat
+  // systolic/diastolic here silently applies to nothing the UI renders.
+  static Map<String, dynamic> _ncdScanFieldMap(NcdVisitExtraction visit) => {
+        if (visit.weightKg != null) 'weight': visit.weightKg,
+        if (visit.heightCm != null) 'height': visit.heightCm,
+        if (visit.bpSystolic != null && visit.bpDiastolic != null)
+          'bpLogDetails': [
+            {'systolic': visit.bpSystolic, 'diastolic': visit.bpDiastolic},
+          ],
+        if (visit.glucoseMmolL != null) 'glucose': visit.glucoseMmolL,
+        if (visit.glucoseType != null) 'glucoseType': visit.glucoseType,
+      };
+
+  /// Applies a Gemini-vision NCD card scan's result ([visit]) to this form —
+  /// the camera-scan counterpart to [applyScannedAncVisit]. Never overwrites
+  /// a field the SK already typed/edited (same `_isSkOwned` guard). Returns
+  /// the number of fields actually applied, for the caller's confirmation
+  /// UI / telemetry.
+  int applyScannedNcdVisit(NcdVisitExtraction visit) {
+    var appliedCount = 0;
+    for (final entry in _ncdScanFieldMap(visit).entries) {
+      final fieldId = entry.key;
+      if (_isSkOwned(fieldId)) {
+        debugPrint('[NcdScan] SKIPPED [$fieldId] SK-owned — '
+            'value "${entry.value}" NOT applied');
+        continue;
+      }
+      _data = _data.setValue(fieldId, entry.value);
+      _fieldSources[fieldId] = FieldSource.scanPending;
+      appliedCount++;
+      debugPrint('[NcdScan] APPLIED [$fieldId] = ${entry.value}');
+    }
+    if (appliedCount > 0) {
+      _saveDraft();
+      notifyListeners();
+    }
+    return appliedCount;
   }
 
   /// Decompose canonical data into per-programme payloads and save as
@@ -2225,11 +2369,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
         }
       }
 
-      final payloads = UnifiedPayloadMapper.decompose(
+      var payloads = UnifiedPayloadMapper.decompose(
         _withWireOptionValues(_data),
         _activeFormTypes.toSet(),
         risingBpTrend: risingBpTrend,
       );
+      if (payloads.any((p) => p.assessmentType == 'ANC') &&
+          FieldVisibilityRules.isPregnancyTooEarly(_data)) {
+        debugPrint(
+          '[SubmitBlocked] ANC dropped — LMP is under the 6-week threshold',
+        );
+        payloads =
+            payloads.where((p) => p.assessmentType != 'ANC').toList();
+      }
       if (payloads.isEmpty) {
         debugPrint(
             '[SubmitBlocked] no assessment payloads produced for form types '
@@ -2330,6 +2482,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         }
       }
 
+      final skLocation = await LocationService.getCurrentPosition();
       for (final payload in payloads) {
         ConsoleLog.banner(
           '[PayloadDebug] submit — ${payload.assessmentType} payload:\n'
@@ -2344,6 +2497,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
           patientId: _patientId,
           villageId: _villageId,
           encounterId: _encounterId,
+          latitude: skLocation.latitude,
+          longitude: skLocation.longitude,
           isReferred: isReferred,
           referredReasons: referredReasons.isEmpty ? null : referredReasons,
           customStatus: payload.assessmentType == 'PWPROFILE'
@@ -2464,6 +2619,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
     int extractableVisible,
     List<String> aiCorrected,
     List<String> aiAcceptedUnchanged,
+    List<String> scanCorrected,
+    List<String> scanAcceptedUnchanged,
   }) telemetryVisitCapture() {
     final b = classifyFieldProvenance();
     // Expanded to leaves, because `aiFilled` records leaves: AI fills
@@ -2482,6 +2639,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
           b.aiCorrected.where(captureIds.contains).toList()..sort(),
       aiAcceptedUnchanged:
           b.aiAcceptedUnchanged.where(captureIds.contains).toList()..sort(),
+      scanCorrected:
+          b.scanCorrected.where(captureIds.contains).toList()..sort(),
+      scanAcceptedUnchanged: b.scanAcceptedUnchanged
+          .where(captureIds.contains)
+          .toList()
+        ..sort(),
     );
   }
 
@@ -2490,6 +2653,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (telemetry == null) return;
     try {
       final b = classifyFieldProvenance();
+      _closeScribeSpanAtSubmit();
       final capture = telemetryVisitCapture();
       // Shared with value-audit and visit-content via [ensureVisitUuid].
       final visitUuid = telemetry.ensureVisitUuid(_encounterId);
@@ -2501,6 +2665,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
             _aiOverriddenFieldIds.isNotEmpty,
         aiCorrected: capture.aiCorrected,
         aiAcceptedUnchanged: capture.aiAcceptedUnchanged,
+        scanUsed: capture.scanCorrected.isNotEmpty ||
+            capture.scanAcceptedUnchanged.isNotEmpty,
+        scanCorrected: capture.scanCorrected,
+        scanAcceptedUnchanged: capture.scanAcceptedUnchanged,
         manual: b.manual.toList(),
         prefilled: b.prefilled.toList(),
         derived: b.derived.toList(),
@@ -2533,6 +2701,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
   ({
     Set<String> aiCorrected,
     Set<String> aiAcceptedUnchanged,
+    Set<String> scanCorrected,
+    Set<String> scanAcceptedUnchanged,
     Set<String> manual,
     Set<String> prefilled,
     Set<String> derived,
@@ -2542,6 +2712,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }) classifyFieldProvenance() {
       final aiCorrected = <String>{};
       final aiAcceptedUnchanged = <String>{};
+      final scanCorrected = <String>{};
+      final scanAcceptedUnchanged = <String>{};
       final manual = <String>{};
       final prefilled = <String>{};
       final derived = <String>{};
@@ -2579,6 +2751,13 @@ class UnifiedFormNotifier extends ChangeNotifier {
               // explicit accept. The correction rate is therefore a lower
               // bound on error, which is why `aiOverridden` is also reported.
               aiAcceptedUnchanged.add(def.id);
+            case FieldSource.scanModified:
+              scanCorrected.add(def.id);
+            case FieldSource.scanPending:
+            case FieldSource.scanAccepted:
+              // Same "not yet edited ≠ reviewed" caveat as `aiAcceptedUnchanged`
+              // above — the scan path also sets no explicit accept.
+              scanAcceptedUnchanged.add(def.id);
             case FieldSource.manual:
               manual.add(def.id);
             case FieldSource.prefilled:
@@ -2607,7 +2786,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
       // account for, but they were never offered to the extractor, so they
       // are not capture opportunities and must not move the capture rate.
       final classified = {
-        ...aiCorrected, ...aiAcceptedUnchanged, ...manual,
+        ...aiCorrected, ...aiAcceptedUnchanged,
+        ...scanCorrected, ...scanAcceptedUnchanged, ...manual,
         ...prefilled, ...derived, ...empty,
       };
       for (final entry in _fieldSources.entries) {
@@ -2630,6 +2810,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
           case FieldSource.aiPending:
           case FieldSource.aiAccepted:
             aiAcceptedUnchanged.add(id);
+          case FieldSource.scanModified:
+            scanCorrected.add(id);
+          case FieldSource.scanPending:
+          case FieldSource.scanAccepted:
+            scanAcceptedUnchanged.add(id);
           case FieldSource.manual:
             manual.add(id);
           case FieldSource.prefilled:
@@ -2651,6 +2836,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
       return (
         aiCorrected: aiCorrected,
         aiAcceptedUnchanged: aiAcceptedUnchanged,
+        scanCorrected: scanCorrected,
+        scanAcceptedUnchanged: scanAcceptedUnchanged,
         manual: manual,
         prefilled: prefilled,
         derived: derived,
@@ -2684,6 +2871,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  /// Closes a scribe span left open by a session still running at submit.
+  ///
+  /// The banner reports the end from `stop()`, which completes a moment AFTER
+  /// this event is assembled — an SK who submits without first switching the
+  /// live session off would otherwise record a start and no end, and so no
+  /// manual-editing time either. Submitting IS the end of the span: the form
+  /// cannot be edited afterwards, and the near-zero editing time that follows
+  /// is the true measure for that flow.
+  void _closeScribeSpanAtSubmit() {
+    if (_scribeStartedAtMs == null || _scribeEndedAtMs != null) return;
+    markScribeSpan(endedAtMs: DateTime.now().millisecondsSinceEpoch);
+  }
+
+  @visibleForTesting
+  void closeScribeSpanAtSubmitForTesting() => _closeScribeSpanAtSubmit();
+
   /// The in-memory AI-value capture map. Empty unless
   /// [AppConfig.valueAuditEnabled] — which is what the tests pin.
   @visibleForTesting
@@ -2704,6 +2907,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// is in it now is the SK's value, not AI's.
   void _captureAiValueBeforeFirstEdit(String fieldId) {
     if (!AppConfig.valueAuditEnabled) return;
+    // A composite container is not a field the SK sees, and the report names
+    // fields the way the rest of the log does — by leaf. Editing a BP reading
+    // used to record `bpLogDetails` here while the edited-fields column named
+    // `systolic`/`diastolic`, so the two columns could not be reconciled.
+    final members = _compositeMembers[fieldId];
+    if (members != null) {
+      for (final member in members) {
+        _captureAiValueBeforeFirstEdit(member);
+      }
+      return;
+    }
     if (_aiProposedValues.containsKey(fieldId)) return;
     if (_groupSourceFor(fieldId) != FieldSource.aiPending) return;
     _aiProposedValues[fieldId] = _stringifyValue(_data.getValue(fieldId));
@@ -2713,7 +2927,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
   ///
   /// A report that shows a clinician what AI proposed has to show what it
   /// actually proposed, so this does not round, parse or infer units.
-  static String? _stringifyValue(dynamic raw) => raw?.toString();
+  static String? _stringifyValue(dynamic raw) {
+    if (raw == null) return null;
+    // Dart's own toString leaked into the report: a multi-select exported as
+    // "[fever, cough]" and a BP reading as "[{systolic: 110, diastolic: 70}]".
+    // Neither is what the form shows, which is what this is meant to capture.
+    if (raw is List) return raw.map(_stringifyValue).join(', ');
+    if (raw is Map) {
+      return raw.entries.map((e) => '${e.key}: ${e.value}').join(', ');
+    }
+    return raw.toString();
+  }
 
   /// Writes the before/after pairs for this visit to the PHI audit table.
   ///
@@ -2730,18 +2954,27 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (dao == null || _aiProposedValues.isEmpty) return;
     try {
       final now = DateTime.now().toUtc().millisecondsSinceEpoch;
-      await dao.insertAll([
+      // Only pairs where the value actually changed. The columns are labelled
+      // "(edited fields)" and exist to show where AI was wrong; a field the SK
+      // touched without changing (or a composite sibling dragged in by an edit
+      // to its neighbour) exports as "Yes -> Yes", which reads as a disagreement
+      // that never happened.
+      final changed = [
         for (final entry in _aiProposedValues.entries)
-          ValueAuditEntry(
-            id: const Uuid().v4(),
-            visitUuid: visitUuid,
-            fieldId: entry.key,
-            aiValue: entry.value,
-            finalValue: _stringifyValue(_data.getValue(entry.key)),
-            occurredAt: now,
-          ),
-      ]);
-      debugPrint('[ValueAudit] wrote ${_aiProposedValues.length} pair(s)');
+          if (_stringifyValue(_data.getValue(entry.key)) != entry.value)
+            ValueAuditEntry(
+              id: const Uuid().v4(),
+              visitUuid: visitUuid,
+              fieldId: entry.key,
+              aiValue: entry.value,
+              finalValue: _stringifyValue(_data.getValue(entry.key)),
+              occurredAt: now,
+            ),
+      ];
+      if (changed.isEmpty) return;
+      await dao.insertAll(changed);
+      debugPrint('[ValueAudit] wrote ${changed.length} pair(s) '
+          '(${_aiProposedValues.length} captured, unchanged dropped)');
     } on Object catch (e, st) {
       debugPrint('[ValueAudit] write failed: $e');
       debugPrint('[ValueAudit] $st');
@@ -3450,8 +3683,23 @@ class UnifiedFormNotifier extends ChangeNotifier {
       ));
     }
 
+    if (_activeFormTypes.contains('pregnancyOutcome')) {
+      out.add(NabaReferralAssessment(
+        assessmentType: 'PREGNANCYOUTCOME',
+        referralInputs: compact(
+          UnifiedPayloadMapper.pregnancyOutcomeDetailsForNaba(_data),
+        ),
+      ));
+    }
+
     return List<NabaReferralAssessment>.unmodifiable(out);
   }
+
+  @visibleForTesting
+  List<NabaReferralAssessment> buildNabaReferralAssessmentsForTesting({
+    required bool isNcdFollowUp,
+  }) =>
+      _buildNabaReferralAssessments(isNcdFollowUp: isNcdFollowUp);
 
   /// Today's ANC vitals snapshot from the in-progress form (for AI-trend).
   VisitVitals _todayAncVisitVitals() {

@@ -327,16 +327,20 @@ abstract final class UnifiedSectionRules {
     List<String> enrolledFormTypes = const [],
     int? ageInMonths,
   }) {
+    final renderFormTypes = FieldVisibilityRules.effectiveActiveFormTypes(
+      activeFormTypes: activeFormTypes,
+      data: currentData,
+    );
     final claimedFieldIds = <String>{};
     final vitalsSections = <AnnotatedFormSection>[];
     final enrolledSections = <AnnotatedFormSection>[];
     final recommendedSections = <AnnotatedFormSection>[];
-    final combinedVitals = _isCombinedVitalsVisit(activeFormTypes);
+    final combinedVitals = _isCombinedVitalsVisit(renderFormTypes);
 
     // ── Pass 1: shared common vitals (combined visits only) ────────────────
     final commonVitals = _buildCombinedCommonVitalsSection(
       config: config,
-      activeFormTypes: activeFormTypes,
+      activeFormTypes: renderFormTypes,
       claimedFieldIds: claimedFieldIds,
     );
     if (commonVitals != null) {
@@ -349,7 +353,7 @@ abstract final class UnifiedSectionRules {
     // (Android: document birth before mother/child PNC), then enrolled PNC,
     // then any other recommended forms. Routine visits keep enrolled →
     // recommended order.
-    final hasPregnancyOutcome = activeFormTypes.contains('pregnancyOutcome');
+    final hasPregnancyOutcome = renderFormTypes.contains('pregnancyOutcome');
 
     void collectFormType(
       String formType,
@@ -362,7 +366,7 @@ abstract final class UnifiedSectionRules {
       for (final section in config.forms[formType] ?? []) {
         if (!_isSectionVisible(
           section: section,
-          activeFormTypes: activeFormTypes,
+          activeFormTypes: renderFormTypes,
           enrolledFormTypes: enrolledFormTypes,
           currentData: currentData,
           gestationalWeeks: gestationalWeeks,
@@ -418,10 +422,10 @@ abstract final class UnifiedSectionRules {
       );
     }
 
-    final enrolledPass = activeFormTypes.where(
+    final enrolledPass = renderFormTypes.where(
       (ft) => enrolledFormTypes.contains(ft) && ft != 'pregnancyOutcome',
     );
-    final recommendedPass = activeFormTypes.where(
+    final recommendedPass = renderFormTypes.where(
       (ft) => !enrolledFormTypes.contains(ft) && ft != 'pregnancyOutcome',
     );
 
@@ -1001,6 +1005,34 @@ abstract final class FieldVisibilityRules {
     final days = daysSinceLmp(data, now);
     if (days == null) return false;
     return days < lmpThresholdDays;
+  }
+
+  /// True when [activeFormTypes] includes ANC but LMP on the live form is
+  /// under the 6-week threshold — Step 2 must hide ANC until eligible.
+  static bool isAncSuppressedForEarlyLmp({
+    required List<String> activeFormTypes,
+    required CanonicalVisitData data,
+    DateTime? now,
+  }) {
+    return activeFormTypes.contains('anc') && isPregnancyTooEarly(data, now);
+  }
+
+  /// Programme form types actually rendered in Step 2 — drops `anc` while
+  /// [isAncSuppressedForEarlyLmp] (mirrors Android: no ANC workflow before
+  /// 6 weeks, even on a combined PW+ANC visit).
+  static List<String> effectiveActiveFormTypes({
+    required List<String> activeFormTypes,
+    required CanonicalVisitData data,
+    DateTime? now,
+  }) {
+    if (!isAncSuppressedForEarlyLmp(
+      activeFormTypes: activeFormTypes,
+      data: data,
+      now: now,
+    )) {
+      return activeFormTypes;
+    }
+    return activeFormTypes.where((t) => t != 'anc').toList(growable: false);
   }
 
   /// Android AssessmentPregnantWomenRegistrationFragment LMP callback.

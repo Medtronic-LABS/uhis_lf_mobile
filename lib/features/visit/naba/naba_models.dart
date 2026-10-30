@@ -77,12 +77,18 @@ class NabaVitalSnapshot {
       };
 }
 
+/// One earlier encounter, as the backend's `PriorVisitSummary`.
+///
+/// [date] is an ISO-8601 string, never an epoch int: the server declares it
+/// `date: str` and Pydantic does not coerce int to str, so a number 422s the
+/// whole request.
 class NabaPriorVisit {
   const NabaPriorVisit({
     required this.date,
     this.programme,
     this.keyFindings = const [],
     this.actionsTaken = const [],
+    this.vitals,
   });
 
   final String date;
@@ -90,11 +96,20 @@ class NabaPriorVisit {
   final List<String> keyFindings;
   final List<String> actionsTaken;
 
+  /// What was measured at that visit, for trend and repeat-reading reasoning.
+  ///
+  /// Reuses [NabaVitalSnapshot] rather than declaring its own shape: its field
+  /// names and types already match the server's `VitalSnapshot`, and every one
+  /// is null-guarded in `toJson`, so a value that could not be parsed is
+  /// omitted rather than sent as an empty string — which would 422.
+  final NabaVitalSnapshot? vitals;
+
   Map<String, dynamic> toJson() => {
         'date': date,
         if (programme != null) 'programme': programme,
         'keyFindings': keyFindings,
         'actionsTaken': actionsTaken,
+        if (vitals != null) 'vitals': vitals!.toJson(),
       };
 }
 
@@ -110,7 +125,8 @@ class NabaReferralAssessment {
   });
 
   /// Wire assessment type: `ANC`, `NCD`, `PNC_MOTHER`, `CHILDHOOD_VISIT`,
-  /// `PWPROFILE`, `FAMILY_PLANNING`, …
+  /// `PREGNANCYOUTCOME`, `CHILD_IMMUNIZATION`, `PWPROFILE`,
+  /// `FAMILY_PLANNING`, …
   final String assessmentType;
 
   /// Clinical fields for this assessment type (referral inputs, or form
@@ -123,12 +139,42 @@ class NabaReferralAssessment {
       };
 }
 
+/// Top-level [NabaRequest.gestationalWeeks]: visit snapshot first, then the
+/// Step 2 ANC assessment, then LMP back-calculation.
+int? resolveNabaGestationalWeeks({
+  int? visitGestationalWeeks,
+  int? lmpMs,
+  List<NabaReferralAssessment> assessments = const [],
+}) {
+  if (visitGestationalWeeks != null) return visitGestationalWeeks;
+  for (final a in assessments) {
+    if (a.assessmentType != 'ANC') continue;
+    final raw = a.referralInputs['gestationalWeeks'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+  }
+  if (lmpMs != null) {
+    final weeks = DateTime.now()
+            .difference(DateTime.fromMillisecondsSinceEpoch(lmpMs))
+            .inDays ~/
+        7;
+    if (weeks >= 0) return weeks;
+  }
+  return null;
+}
+
+/// ANC visits always declare pregnancy for the NABA backend prompt context.
+bool resolveNabaIsPregnant(List<String> activeProgrammes) {
+  return activeProgrammes.any((p) => p.toUpperCase() == 'ANC');
+}
+
 // ── Primary request ───────────────────────────────────────────────────────────
 
 class NabaRequest {
   const NabaRequest({
     required this.requestId,
     required this.patientId,
+    this.visitUuid,
     this.appLanguage = 'bn',
     this.visitType = 'routine',
     this.aiScribeConfidence = 1.0,
@@ -156,6 +202,10 @@ class NabaRequest {
 
   final String requestId;
   final String patientId;
+
+  /// Per-visit telemetry correlator (same as visit-content / value-audit /
+  /// `visit_completed`). Distinct from [requestId], which is the encounter id.
+  final String? visitUuid;
 
   /// SK's app locale (`bn` / `en`). The backend appends an output-language
   /// instruction keyed off this, so clinical copy — including the referral
@@ -195,6 +245,7 @@ class NabaRequest {
   Map<String, dynamic> toJson() => {
         'requestId': requestId,
         'patientId': patientId,
+        if (visitUuid != null && visitUuid!.isNotEmpty) 'visitUuid': visitUuid,
         'appLanguage': appLanguage,
         'visitType': visitType,
         'aiScribeConfidence': aiScribeConfidence,

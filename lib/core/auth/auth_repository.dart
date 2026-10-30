@@ -818,4 +818,26 @@ class UserProfileSummary {
 
   bool get hasAnyDetail =>
       [skId, nidOrPhone, ward, upazila, area].any((s) => s != null && s.isNotEmpty);
+
+  /// Display name for headers (e.g. My Performance app bar).
+  String get displayName {
+    final f = firstName?.trim() ?? '';
+    final l = lastName?.trim() ?? '';
+    return [f, l].where((e) => e.isNotEmpty).join(' ');
+  }
+
+  /// "Name · {skId} · Upazila" — no "SK ID" label; omits empty parts.
+  String get performanceAppBarSubtitle {
+    final parts = <String>[];
+    if (displayName.isNotEmpty) parts.add(displayName);
+    final id = skId?.trim();
+    if (id != null && id.isNotEmpty) parts.add(id);
+    final location = upazila?.trim().isNotEmpty == true
+        ? upazila!.trim()
+        : (area?.trim().isNotEmpty == true
+            ? area!.trim()
+            : ward?.trim());
+    if (location != null && location.isNotEmpty) parts.add(location);
+    return parts.join(' · ');
+  }
 }

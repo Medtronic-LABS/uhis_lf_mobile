@@ -1066,6 +1066,13 @@ abstract final class UnifiedPayloadMapper {
   //   neonatalDeathCause  → causeOfNeonatalDeath
   // _wrapDetailsForType wraps this map under "pregnancyOutcome" automatically.
 
+  /// Wire-shaped pregnancy outcome details for NABA `assessments[]`
+  /// (`assessmentType`: `PREGNANCYOUTCOME`).
+  static Map<String, dynamic> pregnancyOutcomeDetailsForNaba(
+    CanonicalVisitData d,
+  ) =>
+      _toPregnancyOutcome(d);
+
   static Map<String, dynamic> _toPregnancyOutcome(CanonicalVisitData d) {
     // Android FormResultComposer nests pregnancyOutcomeType under the
     // "pregnancyOutcome" card family (same name as the menu wrapper).

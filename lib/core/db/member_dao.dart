@@ -874,6 +874,19 @@ class MemberDao {
     return rows.map(HouseholdMemberEntity.fromDb).toList();
   }
 
+  /// Local member id → FHIR id (Spice [getMemberFhirIdsByLocalIds]).
+  Future<Map<int, String?>> fhirIdsByLocalIds(List<int> localIds) async {
+    if (localIds.isEmpty) return {};
+    final ph = List.filled(localIds.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      'SELECT id, fhir_id FROM ${AppDatabase.tableMembers} WHERE id IN ($ph)',
+      localIds,
+    );
+    return {
+      for (final r in rows) r['id'] as int: r['fhir_id'] as String?,
+    };
+  }
+
   /// Get member by local ID, falling back to fhir_id for legacy callers.
   Future<HouseholdMemberEntity?> getById(String id) async {
     final rows = await _db.db.query(

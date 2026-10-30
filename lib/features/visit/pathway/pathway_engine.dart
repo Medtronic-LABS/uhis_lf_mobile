@@ -255,15 +255,12 @@ class PathwayEngine {
       }
     }
 
-    // Special case: ANC requires pregnancy from context OR symptoms
+    // Special case: ANC requires eligible pregnancy (LMP ≥ 6 weeks) from
+    // context — mirrors Android getANCPNCStatus(), not bare isPregnant.
     if (rule.programme == Programme.anc) {
-      if (ctx.isPregnant || symptoms.contains('pregnant')) {
+      if (ctx.isAncEligible) {
         triggered = true;
-        if (ctx.isPregnant) {
-          triggerConditions.add('PREGNANCY');
-        } else if (symptoms.contains('pregnant')) {
-          triggerSymptoms.add('pregnant');
-        }
+        triggerConditions.add('PREGNANCY');
       }
     }
 
@@ -276,6 +273,11 @@ class PathwayEngine {
     }
 
     if (!triggered) return null;
+
+    // Android never surfaces ANC before the 6-week LMP threshold.
+    if (rule.programme == Programme.anc && !ctx.isAncEligible) {
+      return null;
+    }
 
     return ActivatedPathway(
       programme: rule.programme,

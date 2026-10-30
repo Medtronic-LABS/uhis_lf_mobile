@@ -1,4 +1,6 @@
 import '../../../core/models/programme.dart';
+import '../../../core/risk/pregnancy_rmnch_menu_gating.dart';
+import '../../../core/db/pregnancy_snapshot_dao.dart';
 
 /// Pure helpers for the Step 1 eligible-services grid.
 ///
@@ -177,14 +179,17 @@ abstract final class ProgrammeGridSync {
   /// `UnifiedFormNotifier._persistPregnancyEpisodeAfterSubmit`). Don't
   /// re-lock this branch — it's an intentional allowance, not a regression
   /// of the bug fix above.
+  /// Spice `isPOMenuDisable` + patient-level postpartum from context.
   static bool isPregnancyOutcomeLocked({
-    required bool isPregnant,
-    required bool isPostpartum,
-    required bool hasOpenPregnancyEpisode,
+    required bool isPostpartumFromContext,
+    PregnancySnapshotRow? relevantObstetric,
+    DateTime? now,
   }) {
-    if (isPostpartum) return true;
-    if (hasOpenPregnancyEpisode) return !isPregnant;
-    return false;
+    if (isPostpartumFromContext) return true;
+    return PregnancyRmnchMenuGating.isPregnancyOutcomeLocked(
+      relevantObstetric,
+      now: now,
+    );
   }
 
   /// Whether the Step 1 ANC card should be locked (disabled).
@@ -197,8 +202,10 @@ abstract final class ProgrammeGridSync {
     required bool isPwGateOpen,
     required bool isDeliveryVisit,
     required bool ancRevisitTooSoon,
+    bool ancEarlyLmpBlocked = false,
   }) {
     if (isPostpartum) return true;
+    if (ancEarlyLmpBlocked) return true;
     return !isPwGateOpen || isDeliveryVisit || ancRevisitTooSoon;
   }
 }

@@ -117,10 +117,11 @@ class TelemetryUploader {
               if (e.skUserId != null) 'skUserId': e.skUserId,
               if (e.capturedTenantId != null)
                 'capturedTenantId': e.capturedTenantId,
-              // Which AI feature produced the row. Sent explicitly rather
-              // than left to the server's default so a future feature needs
-              // no server change to be attributed correctly.
-              'aiFeature': kTelemetryAiFeatureScribe,
+              // Which AI feature produced the row — derived from the event
+              // type so each feature is attributed correctly (scribe events →
+              // scribe, assistant_ask → assistant). Sent explicitly rather
+              // than left to the server default.
+              'aiFeature': telemetryAiFeatureForEvent(e.eventType),
               'appVersion': e.appVersion,
               'appBuild': e.appBuild,
               'payloadVersion': e.payloadVersion,

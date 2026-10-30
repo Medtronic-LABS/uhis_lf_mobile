@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../auth/auth_repository.dart';
 import '../auth/auth_state.dart';
 import '../../features/visit/assessment_repository.dart';
+import 'call_log_sync_service.dart';
 import 'offline_push_service.dart';
 import 'offline_sync_service.dart';
 
@@ -33,12 +34,14 @@ class SyncConnectivityService {
     required OfflinePushService pushService,
     required AuthState authState,
     required AuthRepository authRepo,
+    CallLogSyncService? callLogSync,
     void Function()? flushUploadQueues,
   })  : _assessmentRepo = assessmentRepo,
         _syncService = syncService,
         _pushService = pushService,
         _authState = authState,
         _authRepo = authRepo,
+        _callLogSync = callLogSync,
         _flushUploadQueues = flushUploadQueues;
 
   final AssessmentRepository _assessmentRepo;
@@ -47,6 +50,12 @@ class SyncConnectivityService {
   final AuthState _authState;
   final AuthRepository _authRepo;
   final void Function()? _flushUploadQueues;
+
+  /// Optional -- null in any test/harness that doesn't wire it. Piggybacks
+  /// on this same connectivity-restored trigger (see `_triggerSync`) so a
+  /// patient's Shukhee call/prescription/clinicalData history stays fresh
+  /// without a dedicated timer.
+  final CallLogSyncService? _callLogSync;
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   Timer? _retryTimer;
@@ -115,7 +124,11 @@ class SyncConnectivityService {
   /// Call after login / unlock when the session is ready so pending outbound
   /// work is pushed even if the offline→online edge was already consumed
   /// (e.g. network returned while locked, or app opened already online).
-  void syncIfSessionReady() {
+  ///
+  /// Set [includeWarmPull] false on Home open — SK should not re-download the
+  /// full patient bundle every time they land on the dashboard; pull remains
+  /// on login/unlock, connectivity restore, and manual refresh.
+  void syncIfSessionReady({bool includeWarmPull = true}) {
     if (_authState.status == AuthStatus.signedIn &&
         !_authState.locked &&
         _authRepo.hasSessionCredentials) {
@@ -123,10 +136,10 @@ class SyncConnectivityService {
       // the session is ready rather than waiting for warmSync to complete.
       _flushUploadQueues?.call();
     }
-    _triggerSync();
+    _triggerSync(includeWarmPull: includeWarmPull);
   }
 
-  void _triggerSync() {
+  void _triggerSync({bool includeWarmPull = true}) {
     // Only sync when the user has an active authenticated session.
     if (_authState.status != AuthStatus.signedIn || _authState.locked) {
       debugPrint('[SyncConnectivity] Skipping auto-sync — not signed-in or session locked');
@@ -159,15 +172,26 @@ class SyncConnectivityService {
             syncMode: 'AutomaticSync',
           );
         })
-        .then((n) {
+        .then((n) async {
           if (n > 0) {
             debugPrint('[SyncConnectivity] AutomaticSync pushed $n assessment(s)');
           }
+          if (!includeWarmPull) {
+            debugPrint(
+              '[SyncConnectivity] Skipping warm pull (push-only automatic sync)',
+            );
+            return;
+          }
           // Warm pull after push so the worklist refreshes with any server updates.
-          return _syncService.warmSync();
+          await _syncService.warmSync();
+          debugPrint('[SyncConnectivity] AutomaticSync warm pull complete');
         })
         .then((_) {
-          debugPrint('[SyncConnectivity] AutomaticSync warm pull complete');
+          if (!includeWarmPull) return null;
+          return _callLogSync?.pull();
+        })
+        .then((_) {
+          debugPrint('[SyncConnectivity] AutomaticSync call-log history pull complete');
         })
         .catchError((Object e) {
           debugPrint('[SyncConnectivity] AutomaticSync error — scheduling retry in ${_retryDelay.inSeconds}s: $e');

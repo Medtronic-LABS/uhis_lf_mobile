@@ -21,6 +21,7 @@ import '../db/follow_up_dao.dart';
 import '../db/health_facility_dao.dart';
 import '../db/household_dao.dart';
 import '../db/immunisation_dao.dart';
+import '../db/member_assessment_history_writer.dart';
 import '../db/member_dao.dart';
 import '../db/patient_dao.dart';
 import '../db/patient_programmes_dao.dart';
@@ -30,7 +31,6 @@ import '../db/referral_dao.dart';
 import '../db/roster_revision.dart';
 import '../db/sync_meta_dao.dart';
 import '../db/treatment_presence_dao.dart';
-import '../mission/mission_pregnancy_facts.dart';
 import '../models/json_read.dart';
 import '../models/patient.dart';
 import '../models/programme.dart';
@@ -38,6 +38,8 @@ import '../models/referral.dart';
 import '../referral/referral_ingest_mapper.dart';
 import 'latest_visit_follow_up.dart';
 import 'pregnancy_delivery_sync.dart';
+import 'pregnancy_mah_projection.dart';
+import 'shukhee_encounter_attach_service.dart';
 import 'sync_activity.dart';
 import 'sync_progress.dart';
 import 'sync_report.dart';
@@ -46,8 +48,9 @@ import 'sync_report.dart';
 /// SQLite cache. Risk *scoring* is a separate concern handled by
 /// `RiskScoringService` / `WorklistRepository.recomputeAllAfterSync`.
 ///
-/// Authoritative bulk path: `POST /offline-sync/fetch-synced-data` —
-/// a GZIP'd JSON bundle keyed by entity.
+/// Entity pull (Spice Android parity): parallel `households`, `members`,
+/// `follow-ups`, then `member-assessment-history`; pregnancy tables are
+/// filled from MAH via [PregnancyMahProjection], not `pregnancyInfos[]`.
 class OfflineSyncService extends ChangeNotifier {
   OfflineSyncService({
     required ApiClient api,
@@ -65,6 +68,12 @@ class OfflineSyncService extends ChangeNotifier {
     PregnancyEpisodeDao? pregnancyEpisode,
     TreatmentPresenceDao? treatmentPresence,
     EncounterDao? encounterDao,
+    // Durably attaches a visit's FHIR Encounter id onto its local Call Logs
+    // row, run as a best-effort step of the assessment-history persist path
+    // so the Shukhee call/prescription link survives a full local data wipe
+    // or a new device. Also fed (much sooner) from OfflinePushService's and
+    // AssessmentRepository's push+poll paths -- see ShukheeEncounterAttachService.
+    ShukheeEncounterAttachService? encounterAttach,
     // CCE: ingest open referrals from followUps / assessment history into
     // the local `referrals` table (SLA recompute runs after sync in UI).
     ReferralDao? referrals,
@@ -72,6 +81,8 @@ class OfflineSyncService extends ChangeNotifier {
     // instead of making a second user-data HTTP call on every full sync.
     UserHierarchyService? hierarchy,
     HealthFacilityDao? healthFacilities,
+    MemberAssessmentHistoryWriter? assessmentHistoryWriter,
+    PregnancyMahProjection? pregnancyMahProjection,
   })  : _api = api,
         _auth = auth,
         _db = db,
@@ -87,11 +98,19 @@ class OfflineSyncService extends ChangeNotifier {
         _pregnancyEpisode = pregnancyEpisode,
         _treatmentPresence = treatmentPresence,
         _encounterDao = encounterDao,
+        _encounterAttach = encounterAttach,
         _referrals = referrals,
         _hierarchy = hierarchy,
-        _healthFacilities = healthFacilities;
+        _healthFacilities = healthFacilities,
+        _assessmentHistoryWriter = assessmentHistoryWriter,
+        _pregnancyMahProjection = pregnancyMahProjection;
 
+  /// Legacy monolithic cursor — kept for [lastSyncedAt] fallback after upgrade.
   static const String _entityKey = 'worklist';
+
+  static const String _householdsEntityKey = 'offlineSyncHouseholds';
+  static const String _membersEntityKey = 'offlineSyncMembers';
+  static const String _followUpsEntityKey = 'offlineSyncFollowUps';
 
   /// Separate `sync_meta` entity for the assessment-history endpoint, which
   /// has always fetched full village scope regardless of cold/warm/relogin —
@@ -114,12 +133,21 @@ class OfflineSyncService extends ChangeNotifier {
   final PregnancyEpisodeDao? _pregnancyEpisode;
   final TreatmentPresenceDao? _treatmentPresence;
   final EncounterDao? _encounterDao;
+  final ShukheeEncounterAttachService? _encounterAttach;
   final ReferralDao? _referrals;
   // P1: shared hierarchy service — avoids second user-data call on full sync
   final UserHierarchyService? _hierarchy;
   final HealthFacilityDao? _healthFacilities;
+  final MemberAssessmentHistoryWriter? _assessmentHistoryWriter;
+  final PregnancyMahProjection? _pregnancyMahProjection;
 
   bool _running = false;
+
+  static bool _isEntityPullPath(String path) {
+    return path == Endpoints.offlineSyncHouseholds ||
+        path == Endpoints.offlineSyncMembers ||
+        path == Endpoints.offlineSyncFollowUps;
+  }
 
   /// Stream controller for sync progress updates.
   final _progressController = StreamController<SyncProgress>.broadcast();
@@ -191,9 +219,19 @@ class OfflineSyncService extends ChangeNotifier {
   }
 
   Future<DateTime?> lastSyncedAt() async {
-    final row = await _syncMeta.read(_entityKey);
-    final t = row?.lastSyncTime;
-    return t == null ? null : DateTime.fromMillisecondsSinceEpoch(t);
+    int? maxMs;
+    for (final key in [
+      _householdsEntityKey,
+      _membersEntityKey,
+      _followUpsEntityKey,
+      _entityKey,
+    ]) {
+      final t = (await _syncMeta.read(key))?.lastSyncTime;
+      if (t != null && (maxMs == null || t > maxMs)) maxMs = t;
+    }
+    return maxMs == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(maxMs);
   }
 
   /// First sync after login — full pull, no `lastSyncTime` filter.
@@ -301,30 +339,16 @@ class OfflineSyncService extends ChangeNotifier {
         );
       }
 
-      DateTime? since;
-      if (!fullSync) {
-        final last = await _syncMeta.read(_entityKey);
-        if (last?.lastSyncTime != null) {
-          since = DateTime.fromMillisecondsSinceEpoch(last!.lastSyncTime!);
-        }
-      }
+      await _bootstrapLegacyEntityCursors();
 
-      // Step 1: Fetch patients bundle
-      // Emits data only — never localized copy. This object outlives the
-      // language-keyed MaterialApp remount (this service is an app-level
-      // singleton above it), so text localized here would stay frozen in the
-      // old language after the SK switches. The UI localizes at build.
+      // Step 1: Fetch households, members, follow-ups (Spice 3+1 entity APIs).
       _emitProgress(const SyncProgress(
         currentStep: SyncStep.fetchingPatients,
       ));
 
-      // A full bundle can take minutes to build server-side and is replayed up
-      // to AppConfig.apiMaxAttempts times by ApiClient's retry interceptor.
-      // Surface each attempt so the sync screen shows activity instead of
-      // appearing frozen for the whole retry budget.
-      Map<String, dynamic>? bundle;
+      _SyncedEntityDownload? entityDownload;
       _api.onRetryAttempt = (path, attempt, maxAttempts) {
-        if (path != Endpoints.offlineSyncFetch) return;
+        if (!_isEntityPullPath(path)) return;
         _emitProgress(SyncProgress(
           currentStep: SyncStep.fetchingPatients,
           retryAttempt: attempt,
@@ -332,14 +356,25 @@ class OfflineSyncService extends ChangeNotifier {
         ));
       };
       try {
-        bundle = await _fetchBundle(villageIds: villageIds, since: since);
+        entityDownload = await _fetchSyncedEntities(
+          villageIds: villageIds,
+          fullSync: fullSync,
+        );
       } catch (e) {
-        // Keep the failure kind: a StateError erased DioExceptionType, leaving
-        // the UI unable to tell "too slow" from "server broke".
         throw NetworkException(cause: e, message: NetworkErrorMapper.friendly(e));
       } finally {
         _api.onRetryAttempt = null;
       }
+
+      if (entityDownload == null) {
+        const msg = 'Entity sync download failed';
+        _emitProgress(SyncProgress.failed(msg));
+        return report.copyWith(
+          finishedAt: DateTime.now(),
+          errors: const [msg],
+        );
+      }
+      final bundle = entityDownload.bundle;
 
       // Step 2: Process and persist bundle (includes households/members if in bundle - Android pattern)
       _emitProgress(const SyncProgress(
@@ -388,30 +423,16 @@ class OfflineSyncService extends ChangeNotifier {
       final historyReferrals = await _syncAssessmentHistoryProgrammes(
         villageIds,
         since: historySince,
+        replaceMahOnFullSync: fullSync,
       );
 
-      // UHIS parity: persist the server's response `lastSyncTime` (echo of
-      // server `currentSyncTime` at fetch start), not the device clock.
-      // Android: SecuredPreference.SERVER_LAST_SYNCED = response.lastSyncTime.
-      final serverLastSync = _parseServerLastSyncTime(bundle);
-      final cursorAt = serverLastSync ?? DateTime.now().toUtc();
-      if (serverLastSync == null) {
-        debugPrint(
-          '[OfflineSyncService] WARNING: sync response missing lastSyncTime '
-          '— falling back to device UTC clock',
-        );
-      } else {
-        debugPrint(
-          '[OfflineSyncService] using server lastSyncTime='
-          '${_toOffsetDateTime(cursorAt)}',
-        );
-      }
+      final cursorAt = entityDownload.cursorAt;
+      debugPrint(
+        '[OfflineSyncService] entity sync cursor='
+        '${_toOffsetDateTime(cursorAt)}',
+      );
 
-      // Only stamp the cursor forward once the fetch+persist above actually
-      // succeeded — _syncAssessmentHistoryProgrammes returns null on failure,
-      // so a failed pass must not silently advance `since` and skip
-      // re-fetching those rows next time. Use the same server cursor as the
-      // main bundle (UHIS shares SERVER_LAST_SYNCED for both filters).
+      // Only stamp assessment-history once that pull succeeded.
       if (historyReferrals != null) {
         if (fullSync) {
           await _syncMeta.stampFull(_assessmentHistoryEntityKey, cursorAt);
@@ -431,11 +452,7 @@ class OfflineSyncService extends ChangeNotifier {
         referrals: out.referrals + (historyReferrals ?? 0),
       );
 
-      if (fullSync) {
-        await _syncMeta.stampFull(_entityKey, cursorAt);
-      } else {
-        await _syncMeta.stampWarm(_entityKey, cursorAt);
-      }
+      await _stampEntityCursors(entityDownload, fullSync: fullSync, cursorAt: cursorAt);
 
       // Server rows just landed — nudge any mounted roster screen to re-query.
       // One bump per sync (not per row), so a large bundle can't turn into a
@@ -509,16 +526,101 @@ class OfflineSyncService extends ChangeNotifier {
     return null;
   }
 
-  Future<Map<String, dynamic>> _fetchBundle({
-    required List<int> villageIds,
-    DateTime? since,
-  }) async {
-    // Match Android RequestAllEntities format: integer villageIds + metadata
-    final userId = await _auth.userId();
-    if (userId == null) {
-      debugPrint('[OfflineSyncService] WARNING: userId is null — sync may return empty bundle');
+  Future<void> _bootstrapLegacyEntityCursors() async {
+    final legacy = await _syncMeta.read(_entityKey);
+    final legacyMs = legacy?.lastSyncTime;
+    if (legacyMs == null) return;
+    for (final key in [
+      _householdsEntityKey,
+      _membersEntityKey,
+      _followUpsEntityKey,
+    ]) {
+      final row = await _syncMeta.read(key);
+      if (row?.lastSyncTime == null) {
+        await _syncMeta.stampWarm(
+          key,
+          DateTime.fromMillisecondsSinceEpoch(legacyMs, isUtc: true),
+        );
+      }
     }
+  }
+
+  Future<DateTime?> _resolveEntityLastSyncTime(
+    String entityKey, {
+    required bool fullSync,
+  }) async {
+    if (fullSync) return null;
+    final last = await _syncMeta.read(entityKey);
+    if (last?.lastSyncTime == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(last!.lastSyncTime!, isUtc: true);
+  }
+
+  Future<_SyncedEntityDownload?> _fetchSyncedEntities({
+    required List<int> villageIds,
+    required bool fullSync,
+  }) async {
+    try {
+      final results = await Future.wait([
+        _postEntitySlice(
+          Endpoints.offlineSyncHouseholds,
+          villageIds: villageIds,
+          entityKey: _householdsEntityKey,
+          fullSync: fullSync,
+        ),
+        _postEntitySlice(
+          Endpoints.offlineSyncMembers,
+          villageIds: villageIds,
+          entityKey: _membersEntityKey,
+          fullSync: fullSync,
+        ),
+        _postEntitySlice(
+          Endpoints.offlineSyncFollowUps,
+          villageIds: villageIds,
+          entityKey: _followUpsEntityKey,
+          fullSync: fullSync,
+        ),
+      ]);
+      final householdsBody = results[0];
+      final membersBody = results[1];
+      final followUpsBody = results[2];
+      if (householdsBody == null ||
+          membersBody == null ||
+          followUpsBody == null) {
+        return null;
+      }
+      final bundle = <String, dynamic>{
+        if (householdsBody['households'] != null)
+          'households': householdsBody['households'],
+        if (membersBody['members'] != null) 'members': membersBody['members'],
+        if (followUpsBody['followUps'] != null)
+          'followUps': followUpsBody['followUps'],
+        if (followUpsBody['followUpCriteria'] != null)
+          'followUpCriteria': followUpsBody['followUpCriteria'],
+      };
+      return _SyncedEntityDownload(
+        bundle: bundle,
+        householdsLastSynced: householdsBody['lastSyncTime']?.toString(),
+        membersLastSynced: membersBody['lastSyncTime']?.toString(),
+        followUpsLastSynced: followUpsBody['lastSyncTime']?.toString(),
+      );
+    } catch (e) {
+      debugPrint('[OfflineSyncService] entity download failed: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _postEntitySlice(
+    String path, {
+    required List<int> villageIds,
+    required String entityKey,
+    required bool fullSync,
+  }) async {
+    final userId = await _auth.userId();
     final deviceId = await _auth.deviceId();
+    final since = await _resolveEntityLastSyncTime(
+      entityKey,
+      fullSync: fullSync,
+    );
     final body = <String, dynamic>{
       'villageIds': villageIds,
       if (since != null) 'lastSyncTime': _toOffsetDateTime(since),
@@ -529,27 +631,51 @@ class OfflineSyncService extends ChangeNotifier {
       'appType': AppConfig.appType,
       'memberIds': <int>[],
     };
-    ConsoleLog.banner('[PayloadDebug] sync-fetch\n${body.toString()}');
+    ConsoleLog.banner('[PayloadDebug] $path\n${body.toString()}');
     final resp = await _api.dio.post<List<int>>(
-      Endpoints.offlineSyncFetch,
+      path,
       data: body,
       options: Options(responseType: ResponseType.bytes),
     );
     final status = resp.statusCode ?? 0;
     if (status < 200 || status >= 300) {
-      throw StateError('offline-sync HTTP $status');
+      debugPrint('[OfflineSyncService] $path HTTP $status');
+      return null;
     }
     final bytes = resp.data;
-    if (bytes == null || bytes.isEmpty) {
-      return const <String, dynamic>{};
-    }
+    if (bytes == null || bytes.isEmpty) return <String, dynamic>{};
     final decoded = _maybeDecompress(Uint8List.fromList(bytes));
     final text = utf8.decode(decoded);
-    if (text.isEmpty) return const <String, dynamic>{};
+    if (text.isEmpty) return <String, dynamic>{};
     final parsed = jsonDecode(text);
     if (parsed is Map<String, dynamic>) return parsed;
     if (parsed is Map) return Map<String, dynamic>.from(parsed);
-    return const <String, dynamic>{};
+    return <String, dynamic>{};
+  }
+
+  Future<void> _stampEntityCursors(
+    _SyncedEntityDownload download, {
+    required bool fullSync,
+    required DateTime cursorAt,
+  }) async {
+    Future<void> stampKey(String key, String? lastSyncedWire) async {
+      final at = _parseServerLastSyncTime({'lastSyncTime': lastSyncedWire}) ??
+          cursorAt;
+      if (fullSync) {
+        await _syncMeta.stampFull(key, at);
+      } else {
+        await _syncMeta.stampWarm(key, at);
+      }
+    }
+
+    await stampKey(_householdsEntityKey, download.householdsLastSynced);
+    await stampKey(_membersEntityKey, download.membersLastSynced);
+    await stampKey(_followUpsEntityKey, download.followUpsLastSynced);
+    if (fullSync) {
+      await _syncMeta.stampFull(_entityKey, cursorAt);
+    } else {
+      await _syncMeta.stampWarm(_entityKey, cursorAt);
+    }
   }
 
   static Uint8List _maybeDecompress(Uint8List raw) {
@@ -906,109 +1032,20 @@ class OfflineSyncService extends ChangeNotifier {
       programmes.putIfAbsent(patientId, () => <Programme>{}).add(programme);
     }
 
-    final pregnancyNodes = _listFromAny(bundle, const [
-      'pregnancyInfos',
-      'pregnancyInfoList',
-      'pregnancies',
-    ]);
-    final pregnancyRows = <PregnancySnapshotRow>[];
+    // Pregnancy read models: [PregnancyMahProjection] after MAH sync — not
+    // from fetch-all `pregnancyInfos[]` (removed with 3+1 entity pull).
+
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
-    for (final raw in pregnancyNodes) {
-      if (raw is! Map) continue;
-      final memberKey = JsonRead.firstString(raw, const [
-        'householdMemberId',
-        'memberId',
-        'patientId',
-      ]);
-      mergeProgramme(memberKey, Programme.anc);
 
-      final patientId =
-          memberKey == null ? null : memberIdToPatientId[memberKey] ?? memberKey;
-      if (patientId == null || patientId.isEmpty) continue;
-      // Always persist a row when we have a member key — LMP/EDD must not be
-      // dropped just because clinical fact flags failed to parse.
-      final facts = _pregnancyFactsFrom(raw, now: now) ?? PregnancyFacts.empty;
-      final flat = _flattenPregnancyInfo(raw);
-      final eddMs = JsonRead.epochMillis(flat, const [
-        'estimatedDeliveryDate',
-        'edd',
-        'eddDate',
-      ]);
-      // Android spice entity field is `lastMenstrualPeriod` (ISO string).
-      final lmpMs = JsonRead.epochMillis(flat, const [
-        'lastMenstrualPeriod',
-        'lastMenstrualPeriodDate',
-        'lmpDate',
-        'lmp',
-        'lmpValue',
-        'menstrualDate',
-        'lastPeriodDate',
-      ]);
-      if (lmpMs == null) {
-        final wire = flat['lastMenstrualPeriod'] ?? flat['lmpDate'];
-        // Key present with null is normal for multi-episode rows — not a parse error.
-        if (wire != null && '$wire'.trim().isNotEmpty && '$wire' != 'null') {
-          debugPrint(
-            '[LMP] sync parse FAIL patient=$patientId raw=$wire',
-          );
-        }
-      } else {
-        debugPrint(
-          '[LMP] sync parse OK patient=$patientId member=$memberKey '
-          'lmpMs=$lmpMs eddMs=$eddMs '
-          'wire=${flat['lastMenstrualPeriod']}',
-        );
-      }
-      final deliveryDateMs = JsonRead.epochMillis(flat, const [
-        'dateOfDelivery',
-        'deliveryDate',
-      ]);
-      pregnancyRows.add(PregnancySnapshotRow(
-        patientId: patientId,
-        facts: facts,
-        updatedAt: nowMs,
-        eddDate: eddMs,
-        lmpDate: lmpMs,
-        deliveryDateMillis: deliveryDateMs,
-        // Spice PregnancyDetails.ancVisitNo / pncVisitNo.
-        ancVisitNo: JsonRead.firstInt(flat, const [
-          'ancVisitNo',
-          'anc_visit_no',
-          'ancVisitNumber',
-        ]),
-        pncVisitNo: JsonRead.firstInt(flat, const [
-          'pncVisitNo',
-          'pnc_visit_no',
-          'pncVisitNumber',
-        ]),
-        gravida: JsonRead.firstInt(flat, const ['gravida']),
-        parity: JsonRead.firstInt(flat, const ['parity']),
-        livingChildren: JsonRead.firstInt(flat, const [
-          'numberOfLivingChildren',
-          'livingChildren',
-          'living_children',
-        ]),
-        ageOfLastChild: JsonRead.firstString(flat, const [
-          'ageOfLastChild',
-          'age_of_last_child',
-        ]),
-        pregnancyTest: JsonRead.firstString(flat, const [
-          'pregnancyTest',
-          'pregnancy_test',
-        ]),
-      ));
-    }
-    mark('pregnancyInfos', pregnancyRows.length);
-
-    // Bundle `treatmentDetails[]` → presence-only set (clinical specifics
-    // live elsewhere). Drives the `ncd-drift` OVERDUE-min driver and the
-    // on-treatment composite-score bonus.
-    final treatmentNodes = _listFromAny(bundle, const [
+    const treatmentKeys = [
       'treatmentDetails',
       'treatmentDetailsList',
       'treatments',
-    ]);
+    ];
+    final hasTreatmentSlice = _bundleHasListKey(bundle, treatmentKeys);
+    final treatmentNodes =
+        hasTreatmentSlice ? _listFromAny(bundle, treatmentKeys) : const [];
     final treatmentPatientIds = <String>{};
     for (final raw in treatmentNodes) {
       if (raw is! Map) continue;
@@ -1035,6 +1072,16 @@ class OfflineSyncService extends ChangeNotifier {
         'encounterName',
       ]);
       mergeProgramme(memberKey, Programme.fromTag(encounter));
+      if (raw['isCompleted'] == true) continue;
+      final status = JsonRead.firstString(raw, const [
+        'patientStatus',
+        'currentPatientStatus',
+        'referralStatus',
+      ]);
+      if (!_isOnTreatmentPatientStatus(status)) continue;
+      if (memberKey == null || memberKey.isEmpty) continue;
+      final patientId = memberIdToPatientId[memberKey] ?? memberKey;
+      if (patientId.isNotEmpty) treatmentPatientIds.add(patientId);
     }
 
     // Upsert patients instead of clear+insert to preserve any existing rows.
@@ -1129,57 +1176,23 @@ class OfflineSyncService extends ChangeNotifier {
       await _members.propagateVillageFromHouseholdTable();
     }
 
-    // Pregnancy episodes: route each patient's coalesced incoming data
-    // through PregnancyEpisodeDao rather than writing patient_pregnancy_snapshot
-    // directly — updates the currently open episode if one exists (the
-    // server payload has no stable per-episode id today, so "is there a
-    // local open episode" is the disambiguator), or backfills a single
-    // episode row if the patient has none locally yet (fresh install / first
-    // sync). Each write also refreshes the patient_pregnancy_snapshot
-    // projection for that one patient, so patients untouched by this sync
-    // keep their existing projection row unchanged (no more clearAll()).
-    //
-    // Follow-up: if/when the server starts sending a stable per-episode id,
-    // this should key on that id directly instead of "assume at most one
-    // open episode per patient."
-    if (_pregnancyEpisode != null) {
-      final coalesced = PregnancySnapshotDao.coalesceByPatient(pregnancyRows);
-      for (final row in coalesced) {
-        await _pregnancyEpisode.applyIncomingSyncRow(
-          patientId: row.patientId,
-          row: row,
-        );
-      }
-      final coalescedWithLmp =
-          coalesced.where((r) => r.lmpDate != null).length;
-      debugPrint(
-        '[LMP] pregnancy episode sync — incoming=${pregnancyRows.length} '
-        'patientsTouched=${coalesced.length} withLmp=$coalescedWithLmp',
-      );
-      await _pregnancyEpisode.syncCoalescedSnapshots(coalesced);
-      mark('pregnancyEpisodes', coalesced.length);
-    } else if (_pregnancySnapshot != null) {
-      // No PregnancyEpisodeDao injected (e.g. a test harness that only wires
-      // the snapshot dao) — fall back to the pre-episode direct-write path.
-      final prior = await _pregnancySnapshot.getAllRows();
-      final merged = PregnancySnapshotDao.mergePreservingDates(
-        incoming: pregnancyRows,
-        prior: prior,
-      );
-      await _pregnancySnapshot.clearAll();
-      if (merged.isNotEmpty) {
-        await _pregnancySnapshot.upsertMany(merged);
-      }
-    }
     if (_treatmentPresence != null) {
-      if (fullSync) {
-        // Full bundle is authoritative — replace outright, so a patient who
-        // came off treatment (no treatmentDetails[] row this pull) correctly
-        // loses the flag.
+      if (fullSync && hasTreatmentSlice) {
         await _treatmentPresence.clearAll();
         if (treatmentPatientIds.isNotEmpty) {
           await _treatmentPresence
               .upsertAll(treatmentPatientIds, updatedAt: nowMs);
+        }
+      } else if (fullSync) {
+        final prior = await _treatmentPresence.getAll();
+        final merged = {...prior, ...treatmentPatientIds};
+        debugPrint(
+          '[OfflineSyncService] treatment-presence full sync (no slice): '
+          'prior=${prior.length} merged=${merged.length}',
+        );
+        await _treatmentPresence.clearAll();
+        if (merged.isNotEmpty) {
+          await _treatmentPresence.upsertAll(merged, updatedAt: nowMs);
         }
       } else {
         // Delta bundle only carries patients that changed since `since` —
@@ -1207,7 +1220,7 @@ class OfflineSyncService extends ChangeNotifier {
       'patients=${patients.length} programmes=${programmes.length} '
       'followUps=${remappedFollowUps.length} immunisations=${immunisations.length} '
       'assessments=${assessments.length} referrals=$referralCount '
-      'pregnancy=${pregnancyRows.length} '
+      'pregnancy=from-mah '
       'totalMs=${persistWatch.elapsedMilliseconds}',
     );
 
@@ -1269,6 +1282,26 @@ class OfflineSyncService extends ChangeNotifier {
       rawJson: m.rawJson ?? '{}',
       age: ageYears,
     );
+  }
+
+  static bool _bundleHasListKey(Map bundle, List<String> keys) {
+    for (final k in keys) {
+      final v = bundle[k];
+      if (v is List) return true;
+      if (v is Map &&
+          (v['entityList'] is List || v['data'] is List)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _isOnTreatmentPatientStatus(String? status) {
+    if (status == null || status.trim().isEmpty) return false;
+    final normalized = status.trim().toLowerCase().replaceAll(' ', '');
+    return normalized == 'ontreatment' ||
+        normalized == 'patientontreatment' ||
+        normalized == 'on_treatment';
   }
 
   static List _listFromAny(Map bundle, List<String> keys) {
@@ -1369,8 +1402,19 @@ class OfflineSyncService extends ChangeNotifier {
       'nextVisitDate',
       'visitDate',
     ]);
-    final completedAt = JsonRead.epochMillis(
-        raw, const ['completedAt', 'completedDate', 'visitDate']);
+    // UHIS/spice close follow-ups with `isCompleted` on CallRegister — not
+    // always a dedicated completedAt timestamp. Do not treat encounter
+    // `visitDate` as completion (that keeps open tickets wrongly closed or,
+    // when missing isCompleted, leaves completed tickets on the open list).
+    var completedAt = JsonRead.epochMillis(
+        raw, const ['completedAt', 'completedDate']);
+    if (completedAt == null && _truthy(raw['isCompleted'])) {
+      completedAt = JsonRead.epochMillis(raw, const [
+            'updatedAt',
+            'calledAt',
+          ]) ??
+          DateTime.now().millisecondsSinceEpoch;
+    }
     final attempts = JsonRead.firstInt(raw, const ['attempts', 'visits']);
     final unsuccessful = JsonRead.firstInt(raw, const [
       'unsuccessfulAttempts',
@@ -1389,9 +1433,15 @@ class OfflineSyncService extends ChangeNotifier {
     ])?.toUpperCase();
     final isLost = _truthy(raw['isLostToFollowUp']) ||
         _truthy(raw['lostToFollowUp']) ||
+        _truthy(raw['isWrongNumber']) ||
         (kind != null && kind.toLowerCase().contains('lost')) ||
         wireType == 'LOST_TO_FOLLOW_UP';
     final backendId = (raw['id'] as num?)?.toInt();
+    final updatedAt = JsonRead.epochMillis(raw, const [
+          'updatedAt',
+          'updated_at',
+        ]) ??
+        JsonRead.epochMillis(raw, const ['createdAt', 'created_at']);
     return FollowUpRow(
       id: id,
       patientId: patientId,
@@ -1404,97 +1454,9 @@ class OfflineSyncService extends ChangeNotifier {
       referredSiteId: referredSiteId,
       isLost: isLost,
       backendId: backendId,
+      updatedAt: updatedAt,
       rawJson: JsonRead.encode(raw),
     );
-  }
-
-  /// True when `value` carries meaningful content — non-null, non-empty
-  /// string (rejecting `"null"`, `"[]"`, `"{}"` as sentinels), non-empty
-  /// collection, non-zero number, or truthy bool. Used by
-  /// [_pregnancyFactsFrom] because the bundle returns several "high-risk"
-  /// fields as JSON-encoded arrays of conditions (e.g.
-  /// `"[\"High Fever\",\"Abnormal Pulse\"]"`) rather than booleans — the
-  /// presence of the array itself is the signal.
-  static bool _hasContent(Object? value) {
-    if (value == null) return false;
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-    if (value is Iterable) return value.isNotEmpty;
-    if (value is Map) return value.isNotEmpty;
-    final s = value.toString().trim();
-    if (s.isEmpty) return false;
-    final lower = s.toLowerCase();
-    if (lower == 'null' || lower == 'false') return false;
-    if (s == '[]' || s == '{}') return false;
-    return true;
-  }
-
-  /// Flatten nested pregnancy DTOs so LMP/EDD keys are readable at the top
-  /// level. Spice `pregnancyInfos[]` is usually flat (`lastMenstrualPeriod`),
-  /// but assessment-shaped nests still show up on some builds.
-  static Map<String, dynamic> _flattenPregnancyInfo(Map raw) {
-    final flat = <String, dynamic>{
-      for (final e in raw.entries) e.key.toString(): e.value,
-    };
-    for (final sub in const [
-      'pregnancyDetails',
-      'pregnancyDetail',
-      'pwProfile',
-      'pregnancyDetailsAndHistory',
-      'pregnancyProfile',
-      'obstetricHistory',
-      'observations',
-      'assessmentDetails',
-    ]) {
-      final nested = raw[sub];
-      if (nested is Map) {
-        for (final e in nested.entries) {
-          flat.putIfAbsent(e.key.toString(), () => e.value);
-        }
-      }
-    }
-    return flat;
-  }
-
-  /// Build a [PregnancyFacts] snapshot from one `pregnancyInfos[]` row.
-  /// Per-row narrow-catch — one malformed entry should not kill the rest.
-  static PregnancyFacts? _pregnancyFactsFrom(Map raw, {required DateTime now}) {
-    try {
-      final highRisk = _hasContent(raw['highRiskPregnantWoman']) ||
-          _hasContent(raw['highRiskMother']);
-      final gapsAnc = _hasContent(raw['gapsInAnc']);
-
-      bool withinDays(Object? value, int windowDays, {bool future = false}) {
-        final ts = JsonRead.epochMillis({'_': value}, const ['_']);
-        if (ts == null) return false;
-        final dt = DateTime.fromMillisecondsSinceEpoch(ts);
-        final diff = future ? dt.difference(now) : now.difference(dt);
-        return diff.inDays >= 0 && diff.inDays <= windowDays;
-      }
-
-      final dod = raw['dateOfDelivery'] ?? raw['deliveryDate'];
-      final edd = raw['estimatedDeliveryDate'] ?? raw['edd'];
-      final isPostpartum = withinDays(dod, 42);
-      final isNearTerm = withinDays(edd, 14, future: true);
-
-      final hadComplications =
-          _hasContent(raw['complicationsDuringDelivery']) ||
-              _truthy(raw['isDeliveryAtHome']);
-
-      final hasPncIll = _hasContent(raw['pncIllness']);
-
-      return PregnancyFacts(
-        highRiskPregnantWoman: highRisk,
-        hasGapsInAnc: gapsAnc,
-        isPostpartumWindow: isPostpartum,
-        isNearTermAnc: isNearTerm,
-        hadDeliveryComplications: hadComplications,
-        hasPncIllness: hasPncIll,
-      );
-    } on Object catch (e) {
-      debugPrint('[OfflineSyncService] pregnancyInfos parse failed: $e');
-      return null;
-    }
   }
 
   /// Extracts a normalised vitals map from an assessment-history raw JSON row.
@@ -1629,6 +1591,7 @@ class OfflineSyncService extends ChangeNotifier {
   Future<int?> _syncAssessmentHistoryProgrammes(
     List<int> villageIds, {
     DateTime? since,
+    bool replaceMahOnFullSync = false,
   }) async {
     if (_members == null) return 0;
     try {
@@ -1637,6 +1600,14 @@ class OfflineSyncService extends ChangeNotifier {
         since: since,
       );
       if (items.isEmpty) return 0;
+
+      if (replaceMahOnFullSync) {
+        await _assessmentHistoryWriter?.clearAllForFullSync();
+        debugPrint(
+          '[OfflineSyncService] full sync — replaced MAH with '
+          '${items.length} assessment-history row(s)',
+        );
+      }
 
       // Collect unique member IDs and bulk-resolve to patient IDs.
       final memberIds = items
@@ -1828,33 +1799,63 @@ class OfflineSyncService extends ChangeNotifier {
         );
       }
 
-      // Write encounter rows with extracted vitals so VitalsRepository can
-      // render Recent Vitals without a new network call. Only rows that carry
-      // clinical assessmentDetails (NCD/ANC/PNC have BP/weight etc.) get an
-      // encounter row; rows with no vitals content are skipped.
-      int vitalsWritten = 0;
+      // Write an encounter row for every assessment-history item, not just
+      // ones carrying extractable vitals (NCD/ANC/PNC have BP/weight etc. --
+      // Eye Care/Cataract and other vitals-less programmes do not). Vitals
+      // are an optional enrichment (VitalsRepository's own
+      // recentWithVitalsForPatient already filters on vitals_json being
+      // non-null/non-empty, so a null here is invisible to it), never a
+      // gate on the row's existence -- gating on vitals meant the
+      // `encounters` table never reflected a vitals-less visit at all once
+      // synced, silently breaking anything keyed off `encounters.id` for
+      // that visit (e.g. TeleconsultHistorySection's encounter_id join for a
+      // Shukhee call booked from an Eye Care visit).
+      int encounterRowsWritten = 0;
+      // client-minted draft id -> the server's own FHIR Encounter id for the
+      // same visit, collected below whenever findPendingDraftId reconciles
+      // one -- fed to _attachPendingFhirEncounterIds afterward so a Shukhee
+      // Call Logs row for that same visit can have its FHIR id durably
+      // attached server-side (see that method's doc comment).
+      final draftToServerEncounterId = <String, String>{};
       if (_encounterDao != null) {
+        final encounterDao = _encounterDao;
         final encounterRows = <EncounterRow>[];
         for (final item in items) {
           final patientId = memberToPatient[item.householdMemberId];
           if (patientId == null || patientId.isEmpty) continue;
           final vitals = _vitalsFromAssessmentRaw(item.rawJson);
-          if (vitals == null) continue;
-          encounterRows.add(EncounterRow(
-            id: item.encounterId,
+          final programme = (item.serviceProvided ?? 'assessment').toLowerCase();
+          // Reconcile onto a matching local draft's own id when one exists,
+          // so anything already anchored to that client-minted id (e.g. a
+          // Shukhee Call Logs row's encounter_id) doesn't go stale the
+          // moment this device syncs -- see EncounterDao.findPendingDraftId.
+          final draftId = await encounterDao.findPendingDraftId(
             patientId: patientId,
-            programme: (item.serviceProvided ?? 'assessment').toLowerCase(),
+            programme: programme,
+            around: item.visitDate,
+          );
+          if (draftId != null) {
+            draftToServerEncounterId[draftId] = item.encounterId;
+          }
+          encounterRows.add(EncounterRow(
+            id: draftId ?? item.encounterId,
+            patientId: patientId,
+            programme: programme,
             startedAt: item.visitDate.millisecondsSinceEpoch,
             completedAt: item.visitDate.millisecondsSinceEpoch,
             status: EncounterStatus.synced,
             syncStatus: SyncStatus.synced,
-            vitalsJson: jsonEncode(vitals),
+            serverVisitId: draftId != null ? item.encounterId : null,
+            vitalsJson: vitals == null ? null : jsonEncode(vitals),
           ));
         }
         if (encounterRows.isNotEmpty) {
-          await _encounterDao.upsertMany(encounterRows);
-          vitalsWritten = encounterRows.length;
+          await encounterDao.upsertMany(encounterRows);
+          encounterRowsWritten = encounterRows.length;
         }
+      }
+      if (draftToServerEncounterId.isNotEmpty) {
+        await _encounterAttach?.attachAll(draftToServerEncounterId);
       }
 
       // Write assessment rows keyed by FHIR patient ID so AssessmentDao queries
@@ -1878,6 +1879,29 @@ class OfflineSyncService extends ChangeNotifier {
       }
       if (assessmentRows.isNotEmpty) {
         await _assessments.upsertMany(assessmentRows);
+      }
+
+      await _assessmentHistoryWriter?.upsertFromHistoryItems(items);
+      if (replaceMahOnFullSync) {
+        // Pending visits live in local_assessments, not server history — restore
+        // them into MAH before post-sync/dashboard so KPIs are not briefly empty.
+        await _assessmentHistoryWriter?.rebuildFromLocalAssessments();
+      }
+
+      final projection = _pregnancyMahProjection;
+      if (projection != null) {
+        if (replaceMahOnFullSync) {
+          await projection.rebuildAllAndProject();
+        } else {
+          final memberLocalIds = memberToPatient.values
+              .map(int.tryParse)
+              .whereType<int>()
+              .toSet()
+              .toList();
+          if (memberLocalIds.isNotEmpty) {
+            await projection.rebuildMembersAndProject(memberLocalIds);
+          }
+        }
       }
 
       // CCE: open referred visits → local referrals table (dedupe by encounter).
@@ -1905,7 +1929,7 @@ class OfflineSyncService extends ChangeNotifier {
       debugPrint(
         '[SyncPersist] assessmentHistory=${items.length} '
         'programmes=$progUpdated visitSchedule=$schedUpdated '
-        'encounters=$vitalsWritten assessments=${assessmentRows.length} '
+        'encounters=$encounterRowsWritten assessments=${assessmentRows.length} '
         'referrals=$referralCount',
       );
       return referralCount;
@@ -1916,6 +1940,30 @@ class OfflineSyncService extends ChangeNotifier {
       return null;
     }
   }
+
+  /// Best-effort: for every visit this sync pass just reconciled onto its
+  /// original client-minted id ([draftToServerEncounterId], keyed by that
+  /// draft id -> the server's own FHIR Encounter id), durably attaches the
+  /// FHIR id onto that visit's local Shukhee Call Logs row, if any
+  /// ([ShukheeEncounterAttachService.attachAll]).
+  ///
+  /// This is a redundant catch-up path: `OfflinePushService`/
+  /// `AssessmentRepository`'s push+poll normally attaches this far sooner
+  /// (seconds after the visit, not on the next full sync) -- see
+  /// `ShukheeEncounterAttachService.attachForVisit`. This one covers a call
+  /// whose push/poll never ran on this device (offline for a long stretch,
+  /// or synced in from a different device).
+  ///
+  /// Test-only entry point -- lets a test exercise this step directly
+  /// against a real in-memory `CallLogHistoryDao` + a scripted
+  /// `ShukheeEncounterLinkClient`, without needing to mock the full
+  /// assessment-history HTTP fetch this is normally reached through. Same
+  /// pattern as `AppDatabase.forTesting`.
+  @visibleForTesting
+  Future<void> attachPendingFhirEncounterIdsForTest(
+    Map<String, String> draftToServerEncounterId,
+  ) =>
+      _encounterAttach?.attachAll(draftToServerEncounterId) ?? Future.value();
 
   /// Calls `POST /spice-service/static-data/user-data`, extracts village IDs
   /// and the user's FHIR Practitioner ID, persists both, and returns the list.
@@ -2197,6 +2245,37 @@ class OfflineSyncService extends ChangeNotifier {
   void dispose() {
     _progressController.close();
     super.dispose();
+  }
+}
+
+class _SyncedEntityDownload {
+  _SyncedEntityDownload({
+    required this.bundle,
+    this.householdsLastSynced,
+    this.membersLastSynced,
+    this.followUpsLastSynced,
+  });
+
+  final Map<String, dynamic> bundle;
+  final String? householdsLastSynced;
+  final String? membersLastSynced;
+  final String? followUpsLastSynced;
+
+  DateTime get cursorAt {
+    DateTime? max;
+    for (final wire in [
+      householdsLastSynced,
+      membersLastSynced,
+      followUpsLastSynced,
+    ]) {
+      final parsed = OfflineSyncService._parseServerLastSyncTime(
+        {'lastSyncTime': wire},
+      );
+      if (parsed != null && (max == null || parsed.isAfter(max))) {
+        max = parsed;
+      }
+    }
+    return max ?? DateTime.now().toUtc();
   }
 }
 

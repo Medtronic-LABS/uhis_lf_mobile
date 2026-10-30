@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/auth/auth_repository.dart';
+import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/patient_dao.dart';
@@ -10,6 +12,7 @@ import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
+import 'sk_kpi_dashboard_tab.dart';
 import 'sk_performance_repository.dart';
 import '../../core/i18n/app_date_format.dart';
 
@@ -81,12 +84,27 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
   bool _showMonth = false;
   late Future<SkPerformanceStats> _statsFuture;
   late Future<List<_PatientItem>> _patientsFuture;
+  UserProfileSummary? _profile;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 3, vsync: this);
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadProfile());
+  }
+
+  Future<void> _loadProfile() async {
+    final summary = await context.read<AuthState>().userProfileSummary();
+    if (mounted) setState(() => _profile = summary);
+  }
+
+  String _appBarSubtitle() {
+    final line = _profile?.performanceAppBarSubtitle;
+    if (line != null && line.isNotEmpty) return line;
+    final username = context.read<AuthState>().username?.trim();
+    if (username != null && username.isNotEmpty) return username;
+    return '';
   }
 
   @override
@@ -105,6 +123,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = _appBarSubtitle();
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
@@ -123,14 +142,15 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
                 fontSize: 17,
               ),
             ),
-            Text(
-              PerformanceStrings.appBarSubtitle,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
+            if (subtitle.isNotEmpty)
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
-            ),
           ],
         ),
         bottom: TabBar(
@@ -142,6 +162,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
           tabs: [
             Tab(text: PerformanceStrings.performanceTab),
             Tab(text: PerformanceStrings.myPatientsTab),
+            Tab(text: PerformanceStrings.dashboardTab),
           ],
         ),
       ),
@@ -215,6 +236,9 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
               );
             },
           ),
+
+          // ── Tab 2: UHIS-style KPI dashboard ─────────────────────────────
+          const SkKpiDashboardTab(),
         ],
       ),
     );

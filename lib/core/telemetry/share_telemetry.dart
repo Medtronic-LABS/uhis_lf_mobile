@@ -45,11 +45,13 @@ void recordShareTap(
   required String surface,
   required bool hasMessage,
   required bool launched,
+  String? visitUuid,
 }) {
   telemetry?.recordCounsellingShare(
     channel: channel,
     surface: surface,
     hasMessage: hasMessage,
     launched: launched,
+    visitUuid: visitUuid,
   );
 }

@@ -40,12 +40,21 @@ import 'core/db/immunisation_dao.dart';
 import 'features/visit/immunisation/immunisation_repository.dart';
 import 'core/db/local_assessment_dao.dart';
 import 'core/db/local_dashboard_repository.dart';
+import 'core/db/member_assessment_history_dao.dart';
+import 'core/db/member_assessment_history_writer.dart';
+import 'core/db/spice_dashboard_dao.dart';
+import 'core/db/ss_linked_village_dao.dart';
 import 'core/db/member_dao.dart';
+import 'core/db/service_member_dao.dart';
 import 'core/db/patient_dao.dart';
 import 'core/db/patient_programmes_dao.dart';
+import 'core/db/pregnancy_detail_dao.dart';
 import 'core/db/pregnancy_episode_dao.dart';
 import 'core/db/pregnancy_snapshot_dao.dart';
+import 'core/sync/pregnancy_mah_projection.dart';
 import 'core/db/treatment_presence_dao.dart';
+import 'core/db/teleconsult_prescription_dao.dart';
+import 'core/db/call_log_history_dao.dart';
 import 'core/db/referral_dao.dart';
 import 'core/db/sync_meta_dao.dart';
 import 'core/risk/risk_scoring_service.dart';
@@ -60,6 +69,9 @@ import 'core/telemetry/value_audit_uploader.dart';
 import 'core/telemetry/visit_content_dao.dart';
 import 'core/telemetry/visit_content_service.dart';
 import 'core/telemetry/visit_content_uploader.dart';
+import 'core/telemetry/assistant_content_dao.dart';
+import 'core/telemetry/assistant_content_service.dart';
+import 'core/telemetry/assistant_content_uploader.dart';
 import 'core/sync/offline_sync_service.dart';
 import 'app/post_sync_refresher.dart';
 import 'core/sync/sync_foreground_controller.dart';
@@ -68,6 +80,7 @@ import 'core/sync/offline_push_service.dart';
 import 'features/dashboard/dashboard_filter_state.dart';
 import 'features/dashboard/dashboard_repository.dart';
 import 'features/dashboard/mission_dashboard_repository.dart';
+import 'features/dashboard/sk_spice_dashboard_repository.dart';
 import 'features/lock/lock_barrier.dart';
 import 'features/patient/followup_call_service.dart';
 import 'features/patient/followup_repository.dart';
@@ -85,12 +98,20 @@ import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
+import 'features/visit/immunisation/epi_date_extraction_repository.dart';
+import 'features/visit/anc/anc_visit_extraction_repository.dart';
+import 'features/visit/ncd/ncd_visit_extraction_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'core/config/app_config.dart';
+import 'core/widgets/environment_banner.dart';
 import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 import 'core/sync/sync_connectivity_service.dart';
+import 'core/sync/call_log_sync_client.dart';
+import 'core/sync/call_log_sync_service.dart';
+import 'core/sync/shukhee_encounter_attach_service.dart';
+import 'core/sync/shukhee_encounter_link_client.dart';
 import 'core/version/app_update_flow.dart';
 import 'core/version/app_version_enforcer.dart';
 import 'core/version/app_version_info.dart';
@@ -182,6 +203,8 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final SyncMetaDao _syncMetaDao = SyncMetaDao(widget.appDb);
   late final HouseholdDao _householdDao = HouseholdDao(widget.appDb);
   late final MemberDao _memberDao = MemberDao(widget.appDb);
+  late final ServiceMemberDao _serviceMemberDao =
+      ServiceMemberDao(widget.appDb);
   late final PregnancySnapshotDao _pregnancySnapshotDao =
       PregnancySnapshotDao(widget.appDb);
   late final PregnancyEpisodeDao _pregnancyEpisodeDao =
@@ -189,6 +212,82 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
   late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
+  late final TeleconsultPrescriptionDao _teleconsultPrescriptionDao =
+      TeleconsultPrescriptionDao(widget.appDb);
+  late final CallLogHistoryDao _callLogHistoryDao = CallLogHistoryDao(widget.appDb);
+  late final CallLogSyncClient _callLogSyncClient = CallLogSyncClient(
+    baseUrl: AppConfig.spiceNextCoreApiBaseUrl,
+    // Same "strip the Bearer prefix" reasoning as
+    // features/teleconsult/shukhee_client_factory.dart's buildShukheeClient.
+    authTokenProvider: () async {
+      final raw = widget.api.exportAuthToken();
+      if (raw == null) return null;
+      const prefix = 'Bearer ';
+      return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+    },
+    tenantIdProvider: () async => widget.api.tenantId,
+  );
+  late final CallLogSyncService _callLogSync = CallLogSyncService(
+    client: _callLogSyncClient,
+    dao: _callLogHistoryDao,
+    syncMeta: _syncMetaDao,
+  );
+  // Same auth pattern as _callLogSyncClient above -- this hits
+  // shukhee_integration rather than spice_next_core, but both currently
+  // resolve to the same Frappe site/gateway (see AppConfig.shukheeApiBaseUrl's
+  // doc comment).
+  late final ShukheeEncounterLinkClient _shukheeEncounterLinkClient =
+      ShukheeEncounterLinkClient(
+    baseUrl: AppConfig.shukheeApiBaseUrl,
+    authTokenProvider: () async {
+      final raw = widget.api.exportAuthToken();
+      if (raw == null) return null;
+      const prefix = 'Bearer ';
+      return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
+    },
+    tenantIdProvider: () async => widget.api.tenantId,
+  );
+  // Shared by OfflineSyncService (pull-side catch-up), OfflinePushService and
+  // AssessmentRepository (push-side, fires within seconds of a visit
+  // finishing) -- see ShukheeEncounterAttachService's own doc comment.
+  late final ShukheeEncounterAttachService _shukheeEncounterAttach =
+      ShukheeEncounterAttachService(
+    callLogHistory: _callLogHistoryDao,
+    linkClient: _shukheeEncounterLinkClient,
+  );
+  late final MemberAssessmentHistoryDao _mahDao =
+      MemberAssessmentHistoryDao(widget.appDb);
+  late final SsLinkedVillageDao _ssLinkedVillageDao =
+      SsLinkedVillageDao(widget.appDb);
+  late final SpiceDashboardDao _spiceDashboardDao =
+      SpiceDashboardDao(widget.appDb);
+  late final PregnancyDetailDao _pregnancyDetailDao = PregnancyDetailDao(
+    widget.appDb,
+    _mahDao,
+    _memberDao,
+  );
+  late final PregnancyMahProjection _pregnancyMahProjection =
+      PregnancyMahProjection(
+    pregnancyDetail: _pregnancyDetailDao,
+    pregnancyEpisode: _pregnancyEpisodeDao,
+    pregnancySnapshot: _pregnancySnapshotDao,
+    members: _memberDao,
+  );
+  late final MemberAssessmentHistoryWriter _mahWriter =
+      MemberAssessmentHistoryWriter(
+    mah: _mahDao,
+    members: _memberDao,
+    appDb: widget.appDb,
+    pregnancyProjection: _pregnancyMahProjection,
+  );
+  late final SkSpiceDashboardRepository _skSpiceDashboardRepo =
+      SkSpiceDashboardRepository(
+    dashboard: _spiceDashboardDao,
+    mah: _mahDao,
+    mahWriter: _mahWriter,
+    pregnancyDetail: _pregnancyDetailDao,
+    auth: widget.authRepo,
+  );
   late final TelemetryDao _telemetryDao = TelemetryDao(widget.appDb);
   late final TelemetryService _telemetryService = TelemetryService(
     dao: _telemetryDao,
@@ -221,6 +320,19 @@ class _UhisNextAppState extends State<UhisNextApp>
   );
   late final VisitContentUploader _visitContentUploader =
       VisitContentUploader(_visitContentDao, widget.api);
+  late final AssistantContentDao _assistantContentDao =
+      AssistantContentDao(widget.appDb);
+  late final AssistantContentService _assistantContentService =
+      AssistantContentService(
+    dao: _assistantContentDao,
+    userIdResolver: widget.authRepo.userId,
+    tenantIdResolver: () async {
+      final raw = await widget.authRepo.currentTenantId();
+      return raw == null ? null : int.tryParse(raw);
+    },
+  );
+  late final AssistantContentUploader _assistantContentUploader =
+      AssistantContentUploader(_assistantContentDao, widget.api);
   late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
     households: _householdDao,
     members: _memberDao,
@@ -248,12 +360,15 @@ class _UhisNextAppState extends State<UhisNextApp>
     pregnancyEpisode: _pregnancyEpisodeDao,
     treatmentPresence: _treatmentPresenceDao,
     encounterDao: _encounterDao,
+    encounterAttach: _shukheeEncounterAttach,
     // CCE: project followUp / assessment-history referrals into `referrals`.
     referrals: _referralDao,
     // P1: share the same UserHierarchyService instance so OfflineSyncService
     // can reuse already-fetched static-data without a second user-data call.
     hierarchy: _userHierarchy,
     healthFacilities: _healthFacilityDao,
+    assessmentHistoryWriter: _mahWriter,
+    pregnancyMahProjection: _pregnancyMahProjection,
   );
   late final WorklistRepository _worklist = WorklistRepository(
     patients: _patientDao,
@@ -263,6 +378,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     risk: _risk,
     localAssessments: _localAssessmentDao,
     assessments: _assessmentDao,
+    pregnancySnapshots: _pregnancySnapshotDao,
   );
   late final PatientRepository _patientRepo = PatientRepository(
     patients: _patientDao,
@@ -314,6 +430,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     historyDao: _assessmentDao,
     followUpCalls: _followUpCallService,
     memberDao: _memberDao,
+    encounterAttach: _shukheeEncounterAttach,
+    assessmentHistoryWriter: _mahWriter,
   );
   late final OfflinePushService _offlinePush = OfflinePushService(
     api: widget.api,
@@ -322,6 +440,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     members: _memberDao,
     assessments: _localAssessmentDao,
     followUpCalls: _followUpCallService,
+    encounterAttach: _shukheeEncounterAttach,
   );
   /// Runs the Android dataSync foreground service for as long as any sync is
   /// in flight, so a pull that outlives the 30 s screen timeout is not frozen
@@ -336,6 +455,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     telemetry: _telemetryUploader,
     valueAudit: _valueAuditUploader,
     visitContent: _visitContentUploader,
+    assistantContent: _assistantContentUploader,
+    skDashboardMah: _skSpiceDashboardRepo,
   );
   late final SyncForegroundController _syncForeground = SyncForegroundController(
     progress: _sync.progressStream,
@@ -349,6 +470,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     widget.api,
     widget.authRepo,
     healthFacilities: _healthFacilityDao,
+    ssLinkedVillages: _ssLinkedVillageDao,
   );
 
   // Connectivity-aware auto-sync: outbound push + inbound warm pull on reconnect
@@ -359,6 +481,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     pushService: _offlinePush,
     authState: widget.authState,
     authRepo: widget.authRepo,
+    callLogSync: _callLogSync,
     flushUploadQueues: _postSync.flushUploadQueues,
   );
   late final AppVersionEnforcer _appVersionEnforcer =
@@ -425,6 +548,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Refresh server-side feature flags on every sign-in (fresh login or
     // biometric/PIN restore). Non-fatal — defaults remain if the call fails.
     unawaited(_userHierarchy.refreshFeatureFlags());
+    unawaited(_userHierarchy.refreshShukheeControls());
     if (_sdkInitialized) return;
     _sdkInitialized = true;
     final token = await widget.authRepo.getToken();
@@ -513,9 +637,12 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<PriorityScorer>.value(value: _priorityScorer),
         Provider<ReferralRepository>.value(value: _referrals),
         Provider<MissionDashboardRepository>.value(value: _missionDashboard),
+        Provider<SkSpiceDashboardRepository>.value(
+            value: _skSpiceDashboardRepo),
         Provider<PatientDao>.value(value: _patientDao),
         Provider<HouseholdDao>.value(value: _householdDao),
         Provider<MemberDao>.value(value: _memberDao),
+        Provider<ServiceMemberDao>.value(value: _serviceMemberDao),
         Provider<FollowUpDao>.value(value: _followUpDao),
         Provider<FollowUpCallService>.value(value: _followUpCallService),
         Provider<AssessmentDao>.value(value: _assessmentDao),
@@ -537,6 +664,9 @@ class _UhisNextAppState extends State<UhisNextApp>
                 )),
         // Visit flow providers
         Provider<EncounterDao>.value(value: _encounterDao),
+        Provider<TeleconsultPrescriptionDao>.value(value: _teleconsultPrescriptionDao),
+        Provider<CallLogHistoryDao>.value(value: _callLogHistoryDao),
+        Provider<CallLogSyncService>.value(value: _callLogSync),
         Provider<TelemetryDao>.value(value: _telemetryDao),
         Provider<TelemetryService>.value(value: _telemetryService),
         Provider<TelemetryUploader>.value(value: _telemetryUploader),
@@ -545,6 +675,11 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<VisitContentDao>.value(value: _visitContentDao),
         Provider<VisitContentService>.value(value: _visitContentService),
         Provider<VisitContentUploader>.value(value: _visitContentUploader),
+        Provider<AssistantContentDao>.value(value: _assistantContentDao),
+        Provider<AssistantContentService>.value(
+            value: _assistantContentService),
+        Provider<AssistantContentUploader>.value(
+            value: _assistantContentUploader),
         Provider<EncounterRepository>(
             create: (ctx) => EncounterRepository(
                   widget.api,
@@ -579,6 +714,15 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<VisitBriefingRepository>(
             create: (_) =>
                 VisitBriefingRepository(widget.api, cache: _aiCacheDao)),
+        // AI Card Extraction — Gemini-vision date read for scanned EPI cards
+        Provider<EpiDateExtractionRepository>(
+            create: (_) => EpiDateExtractionRepository(widget.api)),
+        // AI Card Extraction — Gemini-vision vitals read for scanned ANC cards
+        Provider<AncVisitExtractionRepository>(
+            create: (_) => AncVisitExtractionRepository(widget.api)),
+        // AI Card Extraction — Gemini-vision vitals read for scanned NCD cards
+        Provider<NcdVisitExtractionRepository>(
+            create: (_) => NcdVisitExtractionRepository(widget.api)),
         // AI Assistant — conversational Q&A (Tab 3)
         Provider<AssistantRepository>(
             create: (_) => AssistantRepository(widget.api)),
@@ -651,6 +795,27 @@ class _UhisNextAppState extends State<UhisNextApp>
                   themeMode: themeProvider.mode,
                   routerConfig: _router,
                   debugShowCheckedModeBanner: false,
+                  // Wraps every route with a single insertion point — the
+                  // "LW Training" build's persistent non-production warning.
+                  // Renders nothing (and this whole wrapper is a no-op) on
+                  // the production build.
+                  builder: (context, child) => AppConfig.showEnvironmentBanner
+                      ? Column(
+                          children: [
+                            const EnvironmentBanner(),
+                            // The banner's SafeArea already takes the status
+                            // bar inset; without this every screen below would
+                            // pad for it again (e.g. the dashboard header).
+                            Expanded(
+                              child: MediaQuery.removePadding(
+                                context: context,
+                                removeTop: true,
+                                child: child!,
+                              ),
+                            ),
+                          ],
+                        )
+                      : child!,
                 ),
               ),
             ),

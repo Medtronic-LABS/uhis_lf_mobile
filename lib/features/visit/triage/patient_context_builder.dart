@@ -11,6 +11,7 @@ import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/mission/mission_pregnancy_facts.dart';
 import '../../../core/models/json_read.dart';
 import '../../../core/models/programme.dart';
+import '../../../core/risk/pregnancy_cohort_rules.dart';
 import '../../../core/sync/pregnancy_delivery_sync.dart';
 import '../immunisation/epi_schedule_engine.dart';
 
@@ -27,6 +28,7 @@ class PatientContext {
     required this.ageMonths,
     required this.sex,
     required this.isPregnant,
+    this.isAncEligible = false,
     this.ageKnown = true,
     this.gestationalWeeks,
     this.pregnancyFacts,
@@ -59,6 +61,10 @@ class PatientContext {
 
   /// Whether the patient is currently pregnant.
   final bool isPregnant;
+
+  /// Whether ANC is clinically available — active pregnancy with LMP at least
+  /// 6 weeks ago and no delivery (Android `getANCPNCStatus` ANC branch).
+  final bool isAncEligible;
 
   /// Gestational weeks if pregnant.
   final int? gestationalWeeks;
@@ -243,11 +249,13 @@ class PatientContextBuilder {
     final programmes = await _programmesDao.programmesFor(patientId);
     debugPrint('[PatientCtx] programmes from DB: ${programmes.map((p) => p.name).toList()}');
 
-    // Fetch pregnancy facts if available
-    final pregnancyMap = await _pregnancyDao.getAll();
-    final pregnancyFacts = pregnancyMap[patientId];
-    final pregnancyRowMap = await _pregnancyDao.getAllRows();
-    final pregnancyRow = pregnancyRowMap[patientId];
+    // Per-patient snapshot read — avoid loading the full table on every open
+    // (PatientContextScreen + AI insight each call [build]).
+    final pregnancyRow = await _pregnancyDao.byPatientOrMember(
+      patientId,
+      memberId: patient.patientId,
+    );
+    final pregnancyFacts = pregnancyRow?.facts;
     debugPrint('[PatientCtx] pregnancyFacts from snapshot: ${pregnancyFacts != null} '
         'deliveryDateInSnapshot=${pregnancyRow?.deliveryDateMillis}');
 
@@ -285,6 +293,19 @@ class PatientContextBuilder {
       '[PatientCtx] isPregnant=$isPregnant hasDelivered=$hasDelivered '
       '(facts=$pregnantFromFacts programme=$pregnantFromProgramme raw=$pregnantFromRaw)',
     );
+
+    final ancEligibilityRow = pregnancyRow == null
+        ? null
+        : PregnancySnapshotRow(
+            patientId: patientId,
+            facts: pregnancyRow.facts,
+            lmpDate: pregnancyRow.lmpDate,
+            eddDate: pregnancyRow.eddDate,
+            deliveryDateMillis: deliveryDateMillis,
+          );
+    final isAncEligible =
+        PregnancyCohortRules.isAncEligible(ancEligibilityRow);
+    debugPrint('[PatientCtx] isAncEligible=$isAncEligible');
 
     // Extract gestational weeks from raw JSON if available
     final gestationalWeeks = _extractGestationalWeeks(patient.rawJson);
@@ -329,6 +350,7 @@ class PatientContextBuilder {
       ageKnown: ageKnown,
       sex: sex,
       isPregnant: isPregnant,
+      isAncEligible: isAncEligible,
       gestationalWeeks: gestationalWeeks,
       pregnancyFacts: pregnancyFacts,
       deliveryDateMillis: deliveryDateMillis,

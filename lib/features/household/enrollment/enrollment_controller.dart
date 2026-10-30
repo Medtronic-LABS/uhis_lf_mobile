@@ -66,6 +66,8 @@ class EnrollmentController extends ChangeNotifier {
   /// inserting another household row for the same enrollment session.
   bool _submitted = false;
   String? _error;
+  /// Local autoincrement PK assigned by [_persistLocally] on first submit.
+  String? _persistedHouseholdLocalId;
 
   Household? get household => _household;
   HouseholdHeadInfo? get householdHead => _householdHead;
@@ -73,6 +75,7 @@ class EnrollmentController extends ChangeNotifier {
   bool get loading => _loading;
   bool get submitted => _submitted;
   String? get error => _error;
+  String? get persistedHouseholdLocalId => _persistedHouseholdLocalId;
 
   int get totalMembers => (_members.length) + (_householdHead != null ? 1 : 0);
 
@@ -392,6 +395,8 @@ class EnrollmentController extends ChangeNotifier {
           return false;
         }
 
+        _persistedHouseholdLocalId = result.hhReferenceId;
+
         // Block a second Save / OfflinePush re-POST of this enrollment.
         _submitted = true;
         await _householdDao?.updateSyncStatus(
@@ -672,6 +677,11 @@ class EnrollmentController extends ChangeNotifier {
       ]);
     }
 
+    // Head row is memberLocalIds[0] — keep controller in sync for navigation.
+    if (_householdHead != null && memberLocalIds.isNotEmpty) {
+      _householdHead = _householdHead!.copyWith(id: memberLocalIds.first);
+    }
+
     // Rewrite in-memory guardian ids to local PKs for the create payload.
     for (var i = 0; i < _members.length; i++) {
       final m = _members[i];
@@ -722,6 +732,7 @@ class EnrollmentController extends ChangeNotifier {
     _loading = false;
     _submitted = false;
     _error = null;
+    _persistedHouseholdLocalId = null;
     notifyListeners();
   }
 

@@ -7,7 +7,9 @@ import '../core/telemetry/telemetry_upload_log.dart';
 import '../core/telemetry/telemetry_uploader.dart';
 import '../core/telemetry/value_audit_uploader.dart';
 import '../core/telemetry/visit_content_uploader.dart';
+import '../core/telemetry/assistant_content_uploader.dart';
 import '../features/dashboard/mission_dashboard_repository.dart';
+import '../features/dashboard/sk_spice_dashboard_repository.dart';
 import '../features/referral/referral_repository.dart';
 import '../features/worklist/worklist_repository.dart';
 
@@ -31,18 +33,25 @@ class PostSyncRefresher {
     TelemetryUploader? telemetry,
     ValueAuditUploader? valueAudit,
     VisitContentUploader? visitContent,
+    AssistantContentUploader? assistantContent,
+    SkSpiceDashboardRepository? skDashboardMah,
   })  : _progress = progress,
         _worklist = worklist,
         _referrals = referrals,
         _mission = mission,
+        _skDashboardMah = skDashboardMah,
         _telemetry = telemetry,
         _valueAudit = valueAudit,
-        _visitContent = visitContent;
+        _visitContent = visitContent,
+        _assistantContent = assistantContent;
 
   final Stream<SyncProgress> _progress;
   final WorklistRepository _worklist;
   final ReferralRepository _referrals;
   final MissionDashboardRepository _mission;
+
+  /// Refreshes SK KPI MAH from local caches after a successful pull.
+  final SkSpiceDashboardRepository? _skDashboardMah;
 
   /// Optional so existing constructions and tests are unaffected. A completed
   /// sync is the app's most reliable proof of connectivity, which makes it the
@@ -56,6 +65,10 @@ class PostSyncRefresher {
 
   /// Visit-scoped AI content (transcript + summary text).
   final VisitContentUploader? _visitContent;
+
+  /// AI assistant ("Ask") question/answer PHI content — drained on the same
+  /// trigger through its own uploader, gated independently.
+  final AssistantContentUploader? _assistantContent;
 
   StreamSubscription<SyncProgress>? _sub;
 
@@ -94,6 +107,7 @@ class PostSyncRefresher {
     unawaited(_flushTelemetry());
     unawaited(_flushValueAudit());
     unawaited(_flushVisitContent());
+    unawaited(_flushAssistantContent());
   }
 
   void attach() {
@@ -146,6 +160,20 @@ class PostSyncRefresher {
     }
   }
 
+  Future<void> _flushAssistantContent() async {
+    final uploader = _assistantContent;
+    if (uploader == null) return;
+    try {
+      final sent = await uploader.uploadPending();
+      if (sent > 0) {
+        telemetryUploadLog(
+            '[PostSync] assistant content uploaded $sent row(s)');
+      }
+    } on Object catch (e) {
+      telemetryUploadLog('[PostSync] assistant content flush failed: $e');
+    }
+  }
+
   /// Drains the telemetry queue. Never throws and never blocks the recompute
   /// — a lost metric must not be able to disturb clinical data flow.
   Future<void> _flushTelemetry() async {
@@ -193,6 +221,16 @@ class PostSyncRefresher {
       // Order matters: the worklist recompute writes the risk/next-due columns
       // the mission queue reads, so refreshing the dashboard first would show
       // pre-sync ordering.
+      final mah = _skDashboardMah;
+      if (mah != null) {
+        try {
+          await mah.refreshMahFromLocalCaches();
+          debugPrint(
+              '[PostSync] SK MAH refresh ${watch.elapsedMilliseconds}ms');
+        } catch (e) {
+          debugPrint('[PostSync] SK MAH refresh failed: $e');
+        }
+      }
       await _worklist.recomputeAllAfterSync();
       debugPrint('[PostSync] worklist recompute ${watch.elapsedMilliseconds}ms');
       await _referrals.recomputeAllAfterSync();

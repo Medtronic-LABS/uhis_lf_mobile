@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../constants/app_strings.dart';
+import '../mission/mission_schedule_urgency.dart';
 import '../models/dashboard_tier.dart';
 import '../models/mission_queue_item.dart';
 import '../models/programme.dart';
@@ -138,10 +139,12 @@ extension NeedFilterHelpers on NeedFilter {
         return item.programmes
             .any((p) => p == Programme.eyeCare || p == Programme.cataract);
       case NeedFilter.thisWeek:
-        // Calendar schedule 1–7 days out — not clinical tier (may be critical).
-        return DashboardTier.fromDueAt(item.dueAt) == DashboardTier.thisWeek;
+        // Calendar schedule 1–7 days out — ANC / PNC / NCD only.
+        return missionScheduleTierForDisplay(item) == DashboardTier.thisWeek;
       case NeedFilter.missedFollowUp:
-        return item.daysOverdue != null && item.daysOverdue! > 0;
+        return missionItemSupportsScheduleUrgency(item) &&
+            item.daysOverdue != null &&
+            item.daysOverdue! > 0;
       case NeedFilter.pendingReferral:
         return item.referralId != null;
       case NeedFilter.homeVisit:
@@ -177,10 +180,12 @@ Set<NeedFilter> computeAvailableNeeds(List<MissionQueueItem> items) {
         .any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
       available.add(NeedFilter.eyeCare);
     }
-    if (DashboardTier.fromDueAt(item.dueAt) == DashboardTier.thisWeek) {
+    if (missionScheduleTierForDisplay(item) == DashboardTier.thisWeek) {
       available.add(NeedFilter.thisWeek);
     }
-    if (item.daysOverdue != null && item.daysOverdue! > 0) {
+    if (missionItemSupportsScheduleUrgency(item) &&
+        item.daysOverdue != null &&
+        item.daysOverdue! > 0) {
       available.add(NeedFilter.missedFollowUp);
     }
     if (item.referralId != null) {

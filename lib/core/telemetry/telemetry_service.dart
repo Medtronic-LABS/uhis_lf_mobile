@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
 import '../version/app_version_info.dart';
+import 'epi_card_telemetry.dart';
 import 'telemetry_dao.dart';
 import 'telemetry_event.dart';
 
@@ -60,6 +61,9 @@ class TelemetryService {
   /// value-audit and visit-content for the same encounter.
   String newVisitUuid() => _uuid.v4();
 
+  /// Correlates one EPI card scan-screen session with its attempt/update events.
+  String newScanSessionId() => _uuid.v4();
+
   /// Returns the stable telemetry correlator for [encounterId], minting once.
   String ensureVisitUuid(String encounterId) =>
       _visitUuidByEncounter.putIfAbsent(encounterId, () => _uuid.v4());
@@ -84,6 +88,9 @@ class TelemetryService {
     List<String> prefilled = const [],
     List<String> derived = const [],
     List<String> aiOverridden = const [],
+    bool scanUsed = false,
+    List<String> scanCorrected = const [],
+    List<String> scanAcceptedUnchanged = const [],
     required int libraryTotal,
     required int renderedTotal,
     required int extractableVisible,
@@ -109,6 +116,10 @@ class TelemetryService {
       prefilled: prefilled,
       derived: derived,
       aiOverridden: aiOverridden,
+      scanUsed: scanUsed,
+      scanFilled: [...scanCorrected, ...scanAcceptedUnchanged],
+      scanCorrected: scanCorrected,
+      scanAcceptedUnchanged: scanAcceptedUnchanged,
       libraryTotal: libraryTotal,
       renderedTotal: renderedTotal,
       extractableVisible: extractableVisible,
@@ -152,11 +163,155 @@ class TelemetryService {
     );
   }
 
+  /// Records one patient AI assistant ("Ask") question — LEAP-47.
+  ///
+  /// Non-PHI only: latency, a within-session repeat flag, and the app
+  /// language. The question and answer text are PHI and are never passed here
+  /// — they must not enter the telemetry table.
+  Future<void> recordEpiCardScanSession({
+    required String scanSessionId,
+    required String outcome,
+    required int attemptCount,
+    required int successfulAttemptCount,
+    required bool appliedToApp,
+    String? visitUuid,
+    DateTime? occurredAt,
+  }) async {
+    await _insertEpiCard(
+      eventType: TelemetryEventType.epiCardScanSession,
+      payload: epiCardScanSessionPayload(
+        scanSessionId: scanSessionId,
+        outcome: outcome,
+        attemptCount: attemptCount,
+        successfulAttemptCount: successfulAttemptCount,
+        appliedToApp: appliedToApp,
+      ),
+      visitUuid: visitUuid,
+      occurredAt: occurredAt,
+    );
+  }
+
+  Future<void> recordEpiCardScanAttempt({
+    required String scanSessionId,
+    required int attemptIndex,
+    required bool success,
+    required String failureReason,
+    required String engine,
+    required int matchedVaccineCount,
+    String? captureQuality,
+    String? visitUuid,
+    DateTime? occurredAt,
+  }) async {
+    await _insertEpiCard(
+      eventType: TelemetryEventType.epiCardScanAttempt,
+      payload: epiCardScanAttemptPayload(
+        scanSessionId: scanSessionId,
+        attemptIndex: attemptIndex,
+        success: success,
+        failureReason: failureReason,
+        engine: engine,
+        matchedVaccineCount: matchedVaccineCount,
+        captureQuality: captureQuality,
+      ),
+      visitUuid: visitUuid,
+      occurredAt: occurredAt,
+    );
+  }
+
+  Future<void> recordEpiScanDetection({
+    required String scanSessionId,
+    required List<String> pendingVaccineKeys,
+    required List<String> detectedVaccineKeys,
+    String? visitUuid,
+    DateTime? occurredAt,
+  }) async {
+    await _insertEpiCard(
+      eventType: TelemetryEventType.epiScanDetection,
+      payload: epiScanDetectionPayload(
+        scanSessionId: scanSessionId,
+        pendingVaccineKeys: pendingVaccineKeys,
+        detectedVaccineKeys: detectedVaccineKeys,
+      ),
+      visitUuid: visitUuid,
+      occurredAt: occurredAt,
+    );
+  }
+
+  Future<void> recordEpiVaccinationUpdate({
+    required String vaccineKey,
+    required String changeType,
+    required bool ocrDetected,
+    required bool hadScanPrefill,
+    required bool dateChangedFromPrefill,
+    required int updateDurationMs,
+    required bool ocrAssisted,
+    String? scanSessionId,
+    String? visitUuid,
+    DateTime? occurredAt,
+  }) async {
+    await _insertEpiCard(
+      eventType: TelemetryEventType.epiVaccinationUpdate,
+      payload: epiVaccinationUpdatePayload(
+        scanSessionId: scanSessionId,
+        vaccineKey: vaccineKey,
+        changeType: changeType,
+        ocrDetected: ocrDetected,
+        hadScanPrefill: hadScanPrefill,
+        dateChangedFromPrefill: dateChangedFromPrefill,
+        updateDurationMs: updateDurationMs,
+        ocrAssisted: ocrAssisted,
+      ),
+      visitUuid: visitUuid,
+      occurredAt: occurredAt,
+    );
+  }
+
+  Future<void> recordAssistantAsk({
+    required bool askedAgain,
+    required String appLanguage,
+    int? generationMs,
+    String context = 'patient-scoped',
+    bool deceasedContext = false,
+    String? correlator,
+    DateTime? occurredAt,
+  }) async {
+    await _insert(
+      eventType: TelemetryEventType.assistantAsk,
+      payload: AssistantAskPayload(
+        askedAgain: askedAgain,
+        appLanguage: appLanguage,
+        generationMs: generationMs,
+        context: context,
+        deceasedContext: deceasedContext,
+      ).toJson(),
+      // The per-ask correlator rides the event's visit_uuid slot — the join
+      // key the server uses to attach the gated question/answer content.
+      visitUuid: correlator,
+      occurredAt: occurredAt,
+    );
+  }
+
+  Future<void> _insertEpiCard({
+    required String eventType,
+    required Map<String, dynamic> payload,
+    String? visitUuid,
+    DateTime? occurredAt,
+  }) async {
+    await _insert(
+      eventType: eventType,
+      payload: payload,
+      visitUuid: visitUuid,
+      occurredAt: occurredAt,
+      payloadVersion: kEpiCardTelemetryPayloadVersion,
+    );
+  }
+
   Future<void> _insert({
     required String eventType,
     required Map<String, dynamic> payload,
     String? visitUuid,
     DateTime? occurredAt,
+    int payloadVersion = kTelemetryPayloadVersion,
   }) async {
     try {
       final userId = await _userIdResolver();
@@ -171,7 +326,7 @@ class TelemetryService {
         capturedTenantId: tenantId,
         appVersion: AppVersionInfo.current.versionName,
         appBuild: AppVersionInfo.current.versionCode,
-        payloadVersion: kTelemetryPayloadVersion,
+        payloadVersion: payloadVersion,
         payload: payload,
       ));
     } on Object catch (e, st) {

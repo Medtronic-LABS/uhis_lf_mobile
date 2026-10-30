@@ -103,4 +103,38 @@ void main() {
       expect(PregnancyCohortRules.daysSinceDelivery(r, now: now), 10);
     });
   });
+
+  group('PregnancyCohortRules.isAncEligible', () {
+    test('false when LMP is unknown', () {
+      expect(PregnancyCohortRules.isAncEligible(null, now: now), isFalse);
+      expect(PregnancyCohortRules.isAncEligible(row(), now: now), isFalse);
+    });
+
+    test('false when fewer than 42 days since LMP', () {
+      final r = row(lmpDaysAgo: 30);
+      expect(PregnancyCohortRules.isAncEligible(r, now: now), isFalse);
+    });
+
+    test('true at exactly 42 days since LMP', () {
+      final r = row(lmpDaysAgo: 42);
+      expect(PregnancyCohortRules.isAncEligible(r, now: now), isTrue);
+    });
+
+    test('false once delivery has been recorded', () {
+      final r = row(lmpDaysAgo: 70, deliveryDaysAgo: 3);
+      expect(PregnancyCohortRules.isAncEligible(r, now: now), isFalse);
+    });
+  });
+
+  group('PregnancyCohortRules.isRelevantForRmnchMenus', () {
+    test('false when EDD is more than 45 days overdue', () {
+      final r = row(lmpDaysAgo: 990, eddDaysFromNow: -700);
+      expect(PregnancyCohortRules.isRelevantForRmnchMenus(r, now: now), isFalse);
+    });
+
+    test('true in postnatal window after delivery', () {
+      final r = row(lmpDaysAgo: 200, deliveryDaysAgo: 10);
+      expect(PregnancyCohortRules.isRelevantForRmnchMenus(r, now: now), isTrue);
+    });
+  });
 }
