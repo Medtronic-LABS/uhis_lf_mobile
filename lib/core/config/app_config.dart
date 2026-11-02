@@ -132,7 +132,7 @@ class AppConfig {
   /// live behind this one service/port now.
   ///
   /// Empty = route through the nginx gateway (production path).
-  /// Set to e.g. `http://10.0.2.2:8095` to hit a locally-running service while
+  /// Set to e.g. `http://<emulator-host>:8095` to hit a locally-running service while
   /// keeping [apiBaseUrl] pointed at the remote backend.
   ///
   /// This is the single AI dart-define: [scribeBaseUrl] derives from it, so one
@@ -164,7 +164,7 @@ class AppConfig {
   }
 
   /// Base URL for `POST /mobile/app-version` on leapfrog-ai-service. Uses
-  /// [aiServiceBaseUrl] when set (e.g. `http://10.0.2.2:8095`); otherwise
+  /// [aiServiceBaseUrl] when set (e.g. `http://<emulator-host>:8095`); otherwise
   /// [apiBaseUrl] with the `/ai-scribe/mobile/app-version` gateway path.
   static String get appVersionCheckBaseUrl {
     if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
@@ -432,7 +432,7 @@ class AppConfig {
   /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
   ///   appended, e.g. `<API_BASE_URL>/admin-api`.
   /// - Local override: set `SHUKHEE_API_BASE_URL` to a complete base URL
-  ///   (e.g. `http://10.0.2.2:8000`) pointing directly at a local
+  ///   (e.g. `http://<emulator-host>:8000`) pointing directly at a local
   ///   `frappe-uhis-next` instance -- used verbatim, no gateway segment
   ///   appended, since a direct local instance isn't behind that route.
   static String get shukheeApiBaseUrl {

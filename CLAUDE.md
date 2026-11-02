@@ -248,7 +248,7 @@ Pre-visit briefing cards shown inside `SymptomPickerScreen` (the "What symptoms 
 **Service routing:**
 - Gateway path: `/ai-visit-briefing-service/briefing/generate` (routed through nginx)
 - Direct local path: `/briefing/generate` (when `AI_SERVICE_URL` dart-define is set)
-- `AppConfig.aiServiceBaseUrl` (`--dart-define=AI_SERVICE_URL=http://10.0.2.2:8096`) — causes `VisitBriefingRepository` to use a separate Dio instance pointed at the local service
+- `AppConfig.aiServiceBaseUrl` (`--dart-define=AI_SERVICE_URL=http://<emulator-host>:8096`) — causes `VisitBriefingRepository` to use a separate Dio instance pointed at the local service
 - Local AI service: `leapfrog-setup/ai-visit-briefing-service/` (FastAPI, port 8096, Gemini `gemini-2.5-flash`)
 
 **Key models — `lib/features/visit/briefing/briefing_models.dart`:**
