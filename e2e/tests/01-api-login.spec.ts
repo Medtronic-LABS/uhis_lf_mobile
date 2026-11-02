@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createHmac } from 'crypto';
 
-const BASE = 'https://spice-dev-backend.uhis.labsplatform.com';
+const BASE = 'https://uhis-dev-backend.labsplatform.com';
 const KEY  = process.env.LF_HASH_KEY ?? 'spice_uat';
 const USER = process.env.LF_USER     ?? 'hyper_sk';
 const PASS = process.env.LF_PASS     ?? 'Spice123';

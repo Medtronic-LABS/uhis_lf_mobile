@@ -522,8 +522,8 @@ adb shell monkey -p com.medtroniclabs.uhis_next -c android.intent.category.LAUNC
 
 ```bash
 flutter build apk --debug \
-  --dart-define=BASE_URL=https://spice-dev-backend.uhis.labsplatform.com \
-  --dart-define=AI_SERVICE_URL=https://spice-dev-backend.uhis.labsplatform.com/ai-scribe \
+  --dart-define=BASE_URL=https://uhis-dev-backend.labsplatform.com \
+  --dart-define=AI_SERVICE_URL=https://uhis-dev-backend.labsplatform.com/ai-scribe \
   --dart-define=PASSWORD_HASH_KEY=spice_uat
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```

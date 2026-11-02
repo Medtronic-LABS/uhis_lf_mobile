@@ -13,7 +13,7 @@ class AppConfig {
   /// Production/Dev server → `https://spice-qa-backend.uhis.labsplatform.com/`
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/',
+    defaultValue: 'https://uhis-dev-backend.labsplatform.com/',
   );
 
   /// Value of the `client` request header expected by the auth pipeline.
@@ -93,11 +93,11 @@ class AppConfig {
   /// append full paths that already include /medtronics-api/ (e.g. /medtronics-api/sync/modules).
   /// Do NOT include /medtronics-api in the dart-define value — use just the host+mount prefix.
   /// Examples:
-  ///   production : https://spice-dev-backend.uhis.labsplatform.com/micro-coaching
-  ///   UHIS dev   : https://spice-dev-backend.uhis.labsplatform.com/micro-coaching
+  ///   production : https://uhis-dev-backend.labsplatform.com/micro-coaching
+  ///   UHIS dev   : https://uhis-dev-backend.labsplatform.com/micro-coaching
   static const String coachingServiceUrl = String.fromEnvironment(
     'COACHING_SERVICE_URL',
-    defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/micro-coaching',
+    defaultValue: 'https://uhis-dev-backend.labsplatform.com/micro-coaching',
   );
 
   /// HuggingFace API token for micro-coaching SDK model download.
