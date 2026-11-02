@@ -499,7 +499,7 @@ ifconfig | grep "inet 192"
 # 4. Run (replace 192.168.1.X with your actual Mac LAN IP)
 flutter run \
   --dart-define=BASE_URL=http://192.168.1.X \
-  --dart-define=PASSWORD_HASH_KEY=spice_uat \
+  --dart-define=PASSWORD_HASH_KEY=<hash_key> \
   -d <device-id>
 ```
 
@@ -508,7 +508,7 @@ flutter run \
 1. Connect Android device with USB or pair via wireless ADB (see above)
 2. `git clone … && flutter pub get`
 3. Find your Mac LAN IP: `ifconfig | grep "inet 192"`
-4. `flutter run --dart-define=BASE_URL=http://<MAC_IP> --dart-define=PASSWORD_HASH_KEY=spice_uat`
+4. `flutter run --dart-define=BASE_URL=http://<MAC_IP> --dart-define=PASSWORD_HASH_KEY=<hash_key>`
 
 ### One-shot install (emulator)
 
@@ -524,7 +524,7 @@ adb shell monkey -p com.medtroniclabs.uhis_next -c android.intent.category.LAUNC
 flutter build apk --debug \
   --dart-define=BASE_URL=<api_base_url> \
   --dart-define=AI_SERVICE_URL=<api_base_url>/ai-scribe \
-  --dart-define=PASSWORD_HASH_KEY=spice_uat
+  --dart-define=PASSWORD_HASH_KEY=<hash_key>
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
@@ -790,7 +790,7 @@ cd build/web && python3 -m http.server 5050 --bind localhost &
 cd e2e
 npm install
 npx playwright install chromium
-export LF_API_BASE_URL=<api_base_url>   # required by tests/01-api-login.spec.ts
+export LF_API_BASE_URL=<api_base_url> LF_HASH_KEY=<hash_key> LF_USER=<user> LF_PASS=<pass>   # required; never commit
 npx playwright test --headed
 ```
 

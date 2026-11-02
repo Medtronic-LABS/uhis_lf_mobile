@@ -3,12 +3,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:uhis_next/main.dart' as app;
+import 'package:uhis_next/core/config/app_config.dart';
 import 'package:uhis_next/core/constants/app_strings.dart';
 
 // ── Test constants ────────────────────────────────────────────────────────────
 
-const _kUsername = 'hyper_sk';
-const _kPassword = 'Spice123';
+const _kUsername = AppConfig.devUser;
+const _kPassword = AppConfig.devPass;
 const _kPin = ['1', '2', '3', '4'];
 
 // Household 1 (head-only enrollment)

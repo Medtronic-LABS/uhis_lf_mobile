@@ -1,4 +1,5 @@
 import { expect, Page } from '@playwright/test';
+import { requireEnv } from './env';
 
 export async function waitForFlutterReady(page: Page) {
   await page.waitForSelector('flt-glass-pane', { state: 'attached', timeout: 60_000 });
@@ -11,8 +12,8 @@ export async function waitForFlutterReady(page: Page) {
 
 export async function loginViaUi(
   page: Page,
-  user = process.env.LF_USER ,
-  pass = process.env.LF_PASS ,
+  user = requireEnv('LF_USER'),
+  pass = requireEnv('LF_PASS'),
 ) {
   await page.goto('/');
   await waitForFlutterReady(page);

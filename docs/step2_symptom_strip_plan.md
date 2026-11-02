@@ -118,7 +118,7 @@ static const String symptomSummaryLabel = 'Reported symptoms';
 
 ## Verification
 
-1. `flutter run --dart-define=BASE_URL=http://10.0.2.2 --dart-define=PASSWORD_HASH_KEY=spice_uat`
+1. `flutter run --dart-define=BASE_URL=http://10.0.2.2 --dart-define=PASSWORD_HASH_KEY=<hash_key>`
 2. ANC/NCD patient → start visit
 3. Live ASR: LIVE toggle → speak symptoms → Step 2 strip shows plain-English phrases
 4. Manual chips: tap chips → Step 2 strip shows amber labels

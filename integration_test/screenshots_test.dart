@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:uhis_next/main.dart' as app;
+import 'package:uhis_next/core/config/app_config.dart';
 import 'package:uhis_next/core/constants/app_strings.dart';
 
 /// Captures Play Store listing screenshots from a real, logged-in run of the
@@ -13,8 +14,8 @@ import 'package:uhis_next/core/constants/app_strings.dart';
 /// Run via `scripts/capture_screenshots.sh`, not `flutter test` — screenshots
 /// only reach the host filesystem through `test_driver/integration_test.dart`
 /// driving this file with `flutter drive`.
-const _kUsername = 'hyper_sk';
-const _kPassword = 'Spice123';
+const _kUsername = AppConfig.devUser;
+const _kPassword = AppConfig.devPass;
 const _kTestPin = ['1', '2', '3', '4'];
 const _kPatientName = 'Saidul';
 

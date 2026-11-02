@@ -149,7 +149,7 @@ lib/
 
 - Endpoint: `POST /auth-service/session` (application/x-www-form-urlencoded)
 - Fields: `username` + `password` (HmacSHA512-hashed with `AppConfig.passwordHashKey`)
-- Dev hash key: `spice_uat` (set via `--dart-define=PASSWORD_HASH_KEY=spice_uat`)
+- Dev hash key: `<hash_key>` (ask the team; never commit) (set via `--dart-define=PASSWORD_HASH_KEY=<hash_key>`)
 - Response header: `Authorization: Bearer <token>`
 - Session persisted via flutter_secure_storage (KeyStore-backed); biometric unlocks the stored session
 - **Never store plaintext password or hash on device**
@@ -476,7 +476,7 @@ All code in this app must satisfy the **Engineering Design Standards** defined i
 
 ```bash
 # Dev (local backend)
-flutter run --dart-define=BASE_URL=http://10.0.2.2 --dart-define=PASSWORD_HASH_KEY=spice_uat
+flutter run --dart-define=BASE_URL=http://10.0.2.2 --dart-define=PASSWORD_HASH_KEY=<hash_key>
 
 # Run unit tests
 flutter test
