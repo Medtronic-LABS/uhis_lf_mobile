@@ -27,13 +27,13 @@ class AppConfig {
 
   /// Base URL for the UHIS nginx gateway.
   /// Android emulator → `http://10.0.2.2`. Physical device → host LAN IP.
-  /// Production/Dev server → `https://spice-qa-backend.uhis.labsplatform.com/`
+  /// Remote servers → pass the gateway URL via `API_BASE_URL` (see `env.example.json`).
   /// Prefer `API_BASE_URL`; `BASE_URL` is accepted for older docs/scripts.
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: String.fromEnvironment(
       'BASE_URL',
-      defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/',
+      defaultValue: 'http://10.0.2.2',
     ),
   );
 
@@ -113,13 +113,12 @@ class AppConfig {
   /// Used by Flutter HTTP callers (coaching_repository, telemetry_service) which
   /// append full paths that already include /medtronics-api/ (e.g. /medtronics-api/sync/modules).
   /// Do NOT include /medtronics-api in the dart-define value — use just the host+mount prefix.
-  /// Examples:
-  ///   production : https://spice-dev-backend.uhis.labsplatform.com/micro-coaching
-  ///   UHIS dev   : https://spice-dev-backend.uhis.labsplatform.com/micro-coaching
-  static const String coachingServiceUrl = String.fromEnvironment(
-    'COACHING_SERVICE_URL',
-    defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/micro-coaching',
-  );
+  /// Set `COACHING_SERVICE_URL` to override; otherwise derived from [apiBaseUrl]
+  /// as `<API_BASE_URL>/micro-coaching`, matching the native `BuildConfig.API_BASE_URL` default.
+  static String get coachingServiceUrl {
+    const explicit = String.fromEnvironment('COACHING_SERVICE_URL', defaultValue: '');
+    return explicit.isNotEmpty ? explicit : joinUrlSegment(apiBaseUrl, 'micro-coaching');
+  }
 
   /// HuggingFace API token for micro-coaching SDK model download.
   /// Used as a client-side fallback when the backend /api/v1/models/gemma/download
@@ -435,7 +434,7 @@ class AppConfig {
   /// Base URL of the backend exposing the Shukhee consultation endpoints.
   ///
   /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
-  ///   appended, e.g. `https://spice-dev-backend.uhis.labsplatform.com/admin-api`.
+  ///   appended, e.g. `<API_BASE_URL>/admin-api`.
   /// - Local override: set `SHUKHEE_API_BASE_URL` to a complete base URL
   ///   (e.g. `http://10.0.2.2:8000`) pointing directly at a local
   ///   `frappe-uhis-next` instance -- used verbatim, no gateway segment

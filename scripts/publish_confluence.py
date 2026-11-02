@@ -354,8 +354,8 @@ def page_developer_setup():
         + h(2, "Build production APK")
         + code(
             "flutter build apk --debug \\\n"
-            "  --dart-define=BASE_URL=https://spice-dev-backend.uhis.labsplatform.com \\\n"
-            "  --dart-define=AI_SERVICE_URL=https://spice-dev-backend.uhis.labsplatform.com/ai-scribe \\\n"
+            "  --dart-define=BASE_URL=<api_base_url> \\\n"
+            "  --dart-define=AI_SERVICE_URL=<api_base_url>/ai-scribe \\\n"
             "  --dart-define=PASSWORD_HASH_KEY=<hash_key>\n\n"
             "adb install -r build/app/outputs/flutter-apk/app-debug.apk"
         )

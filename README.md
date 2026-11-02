@@ -522,8 +522,8 @@ adb shell monkey -p com.medtroniclabs.uhis_next -c android.intent.category.LAUNC
 
 ```bash
 flutter build apk --debug \
-  --dart-define=BASE_URL=https://spice-dev-backend.uhis.labsplatform.com \
-  --dart-define=AI_SERVICE_URL=https://spice-dev-backend.uhis.labsplatform.com/ai-scribe \
+  --dart-define=BASE_URL=<api_base_url> \
+  --dart-define=AI_SERVICE_URL=<api_base_url>/ai-scribe \
   --dart-define=PASSWORD_HASH_KEY=spice_uat
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
@@ -790,6 +790,7 @@ cd build/web && python3 -m http.server 5050 --bind localhost &
 cd e2e
 npm install
 npx playwright install chromium
+export LF_API_BASE_URL=<api_base_url>   # required by tests/01-api-login.spec.ts
 npx playwright test --headed
 ```
 

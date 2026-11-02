@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { createHmac } from 'crypto';
 
-const BASE = 'https://spice-dev-backend.uhis.labsplatform.com';
+const BASE = process.env.LF_API_BASE_URL?.replace(/\/+$/, '');
+if (!BASE) throw new Error('LF_API_BASE_URL is required (e.g. export LF_API_BASE_URL=<gateway URL>)');
 const KEY  = process.env.LF_HASH_KEY ?? 'spice_uat';
 const USER = process.env.LF_USER     ?? 'hyper_sk';
 const PASS = process.env.LF_PASS     ?? 'Spice123';
