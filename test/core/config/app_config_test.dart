@@ -12,8 +12,17 @@ void main() {
 
     test('does not double the slash when the base already ends with one', () {
       expect(
-        AppConfig.joinUrlSegment('https://spice-dev-backend.uhis.labsplatform.com/', 'admin-api'),
-        'https://spice-dev-backend.uhis.labsplatform.com/admin-api',
+        AppConfig.joinUrlSegment('https://backend.example.test/', 'admin-api'),
+        'https://backend.example.test/admin-api',
+      );
+    });
+  });
+
+  group('coachingServiceUrl', () {
+    test('derives from apiBaseUrl when COACHING_SERVICE_URL is unset', () {
+      expect(
+        AppConfig.coachingServiceUrl,
+        AppConfig.joinUrlSegment(AppConfig.apiBaseUrl, 'micro-coaching'),
       );
     });
   });

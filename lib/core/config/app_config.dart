@@ -25,16 +25,12 @@ class AppConfig {
   static bool get showEnvironmentBanner =>
       isTrainingBuild && const bool.fromEnvironment('SHOW_ENV_BANNER');
 
-  /// Base URL for the UHIS nginx gateway.
-  /// Android emulator → `http://10.0.2.2`. Physical device → host LAN IP.
-  /// Production/Dev server → `https://spice-qa-backend.uhis.labsplatform.com/`
+  /// Base URL for the UHIS nginx gateway. Required: supply via `API_BASE_URL`
+  /// (see `env.example.json`); there is no built-in default.
   /// Prefer `API_BASE_URL`; `BASE_URL` is accepted for older docs/scripts.
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: String.fromEnvironment(
-      'BASE_URL',
-      defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/',
-    ),
+    defaultValue: String.fromEnvironment('BASE_URL'),
   );
 
   /// Value of the `client` request header expected by the auth pipeline.
@@ -113,13 +109,12 @@ class AppConfig {
   /// Used by Flutter HTTP callers (coaching_repository, telemetry_service) which
   /// append full paths that already include /medtronics-api/ (e.g. /medtronics-api/sync/modules).
   /// Do NOT include /medtronics-api in the dart-define value — use just the host+mount prefix.
-  /// Examples:
-  ///   production : https://spice-dev-backend.uhis.labsplatform.com/micro-coaching
-  ///   UHIS dev   : https://spice-dev-backend.uhis.labsplatform.com/micro-coaching
-  static const String coachingServiceUrl = String.fromEnvironment(
-    'COACHING_SERVICE_URL',
-    defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/micro-coaching',
-  );
+  /// Set `COACHING_SERVICE_URL` to override; otherwise derived from [apiBaseUrl]
+  /// as `<API_BASE_URL>/micro-coaching`, matching the native `BuildConfig.API_BASE_URL` default.
+  static String get coachingServiceUrl {
+    const explicit = String.fromEnvironment('COACHING_SERVICE_URL', defaultValue: '');
+    return explicit.isNotEmpty ? explicit : joinUrlSegment(apiBaseUrl, 'micro-coaching');
+  }
 
   /// HuggingFace API token for micro-coaching SDK model download.
   /// Used as a client-side fallback when the backend /api/v1/models/gemma/download
@@ -137,7 +132,7 @@ class AppConfig {
   /// live behind this one service/port now.
   ///
   /// Empty = route through the nginx gateway (production path).
-  /// Set to e.g. `http://10.0.2.2:8095` to hit a locally-running service while
+  /// Set to e.g. `http://<emulator-host>:8095` to hit a locally-running service while
   /// keeping [apiBaseUrl] pointed at the remote backend.
   ///
   /// This is the single AI dart-define: [scribeBaseUrl] derives from it, so one
@@ -169,7 +164,7 @@ class AppConfig {
   }
 
   /// Base URL for `POST /mobile/app-version` on leapfrog-ai-service. Uses
-  /// [aiServiceBaseUrl] when set (e.g. `http://10.0.2.2:8095`); otherwise
+  /// [aiServiceBaseUrl] when set (e.g. `http://<emulator-host>:8095`); otherwise
   /// [apiBaseUrl] with the `/ai-scribe/mobile/app-version` gateway path.
   static String get appVersionCheckBaseUrl {
     if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
@@ -435,9 +430,9 @@ class AppConfig {
   /// Base URL of the backend exposing the Shukhee consultation endpoints.
   ///
   /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
-  ///   appended, e.g. `https://spice-dev-backend.uhis.labsplatform.com/admin-api`.
+  ///   appended, e.g. `<API_BASE_URL>/admin-api`.
   /// - Local override: set `SHUKHEE_API_BASE_URL` to a complete base URL
-  ///   (e.g. `http://10.0.2.2:8000`) pointing directly at a local
+  ///   (e.g. `http://<emulator-host>:8000`) pointing directly at a local
   ///   `frappe-uhis-next` instance -- used verbatim, no gateway segment
   ///   appended, since a direct local instance isn't behind that route.
   static String get shukheeApiBaseUrl {

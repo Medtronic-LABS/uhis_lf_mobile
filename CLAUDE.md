@@ -149,7 +149,7 @@ lib/
 
 - Endpoint: `POST /auth-service/session` (application/x-www-form-urlencoded)
 - Fields: `username` + `password` (HmacSHA512-hashed with `AppConfig.passwordHashKey`)
-- Dev hash key: `spice_uat` (set via `--dart-define=PASSWORD_HASH_KEY=spice_uat`)
+- Dev hash key: `<hash_key>` (ask the team; never commit) (set via `--dart-define=PASSWORD_HASH_KEY=<hash_key>`)
 - Response header: `Authorization: Bearer <token>`
 - Session persisted via flutter_secure_storage (KeyStore-backed); biometric unlocks the stored session
 - **Never store plaintext password or hash on device**
@@ -248,7 +248,7 @@ Pre-visit briefing cards shown inside `SymptomPickerScreen` (the "What symptoms 
 **Service routing:**
 - Gateway path: `/ai-visit-briefing-service/briefing/generate` (routed through nginx)
 - Direct local path: `/briefing/generate` (when `AI_SERVICE_URL` dart-define is set)
-- `AppConfig.aiServiceBaseUrl` (`--dart-define=AI_SERVICE_URL=http://10.0.2.2:8096`) — causes `VisitBriefingRepository` to use a separate Dio instance pointed at the local service
+- `AppConfig.aiServiceBaseUrl` (`--dart-define=AI_SERVICE_URL=http://<emulator-host>:8096`) — causes `VisitBriefingRepository` to use a separate Dio instance pointed at the local service
 - Local AI service: `leapfrog-setup/ai-visit-briefing-service/` (FastAPI, port 8096, Gemini `gemini-2.5-flash`)
 
 **Key models — `lib/features/visit/briefing/briefing_models.dart`:**
@@ -475,8 +475,8 @@ All code in this app must satisfy the **Engineering Design Standards** defined i
 ## Running
 
 ```bash
-# Dev (remote staging backend — default; see AppConfig.apiBaseUrl)
-flutter run --dart-define=API_BASE_URL=https://spice-dev-backend.uhis.labsplatform.com/ --dart-define=PASSWORD_HASH_KEY=spice_uat
+# Dev — values come from env.development.json (copy of env.example.json; gitignored)
+flutter run --dart-define-from-file=env.development.json
 
 # Run unit tests
 flutter test
