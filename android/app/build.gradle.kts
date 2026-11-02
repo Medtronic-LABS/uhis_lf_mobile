@@ -51,10 +51,10 @@ android {
         multiDexEnabled = true
         // Expose API_BASE_URL from --dart-define so native Kotlin can build
         // service-specific URLs (e.g. coaching backend) without hardcoding a host.
-        // Falls back to the API_BASE_URL environment variable, then the emulator host.
+        // Falls back to the API_BASE_URL environment variable; no built-in default.
         buildConfigField(
             "String", "API_BASE_URL",
-            "\"${dartDefines["API_BASE_URL"] ?: dartDefines["BASE_URL"] ?: System.getenv("API_BASE_URL") ?: "http://10.0.2.2"}\""
+            "\"${dartDefines["API_BASE_URL"] ?: dartDefines["BASE_URL"] ?: System.getenv("API_BASE_URL").orEmpty()}\""
         )
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.medtroniclabs.uhis_next"

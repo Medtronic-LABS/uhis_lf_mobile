@@ -25,16 +25,12 @@ class AppConfig {
   static bool get showEnvironmentBanner =>
       isTrainingBuild && const bool.fromEnvironment('SHOW_ENV_BANNER');
 
-  /// Base URL for the UHIS nginx gateway.
-  /// Android emulator → `http://10.0.2.2`. Physical device → host LAN IP.
-  /// Remote servers → pass the gateway URL via `API_BASE_URL` (see `env.example.json`).
+  /// Base URL for the UHIS nginx gateway. Required: supply via `API_BASE_URL`
+  /// (see `env.example.json`); there is no built-in default.
   /// Prefer `API_BASE_URL`; `BASE_URL` is accepted for older docs/scripts.
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: String.fromEnvironment(
-      'BASE_URL',
-      defaultValue: 'http://10.0.2.2',
-    ),
+    defaultValue: String.fromEnvironment('BASE_URL'),
   );
 
   /// Value of the `client` request header expected by the auth pipeline.
