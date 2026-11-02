@@ -99,20 +99,20 @@ void main() {
   group('ApiClient retry', () {
     test('replays a read that times out, then succeeds', () async {
       final (api, adapter) =
-          await _clientWith({Endpoints.offlineSyncFetch: 2});
+          await _clientWith({Endpoints.offlineSyncHouseholds: 2});
 
-      final res = await api.dio.post<dynamic>(Endpoints.offlineSyncFetch);
+      final res = await api.dio.post<dynamic>(Endpoints.offlineSyncHouseholds);
 
       expect(res.statusCode, 200);
-      expect(adapter.calls[Endpoints.offlineSyncFetch], 3);
+      expect(adapter.calls[Endpoints.offlineSyncHouseholds], 3);
     }, timeout: const Timeout(Duration(minutes: 2)));
 
     test('gives up after apiMaxAttempts and rethrows the timeout', () async {
       final (api, adapter) =
-          await _clientWith({Endpoints.offlineSyncFetch: 99});
+          await _clientWith({Endpoints.offlineSyncHouseholds: 99});
 
       await expectLater(
-        api.dio.post<dynamic>(Endpoints.offlineSyncFetch),
+        api.dio.post<dynamic>(Endpoints.offlineSyncHouseholds),
         throwsA(isA<DioException>().having(
           (e) => e.type,
           'type',
@@ -120,7 +120,7 @@ void main() {
         )),
       );
       expect(
-        adapter.calls[Endpoints.offlineSyncFetch],
+        adapter.calls[Endpoints.offlineSyncHouseholds],
         AppConfig.apiMaxAttempts,
       );
     }, timeout: const Timeout(Duration(minutes: 2)));
@@ -144,22 +144,22 @@ void main() {
       adapter.successStatus = 400;
 
       // validateStatus admits <500, so this resolves rather than throwing.
-      final res = await api.dio.post<dynamic>(Endpoints.offlineSyncFetch);
+      final res = await api.dio.post<dynamic>(Endpoints.offlineSyncHouseholds);
 
       expect(res.statusCode, 400);
-      expect(adapter.calls[Endpoints.offlineSyncFetch], 1);
+      expect(adapter.calls[Endpoints.offlineSyncHouseholds], 1);
     });
 
     test('reports each retry through onRetryAttempt', () async {
-      final (api, _) = await _clientWith({Endpoints.offlineSyncFetch: 2});
+      final (api, _) = await _clientWith({Endpoints.offlineSyncHouseholds: 2});
       final seen = <(String, int, int)>[];
       api.onRetryAttempt = (path, attempt, max) => seen.add((path, attempt, max));
 
-      await api.dio.post<dynamic>(Endpoints.offlineSyncFetch);
+      await api.dio.post<dynamic>(Endpoints.offlineSyncHouseholds);
 
       // Attempt 1 is the original request; 2 and 3 are the replays.
       expect(seen.map((e) => e.$2).toList(), [2, 3]);
-      expect(seen.every((e) => e.$1 == Endpoints.offlineSyncFetch), isTrue);
+      expect(seen.every((e) => e.$1 == Endpoints.offlineSyncHouseholds), isTrue);
       expect(seen.every((e) => e.$3 == AppConfig.apiMaxAttempts), isTrue);
     }, timeout: const Timeout(Duration(minutes: 2)));
   });

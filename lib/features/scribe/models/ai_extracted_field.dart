@@ -37,6 +37,28 @@ enum FieldSource {
   /// height/weight, a follow-up date from `daysSinceDelivery`, EDD from LMP.
   /// Also not SK-owned.
   derived,
+
+  /// Value was extracted by Gemini vision from a scanned programme card
+  /// photo (EPI/ANC card scanning) and is pending review — the camera-scan
+  /// counterpart to [aiPending]. Distinct from AI Scribe's provenance since
+  /// the capture mechanism (camera + vision model vs voice + transcription)
+  /// is a different audit/telemetry signal worth keeping separate.
+  scanPending,
+
+  /// Value was extracted by camera scan and accepted by the user unchanged.
+  scanAccepted,
+
+  /// Value was extracted by camera scan but modified by the user.
+  scanModified,
+}
+
+/// True for any of the `scan*` [FieldSource] values — the camera-scan
+/// counterpart to checking `source == aiPending/aiAccepted/aiModified`.
+extension FieldSourceScan on FieldSource {
+  bool get isScanOrigin =>
+      this == FieldSource.scanPending ||
+      this == FieldSource.scanAccepted ||
+      this == FieldSource.scanModified;
 }
 
 /// A single field extracted by the AI scribe service.

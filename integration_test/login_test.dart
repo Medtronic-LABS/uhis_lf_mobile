@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:uhis_next/main.dart' as app;
+import 'package:uhis_next/core/config/app_config.dart';
 import 'package:uhis_next/core/constants/app_strings.dart';
 
 const _kTestPin = ['1', '2', '3', '4'];
@@ -60,7 +61,7 @@ void main() {
       await _pause(tester, 1);
       await tester.enterText(
         find.widgetWithText(TextFormField, LoginStrings.usernameLabel),
-        'hyper_sk',
+        AppConfig.devUser,
       );
       await _pause(tester, 2); // pause so you can read the typed username
 
@@ -70,7 +71,7 @@ void main() {
       await _pause(tester, 1);
       await tester.enterText(
         find.widgetWithText(TextFormField, LoginStrings.passwordLabel),
-        'Spice123',
+        AppConfig.devPass,
       );
       await _pause(tester, 2); // pause so you can see both fields filled
 

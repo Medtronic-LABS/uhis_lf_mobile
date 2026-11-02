@@ -253,7 +253,7 @@ class ScribeJobResult {
 ///
 /// Uses a dedicated Dio instance — no UHIS auth interceptors or cookie jar.
 /// Base URL: [AppConfig.aiServiceBaseUrl] when set (via --dart-define
-/// AI_SERVICE_URL=http://10.0.2.2:8095), otherwise [AppConfig.scribeBaseUrl].
+/// AI_SERVICE_URL=`http://<emulator-host>:8095`), otherwise [AppConfig.scribeBaseUrl].
 /// The nginx gateway adds an `/ai-scribe-service/` routing prefix; the
 /// container itself does not. [_scribePath] strips that prefix so requests
 /// hit the service directly.

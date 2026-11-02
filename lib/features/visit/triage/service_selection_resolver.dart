@@ -13,6 +13,10 @@ enum ServiceSelectionBlockReason {
   /// ANC removed — the risk-based revisit interval since the last ANC visit
   /// hasn't elapsed yet (1 day if that visit was high-risk, else 15 days).
   ancBlockedRevisit,
+
+  /// ANC removed — LMP is recorded but fewer than 6 weeks (42 days) have
+  /// elapsed (Android `getANCPNCStatus` / `LMP_THRESHOLD_DAYS`).
+  ancBlockedEarlyPregnancy,
 }
 
 /// Result of finalizing a visit's service selection.
@@ -104,8 +108,9 @@ abstract final class ServiceSelectionResolver {
   ///    delivery visit (symptom smuggling guard).
   /// 4. **PW-once-only** — dropped silently when [pwRegistrationBlocked].
   /// 5. **ANC blocked postpartum** — removed with dialog reason.
-  /// 6. **ANC blocked by revisit interval** — removed with dialog reason.
-  /// 7. **PW auto-add** — added alongside a first-time ANC selection.
+  /// 6. **ANC blocked by early LMP** (< 42 days) — removed with dialog reason.
+  /// 7. **ANC blocked by revisit interval** — removed with dialog reason.
+  /// 8. **PW auto-add** — added alongside a first-time ANC selection.
   /// 8. **Delivery visit ANC/PW clear** — incompatible with PO backfill.
   ///
   /// PNC is never auto-added on a delivery visit — PO+PNC is optional.
@@ -114,6 +119,7 @@ abstract final class ServiceSelectionResolver {
     required bool pwRegistrationBlocked,
     required bool isPostpartum,
     required bool ancRevisitBlocked,
+    bool ancEarlyLmpBlocked = false,
     bool isDeliveryVisit = false,
     bool isMale = false,
   }) {
@@ -177,6 +183,16 @@ abstract final class ServiceSelectionResolver {
         programmes: _ordered(programmes),
         isDeliveryVisit: deliveryVisit,
         blockedReason: ServiceSelectionBlockReason.ancBlockedPostpartum,
+      );
+    }
+
+    // Block ANC when stored LMP is under the 6-week threshold.
+    if (hasAnc && ancEarlyLmpBlocked) {
+      programmes.remove(Programme.anc);
+      return ServiceSelectionResult(
+        programmes: _ordered(programmes),
+        isDeliveryVisit: deliveryVisit,
+        blockedReason: ServiceSelectionBlockReason.ancBlockedEarlyPregnancy,
       );
     }
 

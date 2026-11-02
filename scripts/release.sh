@@ -13,6 +13,10 @@
 #   scripts/release.sh production 1.2.0+15   # explicit version
 #   scripts/release.sh production patch --tag   # bump, then stop and ask you to commit
 #   scripts/release.sh production "" --tag      # tag the already-committed current version
+#   scripts/release.sh training patch --app-flavor training  # distinct "LW
+#     Training" app (own applicationId, launcher icon, top banner) — see
+#     android/app/build.gradle.kts's productFlavors. Independent of the
+#     env.<flavor>.json selection above (that's app identity; this is backend).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -23,9 +27,25 @@ shift $(( $# > 0 ? 1 : 0 )) || true
 shift $(( $# > 0 ? 1 : 0 )) || true
 
 DO_TAG=false
+APP_FLAVOR="prod"
+APP_FLAVOR_NEXT=0
 for arg in "$@"; do
-  [[ "$arg" == "--tag" ]] && DO_TAG=true
+  if [[ "$APP_FLAVOR_NEXT" == "1" ]]; then
+    APP_FLAVOR="$arg"
+    APP_FLAVOR_NEXT=0
+    continue
+  fi
+  case "$arg" in
+    --tag) DO_TAG=true ;;
+    --app-flavor=*) APP_FLAVOR="${arg#--app-flavor=}" ;;
+    --app-flavor) APP_FLAVOR_NEXT=1 ;;
+  esac
 done
+
+if [[ "$APP_FLAVOR" != "prod" && "$APP_FLAVOR" != "training" ]]; then
+  echo "✗ --app-flavor must be 'prod' or 'training' (got: $APP_FLAVOR)" >&2
+  exit 1
+fi
 
 ENV_FILE="env.${FLAVOR}.json"
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -78,7 +98,7 @@ if [[ -n "$VERSION_ARG" ]]; then
   echo "▶ Bumped pubspec.yaml version to $NEW"
 fi
 
-echo "▶ Building release App Bundle ($FLAVOR)"
+echo "▶ Building release App Bundle ($FLAVOR, app-flavor=$APP_FLAVOR)"
 flutter pub get
 
 # `flutter pub get` rewrites android/.../GeneratedPluginRegistrant.java listing
@@ -88,11 +108,15 @@ flutter pub get
 # regenerates the registrant — so it compiles the pub-get version and dies with
 #   error: package dev.flutter.plugins.integration_test does not exist
 # A release-mode `flutter build bundle` rewrites the registrant *without* dev
-# plugins and is Dart-only (no Gradle), so run it as a cheap fixup first.
+# plugins and is Dart-only (no Gradle, no --flavor support — it's a platform-
+# agnostic Dart bundle, not an Android variant build), so run it as a cheap
+# fixup first.
 echo "▶ Regenerating plugin registrant for release (drops dev_dependency plugins)"
-flutter build bundle --release --dart-define-from-file="$ENV_FILE" >/dev/null
+flutter build bundle --release \
+  --dart-define-from-file="$ENV_FILE" \
+  --dart-define=APP_FLAVOR="$APP_FLAVOR" >/dev/null
 
-AAB="build/app/outputs/bundle/release/app-release.aab"
+AAB="build/app/outputs/bundle/${APP_FLAVOR}Release/app-${APP_FLAVOR}-release.aab"
 
 # Delete any prior artifact BEFORE building: the existence check below cannot
 # tell this run's output from a stale bundle left by an earlier (or failed) run.
@@ -100,7 +124,9 @@ rm -f "$AAB"
 
 flutter build appbundle \
   --release \
-  --dart-define-from-file="$ENV_FILE"
+  --flavor "$APP_FLAVOR" \
+  --dart-define-from-file="$ENV_FILE" \
+  --dart-define=APP_FLAVOR="$APP_FLAVOR"
 
 if [[ ! -f "$AAB" ]]; then
   echo "✗ Expected artifact not found: $AAB" >&2
@@ -175,15 +201,15 @@ echo "✓ Output: $AAB ($SIZE)"
 
 # ── Archive the verified artifact into releases/ ────────────────────────────
 # Only reached after the signer check above passes, so releases/ never holds an
-# unverified bundle. Gradle overwrites build/.../app-release.aab on every run;
-# this keeps each build addressable by version + timestamp. releases/ is
+# unverified bundle. Gradle overwrites $AAB on every run; this keeps each
+# build addressable by version + timestamp. releases/ is
 # gitignored — these are large binaries, not source.
 # Read the version back from pubspec.yaml so this is correct whether or not a
 # bump happened this run.
 EFFECTIVE_VERSION=$(awk '/^version:/{print $2; exit}' pubspec.yaml)
 RELEASES_DIR="releases"
 mkdir -p "$RELEASES_DIR"
-RELEASE_COPY="$RELEASES_DIR/app_release_${FLAVOR}_v${EFFECTIVE_VERSION}_$(date +%y-%m-%d_%H-%M-%S).aab"
+RELEASE_COPY="$RELEASES_DIR/app_release_${FLAVOR}_${APP_FLAVOR}_v${EFFECTIVE_VERSION}_$(date +%y-%m-%d_%H-%M-%S).aab"
 cp "$AAB" "$RELEASE_COPY"
 echo "✓ Archived: $RELEASE_COPY"
 

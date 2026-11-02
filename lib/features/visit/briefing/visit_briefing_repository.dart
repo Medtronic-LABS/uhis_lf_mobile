@@ -12,7 +12,7 @@ import 'briefing_models.dart';
 /// Calls the AI visit briefing service to generate pre-visit guidance cards.
 ///
 /// When [AppConfig.aiServiceBaseUrl] is non-empty (set via --dart-define
-/// AI_SERVICE_URL=http://10.0.2.2:8096), requests go directly to the local
+/// AI_SERVICE_URL=`http://<emulator-host>:8096`), requests go directly to the local
 /// service without the nginx prefix. Otherwise they route through the gateway.
 ///
 /// Results are cached in SQLite via [AiResponseCacheDao] when available so

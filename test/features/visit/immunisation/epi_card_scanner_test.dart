@@ -72,6 +72,30 @@ void main() {
       expect(r.matchedCodes, isEmpty);
     });
 
+    // Real-card Bengali wording (as OCR'd from an actual national EPI card):
+    // vaccines are printed as descriptive disease names, not abbreviations.
+    test('matches descriptive Bengali disease names printed on the card', () {
+      const cardText =
+          'বিসিজি (যক্ষা)\nপেন্টা (ডিপথেরিয়া, হেপাটাইটিস বি, হিমোফাইলাস)\n'
+          'পিসিভি (নিউমোকক্কাল জনিত নিউমোনিয়া)\nএমআর (হাম ও রুবেলা)\n'
+          'ওপিভি (পোলিও)\nটিসিভি (টাইফয়েড)';
+      final r = EpiCardScanner.matchText(cardText, allCodes);
+      expect(
+        r.matchedCodes,
+        containsAll(['BCG', 'PENTA1', 'PCV1', 'MR1', 'OPV1', 'TCV']),
+      );
+    });
+
+    test('matches হাম/রুবেলা to MR', () {
+      final r = EpiCardScanner.matchText('হাম ও রুবেলা', ['MR1', 'MR2']);
+      expect(r.matchedCodes, containsAll(['MR1', 'MR2']));
+    });
+
+    test('matches নিউমোনিয়া to PCV', () {
+      final r = EpiCardScanner.matchText('নিউমোকক্কাল জনিত নিউমোনিয়া', ['PCV1']);
+      expect(r.matchedCodes, contains('PCV1'));
+    });
+
     test('anyMatched false when no codes and no date', () {
       final r = EpiCardScanner.matchText('random text without vaccines', allCodes);
       expect(r.anyMatched, isFalse);

@@ -57,6 +57,7 @@ class VisitContentService {
         referralRecommendation: existing?.referralRecommendation,
         summaryStartedAt: existing?.summaryStartedAt,
         summaryEndAt: existing?.summaryEndAt,
+        helpfulnessVote: existing?.helpfulnessVote,
         uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
         uploadedAt: existing?.uploadedAt,
       ),
@@ -88,6 +89,7 @@ class VisitContentService {
         whatsappSummary: existing?.whatsappSummary,
         referralRecommendation: existing?.referralRecommendation,
         summaryEndAt: existing?.summaryEndAt,
+        helpfulnessVote: existing?.helpfulnessVote,
         uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
         uploadedAt: existing?.uploadedAt,
       ),
@@ -118,13 +120,50 @@ class VisitContentService {
         transcript: existing?.transcript,
         transcriptCapturedAt: existing?.transcriptCapturedAt,
         summaryStartedAt: existing?.summaryStartedAt,
-        whatsappSummary: whatsappSummary?.trim().isEmpty == true
-            ? null
-            : whatsappSummary?.trim(),
-        referralRecommendation: referralRecommendation?.trim().isEmpty == true
-            ? null
-            : referralRecommendation?.trim(),
+        // Preserve, don't blank. Every other field here falls back to
+        // `existing`; these two did not, so a second call carrying only one
+        // of them wiped the other — a WhatsApp summary captured correctly
+        // and then lost to a re-render.
+        whatsappSummary: _prefer(whatsappSummary, existing?.whatsappSummary),
+        referralRecommendation: _prefer(
+            referralRecommendation, existing?.referralRecommendation),
         summaryEndAt: at,
+        helpfulnessVote: existing?.helpfulnessVote,
+        uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
+        uploadedAt: existing?.uploadedAt,
+      ),
+    );
+  }
+
+  /// Thumbs up/down on the Step 3 AI counselling message (LEAP-68).
+  Future<void> recordHelpfulnessVote({
+    required String visitUuid,
+    required String patientId,
+    required String vote,
+  }) async {
+    if (!AppConfig.visitContentTelemetryEnabled) return;
+    final normalized = vote == VisitContentHelpfulnessVote.down
+        ? VisitContentHelpfulnessVote.down
+        : VisitContentHelpfulnessVote.up;
+    final at = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await _upsert(
+      visitUuid: visitUuid,
+      patientId: patientId,
+      occurredAt: at,
+      merge: (existing) => VisitContentEntry(
+        id: existing?.id ?? _uuid.v4(),
+        visitUuid: visitUuid,
+        patientId: patientId,
+        occurredAt: existing == null ? at : _maxInt(existing.occurredAt, at),
+        skUserId: existing?.skUserId,
+        capturedTenantId: existing?.capturedTenantId,
+        transcript: existing?.transcript,
+        transcriptCapturedAt: existing?.transcriptCapturedAt,
+        whatsappSummary: existing?.whatsappSummary,
+        referralRecommendation: existing?.referralRecommendation,
+        summaryStartedAt: existing?.summaryStartedAt,
+        summaryEndAt: existing?.summaryEndAt,
+        helpfulnessVote: normalized,
         uploadStatus: _uploadStatus(existing, existing?.uploadStatus),
         uploadedAt: existing?.uploadedAt,
       ),
@@ -145,7 +184,8 @@ class VisitContentService {
         before.whatsappSummary != after.whatsappSummary ||
         before.referralRecommendation != after.referralRecommendation ||
         before.summaryStartedAt != after.summaryStartedAt ||
-        before.summaryEndAt != after.summaryEndAt;
+        before.summaryEndAt != after.summaryEndAt ||
+        before.helpfulnessVote != after.helpfulnessVote;
   }
 
   /// Keeps pending rows pending; re-queues uploaded rows when payload grows.
@@ -157,7 +197,43 @@ class VisitContentService {
     return VisitContentUploadStatus.uploaded;
   }
 
+  /// Keeps [incoming] when it carries text, otherwise [existing].
+  ///
+  /// A capture point with nothing to say for a field must leave what is
+  /// already stored alone — these merges only ever add.
+  static String? _prefer(String? incoming, String? existing) {
+    final trimmed = incoming?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? existing : trimmed;
+  }
+
+  /// Serializes every read-modify-write below.
+  ///
+  /// [_upsert] reads the row, merges, and writes it back, and its callers are
+  /// concurrent: `_recordSummaryStarted` and `_recordSummaryCompleted` are
+  /// both fired with `unawaited` from the Step 3 screen. Interleaved, the
+  /// later writer re-reads a row the earlier one has not yet written and
+  /// stores back the field it had just set — silently dropping a transcript
+  /// or a WhatsApp summary that was captured correctly.
+  Future<void> _writes = Future<void>.value();
+
   Future<void> _upsert({
+    required String visitUuid,
+    required String patientId,
+    required int occurredAt,
+    required VisitContentEntry Function(VisitContentEntry? existing) merge,
+  }) {
+    final next = _writes.then((_) => _upsertNow(
+          visitUuid: visitUuid,
+          patientId: patientId,
+          occurredAt: occurredAt,
+          merge: merge,
+        ));
+    // A failed link must not break the chain for every later write.
+    _writes = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _upsertNow({
     required String visitUuid,
     required String patientId,
     required int occurredAt,
@@ -185,6 +261,7 @@ class VisitContentService {
         referralRecommendation: entry.referralRecommendation,
         summaryStartedAt: entry.summaryStartedAt,
         summaryEndAt: entry.summaryEndAt,
+        helpfulnessVote: entry.helpfulnessVote,
         skUserId: userId,
         capturedTenantId: tenantId,
         uploadStatus: uploadStatus,

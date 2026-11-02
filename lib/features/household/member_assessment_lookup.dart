@@ -1,6 +1,7 @@
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
+import '../../core/mission/latest_service_badge.dart';
 
 /// Keys under which synced assessment history may be stored for a member.
 ///
@@ -126,10 +127,12 @@ String? resolveRecentServiceKind({
     if (local == null || candidate.at > local.at) local = candidate;
   }
 
-  final syncedAt = synced?.occurredAt ?? 0;
-  final localAt = local?.at ?? 0;
-  if (localAt > syncedAt) return local!.type;
-  return synced?.kind;
+  return pickLatestServiceKind(
+    syncedKind: synced?.kind,
+    syncedAtMs: synced?.occurredAt,
+    localKind: local?.type,
+    localAtMs: local?.at,
+  );
 }
 
 /// Highest per-key visit count for a member — synced history may be keyed by

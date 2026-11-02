@@ -329,33 +329,33 @@ def page_developer_setup():
         + h(2, "Run on device / emulator")
         + code(
             "flutter devices\n\n"
-            "# Android emulator (10.0.2.2 = host localhost)\n"
+            "# Android emulator (<emulator-host> = host localhost)\n"
             "flutter run \\\n"
-            "  --dart-define=API_BASE_URL=http://10.0.2.2:80 \\\n"
+            "  --dart-define=API_BASE_URL=http://<emulator-host>:80 \\\n"
             "  --dart-define=PASSWORD_HASH_KEY=<hash_key>\n\n"
             "# Physical device on LAN\n"
             "flutter run \\\n"
-            "  --dart-define=API_BASE_URL=http://192.168.1.100:80 \\\n"
+            "  --dart-define=API_BASE_URL=http://<lan-ip>:80 \\\n"
             "  --dart-define=PASSWORD_HASH_KEY=<hash_key>"
         )
         + h(2, "Physical device (wireless ADB)")
-        + p("Physical devices need your Mac LAN IP — <code>10.0.2.2</code> is emulator-only.")
+        + p("Physical devices need your Mac LAN IP — <code><emulator-host></code> is emulator-only.")
         + code(
             "# 1. Find Mac LAN IP\n"
             "ifconfig | grep 'inet 192'\n\n"
             "# 2. Pair via Settings → Developer options → Wireless debugging\n"
-            "adb pair 192.168.1.X:PORT\n"
-            "adb connect 192.168.1.X:PORT\n\n"
+            "adb pair <lan-ip>:PORT\n"
+            "adb connect <lan-ip>:PORT\n\n"
             "# 3. Run\n"
             "flutter run \\\n"
-            "  --dart-define=BASE_URL=http://192.168.1.X \\\n"
+            "  --dart-define=BASE_URL=http://<lan-ip> \\\n"
             "  --dart-define=PASSWORD_HASH_KEY=<hash_key>"
         )
         + h(2, "Build production APK")
         + code(
             "flutter build apk --debug \\\n"
-            "  --dart-define=BASE_URL=https://uhis-dev-backend.labsplatform.com \\\n"
-            "  --dart-define=AI_SERVICE_URL=https://uhis-dev-backend.labsplatform.com/ai-scribe \\\n"
+            "  --dart-define=BASE_URL=<api_base_url> \\\n"
+            "  --dart-define=AI_SERVICE_URL=<api_base_url>/ai-scribe \\\n"
             "  --dart-define=PASSWORD_HASH_KEY=<hash_key>\n\n"
             "adb install -r build/app/outputs/flutter-apk/app-debug.apk"
         )
@@ -363,7 +363,7 @@ def page_developer_setup():
         + table(
             ["--dart-define key", "Default", "Description"],
             [
-                ["API_BASE_URL", "http://10.0.2.2:80", "Backend base URL"],
+                ["API_BASE_URL", "http://<emulator-host>:80", "Backend base URL"],
                 ["PASSWORD_HASH_KEY", "(from team credential store)", "HmacSHA512 salt — never commit"],
             ],
         )
@@ -961,7 +961,7 @@ def page_ai_visit_briefing():
                 ["Language", "Python 3.12 · FastAPI"],
                 ["Port", "8096"],
                 ["Gateway prefix", "<code>/ai-visit-briefing-service/</code>"],
-                ["Direct dev URL", "<code>--dart-define=AI_SERVICE_URL=http://10.0.2.2:8096</code>"],
+                ["Direct dev URL", "<code>--dart-define=AI_SERVICE_URL=http://<emulator-host>:8096</code>"],
                 ["AI model", f"<code>{gemini_model}</code>"],
                 ["Auth", "None (internal service; gateway handles auth)"],
                 ["Last published", TODAY],

@@ -19,6 +19,10 @@ abstract final class PregnancyCohortRules {
   /// Android `POSTNATAL_WINDOW_DAYS`.
   static const int postnatalWindowDays = 42;
 
+  /// Android `PregnantWomen.LMP_THRESHOLD_DAYS` — ANC is only offered once
+  /// at least 6 weeks (42 days) have elapsed since LMP.
+  static const int lmpThresholdDays = 42;
+
   /// True while the pregnancy is still open: LMP known, no delivery
   /// recorded, and EDD (if known) isn't more than [overdueGraceDays] days in
   /// the past.
@@ -31,6 +35,14 @@ abstract final class PregnancyCohortRules {
     final cutoff =
         (now ?? DateTime.now()).subtract(const Duration(days: overdueGraceDays));
     return DateTime.fromMillisecondsSinceEpoch(eddMs).isAfter(cutoff);
+  }
+
+  /// Active or postnatal — still in an RMNCH care episode (Spice
+  /// `isRelevantForRmnchMenus`). When false, menu gating treats the member
+  /// as having no actionable pregnancy (PW / PO / FP re-enable).
+  static bool isRelevantForRmnchMenus(PregnancySnapshotRow? row, {DateTime? now}) {
+    return isActivePregnancy(row, now: now) ||
+        isPostnatal(row, now: now);
   }
 
   /// True while delivery was recorded within the last [postnatalWindowDays]
@@ -59,5 +71,13 @@ abstract final class PregnancyCohortRules {
     return (now ?? DateTime.now())
         .difference(DateTime.fromMillisecondsSinceEpoch(deliveryMs))
         .inDays;
+  }
+
+  /// Mirrors Android `MetaRepository.getANCPNCStatus()` ANC branch — active
+  /// pregnancy with known LMP at least [lmpThresholdDays] old and no delivery.
+  static bool isAncEligible(PregnancySnapshotRow? row, {DateTime? now}) {
+    if (!isActivePregnancy(row, now: now)) return false;
+    final days = daysSinceLmp(row, now: now);
+    return days != null && days >= lmpThresholdDays;
   }
 }

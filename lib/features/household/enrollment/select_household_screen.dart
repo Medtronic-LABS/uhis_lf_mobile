@@ -20,12 +20,14 @@ class SelectHouseholdScreen extends StatefulWidget {
     this.scannedNidNumber,
     this.scannedName,
     this.scannedDateOfBirth,
+    this.scannedGender,
   });
 
   final bool fromNidScan;
   final String? scannedNidNumber;
   final String? scannedName;
   final String? scannedDateOfBirth;
+  final String? scannedGender;
 
   @override
   State<SelectHouseholdScreen> createState() => _SelectHouseholdScreenState();
@@ -150,6 +152,7 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
       if (widget.scannedNidNumber != null) 'nidNumber': widget.scannedNidNumber,
       if (widget.scannedName != null) 'name': widget.scannedName,
       if (widget.scannedDateOfBirth != null) 'dateOfBirth': widget.scannedDateOfBirth,
+      if (widget.scannedGender != null) 'gender': widget.scannedGender,
     });
     // Member saved — this picker has served its purpose, hand control back to
     // whatever opened it rather than stranding the user on a selection screen.

@@ -14,6 +14,7 @@ void main() {
         ageMonths: 28 * 12, // 28 years
         sex: Sex.female,
         isPregnant: true,
+        isAncEligible: true,
         lastBpSystolic: 150,
         lastBpDiastolic: 95,
       );
@@ -97,12 +98,32 @@ void main() {
     // =========================================================================
     // Golden Case 5: no symptoms, pregnancy active → {ANC} (scheduled path)
     // =========================================================================
+    test('early pregnancy (LMP < 6 weeks) does not activate ANC', () {
+      final ctx = PatientContext(
+        patientId: 'test-5-early',
+        ageMonths: 25 * 12,
+        sex: Sex.female,
+        isPregnant: true,
+        isAncEligible: false,
+        activeProgrammes: {Programme.anc},
+      );
+
+      final activated = PathwayEngine.activate(<String>{}, ctx);
+
+      expect(
+        activated.map((a) => a.programme),
+        isNot(contains(Programme.anc)),
+        reason: 'ANC must not auto-activate before the 6-week LMP threshold',
+      );
+    });
+
     test('Golden Case 5: pregnant woman with no symptoms activates ANC', () {
       final ctx = PatientContext(
         patientId: 'test-5',
         ageMonths: 25 * 12, // 25 years
         sex: Sex.female,
         isPregnant: true,
+        isAncEligible: true,
         activeProgrammes: {Programme.anc},
       );
 

@@ -120,4 +120,59 @@ void main() {
     }
     expect(ncdIds, containsAll(['height', 'weight', 'bmi', 'bpLogDetails']));
   });
+
+  group('early LMP ANC suppression', () {
+    test('PW+ANC visit with LMP under 6 weeks renders PW only', () async {
+      final config = await FormConfig.load(rootBundle);
+      final lmp = DateTime.now().subtract(const Duration(days: 17));
+      final data = CanonicalVisitData({'lmp': lmp.toIso8601String()});
+
+      final sections = UnifiedSectionRules.activeSections(
+        config: config,
+        activeFormTypes: const ['pwProfile', 'anc'],
+        currentData: data,
+      );
+
+      final formTypes = sections.map((a) => a.section.formType).toSet();
+      expect(formTypes, contains('pwProfile'));
+      expect(formTypes, isNot(contains('anc')));
+    });
+
+    test('PW+ANC visit with LMP at 6 weeks still renders ANC', () async {
+      final config = await FormConfig.load(rootBundle);
+      final lmp = DateTime.now().subtract(const Duration(days: 42));
+      final data = CanonicalVisitData({'lmp': lmp.toIso8601String()});
+
+      final sections = UnifiedSectionRules.activeSections(
+        config: config,
+        activeFormTypes: const ['pwProfile', 'anc'],
+        currentData: data,
+      );
+
+      final formTypes = sections.map((a) => a.section.formType).toSet();
+      expect(formTypes, containsAll(['pwProfile', 'anc']));
+    });
+
+    test('effectiveActiveFormTypes drops anc only when LMP is too early', () {
+      final earlyLmp = DateTime.now().subtract(const Duration(days: 20));
+      final earlyData = CanonicalVisitData({'lmp': earlyLmp.toIso8601String()});
+      expect(
+        FieldVisibilityRules.effectiveActiveFormTypes(
+          activeFormTypes: const ['pwProfile', 'anc', 'ncd'],
+          data: earlyData,
+        ),
+        ['pwProfile', 'ncd'],
+      );
+
+      final readyLmp = DateTime.now().subtract(const Duration(days: 50));
+      final readyData = CanonicalVisitData({'lmp': readyLmp.toIso8601String()});
+      expect(
+        FieldVisibilityRules.effectiveActiveFormTypes(
+          activeFormTypes: const ['pwProfile', 'anc', 'ncd'],
+          data: readyData,
+        ),
+        ['pwProfile', 'anc', 'ncd'],
+      );
+    });
+  });
 }

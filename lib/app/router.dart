@@ -29,6 +29,7 @@ import '../features/counselling/counselling_screen.dart';
 import '../core/config/app_config.dart';
 import '../features/debug/telemetry_viewer_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
+import '../features/teleconsult/teleconsult_consent_screen.dart';
 import '../features/assistant/assistant_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
 import '../features/patient/enroll/programme_enroll_screen.dart';
@@ -36,7 +37,6 @@ import '../features/visit/visit_flow_screen.dart';
 import '../core/api/api_client.dart';
 import '../core/auth/auth_repository.dart';
 import '../features/household/enrollment/create_household_screen.dart';
-import '../features/household/enrollment/household_created_screen.dart';
 import '../features/household/enrollment/add_household_member_screen.dart';
 import '../features/household/enrollment/enrollment_controller.dart';
 import '../features/household/enrollment/select_household_screen.dart';
@@ -346,16 +346,10 @@ GoRouter buildRouter(AuthState auth) {
                   scannedNidNumber: extra?['nidNumber'] as String?,
                   scannedName: extra?['name'] as String?,
                   scannedDateOfBirth: extra?['dateOfBirth'] as String?,
+                  scannedGender: extra?['gender'] as String?,
                 ),
               );
             },
-          ),
-          GoRoute(
-            path: '/household/enrollment/success',
-            pageBuilder: (context, state) => const MaterialPage(
-              key: ValueKey('enrollment-success'),
-              child: HouseholdCreatedScreen(),
-            ),
           ),
           GoRoute(
             path: '/household/enrollment/add-member',
@@ -396,6 +390,7 @@ GoRouter buildRouter(AuthState auth) {
                   scannedNidNumber: extra['nidNumber'] as String?,
                   scannedName: extra['name'] as String?,
                   scannedDateOfBirth: extra['dateOfBirth'] as String?,
+                  scannedGender: extra['gender'] as String?,
                   initialMemberNames: (extra['memberNames'] as List?)
                           ?.whereType<String>()
                           .toList() ??
@@ -436,6 +431,7 @@ GoRouter buildRouter(AuthState auth) {
               scannedNidNumber: extra['nidNumber'] as String?,
               scannedName: extra['name'] as String?,
               scannedDateOfBirth: extra['dateOfBirth'] as String?,
+              scannedGender: extra['gender'] as String?,
             ),
           );
         },
@@ -484,6 +480,27 @@ GoRouter buildRouter(AuthState auth) {
           );
         },
       ),
+      // Patient-consent gate -- pushed before /teleconsult from
+      // `_TeleconsultButtonState._onTap`. Returns bool: true = consented,
+      // false/null = declined.
+      GoRoute(
+        path: '/teleconsult/consent',
+        name: 'teleconsult-consent',
+        pageBuilder: (context, state) {
+          final extra = state.extra is Map<String, dynamic>
+              ? state.extra as Map<String, dynamic>
+              : <String, dynamic>{};
+          return MaterialPage(
+            key: const ValueKey('teleconsult-consent-page'),
+            child: TeleconsultConsentScreen(
+              patientId: extra['patientId'] as String? ?? '',
+              visitId: extra['visitId'] as String?,
+              patientDob: extra['patientDob'] as String?,
+              patientLabel: extra['patientLabel'] as String?,
+            ),
+          );
+        },
+      ),
       GoRoute(
         path: '/teleconsult',
         name: 'teleconsult',
@@ -496,6 +513,21 @@ GoRouter buildRouter(AuthState auth) {
             child: TeleconsultScreen(
               patientLabel: extra['patientLabel'] as String? ?? '',
               patientId: extra['patientId'] as String? ?? '',
+              visitId: extra['visitId'] as String?,
+              patientPhone: extra['patientPhone'] as String?,
+              reason: extra['reason'] as String?,
+              patientDob: extra['patientDob'] as String?,
+              patientGender: extra['patientGender'] as String?,
+              visitNumber: extra['visitNumber'] as int?,
+              gestationalWeeks: extra['gestationalWeeks'] as int?,
+              clinicalContextSummary: extra['clinicalContextSummary'] as String?,
+              whatsappMessage: extra['whatsappMessage'] as String?,
+              confirmedSymptoms: (extra['confirmedSymptoms'] as Set<String>?) ?? const <String>{},
+              referredReasons: (extra['referredReasons'] as List<String>?) ?? const [],
+              consentVersion: extra['consentVersion'] as String?,
+              consentVersionId: extra['consentVersionId'] as String?,
+              consentLng: extra['consentLng'] as String?,
+              itemsChecked: extra['itemsChecked'] as List<bool>?,
             ),
           );
         },

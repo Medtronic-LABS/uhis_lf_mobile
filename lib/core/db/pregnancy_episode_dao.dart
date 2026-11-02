@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../mission/mission_pregnancy_facts.dart';
@@ -337,6 +338,22 @@ class PregnancyEpisodeDao {
   Future<void> _refreshProjection(PregnancyEpisodeRow episode) async {
     await _snapshotDao.upsertOne(
       episode.obstetric.copyWith(patientId: episode.patientId),
+    );
+  }
+
+  Future<void> deleteAllForPatient(String patientId) async {
+    await _db.db.delete(
+      AppDatabase.tablePregnancyEpisodes,
+      where: 'patient_id = ?',
+      whereArgs: [patientId],
+    );
+  }
+
+  Future<void> insertEpisodeRow(PregnancyEpisodeRow row) async {
+    await _db.db.insert(
+      AppDatabase.tablePregnancyEpisodes,
+      row.toDb(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 

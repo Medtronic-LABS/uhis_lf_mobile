@@ -1,17 +1,10 @@
-// Programme-smart, visit-count-aware badge label — the single shared source
-// for "what is this patient's active programme status" (v13 design). Used
-// by the dashboard worklist (`MissionDashboardService`) and the Patients/
-// household list (`HouseholdListScreen`) so the two surfaces can never drift
-// from each other again — this logic previously existed as two separate,
-// hand-duplicated copies that had already fallen out of sync.
-//
-// Pure Dart, no Flutter import — mirrors the "no Flutter binding" rule of
-// `mission_dashboard_service.dart`, which is the other caller. Badge
-// *colors* (which need `Color`) live in `programmeBadgeColors()` in
-// `lib/features/visit/widgets/mission_queue_card.dart` instead.
+// Programme-smart badge label — shared by the dashboard worklist and the
+// Patients / household list. Display follows **strict latest service** when
+// [latestServiceKind] is known; otherwise enrolment-only fallbacks.
 
 import '../constants/app_strings.dart';
 import '../models/programme.dart';
+import 'latest_service_badge.dart';
 
 /// `Programme.wireTag`-family kinds counted as completed ANC / PNC visits.
 const List<String> ancVisitKinds = ['ANC', 'PREGNANCY', 'PREGNANT', 'EMTCT'];
@@ -25,6 +18,46 @@ const List<String> pncLocalVisitKinds = [
   'PNCMOTHER',
 ];
 
+/// Synced/local assessment kinds for a registered pregnancy outcome form.
+const List<String> pregnancyOutcomeVisitKinds = [
+  'PREGNANCY_OUTCOME',
+  'PREGNANCYOUTCOME',
+];
+
+/// Completed Family Planning service visits (synced + local assessment types).
+const List<String> familyPlanningVisitKinds = [
+  'FAMILY_PLANNING',
+  'FAMILYPLANNING',
+];
+
+/// Shared reason string + programme key for badge styling.
+({String reason, Programme badgeProgramme}) patientBadgeLabel({
+  String? latestServiceKind,
+  required Set<Programme> programmes,
+  int ancVisitCount = 0,
+  int pncVisitCount = 0,
+}) {
+  final latest = latestServiceKind?.trim();
+  if (latest != null && latest.isNotEmpty) {
+    return badgeFromLatestServiceKind(
+      latest,
+      ancVisitCount: ancVisitCount,
+      pncVisitCount: pncVisitCount,
+    );
+  }
+
+  if (programmes.isNotEmpty) {
+    return (
+      reason: MissionDashboardStrings.enrolled,
+      badgeProgramme: primaryProgrammeOf(programmes),
+    );
+  }
+  return (
+    reason: MissionDashboardStrings.newVisit,
+    badgeProgramme: Programme.unknown,
+  );
+}
+
 /// Picks the one programme to key a badge off of, by clinical priority.
 Programme primaryProgrammeOf(Set<Programme> programmes) {
   if (programmes.contains(Programme.imci)) return Programme.imci;
@@ -35,9 +68,8 @@ Programme primaryProgrammeOf(Set<Programme> programmes) {
   return programmes.isNotEmpty ? programmes.first : Programme.unknown;
 }
 
-/// Visit-count-aware badge label, e.g. "ANC Visit 3 due", "Registered",
-/// "NCD checkup". Replaces the raw risk-driver reason text with an
-/// actionable label (v13 design).
+/// Legacy programme-set label (tests / fallback). Prefer [patientBadgeLabel]
+/// with [latestServiceKind] for UI.
 String programmeReason({
   required Set<Programme> programmes,
   int ancVisitCount = 0,

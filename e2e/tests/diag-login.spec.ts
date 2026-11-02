@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { waitForFlutterReady } from '../fixtures/flutter';
+import { requireEnv } from '../fixtures/env';
 
-const USER = process.env.LF_USER ;
-const PASS = process.env.LF_PASS || 'Uhis123';
+const USER = requireEnv('LF_USER');
+const PASS = requireEnv('LF_PASS');
 
 test('diag: capture network during login', async ({ page }) => {
   page.on('console', m => console.log('[console]', m.type(), m.text()));

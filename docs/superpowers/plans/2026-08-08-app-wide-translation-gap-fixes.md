@@ -1527,7 +1527,7 @@ Expected: 0 missing codes (every code in `app_strings.dart` now has a `strings.j
 
 Run:
 ```bash
-flutter build apk --debug --dart-define=API_BASE_URL=https://spice-dev-backend.uhis.labsplatform.com/ --dart-define=PASSWORD_HASH_KEY=spice_uat
+flutter build apk --debug --dart-define-from-file=env.development.json
 adb devices -l
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb shell am force-stop com.medtroniclabs.uhis_next

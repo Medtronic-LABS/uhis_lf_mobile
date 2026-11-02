@@ -716,6 +716,27 @@ class LocalAssessmentDao {
     return updated;
   }
 
+  /// Stamps SK GPS on every assessment in [encounterId] (Step 3 / summary parity).
+  Future<int> updateGeoForEncounter({
+    required String encounterId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final rows = await forEncounter(encounterId);
+    if (rows.isEmpty) return 0;
+    final now = DateTime.now();
+    var updated = 0;
+    for (final row in rows) {
+      await update(row.copyWith(
+        latitude: latitude,
+        longitude: longitude,
+        updatedAt: now,
+      ));
+      updated++;
+    }
+    return updated;
+  }
+
   /// Get all assessments eligible for upload.
   ///
   /// Always includes [AssessmentSyncStatus.pending] and
@@ -1179,6 +1200,27 @@ class LocalAssessmentDao {
     return (result.first['count'] as int) > 0;
   }
 
+  /// One-time (per app process) wrapper around [syncPatientIdsFromMemberLinks].
+  ///
+  /// The raw backfill runs two table-wide UPDATEs and must not run on every
+  /// patient-profile open — that write lock starves concurrent reads (Care
+  /// History, dashboard, background sync) and triggers sqflite "database has
+  /// been locked" warnings.
+  static bool _patientIdBackfillDone = false;
+  static Future<void>? _patientIdBackfillFuture;
+
+  Future<void> ensurePatientIdsFromMemberLinks() async {
+    if (_patientIdBackfillDone) return;
+    _patientIdBackfillFuture ??= () async {
+      try {
+        await syncPatientIdsFromMemberLinks();
+      } finally {
+        _patientIdBackfillDone = true;
+      }
+    }();
+    await _patientIdBackfillFuture;
+  }
+
   /// Repairs assessment rows saved before identity resolution was fixed:
   /// copies [members.id] into [patient_id] and backfills [household_member_local_id]
   /// when only the server FHIR id was stored.
@@ -1266,13 +1308,23 @@ class LocalAssessmentDao {
 
   /// Latest local assessment type per patient key (`members.id`), for roster
   /// tags when synced history is missing or older than an on-device visit.
+  static const _inChunkSize = 400;
+
   Future<Map<String, ({String type, int at})>> latestLocalServiceForMany(
     List<String> patientIds,
   ) async {
     if (patientIds.isEmpty) return const {};
-    final placeholders = List.filled(patientIds.length, '?').join(',');
-    final rows = await _db.db.rawQuery(
-      '''
+    final out = <String, ({String type, int at})>{};
+    for (var i = 0; i < patientIds.length; i += _inChunkSize) {
+      final chunk = patientIds.sublist(
+        i,
+        i + _inChunkSize > patientIds.length
+            ? patientIds.length
+            : i + _inChunkSize,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.db.rawQuery(
+        '''
       SELECT patient_id, assessment_type, created_at
       FROM $tableName
       WHERE patient_id IN ($placeholders)
@@ -1280,17 +1332,17 @@ class LocalAssessmentDao {
         AND created_at IS NOT NULL
       ORDER BY created_at DESC
       ''',
-      patientIds,
-    );
-    final out = <String, ({String type, int at})>{};
-    for (final r in rows) {
-      final pid = r['patient_id'] as String?;
-      if (pid == null || out.containsKey(pid)) continue;
-      final type = r['assessment_type'] as String?;
-      final at = r['created_at'];
-      if (type == null || type.isEmpty || at == null) continue;
-      final ms = (at is int) ? at : int.tryParse(at.toString()) ?? 0;
-      out[pid] = (type: type, at: ms);
+        chunk,
+      );
+      for (final r in rows) {
+        final pid = r['patient_id'] as String?;
+        if (pid == null || out.containsKey(pid)) continue;
+        final type = r['assessment_type'] as String?;
+        final at = r['created_at'];
+        if (type == null || type.isEmpty || at == null) continue;
+        final ms = (at is int) ? at : int.tryParse(at.toString()) ?? 0;
+        out[pid] = (type: type, at: ms);
+      }
     }
     return out;
   }
@@ -1304,21 +1356,32 @@ class LocalAssessmentDao {
     List<String> kinds,
   ) async {
     if (patientIds.isEmpty || kinds.isEmpty) return const {};
-    final pp = List.filled(patientIds.length, '?').join(',');
     final upperKinds = kinds.map((k) => k.toUpperCase()).toList();
-    final kp = List.filled(upperKinds.length, '?').join(',');
-    final rows = await _db.db.rawQuery(
-      'SELECT patient_id, COUNT(*) AS cnt FROM $tableName '
-      'WHERE patient_id IN ($pp) '
-      'AND UPPER(assessment_type) IN ($kp) '
-      'AND sync_status != ? '
-      'GROUP BY patient_id',
-      [...patientIds, ...upperKinds, AssessmentSyncStatus.success.name],
-    );
-    return {
-      for (final r in rows)
-        if (r['patient_id'] is String) r['patient_id'] as String: r['cnt'] as int,
-    };
+    final out = <String, int>{};
+    for (var i = 0; i < patientIds.length; i += _inChunkSize) {
+      final chunk = patientIds.sublist(
+        i,
+        i + _inChunkSize > patientIds.length
+            ? patientIds.length
+            : i + _inChunkSize,
+      );
+      final pp = List.filled(chunk.length, '?').join(',');
+      final kp = List.filled(upperKinds.length, '?').join(',');
+      final rows = await _db.db.rawQuery(
+        'SELECT patient_id, COUNT(*) AS cnt FROM $tableName '
+        'WHERE patient_id IN ($pp) '
+        'AND UPPER(assessment_type) IN ($kp) '
+        'AND sync_status != ? '
+        'GROUP BY patient_id',
+        [...chunk, ...upperKinds, AssessmentSyncStatus.success.name],
+      );
+      for (final r in rows) {
+        final pid = r['patient_id'] as String?;
+        if (pid == null) continue;
+        out[pid] = r['cnt'] as int;
+      }
+    }
+    return out;
   }
 
   /// Latest local assessment visit per patient → follow-up stamp from

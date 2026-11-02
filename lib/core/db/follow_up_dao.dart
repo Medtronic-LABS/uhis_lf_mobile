@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
+import '../models/json_read.dart';
 import 'app_database.dart';
 
 /// Wire-side kind tags for the `follow_ups.kind` column. Centralised so
@@ -328,6 +329,40 @@ class FollowUpDao {
     );
   }
 
+  /// Merge a server pull into a row the device has already edited (call log
+  /// pending push or status poll in flight). Mirrors Android skipping
+  /// `NotSynced` rows, extended for `InProgress` so completion/attempts are
+  /// not wiped before the server bundle reflects the pushed call.
+  static FollowUpRow mergePull(FollowUpRow local, FollowUpRow remote) {
+    final protect = FollowUpSyncStatus.pending.contains(local.syncStatus) ||
+        local.syncStatus == FollowUpSyncStatus.inProgress;
+    if (!protect) return remote;
+
+    int? maxAttempts(int? a, int? b) {
+      if (a == null) return b;
+      if (b == null) return a;
+      return a > b ? a : b;
+    }
+
+    return FollowUpRow(
+      id: remote.id,
+      patientId: remote.patientId,
+      kind: remote.kind,
+      dueAt: remote.dueAt ?? local.dueAt,
+      completedAt: local.completedAt ?? remote.completedAt,
+      attempts: maxAttempts(local.attempts, remote.attempts),
+      unsuccessfulAttempts:
+          maxAttempts(local.unsuccessfulAttempts, remote.unsuccessfulAttempts),
+      type: remote.type ?? local.type,
+      referredSiteId: remote.referredSiteId ?? local.referredSiteId,
+      isLost: local.isLost || remote.isLost,
+      backendId: remote.backendId ?? local.backendId,
+      syncStatus: local.syncStatus,
+      updatedAt: local.updatedAt ?? remote.updatedAt,
+      rawJson: remote.rawJson,
+    );
+  }
+
   Future<void> upsertMany(List<FollowUpRow> rows) async {
     if (rows.isEmpty) return;
     // Protect locally-edited rows: a server pull must never clobber a
@@ -347,12 +382,24 @@ class FollowUpDao {
       ],
     );
     final locked = pendingRows.map((r) => r['id'] as String).toSet();
+    final existingRows = await _db.db.query(
+      AppDatabase.tableFollowUps,
+      where: 'id IN ($idPlaceholders)',
+      whereArgs: ids,
+    );
+    final existingById = {
+      for (final row in existingRows)
+        row['id'] as String: FollowUpRow.fromDb(row),
+    };
     final batch = _db.db.batch();
     for (final r in rows) {
       if (locked.contains(r.id)) continue;
+      final existing = existingById[r.id];
+      final toWrite =
+          existing == null ? r : FollowUpDao.mergePull(existing, r);
       batch.insert(
         AppDatabase.tableFollowUps,
-        r.toDb(),
+        toWrite.toDb(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
@@ -381,18 +428,76 @@ class FollowUpDao {
 
   /// Open fetch-origin **REFERRED** follow-ups (`backend_id` present) for CCE.
   /// Local/schedule-only rows and non-REFERRED types (e.g. `HH_VISIT`) are
-  /// excluded.
+  /// excluded. Mirrors Android `INNER JOIN HouseholdMember ON memberId =
+  /// fhir_id` with `isActive = 1` — [limit] applies after the join.
+  ///
+  /// Sync remaps [FollowUpRow.patientId] to the member local PK / BRN for the
+  /// worklist, so the join must also match `raw_json.memberId` → `fhir_id`.
   Future<List<FollowUpRow>> openReferredFetched({int limit = 500}) async {
-    final rows = await _db.db.query(
-      AppDatabase.tableFollowUps,
-      where: 'backend_id IS NOT NULL '
-          "AND UPPER(COALESCE(type, '')) = 'REFERRED' "
-          'AND completed_at IS NULL '
-          'AND (is_lost IS NULL OR is_lost = 0)',
-      orderBy: 'updated_at DESC',
-      limit: limit,
-    );
+    final fu = AppDatabase.tableFollowUps;
+    final mem = AppDatabase.tableMembers;
+    final rows = await _db.db.rawQuery('''
+      SELECT fu.*
+      FROM $fu AS fu
+      INNER JOIN $mem AS m ON m.is_active = 1
+        AND (
+          m.fhir_id = fu.patient_id
+          OR m.patient_id = fu.patient_id
+          OR CAST(m.id AS TEXT) = fu.patient_id
+          OR m.fhir_id = CAST(json_extract(fu.raw_json, '\$.memberId') AS TEXT)
+          OR m.fhir_id = CAST(json_extract(fu.raw_json, '\$.householdMemberId') AS TEXT)
+        )
+      WHERE fu.backend_id IS NOT NULL
+        AND UPPER(COALESCE(fu.type, '')) = 'REFERRED'
+        AND fu.completed_at IS NULL
+        AND (fu.is_lost IS NULL OR fu.is_lost = 0)
+      ORDER BY fu.updated_at DESC, fu.backend_id DESC
+      LIMIT ?
+    ''', [limit]);
     return rows.map(FollowUpRow.fromDb).toList(growable: false);
+  }
+
+  /// One-time repair: rows synced before server `updatedAt` was persisted.
+  static Future<void> backfillUpdatedAtFromRawJson(Database db) async {
+    final rows = await db.query(
+      AppDatabase.tableFollowUps,
+      columns: ['id', 'raw_json', 'updated_at'],
+    );
+    var batch = db.batch();
+    var pending = 0;
+    for (final row in rows) {
+      if (row['updated_at'] != null) continue;
+      final rawJson = row['raw_json'];
+      if (rawJson is! String || rawJson.isEmpty) continue;
+      try {
+        final decoded = jsonDecode(rawJson);
+        if (decoded is! Map) continue;
+        final map = Map<String, Object?>.from(decoded);
+        final ms = JsonRead.epochMillis(map, const [
+              'updatedAt',
+              'updated_at',
+            ]) ??
+            JsonRead.epochMillis(map, const ['createdAt', 'created_at']);
+        if (ms == null) continue;
+        batch.update(
+          AppDatabase.tableFollowUps,
+          {'updated_at': ms},
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+        pending++;
+        if (pending >= 200) {
+          await batch.commit(noResult: true);
+          batch = db.batch();
+          pending = 0;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    if (pending > 0) {
+      await batch.commit(noResult: true);
+    }
   }
 
   /// Replace a single follow-up row (used by the call/close lifecycle).

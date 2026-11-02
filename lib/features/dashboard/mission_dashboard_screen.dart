@@ -128,8 +128,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadMissionData();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      // UHIS parity: LandingActivity.startSyncWorker() on every home open.
-      context.read<SyncConnectivityService>().syncIfSessionReady();
+      // Push pending outbound work only — do not warm-pull patients on every
+      // Home visit (shows "Downloading patients" on the nav strip for minutes).
+      context.read<SyncConnectivityService>().syncIfSessionReady(
+            includeWarmPull: false,
+          );
       final auth = context.read<AuthState>();
       await _loadSummary(auth);
       await _loadVillagesLine();
@@ -512,7 +515,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     await _startVisitByPatientId(
       patientId: patientId,
-      programme: item.primaryProgramme,
+      programme: item.badgePrimaryProgramme,
       patientName: item.patientName,
       patientAge: item.age,
       householdId: item.householdId,

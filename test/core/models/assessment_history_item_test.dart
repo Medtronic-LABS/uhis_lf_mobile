@@ -54,6 +54,24 @@ void main() {
       );
     });
 
+    test('parses customStatus JSON string and encounter.customStatus', () {
+      final fromString = AssessmentHistoryItem.fromJson({
+        'householdMemberId': 'm-1',
+        'encounterId': '2',
+        'visitDate': 1717200000000,
+        'customStatus': '["GLASSES_SOLD"]',
+      });
+      expect(fromString!.customStatus, ['GLASSES_SOLD']);
+
+      final nested = AssessmentHistoryItem.fromJson({
+        'householdMemberId': 'm-1',
+        'encounterId': '3',
+        'visitDate': 1717200000000,
+        'encounter': {'customStatus': ['HIGH_RISK_PW']},
+      });
+      expect(nested!.customStatus, ['HIGH_RISK_PW']);
+    });
+
     test('accepts an ISO string visitDate', () {
       final item = AssessmentHistoryItem.fromJson({
         'householdMemberId': 'm-1',

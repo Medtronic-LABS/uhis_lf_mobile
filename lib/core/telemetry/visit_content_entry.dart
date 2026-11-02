@@ -15,6 +15,14 @@ abstract final class VisitContentUploadStatus {
   static const String uploaded = 'uploaded';
 }
 
+/// Step 3 counselling guide thumbs feedback (LEAP-68) — wire + DB values.
+abstract final class VisitContentHelpfulnessVote {
+  VisitContentHelpfulnessVote._();
+
+  static const String up = 'up';
+  static const String down = 'down';
+}
+
 class VisitContentEntry {
   const VisitContentEntry({
     required this.id,
@@ -27,6 +35,7 @@ class VisitContentEntry {
     this.referralRecommendation,
     this.summaryStartedAt,
     this.summaryEndAt,
+    this.helpfulnessVote,
     this.skUserId,
     this.capturedTenantId,
     this.uploadStatus = VisitContentUploadStatus.pending,
@@ -50,6 +59,9 @@ class VisitContentEntry {
   final int? summaryStartedAt;
   final int? summaryEndAt;
 
+  /// ``up`` or ``down`` after the SK rates the AI counselling message.
+  final String? helpfulnessVote;
+
   final String? skUserId;
   final int? capturedTenantId;
 
@@ -69,6 +81,7 @@ class VisitContentEntry {
         'referral_recommendation': referralRecommendation,
         'summary_started_at': summaryStartedAt,
         'summary_end_at': summaryEndAt,
+        'helpfulness_vote': helpfulnessVote,
         'sk_user_id': skUserId,
         'captured_tenant_id': capturedTenantId,
         'occurred_at': occurredAt,
@@ -87,6 +100,7 @@ class VisitContentEntry {
         referralRecommendation: row['referral_recommendation'] as String?,
         summaryStartedAt: row['summary_started_at'] as int?,
         summaryEndAt: row['summary_end_at'] as int?,
+        helpfulnessVote: row['helpfulness_vote'] as String?,
         skUserId: row['sk_user_id'] as String?,
         capturedTenantId: row['captured_tenant_id'] as int?,
         occurredAt: row['occurred_at'] as int,
@@ -105,6 +119,7 @@ class VisitContentEntry {
         'referralRecommendation': referralRecommendation,
         'summaryStartedAt': _isoOrNull(summaryStartedAt),
         'summaryEndAt': _isoOrNull(summaryEndAt),
+        if (helpfulnessVote != null) 'helpfulnessVote': helpfulnessVote,
         'skUserId': skUserId,
         'capturedTenantId': capturedTenantId,
         'occurredAt': DateTime.fromMillisecondsSinceEpoch(occurredAt, isUtc: true)

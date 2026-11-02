@@ -10,10 +10,12 @@ import '../../core/db/immunisation_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
+import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import '../../core/models/worklist_entry.dart';
+import '../../core/mission/latest_service_badge.dart';
 import '../../core/mission/programme_reason.dart' as programme_reason;
 import '../../core/risk/clinical_vitals_from_history.dart';
 import '../../core/risk/risk_scoring_service.dart';
@@ -31,13 +33,15 @@ class WorklistRepository {
     required RiskScoringService risk,
     required LocalAssessmentDao localAssessments,
     required AssessmentDao assessments,
+    PregnancySnapshotDao? pregnancySnapshots,
   })  : _patients = patients,
         _programmes = programmes,
         _followUps = followUps,
         _immunisations = immunisations,
         _risk = risk,
         _localAssessments = localAssessments,
-        _assessments = assessments;
+        _assessments = assessments,
+        _pregnancySnapshots = pregnancySnapshots;
 
   final PatientDao _patients;
   final PatientProgrammesDao _programmes;
@@ -46,6 +50,10 @@ class WorklistRepository {
   final RiskScoringService _risk;
   final LocalAssessmentDao _localAssessments;
   final AssessmentDao _assessments;
+  final PregnancySnapshotDao? _pregnancySnapshots;
+
+  static const _poKinds = programme_reason.pregnancyOutcomeVisitKinds;
+  static const _fpKinds = programme_reason.familyPlanningVisitKinds;
 
   /// Programme.wireTag-family kinds counted as completed ANC / PNC visits
   /// for the visit-count-aware dashboard label (spec v13) — shared with
@@ -82,14 +90,39 @@ class WorklistRepository {
       ids,
       programme_reason.pncLocalVisitKinds,
     );
+    final poSynced =
+        await _assessments.visitCountsByPatients(ids, _poKinds);
+    final poLocal =
+        await _localAssessments.visitCountsByPatients(ids, _poKinds);
+    final fpSynced =
+        await _assessments.visitCountsByPatients(ids, _fpKinds);
+    final fpLocal =
+        await _localAssessments.visitCountsByPatients(ids, _fpKinds);
+    final pregnancySnapshots =
+        await _pregnancySnapshots?.getAllRows() ?? const {};
+    final latestSynced = await _assessments.latestAssessmentForMany(ids);
+    final latestLocal =
+        await _localAssessments.latestLocalServiceForMany(ids);
     final out = <WorklistEntry>[];
     for (final r in rows) {
       final p = Patient.fromDb(r);
+      final snap = pregnancySnapshots[p.id];
+      final synced = latestSynced[p.id];
+      final local = latestLocal[p.id];
       out.add(_toEntry(
         p,
         progMap[p.id] ?? const <Programme>{},
         ancVisitCount: (ancSynced[p.id] ?? 0) + (ancLocal[p.id] ?? 0),
         pncVisitCount: (pncSynced[p.id] ?? 0) + (pncLocal[p.id] ?? 0),
+        deliveryDateMillis: snap?.deliveryDateMillis,
+        pregnancyOutcomeCount: (poSynced[p.id] ?? 0) + (poLocal[p.id] ?? 0),
+        familyPlanningVisitCount: (fpSynced[p.id] ?? 0) + (fpLocal[p.id] ?? 0),
+        latestServiceKind: pickLatestServiceKind(
+          syncedKind: synced?.kind,
+          syncedAtMs: synced?.occurredAt,
+          localKind: local?.type,
+          localAtMs: local?.at,
+        ),
       ));
     }
     _applySpecSort(out, selectedVillageId: selectedVillageId);
@@ -101,6 +134,10 @@ class WorklistRepository {
     Set<Programme> programmes, {
     int ancVisitCount = 0,
     int pncVisitCount = 0,
+    int? deliveryDateMillis,
+    int pregnancyOutcomeCount = 0,
+    int familyPlanningVisitCount = 0,
+    String? latestServiceKind,
   }) {
     final age = p.age ?? CalendarDay.ageFromDob(p.dob);
     return WorklistEntry(
@@ -127,6 +164,10 @@ class WorklistRepository {
           : DateTime.fromMillisecondsSinceEpoch(p.lastVisitAt!),
       ancVisitCount: ancVisitCount,
       pncVisitCount: pncVisitCount,
+      deliveryDateMillis: deliveryDateMillis,
+      pregnancyOutcomeCount: pregnancyOutcomeCount,
+      familyPlanningVisitCount: familyPlanningVisitCount,
+      latestServiceKind: latestServiceKind,
     );
   }
 

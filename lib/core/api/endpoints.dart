@@ -169,8 +169,16 @@ class Endpoints {
   static const String staticMetaPncBaby =
       '/spice-service/static-data/meta-data/mother-neonate-pnc-baby';
 
-  // ── Offline-service: bulk sync ────────────────────────────────────────────
-  /// Bulk pull — households, members, followUps, householdMemberLinks.
+  // ── Offline-service: entity pull (Spice Android parity) ───────────────────
+  static const String offlineSyncHouseholds =
+      '/offline-service/offline-sync/households';
+  static const String offlineSyncMembers =
+      '/offline-service/offline-sync/members';
+  static const String offlineSyncFollowUps =
+      '/offline-service/offline-sync/follow-ups';
+
+  /// Legacy monolithic pull — replaced by [offlineSyncHouseholds] et al.
+  @Deprecated('Use offlineSyncHouseholds/Members/FollowUps')
   static const String offlineSyncFetch =
       '/offline-service/offline-sync/fetch-synced-data';
 
@@ -227,6 +235,11 @@ class Endpoints {
   // ── AI Assistant: conversational Q&A ────────────────────────────────────
   static const String assistantAsk = '/ai-scribe/assistant/ask';
 
+  // ── AI Card Extraction: Gemini-vision read of scanned programme cards ────
+  // (EPI vaccination booklet today; ANC/NCD cards reserved for later).
+  static const String cardExtractionExtract =
+      '/ai-scribe/card-extraction/extract';
+
   // ── Telemetry: AI Scribe adoption / accuracy reporting ───────────────────
   /// Batch-ingest of `telemetry_events` rows queued on device. Idempotent on
   /// each event's client-generated id, so a retry after a lost response
@@ -245,6 +258,11 @@ class Endpoints {
   static const String telemetryVisitContent =
       '/ai-scribe/telemetry/visit-content';
 
+  /// AI assistant ("Ask") question/answer PHI text, gated separately from
+  /// usage telemetry. Server: ai-scribe-service `app/api/assistant_content.py`.
+  static const String telemetryAssistantContent =
+      '/ai-scribe/telemetry/assistant-content';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>
@@ -255,8 +273,8 @@ class Endpoints {
       '/ai-scribe/upload/$uploadId/complete';
 
   // ── Micro-coaching (spice-coaching / medtronics-api) ─────────────────────
-  // Base URL: [AppConfig.coachingServiceUrl] (defaults to the shared UHIS dev
-  // backend — override with --dart-define=COACHING_SERVICE_URL=... if needed).
+  // Base URL: [AppConfig.coachingServiceUrl] (defaults to `<API_BASE_URL>/micro-coaching` —
+  // override with --dart-define=COACHING_SERVICE_URL=... if needed).
   /// Full module + card + quiz bundle (incremental via `?since=`).
   static const String coachingSyncModules = '/medtronics-api/sync/modules';
 
@@ -296,4 +314,14 @@ class Endpoints {
 
   /// Server-side feature flags for mobile clients.
   static const String aiScribeConfig = '/ai-scribe/config';
+
+  // ── Shukhee integration ───────────────────────────────────────────────────
+  /// `shukhee_integration.api.settings.get_controls` -- server-side
+  /// kill-switch for the Shukhee teleconsult feature (see
+  /// `UserHierarchyService.shukheeControls`). Unlike every other path in this
+  /// file, this one is relative to [AppConfig.shukheeApiBaseUrl] (the
+  /// Shukhee/Frappe backend), not [AppConfig.apiBaseUrl] -- same base as
+  /// `ShukheeConsentClient.consentPath`/`declinePath`.
+  static const String shukheeGetControls =
+      '/api/method/shukhee_integration.api.settings.get_controls';
 }

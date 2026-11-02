@@ -14,10 +14,17 @@ import '../../../core/telemetry/visit_content_service.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
+import '../../../core/i18n/app_date_format.dart';
 import '../../../core/i18n/app_locale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/form_fields/age_or_dob_field.dart';
 import '../widgets/form_fields/radio_form_field.dart';
+import '../anc/anc_card_scan_screen.dart';
+import '../anc/anc_visit_extraction_models.dart';
+import '../anc/anc_visit_extraction_repository.dart';
+import '../ncd/ncd_card_scan_screen.dart';
+import '../ncd/ncd_visit_extraction_models.dart';
+import '../ncd/ncd_visit_extraction_repository.dart';
 import 'canonical_visit_data.dart';
 import 'childhood_visit.dart';
 import 'form_config.dart';
@@ -26,6 +33,8 @@ import '../../scribe/form_field_schema_builder.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/widgets/ai_scribe_banner.dart';
 import 'triage_symptom_mapper.dart';
+import 'form_bound_text_field.dart';
+import 'form_control_sync.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
 import 'vitals_trend.dart';
@@ -89,6 +98,7 @@ class UnifiedFormScreen extends StatefulWidget {
     this.enrolledFormTypes = const [],
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
+    this.onAncSuppressedForEarlyLmpChanged,
   });
 
   /// Ordered formType keys (e.g. `['anc', 'ncd']`) from activated pathways.
@@ -123,6 +133,11 @@ class UnifiedFormScreen extends StatefulWidget {
   /// Subset of [confirmedSymptoms] pre-selected by the AI Scribe.
   /// Used to colour AI-sourced chips purple in the programme divider strips.
   final Set<String> aiPickedSymptoms;
+
+  /// Fired when live LMP crosses the 6-week ANC threshold — lets embedded
+  /// hosts (VisitFlowScreen header badge) drop ANC while PW-only Step 2
+  /// is showing.
+  final ValueChanged<bool>? onAncSuppressedForEarlyLmpChanged;
 
   @override
   State<UnifiedFormScreen> createState() => _UnifiedFormScreenState();
@@ -161,6 +176,16 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// Live ASR controller owned by [AiScribeBanner] — read at submit for
   /// visit-content telemetry.
   RealtimeAsrController? _liveAsrCtrl;
+
+  bool? _lastReportedAncSuppressed;
+
+  /// The live transcript, as the banner reports it.
+  ///
+  /// A backstop for [_liveAsrCtrl], which can point at a controller replaced
+  /// on a rebuild whose buffer is empty — that is how a visit with eight
+  /// recorded transcript segments stored none. The banner pushes this
+  /// whenever it grows, so it survives the reference going stale.
+  String? _liveTranscript;
 
   // One GlobalKey per section — used to scroll to the first error section
   // on submit so the SK doesn't have to hunt for the highlighted field.
@@ -414,6 +439,23 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     return Consumer<UnifiedFormNotifier>(
       builder: (ctx, notifier, _) {
         final effectiveGa = _effectiveGestationalWeeks(notifier);
+        final ancSuppressed = FieldVisibilityRules.isAncSuppressedForEarlyLmp(
+          activeFormTypes: widget.activeFormTypes,
+          data: notifier.data,
+        );
+        if (_lastReportedAncSuppressed != ancSuppressed) {
+          _lastReportedAncSuppressed = ancSuppressed;
+          final callback = widget.onAncSuppressedForEarlyLmpChanged;
+          if (callback != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) callback(ancSuppressed);
+            });
+          }
+        }
+        final renderFormTypes = FieldVisibilityRules.effectiveActiveFormTypes(
+          activeFormTypes: widget.activeFormTypes,
+          data: notifier.data,
+        );
         final annotated = UnifiedSectionRules.activeSections(
           config: _config!,
           activeFormTypes: widget.activeFormTypes,
@@ -488,7 +530,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         //   • Gestational age card → first item (below the AI Scribe banner)
         //   • Vitals trend card    → last item before submit
         final items = <Widget>[];
-        final isAnc = widget.activeFormTypes.contains('anc');
+        final isAnc = renderFormTypes.contains('anc');
+        final isNcd = renderFormTypes.contains('ncd');
 
         // ── Gestational age card (ANC) — top of scroll area ────────────────
         final cardLmp = notifier.lmpDate ??
@@ -520,6 +563,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         } else if (isAnc) {
           debugPrint(
             '[LMP] card HIDE — no LMP/EDD/GA yet patient=${notifier.patientId}',
+          );
+        } else if (ancSuppressed) {
+          debugPrint(
+            '[LMP] card HIDE — LMP under 6-week threshold '
+            'patient=${notifier.patientId}',
           );
         } else {
           debugPrint(
@@ -597,7 +645,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         return GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
           behavior: HitTestBehavior.opaque,
-          child: Column(
+          child: Stack(
+            children: [
+              Column(
           children: [
             // ── Step 2 AI Scribe banner — the SAME widget as Step 1, in
             // live-first mode. When the programme mix supports auto-fill
@@ -612,13 +662,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                 child: AiScribeBanner(
                   encounterId: notifier.encounterId,
                   patientId: notifier.patientId,
-                  isFemale: widget.activeFormTypes.contains('anc') ||
-                      widget.activeFormTypes.contains('pnc') ||
-                      widget.activeFormTypes.contains('pncMother') ||
-                      widget.activeFormTypes.contains('pregnancyOutcome'),
+                  isFemale: renderFormTypes.contains('anc') ||
+                      renderFormTypes.contains('pnc') ||
+                      renderFormTypes.contains('pncMother') ||
+                      renderFormTypes.contains('pregnancyOutcome') ||
+                      widget.activeFormTypes.contains('pwProfile'),
                   tapStartsLiveAsr: true,
                   assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
-                      widget.activeFormTypes),
+                      renderFormTypes),
                   visibleFieldIds: _visibleFieldIds(annotated, notifier),
                   onScribeSpan: (startedAtMs, endedAtMs) =>
                       notifier.markScribeSpan(
@@ -636,6 +687,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                     }
                   },
                   onLiveControllerReady: (ctrl) => _liveAsrCtrl = ctrl,
+                  onLiveTranscript: (t) => _liveTranscript = t,
                   // VisitFormScreen watches ScribeController state and
                   // auto-opens the SOAP review sheet when reviewReady — no
                   // action needed here.
@@ -664,6 +716,25 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
               ),
             ),
           ],
+          ),
+              // A combined visit can have both ANC and NCD active at once —
+              // stack the second FAB above the first (same spot would make
+              // one of them untappable, hidden directly behind the other)
+              // rather than assuming only one programme's scan is ever
+              // relevant per visit.
+              if (isAnc)
+                const Positioned(
+                  right: AppSpacing.xxl,
+                  bottom: AppSpacing.xxl,
+                  child: _AncScanFab(),
+                ),
+              if (isNcd)
+                Positioned(
+                  right: AppSpacing.xxl,
+                  bottom: isAnc ? AppSpacing.xxl + 64 : AppSpacing.xxl,
+                  child: const _NcdScanFab(),
+                ),
+            ],
           ),
         );
       },
@@ -758,7 +829,13 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         await visitContent.recordTranscript(
           visitUuid: ctx.read<TelemetryService>().ensureVisitUuid(encounterId),
           patientId: patientId,
-          transcript: transcript,
+          // The just-flushed controller first — it includes the final
+          // segments the stop() above captured. The pushed value only as a
+          // backstop, for when that reference points at a rebuilt controller
+          // whose buffer is empty.
+          transcript: (transcript != null && transcript.isNotEmpty)
+              ? transcript
+              : _liveTranscript,
         );
       }
       widget.onSubmitComplete();
@@ -1915,19 +1992,157 @@ class _DateSubBox extends StatelessWidget {
   }
 }
 
-// ── AI-filled badge wrap ──────────────────────────────────────────────────────
+// ── ANC card scan floating button ─────────────────────────────────────────────
 
-/// Overlays a small "AI — verify" pill on a form field whose current value
-/// was filled by the realtime ASR scribe and not yet reviewed by the SK.
-/// The badge disappears as soon as the SK edits the field (source flips to
-/// [FieldSource.aiModified] in [UnifiedFormNotifier.updateField]).
-class _AiFilledBadgeWrap extends StatelessWidget {
-  const _AiFilledBadgeWrap({required this.child});
+/// Floating "📷 Scan card" button, pinned to the bottom-right of the ANC
+/// assessment form — reachable from anywhere while scrolling a long combined
+/// visit, rather than tied to one section's header. Targets the scan at
+/// whichever visit the SK is currently recording (`ancVisitNumber`, already
+/// tracked by the form) — see [AncCardScanScreen]/[AncVisitExtractionRepository].
+class _AncScanFab extends StatelessWidget {
+  const _AncScanFab();
 
-  final Widget child;
+  Future<void> _scan(BuildContext context) async {
+    final notifier = context.read<UnifiedFormNotifier>();
+    // `ancVisitNumber` is normally only assigned inside `submit()` — the SK
+    // needs it here, mid-visit, well before that — so this resolves the same
+    // value `submit()` would later assign (a pure read, see
+    // `resolveCurrentAncVisitNumber`'s doc comment) rather than reading a
+    // field that's still unset at this point in the flow.
+    final visitNumber = await notifier.resolveCurrentAncVisitNumber();
+    if (!context.mounted) return;
+    if (visitNumber < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(EpiStrings.scanFailed)),
+      );
+      return;
+    }
+    final repo = context.read<AncVisitExtractionRepository>();
+    final result = await Navigator.of(context).push<AncVisitExtractionResult?>(
+      MaterialPageRoute(
+        builder: (_) =>
+            AncCardScanScreen(visitNumber: visitNumber, repository: repo),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+    final visit = result.visit;
+    if (visit == null || !visit.anyFieldFound) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(EpiStrings.scanFailed)),
+      );
+      return;
+    }
+    final applied = notifier.applyScannedAncVisit(visit);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.flagged && result.flagReason != null
+            ? '$applied field(s) filled from card · ${Step2AsrStrings.scanFilledBadge} — double-check against the card'
+            : '$applied field(s) filled from card'),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    return FloatingActionButton.extended(
+      heroTag: 'ancScanFab',
+      backgroundColor: AppColors.statusInfo,
+      foregroundColor: Colors.white,
+      onPressed: () => _scan(context),
+      icon: const Icon(Icons.photo_camera_outlined, size: 18),
+      label: Text(
+        EpiStrings.scanAncCardCta,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+// ── NCD card scan floating button ─────────────────────────────────────────────
+
+/// Floating "📷 Scan card" button, pinned to the bottom-right of the NCD
+/// assessment form — same reachable-while-scrolling reasoning as
+/// [_AncScanFab]. Targets the scan at whichever visit the SK is currently
+/// recording ([UnifiedFormNotifier.resolveCurrentNcdVisitNumber]) — see
+/// [NcdCardScanScreen]/[NcdVisitExtractionRepository].
+class _NcdScanFab extends StatelessWidget {
+  const _NcdScanFab();
+
+  Future<void> _scan(BuildContext context) async {
+    final notifier = context.read<UnifiedFormNotifier>();
+    final visitNumber = await notifier.resolveCurrentNcdVisitNumber();
+    if (!context.mounted) return;
+    if (visitNumber < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(EpiStrings.scanFailed)),
+      );
+      return;
+    }
+    final repo = context.read<NcdVisitExtractionRepository>();
+    final result = await Navigator.of(context).push<NcdVisitExtractionResult?>(
+      MaterialPageRoute(
+        builder: (_) =>
+            NcdCardScanScreen(visitNumber: visitNumber, repository: repo),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+    final visit = result.visit;
+    if (visit == null || !visit.anyFieldFound) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(EpiStrings.scanFailed)),
+      );
+      return;
+    }
+    final applied = notifier.applyScannedNcdVisit(visit);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.flagged && result.flagReason != null
+            ? '$applied field(s) filled from card · ${Step2AsrStrings.scanFilledBadge} — double-check against the card'
+            : '$applied field(s) filled from card'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton.extended(
+      heroTag: 'ncdScanFab',
+      backgroundColor: AppColors.statusInfo,
+      foregroundColor: Colors.white,
+      onPressed: () => _scan(context),
+      icon: const Icon(Icons.photo_camera_outlined, size: 18),
+      label: Text(
+        EpiStrings.scanNcdCardCta,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+// ── AI-filled badge wrap ──────────────────────────────────────────────────────
+
+/// Overlays a small "AI — verify" (or "📷 Scanned") pill on a form field
+/// whose current value was filled by the realtime ASR scribe or a camera
+/// card scan, and not yet reviewed by the SK. The badge disappears as soon
+/// as the SK edits the field (source flips to [FieldSource.aiModified] /
+/// [FieldSource.scanModified] in [UnifiedFormNotifier.updateField]).
+class _AiFilledBadgeWrap extends StatelessWidget {
+  const _AiFilledBadgeWrap({required this.child, this.isScan = false});
+
+  final Widget child;
+
+  /// True shows the camera-scan variant (distinct icon/color/label) instead
+  /// of the AI Scribe variant — lets the SK tell the two fill provenances
+  /// apart at a glance.
+  final bool isScan;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isScan ? AppColors.statusInfo : AppColors.aiPurple;
+    final icon = isScan ? Icons.photo_camera_outlined : Icons.auto_awesome;
+    final label = isScan
+        ? Step2AsrStrings.scanFilledBadge
+        : Step2AsrStrings.aiFilledBadge;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -1939,17 +2154,16 @@ class _AiFilledBadgeWrap extends StatelessWidget {
             padding:
                 const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
             decoration: BoxDecoration(
-              color: AppColors.aiPurple,
+              color: color,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.auto_awesome,
-                    size: 10, color: Colors.white),
+                Icon(icon, size: 10, color: Colors.white),
                 const SizedBox(width: 3),
                 Text(
-                  Step2AsrStrings.aiFilledBadge,
+                  label,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 9,
@@ -2197,6 +2411,8 @@ class _SectionCard extends StatelessWidget {
     final notifier = context.watch<UnifiedFormNotifier>();
     bool aiPending(String fieldId) =>
         notifier.fieldSource(fieldId) == FieldSource.aiPending;
+    bool scanPending(String fieldId) =>
+        notifier.fieldSource(fieldId) == FieldSource.scanPending;
 
     final fieldWidgets = <Widget>[];
     // Sequential question numbering (matches the design mockup) — scoped to
@@ -2353,6 +2569,8 @@ class _SectionCard extends StatelessWidget {
 
       if (badgeIds.any(aiPending)) {
         child = _AiFilledBadgeWrap(child: child);
+      } else if (badgeIds.any(scanPending)) {
+        child = _AiFilledBadgeWrap(child: child, isScan: true);
       }
 
       // Zero-height anchor so a failed submit can scroll straight to this
@@ -2397,6 +2615,9 @@ class _SectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ANC's "Scan card" entry point is a screen-level floating button
+          // (see `_AncScanFab` in this screen's root Stack) — reachable
+          // while scrolling, rather than tied to this one section's header.
           if (section.title.isNotEmpty) ...[
             Text(
               FormSectionStrings.headerFor(section.sectionId, section.title),
@@ -3497,8 +3718,8 @@ class _SectionCard extends StatelessWidget {
         // inputType 0 = text (e.g. newWorseningSymptoms comment field) — no
         // numeric keyboard, no unit, no parse. Render as plain text input.
         if (ref.inputType == 0 && def.unitMeasurement == null) {
-          return TextFormField(
-            initialValue: currentValue?.toString(),
+          return FormBoundTextField(
+            value: currentValue?.toString(),
             style: Theme.of(context).textTheme.bodyMedium,
             decoration: _filledInputDecoration(hintText: def.displayHint),
             maxLines: 3,
@@ -4174,7 +4395,7 @@ class _EmojiTile extends StatelessWidget {
 /// with a single self-contained card.  Both fields are still written to
 /// [CanonicalVisitData] under their original IDs so the payload mapper is
 /// unaffected.
-class _BloodGlucoseEntryField extends StatefulWidget {
+class _BloodGlucoseEntryField extends StatelessWidget {
   const _BloodGlucoseEntryField({
     super.key,
     required this.options,
@@ -4203,59 +4424,9 @@ class _BloodGlucoseEntryField extends StatefulWidget {
   final FormFieldValidator<String>? valueValidator;
 
   @override
-  State<_BloodGlucoseEntryField> createState() =>
-      _BloodGlucoseEntryFieldState();
-}
-
-class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
-  late final TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    debugPrint('[_BloodGlucoseEntryFieldState] initState');
-    _ctrl = TextEditingController(
-      text: widget.glucoseValue?.toString() ?? '',
-    );
-  }
-
-  @override
-  void didUpdateWidget(_BloodGlucoseEntryField old) {
-    super.didUpdateWidget(old);
-    if (old.glucoseValue != widget.glucoseValue) {
-      final newText = widget.glucoseValue?.toString() ?? '';
-      if (_ctrl.text != newText) {
-        final ctrlNum = double.tryParse(_ctrl.text);
-        final newNum = double.tryParse(newText);
-        final sameValue =
-            ctrlNum != null && newNum != null && ctrlNum == newNum;
-        if (!sameValue) {
-          // Defer so controller updates never fire mid-build (Form setState).
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || _ctrl.text == newText) return;
-            final curNum = double.tryParse(_ctrl.text);
-            final tgtNum = double.tryParse(newText);
-            if (curNum != null && tgtNum != null && curNum == tgtNum) return;
-            _ctrl.text = newText;
-            _ctrl.selection =
-                TextSelection.collapsed(offset: newText.length);
-          });
-        }
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    debugPrint('[_BloodGlucoseEntryFieldState] dispose');
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final currentType = widget.glucoseType;
-    final glucoseNum = _VitalStatusEval.asDouble(widget.glucoseValue);
+    final currentType = glucoseType;
+    final glucoseNum = _VitalStatusEval.asDouble(glucoseValue);
 
     // Route value to fasting vs random threshold depending on selected type.
     final fastingVal = currentType == 'fbs' ? glucoseNum : null;
@@ -4267,8 +4438,8 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
       subLabel: UnifiedFormStrings.bloodGlucoseEntryUnit,
       emoji: '🩸',
       emojiBg: const Color(0xFFFEE2E2),
-      isMandatory: widget.isMandatory,
-      hasError: widget.hasError,
+      isMandatory: isMandatory,
+      hasError: hasError,
       statusBadge: status != null
           ? _VitalBadge(label: status.label, color: status.color)
           : null,
@@ -4278,18 +4449,18 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
         children: [
           // ── Type toggle row ─────────────────────────────────────────────
           Row(
-            children: List.generate(widget.options.length, (i) {
-              final opt = widget.options[i];
+            children: List.generate(options.length, (i) {
+              final opt = options[i];
               final isSelected = currentType == opt.id;
               return Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(
-                    right: i < widget.options.length - 1 ? AppSpacing.xs : 0,
+                    right: i < options.length - 1 ? AppSpacing.xs : 0,
                   ),
                   child: GestureDetector(
                     onTap: () {
                       // Tap again to deselect.
-                      widget.onTypeChanged(isSelected ? null : opt.id);
+                      onTypeChanged(isSelected ? null : opt.id);
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
@@ -4325,8 +4496,8 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
           ),
           const SizedBox(height: AppSpacing.sm),
           // ── Value input ─────────────────────────────────────────────────
-          TextFormField(
-            controller: _ctrl,
+          FormBoundTextField(
+            value: glucoseValue?.toString(),
             keyboardType: TextInputType.number,
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
@@ -4337,12 +4508,12 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
               suffixText: UnifiedFormStrings.bloodGlucoseEntryUnit,
             ),
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            validator: widget.valueValidator,
+            validator: valueValidator,
             onChanged: (v) {
               if (v.isEmpty) {
-                widget.onValueChanged(null);
+                onValueChanged(null);
               } else {
-                widget.onValueChanged(double.tryParse(v) ?? v);
+                onValueChanged(double.tryParse(v) ?? v);
               }
             },
           ),
@@ -4352,7 +4523,7 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
   }
 }
 
-class _NumericField extends StatefulWidget {
+class _NumericField extends StatelessWidget {
   const _NumericField({
     super.key,
     required this.isDecimal,
@@ -4373,77 +4544,14 @@ class _NumericField extends StatefulWidget {
   final bool readOnly;
 
   @override
-  State<_NumericField> createState() => _NumericFieldState();
-}
-
-class _NumericFieldState extends State<_NumericField> {
-  late final TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    debugPrint('[_NumericFieldState] initState');
-    _ctrl = TextEditingController(text: widget.initialValue ?? '');
-  }
-
-  @override
-  void didUpdateWidget(_NumericField old) {
-    super.didUpdateWidget(old);
-    if (old.initialValue != widget.initialValue) {
-      final newText = widget.initialValue ?? '';
-      if (_ctrl.text != newText) {
-        // Skip the update when the controller text and the incoming value
-        // represent the same number but differ only in float representation
-        // (e.g. "1" vs "1.0").  Without this guard, storing a parsed double
-        // after every keystroke causes "120" to become "1.20": the controller
-        // is reset to "1.0" after the first "1", and the next character
-        // inserts at the wrong cursor position.
-        final ctrlNum = double.tryParse(_ctrl.text);
-        final newNum = double.tryParse(newText);
-        final sameValue =
-            ctrlNum != null && newNum != null && ctrlNum == newNum;
-        if (!sameValue) {
-          // Defer so TextEditingController.text= never fires mid-build.
-          // It notifies TextFormField → FormState._forceRebuild → setState(),
-          // which crashes if called during the build phase.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || _ctrl.text == newText) return;
-            final curNum = double.tryParse(_ctrl.text);
-            final tgtNum = double.tryParse(newText);
-            if (curNum != null && tgtNum != null && curNum == tgtNum) return;
-            _ctrl.text = newText;
-            _ctrl.selection =
-                TextSelection.collapsed(offset: newText.length);
-          });
-        }
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    debugPrint('[_NumericFieldState] dispose');
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final readOnly = widget.readOnly;
-    return TextFormField(
-      controller: _ctrl,
+    return FormBoundTextField(
+      value: initialValue,
       readOnly: readOnly,
       enabled: !readOnly,
-      // Use the plain number keyboard for ALL numeric fields — even decimal
-      // ones.  Some Android keyboards in currency/decimal mode auto-insert a
-      // decimal point when `decimal: true` is set, causing "190" to appear
-      // as "1.90" without the user intending it.  The plain number keyboard
-      // never auto-inserts a point; users who need decimals (e.g. temperature
-      // "36.5") can still type the "." manually since the formatter below
-      // allows it.
       keyboardType: TextInputType.number,
       inputFormatters: [
-        if (widget.isDecimal)
+        if (isDecimal)
           FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
         else
           FilteringTextInputFormatter.digitsOnly,
@@ -4454,17 +4562,17 @@ class _NumericFieldState extends State<_NumericField> {
                 : null,
           ),
       decoration: _filledInputDecoration(
-        hintText: widget.hint,
-        suffixText: widget.unit,
+        hintText: hint,
+        suffixText: unit,
       ).copyWith(
         fillColor: readOnly
             ? Theme.of(context).colorScheme.surfaceContainerHighest
                 .withValues(alpha: 0.55)
             : null,
       ),
-      onChanged: readOnly ? null : widget.onChanged,
+      onChanged: readOnly ? (_) {} : (v) => onChanged(v.isEmpty ? null : v),
       autovalidateMode: AutovalidateMode.onUserInteraction,
-      validator: widget.validator,
+      validator: validator,
     );
   }
 }
@@ -4566,29 +4674,42 @@ class _DateField extends StatefulWidget {
 
 class _DateFieldState extends State<_DateField> {
   late final TextEditingController _ctrl;
+  late final FocusNode _focusNode;
+
+  static String _formatDisplay(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    try {
+      return AppDateFormat.dayMonthYearPaddedFmt.format(DateTime.parse(iso));
+    } catch (_) {
+      return iso;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     debugPrint('[_DateFieldState] initState');
-    _ctrl = TextEditingController(text: widget.currentValue ?? '');
+    _focusNode = FocusNode();
+    _ctrl = TextEditingController(text: _formatDisplay(widget.currentValue));
   }
 
   @override
   void didUpdateWidget(_DateField old) {
     super.didUpdateWidget(old);
     if (old.currentValue != widget.currentValue) {
-      // Defer the controller update so it never fires inside a build phase.
-      // Setting TextEditingController.text= triggers FormField.didChange →
-      // FormState._forceRebuild → setState(), which crashes if called mid-build.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _ctrl.text = widget.currentValue ?? '';
-      });
+      // Read-only picker field — never skip sync while focused (unlike free
+      // text). After showDatePicker the field keeps focus and FormControlSync
+      // would leave the controller empty even though LMP was saved.
+      final text = _formatDisplay(widget.currentValue);
+      if (_ctrl.text != text) {
+        _ctrl.text = text;
+      }
     }
   }
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _ctrl.dispose();
     debugPrint('[_DateFieldState] dispose');
     super.dispose();
@@ -4599,6 +4720,7 @@ class _DateFieldState extends State<_DateField> {
     return TextFormField(
       readOnly: true,
       controller: _ctrl,
+      focusNode: _focusNode,
       style: Theme.of(context).textTheme.bodyMedium,
       decoration: _filledInputDecoration(
         suffixIcon: const Icon(
@@ -4631,7 +4753,10 @@ class _DateFieldState extends State<_DateField> {
           lastDate: last,
         );
         if (picked != null) {
-          widget.onChanged(picked.toIso8601String().substring(0, 10));
+          final iso = picked.toIso8601String().substring(0, 10);
+          _focusNode.unfocus();
+          _ctrl.text = _formatDisplay(iso);
+          widget.onChanged(iso);
         }
       },
     );
@@ -4639,6 +4764,45 @@ class _DateFieldState extends State<_DateField> {
 }
 
 // ── BP reading field ──────────────────────────────────────────────────────────
+
+/// Controllers + focus nodes for one NCD BP log row.
+class _BpReadingRowHandles {
+  _BpReadingRowHandles({
+    required this.systolic,
+    required this.diastolic,
+    required this.pulse,
+    required this.systolicFocus,
+    required this.diastolicFocus,
+    required this.pulseFocus,
+  });
+
+  factory _BpReadingRowHandles.fromReading(Map<String, dynamic> r) {
+    return _BpReadingRowHandles(
+      systolic: TextEditingController(text: r['systolic']?.toString() ?? ''),
+      diastolic: TextEditingController(text: r['diastolic']?.toString() ?? ''),
+      pulse: TextEditingController(text: r['pulse']?.toString() ?? ''),
+      systolicFocus: FocusNode(),
+      diastolicFocus: FocusNode(),
+      pulseFocus: FocusNode(),
+    );
+  }
+
+  final TextEditingController systolic;
+  final TextEditingController diastolic;
+  final TextEditingController pulse;
+  final FocusNode systolicFocus;
+  final FocusNode diastolicFocus;
+  final FocusNode pulseFocus;
+
+  void dispose() {
+    systolic.dispose();
+    diastolic.dispose();
+    pulse.dispose();
+    systolicFocus.dispose();
+    diastolicFocus.dispose();
+    pulseFocus.dispose();
+  }
+}
 
 /// Multi-reading BP widget matching Android's `bpLogDetails` wire format.
 ///
@@ -4665,8 +4829,7 @@ class _BpReadingField extends StatefulWidget {
 }
 
 class _BpReadingFieldState extends State<_BpReadingField> {
-  // One triplet of controllers per row (up to _maxReadings).
-  late List<(TextEditingController, TextEditingController, TextEditingController)> _rows;
+  late List<_BpReadingRowHandles> _rows;
 
   @override
   void initState() {
@@ -4674,74 +4837,64 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     _rows = _buildRows(widget.readings);
   }
 
-  List<(TextEditingController, TextEditingController, TextEditingController)> _buildRows(
-    List<Map<String, dynamic>> readings,
-  ) {
+  List<_BpReadingRowHandles> _buildRows(List<Map<String, dynamic>> readings) {
     final source = readings.isNotEmpty ? readings : [const <String, dynamic>{}];
-    return source.map((r) {
-      return (
-        TextEditingController(text: r['systolic']?.toString() ?? ''),
-        TextEditingController(text: r['diastolic']?.toString() ?? ''),
-        TextEditingController(text: r['pulse']?.toString() ?? ''),
-      );
-    }).toList();
+    return source.map(_BpReadingRowHandles.fromReading).toList();
   }
 
   @override
   void didUpdateWidget(_BpReadingField old) {
     super.didUpdateWidget(old);
     if (old.readings != widget.readings) {
-      // Sync only rows that haven't changed length; rebuild otherwise.
       if (widget.readings.length != _rows.length) {
-        for (final (s, d, p) in _rows) {
-          s.dispose();
-          d.dispose();
-          p.dispose();
+        for (final row in _rows) {
+          row.dispose();
         }
         setState(() => _rows = _buildRows(widget.readings));
       } else {
         for (var i = 0; i < _rows.length; i++) {
           final r = widget.readings[i];
-          final (s, d, p) = _rows[i];
-          _syncCtrl(s, r['systolic']?.toString() ?? '');
-          _syncCtrl(d, r['diastolic']?.toString() ?? '');
-          _syncCtrl(p, r['pulse']?.toString() ?? '');
+          final row = _rows[i];
+          _syncCtrl(row.systolic, row.systolicFocus, r['systolic']?.toString() ?? '');
+          _syncCtrl(row.diastolic, row.diastolicFocus, r['diastolic']?.toString() ?? '');
+          _syncCtrl(row.pulse, row.pulseFocus, r['pulse']?.toString() ?? '');
         }
       }
     }
   }
 
-  void _syncCtrl(TextEditingController ctrl, String newText) {
-    if (ctrl.text == newText) return;
-    // Defer so controller updates never fire mid-build (Form setState).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || ctrl.text == newText) return;
-      ctrl.text = newText;
-      ctrl.selection = TextSelection.collapsed(offset: newText.length);
-    });
+  void _syncCtrl(
+    TextEditingController ctrl,
+    FocusNode focusNode,
+    String newText,
+  ) {
+    FormControlSync.applyExternalText(
+      mounted: () => mounted,
+      focusNode: focusNode,
+      controller: ctrl,
+      newText: newText,
+    );
   }
 
   @override
   void dispose() {
-    for (final (s, d, p) in _rows) {
-      s.dispose();
-      d.dispose();
-      p.dispose();
+    for (final row in _rows) {
+      row.dispose();
     }
     super.dispose();
   }
 
   void _emit() {
     final out = <Map<String, dynamic>>[];
-    for (final (s, d, p) in _rows) {
-      final sys = int.tryParse(s.text);
-      final dia = int.tryParse(d.text);
+    for (final row in _rows) {
+      final sys = int.tryParse(row.systolic.text);
+      final dia = int.tryParse(row.diastolic.text);
       if (sys == null && dia == null) continue;
       final reading = <String, dynamic>{};
       if (sys != null) reading['systolic'] = sys;
       if (dia != null) reading['diastolic'] = dia;
       if (widget.showPulse) {
-        final pulse = int.tryParse(p.text);
+        final pulse = int.tryParse(row.pulse.text);
         if (pulse != null) reading['pulse'] = pulse;
       }
       out.add(reading);
@@ -4752,20 +4905,13 @@ class _BpReadingFieldState extends State<_BpReadingField> {
   void _addRow() {
     if (_rows.length >= _BpReadingField._maxReadings) return;
     setState(() {
-      _rows.add((
-        TextEditingController(),
-        TextEditingController(),
-        TextEditingController(),
-      ));
+      _rows.add(_BpReadingRowHandles.fromReading(const {}));
     });
   }
 
   void _removeRow(int index) {
     if (_rows.length <= 1) return;
-    final (s, d, p) = _rows[index];
-    s.dispose();
-    d.dispose();
-    p.dispose();
+    _rows[index].dispose();
     setState(() => _rows.removeAt(index));
     _emit();
   }
@@ -4804,9 +4950,7 @@ class _BpReadingFieldState extends State<_BpReadingField> {
               ),
             ),
           _BpReadingRow(
-            sysCtrl: _rows[i].$1,
-            diaCtrl: _rows[i].$2,
-            pulseCtrl: _rows[i].$3,
+            row: _rows[i],
             showPulse: widget.showPulse,
             onChanged: (_) => _emit(),
           ),
@@ -4833,16 +4977,12 @@ class _BpReadingFieldState extends State<_BpReadingField> {
 /// Single systolic / diastolic / optional pulse row inside [_BpReadingField].
 class _BpReadingRow extends StatelessWidget {
   const _BpReadingRow({
-    required this.sysCtrl,
-    required this.diaCtrl,
-    required this.pulseCtrl,
+    required this.row,
     required this.onChanged,
     this.showPulse = false,
   });
 
-  final TextEditingController sysCtrl;
-  final TextEditingController diaCtrl;
-  final TextEditingController pulseCtrl;
+  final _BpReadingRowHandles row;
   final ValueChanged<void> onChanged;
   final bool showPulse;
 
@@ -4856,7 +4996,8 @@ class _BpReadingRow extends StatelessWidget {
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpSystolicLabel,
-            controller: sysCtrl,
+            controller: row.systolic,
+            focusNode: row.systolicFocus,
             suffixText: UnifiedFormStrings.bpUnit,
             validator: _SectionCard._numericRangeValidator('systolic'),
           ),
@@ -4876,7 +5017,8 @@ class _BpReadingRow extends StatelessWidget {
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpDiastolicLabel,
-            controller: diaCtrl,
+            controller: row.diastolic,
+            focusNode: row.diastolicFocus,
             validator: _SectionCard._numericRangeValidator('diastolic'),
           ),
         ),
@@ -4887,7 +5029,8 @@ class _BpReadingRow extends StatelessWidget {
             child: _bpCell(
               context,
               caption: UnifiedFormStrings.bpPulseLabel,
-              controller: pulseCtrl,
+              controller: row.pulse,
+              focusNode: row.pulseFocus,
               suffixText: UnifiedFormStrings.bpPulseUnit,
             ),
           ),
@@ -4900,11 +5043,13 @@ class _BpReadingRow extends StatelessWidget {
     BuildContext context, {
     required String caption,
     required TextEditingController controller,
+    required FocusNode focusNode,
     String? suffixText,
     FormFieldValidator<String>? validator,
   }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       style: Theme.of(context).textTheme.bodyMedium,

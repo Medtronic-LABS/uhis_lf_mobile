@@ -10,7 +10,7 @@ import '../../../../core/theme/app_theme.dart';
 /// state (spec: keep the CTA disabled until mandatory fields are complete).
 ///
 /// Replaces the sticky-CTA block that was previously duplicated verbatim across
-/// the create / head-info / add-member / success screens (single home for the
+/// the create / add-member / link-member screens (single home for the
 /// bar's spacing, radius, elevation, and disabled styling).
 class EnrollmentStickyBar extends StatelessWidget {
   const EnrollmentStickyBar({

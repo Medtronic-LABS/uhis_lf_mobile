@@ -12,12 +12,17 @@ import '../../core/config/app_config.dart';
 import '../../core/version/app_version_info.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
+import '../../core/db/member_assessment_history_writer.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/pregnancy_episode_dao.dart';
+import '../../core/models/assessment_history_item.dart';
+import '../../core/models/custom_status_parse.dart';
 import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
 import '../../core/risk/anc_status.dart';
+import '../../core/services/location_service.dart';
 import '../../core/sync/offline_push_service.dart';
+import '../../core/sync/shukhee_encounter_attach_service.dart';
 import '../../core/sync/sync_activity.dart';
 import '../patient/followup_call_service.dart';
 import 'forms/pregnancy_outcome_side_effects.dart';
@@ -41,12 +46,19 @@ class AssessmentRepository extends ChangeNotifier {
     AssessmentDao? historyDao,
     FollowUpCallService? followUpCalls,
     MemberDao? memberDao,
+    // Durably attaches a visit's FHIR Encounter id onto its local Shukhee
+    // Call Logs row the moment this push's poll resolves it -- see
+    // ShukheeEncounterAttachService.attachForVisit.
+    ShukheeEncounterAttachService? encounterAttach,
+    MemberAssessmentHistoryWriter? assessmentHistoryWriter,
   })  : _dao = dao,
         _api = api,
         _auth = auth,
         _historyDao = historyDao,
         _followUpCalls = followUpCalls,
-        _memberDao = memberDao;
+        _memberDao = memberDao,
+        _encounterAttach = encounterAttach,
+        _assessmentHistoryWriter = assessmentHistoryWriter;
 
   final LocalAssessmentDao _dao;
   final ApiClient _api;
@@ -59,6 +71,8 @@ class AssessmentRepository extends ChangeNotifier {
   final FollowUpCallService? _followUpCalls;
   // New household members (e.g. live-birth babies) ride the same push.
   final MemberDao? _memberDao;
+  final ShukheeEncounterAttachService? _encounterAttach;
+  final MemberAssessmentHistoryWriter? _assessmentHistoryWriter;
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -92,6 +106,16 @@ class AssessmentRepository extends ChangeNotifier {
     double longitude = 0.0,
     Map<String, dynamic>? otherDetails,
   }) async {
+    // Android AssessmentRepository.saveAssessment reads CURRENT_LATITUDE/LONGITUDE
+    // from secure prefs at save time; refresh when the caller did not supply coords.
+    var resolvedLat = latitude;
+    var resolvedLng = longitude;
+    if (resolvedLat == 0.0 && resolvedLng == 0.0) {
+      final pos = await LocationService.getCurrentPosition();
+      resolvedLat = pos.latitude;
+      resolvedLng = pos.longitude;
+    }
+
     final id = const Uuid().v4();
     final now = DateTime.now();
     final type = assessmentType.toUpperCase();
@@ -146,14 +170,15 @@ class AssessmentRepository extends ChangeNotifier {
           : null,
       followUpId: followUpId,
       pregnancyEpisodeId: resolvedEpisodeId,
-      latitude: latitude,
-      longitude: longitude,
+      latitude: resolvedLat,
+      longitude: resolvedLng,
       syncStatus: AssessmentSyncStatus.pending,
       createdAt: now,
       updatedAt: now,
     );
 
     await _dao.insert(entity);
+    await _assessmentHistoryWriter?.upsertFromLocal(entity);
     await _refreshPendingCount();
 
     return id;
@@ -169,6 +194,7 @@ class AssessmentRepository extends ChangeNotifier {
     String? referralFacilityType,
     String? referredSiteId,
   }) async {
+    final position = await LocationService.getCurrentPosition();
     final updated = await _dao.mergeOtherDetailsForEncounter(
       encounterId: encounterId,
       patchFor: (row) => VisitSummaryDetails.patchFor(
@@ -179,7 +205,14 @@ class AssessmentRepository extends ChangeNotifier {
         referredSiteId: referredSiteId,
       ),
     );
-    if (updated > 0) {
+    // Android updateOtherAssessmentDetails overwrites lat/lng with lastLocation
+    // when the visit summary step completes.
+    final geoUpdated = await _dao.updateGeoForEncounter(
+      encounterId: encounterId,
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
+    if (updated > 0 || geoUpdated > 0) {
       debugPrint(
         '[AssessmentRepo] Step 3 summary applied to $updated assessment(s) '
         'encounter=$encounterId nextVisit=$nextVisitDate referred=$isReferred',
@@ -558,6 +591,7 @@ class AssessmentRepository extends ChangeNotifier {
               : poll.assessmentFhirIdByReference[entity.referenceId];
           if (ok && fhirId != null && fhirId.isNotEmpty) {
             await _dao.applyFhirIdByReferenceId(entity.referenceId!, fhirId);
+            _encounterAttach?.attachFromOtherDetails(entity.otherDetails, fhirId);
           }
         }
 
@@ -676,6 +710,24 @@ class AssessmentRepository extends ChangeNotifier {
     final historyMap = await _historyDao.forMany([patientId]);
     final rows = historyMap[patientId] ?? const [];
     return rows.any((r) => _isNcdKind(r.kind?.toUpperCase() ?? ''));
+  }
+
+  /// Number of NCD visits already recorded for [patientId], across this
+  /// device's unsynced rows and synced history — the row number the NCD
+  /// card scan targets is `priorNcdVisitCount(...) + 1` ("this visit"), same
+  /// "prior count + 1" convention as ANC's server-synced `ancVisitNo`, just
+  /// without a dedicated snapshot counter since NCD visits aren't
+  /// pregnancy-episode-scoped.
+  Future<int> priorNcdVisitCount(String patientId) async {
+    if (patientId.isEmpty) return 0;
+    final localRows = await _dao.getByPatientId(patientId);
+    var count =
+        localRows.where((r) => r.assessmentType.toUpperCase() == 'NCD').length;
+    if (_historyDao == null) return count;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = historyMap[patientId] ?? const [];
+    count += rows.where((r) => _isNcdKind(r.kind?.toUpperCase() ?? '')).length;
+    return count;
   }
 
   /// Number of childhood visits already recorded for [patientId], across this
@@ -1138,6 +1190,156 @@ class AssessmentRepository extends ChangeNotifier {
       fromLocal: fromLocal,
     );
   }
+
+  /// Every prior encounter for one patient, across all programmes.
+  ///
+  /// The programme-agnostic sibling of [ancVitalsHistory], which cannot be
+  /// reused here: it filters to ANC and returns [VisitVitals], which carries
+  /// no referral status or follow-up — the actions a prior visit is mostly
+  /// useful for. Same plumbing underneath ([_idsFor], [_historyRows],
+  /// [_localRows]) and the same contract: synced `assessments` are the source
+  /// of truth, local rows merge in by calendar day, result is **oldest-first**.
+  ///
+  /// Oldest-first is not cosmetic. The NABA backend slices the TAIL of this
+  /// list (`visits[-3:]`), so a newest-first list silently delivers the three
+  /// *oldest* visits — which reads as a worsening trend when it may be
+  /// improving.
+  ///
+  /// [excludeEncounterId] and [excludeVisitsOn] drop the visit in progress.
+  /// Both are needed: the caller's encounter id matches synced rows, while a
+  /// just-submitted local row is filed under its own local uuid and can only
+  /// be recognised by its date.
+  Future<List<AssessmentHistoryItem>> visitHistory(
+    String patientId, {
+    String? alsoId,
+    Iterable<String>? extraIds,
+    String? excludeEncounterId,
+    DateTime? excludeVisitsOn,
+  }) async {
+    final ids = _idsFor(patientId, alsoId, extraIds: extraIds);
+    if (ids.isEmpty) return const [];
+
+    // 1. Synced history — carries the flat `observations` map, so this is
+    //    where vitals come from.
+    final fromAssessments = <AssessmentHistoryItem>[];
+    for (final row in await _historyRows(ids)) {
+      final item = AssessmentHistoryItem.fromAssessmentRow(row.toDb());
+      if (item != null) fromAssessments.add(item);
+    }
+
+    // 2. Local submissions — a visit that happened but has not synced yet.
+    final fromLocal = <AssessmentHistoryItem>[];
+    for (final row in await _localRows(ids)) {
+      final item = _historyItemFromLocal(row);
+      if (item != null) fromLocal.add(item);
+    }
+
+    return _mergeHistoryByVisitDay(
+      fromAssessments: fromAssessments,
+      fromLocal: fromLocal,
+      excludeEncounterId: excludeEncounterId,
+      excludeVisitsOn: excludeVisitsOn,
+    );
+  }
+
+  /// One un-synced local row as a history item.
+  ///
+  /// `observations` stays null: that key is the flat server shape
+  /// (`bp: "144/91"`), whereas a local row holds the nested form JSON
+  /// (`bpLog.avgSystolic`). Rather than invent a second parse path, a
+  /// local-only visit reports that it happened without vitals — and
+  /// [_mergeHistoryByVisitDay] carries a synced row's observations across
+  /// when both exist for the same day.
+  static AssessmentHistoryItem? _historyItemFromLocal(
+    LocalAssessmentEntity row,
+  ) {
+    final memberId = row.memberId ?? row.patientId;
+    final visitAt = row.createdAt;
+    if (memberId == null || memberId.isEmpty || visitAt == null) return null;
+    return AssessmentHistoryItem(
+      householdMemberId: memberId,
+      encounterId: row.id,
+      visitDate: visitAt,
+      serviceProvided: row.assessmentType,
+      referralStatus: row.referralStatus,
+      referralReason: row.referredReasons,
+      customStatus: CustomStatusParse.decodeTokens(row.customStatus),
+    );
+  }
+
+  /// Test seam for the merge: the real [visitHistory] needs DAOs, but the
+  /// ordering and exclusion rules are pure and are the part that matters —
+  /// the NABA backend slices the tail of this list.
+  @visibleForTesting
+  static List<AssessmentHistoryItem> mergeHistoryForTesting({
+    required List<AssessmentHistoryItem> fromAssessments,
+    required List<AssessmentHistoryItem> fromLocal,
+    String? excludeEncounterId,
+    DateTime? excludeVisitsOn,
+  }) =>
+      _mergeHistoryByVisitDay(
+        fromAssessments: fromAssessments,
+        fromLocal: fromLocal,
+        excludeEncounterId: excludeEncounterId,
+        excludeVisitsOn: excludeVisitsOn,
+      );
+
+  /// Merges synced and local history by calendar day, oldest-first.
+  ///
+  /// Mirrors [_mergeAncVitalsByVisitDay] — that one is typed to [VisitVitals]
+  /// and cannot be shared — including local-wins-on-the-same-day and unique
+  /// synthetic keys so undated rows are never collapsed together.
+  ///
+  /// One deliberate difference: when a local row displaces a synced row for
+  /// the same day, the synced row's `observations` are carried over. A local
+  /// row never has them, so letting it win outright would discard that day's
+  /// vitals — losing the readings this whole change exists to supply.
+  static List<AssessmentHistoryItem> _mergeHistoryByVisitDay({
+    required List<AssessmentHistoryItem> fromAssessments,
+    required List<AssessmentHistoryItem> fromLocal,
+    String? excludeEncounterId,
+    DateTime? excludeVisitsOn,
+  }) {
+    String dayKey(DateTime d) {
+      final local = d.toLocal();
+      return '${local.year.toString().padLeft(4, '0')}-'
+          '${local.month.toString().padLeft(2, '0')}-'
+          '${local.day.toString().padLeft(2, '0')}';
+    }
+
+    final skipDay =
+        excludeVisitsOn == null ? null : dayKey(excludeVisitsOn);
+    bool excluded(AssessmentHistoryItem i) =>
+        (excludeEncounterId != null && i.encounterId == excludeEncounterId) ||
+        (skipDay != null && dayKey(i.visitDate) == skipDay);
+
+    final byDay = <String, AssessmentHistoryItem>{};
+    for (final item in fromAssessments) {
+      if (excluded(item)) continue;
+      byDay[dayKey(item.visitDate)] = item;
+    }
+    for (final item in fromLocal) {
+      if (excluded(item)) continue;
+      final key = dayKey(item.visitDate);
+      final displaced = byDay[key];
+      byDay[key] = (item.observations == null && displaced?.observations != null)
+          ? item.copyWithObservations(displaced!.observations)
+          : item;
+    }
+
+    final merged = byDay.values.toList()
+      ..sort((a, b) => a.visitDate.compareTo(b.visitDate));
+    return merged;
+  }
+
+  /// Builds a [VisitVitals] snapshot from one ANC assessment's raw
+  /// `assessment_details` JSON — the same shape [ancVitalsHistory] parses for
+  /// prior visits. Public entry point for describing *today's* in-progress
+  /// vitals (e.g. Step 3's teleconsult clinical-context summary) without
+  /// re-deriving the systolic/diastolic/weight/urinaryAlbumin extraction a
+  /// second time.
+  static VisitVitals vitalsFromAncAssessmentJson(String detailsJson, {DateTime? date}) =>
+      _snapshotFromAnc(detailsJson, date);
 
   /// Merge synced `assessments` + `local_assessments` by calendar day.
   /// Same-day collision: local wins (fresher device write).

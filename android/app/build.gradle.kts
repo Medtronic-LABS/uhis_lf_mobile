@@ -38,6 +38,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        resValues = true
     }
 
     compileOptions {
@@ -50,9 +51,10 @@ android {
         multiDexEnabled = true
         // Expose API_BASE_URL from --dart-define so native Kotlin can build
         // service-specific URLs (e.g. coaching backend) without hardcoding a host.
+        // Falls back to the API_BASE_URL environment variable; no built-in default.
         buildConfigField(
             "String", "API_BASE_URL",
-            "\"${dartDefines["API_BASE_URL"] ?: "https://uhis-dev-backend.labsplatform.com/"}\""
+            "\"${dartDefines["API_BASE_URL"] ?: dartDefines["BASE_URL"] ?: System.getenv("API_BASE_URL").orEmpty()}\""
         )
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.medtroniclabs.uhis_next"
@@ -69,6 +71,24 @@ android {
         // filter), so debug/profile builds on an x86_64 emulator will no longer install.
         ndk {
             abiFilters += setOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    // Lets a "training" build install alongside the real production app on the
+    // same device (distinct applicationId), branded "LW Training" with an
+    // orange-badged icon — see lib/core/config/app_config.dart's
+    // `isTrainingBuild` for the matching Dart-side flag (--dart-define=APP_FLAVOR=training).
+    flavorDimensions += "env"
+    productFlavors {
+        create("prod") {
+            dimension = "env"
+            resValue("string", "app_name", "LEAPWELL")
+            // applicationId unchanged: com.medtroniclabs.uhis_next
+        }
+        create("training") {
+            dimension = "env"
+            applicationIdSuffix = ".training"
+            resValue("string", "app_name", "LW Training")
         }
     }
 

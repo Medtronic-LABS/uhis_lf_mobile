@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/mission/mission_schedule_urgency.dart';
 import '../../../core/mission/programme_reason.dart';
 import '../../../core/rmnch/deceased_reason.dart';
 import '../../../core/models/dashboard_tier.dart';
@@ -58,15 +59,14 @@ class MissionQueueCard extends StatelessWidget {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final urgency = Theme.of(context).extension<UrgencyTheme>()!;
     // Pill is calendar-only (dueAt → Overdue / Today / This week / Routine).
-    // Clinical risk drivers still live on [item.tier] for sort / filters /
-    // AI insight — they must not change the status pill.
+    // Only ANC / PNC / NCD — other programmes omit the pill entirely.
+    // Clinical risk drivers still live on [item.tier] for sort / filters.
+    final scheduleTier = missionScheduleTierForDisplay(item);
+    final showSchedulePill =
+        isCompleted || missionItemSupportsScheduleUrgency(item);
     final (dotLabel, dotColor) = isCompleted
         ? ('Done', tokens.statusSuccess)
-        : _statusDotStyle(
-            DashboardTier.fromDueAt(item.dueAt),
-            tokens,
-            urgency,
-          );
+        : _statusDotStyle(scheduleTier, tokens, urgency);
 
     return Opacity(
       opacity: isCompleted ? 0.6 : 1.0,
@@ -247,8 +247,12 @@ class MissionQueueCard extends StatelessWidget {
                       ),
 
                       // ── Right: status dot ───────────────────────────────
-                      const SizedBox(width: 12),
-                      _StatusDot(label: dotLabel, color: dotColor),
+                      if (showSchedulePill &&
+                          (isCompleted ||
+                              scheduleTier != DashboardTier.upcoming)) ...[
+                        const SizedBox(width: 12),
+                        _StatusDot(label: dotLabel, color: dotColor),
+                      ],
                     ],
                   ),
                 ),
@@ -295,7 +299,7 @@ class MissionReasonBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = programmeBadgeColors(item.primaryProgramme);
+    final (bg, fg) = programmeBadgeColors(item.badgePrimaryProgramme);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -324,6 +328,7 @@ class MissionReasonBadge extends StatelessWidget {
 (Color, Color) programmeBadgeColors(Programme programme) {
   switch (programme) {
     case Programme.anc:
+    case Programme.pw:
       return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
     case Programme.pnc:
       return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
@@ -333,6 +338,8 @@ class MissionReasonBadge extends StatelessWidget {
       return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
     case Programme.tb:
       return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
+    case Programme.familyPlanning:
+      return (const Color(0xFFFDF2F8), const Color(0xFF831843));
     default:
       return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
   }
@@ -367,6 +374,7 @@ class PatientBadgeRow extends StatelessWidget {
     this.householdName,
     this.useLatestServiceBadge = false,
     this.recentServiceKind,
+    this.serviceBadgePending = false,
     this.isDeceased = false,
   });
 
@@ -393,6 +401,10 @@ class PatientBadgeRow extends StatelessWidget {
   final bool useLatestServiceBadge;
   final String? recentServiceKind;
 
+  /// When true, omits the programme/service badge until roster enrichment
+  /// finishes (avoids a transient "New visit" placeholder).
+  final bool serviceBadgePending;
+
   /// When true, shows a grey "Deceased" tag instead of programme/service badges.
   final bool isDeceased;
 
@@ -400,38 +412,28 @@ class PatientBadgeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String badgeLabel;
-    final Color badgeBg;
-    final Color badgeFg;
-    if (isDeceased) {
+    final bool showServiceBadge = !serviceBadgePending || isDeceased;
+    final String? badgeLabel;
+    final Color? badgeBg;
+    final Color? badgeFg;
+    if (!showServiceBadge) {
+      badgeLabel = null;
+      badgeBg = null;
+      badgeFg = null;
+    } else if (isDeceased) {
       badgeLabel = MemberDeceasedStrings.deceased;
       badgeBg = AppColors.progressTrack;
       badgeFg = AppColors.textMuted;
-    } else if (useLatestServiceBadge) {
-      final serviceKind = recentServiceKind?.trim();
-      final hasService = serviceKind != null && serviceKind.isNotEmpty;
-      badgeLabel = hasService
-          ? ProgrammeLabels.forServiceKind(serviceKind)
-          : HouseholdListStrings.enrolledTag;
-      final serviceProgramme =
-          hasService ? Programme.fromString(serviceKind) : null;
-      if (hasService &&
-          serviceProgramme != null &&
-          serviceProgramme != Programme.unknown) {
-        (badgeBg, badgeFg) = programmeBadgeColors(serviceProgramme);
-      } else {
-        badgeBg = AppColors.statusSuccessSurface;
-        badgeFg = AppColors.statusSuccessAction;
-      }
     } else {
-      badgeLabel = programmeReason(
+      final badge = patientBadgeLabel(
+        latestServiceKind:
+            useLatestServiceBadge ? recentServiceKind : null,
         programmes: programmes,
         ancVisitCount: ancVisitCount,
         pncVisitCount: pncVisitCount,
       );
-      (badgeBg, badgeFg) = programmeBadgeColors(
-        primaryProgrammeOf(programmes),
-      );
+      badgeLabel = badge.reason;
+      (badgeBg, badgeFg) = programmeBadgeColors(badge.badgeProgramme);
     }
 
     final address = [
@@ -475,25 +477,26 @@ class PatientBadgeRow extends StatelessWidget {
                           ].join('/'),
                           style: AppTextStyles.worklistPatientMeta,
                         ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: badgeBg,
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          badgeLabel,
-                          style: TextStyle(
-                            fontFamily: AppFonts.body,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: badgeFg,
+                      if (badgeLabel != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: badgeBg,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            badgeLabel,
+                            style: TextStyle(
+                              fontFamily: AppFonts.body,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: badgeFg,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                   if (address.isNotEmpty)

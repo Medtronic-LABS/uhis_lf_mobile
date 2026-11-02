@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 /// Build-time configuration. Every value is sourced via
 /// [String.fromEnvironment], which is populated by either
 /// `--dart-define=KEY=VALUE` or `--dart-define-from-file=env.*.json`
@@ -8,12 +10,27 @@
 class AppConfig {
   AppConfig._();
 
-  /// Base URL for the UHIS nginx gateway.
-  /// Android emulator → `http://10.0.2.2`. Physical device → host LAN IP.
-  /// Production/Dev server → `https://spice-qa-backend.uhis.labsplatform.com/`
+  /// Set at build time via `--dart-define=APP_FLAVOR=training`. Drives the
+  /// thin persistent non-production banner at the top of every screen;
+  /// everything else looks like production.
+  /// Matches the Android `training` product flavor
+  /// (`android/app/build.gradle.kts`), which gives that build a distinct
+  /// `applicationId` so it can be installed alongside the production app.
+  static bool get isTrainingBuild =>
+      const String.fromEnvironment('APP_FLAVOR', defaultValue: 'production') ==
+      'training';
+
+  /// Whether the training build shows its top banner (EnvironmentBanner).
+  /// Off for now; turn on with `--dart-define=SHOW_ENV_BANNER=true`.
+  static bool get showEnvironmentBanner =>
+      isTrainingBuild && const bool.fromEnvironment('SHOW_ENV_BANNER');
+
+  /// Base URL for the UHIS nginx gateway. Required: supply via `API_BASE_URL`
+  /// (see `env.example.json`); there is no built-in default.
+  /// Prefer `API_BASE_URL`; `BASE_URL` is accepted for older docs/scripts.
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://uhis-dev-backend.labsplatform.com/',
+    defaultValue: String.fromEnvironment('BASE_URL'),
   );
 
   /// Value of the `client` request header expected by the auth pipeline.
@@ -92,13 +109,12 @@ class AppConfig {
   /// Used by Flutter HTTP callers (coaching_repository, telemetry_service) which
   /// append full paths that already include /medtronics-api/ (e.g. /medtronics-api/sync/modules).
   /// Do NOT include /medtronics-api in the dart-define value — use just the host+mount prefix.
-  /// Examples:
-  ///   production : https://uhis-dev-backend.labsplatform.com/micro-coaching
-  ///   UHIS dev   : https://uhis-dev-backend.labsplatform.com/micro-coaching
-  static const String coachingServiceUrl = String.fromEnvironment(
-    'COACHING_SERVICE_URL',
-    defaultValue: 'https://uhis-dev-backend.labsplatform.com/micro-coaching',
-  );
+  /// Set `COACHING_SERVICE_URL` to override; otherwise derived from [apiBaseUrl]
+  /// as `<API_BASE_URL>/micro-coaching`, matching the native `BuildConfig.API_BASE_URL` default.
+  static String get coachingServiceUrl {
+    const explicit = String.fromEnvironment('COACHING_SERVICE_URL', defaultValue: '');
+    return explicit.isNotEmpty ? explicit : joinUrlSegment(apiBaseUrl, 'micro-coaching');
+  }
 
   /// HuggingFace API token for micro-coaching SDK model download.
   /// Used as a client-side fallback when the backend /api/v1/models/gemma/download
@@ -116,7 +132,7 @@ class AppConfig {
   /// live behind this one service/port now.
   ///
   /// Empty = route through the nginx gateway (production path).
-  /// Set to e.g. `http://10.0.2.2:8095` to hit a locally-running service while
+  /// Set to e.g. `http://<emulator-host>:8095` to hit a locally-running service while
   /// keeping [apiBaseUrl] pointed at the remote backend.
   ///
   /// This is the single AI dart-define: [scribeBaseUrl] derives from it, so one
@@ -148,7 +164,7 @@ class AppConfig {
   }
 
   /// Base URL for `POST /mobile/app-version` on leapfrog-ai-service. Uses
-  /// [aiServiceBaseUrl] when set (e.g. `http://10.0.2.2:8095`); otherwise
+  /// [aiServiceBaseUrl] when set (e.g. `http://<emulator-host>:8095`); otherwise
   /// [apiBaseUrl] with the `/ai-scribe/mobile/app-version` gateway path.
   static String get appVersionCheckBaseUrl {
     if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
@@ -368,10 +384,117 @@ class AppConfig {
   static bool get visitContentTelemetryEnabled =>
       const bool.fromEnvironment('VISIT_CONTENT_TELEMETRY', defaultValue: true);
 
+  /// Capture + upload the AI assistant ("Ask") question/answer PHI stream.
+  /// Gated separately from the usage telemetry so a deployment can collect
+  /// usage without the free text. Disable with
+  /// `--dart-define=ASSISTANT_CONTENT_TELEMETRY=false`.
+  static bool get assistantContentTelemetryEnabled =>
+      const bool.fromEnvironment('ASSISTANT_CONTENT_TELEMETRY',
+          defaultValue: true);
+
   /// Feature flag: use the uhis_form JSON-driven renderer instead of the
   /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
   static const bool useDynamicForms = bool.fromEnvironment(
     'USE_DYNAMIC_FORMS',
     defaultValue: true,
+  );
+
+  // ── Shukhee teleconsult ────────────────────────────────────────────────
+
+  /// Path segment nginx routes to `frappe-uhis-next`'s `shukhee_integration`
+  /// app, appended to [apiBaseUrl] for dev/prod -- same gateway host as every
+  /// other service; [ShukheeConfig]'s own endpoint paths
+  /// (`/api/method/shukhee_integration.api.consultation.*`) are unaffected
+  /// either way, only this base segment differs.
+  static const String _shukheeGatewaySegment = 'admin-api';
+
+  /// Joins [apiBaseUrl] with a gateway path segment, normalizing the slash
+  /// between them regardless of whether `API_BASE_URL` was supplied with or
+  /// without a trailing slash -- a bare `'$apiBaseUrl$segment'` concatenation
+  /// silently produces a malformed host (e.g.
+  /// `uhis-next-backend.labsplatform.comadmin-api`, a real production
+  /// incident this fixes) whenever the build's `API_BASE_URL` dart-define
+  /// has no trailing slash, since the one in [apiBaseUrl]'s own default
+  /// value masks the bug for every build that copies that convention.
+  static String _joinGatewaySegment(String segment) =>
+      joinUrlSegment(apiBaseUrl, segment);
+
+  /// Pure join logic, factored out so it's testable independent of
+  /// [apiBaseUrl]'s compile-time `--dart-define` value.
+  @visibleForTesting
+  static String joinUrlSegment(String base, String segment) {
+    final trimmedBase = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+    return '$trimmedBase/$segment';
+  }
+
+  /// Base URL of the backend exposing the Shukhee consultation endpoints.
+  ///
+  /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
+  ///   appended, e.g. `<API_BASE_URL>/admin-api`.
+  /// - Local override: set `SHUKHEE_API_BASE_URL` to a complete base URL
+  ///   (e.g. `http://<emulator-host>:8000`) pointing directly at a local
+  ///   `frappe-uhis-next` instance -- used verbatim, no gateway segment
+  ///   appended, since a direct local instance isn't behind that route.
+  static String get shukheeApiBaseUrl {
+    const local = String.fromEnvironment('SHUKHEE_API_BASE_URL', defaultValue: '');
+    if (local.isNotEmpty) return local;
+    return _joinGatewaySegment(_shukheeGatewaySegment);
+  }
+
+  /// Base URL of the same `frappe-uhis-next` backend's `spice_next_core` app
+  /// (currently only `spice_next_core.api.sync.pull`, consumed by
+  /// `CallLogSyncClient`) -- deliberately its own named getter rather than
+  /// reusing [shukheeApiBaseUrl], even though both currently resolve to the
+  /// same gateway segment on the same Frappe site (Frappe dispatches by the
+  /// full dotted method path internally, not by a per-app nginx route). If
+  /// the two apps are ever split behind different gateway paths, only this
+  /// getter needs to change.
+  ///
+  /// - Dev/prod: derives from [apiBaseUrl] with [_shukheeGatewaySegment]
+  ///   appended, same as [shukheeApiBaseUrl].
+  /// - Local override: set `SPICE_NEXT_CORE_API_BASE_URL` to a complete base
+  ///   URL, same convention as `SHUKHEE_API_BASE_URL`.
+  static String get spiceNextCoreApiBaseUrl {
+    const local = String.fromEnvironment('SPICE_NEXT_CORE_API_BASE_URL', defaultValue: '');
+    if (local.isNotEmpty) return local;
+    return _joinGatewaySegment(_shukheeGatewaySegment);
+  }
+
+  /// Feature flag: whether the real Shukhee teleconsult flow is wired up.
+  /// Default off -- this integrates against a real third-party vendor with
+  /// per-SK provisioning requirements on the backend (an Active `UHIS
+  /// Shukhee User` record) that may not be set up for every environment's
+  /// user base yet; flip per-environment once confirmed.
+  static const bool teleconsultEnabled = bool.fromEnvironment(
+    'TELECONSULT_ENABLED',
+    defaultValue: false,
+  );
+
+  /// Max attempts / delay for polling consultation status after booking.
+  /// Delay mirrors the desk-side admin UI's own polling cadence for the same
+  /// backend endpoint (4s), proven against the live Shukhee sandbox. The
+  /// budget this pair spans (~20 minutes) covers the *entire* call, not just
+  /// booking acceptance -- `get_consultation_status` is only marked
+  /// `completed` once the doctor actually ends the call, so a shorter budget
+  /// (previously ~2 minutes) timed out mid-call and showed "Doctor not
+  /// available" even though a doctor had answered (confirmed live: Call Logs
+  /// stuck at `accepted` with no Shukhee call ever actually rejected/
+  /// cancelled/on-hold).
+  static int get teleconsultPollMaxAttempts =>
+      int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_MAX_ATTEMPTS')) ?? 300;
+
+  static int get teleconsultPollDelaySeconds =>
+      int.tryParse(const String.fromEnvironment('TELECONSULT_POLL_DELAY_SECONDS')) ?? 4;
+
+  /// Fallback contact number offered (pre-filled, not silently applied) when
+  /// a patient/household has no phone number on file. The SK facilitates the
+  /// teleconsult call on the patient's behalf -- Shukhee's booking API still
+  /// requires *some* valid contact number on the request even though the SK's
+  /// own device is what actually joins the call, so this exists to unblock
+  /// that case rather than dead-end the flow. Empty by default outside dev --
+  /// blank means the phone-prompt sheet shows no pre-fill, same as before.
+  static const String teleconsultDefaultPhone = String.fromEnvironment(
+    'TELECONSULT_DEFAULT_PHONE',
+    defaultValue: '',
   );
 }

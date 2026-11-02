@@ -245,7 +245,7 @@ is built — the SK sees a loading skeleton while reviewing symptoms, then the c
 | Path | When used |
 |------|-----------|
 | `/ai-scribe-service/briefing/generate` (via nginx gateway) | Default: `AI_SERVICE_URL` dart-define not set |
-| `http://<AI_SERVICE_URL>/briefing/generate` | Local dev: `--dart-define=AI_SERVICE_URL=http://192.168.1.X:8095` |
+| `http://<AI_SERVICE_URL>/briefing/generate` | Local dev: `--dart-define=AI_SERVICE_URL=http://<lan-ip>:8095` |
 
 The AI service is `ai-scribe-service` running on port 8095. `AppConfig.aiServiceBaseUrl` causes `VisitBriefingRepository` to use a separate Dio instance pointed at the local service.
 
@@ -329,7 +329,7 @@ The AI Scribe service runs as a separate Docker container on port 8095:
 cd ai-scribe-service && docker-compose up -d
 
 # Configure via dart-define (local dev)
---dart-define=AI_SERVICE_URL=http://192.168.1.X:8095
+--dart-define=AI_SERVICE_URL=http://<lan-ip>:8095
 ```
 
 Timeouts: `connectTimeout: 60s`, `sendTimeout: 3min`, `receiveTimeout: 3min`.
@@ -423,8 +423,8 @@ time via `--dart-define-from-file`. Source of truth: `lib/core/config/app_config
 
 | Key                       | Type   | Default               | Purpose                                                                       |
 |---------------------------|--------|-----------------------|-------------------------------------------------------------------------------|
-| `API_BASE_URL`            | string | `http://10.0.2.2`     | UHIS nginx gateway. `10.0.2.2` = host loopback from Android emulator only. Physical devices need the Mac LAN IP. |
-| `AI_SERVICE_URL`          | string | `""`                  | Direct URL for local AI services (bypasses nginx). E.g. `http://192.168.1.X:8095`. When empty, AI calls go through the gateway. |
+| `API_BASE_URL`            | string | (required)             | UHIS nginx gateway. `<emulator-host>` = host loopback from Android emulator only. Physical devices need the Mac LAN IP. |
+| `AI_SERVICE_URL`          | string | `""`                  | Direct URL for local AI services (bypasses nginx). E.g. `http://<lan-ip>:8095`. When empty, AI calls go through the gateway. |
 | `API_CLIENT`              | string | `web`                 | Value of the `client` request header. `web` or `mob`.                         |
 | `PASSWORD_HASH_KEY`       | string | `""`                  | HmacSHA512 key matching `REACT_APP_PASSWORD_HASH_KEY` on the backend.         |
 | `AUTH_COOKIE_TTL_SECONDS` | int    | `3600`                | Fallback `AuthCookie` TTL when server omits `Max-Age`.                        |
@@ -471,10 +471,10 @@ adb shell svc wifi enable
 Verify network from inside the emulator:
 
 ```bash
-adb shell ping -c 1 10.0.2.2
+adb shell ping -c 1 <emulator-host>
 ```
 
-> **Note:** `10.0.2.2` is the emulator's alias for the host loopback — it only works inside an AVD. On a physical device you must use your Mac's LAN IP (e.g. `192.168.1.X`).
+> **Note:** `<emulator-host>` is the emulator's alias for the host loopback — it only works inside an AVD. On a physical device you must use your Mac's LAN IP (e.g. `<lan-ip>`).
 
 ### Hot-reload dev loop (emulator)
 
@@ -488,18 +488,18 @@ scripts/run.sh development -d emulator-5554
 ```bash
 # 1. Pair the device
 #    On the device: Settings → Developer options → Wireless debugging → Pair device
-adb pair 192.168.1.X:PORT          # PORT shown on device pairing screen
+adb pair <lan-ip>:PORT          # PORT shown on device pairing screen
 
 # 2. Connect
-adb connect 192.168.1.X:PORT       # use the port shown under "Wireless debugging"
+adb connect <lan-ip>:PORT       # use the port shown under "Wireless debugging"
 
 # 3. Find your Mac's LAN IP
 ifconfig | grep "inet 192"
 
-# 4. Run (replace 192.168.1.X with your actual Mac LAN IP)
+# 4. Run (replace <lan-ip> with your actual Mac LAN IP)
 flutter run \
-  --dart-define=BASE_URL=http://192.168.1.X \
-  --dart-define=PASSWORD_HASH_KEY=spice_uat \
+  --dart-define=BASE_URL=http://<lan-ip> \
+  --dart-define=PASSWORD_HASH_KEY=<hash_key> \
   -d <device-id>
 ```
 
@@ -508,7 +508,7 @@ flutter run \
 1. Connect Android device with USB or pair via wireless ADB (see above)
 2. `git clone … && flutter pub get`
 3. Find your Mac LAN IP: `ifconfig | grep "inet 192"`
-4. `flutter run --dart-define=BASE_URL=http://<MAC_IP> --dart-define=PASSWORD_HASH_KEY=spice_uat`
+4. `flutter run --dart-define=BASE_URL=http://<MAC_IP> --dart-define=PASSWORD_HASH_KEY=<hash_key>`
 
 ### One-shot install (emulator)
 
@@ -522,9 +522,9 @@ adb shell monkey -p com.medtroniclabs.uhis_next -c android.intent.category.LAUNC
 
 ```bash
 flutter build apk --debug \
-  --dart-define=BASE_URL=https://uhis-dev-backend.labsplatform.com \
-  --dart-define=AI_SERVICE_URL=https://uhis-dev-backend.labsplatform.com/ai-scribe \
-  --dart-define=PASSWORD_HASH_KEY=spice_uat
+  --dart-define=BASE_URL=<api_base_url> \
+  --dart-define=AI_SERVICE_URL=<api_base_url>/ai-scribe \
+  --dart-define=PASSWORD_HASH_KEY=<hash_key>
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
@@ -588,7 +588,7 @@ the file is missing.
 ```
 
 - Password hash: `HmacSHA512(password, PASSWORD_HASH_KEY).hex()`. Matches `crypto-js` on the React frontend.
-- Cookies: `JSESSIONID` (Spring session) + `AuthCookie` (base64 Bearer). Both stored in cookie_jar with `secure=false` and `domain=null` so Android sends them over plain HTTP and across `10.0.2.2` ↔ `localhost`.
+- Cookies: `JSESSIONID` (Spring session) + `AuthCookie` (base64 Bearer). Both stored in cookie_jar with `secure=false` and `domain=null` so Android sends them over plain HTTP and across `<emulator-host>` ↔ `localhost`.
 - `tenantId` taken from profile response `entity.tenantId`.
 
 ---
@@ -790,6 +790,7 @@ cd build/web && python3 -m http.server 5050 --bind localhost &
 cd e2e
 npm install
 npx playwright install chromium
+export LF_API_BASE_URL=<api_base_url> LF_HASH_KEY=<hash_key> LF_USER=<user> LF_PASS=<pass>   # required; never commit
 npx playwright test --headed
 ```
 
@@ -808,8 +809,8 @@ Web build requires `SemanticsBinding.instance.ensureSemantics()` (already in
 
 | Symptom                                       | Likely cause                                                                  | Fix                                                                                          |
 |-----------------------------------------------|-------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| `SocketException: Network is unreachable, 10.0.2.2` | Emulator booted with Airplane Mode on                                       | `adb shell settings put global airplane_mode_on 0 && adb shell svc wifi enable`             |
-| `SocketException` on physical device          | `10.0.2.2` used instead of Mac LAN IP                                        | Use your Mac's LAN IP (`ifconfig | grep "inet 192"`) with `--dart-define=BASE_URL=http://192.168.1.X` |
+| `SocketException: Network is unreachable, <emulator-host>` | Emulator booted with Airplane Mode on                                       | `adb shell settings put global airplane_mode_on 0 && adb shell svc wifi enable`             |
+| `SocketException` on physical device          | `<emulator-host>` used instead of Mac LAN IP                                        | Use your Mac's LAN IP (`ifconfig | grep "inet 192"`) with `--dart-define=BASE_URL=http://<lan-ip>` |
 | `Invalid credentials` 401 every login         | User locked by 5 failed attempts                                              | `UPDATE "user" SET is_blocked=false, invalid_login_attempts=0 WHERE id=...`                  |
 | `Failed to load profile (401)`                | Cookie not being sent — server expects `client: web` header                   | Check `AppConfig.apiClient` is `web` and the Cookie header carries both `JSESSIONID` + `AuthCookie` |
 | Profile 401 on Android but 200 via curl       | `AuthCookie` has `Secure` flag — cookie_jar refuses on plain HTTP             | Already handled: response interceptor strips `Secure` + `Domain` before saving               |
@@ -827,7 +828,7 @@ Web build requires `SemanticsBinding.instance.ensureSemantics()` (already in
 - **No password / hash at rest.** Only ephemeral session tokens (`JSESSIONID` + `AuthCookie`) and tenantId.
 - **Android Keystore** backs the `flutter_secure_storage` writes.
 - **HmacSHA512 client hashing** matches the React frontend so the server never sees plaintext.
-- **`usesCleartextTraffic="true"`** is enabled for dev (HTTP to `10.0.2.2` or LAN IP). Production must move to HTTPS — flip the manifest flag back to `false` and configure `network_security_config.xml`.
+- **`usesCleartextTraffic="true"`** is enabled for dev (HTTP to `<emulator-host>` or LAN IP). Production must move to HTTPS — flip the manifest flag back to `false` and configure `network_security_config.xml`.
 - **No `FLAG_SECURE`** yet — the dashboard is visible in the recent-apps thumbnail. Deferred.
 - **`secure=false` cookie storage** is intentional for dev; production over HTTPS should remove the strip-Secure interceptor.
 

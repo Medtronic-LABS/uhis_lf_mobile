@@ -14,6 +14,7 @@ import '../db/local_assessment_dao.dart';
 import '../db/member_dao.dart';
 import '../debug/console_log.dart';
 import '../models/provance_dto.dart';
+import 'shukhee_encounter_attach_service.dart';
 import 'sync_activity.dart';
 import '../../features/patient/followup_call_service.dart';
 import '../../features/visit/forms/pregnancy_outcome_side_effects.dart';
@@ -74,11 +75,19 @@ class _PushPollOutcome {
   const _PushPollOutcome({
     required this.overall,
     required this.assessmentStatus,
+    this.assessmentFhirId = const {},
     this.followUpFailed = false,
   });
 
   final _PushPollResult overall;
   final Map<int, String> assessmentStatus;
+
+  /// Resolved FHIR id per `referenceId`, only present for entries that
+  /// reported `status == 'Success'` with a real `fhirId` -- fed to
+  /// `ShukheeEncounterAttachService.attachForVisit` at the call site so a
+  /// Shukhee call/prescription made from this visit gets its durable
+  /// server-side attach within one poll round-trip, not the next full sync.
+  final Map<int, String> assessmentFhirId;
 
   /// True when any `FollowUp` entity in this request finished as Failed.
   final bool followUpFailed;
@@ -95,12 +104,17 @@ class OfflinePushService extends ChangeNotifier {
     required MemberDao members,
     required LocalAssessmentDao assessments,
     FollowUpCallService? followUpCalls,
+    // Durably attaches a visit's FHIR Encounter id onto its local Shukhee
+    // Call Logs row the moment this push's poll resolves it -- see
+    // ShukheeEncounterAttachService.attachForVisit.
+    ShukheeEncounterAttachService? encounterAttach,
   })  : _api = api,
         _auth = auth,
         _households = households,
         _members = members,
         _assessments = assessments,
-        _followUpCalls = followUpCalls;
+        _followUpCalls = followUpCalls,
+        _encounterAttach = encounterAttach;
 
   final ApiClient _api;
   final AuthRepository _auth;
@@ -108,6 +122,7 @@ class OfflinePushService extends ChangeNotifier {
   final MemberDao _members;
   final LocalAssessmentDao _assessments;
   final FollowUpCallService? _followUpCalls;
+  final ShukheeEncounterAttachService? _encounterAttach;
 
   /// Cross-caller lock so assessment auto-sync and enrollment do not race.
   static bool isPushInFlight = false;
@@ -441,14 +456,20 @@ class OfflinePushService extends ChangeNotifier {
         final succeeded = <String>[];
         final failed = <String>[];
         for (final entity in pendingAssessments) {
-          final reported = entity.referenceId == null
-              ? null
-              : outcome.assessmentStatus[entity.referenceId];
+          final reference = entity.referenceId;
+          final reported =
+              reference == null ? null : outcome.assessmentStatus[reference];
           // Anything the server did not name inherits the batch verdict.
           final ok = reported == null
               ? poll == _PushPollResult.success
               : reported == 'Success';
           (ok ? succeeded : failed).add(entity.id);
+
+          final fhirId =
+              reference == null ? null : outcome.assessmentFhirId[reference];
+          if (fhirId != null) {
+            _encounterAttach?.attachFromOtherDetails(entity.otherDetails, fhirId);
+          }
         }
         if (failed.isNotEmpty) {
           await _assessments.updateSyncStatus(
@@ -535,6 +556,7 @@ class OfflinePushService extends ChangeNotifier {
     var sawFailed = false;
     var followUpFailed = false;
     final assessmentStatus = <int, String>{};
+    final assessmentFhirId = <int, String>{};
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) await Future<void>.delayed(delayBetween);
       _progress = 0.4 + (0.5 * attempt / maxAttempts);
@@ -606,6 +628,7 @@ class OfflinePushService extends ChangeNotifier {
                   fhirId.isNotEmpty &&
                   fhirId != 'null') {
                 await _assessments.applyFhirIdByReferenceId(reference, fhirId);
+                assessmentFhirId[reference] = fhirId;
               }
           }
         }
@@ -615,6 +638,7 @@ class OfflinePushService extends ChangeNotifier {
             overall:
                 sawFailed ? _PushPollResult.failed : _PushPollResult.success,
             assessmentStatus: assessmentStatus,
+            assessmentFhirId: assessmentFhirId,
             followUpFailed: followUpFailed,
           );
         }
@@ -625,6 +649,7 @@ class OfflinePushService extends ChangeNotifier {
     return _PushPollOutcome(
       overall: sawFailed ? _PushPollResult.failed : _PushPollResult.inProgress,
       assessmentStatus: assessmentStatus,
+      assessmentFhirId: assessmentFhirId,
       followUpFailed: followUpFailed,
     );
   }

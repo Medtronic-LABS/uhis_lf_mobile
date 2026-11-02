@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/core/db/pregnancy_snapshot_dao.dart';
+import 'package:uhis_next/core/mission/mission_pregnancy_facts.dart';
 import 'package:uhis_next/core/models/programme.dart';
 import 'package:uhis_next/features/visit/triage/programme_grid_sync.dart';
 
@@ -238,65 +240,42 @@ void main() {
   // false` — they now expect `isFalse`, not a regression of the bug above.
   // ===========================================================================
   group('ProgrammeGridSync.isPregnancyOutcomeLocked', () {
-    test('unlocked for direct entry — not pregnant, no episode, not postpartum', () {
-      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
-        isPregnant: false,
-        isPostpartum: false,
-        hasOpenPregnancyEpisode: false,
+    test('unlocked when no relevant obstetric row (Spice direct entry)', () {
+      expect(
+        ProgrammeGridSync.isPregnancyOutcomeLocked(
+          isPostpartumFromContext: false,
+          relevantObstetric: null,
+        ),
+        isFalse,
       );
-      expect(locked, isFalse,
-          reason: 'No episode exists — this is the direct-entry case (SK '
-              'reached the household after delivery, no prior PW/ANC visit). '
-              'The legacy isPregnant flag has nothing to say when there is no '
-              'episode to check it against.');
     });
 
-    test(
-        'unlocked for direct entry even when the legacy isPregnant flag is '
-        'true, as long as no episode exists', () {
-      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
-        isPregnant: true,
-        isPostpartum: false,
-        hasOpenPregnancyEpisode: false,
+    test('unlocked during active relevant pregnancy', () {
+      final now = DateTime(2026, 6, 15);
+      final row = PregnancySnapshotRow(
+        patientId: 'p1',
+        facts: PregnancyFacts.empty,
+        lmpDate: now.subtract(const Duration(days: 100)).millisecondsSinceEpoch,
+        eddDate: now.add(const Duration(days: 100)).millisecondsSinceEpoch,
       );
-      expect(locked, isFalse,
-          reason: 'Same direct-entry case — nothing was ever registered via '
-              'PW, but that is exactly the scenario this unlocks for, not a '
-              'reason to keep it locked.');
+      expect(
+        ProgrammeGridSync.isPregnancyOutcomeLocked(
+          isPostpartumFromContext: false,
+          relevantObstetric: row,
+          now: now,
+        ),
+        isFalse,
+      );
     });
 
-    test('unlocked when pregnant AND an open pregnancy episode exists', () {
-      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
-        isPregnant: true,
-        isPostpartum: false,
-        hasOpenPregnancyEpisode: true,
+    test('locked when postpartum from patient context', () {
+      expect(
+        ProgrammeGridSync.isPregnancyOutcomeLocked(
+          isPostpartumFromContext: true,
+          relevantObstetric: null,
+        ),
+        isTrue,
       );
-      expect(locked, isFalse,
-          reason: 'A real, open PW registration exists — this is the '
-              'normal case where recording the outcome makes sense.');
-    });
-
-    test('locked when already postpartum, even with a stale open episode flag', () {
-      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
-        isPregnant: true,
-        isPostpartum: true,
-        hasOpenPregnancyEpisode: true,
-      );
-      expect(locked, isTrue,
-          reason: 'Outcome already recorded once postpartum — should not '
-              'be offered again.');
-    });
-
-    test('locked when an episode exists but the legacy isPregnant flag is false', () {
-      final locked = ProgrammeGridSync.isPregnancyOutcomeLocked(
-        isPregnant: false,
-        isPostpartum: false,
-        hasOpenPregnancyEpisode: true,
-      );
-      expect(locked, isTrue,
-          reason: 'Both signals must agree there is an active, open '
-              'pregnancy — a lagging/unsynced legacy flag should not by '
-              'itself unlock the card either.');
     });
   });
 
@@ -332,6 +311,19 @@ void main() {
           isPwGateOpen: false,
           isDeliveryVisit: false,
           ancRevisitTooSoon: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('locked when stored LMP is under the 6-week threshold', () {
+      expect(
+        ProgrammeGridSync.isAncGridLocked(
+          isPostpartum: false,
+          isPwGateOpen: true,
+          isDeliveryVisit: false,
+          ancRevisitTooSoon: false,
+          ancEarlyLmpBlocked: true,
         ),
         isTrue,
       );

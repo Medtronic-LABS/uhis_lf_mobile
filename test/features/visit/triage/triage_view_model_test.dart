@@ -239,6 +239,7 @@ void main() {
         ageMonths: 300,
         sex: Sex.female,
         isPregnant: true,
+        isAncEligible: true,
         knownConditions: {},
         activeProgrammes: {},
         lastBpSystolic: 150,
@@ -294,6 +295,7 @@ void main() {
         ageMonths: 300,
         sex: Sex.female,
         isPregnant: true,
+        isAncEligible: true,
         knownConditions: {},
         activeProgrammes: {Programme.anc},
       );

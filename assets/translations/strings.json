@@ -2683,10 +2683,6 @@
     "bn": "হ্যাঁ",
     "en": "Yes"
   },
-  "Performance.appBarSubtitle": {
-    "bn": "জাহানারা বেগম · এসকে আইডি ৪৫২১ · মানিকগঞ্জ সদর",
-    "en": "Jahnara Begum · SK ID 4521 · Manikganj Sadar"
-  },
   "Performance.badgeCompleted": {
     "bn": "সম্পন্ন",
     "en": "Completed"
@@ -2903,6 +2899,86 @@
     "bn": "সদস্য আইডি পাওয়া যায়নি",
     "en": "Member ID not available"
   },
+  "ServiceFilter.allMembers": {
+    "bn": "সব সদস্য তালিকা",
+    "en": "All member list"
+  },
+  "ServiceFilter.cataract": {
+    "bn": "ক্যাটারাক্ট স্ক্রিনিং",
+    "en": "Cataract Screening"
+  },
+  "ServiceFilter.childrenUnderTwo": {
+    "bn": "শিশু তালিকা (২ বছরের নিচের)",
+    "en": "Child List (under-2)"
+  },
+  "ServiceFilter.dropdownItem": {
+    "bn": "{name} ({count})",
+    "en": "{name} ({count})"
+  },
+  "ServiceFilter.emptyDash": {
+    "bn": "--",
+    "en": "--"
+  },
+  "ServiceFilter.expectedDelivery": {
+    "bn": "সম্ভাব্য ডেলিভারি তালিকা",
+    "en": "Expected delivery list"
+  },
+  "ServiceFilter.externalMembers": {
+    "bn": "বহিরাগত সদস্য তালিকা",
+    "en": "External member list"
+  },
+  "ServiceFilter.externalPw": {
+    "bn": "বহিরাগত গর্ভবতী মায়ের তালিকা",
+    "en": "External PW list"
+  },
+  "ServiceFilter.eye": {
+    "bn": "চক্ষু পরীক্ষা স্ক্রিনিং",
+    "en": "Eye Screening"
+  },
+  "ServiceFilter.familyPlanning": {
+    "bn": "পরিবার পরিকল্পনা কাউন্সেলিং তালিকা",
+    "en": "Family planning counseling list"
+  },
+  "ServiceFilter.highRiskPw": {
+    "bn": "উচ্চ ঝুঁকিপূর্ণ গর্ভবতী মায়ের তালিকা",
+    "en": "High risk PW women list"
+  },
+  "ServiceFilter.memberSearchHint": {
+    "bn": "সদস্যের নাম / জাতীয় পরিচয় পত্র (NID) বা জন্ম নিবন্ধন নম্বর (BRN) / ফোন",
+    "en": "Member Name / National ID or BRN / Phone"
+  },
+  "ServiceFilter.ncd": {
+    "bn": "এনসিডি সেবাসমূহ",
+    "en": "NCD Services"
+  },
+  "ServiceFilter.otherServices": {
+    "bn": "সংক্রামক রোগ",
+    "en": "Communicable Diseases"
+  },
+  "ServiceFilter.pendingDelivery": {
+    "bn": "পেন্ডিং ডেলিভারি লিস্ট",
+    "en": "Pending Delivery List"
+  },
+  "ServiceFilter.pncMothers": {
+    "bn": "প্রসবোত্তর মায়ের তালিকা",
+    "en": "Postnatal Mothers List"
+  },
+  "ServiceFilter.pregnantWomen": {
+    "bn": "গর্ভবতী মায়ের তালিকা",
+    "en": "Pregnant Women List"
+  },
+  "ServiceFilter.recentService": {
+    "bn": "সাম্প্রতিক সেবা",
+    "en": "Recent service"
+  },
+  "ServiceFilter.recentServiceDate": {
+    "bn": "সাম্প্রতিক সেবার তারিখ",
+    "en": "Recent service date"
+  },
+  "ServiceFilter.ssName": {
+    "bn": "SS নাম",
+    "en": "SS Name"
+  },
   "SelectHousehold.emptyState": {
     "bn": "কোনো খানা পাওয়া যায়নি",
     "en": "No households found"
@@ -3111,17 +3187,305 @@
     "bn": "আপনার তথ্য সেট আপ হচ্ছে",
     "en": "Setting up your data"
   },
+  "Teleconsult.ancRecordSharedBody": {
+    "bn": "{visitLabel} নোট · {summary} — ডাক্তার কলের আগে এটি দেখেছেন",
+    "en": "{visitLabel} notes · {summary} — doctor saw it before the call"
+  },
+  "Teleconsult.availableSpecialityLabel": {
+    "bn": "উপলব্ধ বিশেষত্ব",
+    "en": "Available Specialty"
+  },
+  "Teleconsult.bookingTitle": {
+    "bn": "টেলি-পরামর্শ বুক করুন",
+    "en": "Book a teleconsult"
+  },
+  "Teleconsult.callTitle": {
+    "bn": "ডাক্তার ভিডিও কল",
+    "en": "Doctor video call"
+  },
+  "Teleconsult.cameraMicRequiredBody": {
+    "bn": "ভিডিও কল শুরু করতে টেলি-পরামর্শের ক্যামেরা ও মাইক্রোফোন অ্যাক্সেস প্রয়োজন। অনুগ্রহ করে সেটিংসে অ্যাক্সেস দিন।",
+    "en": "Teleconsult needs camera and microphone access to start a video call. Please allow access in Settings."
+  },
+  "Teleconsult.cameraMicRequiredTitle": {
+    "bn": "ক্যামেরা ও মাইক্রোফোন প্রয়োজন",
+    "en": "Camera & microphone needed"
+  },
+  "Teleconsult.cancel": {
+    "bn": "বাতিল",
+    "en": "Cancel"
+  },
+  "Teleconsult.chooseFromGallery": {
+    "bn": "গ্যালারি থেকে বেছে নিন",
+    "en": "Choose from gallery"
+  },
+  "Teleconsult.collapseTooltip": {
+    "bn": "ফুলস্ক্রিন থেকে বের হন",
+    "en": "Exit fullscreen"
+  },
   "Teleconsult.comingSoon": {
     "bn": "শীঘ্রই আসছে",
     "en": "Coming soon"
+  },
+  "Teleconsult.connectedLabel": {
+    "bn": "সংযুক্ত",
+    "en": "Connected"
+  },
+  "Teleconsult.connecting": {
+    "bn": "আপনার কল সংযুক্ত হচ্ছে…",
+    "en": "Connecting your call…"
+  },
+  "Teleconsult.connectingHeaderTitle": {
+    "bn": "সংযুক্ত হচ্ছে...",
+    "en": "Connecting..."
+  },
+  "Teleconsult.connectingHint": {
+    "bn": "অনুগ্রহ করে অপেক্ষা করুন, আপনার পরামর্শ প্রস্তুত করা হচ্ছে।",
+    "en": "Please wait while we set up your consultation."
+  },
+  "Teleconsult.connectingToDoctor": {
+    "bn": "আপনাকে একজন ডাক্তারের সাথে সংযুক্ত করা হচ্ছে…",
+    "en": "Connecting you to a doctor…"
+  },
+  "Teleconsult.connectingToDoctorPill": {
+    "bn": "ডাক্তারের সাথে সংযুক্ত হচ্ছে…",
+    "en": "Connecting to doctor…"
+  },
+  "Teleconsult.contactNumberLabel": {
+    "bn": "যোগাযোগের নম্বর",
+    "en": "Contact Number"
+  },
+  "Teleconsult.contactNumberRequired": {
+    "bn": "চালিয়ে যেতে একটি যোগাযোগের নম্বর লিখুন।",
+    "en": "Enter a contact number to continue."
+  },
+  "Teleconsult.continueWithoutCall": {
+    "bn": "টেলি-পরামর্শ ছাড়াই চালিয়ে যান",
+    "en": "Continue without teleconsult"
+  },
+  "Teleconsult.dataSharedGenericBody": {
+    "bn": "কলের আগে আপনার ভিজিটের কারণ ডাক্তারের সাথে শেয়ার করা হয়েছে।",
+    "en": "Your visit reason was shared with the doctor before the call."
+  },
+  "Teleconsult.dataSharedTitle": {
+    "bn": "আপন সুস্বাস্থ্য সুখীর সাথে সম্পূর্ণ রেকর্ড শেয়ার করেছে",
+    "en": "Apon Sushashthya shared the full record with Sukhee"
+  },
+  "Teleconsult.doctorNameOnly": {
+    "bn": "ডা. {name}",
+    "en": "Dr. {name}"
+  },
+  "Teleconsult.doctorNameSpeciality": {
+    "bn": "ডা. {name} · {speciality}",
+    "en": "Dr. {name} · {speciality}"
+  },
+  "Teleconsult.doctorNameSpecialityFacility": {
+    "bn": "ডা. {name} · {speciality} · {facility}",
+    "en": "Dr. {name} · {speciality} · {facility}"
+  },
+  "Teleconsult.documentOpenFailed": {
+    "bn": "ডকুমেন্টটি খোলা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
+    "en": "Could not open the document. Please try again."
+  },
+  "Teleconsult.documentTypeLabReports": {
+    "bn": "ল্যাব রিপোর্ট",
+    "en": "Lab Reports"
+  },
+  "Teleconsult.documentTypeLabel": {
+    "bn": "ডকুমেন্টের ধরন",
+    "en": "Document Type"
+  },
+  "Teleconsult.documentTypePrescription": {
+    "bn": "প্রেসক্রিপশন",
+    "en": "Prescription"
   },
   "Teleconsult.doneButton": {
     "bn": "সম্পন্ন",
     "en": "Done"
   },
+  "Teleconsult.expandTooltip": {
+    "bn": "ফুলস্ক্রিন করুন",
+    "en": "Expand to fullscreen"
+  },
+  "Teleconsult.generatingPrescriptionBody": {
+    "bn": "সুখী থেকে স্বাক্ষরিত প্রেসক্রিপশন সিঙ্ক করা হচ্ছে",
+    "en": "Syncing signed prescription from Sukhee"
+  },
+  "Teleconsult.generatingPrescriptionTitle": {
+    "bn": "প্রেসক্রিপশন তৈরি হচ্ছে…",
+    "en": "Generating prescription…"
+  },
+  "Teleconsult.leaveCallBody": {
+    "bn": "পরামর্শ এখনও শেষ হয়নি।",
+    "en": "The consultation hasn't ended yet."
+  },
+  "Teleconsult.leaveCallConfirm": {
+    "bn": "কল ত্যাগ করুন",
+    "en": "Leave call"
+  },
+  "Teleconsult.leaveCallTitle": {
+    "bn": "এই কলটি ত্যাগ করবেন?",
+    "en": "Leave this call?"
+  },
+  "Teleconsult.liveLabel": {
+    "bn": "লাইভ",
+    "en": "LIVE"
+  },
+  "Teleconsult.loadingPreview": {
+    "bn": "প্রিভিউ লোড হচ্ছে…",
+    "en": "Loading preview…"
+  },
+  "Teleconsult.lookingForDoctor": {
+    "bn": "ডাক্তার খোঁজা হচ্ছে…",
+    "en": "Looking for a doctor…"
+  },
+  "Teleconsult.notCompletedBody": {
+    "bn": "ডাক্তার এই কলে যোগ দিতে পারেননি। আপনি আবার চেষ্টা করতে পারেন, অথবা টেলি-পরামর্শ ছাড়াই ভিজিট চালিয়ে যেতে পারেন।",
+    "en": "The doctor was not able to join this call. You can try again, or continue the visit without a teleconsult."
+  },
+  "Teleconsult.notCompletedTitle": {
+    "bn": "ডাক্তার উপলব্ধ নেই",
+    "en": "Doctor not available"
+  },
+  "Teleconsult.notProvisionedBody": {
+    "bn": "আপনার অ্যাকাউন্টের জন্য টেলি-পরামর্শ এখনও সেট আপ করা হয়নি। আপনার সুপারভাইজারের সাথে যোগাযোগ করুন।",
+    "en": "Teleconsult isn't set up for your account yet. Contact your supervisor."
+  },
+  "Teleconsult.notProvisionedTitle": {
+    "bn": "টেলি-পরামর্শ সেট আপ করা হয়নি",
+    "en": "Teleconsult not set up"
+  },
+  "Teleconsult.prescriptionHeaderTitle": {
+    "bn": "প্রেসক্রিপশন",
+    "en": "Prescription"
+  },
+  "Teleconsult.prescriptionTitle": {
+    "bn": "প্রেসক্রিপশন — সুখী থেকে",
+    "en": "Prescription — from Sukhee"
+  },
+  "Teleconsult.previewUnavailable": {
+    "bn": "প্রিভিউ উপলব্ধ নেই",
+    "en": "Preview unavailable"
+  },
+  "Teleconsult.selectDocumentsHint": {
+    "bn": "মেডিকেল ডকুমেন্ট নির্বাচন করুন (প্রেসক্রিপশন/ ল্যাব রিপোর্ট)",
+    "en": "Select Medical documents (Prescriptions/ Lab Reports)"
+  },
+  "Teleconsult.selectDocumentsLabel": {
+    "bn": "মেডিকেল ডকুমেন্ট নির্বাচন করুন",
+    "en": "Select Medical Documents"
+  },
+  "Teleconsult.selectDocumentsMax": {
+    "bn": "সর্বোচ্চ ৩টি ডকুমেন্ট",
+    "en": "Maximum 3 documents"
+  },
+  "Teleconsult.sendCounsellingToFamily": {
+    "bn": "পরিবারকে পরামর্শ পাঠান",
+    "en": "Send counselling to family"
+  },
+  "Teleconsult.sendCounsellingToFamilyBn": {
+    "bn": "পরিবারকে পরামর্শ পাঠান",
+    "en": "পরিবারকে পরামর্শ পাঠান"
+  },
+  "Teleconsult.specialityDiabeticCoach": {
+    "bn": "ডায়াবেটিস কোচ",
+    "en": "Diabetic Coach"
+  },
+  "Teleconsult.specialityFemaleOnlySemantic": {
+    "bn": "{label}, শুধুমাত্র নারী রোগীদের জন্য উপলব্ধ",
+    "en": "{label}, available for female patients only"
+  },
+  "Teleconsult.specialityGeneralPhysician": {
+    "bn": "জেনারেল ফিজিশিয়ান",
+    "en": "General Physician"
+  },
+  "Teleconsult.specialityMaternityCoach": {
+    "bn": "মাতৃত্ব কোচ",
+    "en": "Maternity Coach"
+  },
+  "Teleconsult.specialitySexualWellness": {
+    "bn": "যৌন সুস্বাস্থ্য",
+    "en": "Sexual Wellness"
+  },
+  "Teleconsult.startConsultationButton": {
+    "bn": "পরামর্শ শুরু করুন",
+    "en": "Start Consultation"
+  },
+  "Teleconsult.statusConnected": {
+    "bn": "সংযুক্ত · এনক্রিপ্টেড",
+    "en": "Connected · Encrypted"
+  },
+  "Teleconsult.takePhoto": {
+    "bn": "ছবি তুলুন",
+    "en": "Take photo"
+  },
+  "Teleconsult.thisVisitLabel": {
+    "bn": "এই ভিজিট",
+    "en": "This visit"
+  },
   "Teleconsult.title": {
     "bn": "টেলি-পরামর্শ",
     "en": "Teleconsult"
+  },
+  "Teleconsult.tryAgain": {
+    "bn": "আবার চেষ্টা করুন",
+    "en": "Try again"
+  },
+  "Teleconsult.viaSukhee": {
+    "bn": "সুখীর মাধ্যমে · নিরাপদ কল",
+    "en": "via Sukhee · Secure call"
+  },
+  "Teleconsult.viaSukheeWithPatient": {
+    "bn": "সুখীর মাধ্যমে · {patientLabel}",
+    "en": "via Sukhee · {patientLabel}"
+  },
+  "Teleconsult.viewFullDocument": {
+    "bn": "সম্পূর্ণ ডকুমেন্ট দেখুন",
+    "en": "View full document"
+  },
+  "Teleconsult.viewInvoice": {
+    "bn": "চালান দেখুন",
+    "en": "View Invoice"
+  },
+  "Teleconsult.viewPrescription": {
+    "bn": "প্রেসক্রিপশন দেখুন",
+    "en": "View Prescription"
+  },
+  "Teleconsult.weeksPregnantSuffix": {
+    "bn": " · {weeks} সপ্তাহের গর্ভবতী",
+    "en": " · {weeks} weeks pregnant"
+  },
+  "TeleconsultConsent.agreeButton": {
+    "bn": "আমি সম্মত",
+    "en": "I Agree"
+  },
+  "TeleconsultConsent.checkboxLabel": {
+    "bn": "আমি রোগীকে এটি ব্যাখ্যা করেছি এবং তিনি এই টেলিকনসাল্ট কলে সম্মত আছেন।",
+    "en": "I have explained this to the patient and they consent to this teleconsult call."
+  },
+  "TeleconsultConsent.declineButton": {
+    "bn": "প্রত্যাখ্যান",
+    "en": "Decline"
+  },
+  "TeleconsultConsent.errorMessage": {
+    "bn": "সম্মতি ফর্ম লোড করা যায়নি। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
+    "en": "Could not load the consent form. Please check your connection and try again."
+  },
+  "TeleconsultConsent.loadingMessage": {
+    "bn": "সম্মতি ফর্ম লোড হচ্ছে…",
+    "en": "Loading consent form…"
+  },
+  "TeleconsultConsent.patientContextLabel": {
+    "bn": "রোগী: {patientLabel}",
+    "en": "For: {patientLabel}"
+  },
+  "TeleconsultConsent.retryButton": {
+    "bn": "আবার চেষ্টা করুন",
+    "en": "Retry"
+  },
+  "TeleconsultConsent.title": {
+    "bn": "রোগীর সম্মতি",
+    "en": "Patient Consent"
   },
   "Training.allModulesTitle": {
     "bn": "সকল মডিউল",
@@ -4276,8 +4640,8 @@
     "en": "Eye Care"
   },
   "Worklist.programmeFamilyPlanning": {
-    "bn": "এফপি",
-    "en": "FP"
+    "bn": "সক্ষম দম্পতি",
+    "en": "Family Planning"
   },
   "Worklist.programmeImci": {
     "bn": "শিশু ফলোআপ",
@@ -4722,6 +5086,18 @@
   "ancBlockedPostpartumTitle": {
     "bn": "এএনসি সেবা দেওয়া যাবে না",
     "en": "ANC Not Available"
+  },
+  "ancBlockedEarlyPregnancyTitle": {
+    "bn": "⚠️ গর্ভাবস্থা মূল্যায়নের জন্য খুব প্রাথমিক পর্যায়",
+    "en": "⚠️ Pregnancy Too Early to Assess"
+  },
+  "ancBlockedEarlyPregnancyMessage": {
+    "bn": "এলএমপি থেকে ৬ সপ্তাহ পরেই কেবল গর্ভাবস্থা মূল্যায়ন করা সম্ভব।\n\nসম্পূর্ণ গর্ভাবস্থা প্রোফাইল মূল্যায়ন এবং এএনসি-র জন্য অনুগ্রহ করে ৬ সপ্তাহ পরে আবার আসুন।",
+    "en": "Pregnancy assessment can only be conducted after 6 weeks from LMP.\n\nPlease revisit after 6 weeks for complete pregnancy profile assessment and ANC."
+  },
+  "ancLockedEarlyLmpHint": {
+    "bn": "⚠ এলএমপি-র ৬ সপ্তাহ পরেই এএনসি সেবা দেওয়া যাবে",
+    "en": "⚠ ANC is available only after 6 weeks from LMP."
   },
   "ancLockedPostpartumHint": {
     "bn": "⚠ প্রসবের পর এএনসি সেবা দেওয়া যাবে না — পোস্টন্যাটাল যত্নের জন্য পিএনসি ব্যবহার করুন",
@@ -13755,6 +14131,166 @@
     "bn": "সপ্তাহ ৪",
     "en": "W4"
   },
+  "Performance.dashboardTab": {
+    "bn": "ড্যাশবোর্ড",
+    "en": "Dashboard"
+  },
+  "Performance.dashboardServicesTab": {
+    "bn": "সেবা প্রদান করুন",
+    "en": "Services"
+  },
+  "Performance.dashboardDemographicTab": {
+    "bn": "জনতাত্ত্বিক",
+    "en": "Demographic"
+  },
+  "Performance.dashboardSubTabAll": {
+    "bn": "সব",
+    "en": "All"
+  },
+  "Performance.dashboardSubTabRmnch": {
+    "bn": "RMNCH",
+    "en": "RMNCH"
+  },
+  "Performance.dashboardSubTabCd": {
+    "bn": "সংক্রামক রোগের সেবা",
+    "en": "CD Services"
+  },
+  "Performance.dashboardSubTabNcd": {
+    "bn": "এনসিডি",
+    "en": "NCD"
+  },
+  "Performance.dashboardSubTabEye": {
+    "bn": "চক্ষু পরীক্ষা",
+    "en": "Eye care"
+  },
+  "Performance.dashboardSubTabCataract": {
+    "bn": "ক্যাটারাক্ট",
+    "en": "Cataract"
+  },
+  "Performance.dashboardFrom": {
+    "bn": "হতে",
+    "en": "From"
+  },
+  "Performance.dashboardTo": {
+    "bn": "পর্যন্ত",
+    "en": "To"
+  },
+  "Performance.dashboardFilterTitle": {
+    "bn": "ফিল্টার",
+    "en": "Filters"
+  },
+  "Performance.dashboardFilterSs": {
+    "bn": "SS নাম",
+    "en": "Shasthya Shebika"
+  },
+  "Performance.dashboardFilterSubVillage": {
+    "bn": "গ্রাম",
+    "en": "Sub-village"
+  },
+  "Performance.dashboardFilterApply": {
+    "bn": "সাবমিট",
+    "en": "Apply"
+  },
+  "Performance.dashboardLoadError": {
+    "bn": "ড্যাশবোর্ড লোড করা যায়নি",
+    "en": "Could not load dashboard"
+  },
+  "Performance.kpiPwRegistration": {
+    "bn": "গর্ভবতী রেজিস্ট্রেশন",
+    "en": "Pregnancy registration"
+  },
+  "Performance.kpiAnc": {
+    "bn": "গর্ভবতী সেবা (এএনসি)",
+    "en": "ANC services"
+  },
+  "Performance.kpiPw4MonthAnc": {
+    "bn": "প্রথম চার মাসে চিহ্নিত এবং প্রথম এএনসি সেবা",
+    "en": "PW Registered within 3 Months and Received ANC"
+  },
+  "Performance.kpiAnc3Plus": {
+    "bn": "গর্ভকালীন সময়ে একই মাকে ৩ অথবা ৩+ ANC সেবা",
+    "en": "3/3+ ANC services"
+  },
+  "Performance.kpiPregnancyOutcome": {
+    "bn": "ডেলিভারি রেজিস্ট্রেশন",
+    "en": "Pregnancy Outcome"
+  },
+  "Performance.kpiPnc": {
+    "bn": "PNC সেবা (ডেলিভারির পর যেকোনো সময়)",
+    "en": "PNC services"
+  },
+  "Performance.kpiHighRiskPw": {
+    "bn": "উচ্চ ঝুঁকিপূর্ণ গর্ভবতী মা",
+    "en": "Highrisk pregnant women"
+  },
+  "Performance.kpiChildVisit": {
+    "bn": "0–24 মাস বয়সী শিশু কাউন্সেলিং",
+    "en": "Under-2 children counselled"
+  },
+  "Performance.kpiHouseholdRegistered": {
+    "bn": "খানা নিবন্ধন",
+    "en": "Households Registered"
+  },
+  "Performance.kpiTotalHousehold": {
+    "bn": "মোট পরিবার",
+    "en": "Total Household"
+  },
+  "Performance.kpiTotalMember": {
+    "bn": "মোট সদস্য",
+    "en": "Total Member"
+  },
+  "Performance.kpiTotalPregnantWomen": {
+    "bn": "মোট গর্ভবতী নারী",
+    "en": "Total Pregnant Women"
+  },
+  "Performance.kpiFamilyPlanning": {
+    "bn": "পরিবার পরিকল্পনা কাউন্সেলিংয়ের সংখ্যা",
+    "en": "Family planning counselled"
+  },
+  "Performance.kpiOtherServices": {
+    "bn": "সংক্রামক রোগের সেবা",
+    "en": "CD services"
+  },
+  "Performance.kpiNcdScreening": {
+    "bn": "এনসিডি স্ক্রিনিং",
+    "en": "NCD screening"
+  },
+  "Performance.kpiNcdReferred": {
+    "bn": "এনসিডি এর জন্য রেফার ",
+    "en": "NCD referred"
+  },
+  "Performance.kpiNcdFollowUp": {
+    "bn": "এনসিডি মূল্যায়ন",
+    "en": "NCD follow-up assessment"
+  },
+  "Performance.kpiTotalNcd": {
+    "bn": "সর্বমোট এনসিডি সেবা",
+    "en": "Total NCD services"
+  },
+  "Performance.kpiLinkedToCare": {
+    "bn": "লিংক টু কেয়ার",
+    "en": "Linked to care"
+  },
+  "Performance.kpiEyeScreening": {
+    "bn": "সর্বমোট চক্ষু পরীক্ষা",
+    "en": "Total eye screening"
+  },
+  "Performance.kpiGlassesSold": {
+    "bn": "চশমা বিক্রয়",
+    "en": "Glasses sold"
+  },
+  "Performance.kpiCataract": {
+    "bn": "ক্যাটারেক্ট স্ক্রিনিং",
+    "en": "Cataract screening"
+  },
+  "Performance.kpiNcdInCataractCamp": {
+    "bn": "ক্যাটারেক্ট ক্যাম্পে এনসিডি সেবা",
+    "en": "NCD services in cataract camp"
+  },
+  "Performance.kpiReferredOperation": {
+    "bn": "অপারেশনের জন্য রেফার",
+    "en": "Patients referred for operation"
+  },
   "Pin.backTooltip": {
     "bn": "পেছনে",
     "en": "Back"
@@ -14218,5 +14754,253 @@
   "Triage.symptom.bleeding": {
     "bn": "রক্তক্ষরণ",
     "en": "Bleeding"
+  },
+  "Epi.scanCardCta": {
+    "en": "Scan EPI card",
+    "bn": "ইপিআই কার্ড স্ক্যান করুন"
+  },
+  "Epi.scanAncCardCta": {
+    "en": "Scan ANC card",
+    "bn": "এএনসি কার্ড স্ক্যান করুন"
+  },
+  "Epi.scanCardSubtitle": {
+    "en": "Photograph the booklet to detect which vaccines were given · enter dates manually",
+    "bn": "কোন টিকা দেওয়া হয়েছে তা শনাক্ত করতে বইটির ছবি তুলুন · তারিখ নিজে লিখুন"
+  },
+  "Epi.scanResultBanner": {
+    "en": "{count} {unit} found · Review and save",
+    "bn": "{count}টি টিকা পাওয়া গেছে · পর্যালোচনা করে সংরক্ষণ করুন"
+  },
+  "Epi.scanDatePrefilled": {
+    "en": "Date pre-filled from card · Edit if needed",
+    "bn": "কার্ড থেকে তারিখ আগে থেকে পূরণ করা হয়েছে · প্রয়োজনে সম্পাদনা করুন"
+  },
+  "Epi.scanFailed": {
+    "en": "Couldn't read card — please enter manually",
+    "bn": "কার্ড পড়া যায়নি — অনুগ্রহ করে নিজে লিখুন"
+  },
+  "Epi.dateBeforeDobError": {
+    "en": "Date cannot be before the patient's date of birth",
+    "bn": "তারিখ রোগীর জন্ম তারিখের আগে হতে পারবে না"
+  },
+  "Epi.dateBeforeEligibleAgeError": {
+    "en": "Too early for this dose — check the child's age against this vaccine's schedule",
+    "bn": "এই ডোজের জন্য এখনো সময় হয়নি — টিকার সময়সূচির সাথে শিশুর বয়স মিলিয়ে দেখুন"
+  },
+  "Epi.scanReviewTitle": {
+    "en": "Review scanned vaccines",
+    "bn": "স্ক্যান করা টিকা পর্যালোচনা করুন"
+  },
+  "Epi.scanReviewDobLabel": {
+    "en": "DOB",
+    "bn": "জন্ম তারিখ"
+  },
+  "Epi.scanReviewDosesRead": {
+    "en": "{count} doses read",
+    "bn": "{count}টি ডোজ পড়া হয়েছে"
+  },
+  "Epi.scanReviewToConfirm": {
+    "en": "{count} to confirm",
+    "bn": "{count}টি নিশ্চিত করতে হবে"
+  },
+  "Epi.scanReviewNotOnCard": {
+    "en": "{count} not on card",
+    "bn": "{count}টি কার্ডে নেই"
+  },
+  "Epi.scanReviewInstructions": {
+    "en": "Check each date against the card and fix anything the scan got wrong. Then tap Update to save everything in one go.",
+    "bn": "কার্ডের সাথে প্রতিটি তারিখ মিলিয়ে দেখুন এবং স্ক্যানে কোনো ভুল থাকলে ঠিক করুন। তারপর সব একসাথে সংরক্ষণ করতে Update-এ ট্যাপ করুন।"
+  },
+  "Epi.scanReviewUpdateCta": {
+    "en": "Update {count} doses",
+    "bn": "{count}টি ডোজ হালনাগাদ করুন"
+  },
+  "Epi.scanReviewRetakePhoto": {
+    "en": "Retake photo",
+    "bn": "আবার ছবি তুলুন"
+  },
+  "Epi.scanReviewReadClearly": {
+    "en": "✓ Read clearly",
+    "bn": "✓ স্পষ্ট পড়া গেছে"
+  },
+  "Epi.scanReviewConfirmDate": {
+    "en": "Confirm date",
+    "bn": "তারিখ নিশ্চিত করুন"
+  },
+  "Epi.scanReviewNotOnCardBadge": {
+    "en": "Not on card",
+    "bn": "কার্ডে নেই"
+  },
+  "Epi.scanReviewAddDate": {
+    "en": "+ Add date",
+    "bn": "+ তারিখ যোগ করুন"
+  },
+  "Epi.scanQualityWarningTitle": {
+    "en": "Check before scanning",
+    "bn": "স্ক্যান করার আগে পরীক্ষা করুন"
+  },
+  "Epi.scanQualityBlurryMessage": {
+    "en": "This photo looks blurry — dates may not read correctly. Hold steady and fill the frame.",
+    "bn": "ছবিটি অস্পষ্ট মনে হচ্ছে — তারিখ সঠিকভাবে পড়া নাও যেতে পারে। স্থির রাখুন এবং ফ্রেম পূর্ণ করুন।"
+  },
+  "Epi.scanQualityGlareMessage": {
+    "en": "This photo has glare or a bright reflection — dates may not read correctly. Avoid flash and screen reflections.",
+    "bn": "ছবিতে আলোর প্রতিফলন বা উজ্জ্বল ঝলক আছে — তারিখ সঠিকভাবে পড়া নাও যেতে পারে। ফ্ল্যাশ ও পর্দার প্রতিফলন এড়িয়ে চলুন।"
+  },
+  "Epi.scanQualityBothMessage": {
+    "en": "This photo looks blurry and has glare — dates may not read correctly. Hold steady, fill the frame, and avoid reflections.",
+    "bn": "ছবিটি অস্পষ্ট এবং এতে আলোর প্রতিফলন আছে — তারিখ সঠিকভাবে পড়া নাও যেতে পারে। স্থির রাখুন, ফ্রেম পূর্ণ করুন এবং প্রতিফলন এড়িয়ে চলুন।"
+  },
+  "Epi.scanQualityRetake": {
+    "en": "Retake photo",
+    "bn": "আবার ছবি তুলুন"
+  },
+  "Epi.scanQualityUseAnyway": {
+    "en": "Use anyway",
+    "bn": "তবুও ব্যবহার করুন"
+  },
+  "Epi.scanning": {
+    "en": "Scanning…",
+    "bn": "স্ক্যান করা হচ্ছে…"
+  },
+  "Epi.scanReviewCta": {
+    "en": "Review & update →",
+    "bn": "পর্যালোচনা ও হালনাগাদ করুন →"
+  },
+  "Epi.scanFrameHint": {
+    "en": "Fill the frame · hold flat · avoid glare",
+    "bn": "ফ্রেম পূর্ণ করুন · সমতল রাখুন · আলোর প্রতিফলন এড়িয়ে চলুন"
+  },
+  "Epi.scanDatesFlagged": {
+    "en": "Dates look textbook-perfect — double-check against the card",
+    "bn": "তারিখগুলো অস্বাভাবিক রকম নিখুঁত মনে হচ্ছে — কার্ডের সাথে আবার মিলিয়ে দেখুন"
+  },
+  "Epi.scanUploadLabel": {
+    "en": "Upload",
+    "bn": "আপলোড করুন"
+  },
+  "Epi.scanReadingCard": {
+    "en": "Reading card…",
+    "bn": "কার্ড পড়া হচ্ছে…"
+  },
+  "Epi.scanNoDateFound": {
+    "en": "No date found",
+    "bn": "কোনো তারিখ পাওয়া যায়নি"
+  },
+  "Epi.scanCameraUnavailable": {
+    "en": "Camera unavailable — grant permission or upload an image",
+    "bn": "ক্যামেরা পাওয়া যাচ্ছে না — অনুমতি দিন অথবা একটি ছবি আপলোড করুন"
+  },
+  "Epi.scanEngineGemini": {
+    "en": "Gemini Vision",
+    "bn": "জেমিনি ভিশন"
+  },
+  "Epi.scanEngineOffline": {
+    "en": "ML Kit (offline)",
+    "bn": "এমএল কিট (অফলাইন)"
+  },
+  "Anc.scanningVisit": {
+    "en": "Scanning ANC Visit {n}",
+    "bn": "এএনসি ভিজিট {n} স্ক্যান করা হচ্ছে"
+  },
+  "Anc.visitColumnFound": {
+    "en": "Visit {n} column located",
+    "bn": "ভিজিট {n}-এর কলাম পাওয়া গেছে"
+  },
+  "Anc.scanFieldFound": {
+    "en": "{label} found · {value}",
+    "bn": "{label} পাওয়া গেছে · {value}"
+  },
+  "Anc.scanFieldNotFound": {
+    "en": "{label} not found",
+    "bn": "{label} পাওয়া যায়নি"
+  },
+  "Anc.weightLabel": {
+    "en": "Weight",
+    "bn": "ওজন"
+  },
+  "Anc.bpLabel": {
+    "en": "Blood pressure",
+    "bn": "রক্তচাপ"
+  },
+  "Anc.fundalHeightLabel": {
+    "en": "Fundal height",
+    "bn": "জরায়ুর উচ্চতা"
+  },
+  "Anc.hemoglobinLabel": {
+    "en": "Hemoglobin",
+    "bn": "হিমোগ্লোবিন"
+  },
+  "Anc.glucoseLabel": {
+    "en": "Glucose",
+    "bn": "গ্লুকোজ"
+  },
+  "Anc.pulseLabel": {
+    "en": "Pulse",
+    "bn": "নাড়ির গতি"
+  },
+  "Anc.temperatureLabel": {
+    "en": "Temperature",
+    "bn": "তাপমাত্রা"
+  },
+  "Anc.urinaryAlbuminLabel": {
+    "en": "Urinary albumin",
+    "bn": "মূত্রে এলবুমিন"
+  },
+  "Anc.urinaryBilirubinLabel": {
+    "en": "Urinary bilirubin",
+    "bn": "মূত্রে বিলিরুবিন"
+  },
+  "Anc.ttTdLabel": {
+    "en": "TT/TD completed",
+    "bn": "টিটি/টিডি সম্পন্ন"
+  },
+  "Anc.edemaLabel": {
+    "en": "Edema",
+    "bn": "ইডিমা"
+  },
+  "Anc.usgLabel": {
+    "en": "Ultrasound (USG)",
+    "bn": "আল্ট্রাসাউন্ড (ইউএসজি)"
+  },
+  "Anc.notFoundValue": {
+    "en": "Not found",
+    "bn": "পাওয়া যায়নি"
+  },
+  "Anc.valuesDisagreeWarning": {
+    "en": "Some values disagree across reads — double-check the card",
+    "bn": "কয়েকটি মান একাধিক রিডিং-এ ভিন্ন হয়েছে — কার্ডের সাথে আবার মিলিয়ে দেখুন"
+  },
+  "Ncd.scanningVisit": {
+    "en": "Scanning NCD Visit {n}",
+    "bn": "এনসিডি ভিজিট {n} স্ক্যান করা হচ্ছে"
+  },
+  "Ncd.visitRowFound": {
+    "en": "Visit {n} row located",
+    "bn": "ভিজিট {n}-এর সারি পাওয়া গেছে"
+  },
+  "Ncd.weightLabel": {
+    "en": "Weight",
+    "bn": "ওজন"
+  },
+  "Ncd.heightLabel": {
+    "en": "Height",
+    "bn": "উচ্চতা"
+  },
+  "Ncd.bpLabel": {
+    "en": "Blood pressure",
+    "bn": "রক্তচাপ"
+  },
+  "Ncd.glucoseLabel": {
+    "en": "Blood glucose",
+    "bn": "রক্তে গ্লুকোজ"
+  },
+  "Ncd.notFoundValue": {
+    "en": "Not found",
+    "bn": "পাওয়া যায়নি"
+  },
+  "Epi.scanNcdCardCta": {
+    "en": "Scan NCD card",
+    "bn": "এনসিডি কার্ড স্ক্যান করুন"
   }
 }
