@@ -166,6 +166,11 @@ dependencies {
     implementation("androidx.room:room-ktx:2.7.0")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
 
+    // LiteRT-LM — the SDK's on-device inference engine (AAR does not bundle it). Same
+    // version and kotlin-reflect exclusion as the SDK's own build.
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1") {
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-reflect")
+    }
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
