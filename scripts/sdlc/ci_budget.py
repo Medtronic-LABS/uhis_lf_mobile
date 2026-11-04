@@ -13,11 +13,16 @@ from pathlib import Path
 from typing import Optional
 
 _ANALYZER_ERROR_RE = re.compile(r"^\s*error • ", re.MULTILINE)
+# `flutter analyze` always ends with one of these; without it the run crashed or printed nothing.
+_ANALYZER_SUMMARY_RE = re.compile(r"^\s*(?:No issues found!|\d+ issues? found\.)", re.MULTILINE)
 # Progress lines look like `00:10 +1696 ~3 -38: Some tests failed.` / `00:10 +9: All tests passed!`
 _TEST_PROGRESS_RE = re.compile(r"^\s*\d+:\d+\s+\+\d+(?:\s+~\d+)?(?:\s+-(\d+))?:", re.MULTILINE)
 
 
-def count_analyzer_errors(text: str) -> int:
+def count_analyzer_errors(text: str) -> Optional[int]:
+    """Error count, or None when the analyzer summary line is missing (fail closed)."""
+    if not _ANALYZER_SUMMARY_RE.search(text):
+        return None
     return len(_ANALYZER_ERROR_RE.findall(text))
 
 
@@ -40,6 +45,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.analyze:
         label = "analyzer errors"
         count = count_analyzer_errors(Path(args.analyze).read_text(encoding="utf-8", errors="replace"))
+        if count is None:
+            print("Could not find a flutter analyze summary line; failing.")
+            return 1
     else:
         label = "test failures"
         count = count_test_failures(Path(args.tests).read_text(encoding="utf-8", errors="replace"))

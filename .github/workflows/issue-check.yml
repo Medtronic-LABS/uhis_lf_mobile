@@ -2,7 +2,7 @@ name: Issue check
 
 on:
   issues:
-    types: [opened, edited, labeled]
+    types: [opened, edited, labeled, unlabeled]
 
 permissions:
   issues: write
@@ -62,7 +62,7 @@ jobs:
           api="repos/$GITHUB_REPOSITORY"
           if [ "$CHECK_OK" = "true" ]; then
             # 404 just means the label was not on the issue.
-            gh api -X DELETE "$api/issues/$ISSUE_NUMBER/labels/status%3Aneeds-info" > /dev/null 2>&1 \
+            gh api -X DELETE "$api/issues/$ISSUE_NUMBER/labels/${NEEDS_INFO_LABEL//:/%3A}" > /dev/null 2>&1 \
               && echo "Removed $NEEDS_INFO_LABEL." || echo "$NEEDS_INFO_LABEL was not set."
           else
             gh label create "$NEEDS_INFO_LABEL" --color FEF2C0 \

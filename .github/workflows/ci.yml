@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   sdlc-scripts:
@@ -50,12 +50,12 @@ jobs:
         run: |
           zeros="0000000000000000000000000000000000000000"
           base="${PR_BASE_SHA:-$PUSH_BEFORE_SHA}"
-          if [ -n "$base" ] && [ "$base" != "$zeros" ]; then
+          if [ -n "$base" ] && [ "$base" != "$zeros" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
             range="$base..$GITHUB_SHA"
             echo "Scanning commit range $range"
             "$RUNNER_TEMP/gitleaks/gitleaks" git --redact --no-banner --log-opts="$range"
           else
-            echo "No base commit (manual run or new branch); scanning full history"
+            echo "No usable base commit (manual run, new branch or missing from history); scanning full history"
             "$RUNNER_TEMP/gitleaks/gitleaks" git --redact --no-banner
           fi
 
@@ -86,13 +86,6 @@ jobs:
       - name: Flutter tests
         run: flutter test --coverage --reporter expanded > "$RUNNER_TEMP/tests.txt" 2>&1 || true
 
-      - name: Sonar analysis
-        if: ${{ env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' && env.SONAR_ORGANIZATION != '' }}
-        uses: SonarSource/sonarqube-scan-action@v8.2.1
-        with:
-          args: >
-            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
-
       - name: Enforce analyze and test budgets
         run: |
           status=0
@@ -103,3 +96,10 @@ jobs:
           cat "$summary"
           cat "$summary" >> "$GITHUB_STEP_SUMMARY"
           exit $status
+
+      - name: Sonar analysis
+        if: ${{ !cancelled() && env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' && env.SONAR_ORGANIZATION != '' }}
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        with:
+          args: >
+            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}

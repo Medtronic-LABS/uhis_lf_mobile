@@ -3,6 +3,10 @@ description: Track a release (maintainers)
 title: "[Release] "
 labels: ["release"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is public. Do not paste patient or member data, names, phone numbers, IDs, credentials, tokens or unscrubbed logs.
   - type: input
     id: version
     attributes:

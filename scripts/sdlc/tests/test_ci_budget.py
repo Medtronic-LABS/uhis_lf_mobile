@@ -19,6 +19,22 @@ class CountAnalyzerErrorsTest(unittest.TestCase):
     def test_no_errors(self):
         self.assertEqual(ci_budget.count_analyzer_errors("No issues found!\n"), 0)
 
+    def test_real_summary_form(self):
+        text = "  error • x • a • b\n236 issues found. (ran in 5.2s)\n"
+        self.assertEqual(ci_budget.count_analyzer_errors(text), 1)
+
+    def test_single_issue_summary(self):
+        self.assertEqual(ci_budget.count_analyzer_errors("1 issue found.\n"), 0)
+
+    def test_empty_output_is_none(self):
+        self.assertIsNone(ci_budget.count_analyzer_errors(""))
+
+    def test_garbage_output_is_none(self):
+        self.assertIsNone(ci_budget.count_analyzer_errors("Unhandled exception: boom\n"))
+
+    def test_errors_without_summary_is_none(self):
+        self.assertIsNone(ci_budget.count_analyzer_errors("  error • x • a • b\n"))
+
 
 class CountTestFailuresTest(unittest.TestCase):
     def test_failed_summary(self):
@@ -43,11 +59,16 @@ class CliTest(unittest.TestCase):
             path.write_text(content, encoding="utf-8")
             return ci_budget.main([flag, str(path), "--budget", str(budget)])
 
+    SUMMARY = "1 issue found.\n"
+
     def test_analyze_within_budget(self):
-        self.assertEqual(self._run("--analyze", "  error • x • a • b\n", 1), 0)
+        self.assertEqual(self._run("--analyze", "  error • x • a • b\n" + self.SUMMARY, 1), 0)
 
     def test_analyze_over_budget(self):
-        self.assertEqual(self._run("--analyze", "  error • x • a • b\n", 0), 1)
+        self.assertEqual(self._run("--analyze", "  error • x • a • b\n" + self.SUMMARY, 0), 1)
+
+    def test_analyze_empty_output_fails(self):
+        self.assertEqual(self._run("--analyze", "", 40), 1)
 
     def test_tests_within_budget(self):
         self.assertEqual(self._run("--tests", "00:01 +5 -2: Some tests failed.\n", 2), 0)
