@@ -1,0 +1,6 @@
+#!/bin/sh
+# Block staged secret/config files (env*.json, key.properties, keystores, .env)
+# and credentials in staged content. Activated by scripts/setup_dev.sh.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+exec python3 scripts/sdlc/guard_staged.py
