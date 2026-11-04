@@ -16,8 +16,13 @@ run() {
     echo "+ $*"
     "$@"
   else
-    echo "[dry-run] $*"
+    echo "[dry-run] $(quote_cmd "$@")"
   fi
+}
+
+# Shell-quote arguments so a printed command is copy-pasteable.
+quote_cmd() {
+  printf '%q ' "$@"
 }
 
 # Like run(), but the first argument is a body fed to the command on stdin.
@@ -30,7 +35,7 @@ run_stdin() {
     echo "JSON"
     printf '%s\n' "$body" | "$@"
   else
-    echo "[dry-run] $* <<'JSON'"
+    echo "[dry-run] $(quote_cmd "$@")<<'JSON'"
     printf '%s\n' "$body"
     echo "JSON"
   fi

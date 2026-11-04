@@ -6,33 +6,22 @@ set -euo pipefail
 
 usage() {
   cat <<USAGE
-Usage: scripts/github/setup_project.sh [--apply [--i-understand-status-reset]] [--help]
+Usage: scripts/github/setup_project.sh [--apply] [--help]
 
 Configures project #$PROJECT of $OWNER:
-  Priority  options P0, P1, P2, P3
-  Status    options Triage, Backlog, Ready, In progress, In review, QA, Done
-  Sprint    iteration field, 2-week cadence
+  Priority  options P0, P1, P2, P3 (API)
+  Sprint    iteration field, 2-week cadence (API)
+  Status    NOT touched by this script: replacing the option list via the API can
+            wipe item values. Add Triage and QA in the UI (steps printed).
 Default is a dry-run that only prints the GraphQL calls.
-
-The Status step REPLACES the option list (updateProjectV2Field). Existing option
-ids may change and items can lose their Status value, so --apply refuses to run
-unless --i-understand-status-reset is also given. Export/back up the project first.
 USAGE
 }
 
 parse_common_flags usage "$@"
 banner
 
-ACK_RESET=0
-for arg in "${REST[@]+"${REST[@]}"}"; do
-  case "$arg" in
-    --i-understand-status-reset) ACK_RESET=1 ;;
-    *) echo "unknown argument: $arg" >&2; exit 2 ;;
-  esac
-done
-
-if [ "$APPLY" -eq 1 ] && [ "$ACK_RESET" -eq 0 ]; then
-  echo "error: --apply also requires --i-understand-status-reset (Status options are replaced; see --help)." >&2
+if [ "${#REST[@]}" -gt 0 ]; then
+  echo "unknown argument: ${REST[0]}" >&2
   exit 2
 fi
 
@@ -85,15 +74,13 @@ graphql "$(options_body "$(field_id Priority)" \
   "P0:RED" "P1:ORANGE" "P2:YELLOW" "P3:GRAY")"
 
 echo
-echo "WARNING: Status step replaces the whole option list."
-echo "  Existing options are kept by name unchanged: Backlog, Ready, In progress, In review, Done."
-echo "  Only Triage (first) and QA (between In review and Done) are added."
-echo "  Option ids may change, so item Status values can reset. Export/back up the project"
-echo "  (and note current item statuses) before running with --apply."
-echo "-- Status --"
-graphql "$(options_body "$(field_id Status)" \
-  "Triage:PURPLE" "Backlog:GRAY" "Ready:BLUE" "In progress:YELLOW" \
-  "In review:ORANGE" "QA:PINK" "Done:GREEN")"
+echo "-- Status (UI only; this script never edits Status) --"
+echo "  The API replaces the whole option list and can wipe item Status values."
+echo "  In the UI: Project -> Settings -> Status field ->"
+echo "    add 'Triage' and drag it to the top;"
+echo "    add 'QA' and place it between 'In review' and 'Done'."
+echo "  Adding options in the UI keeps existing item values."
+echo "  Target order: Triage, Backlog, Ready, In progress, In review, QA, Done."
 
 echo
 echo "-- Sprint (iteration, 2 weeks) --"

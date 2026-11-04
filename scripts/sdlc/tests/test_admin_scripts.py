@@ -55,7 +55,9 @@ class AdminScriptsTest(unittest.TestCase):
         out = self.run_script("sync_labels.sh").stdout
         self.assertIn("gh label create bug --color d73a4a", out)
         self.assertIn("--force", out)
-        self.assertIn("good first issue", out)
+        self.assertIn("good\\ first\\ issue", out)
+        self.assertIn("Waiting\\ for\\ the\\ reporter\\ to\\ complete\\ the\\ ticket", out)
+        self.assertNotIn("--description Waiting for", out)
 
     def test_protection_values(self):
         out = self.run_script("protect_branches.sh").stdout
@@ -70,16 +72,16 @@ class AdminScriptsTest(unittest.TestCase):
 
     def test_project_dry_run_content(self):
         out = self.run_script("setup_project.sh").stdout
-        for word in ["P0", "P1", "P2", "P3", "Triage", "QA", "Sprint", "WARNING"]:
+        for word in ["P0", "P1", "P2", "P3", "Triage", "QA", "Sprint", "Settings"]:
             self.assertIn(word, out)
         self.assertIn("Backlog", out)
         self.assertIn("In review", out)
 
-    def test_project_apply_requires_status_flag(self):
-        r = self.run_script("setup_project.sh", "--apply")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("--i-understand-status-reset", r.stderr)
-        self.assertFalse(self.calls.exists())
+    def test_project_never_mutates_status(self):
+        out = self.run_script("setup_project.sh").stdout
+        self.assertEqual(out.count("updateProjectV2Field"), 1)  # Priority only
+        self.assertNotIn("status-reset", out)
+        self.assertIn("UI", out)
 
     def test_package_skill_reports_absent_skill(self):
         if (ROOT / ".claude" / "skills" / "lw-ticket").is_dir():
