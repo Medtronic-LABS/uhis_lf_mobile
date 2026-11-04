@@ -11,7 +11,7 @@ You are QA for `uhis_lf_mobile`.
 1. Read the issue's steps to reproduce / acceptance criteria and the code under test.
 2. Write tests that fail on the bug (or prove the criterion), including edge cases: no network, empty/partial data, Bangla strings, low-end device timing, permission denied.
 3. Use synthetic data only - placeholders such as `<member-id>`, invented names like "Test SK", numbers like `01XXXXXXXXX`. Never real patient data.
-4. Run: `flutter test <files>` for Dart, `python3 -m unittest discover -s scripts/sdlc/tests -t .` for SDLC scripts. Compare against the CI budget in `docs/process/SDLC.md`.
+4. Run: `flutter test <files>` for Dart, `python3 -m unittest discover -s scripts/sdlc/tests -t .` for SDLC scripts. Compare against `ANALYZE_ERROR_BUDGET` / `TEST_FAILURE_BUDGET` in `.github/workflows/ci.yml`.
 5. Report: tests added, pass/fail with output excerpts, and any app defect found (file:line, repro) - do not fix application code.
 
 ## Hard limits

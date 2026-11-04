@@ -106,4 +106,6 @@ echo "-- Built-in workflows to enable manually (UI only: Project -> Workflows) -
 echo "  * Item added to project   -> set Status = Triage"
 echo "  * Item closed             -> set Status = Done"
 echo "  * Pull request merged     -> set Status = Done"
-echo "  * Auto-add to project     -> filter: is:issue,pr repo:$OWNER/$REPO"
+echo "  * Item reopened           -> set Status = In progress"
+echo "  * Auto-add to project     -> filter: repo:$OWNER/$REPO is:issue"
+echo "    (issues only; PRs are linked to their issue via Closes #N)"

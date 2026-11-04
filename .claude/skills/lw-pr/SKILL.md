@@ -12,8 +12,8 @@ disable-model-invocation: true
 
 2. **Checks** (report each with the result, do not hide failures):
    - `python3 -m unittest discover -s scripts/sdlc/tests -t .`
-   - `flutter analyze` - error count must not exceed the CI budget in `docs/process/SDLC.md`.
-   - `flutter test <test files related to the change>` (and the full `flutter test` for M/L) - failures must not exceed the budget.
+   - `flutter analyze` - error count must not exceed `ANALYZE_ERROR_BUDGET` in `.github/workflows/ci.yml`.
+   - `flutter test <test files related to the change>` (and the full `flutter test` for M/L) - failures must not exceed `TEST_FAILURE_BUDGET` in `.github/workflows/ci.yml`.
    - `git status --porcelain` clean; `git log origin/<base>..HEAD --oneline` shows only this issue's commits.
 
 3. **Body.** Fill `.github/pull_request_template.md` into a temp file. Write it with the Write tool (preferred) or a quoted heredoc (`<<'EOF'`) - never an unquoted heredoc or `echo` of user text:

@@ -22,11 +22,6 @@ def names_in(directory, pattern):
     return sorted(p.parent.name if p.name == "SKILL.md" else p.stem for p in directory.glob(pattern))
 
 
-def ci_budget(name):
-    match = re.search(rf"^\s*{name}:\s*(\d+)\s*$", read(ROOT / ".github/workflows/ci.yml"), re.MULTILINE)
-    return match.group(1)
-
-
 class ProcessDocsTest(unittest.TestCase):
     def test_docs_exist(self):
         for name in DOCS:
@@ -53,10 +48,30 @@ class ProcessDocsTest(unittest.TestCase):
         sdlc = read(PROCESS / "SDLC.md")
         self.assertIn(" → ".join(STATUS_FLOW), sdlc)
 
-    def test_sdlc_budgets_match_ci(self):
+    def test_sdlc_points_at_ci_budgets_without_copying_them(self):
         sdlc = read(PROCESS / "SDLC.md")
+        self.assertIn(".github/workflows/ci.yml", sdlc)
         for var in ("ANALYZE_ERROR_BUDGET", "TEST_FAILURE_BUDGET"):
-            self.assertIn(f"`{var}` = {ci_budget(var)}", sdlc, f"SDLC.md out of sync with ci.yml for {var}")
+            self.assertIn(var, sdlc)
+            self.assertNotRegex(sdlc, rf"{var}`?\s*[=:]\s*\d", f"SDLC.md copies the {var} value")
+
+    def test_size_bands_match_spec(self):
+        template = read(ROOT / ".github/pull_request_template.md")
+        sdlc = read(PROCESS / "SDLC.md")
+        for text in (template, sdlc):
+            self.assertIn("50", text)
+            self.assertIn("judged by nature, not line count", text)
+            self.assertNotIn("400", text)
+
+    def test_project_workflows_consistent(self):
+        script = read(ROOT / "scripts/github/setup_project.sh")
+        admin = read(PROCESS / "CLAUDE_ADMIN_SETUP.md")
+        self.assertIn("is:issue", script)
+        self.assertNotIn("is:issue,pr", script)
+        for name in ("Item added to project", "Item closed", "Pull request merged",
+                     "Item reopened", "Auto-add to project"):
+            self.assertIn(name, script)
+            self.assertIn(name, admin)
 
     def test_doc_lengths(self):
         self.assertLessEqual(len(read(PROCESS / "SDLC.md").splitlines()), 260)

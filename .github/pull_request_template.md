@@ -6,9 +6,9 @@ Closes #
 
 ## Size
 
-- [ ] S (under 100 lines)
-- [ ] M (100-400 lines)
-- [ ] L (over 400 lines, explain why it cannot be split)
+- [ ] S - about 50 changed lines or fewer, no new behaviour
+- [ ] M - new behaviour inside one existing feature
+- [ ] L - new module, schema, sync, auth, AI or push change (judged by nature, not line count; link the spec)
 
 ## Test evidence
 

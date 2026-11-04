@@ -45,14 +45,14 @@ Claude proposes; a person decides.
 
 ## 2. Sizes
 
-Size by scope, not by effort. `/lw-start` proposes a size with a one-line reason; the developer
-can override it. Line counts match the PR template and are a guide only.
+`/lw-start` proposes a size with a one-line reason; the developer can override it. The same
+definitions are in the PR template.
 
 | Size | What it is | Required path |
 |---|---|---|
-| S | No new behaviour: bug fix, copy, small refactor (roughly under 100 changed lines) | issue → branch → failing test + fix (`/lw-fix`) → `lw-reviewer` → PR → 1 human review |
-| M | New behaviour inside one existing feature (roughly 100–400 lines) | as S, plus a short design note (approach, files, offline behaviour, risks) shown before coding and copied into the PR → 1 human review |
-| L | New module, DB schema/migration, sync, auth, AI, push, or over 400 lines | spec + plan under `docs/superpowers/`, human approves the spec, subagent task loop (`/lw-feature`), final whole-branch review → 2 human reviews |
+| S | About 50 changed lines or fewer and no new behaviour: bug fix, copy, small refactor | issue → branch → failing test + fix (`/lw-fix`) → `lw-reviewer` → PR → 1 human review |
+| M | New behaviour inside one existing feature | as S, plus a short design note (approach, files, offline behaviour, risks) shown before coding and copied into the PR → 1 human review |
+| L | New module, DB schema/migration, sync, auth, AI or push change — judged by nature, not line count | spec + plan under `docs/superpowers/`, human approves the spec, subagent task loop (`/lw-feature`), final whole-branch review → 2 human reviews |
 
 Anything touching auth, db, sync, scribe, push, logging or build config also gets `lw-security`.
 
@@ -129,15 +129,14 @@ sensitive data add `status:needs-info` and one bot comment; fixing the issue rem
 
 ### Ratchet budgets
 
-The baseline (2026-11-04) had 40 analyzer errors and 38 failing tests, so the `flutter` job
-fails only when a PR makes things **worse**. Current values in `.github/workflows/ci.yml`:
+The codebase started with known analyzer errors and failing tests, so the `flutter` job fails only
+when a PR makes things **worse**: analyzer errors may not exceed `ANALYZE_ERROR_BUDGET` and failing
+tests may not exceed `TEST_FAILURE_BUDGET`. Both live only in the `flutter` job's `env:` in
+`.github/workflows/ci.yml` — that file is the single source of the current numbers.
 
-- `ANALYZE_ERROR_BUDGET` = 40
-- `TEST_FAILURE_BUDGET` = 38
-
-**Ratchet down, never up.** When your PR fixes analyzer errors or failing tests, lower the number
-in `ci.yml` to the new count **in the same PR**, and update the two lines above (a test checks they
-match). Raising a budget needs an explicit human decision recorded in the PR. Goal: both at 0.
+**Ratchet down, never up.** When your PR fixes analyzer errors or failing tests, lower the budget
+in `ci.yml` to the new count **in the same PR**. Raising a budget needs an explicit human decision
+recorded in the PR. Goal: both at 0.
 
 ## 7. Release
 

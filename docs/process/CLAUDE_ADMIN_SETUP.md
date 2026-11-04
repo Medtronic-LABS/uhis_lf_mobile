@@ -53,9 +53,10 @@ bash scripts/github/protect_branches.sh       # main: 2 approvals, develop: 1, r
 bash scripts/github/protect_branches.sh --apply
 ```
 
-Apply `protect_branches.sh` only once the workflows behind its required checks (`pr-check`,
-`sdlc-scripts`, `secret-scan`, `flutter`, `build-apk`) are merged and have reported on a PR;
-otherwise PRs wait for checks that never arrive.
+Required check names (`pr-check`, `sdlc-scripts`, `secret-scan`, `flutter`, `build-apk`) appear
+in the branch-protection UI picker only after they have run once; `protect_branches.sh` sets them
+by name through the API regardless. Until the workflows are on the target branch and have run,
+PRs will wait on those checks.
 
 `setup_project.sh` never edits **Status** (the API replaces the whole option list and can wipe
 item values). In the UI: Project → Settings → Status → add `Triage` and drag it to the top; add
@@ -68,7 +69,7 @@ Project → Workflows (UI only), enable:
 
 | Workflow | Setting |
 |---|---|
-| Auto-add to project | filter `repo:Medtronic-LABS/uhis_lf_mobile is:issue` |
+| Auto-add to project | filter `repo:Medtronic-LABS/uhis_lf_mobile is:issue` (issues only; PRs link via `Closes #N`) |
 | Item added to project | set Status = Triage |
 | Item closed | set Status = Done |
 | Pull request merged | set Status = Done |
