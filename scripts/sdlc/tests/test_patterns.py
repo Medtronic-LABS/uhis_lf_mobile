@@ -4,8 +4,7 @@ import unittest
 from scripts.sdlc.patterns import (
     CREDENTIAL_CATEGORIES,
     ISSUE_REF_RE,
-    REQUIRED_SECTIONS,
-    TYPE_LABELS,
+    TRACKER_REF_RE,
     find_sensitive,
     is_protected_path,
 )
@@ -140,26 +139,22 @@ class TestProtectedPath(unittest.TestCase):
 
 class TestIssueRef(unittest.TestCase):
     def test_matches(self):
-        for text in ("closes #12", "Refs #7", "Fixes #3", "resolved #9", "Close #1"):
+        for text in (
+            "closes #12", "Refs #7", "Fixes #3", "resolved #9", "Close #1",
+            "Closes Medtronic-LABS/leapwell#12", "Refs Medtronic-LABS/leapwell#7",
+        ):
             self.assertIsNotNone(ISSUE_REF_RE.search(text), text)
 
     def test_rejects(self):
-        for text in ("see #12", "#12", "LEAP-12", "closes 12", "prefix#4"):
+        for text in (
+            "see #12", "#12", "LEAP-12", "closes 12", "prefix#4",
+            "Closes Medtronic-LABS/other#1", "Closes other/leapwell#1",
+        ):
             self.assertIsNone(ISSUE_REF_RE.search(text), text)
 
-
-class TestContractTables(unittest.TestCase):
-    def test_required_sections(self):
-        self.assertEqual(REQUIRED_SECTIONS["release"], ["Version", "Release checklist"])
-        self.assertEqual(REQUIRED_SECTIONS["task"][-1], "Privacy check")
-        self.assertEqual(len(REQUIRED_SECTIONS["bug"]), 10)
-        self.assertEqual(len(REQUIRED_SECTIONS["feature"]), 7)
-
-    def test_type_labels(self):
-        self.assertEqual(
-            TYPE_LABELS,
-            {"bug": "bug", "enhancement": "feature", "chore": "task", "release": "release"},
-        )
+    def test_tracker_ref_is_cross_repo_only(self):
+        self.assertIsNotNone(TRACKER_REF_RE.search("Refs Medtronic-LABS/leapwell#7"))
+        self.assertIsNone(TRACKER_REF_RE.search("Refs #7"))
 
 
 if __name__ == "__main__":

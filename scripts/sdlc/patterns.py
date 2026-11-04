@@ -1,7 +1,7 @@
 """Shared patterns and contract tables for the LEAPWELL SDLC checks.
 
 Single home for: the sensitive-data scan, protected file paths, the issue
-reference rule and the required issue sections. Only category names are ever
+reference rule and the branch-name rule. Only category names are ever
 returned for sensitive matches, never the matched text.
 """
 import re
@@ -102,36 +102,14 @@ def is_protected_path(path: str) -> bool:
     return PROTECTED_PATH_RE.search(path) is not None
 
 
-ISSUE_REF_RE = re.compile(r"\b(close[sd]?|fix(e[sd])?|resolve[sd]?|refs?)\s+#\d+\b", re.IGNORECASE)
+TRACKER_SLUG = "Medtronic-LABS/leapwell"
+_REF_KEYWORDS = r"(close[sd]?|fix(e[sd])?|resolve[sd]?|refs?)"
 
-PRIVACY_HEADING = "Privacy check"
-
-REQUIRED_SECTIONS: dict[str, list[str]] = {
-    "bug": [
-        "App version", "Build flavor", "Device and Android version", "Screen or feature",
-        "Steps to reproduce", "Expected behaviour", "Actual behaviour", "Frequency",
-        "Impact", PRIVACY_HEADING,
-    ],
-    "feature": [
-        "User", "Problem", "Proposed solution", "Acceptance criteria", "Programme",
-        "Offline behaviour", PRIVACY_HEADING,
-    ],
-    "task": ["What", "Why now", "Risk if not done", PRIVACY_HEADING],
-    "release": ["Version", "Release checklist"],
-}
-
-TYPE_LABELS: dict[str, str] = {
-    "bug": "bug",
-    "enhancement": "feature",
-    "chore": "task",
-    "release": "release",
-}
-
-TITLE_PREFIXES: dict[str, str] = {
-    "[bug]": "bug",
-    "[feature]": "feature",
-    "[task]": "task",
-    "[release]": "release",
-}
+# `<kw> #N` (same repo) or `<kw> Medtronic-LABS/leapwell#N` (cross-repo, from a code repo).
+ISSUE_REF_RE = re.compile(
+    rf"\b{_REF_KEYWORDS}\s+(?:{re.escape(TRACKER_SLUG)})?#\d+\b", re.IGNORECASE
+)
+# The cross-repo form only.
+TRACKER_REF_RE = re.compile(rf"\b{_REF_KEYWORDS}\s+{re.escape(TRACKER_SLUG)}#\d+\b", re.IGNORECASE)
 
 BRANCH_RE = re.compile(r"^(feat|fix|chore|docs|refactor|test|hotfix)/\d+-[\w.-]+$")

@@ -11,11 +11,12 @@ from scripts.sdlc import check_pr
 
 class TestEvaluate(unittest.TestCase):
     def test_issue_ref_forms_pass(self):
-        for body in ("closes #12", "Refs #7", "Fixes #3\n\nmore"):
+        for body in ("closes #12", "Refs #7", "Fixes #3\n\nmore",
+                     "Closes Medtronic-LABS/leapwell#12", "Refs Medtronic-LABS/leapwell#7"):
             self.assertTrue(check_pr.evaluate(body, "feat/12-x").ok, body)
 
     def test_missing_ref_fails(self):
-        for body in ("#12", "LEAP-12", "", "see #4"):
+        for body in ("#12", "LEAP-12", "", "see #4", "Closes Medtronic-LABS/other#1"):
             result = check_pr.evaluate(body, "feat/12-x")
             self.assertFalse(result.has_issue_ref, body)
             self.assertFalse(result.ok, body)

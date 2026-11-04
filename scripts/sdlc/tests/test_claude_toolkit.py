@@ -5,16 +5,13 @@ import re
 import unittest
 from pathlib import Path
 
-from scripts.sdlc.check_issue import evaluate
-from scripts.sdlc.patterns import PRIVACY_HEADING, REQUIRED_SECTIONS, TYPE_LABELS, find_sensitive
+from scripts.sdlc.patterns import find_sensitive
 
 ROOT = Path(__file__).resolve().parents[3]
 CLAUDE = ROOT / ".claude"
 AGENTS_DIR = CLAUDE / "agents"
 SKILLS_DIR = CLAUDE / "skills"
-TICKET_DIR = SKILLS_DIR / "lw-ticket"
 GITHOOKS = ROOT / ".githooks"
-FORMS_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
 
 HOOK_COMMAND = 'python3 "$CLAUDE_PROJECT_DIR"/scripts/sdlc/guard_tool.py'
 AGENTS = {
@@ -27,9 +24,7 @@ AGENTS = {
 }
 READ_ONLY_AGENTS = {"lw-architect", "lw-reviewer", "lw-security", "lw-release"}
 WORKFLOW_SKILLS = {"lw-start", "lw-feature", "lw-fix", "lw-pr", "lw-release"}
-TICKET_TYPES = ("bug", "feature", "task", "release")
 HARD_LIMIT_PHRASES = ("never merge", "never set priority", "prod", "secret")
-MAX_TICKET_SKILL_LINES = 220
 
 
 def frontmatter(path):
@@ -44,18 +39,6 @@ def frontmatter(path):
         if sep and not line.startswith(" "):
             meta[key.strip()] = value.strip()
     return meta, text[end + 5:]
-
-
-def form_options(name):
-    """Dropdown options of an issue form, keyed by field label."""
-    text = (FORMS_DIR / f"{name}.yml").read_text(encoding="utf-8")
-    options = {}
-    for block in re.split(r"^  - type: ", text, flags=re.MULTILINE)[1:]:
-        if not block.startswith("dropdown"):
-            continue
-        label = re.search(r"^      label:\s*(.+?)\s*$", block, re.MULTILINE).group(1)
-        options[label] = re.findall(r"^        - (.+?)\s*$", block, re.MULTILINE)
-    return options
 
 
 def toolkit_files():
@@ -107,10 +90,10 @@ class AgentsTest(unittest.TestCase):
 
 class SkillsTest(unittest.TestCase):
     def test_exact_skill_set(self):
-        self.assertEqual({p.parent.name for p in SKILLS_DIR.glob("*/SKILL.md")}, WORKFLOW_SKILLS | {"lw-ticket"})
+        self.assertEqual({p.parent.name for p in SKILLS_DIR.glob("*/SKILL.md")}, WORKFLOW_SKILLS)
 
     def test_frontmatter(self):
-        for skill in WORKFLOW_SKILLS | {"lw-ticket"}:
+        for skill in WORKFLOW_SKILLS:
             meta, body = frontmatter(SKILLS_DIR / skill / "SKILL.md")
             self.assertEqual(meta.get("name"), skill)
             self.assertTrue(meta.get("description"), skill)
@@ -120,72 +103,6 @@ class SkillsTest(unittest.TestCase):
         for skill in WORKFLOW_SKILLS:
             meta, _ = frontmatter(SKILLS_DIR / skill / "SKILL.md")
             self.assertEqual(meta.get("disable-model-invocation"), "true", skill)
-
-
-class TicketSkillTest(unittest.TestCase):
-    def setUp(self):
-        self.meta, self.body = frontmatter(TICKET_DIR / "SKILL.md")
-
-    def test_chat_safe_frontmatter(self):
-        self.assertEqual(set(self.meta), {"name", "description"})
-        for trigger in ("bug", "ticket", "issue", "feature request", "task"):
-            self.assertIn(trigger, self.meta["description"].lower())
-
-    def test_focused_length(self):
-        lines = (TICKET_DIR / "SKILL.md").read_text(encoding="utf-8").count("\n")
-        self.assertLessEqual(lines, MAX_TICKET_SKILL_LINES)
-
-    def test_self_contained(self):
-        for path in TICKET_DIR.rglob("*.md"):
-            text = path.read_text(encoding="utf-8")
-            self.assertNotIn("../", text, f"{path} reaches outside the skill folder")
-        for ref in re.findall(r"references/[\w-]+\.md", self.body):
-            self.assertTrue((TICKET_DIR / ref).is_file(), ref)
-        for issue_type in TICKET_TYPES:
-            self.assertIn(f"references/{issue_type}.md", self.body)
-        self.assertIn("references/privacy.md", self.body)
-
-    def test_flow_essentials(self):
-        for needle in (
-            "gh issue list", "--body-file", "gh project item-add 4 --owner Medtronic-LABS",
-            "issue_write", "issues/new?template=",
-            "https://github.com/Medtronic-LABS/uhis_lf_mobile/security/advisories/new",
-            "AskUserQuestion", "adb devices", "prio:", "env:", "area:",
-        ):
-            self.assertIn(needle, self.body)
-
-    def test_references_carry_contract_headings(self):
-        for issue_type in TICKET_TYPES:
-            text = (TICKET_DIR / "references" / f"{issue_type}.md").read_text(encoding="utf-8")
-            for heading in REQUIRED_SECTIONS[issue_type]:
-                self.assertRegex(text, rf"(?m)^### {re.escape(heading)}$", f"{issue_type}: {heading}")
-
-    def test_body_templates_pass_issue_check(self):
-        type_label = {issue_type: label for label, issue_type in TYPE_LABELS.items()}
-        for issue_type in TICKET_TYPES:
-            text = (TICKET_DIR / "references" / f"{issue_type}.md").read_text(encoding="utf-8")
-            body = re.search(r"```markdown\n(.*?)```", text, re.DOTALL).group(1)
-            result = evaluate(f"[{issue_type}] summary", body, [type_label[issue_type]])
-            self.assertTrue(result.ok, f"{issue_type}: {result}")
-
-    def test_privacy_section_template_is_ticked(self):
-        for issue_type in TICKET_TYPES:
-            if PRIVACY_HEADING not in REQUIRED_SECTIONS[issue_type]:
-                continue
-            text = (TICKET_DIR / "references" / f"{issue_type}.md").read_text(encoding="utf-8")
-            self.assertIn("- [x] This issue contains no patient/member data", text, issue_type)
-
-    def test_references_offer_form_dropdown_options(self):
-        for issue_type in TICKET_TYPES:
-            text = (TICKET_DIR / "references" / f"{issue_type}.md").read_text(encoding="utf-8")
-            for label, options in form_options(issue_type).items():
-                for option in options:
-                    self.assertIn(option, text, f"{issue_type}/{label}: {option}")
-
-    def test_privacy_reference_covers_categories(self):
-        text = (TICKET_DIR / "references" / "privacy.md").read_text(encoding="utf-8").lower()
-        for needle in ("phone", "nid", "email", "gps", "token", "password", "logcat", "<member-id>", "screenshot"):
-            self.assertIn(needle, text)
 
 
 class GitHooksTest(unittest.TestCase):

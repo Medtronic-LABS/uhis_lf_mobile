@@ -13,7 +13,7 @@ Process reference: `docs/process/SDLC.md` (sizes, Definition of Ready, branching
    If no number was given, ask for one. If the issue is closed, stop.
 
 2. **Definition of Ready.** Report each as ok / missing:
-   - Required sections for its type are filled (no `status:needs-info` label); bug has steps to reproduce, feature has acceptance criteria.
+   - Required sections for its type are filled (the leapwell ticket is complete); bug has steps to reproduce, feature has acceptance criteria.
    - Triaged: has a `prio:*` label (set by a human - you never set it) and an `area:*` label.
    - Not `status:blocked` / `status:needs-design`; open questions answered.
    If something is missing, say what, and ask whether to continue anyway. Do not edit the issue to make it look ready.

@@ -869,7 +869,7 @@ Web build requires `SemanticsBinding.instance.ensureSemantics()` (already in
 
 ## Contributing
 
-Tickets live in GitHub Issues (file them with `/lw-ticket` in Claude, or the issue forms). Follow the process in [`docs/process/SDLC.md`](docs/process/SDLC.md): branch `<type>/<issue#>-<slug>` from `develop`, open a PR with `Closes #N`, keep CI green. Run `sh scripts/setup_dev.sh` once to activate the git hooks. This repository is public — never include patient data, credentials or raw logs.
+Tickets are filed in [`Medtronic-LABS/leapwell`](https://github.com/Medtronic-LABS/leapwell) and routed to sub-issues here by a developer. Follow the process in [`docs/process/SDLC.md`](docs/process/SDLC.md): branch `<type>/<N>-<slug>` from `develop`, open a PR with `Closes #N` (or `Refs Medtronic-LABS/leapwell#N`), keep CI green. Run `sh scripts/setup_dev.sh` once to activate the git hooks. This repository is public — never include patient data, credentials or raw logs.
 
 ---
 

@@ -24,7 +24,7 @@ else
 fi
 
 if ! command -v gh >/dev/null 2>&1; then
-  warn "gh (GitHub CLI) not installed - needed by /lw-ticket, /lw-start and /lw-pr in Claude Code"
+  warn "gh (GitHub CLI) not installed - needed by /lw-start and /lw-pr in Claude Code"
 elif gh auth status >/dev/null 2>&1; then
   ok "gh signed in"
 else
@@ -35,8 +35,9 @@ cat <<'EOF'
 
 Next steps:
   1. Read docs/process/SDLC.md (sizes, branches, Definition of Ready/Done).
-  2. File tickets through Claude: /lw-ticket (or just say "file a bug").
-  3. Pick up an issue: /lw-start <issue-number>  (creates type/<issue#>-<slug>).
+  2. Tickets are filed in leapwell (https://github.com/Medtronic-LABS/leapwell); start Claude from
+     the leapwell workspace (clone it, run /lw-setup) and route items with /lw-route.
+  3. Pick up a sub-issue: /lw-start <issue-number>  (creates type/<N>-<slug>).
   4. Open a draft PR to develop: /lw-pr
   5. Run the SDLC checks: python3 -m unittest discover -s scripts/sdlc/tests -t .
 EOF

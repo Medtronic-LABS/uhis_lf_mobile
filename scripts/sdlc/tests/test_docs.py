@@ -8,7 +8,7 @@ from scripts.sdlc.patterns import find_sensitive
 
 ROOT = Path(__file__).resolve().parents[3]
 PROCESS = ROOT / "docs" / "process"
-DOCS = ("SDLC.md", "TICKETS.md", "CLAUDE_ADMIN_SETUP.md", "JIRA_RETIREMENT.md")
+DOCS = ("SDLC.md", "CLAUDE_ADMIN_SETUP.md", "JIRA_RETIREMENT.md")
 JIRA_KEY_RE = re.compile(r"LEAP-\d")
 GITIGNORE_RULES = (".claude/worktrees/", "env.*.json", "!env.example.json", "dist/")
 STATUS_FLOW = ("Triage", "Backlog", "Ready", "In progress", "In review", "QA", "Done")
@@ -75,19 +75,11 @@ class ProcessDocsTest(unittest.TestCase):
 
     def test_doc_lengths(self):
         self.assertLessEqual(len(read(PROCESS / "SDLC.md").splitlines()), 260)
-        self.assertLessEqual(len(read(PROCESS / "TICKETS.md").splitlines()), 70)
-
-    def test_tickets_guide_covers_intake(self):
-        tickets = read(PROCESS / "TICKETS.md")
-        for phrase in ("/lw-ticket", "file a bug", "public", "Triage", "screenshot", "issues/new/choose"):
-            self.assertIn(phrase, tickets)
 
     def test_admin_setup_covers_owner_steps(self):
         admin = read(PROCESS / "CLAUDE_ADMIN_SETUP.md")
-        for phrase in ("dist/skills/lw-ticket.zip", "scripts/github/package_skill.sh",
-                       "https://api.githubcopilot.com/mcp/", "sync_labels.sh", "setup_project.sh",
-                       "protect_branches.sh", "--apply", "private vulnerability reporting",
-                       "settings.local.json"):
+        for phrase in ("sync_labels.sh", "setup_project.sh", "protect_branches.sh", "--apply",
+                       "private vulnerability reporting", "settings.local.json"):
             self.assertIn(phrase.lower(), admin.lower())
 
     def test_jira_keys_only_in_retirement_note(self):
@@ -107,11 +99,13 @@ class ProcessDocsTest(unittest.TestCase):
         claude = read(ROOT / "CLAUDE.md")
         self.assertIn("## Process & ticketing", claude)
         self.assertLess(claude.index("## Process & ticketing"), claude.index("## Visit Architecture"))
-        for phrase in ("docs/process/SDLC.md", "docs/process/TICKETS.md", "/lw-ticket", "Jira"):
+        for phrase in ("docs/process/SDLC.md", "Medtronic-LABS/leapwell", "/lw-route", "Jira"):
             self.assertIn(phrase, claude)
 
-    def test_readme_links_sdlc(self):
-        self.assertIn("docs/process/SDLC.md", read(ROOT / "README.md"))
+    def test_readme_links_sdlc_and_leapwell(self):
+        readme = read(ROOT / "README.md")
+        self.assertIn("docs/process/SDLC.md", readme)
+        self.assertIn("Medtronic-LABS/leapwell", readme)
 
 
 class RepoHygieneTest(unittest.TestCase):

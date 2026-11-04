@@ -8,9 +8,9 @@ Parent context: `../CLAUDE.md` (leapfrog-setup) and `../../CLAUDE.md` (platform-
 
 ## Process & ticketing
 
-- **Tracker:** GitHub Issues + org Project "LeapWell" (#4). Jira is retired for this app — reference issues as `#N` only ([`docs/process/JIRA_RETIREMENT.md`](docs/process/JIRA_RETIREMENT.md)).
-- **Process:** [`docs/process/SDLC.md`](docs/process/SDLC.md) — S/M/L sizes, Definition of Ready/Done, branches `<type>/<issue#>-<slug>` from `develop`, PRs with `Closes #N`, CI budgets, release, hotfix, agent rules.
-- **Filing tickets:** `/lw-ticket` (or "file a bug" in claude.ai / Desktop chat); guide for PM/QA in [`docs/process/TICKETS.md`](docs/process/TICKETS.md). Admin setup: [`docs/process/CLAUDE_ADMIN_SETUP.md`](docs/process/CLAUDE_ADMIN_SETUP.md).
+- **Tickets live in leapwell** ([`Medtronic-LABS/leapwell`](https://github.com/Medtronic-LABS/leapwell)): everyone files bugs, features, tasks and releases there (`/lw-ticket` in the leapwell workspace). A developer routes each item into sub-issues in this repo (`/lw-route`). Jira is retired ([`docs/process/JIRA_RETIREMENT.md`](docs/process/JIRA_RETIREMENT.md)). Start Claude from the leapwell workspace (clone leapwell, run `/lw-setup`).
+- **Process:** [`docs/process/SDLC.md`](docs/process/SDLC.md) — S/M/L sizes, Definition of Ready/Done, branches `<type>/<N>-<slug>` from `develop`, PRs with `Closes #N` (local sub-issue) or `Refs Medtronic-LABS/leapwell#N`, CI budgets, release, hotfix, agent rules.
+- **Filing tickets:** not here — see leapwell (`docs/process/TICKETS.md` there). Admin setup: [`docs/process/CLAUDE_ADMIN_SETUP.md`](docs/process/CLAUDE_ADMIN_SETUP.md).
 - **Workflow skills:** `/lw-start <N>` → `/lw-fix <N>` (S/M) or `/lw-feature <N>` (L) → `/lw-pr`; `/lw-release` for releases.
 - **Agents** (`.claude/agents/`): `lw-architect`, `lw-implementer`, `lw-reviewer`, `lw-qa`, `lw-security`, `lw-release`.
 - **Never** (humans only): merge, push to `main`/`develop`, tag or release, set priority, touch prod keys or `env*.json`. The repo is public — no patient data, secrets or raw logs in issues, PRs, commits or tests.

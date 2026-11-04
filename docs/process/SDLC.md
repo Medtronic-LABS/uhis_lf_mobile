@@ -4,8 +4,10 @@ How work moves from an idea to the Play Store for `uhis_lf_mobile`. Short on pur
 scales with the size of the change. Design record:
 [`docs/superpowers/specs/2026-11-04-sdlc-and-ticketing-design.md`](../superpowers/specs/2026-11-04-sdlc-and-ticketing-design.md).
 
-- **Tracker:** GitHub Issues + org Project "LeapWell" (#4). Jira is retired for this app
-  ([JIRA_RETIREMENT.md](JIRA_RETIREMENT.md)).
+- **Tickets live in [leapwell](https://github.com/Medtronic-LABS/leapwell).** Everyone files bugs, features, tasks and releases there
+  (see `docs/process/SDLC.md` and `TICKETS.md` in leapwell). A developer routes each item into
+  sub-issues here with `/lw-route` from the leapwell workspace; work, PRs and Project "LeapWell"
+  (#4) tracking happen on those sub-issues. Jira is retired ([JIRA_RETIREMENT.md](JIRA_RETIREMENT.md)).
 - **The repo is public.** No patient/member data, names, phone numbers, IDs, credentials, tokens or
   unscrubbed logs in issues, PRs, commits, tests or screenshots. Security problems go to a
   [private advisory](https://github.com/Medtronic-LABS/uhis_lf_mobile/security/advisories/new).
@@ -13,9 +15,9 @@ scales with the size of the change. Design record:
 
 ```
  idea / bug
-    │  /lw-ticket (or issue form)                     Project Status
+    │  /lw-ticket in leapwell, then /lw-route          Project Status
     ▼
- Issue ──► Triage (humans: priority, area, size, owner)    Triage
+ Sub-issue ──► Triage (humans: priority, area, size, owner)    Triage
     │                                                      Backlog → Ready
     ▼  /lw-start <N>   (Definition of Ready, size, branch)
  type/<N>-<slug> from develop                              In progress
@@ -70,12 +72,11 @@ Project #4 Status: Triage → Backlog → Ready → In progress → In review �
 | QA | developer after merge | On `develop`; waiting for QA on the training build |
 | Done | QA (or automatic on close) | Verified; issue closed |
 
-The `issue-check` workflow validates every issue against its form: missing sections or detected
-sensitive data add `status:needs-info` and one bot comment; fixing the issue removes the label.
+Ticket completeness and privacy are checked in leapwell when the ticket is filed.
 
 ### Definition of Ready
 
-- All required sections for its type are filled (no `status:needs-info`): a bug has steps to
+- The leapwell ticket is complete: a bug has steps to
   reproduce, expected and actual behaviour; a feature has acceptance criteria and offline behaviour.
 - Triaged: a `prio:*` label (set by a human) and one `area:*` label.
 - Not `status:blocked` or `status:needs-design`; open questions answered.
@@ -95,7 +96,7 @@ sensitive data add `status:needs-info` and one bot comment; fixing the issue rem
 
 - Long-lived: `main` (released) and `develop` (integration). Nobody pushes to either directly; the
   guard hook blocks it in Claude Code and branch protection blocks it on GitHub.
-- Work branches from `develop`: `<type>/<issue#>-<slug>`, type one of
+- Work branches from `develop`: `<type>/<N>-<slug>`, type one of
   `feat | fix | chore | docs | refactor | test | hotfix`. Example: `fix/123-sync-stuck-90`.
 - Commits: Conventional Commit subject with the issue, e.g. `fix(sync): retry upload on 503 (#123)`.
   The `commit-msg` hook requires a `#N` or a Conventional Commit type.
@@ -106,8 +107,8 @@ sensitive data add `status:needs-info` and one bot comment; fixing the issue rem
 
 - Open with `/lw-pr` (draft PR to `develop`; `hotfix/*` to `main`). It runs the checks and fills
   `.github/pull_request_template.md`.
-- The body's first line is `Closes #N` (or `Fixes` / `Resolves`), or `Refs #N` when it does not
-  fully resolve the issue. The `pr-check` workflow fails without it; a bare `#N` is not enough.
+- The body's first line is `Closes #N` (local sub-issue; or `Fixes` / `Resolves`), or
+  `Refs Medtronic-LABS/leapwell#N` / `Refs #N` when it does not fully resolve the issue. The `pr-check` workflow fails without it; a bare `#N` is not enough.
 - Fill Size, Test evidence, Screenshots (test data only), Risk & rollback, and tick the Definition
   of Done honestly.
 - Approvals: `develop` 1, `main` 2, plus CODEOWNERS for `.github/`, `.claude/`, auth, db,
@@ -126,7 +127,6 @@ sensitive data add `status:needs-info` and one bot comment; fixing the issue rem
 | `ci.yml` | `flutter` | analyzer errors and failing tests within the budgets below |
 | `pr-check.yml` | `pr-check` | issue link present; branch name and sensitive-data checks |
 | `android-apk.yml` | `build-apk` | release APK builds |
-| `issue-check.yml` | — | issue sections and privacy (labels the issue; not a PR gate) |
 
 ### Ratchet budgets
 
@@ -144,7 +144,7 @@ recorded in the PR. Goal: both at 0.
 Full checklist and Play Console notes: [`RELEASE_PLAN.md`](../../RELEASE_PLAN.md). Walk it with
 `/lw-release` (the `lw-release` agent checks readiness).
 
-1. File a `[Release] <version>` issue (`/lw-ticket` → Release).
+1. File a `[Release] <version>` ticket in leapwell (`/lw-ticket` → Release) and route it here.
 2. Version bump: `pubspec.yaml` is the only version source. Bump via its own
    `chore/<N>-bump-<version>` PR to `develop`; the build number always increases.
 3. `develop` → `main` PR once QA has verified the training build. The PR body must contain
@@ -169,11 +169,11 @@ For a prod P0/P1 the team agrees cannot wait for the next release:
 
 ## 9. Working with the agents
 
-Shared toolkit committed under `.claude/` — everyone's Claude Code behaves the same. Skills you run:
+Shared toolkit committed under `.claude/` — everyone's Claude Code behaves the same. Ticket filing
+and routing (`/lw-ticket`, `/lw-route`) live in the leapwell workspace. Skills you run here:
 
 | Skill | When |
 |---|---|
-| `/lw-ticket` | File a bug, feature, task or release (also works in claude.ai / Desktop chat) |
 | `/lw-start <N>` | Pick up an issue: Definition of Ready, size, branch, plan comment |
 | `/lw-fix <N>` | S/M: root cause, failing test, fix, review |
 | `/lw-feature <N>` | L: brainstorm, spec, plan, task loop, final review |
@@ -221,13 +221,14 @@ blocks the dangerous commands and secret-file access in Claude Code, and the git
 
 ```sh
 sh scripts/setup_dev.sh        # activates .githooks, checks python3 3.11+ and gh
-gh auth login                  # GitHub CLI, used by /lw-ticket, /lw-start, /lw-pr
-gh auth refresh -s project     # lets /lw-ticket add new issues to Project #4
+gh auth login                  # GitHub CLI, used by /lw-start, /lw-pr
+gh auth refresh -s project     # lets Claude read and update Project #4
 ```
 
 If you had a personal, untracked `.claude/settings.json`, rename it to
 `.claude/settings.local.json` before pulling this change, or git refuses to overwrite it.
 Run the SDLC checks any time with `python3 -m unittest discover -s scripts/sdlc/tests -t .`.
 
-Admin and Claude-org setup: [CLAUDE_ADMIN_SETUP.md](CLAUDE_ADMIN_SETUP.md). Filing guide for
-PM/QA: [TICKETS.md](TICKETS.md).
+Admin setup: [CLAUDE_ADMIN_SETUP.md](CLAUDE_ADMIN_SETUP.md). Filing guide for PM/QA:
+`docs/process/TICKETS.md` in [leapwell](https://github.com/Medtronic-LABS/leapwell). Start Claude from the leapwell workspace (clone
+leapwell, run `/lw-setup`).

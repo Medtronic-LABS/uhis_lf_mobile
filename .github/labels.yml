@@ -98,9 +98,6 @@
 - name: env:dev
   color: "BFD4F2"
   description: "Affects the dev build"
-- name: status:needs-info
-  color: "FEF2C0"
-  description: "Waiting for the reporter to complete the ticket"
 - name: status:blocked
   color: "B60205"
   description: "Blocked by another item"

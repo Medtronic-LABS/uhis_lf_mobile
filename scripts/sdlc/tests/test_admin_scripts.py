@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 GH_DIR = ROOT / "scripts" / "github"
 MUTATING = ["sync_labels.sh", "setup_project.sh", "protect_branches.sh"]
-ALL = MUTATING + ["package_skill.sh"]
+ALL = MUTATING
 
 
 class AdminScriptsTest(unittest.TestCase):
@@ -56,8 +56,7 @@ class AdminScriptsTest(unittest.TestCase):
         self.assertIn("gh label create bug --color d73a4a", out)
         self.assertIn("--force", out)
         self.assertIn("good\\ first\\ issue", out)
-        self.assertIn("Waiting\\ for\\ the\\ reporter\\ to\\ complete\\ the\\ ticket", out)
-        self.assertNotIn("--description Waiting for", out)
+        self.assertIn("Blocked\\ by\\ another\\ item", out)
 
     def test_protection_values(self):
         out = self.run_script("protect_branches.sh").stdout
@@ -82,13 +81,6 @@ class AdminScriptsTest(unittest.TestCase):
         self.assertEqual(out.count("updateProjectV2Field"), 1)  # Priority only
         self.assertNotIn("status-reset", out)
         self.assertIn("UI", out)
-
-    def test_package_skill_reports_absent_skill(self):
-        if (ROOT / ".claude" / "skills" / "lw-ticket").is_dir():
-            self.skipTest("skill exists")
-        r = self.run_script("package_skill.sh")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("lw-ticket", r.stderr)
 
 
 if __name__ == "__main__":
