@@ -1,0 +1,231 @@
+# LEAPWELL SDLC
+
+How work moves from an idea to the Play Store for `uhis_lf_mobile`. Short on purpose: ceremony
+scales with the size of the change. Design record:
+[`docs/superpowers/specs/2026-11-04-sdlc-and-ticketing-design.md`](../superpowers/specs/2026-11-04-sdlc-and-ticketing-design.md).
+
+- **Tracker:** GitHub Issues + org Project "LeapWell" (#4). Jira is retired for this app
+  ([JIRA_RETIREMENT.md](JIRA_RETIREMENT.md)).
+- **The repo is public.** No patient/member data, names, phone numbers, IDs, credentials, tokens or
+  unscrubbed logs in issues, PRs, commits, tests or screenshots. Security problems go to a
+  [private advisory](https://github.com/Medtronic-LABS/uhis_lf_mobile/security/advisories/new).
+- **Code standards:** `CLAUDE.md` and the root "Engineering Design Standards".
+
+```
+ idea / bug
+    │  /lw-ticket (or issue form)                     Project Status
+    ▼
+ Issue ──► Triage (humans: priority, area, size, owner)    Triage
+    │                                                      Backlog → Ready
+    ▼  /lw-start <N>   (Definition of Ready, size, branch)
+ type/<N>-<slug> from develop                              In progress
+    │  S/M: /lw-fix      L: /lw-feature (spec → plan → task loop)
+    ▼  /lw-pr          (checks, Closes #N, draft PR)
+ PR → develop ── CI + reviews ── human merges              In review
+    │  training build verified by QA                       QA
+    ▼
+ pubspec bump PR ─► develop → main PR ─► v* tag ─► release.yml ─► Play
+    internal → closed → staged prod                        Done
+```
+
+## 1. Roles and human-only gates
+
+| Role | Does |
+|---|---|
+| Reporter (anyone: dev, QA, PM) | Files tickets through Claude (`lw-ticket`) or the issue forms |
+| Triager (lead + PM, twice a week) | Sets priority, area, size, owner; moves Triage → Backlog/Ready |
+| Developer | Picks up Ready issues, works with the agents, owns the PR |
+| Reviewer (human) | Reviews and approves PRs; CODEOWNERS for sensitive paths |
+| QA | Verifies on the training build, moves the card to Done or back |
+| Release owner | Bumps version, tags, uploads to Play |
+
+**Only humans may:** approve a spec, set priority, merge a PR, tag or release, upload to Play,
+handle prod keys / secrets / `key.properties` / `env*.json`, and grant a security exception.
+Claude proposes; a person decides.
+
+## 2. Sizes
+
+Size by scope, not by effort. `/lw-start` proposes a size with a one-line reason; the developer
+can override it. Line counts match the PR template and are a guide only.
+
+| Size | What it is | Required path |
+|---|---|---|
+| S | No new behaviour: bug fix, copy, small refactor (roughly under 100 changed lines) | issue → branch → failing test + fix (`/lw-fix`) → `lw-reviewer` → PR → 1 human review |
+| M | New behaviour inside one existing feature (roughly 100–400 lines) | as S, plus a short design note (approach, files, offline behaviour, risks) shown before coding and copied into the PR → 1 human review |
+| L | New module, DB schema/migration, sync, auth, AI, push, or over 400 lines | spec + plan under `docs/superpowers/`, human approves the spec, subagent task loop (`/lw-feature`), final whole-branch review → 2 human reviews |
+
+Anything touching auth, db, sync, scribe, push, logging or build config also gets `lw-security`.
+
+## 3. Issue lifecycle
+
+Project #4 Status: Triage → Backlog → Ready → In progress → In review → QA → Done
+
+| Status | Who moves it | Meaning |
+|---|---|---|
+| Triage | automatic (issue added) | New; not yet looked at |
+| Backlog | triager | Accepted, prioritised, not scheduled |
+| Ready | triager / lead | Meets the Definition of Ready; can be picked up |
+| In progress | developer | Branch exists, work started |
+| In review | developer | PR open and marked ready for review |
+| QA | developer after merge | On `develop`; waiting for QA on the training build |
+| Done | QA (or automatic on close) | Verified; issue closed |
+
+The `issue-check` workflow validates every issue against its form: missing sections or detected
+sensitive data add `status:needs-info` and one bot comment; fixing the issue removes the label.
+
+### Definition of Ready
+
+- All required sections for its type are filled (no `status:needs-info`): a bug has steps to
+  reproduce, expected and actual behaviour; a feature has acceptance criteria and offline behaviour.
+- Triaged: a `prio:*` label (set by a human) and one `area:*` label.
+- Not `status:blocked` or `status:needs-design`; open questions answered.
+- Size agreed; L-size has an approved spec before implementation starts.
+
+### Definition of Done
+
+- PR merged to `develop` with `Closes #N`; all required checks green.
+- New public behaviour has a test; bugs have a regression test.
+- No hardcoded user-facing strings (`app_strings.dart`) or config (`AppConfig`); no swallowed errors.
+- No secrets, env files or patient data committed.
+- Offline behaviour verified where relevant.
+- Docs updated where behaviour changed.
+- QA verified on the training build (bugs: on the reported device/Android version when possible).
+
+## 4. Branching
+
+- Long-lived: `main` (released) and `develop` (integration). Nobody pushes to either directly; the
+  guard hook blocks it in Claude Code and branch protection blocks it on GitHub.
+- Work branches from `develop`: `<type>/<issue#>-<slug>`, type one of
+  `feat | fix | chore | docs | refactor | test | hotfix`. Example: `fix/123-sync-stuck-90`.
+- Commits: Conventional Commit subject with the issue, e.g. `fix(sync): retry upload on 503 (#123)`.
+  The `commit-msg` hook requires a `#N` or a Conventional Commit type.
+- Keep a branch to one issue. Rebase or merge `develop` in as needed; never force-push shared branches.
+
+## 5. Pull requests
+
+- Open with `/lw-pr` (draft PR to `develop`; `hotfix/*` to `main`). It runs the checks and fills
+  `.github/pull_request_template.md`.
+- The body's first line is `Closes #N` (or `Fixes` / `Resolves`), or `Refs #N` when it does not
+  fully resolve the issue. The `pr-check` workflow fails without it; a bare `#N` is not enough.
+- Fill Size, Test evidence, Screenshots (test data only), Risk & rollback, and tick the Definition
+  of Done honestly.
+- Approvals: `develop` 1, `main` 2, plus CODEOWNERS for `.github/`, `.claude/`, auth, db,
+  `endpoints.dart`, `android/`, `pubspec.yaml`, `scripts/release.sh`, `scripts/sdlc/`.
+  L-size PRs need 2 human reviews even into `develop`.
+- Required checks: `pr-check`, `sdlc-scripts`, `secret-scan`, `flutter`, `build-apk`.
+- Stale approvals are dismissed on new pushes; conversations must be resolved before merge.
+- A human merges.
+
+## 6. CI gates
+
+| Workflow | Job | Gate |
+|---|---|---|
+| `ci.yml` | `sdlc-scripts` | `python3 -m unittest discover -s scripts/sdlc/tests -t .` must pass |
+| `ci.yml` | `secret-scan` | gitleaks on the PR's commit range must be clean |
+| `ci.yml` | `flutter` | analyzer errors and failing tests within the budgets below |
+| `pr-check.yml` | `pr-check` | issue link present; branch name and sensitive-data checks |
+| `android-apk.yml` | `build-apk` | release APK builds |
+| `issue-check.yml` | — | issue sections and privacy (labels the issue; not a PR gate) |
+
+### Ratchet budgets
+
+The baseline (2026-11-04) had 40 analyzer errors and 38 failing tests, so the `flutter` job
+fails only when a PR makes things **worse**. Current values in `.github/workflows/ci.yml`:
+
+- `ANALYZE_ERROR_BUDGET` = 40
+- `TEST_FAILURE_BUDGET` = 38
+
+**Ratchet down, never up.** When your PR fixes analyzer errors or failing tests, lower the number
+in `ci.yml` to the new count **in the same PR**, and update the two lines above (a test checks they
+match). Raising a budget needs an explicit human decision recorded in the PR. Goal: both at 0.
+
+## 7. Release
+
+Full checklist and Play Console notes: [`RELEASE_PLAN.md`](../../RELEASE_PLAN.md). Walk it with
+`/lw-release` (the `lw-release` agent checks readiness).
+
+1. File a `[Release] <version>` issue (`/lw-ticket` → Release).
+2. Version bump: `pubspec.yaml` is the only version source. Bump via its own
+   `chore/<N>-bump-<version>` PR to `develop`; the build number always increases.
+3. `develop` → `main` PR once QA has verified the training build.
+4. Release notes in English and Bangla, each 500 characters or fewer, user-facing language,
+   no internal IDs or patient data.
+5. Tag `v<version>` on `main` (human, via `scripts/release.sh production "" --tag` then
+   `git push origin v<version>`). `release.yml` builds the signed bundle, verifies the signer and
+   attaches it to a GitHub Release.
+6. Play Console (human): internal → closed testing → staged production rollout.
+7. Tick the release issue, close the milestone.
+
+## 8. Hotfix
+
+For a prod P0/P1 the team agrees cannot wait for the next release:
+
+1. Issue as usual; branch `hotfix/<N>-<slug>` from `origin/main`.
+2. `/lw-fix` (failing test first), `/lw-pr` opens the PR to `main` (2 approvals).
+3. Bump the version, tag and release as in section 7.
+4. Back-merge `main` into `develop` with a PR the same day.
+
+## 9. Working with the agents
+
+Shared toolkit committed under `.claude/` — everyone's Claude Code behaves the same. Skills you run:
+
+| Skill | When |
+|---|---|
+| `/lw-ticket` | File a bug, feature, task or release (also works in claude.ai / Desktop chat) |
+| `/lw-start <N>` | Pick up an issue: Definition of Ready, size, branch, plan comment |
+| `/lw-fix <N>` | S/M: root cause, failing test, fix, review |
+| `/lw-feature <N>` | L: brainstorm, spec, plan, task loop, final review |
+| `/lw-pr` | Run checks, fill the template, push the branch, open a draft PR |
+| `/lw-release [version]` | Release checklist, notes, signed build check |
+
+Agents the skills dispatch:
+
+| Agent | Role | Writes code? |
+|---|---|---|
+| `lw-architect` | Design / spec for L (or M with design questions) | No |
+| `lw-implementer` | One plan task, TDD, one commit | Yes |
+| `lw-reviewer` | Two verdicts: spec compliance + code quality | No |
+| `lw-qa` | Regression, negative and offline tests | Tests only |
+| `lw-security` | PHI, secrets, auth, storage, logging review | No |
+| `lw-release` | Release-readiness checklist | No |
+
+### The task loop (L-size)
+
+1. The main session (you + Claude) holds the decisions and dispatches one task at a time.
+2. `lw-implementer` does the task: failing test, minimal code, green, one commit.
+3. `lw-reviewer` returns two verdicts: `Spec ✅ | Spec ❌` and `Approved | Changes requested`.
+   Both must pass (Spec ✅ + Approved). Otherwise findings go back to the implementer.
+4. At most **5 fix rounds** per task; then stop and escalate to a human.
+5. Each task's brief, report, verdicts and rulings go into a ledger under
+   `.superpowers/sdd/<date>-<slug>/` (local working files, gitignored); the plan's ledger table
+   records task, commit and verdicts.
+6. **Rulings:** when implementer and reviewer disagree, the main session decides and writes the
+   ruling with its reason in the ledger. Anything that changes the approved spec goes to a human.
+7. After the last task: a **final whole-branch review** by `lw-reviewer` on the strongest model
+   against `origin/develop`, then `/lw-pr`.
+
+### What agents may never do
+
+Merge or approve PRs; push to `main`/`develop`; force-push; skip hooks (`--no-verify`); tag,
+upload or publish a release; set priority, milestones or project fields; read or stage prod keys,
+keystores, `key.properties`, `google-services.json` or `env*.json` (except `env.example.json`);
+print secrets or patient data; file security issues publicly. Subagents never spawn agents.
+
+Guard rails enforce most of this: the `.claude/settings.json` hook (`scripts/sdlc/guard_tool.py`)
+blocks the dangerous commands and secret-file access in Claude Code, and the git hooks in
+`.githooks/` check commit messages and block staged secrets for everyone.
+
+## 10. One-time developer setup
+
+```sh
+sh scripts/setup_dev.sh        # activates .githooks, checks python3 3.11+ and gh
+gh auth login                  # GitHub CLI, used by /lw-ticket, /lw-start, /lw-pr
+gh auth refresh -s project     # lets /lw-ticket add new issues to Project #4
+```
+
+If you had a personal, untracked `.claude/settings.json`, rename it to
+`.claude/settings.local.json` before pulling this change, or git refuses to overwrite it.
+Run the SDLC checks any time with `python3 -m unittest discover -s scripts/sdlc/tests -t .`.
+
+Admin and Claude-org setup: [CLAUDE_ADMIN_SETUP.md](CLAUDE_ADMIN_SETUP.md). Filing guide for
+PM/QA: [TICKETS.md](TICKETS.md).

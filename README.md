@@ -33,6 +33,7 @@ Flutter, Android-first.
 17. [Troubleshooting](#troubleshooting)
 18. [Security Notes](#security-notes)
 19. [Roadmap / Deferred](#roadmap--deferred)
+20. [Contributing](#contributing)
 
 ---
 
@@ -863,6 +864,12 @@ Web build requires `SemanticsBinding.instance.ensureSemantics()` (already in
 - Multi-language localization
 - Multi-account picker (multiple biometric-bound sessions per device).
 - Bind stored cookies to a biometric-only Android Keystore key (currently Keystore-encrypted but not biometric-gated at OS level).
+
+---
+
+## Contributing
+
+Tickets live in GitHub Issues (file them with `/lw-ticket` in Claude, or the issue forms). Follow the process in [`docs/process/SDLC.md`](docs/process/SDLC.md): branch `<type>/<issue#>-<slug>` from `develop`, open a PR with `Closes #N`, keep CI green. Run `sh scripts/setup_dev.sh` once to activate the git hooks. This repository is public — never include patient data, credentials or raw logs.
 
 ---
 
