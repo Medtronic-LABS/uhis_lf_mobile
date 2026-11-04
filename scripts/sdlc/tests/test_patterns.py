@@ -121,7 +121,7 @@ class TestProtectedPath(unittest.TestCase):
     def test_protected(self):
         for path in (
             "env.production.json", "env.development.json", "env.json",
-            "env-dev.json", "env_staging.json", "cfg/env.local.json",
+            "cfg/env.local.json",
             "android/key.properties", "release.jks", "a/b/upload.keystore",
             "android/app/google-services.json", "ios/Runner/GoogleService-Info.plist",
             ".env", ".env.local", "sub/.env.production",
@@ -132,6 +132,8 @@ class TestProtectedPath(unittest.TestCase):
         for path in (
             "env.example.json", "pubspec.yaml", "lib/environment.dart",
             "lib/env_config.dart", "docs/env.md", "key_properties.md",
+            "environment_config.json", "env_response.json", "assets/env_response.json",
+            ".env.example", "sub/.env.example", "env-dev.json",
         ):
             self.assertFalse(is_protected_path(path), path)
 

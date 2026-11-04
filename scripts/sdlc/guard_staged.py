@@ -32,6 +32,7 @@ def check(paths: list[str], read: Callable[[str], str]) -> list[str]:
         try:
             content = read(path)
         except (UnicodeDecodeError, OSError):
+            print(f"lw-guard: could not read staged {path}; skipped", file=sys.stderr)
             continue
         if len(content) > MAX_BYTES:
             continue

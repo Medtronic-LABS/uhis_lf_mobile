@@ -107,8 +107,11 @@ class WorkflowsTest(unittest.TestCase):
         for block in re.findall(r"run: \|\n((?:[ ]{8,}.*\n|\n)+)", text):
             self.assertNotIn("${{", block)
         self.assertIn("issues: write", text)
-        self.assertIn("lw-issue-check", text)
-        self.assertIn("status:needs-info", text)
+        self.assertIn(".marker", text)
+        self.assertIn(".needs_info_label", text)
+        self.assertNotIn("lw-issue-check", text)
+        self.assertNotIn("status:needs-info", text)
+        self.assertNotIn("--force", text)
 
     def test_ci_has_budgets(self):
         text = read("workflows/ci.yml")
@@ -119,6 +122,7 @@ class WorkflowsTest(unittest.TestCase):
 
     def test_android_apk_no_longer_runs_analyze_or_tests(self):
         text = read("workflows/android-apk.yml")
+        self.assertIn("\npermissions:\n  contents: read\n", text)
         self.assertNotIn("flutter analyze", text)
         self.assertNotIn("flutter test", text)
         self.assertEqual(text.count("- develop"), 2)

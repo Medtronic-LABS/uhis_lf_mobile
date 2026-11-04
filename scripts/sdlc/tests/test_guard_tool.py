@@ -58,6 +58,19 @@ class TestBashDeny(unittest.TestCase):
         self.assertIsNone(run("git -C other push"))
         self.assertIsNone(run("git push"))
 
+    def test_unknown_branch_bare_push_notes_on_stderr(self):
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            self.assertIsNone(bash("git push", branch=None))
+        self.assertEqual(err.getvalue().strip(),
+                         "lw-guard: could not determine current branch; bare push allowed")
+
+    def test_known_branch_push_is_silent(self):
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            self.assertIsNone(bash("git push", branch="feat/1-x"))
+        self.assertEqual(err.getvalue(), "")
+
     def test_unknown_branch_bare_push_allowed(self):
         self.assertIsNone(bash("git push", branch=None))
 

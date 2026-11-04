@@ -9,6 +9,20 @@ by the overnight build: GitHub settings and Claude org settings are changed only
 | GitHub **repo admin(s)** of `Medtronic-LABS/uhis_lf_mobile` (and an org owner where noted) | 3, 4, 5, 6 |
 | Every developer | 7 |
 
+## Rollout order
+
+GitHub serves issue forms, `config.yml` and `issues:`-event workflows only from the default branch
+(`main`). Roll out in this order:
+
+1. Merge this PR to `develop`.
+2. The next `develop` -> `main` release PR brings the issue forms and `issue-check` live. Announce
+   `lw-ticket` to PM and QA only after that. Until then the `lw-ticket` prefilled-form fallback
+   link and the `TICKETS.md` link in `config.yml` do not resolve.
+3. Only then run `scripts/github/protect_branches.sh` (dry-run first, then `--apply`), and only
+   after the required checks have run once on both `develop` and `main`.
+4. Before applying protection, every open PR needs a GitHub issue and `Refs #N` in its body, or
+   must be merged or closed. List them with `gh pr list --state open`.
+
 ## 1. Upload the `lw-ticket` skill to the Claude org
 
 So PM/QA can say "file a bug" in claude.ai or Claude Desktop chat.
@@ -86,6 +100,8 @@ Repo Settings → Code security → enable **Private vulnerability reporting**. 
 - **`pr-check` on forks:** it runs on `pull_request`, which is fine for branches in this repo.
   Moving it to `pull_request_target` (so fork PRs get the check with a trusted token) is a
   follow-up; do it only with a reviewed workflow that never checks out or runs PR code.
+- **Fork PRs and `build-apk`:** fork PRs cannot pass `build-apk` (no secrets are exposed to forks).
+  Acceptable for the team repo, where contributors push branches here.
 - **First full-history secret scan:** CI scans only each PR's commits. Run gitleaks once over the
   full history (`gitleaks git --redact`) and rotate anything it finds.
 - **Ratchet the budgets:** as tests and analyzer errors get fixed, lower `ANALYZE_ERROR_BUDGET`

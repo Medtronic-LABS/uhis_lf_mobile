@@ -86,13 +86,13 @@ def find_sensitive(text: str, categories: Optional[Iterable[str]] = None) -> lis
 
 PROTECTED_PATH_RE = re.compile(
     r"(?:^|/)(?:"
-    r"env(?!\.example\.json$)[^/]*\.json"
+    r"(?!env\.example\.json$)env(?:\.[^/]+)?\.json"
     r"|key\.properties"
     r"|[^/]*\.jks"
     r"|[^/]*\.keystore"
     r"|google-services\.json"
     r"|GoogleService-Info\.plist"
-    r"|\.env(?:\.[^/]+)?"
+    r"|(?!\.env\.example$)\.env(?:\.[^/]+)?"
     r")$"
 )
 

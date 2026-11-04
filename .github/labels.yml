@@ -1,4 +1,4 @@
-# Source of truth for repo labels; applied by scripts/sdlc (dry-run by default).
+# Source of truth for repo labels; applied by scripts/github/sync_labels.sh (dry-run by default).
 - name: bug
   color: "d73a4a"
   description: "Something isn't working"

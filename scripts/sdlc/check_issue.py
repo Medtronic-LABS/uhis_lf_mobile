@@ -1,7 +1,7 @@
 """Validate a GitHub issue against the LEAPWELL intake contract.
 
 CLI: python3 scripts/sdlc/check_issue.py --event "$GITHUB_EVENT_PATH"
-Prints JSON {"ok": bool, "comment": str} and exits 0; the workflow decides labels.
+Prints JSON {"ok", "comment", "marker", "needs_info_label"} and exits 0; the workflow decides labels.
 """
 import argparse
 import json
@@ -23,6 +23,7 @@ from scripts.sdlc.patterns import (  # noqa: E402
 )
 
 COMMENT_MARKER = "<!-- lw-issue-check -->"
+NEEDS_INFO_LABEL = "status:needs-info"
 _HEADING_RE = re.compile(r"^###[ \t]+(.+?)[ \t]*$", re.MULTILINE)
 _TICKED_RE = re.compile(r"-\s*\[[xX]\]")
 _EMPTY_VALUES = {"", "_no response_"}
@@ -107,7 +108,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     issue = json.loads(Path(args.event).read_text(encoding="utf-8"))["issue"]
     labels = [label["name"] for label in issue.get("labels") or []]
     result = evaluate(issue.get("title") or "", issue.get("body") or "", labels)
-    print(json.dumps({"ok": result.ok, "comment": render_comment(result)}))
+    print(json.dumps({
+        "ok": result.ok,
+        "comment": render_comment(result),
+        "marker": COMMENT_MARKER,
+        "needs_info_label": NEEDS_INFO_LABEL,
+    }))
     return 0
 
 

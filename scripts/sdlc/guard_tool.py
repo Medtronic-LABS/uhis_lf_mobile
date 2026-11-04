@@ -123,6 +123,10 @@ def refspec_target(refspec: str) -> str:
     return target.lstrip("+").removeprefix("refs/heads/")
 
 
+def _note_unknown_branch() -> None:
+    print("lw-guard: could not determine current branch; bare push allowed", file=sys.stderr)
+
+
 def check_push(args: list[str], cwd: str, current_branch: BranchResolver) -> Optional[str]:
     if any(a.startswith(PUSH_FORCE_LONG) for a in args) or _has_short_flag(args, "f"):
         return "Force-push is blocked. Push your feature branch normally."
@@ -132,11 +136,13 @@ def check_push(args: list[str], cwd: str, current_branch: BranchResolver) -> Opt
         return "Force-push (+refspec) is blocked. Push your feature branch normally."
     if PUSH_ALL_FLAGS & set(args):
         return "Pushing all branches would include main/develop. Push your feature branch by name."
+    branch = current_branch(cwd)
     if refspecs:
-        branch = current_branch(cwd)
         targets = {branch if r == "HEAD" else refspec_target(r) for r in refspecs}
     else:
-        targets = {current_branch(cwd)}
+        targets = {branch}
+    if branch is None and (not refspecs or "HEAD" in refspecs):
+        _note_unknown_branch()
     if targets & PROTECTED_BRANCHES:
         return "Direct pushes to main/develop are blocked. Push a feature branch and open a PR."
     return None

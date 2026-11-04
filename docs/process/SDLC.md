@@ -99,6 +99,7 @@ sensitive data add `status:needs-info` and one bot comment; fixing the issue rem
   `feat | fix | chore | docs | refactor | test | hotfix`. Example: `fix/123-sync-stuck-90`.
 - Commits: Conventional Commit subject with the issue, e.g. `fix(sync): retry upload on 503 (#123)`.
   The `commit-msg` hook requires a `#N` or a Conventional Commit type.
+  Rejected: `PNC service added`. Fixed: `feat(pnc): add PNC service #123`.
 - Keep a branch to one issue. Rebase or merge `develop` in as needed; never force-push shared branches.
 
 ## 5. Pull requests
@@ -146,7 +147,8 @@ Full checklist and Play Console notes: [`RELEASE_PLAN.md`](../../RELEASE_PLAN.md
 1. File a `[Release] <version>` issue (`/lw-ticket` → Release).
 2. Version bump: `pubspec.yaml` is the only version source. Bump via its own
    `chore/<N>-bump-<version>` PR to `develop`; the build number always increases.
-3. `develop` → `main` PR once QA has verified the training build.
+3. `develop` → `main` PR once QA has verified the training build. The PR body must contain
+   `Refs #<release issue>` (the Release issue from the release form).
 4. Release notes in English and Bangla, each 500 characters or fewer, user-facing language,
    no internal IDs or patient data.
 5. Tag `v<version>` on `main` (human, via `scripts/release.sh production "" --tag` then
@@ -162,7 +164,8 @@ For a prod P0/P1 the team agrees cannot wait for the next release:
 1. Issue as usual; branch `hotfix/<N>-<slug>` from `origin/main`.
 2. `/lw-fix` (failing test first), `/lw-pr` opens the PR to `main` (2 approvals).
 3. Bump the version, tag and release as in section 7.
-4. Back-merge `main` into `develop` with a PR the same day.
+4. Back-merge `main` into `develop` with a PR the same day; its body must contain
+   `Refs #<hotfix issue>`.
 
 ## 9. Working with the agents
 

@@ -20,8 +20,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
-      NEEDS_INFO_LABEL: status:needs-info
-      COMMENT_MARKER: '<!-- lw-issue-check -->'
     steps:
       - uses: actions/checkout@v7
 
@@ -37,6 +35,8 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
               env.write("CHECK_OK=" + ("true" if result["ok"] else "false") + "\n")
           PY
+          echo "COMMENT_MARKER=$(jq -r .marker "$RUNNER_TEMP/result.json")" >> "$GITHUB_ENV"
+          echo "NEEDS_INFO_LABEL=$(jq -r .needs_info_label "$RUNNER_TEMP/result.json")" >> "$GITHUB_ENV"
 
       - name: Upsert the single bot comment
         run: |
@@ -65,9 +65,11 @@ jobs:
             gh api -X DELETE "$api/issues/$ISSUE_NUMBER/labels/${NEEDS_INFO_LABEL//:/%3A}" > /dev/null 2>&1 \
               && echo "Removed $NEEDS_INFO_LABEL." || echo "$NEEDS_INFO_LABEL was not set."
           else
-            gh label create "$NEEDS_INFO_LABEL" --color FEF2C0 \
-              --description "Waiting for the reporter to complete the ticket" --force \
-              || echo "Could not create label; assuming it already exists."
+            if ! gh label list --limit 200 --json name --jq '.[].name' | grep -Fxq "$NEEDS_INFO_LABEL"; then
+              gh label create "$NEEDS_INFO_LABEL" \
+                && echo "Created plain label $NEEDS_INFO_LABEL; run scripts/github/sync_labels.sh --apply for colour and description." \
+                || echo "Could not create label; continuing."
+            fi
             gh api -X POST "$api/issues/$ISSUE_NUMBER/labels" -f "labels[]=$NEEDS_INFO_LABEL" > /dev/null
             echo "Added $NEEDS_INFO_LABEL."
           fi

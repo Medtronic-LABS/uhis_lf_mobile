@@ -139,6 +139,12 @@ class TestCli(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertIn("lw-issue-check", data["comment"])
 
+    def test_json_carries_marker_and_label(self):
+        _, data = self.run_main(self.event(make_body("bug")))
+        self.assertEqual(data["marker"], check_issue.COMMENT_MARKER)
+        self.assertEqual(data["needs_info_label"], check_issue.NEEDS_INFO_LABEL)
+        self.assertTrue(data["comment"].startswith(data["marker"]))
+
     def test_null_body_event(self):
         code, data = self.run_main(self.event(None))
         self.assertEqual(code, 0)

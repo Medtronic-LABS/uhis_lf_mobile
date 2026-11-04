@@ -1,4 +1,6 @@
 """Tests for scripts.sdlc.guard_staged."""
+import contextlib
+import io
 import subprocess
 import tempfile
 import unittest
@@ -60,6 +62,16 @@ class TestDecodeBlob(unittest.TestCase):
     def test_binary_and_large_read_as_empty(self):
         self.assertEqual(guard_staged.decode_blob(b"ab\x00cd"), "")
         self.assertEqual(guard_staged.decode_blob(b"x" * 1_000_001), "")
+
+
+class TestUnreadableNote(unittest.TestCase):
+    def test_unreadable_path_noted_on_stderr_path_only(self):
+        err = io.StringIO()
+        files = {"a.dart": OSError("boom secret-detail")}
+        with contextlib.redirect_stderr(err):
+            problems = guard_staged.check(["a.dart"], reader(files))
+        self.assertEqual(problems, [])
+        self.assertEqual(err.getvalue().strip(), "lw-guard: could not read staged a.dart; skipped")
 
 
 class TestReadStagedBlob(unittest.TestCase):
