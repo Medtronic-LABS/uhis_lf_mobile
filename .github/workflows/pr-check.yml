@@ -1,0 +1,22 @@
+name: PR check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-check:
+    runs-on: ubuntu-latest
+    steps:
+      # Checks out the merge ref; the script only reads the event payload (never executes PR input).
+      - uses: actions/checkout@v7
+
+      - name: Check issue link, branch name and sensitive data
+        run: python3 scripts/sdlc/check_pr.py --event "$GITHUB_EVENT_PATH"

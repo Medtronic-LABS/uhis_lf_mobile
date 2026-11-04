@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/Medtronic-LABS/uhis_lf_mobile/security/advisories/new
+    about: Do not open a public issue for security problems or exposed patient data.
+  - name: How we use tickets
+    url: https://github.com/Medtronic-LABS/uhis_lf_mobile/blob/main/docs/process/TICKETS.md
+    about: Ticket types, required fields, labels and lifecycle.
