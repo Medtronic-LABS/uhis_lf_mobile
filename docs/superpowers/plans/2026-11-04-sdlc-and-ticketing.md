@@ -74,7 +74,7 @@ class TestFindSensitive(unittest.TestCase):
     def test_ignores_versions_and_dates(self):
         self.assertEqual(find_sensitive("LEAPWELL 1.1.0+15 on 2026-11-04, build 14"), [])
     def test_bearer_category_only(self):
-        self.assertEqual(find_sensitive("Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456"), ["bearer_token"])
+        self.assertEqual(find_sensitive("Authorization: Bearer " + "a" * 32), ["bearer_token"])
 
 class TestGuardTool(unittest.TestCase):
     def bash(self, cmd, branch="feat/1-x"):
