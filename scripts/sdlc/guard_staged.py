@@ -1,4 +1,7 @@
-"""pre-commit check: block protected files and sensitive content in staged files.
+"""pre-commit check: block protected files and credentials in staged blobs.
+
+Only credential categories are scanned in source (PHI categories apply to
+issue/PR text, where source-style examples are not expected).
 
 CLI: python3 scripts/sdlc/guard_staged.py   (exits 1 listing `path: category`)
 """
@@ -10,7 +13,7 @@ from typing import Callable, Optional
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.sdlc.patterns import find_sensitive, is_protected_path  # noqa: E402
+from scripts.sdlc.patterns import CREDENTIAL_CATEGORIES, find_sensitive, is_protected_path  # noqa: E402
 
 MAX_BYTES = 1_000_000
 FIXTURE_PREFIX = "scripts/sdlc/tests/"
@@ -32,17 +35,26 @@ def check(paths: list[str], read: Callable[[str], str]) -> list[str]:
             continue
         if len(content) > MAX_BYTES:
             continue
-        problems.extend(f"{path}: {category}" for category in find_sensitive(content))
+        categories = find_sensitive(content, CREDENTIAL_CATEGORIES)
+        problems.extend(f"{path}: {category}" for category in categories)
     return problems
 
 
-def read_text_file(path: str) -> str:
-    """Read a text file; binary or oversized files read as empty (not scanned)."""
-    with open(path, "rb") as handle:
-        data = handle.read(MAX_BYTES + 1)
+def decode_blob(data: bytes) -> str:
+    """Decode text bytes; binary or oversized content reads as empty (not scanned)."""
     if len(data) > MAX_BYTES or b"\x00" in data:
         return ""
     return data.decode("utf-8", errors="replace")
+
+
+def read_staged_blob(path: str, repo: Optional[str] = None) -> str:
+    """Read the staged (index) version of a file, not the working tree."""
+    command = ["git"] + (["-C", repo] if repo else []) + ["show", f":{path}"]
+    try:
+        done = subprocess.run(command, capture_output=True, check=True)
+    except subprocess.CalledProcessError as error:
+        raise OSError(f"cannot read staged blob for {path}") from error
+    return decode_blob(done.stdout)
 
 
 def staged_paths() -> list[str]:
@@ -54,7 +66,7 @@ def staged_paths() -> list[str]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    problems = check(staged_paths(), read_text_file)
+    problems = check(staged_paths(), read_staged_blob)
     for problem in problems:
         print(problem, file=sys.stderr)
     return 1 if problems else 0

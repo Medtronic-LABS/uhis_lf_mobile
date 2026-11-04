@@ -1,4 +1,5 @@
 """Tests for scripts.sdlc.guard_staged."""
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,11 +31,14 @@ class TestCheck(unittest.TestCase):
             problems, ["env.production.json: protected_path", "android/key.properties: protected_path"]
         )
 
-    def test_sensitive_categories_reported_no_values(self):
-        files = {"notes.md": f"call {PHONE} key {TOKEN}"}
-        problems = guard_staged.check(["notes.md"], reader(files))
-        self.assertEqual(problems, ["notes.md: bd_phone", "notes.md: hf_token"])
-        self.assertFalse(any(PHONE in p or TOKEN in p for p in problems))
+    def test_credential_categories_reported_no_values(self):
+        problems = guard_staged.check(["notes.md"], reader({"notes.md": f"key {TOKEN}"}))
+        self.assertEqual(problems, ["notes.md: hf_token"])
+        self.assertFalse(any(TOKEN in p for p in problems))
+
+    def test_phi_categories_not_checked_in_source(self):
+        text = f"phone {PHONE} mail jane@clinic.org NID 1234567890 id 12345678901234567"
+        self.assertEqual(guard_staged.check(["a.dart"], reader({"a.dart": text})), [])
 
     def test_skips_sdlc_test_fixtures(self):
         path = "scripts/sdlc/tests/test_x.py"
@@ -49,16 +53,36 @@ class TestCheck(unittest.TestCase):
         self.assertEqual(guard_staged.check(list(files), reader(files)), [])
 
 
-class TestReadTextFile(unittest.TestCase):
-    def test_skips_binary_and_large(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            text, binary, big = Path(tmp, "t.txt"), Path(tmp, "b.bin"), Path(tmp, "big.txt")
-            text.write_text("hello")
-            binary.write_bytes(b"ab\x00cd")
-            big.write_text("x" * 1_000_001)
-            self.assertEqual(guard_staged.read_text_file(str(text)), "hello")
-            self.assertEqual(guard_staged.read_text_file(str(binary)), "")
-            self.assertEqual(guard_staged.read_text_file(str(big)), "")
+class TestDecodeBlob(unittest.TestCase):
+    def test_text(self):
+        self.assertEqual(guard_staged.decode_blob(b"hello"), "hello")
+
+    def test_binary_and_large_read_as_empty(self):
+        self.assertEqual(guard_staged.decode_blob(b"ab\x00cd"), "")
+        self.assertEqual(guard_staged.decode_blob(b"x" * 1_000_001), "")
+
+
+class TestReadStagedBlob(unittest.TestCase):
+    def git(self, repo, *args):
+        subprocess.run(["git", "-C", repo, *args], check=True, capture_output=True)
+
+    def test_reads_index_not_working_tree(self):
+        with tempfile.TemporaryDirectory() as repo:
+            self.git(repo, "init", "-q")
+            target = Path(repo, "a.txt")
+            target.write_text("staged " + TOKEN)
+            self.git(repo, "add", "a.txt")
+            target.write_text("clean working tree")
+            staged = guard_staged.read_staged_blob("a.txt", repo)
+            self.assertIn(TOKEN, staged)
+            self.assertEqual(guard_staged.check(["a.txt"], lambda p: guard_staged.read_staged_blob(p, repo)),
+                             ["a.txt: hf_token"])
+
+    def test_unstaged_path_raises_oserror(self):
+        with tempfile.TemporaryDirectory() as repo:
+            self.git(repo, "init", "-q")
+            with self.assertRaises(OSError):
+                guard_staged.read_staged_blob("missing.txt", repo)
 
 
 if __name__ == "__main__":

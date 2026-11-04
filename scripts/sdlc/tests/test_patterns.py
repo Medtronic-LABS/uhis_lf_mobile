@@ -2,6 +2,7 @@
 import unittest
 
 from scripts.sdlc.patterns import (
+    CREDENTIAL_CATEGORIES,
     ISSUE_REF_RE,
     REQUIRED_SECTIONS,
     TYPE_LABELS,
@@ -22,9 +23,31 @@ class TestFindSensitive(unittest.TestCase):
     def test_ignores_epoch_millis(self):
         self.assertEqual(find_sensitive('"visitDate": 1750000000000'), [])
 
-    def test_national_id_lengths(self):
-        for digits in ("1234567890", "2234567890123", "12345678901234567"):
-            self.assertEqual(find_sensitive("NID " + digits), ["national_id"], digits)
+    def test_national_id_flagged_with_keyword_or_17_digits(self):
+        for text in (
+            "NID: 1234567890", "national id 2234567890123", "NID No 1234567890123",
+            "জাতীয় পরিচয় 1234567890", "12345678901234567", "id 19900101123456789",
+        ):
+            self.assertEqual(find_sensitive(text), ["national_id"], text)
+
+    def test_national_id_false_positives_not_flagged(self):
+        for text in (
+            "commit " + "1234567890" + "abcdef0123456789abcdef0123456789",
+            "commit " + "a" * 7 + "1234567890" + "b" * 23,
+            "id 123e4567-e89b-12d3-a456-" + "1234567890ab",
+            "Patient/" + "2234567890123",
+            "ref=" + "2234567890123",
+            "created 1750000000",
+            "max 2147483647",
+            "bare 1234567890",
+            "bare 2234567890123",
+            "v" + "1234567890" + ".5",
+        ):
+            self.assertEqual(find_sensitive(text), [], text)
+
+    def test_keyword_must_be_nearby(self):
+        text = "NID is mentioned here" + " " * 40 + "1234567890"
+        self.assertEqual(find_sensitive(text), [])
 
     def test_email(self):
         self.assertEqual(find_sensitive("mail jane.doe@clinic.org now"), ["email"])
@@ -71,11 +94,25 @@ class TestFindSensitive(unittest.TestCase):
     def test_empty(self):
         self.assertEqual(find_sensitive(""), [])
 
+    def test_category_filter(self):
+        text = "call 0171" + "2345678 key hf_" + "a" * 34
+        self.assertEqual(find_sensitive(text, CREDENTIAL_CATEGORIES), ["hf_token"])
+        self.assertEqual(find_sensitive(text, {"bd_phone"}), ["bd_phone"])
+        self.assertEqual(find_sensitive(text), ["bd_phone", "hf_token"])
+
+    def test_credential_categories_exclude_phi(self):
+        self.assertEqual(
+            CREDENTIAL_CATEGORIES,
+            {"bearer_token", "hf_token", "github_token", "google_api_key",
+             "private_key", "jwt", "password_assignment"},
+        )
+
 
 class TestProtectedPath(unittest.TestCase):
     def test_protected(self):
         for path in (
             "env.production.json", "env.development.json", "env.json",
+            "env-dev.json", "env_staging.json", "cfg/env.local.json",
             "android/key.properties", "release.jks", "a/b/upload.keystore",
             "android/app/google-services.json", "ios/Runner/GoogleService-Info.plist",
             ".env", ".env.local", "sub/.env.production",

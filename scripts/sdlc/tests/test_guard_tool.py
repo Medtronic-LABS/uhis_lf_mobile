@@ -29,6 +29,12 @@ class TestBashDeny(unittest.TestCase):
             "cat env.production.json", "head -n 3 env.development.json", "base64 android/key.properties",
             "git add android/key.properties", "git add -A env.production.json",
             "git -C /r push origin main", "git -c core.x=1 push -f",
+            "sudo git push -f", "env FOO=1 git push -f", "command git push origin main",
+            "nohup git push origin develop", "exec git push -f", "time git push -f",
+            "sudo -n git push -f", "env -i git push origin main",
+            "git -c core.hooksPath=/dev/null commit -m x",
+            "git -c core.hooksPath=/dev/null push origin feat/1-x",
+            "git -c core.hookspath=/tmp/h commit -m x",
         ]:
             self.assertIsNotNone(bash(cmd), cmd)
 
@@ -38,6 +44,19 @@ class TestBashDeny(unittest.TestCase):
             self.assertIsNotNone(bash("git push origin", branch=branch))
             self.assertIsNotNone(bash("git push origin HEAD", branch=branch))
             self.assertIsNotNone(bash("git push -u origin", branch=branch))
+
+    def test_dash_c_dir_resolves_branch_from_that_dir(self):
+        def resolver(cwd):
+            return "main" if cwd == "/r/sub" else "feat/1-x"
+
+        def run(cmd):
+            payload = {"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": "/r"}
+            return decide(payload, current_branch=resolver)
+
+        self.assertIsNotNone(run("git -C sub push"))
+        self.assertIsNotNone(run("git -C /r/sub push origin HEAD"))
+        self.assertIsNone(run("git -C other push"))
+        self.assertIsNone(run("git push"))
 
     def test_unknown_branch_bare_push_allowed(self):
         self.assertIsNone(bash("git push", branch=None))
@@ -67,6 +86,12 @@ class TestBashDeny(unittest.TestCase):
             "git status && git log --oneline",
             "ls",
             "git push origin feat/1-main-thing",
+            "git push --no-force-with-lease origin feat/1-x",
+            "git commit -m -n",
+            'git commit -m "-n"',
+            "git commit -am -n",
+            "git -c user.name=x commit -m y",
+            "sudo ls", "env FOO=1 flutter test", "time git status",
         ]:
             self.assertIsNone(bash(cmd), cmd)
 

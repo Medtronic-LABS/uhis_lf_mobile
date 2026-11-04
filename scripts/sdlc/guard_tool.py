@@ -10,7 +10,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, NamedTuple, Optional
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -23,6 +23,9 @@ PROTECTED_BRANCHES = {"main", "develop"}
 FILE_TOOLS = {"Read", "Edit", "Write"}
 DISPLAY_COMMANDS = {"cat", "less", "more", "head", "tail", "bat", "nl", "xxd", "strings", "base64"}
 SHELLS = {"bash", "sh", "zsh"}
+WRAPPERS = {"command", "sudo", "env", "nohup", "exec", "time"}
+COMMIT_VALUE_OPTS = {"-m", "-F", "-c", "-C", "--message", "--file", "--author", "--date", "--template"}
+COMMIT_VALUE_SHORT_FLAGS = "mFcC"
 OPERATORS = {"&&", "||", ";", "|", "&"}
 GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
 PUSH_FORCE_LONG = ("--force", "--force-with-lease", "--force-if-includes")
@@ -62,20 +65,44 @@ def split_segments(tokens: list[str]) -> list[list[str]]:
 
 
 def strip_prefixes(segment: list[str]) -> list[str]:
+    """Drop leading VAR=val assignments and wrappers (sudo, env, ...) plus their flags."""
     index = 0
-    while index < len(segment) and _ENV_ASSIGN_RE.match(segment[index]):
+    after_wrapper = False
+    while index < len(segment):
+        token = segment[index]
+        if _ENV_ASSIGN_RE.match(token):
+            pass
+        elif os.path.basename(token) in WRAPPERS:
+            after_wrapper = True
+        elif not (after_wrapper and token.startswith("-")):
+            break
         index += 1
     return segment[index:]
 
 
-def git_subcommand(args: list[str]) -> tuple[Optional[str], list[str]]:
-    """Return (subcommand, remaining args) for the args after `git`."""
+class GitInvocation(NamedTuple):
+    config: list[str]
+    directory: Optional[str]
+    subcommand: Optional[str]
+    args: list[str]
+
+
+def parse_git(args: list[str]) -> GitInvocation:
+    """Split the args after `git` into global options, subcommand and its args."""
+    config: list[str] = []
+    directory: Optional[str] = None
     index = 0
     while index < len(args) and args[index].startswith("-"):
-        index += 2 if args[index] in GIT_OPTS_WITH_VALUE else 1
+        option = args[index]
+        value = args[index + 1] if index + 1 < len(args) else ""
+        if option == "-c":
+            config.append(value)
+        elif option == "-C":
+            directory = os.path.join(directory, value) if directory else value
+        index += 2 if option in GIT_OPTS_WITH_VALUE else 1
     if index >= len(args):
-        return None, []
-    return args[index], args[index + 1:]
+        return GitInvocation(config, directory, None, [])
+    return GitInvocation(config, directory, args[index], args[index + 1:])
 
 
 def _has_short_flag(args: list[str], flag: str) -> bool:
@@ -106,13 +133,33 @@ def check_push(args: list[str], cwd: str, current_branch: BranchResolver) -> Opt
     return None
 
 
+def commit_skips_hooks(args: list[str]) -> bool:
+    """True when -n is a flag (not the value of -m/-F/...)."""
+    skip_value = False
+    for token in args:
+        if skip_value:
+            skip_value = False
+        elif token in COMMIT_VALUE_OPTS:
+            skip_value = True
+        elif _SHORT_CLUSTER_RE.match(token):
+            if "n" in token[1:]:
+                return True
+            skip_value = token[-1] in COMMIT_VALUE_SHORT_FLAGS
+    return False
+
+
 def check_git(args: list[str], cwd: str, current_branch: BranchResolver) -> Optional[str]:
-    subcommand, rest = git_subcommand(args)
-    if subcommand == "commit" and _has_short_flag(rest, "n"):
+    git = parse_git(args)
+    if git.subcommand in ("commit", "push") and any(
+        c.lower().startswith("core.hookspath") for c in git.config
+    ):
+        return "Overriding core.hooksPath is blocked (it bypasses the repo hooks)."
+    if git.subcommand == "commit" and commit_skips_hooks(git.args):
         return "Skipping hooks (-n / --no-verify) is blocked."
-    if subcommand == "push":
-        return check_push(rest, cwd, current_branch)
-    if subcommand == "add" and any(is_protected_path(a) for a in rest if not a.startswith("-")):
+    if git.subcommand == "push":
+        repo_dir = os.path.join(cwd, git.directory) if git.directory else cwd
+        return check_push(git.args, repo_dir, current_branch)
+    if git.subcommand == "add" and any(is_protected_path(a) for a in git.args if not a.startswith("-")):
         return "Staging secret/config files (env*.json, key.properties, keystores, .env) is blocked."
     return None
 
