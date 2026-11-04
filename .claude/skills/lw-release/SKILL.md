@@ -18,7 +18,11 @@ The human releases; you prepare and check. Process reference: `docs/process/SDLC
 
 4. **Release notes.** Draft from merged PRs / closed issues since the last tag (`gh pr list --base develop --state merged --search "merged:>=<last-tag-date>"`): user-facing language, no internal IDs or patient data. Produce **English and Bangla**, each **500 characters or fewer** - count and show the counts. The user approves the wording.
 
-5. **Build and signer check.** The human runs `scripts/release.sh production ""` (and `--app-flavor training` for LW Training) on a machine with the release key; it refuses debug signing and runs the signer check. You may explain its output; you never handle the key, `key.properties` or `env*.json`.
+5. **Build and signer check.** The human runs these on a machine with the release key - one command per app:
+   - LEAPWELL (prod): `scripts/release.sh production ""`
+   - LW Training: `scripts/release.sh training "" --app-flavor training`
+
+   The empty `""` keeps the current pubspec version (already bumped by the PR in step 1). The script refuses debug signing and runs the signer check. You may explain its output; you never handle the key, `key.properties` or `env*.json`.
 
 6. **Tag and upload - human only.** Only if the human explicitly says "tag it" in this session: show the exact command (`scripts/release.sh production "" --tag`, which creates the local tag `v<version>` such as `v1.2.0+16`, then `git push origin v<version>`) and let them run it. Play Console upload (internal -> closed -> staged prod) is done by the human.
 

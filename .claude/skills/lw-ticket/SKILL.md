@@ -37,7 +37,8 @@ Read the matching reference file now; it holds the questions, choices, derivatio
 
 ### 2. Duplicate check
 Before the interview, take 2-3 keywords from the user's first description (screen, symptom, feature name) and search **open** issues:
-- Claude Code: `gh issue list --repo Medtronic-LABS/uhis_lf_mobile --state open --search "<keywords>" --limit 5 --json number,title,url`
+- Claude Code: `gh issue list --repo Medtronic-LABS/uhis_lf_mobile --state open --search '<keywords>' --limit 5 --json number,title,url`
+  (single-quote the keywords, as with the title; plain words only - no quotes or symbols)
 - Chat: the connector's search tool with `repo:Medtronic-LABS/uhis_lf_mobile is:issue is:open <keywords>`.
 
 Show up to 5 likely matches as `#N - title` and ask "Is it the same as one of these?"
@@ -97,7 +98,7 @@ Title rules: start with the form prefix (`[Bug] `, `[Feature] `, `[Task] `, `[Re
 
 ### 7. Create
 **Claude Code:**
-1. Write the body to a temporary file (e.g. with `mktemp`), never inline it into the shell command.
+1. Write the body to a temporary file (e.g. a path from `mktemp`), never inline it into the shell command. Write it with the Write tool (preferred) or a quoted heredoc (`<<'EOF'`) - never an unquoted heredoc or `echo` of user text.
 2. `gh issue create --repo Medtronic-LABS/uhis_lf_mobile --title '<title>' --body-file <tmpfile> --label <type> --label <area:...> [--label <env:...>]`
    (quote the title in single quotes; escape any single quote in it as `'\''`).
 3. If `gh` fails because a label does not exist yet, retry with only the type label and tell the user which label to add later.
@@ -105,6 +106,7 @@ Title rules: start with the form prefix (`[Bug] `, `[Feature] `, `[Task] `, `[Re
 5. Delete the temporary file.
 
 **Chat:** call the connector's create-issue tool (`issue_write`, method `create`) with owner `Medtronic-LABS`, repo `uhis_lf_mobile`, the title, body and labels. Adding to Project #4 happens at triage; say so.
+If the labels did not stick (the reporter lacks triage rights), that is fine: the title prefix identifies the type and triage adds the labels.
 
 ### 8. Report
 Reply with the issue link, the labels applied, the suggested priority (as a suggestion), and what was scrubbed. Remind them to add screenshots on GitHub if useful (test data only).

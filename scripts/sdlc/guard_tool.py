@@ -3,6 +3,7 @@
 Reads the hook payload JSON on stdin. On deny, prints the reason to stderr and
 exits 2; otherwise exits 0 silently. Malformed input is always allowed.
 """
+import fnmatch
 import json
 import os
 import re
@@ -30,7 +31,15 @@ OPERATORS = {"&&", "||", ";", "|", "&"}
 GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
 PUSH_FORCE_LONG = ("--force", "--force-with-lease", "--force-if-includes")
 PUSH_ALL_FLAGS = {"--all", "--mirror"}
-_ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+GREP_DENY = "Searching secret/config files (env*.json, key.properties, keystores, .env) is blocked."
+# Representative secret/config file names; a Grep glob matching any of them is denied.
+PROTECTED_SAMPLE_PATHS = (
+    "env.production.json", "env.training.json", "env.development.json",
+    "android/key.properties", "android/app/upload.jks", "android/app/release.keystore",
+    "android/app/google-services.json", "ios/Runner/GoogleService-Info.plist",
+    ".env", ".env.local",
+)
+_ENV_ASSIGN_RE =re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _SHORT_CLUSTER_RE = re.compile(r"^-[A-Za-z]+$")
 
 
@@ -188,6 +197,29 @@ def check_command(command: str, cwd: str, current_branch: BranchResolver) -> Opt
     return None
 
 
+def glob_targets_protected(glob: str) -> bool:
+    """True when a search glob would match a known secret/config file name.
+
+    Conservative: the glob's last segment is matched against file names alone, so
+    `**/env.*.json` and `lib/*.json` both count as targeting env files.
+    """
+    name_glob = glob.rsplit("/", 1)[-1]
+    return any(
+        fnmatch.fnmatch(sample, glob) or fnmatch.fnmatch(os.path.basename(sample), name_glob)
+        for sample in PROTECTED_SAMPLE_PATHS
+    )
+
+
+def check_grep(tool_input: dict) -> Optional[str]:
+    path = tool_input.get("path")
+    if isinstance(path, str) and is_protected_path(path):
+        return GREP_DENY
+    glob = tool_input.get("glob")
+    if isinstance(glob, str) and glob_targets_protected(glob):
+        return GREP_DENY + " Narrow the glob (e.g. lib/**/*.dart)."
+    return None
+
+
 def decide(payload: Any, *, current_branch: BranchResolver = git_current_branch) -> Optional[str]:
     """Return a deny reason for the hook payload, or None to allow."""
     if not isinstance(payload, dict):
@@ -201,6 +233,8 @@ def decide(payload: Any, *, current_branch: BranchResolver = git_current_branch)
         if isinstance(path, str) and is_protected_path(path):
             return "Access to secret/config files (env*.json, key.properties, keystores, .env) is blocked."
         return None
+    if tool == "Grep":
+        return check_grep(tool_input)
     command = tool_input.get("command")
     if tool == "Bash" and isinstance(command, str):
         cwd = payload.get("cwd") if isinstance(payload.get("cwd"), str) else os.getcwd()

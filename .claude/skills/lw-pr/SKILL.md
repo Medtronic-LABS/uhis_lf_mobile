@@ -16,7 +16,7 @@ disable-model-invocation: true
    - `flutter test <test files related to the change>` (and the full `flutter test` for M/L) - failures must not exceed the budget.
    - `git status --porcelain` clean; `git log origin/<base>..HEAD --oneline` shows only this issue's commits.
 
-3. **Body.** Fill `.github/pull_request_template.md` into a temp file:
+3. **Body.** Fill `.github/pull_request_template.md` into a temp file. Write it with the Write tool (preferred) or a quoted heredoc (`<<'EOF'`) - never an unquoted heredoc or `echo` of user text:
    - First line `Closes #<N>` (or `Refs #<N>` if it does not fully resolve the issue).
    - Summary (what and why, 2-5 lines; M-size: include the design note), Size (tick one), Test evidence (commands + results from step 2), Screenshots (test data only), Risk & rollback, Definition of Done ticked honestly - leave unticked what is not done.
    - No patient data, secrets, tokens or raw logs.

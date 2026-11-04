@@ -71,7 +71,7 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(set(settings), {"hooks"})
         self.assertEqual(set(settings["hooks"]), {"PreToolUse"})
         [entry] = settings["hooks"]["PreToolUse"]
-        self.assertEqual(entry["matcher"], "Bash|Read|Edit|Write")
+        self.assertEqual(entry["matcher"], "Bash|Read|Edit|Write|Grep")
         [hook] = entry["hooks"]
         self.assertEqual(hook, {"type": "command", "command": HOOK_COMMAND, "timeout": 10})
 

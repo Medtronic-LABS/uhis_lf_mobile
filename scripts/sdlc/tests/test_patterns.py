@@ -78,6 +78,15 @@ class TestFindSensitive(unittest.TestCase):
         jwt = "eyJ" + "a" * 10 + ".eyJ" + "b" * 10 + "." + "c" * 10
         self.assertEqual(find_sensitive("token=" + jwt), ["jwt"])
 
+    def test_realistic_logcat_tokens(self):
+        header = "eyJ" + "hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+        payload = "eyJ" + "zdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNzAwMDAwMDAwfQ"
+        signature = "SflKxwRJSMeKKF2QT4fw" + "pMeJf36POk6yJV_adQssw5c"
+        jwt = header + "." + payload + "." + signature
+        self.assertEqual(find_sensitive("I/flutter: Authorization: Bearer " + jwt), ["bearer_token", "jwt"])
+        opaque = "a1B2c3D4e5F6g7H8" + "i9J0k1L2m3N4o5P6"
+        self.assertEqual(find_sensitive("D/Dio: Authorization: Bearer " + opaque), ["bearer_token"])
+
     def test_password_assignment_forms(self):
         for text in ("password=hunter2abc", 'password: "Sup3rSecret"', '"password": "abc12345"'):
             self.assertEqual(find_sensitive(text), ["password_assignment"], text)

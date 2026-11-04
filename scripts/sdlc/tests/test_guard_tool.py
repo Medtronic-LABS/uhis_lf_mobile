@@ -114,7 +114,31 @@ class TestFileTools(unittest.TestCase):
                 self.assertIsNone(self.file_tool(tool, path), (tool, path))
 
     def test_other_tools_allowed(self):
-        self.assertIsNone(decide({"tool_name": "Grep", "tool_input": {"pattern": "x"}}))
+        self.assertIsNone(decide({"tool_name": "Glob", "tool_input": {"pattern": "env*.json"}}))
+
+
+class TestGrep(unittest.TestCase):
+    def grep(self, **tool_input):
+        return decide({"tool_name": "Grep", "tool_input": {"pattern": "x", **tool_input}})
+
+    def test_protected_path_blocked(self):
+        for path in ("/r/env.production.json", "android/key.properties", "/r/.env", "/r/app/upload.jks"):
+            self.assertIsNotNone(self.grep(path=path), path)
+
+    def test_glob_targeting_secret_files_blocked(self):
+        for glob in ("env*.json", "env.production.json", "**/env.*.json", "*.json", "*.properties", "*.jks", ".env*"):
+            self.assertIsNotNone(self.grep(glob=glob), glob)
+
+    def test_directories_and_safe_globs_allowed(self):
+        self.assertIsNone(self.grep())
+        self.assertIsNone(self.grep(path="lib"))
+        self.assertIsNone(self.grep(path="/r/lib/main.dart"))
+        self.assertIsNone(self.grep(path="/r/env.example.json"))
+        for glob in ("*.dart", "**/*.yml", "env.example.json", "lib/**/*.dart"):
+            self.assertIsNone(self.grep(path="lib", glob=glob), glob)
+
+    def test_non_string_inputs_allowed(self):
+        self.assertIsNone(self.grep(path=None, glob=["env*.json"]))
 
 
 class TestMalformed(unittest.TestCase):

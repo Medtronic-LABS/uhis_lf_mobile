@@ -9,7 +9,7 @@ disable-model-invocation: true
 
 Process reference: `docs/process/SDLC.md` (sizes, Definition of Ready, branching). Repo: `Medtronic-LABS/uhis_lf_mobile`.
 
-1. **Read the issue.** `gh issue view $ARGUMENTS --repo Medtronic-LABS/uhis_lf_mobile --comments --json number,title,labels,body,assignees,milestone,state`
+1. **Read the issue.** `gh issue view $ARGUMENTS --repo Medtronic-LABS/uhis_lf_mobile --json number,title,labels,body,comments,assignees,milestone,state`
    If no number was given, ask for one. If the issue is closed, stop.
 
 2. **Definition of Ready.** Report each as ok / missing:
@@ -30,6 +30,7 @@ Process reference: `docs/process/SDLC.md` (sizes, Definition of Ready, branching
 
 5. **Plan comment.** Draft a short comment: size + reason, approach (3-6 bullets), files likely touched, test plan, and the next step (`/lw-fix` for S/M, `/lw-feature` for L). No patient data, secrets or raw logs. Show it, and post only after the user says yes:
    `gh issue comment $ARGUMENTS --repo Medtronic-LABS/uhis_lf_mobile --body-file <tmpfile>`
+   Write it with the Write tool (preferred) or a quoted heredoc (`<<'EOF'`) - never an unquoted heredoc or `echo` of user text.
    Offer to assign the issue to the user (`gh issue edit $ARGUMENTS --repo Medtronic-LABS/uhis_lf_mobile --add-assignee @me`). Moving the Project card to "In progress" is the user's call.
 
 6. **Next.** S/M -> `/lw-fix $ARGUMENTS`. L -> `/lw-feature $ARGUMENTS`.
