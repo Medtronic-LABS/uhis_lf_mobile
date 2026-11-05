@@ -69,6 +69,14 @@ dev_dependencies:
   flutter_secure_storage_platform_interface: ^1.1.2
   record_platform_interface: ^2.1.0
 
+# Build SQLite from source instead of downloading the prebuilt binary from
+# GitHub release assets (blocked on some networks).
+hooks:
+  user_defines:
+    sqlite3:
+      source: source
+      path: third_party/sqlite/sqlite3.c
+
 flutter:
   uses-material-design: true
   assets:

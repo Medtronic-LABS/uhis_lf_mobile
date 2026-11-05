@@ -3607,7 +3607,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
           'dangerSignsExperienced28To40': _optionNamesForField(
               'dangerSignsExperienced28To40',
               _data.getValue('dangerSignsExperienced28To40')),
-          'gestationalWeeks': asDouble('gestationalAge')?.toInt() ??
+          // _gestationalWeeks first: an LMP entered on this form is stored
+          // only as the display string `gestationalWeek` ("14 weeks 3 days"),
+          // so neither field id below ever carries it.
+          'gestationalWeeks': _gestationalWeeks ??
+              asDouble('gestationalAge')?.toInt() ??
               asDouble('gestationalWeeks')?.toInt(),
           'temperatureFahrenheit': tempF,
           'temperatureCelsius': tempC,
