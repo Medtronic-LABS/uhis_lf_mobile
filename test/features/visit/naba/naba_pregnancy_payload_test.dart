@@ -42,5 +42,58 @@ void main() {
         18,
       );
     });
+    String daysAgo(int days) => DateTime.now()
+        .subtract(Duration(days: days))
+        .toIso8601String()
+        .substring(0, 10);
+
+    test('falls back to the PWPROFILE LMP entered on this visit', () {
+      expect(
+        resolveNabaGestationalWeeks(
+          assessments: [
+            NabaReferralAssessment(
+              assessmentType: 'PWPROFILE',
+              referralInputs: {'lmp': daysAgo(10 * 7 + 2)},
+            ),
+          ],
+        ),
+        10,
+      );
+    });
+
+    test('ANC weeks win over the PWPROFILE LMP', () {
+      expect(
+        resolveNabaGestationalWeeks(
+          assessments: [
+            NabaReferralAssessment(
+              assessmentType: 'PWPROFILE',
+              referralInputs: {'lmp': daysAgo(10 * 7)},
+            ),
+            const NabaReferralAssessment(
+              assessmentType: 'ANC',
+              referralInputs: {'gestationalWeeks': 12},
+            ),
+          ],
+        ),
+        12,
+      );
+    });
+
+    test('ignores a future or implausibly old PWPROFILE LMP', () {
+      for (final lmp in [daysAgo(-3), daysAgo(46 * 7)]) {
+        expect(
+          resolveNabaGestationalWeeks(
+            assessments: [
+              NabaReferralAssessment(
+                assessmentType: 'PWPROFILE',
+                referralInputs: {'lmp': lmp},
+              ),
+            ],
+          ),
+          isNull,
+          reason: 'lmp=$lmp',
+        );
+      }
+    });
   });
 }
