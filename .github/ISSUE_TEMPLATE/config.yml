@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/Medtronic-LABS/uhis_lf_mobile/security/advisories/new
+    about: Do not open a public issue for security problems or exposed patient data.
+  - name: File bugs, features and tasks in leapwell
+    url: https://github.com/Medtronic-LABS/leapwell/issues/new/choose
+    about: Tickets are filed in the leapwell repo and routed to sub-issues here by a developer.
+  - name: Ideas -> leapwell Discussions
+    url: https://github.com/Medtronic-LABS/leapwell/discussions
+    about: Early ideas and questions go to leapwell Discussions.

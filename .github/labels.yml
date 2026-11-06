@@ -1,0 +1,106 @@
+# Source of truth for repo labels; applied by scripts/github/sync_labels.sh (dry-run by default).
+- name: bug
+  color: "d73a4a"
+  description: "Something isn't working"
+- name: documentation
+  color: "0075ca"
+  description: "Improvements or additions to documentation"
+- name: duplicate
+  color: "cfd3d7"
+  description: "This issue or pull request already exists"
+- name: enhancement
+  color: "a2eeef"
+  description: "New feature or request"
+- name: good first issue
+  color: "7057ff"
+  description: "Good for newcomers"
+- name: help wanted
+  color: "008672"
+  description: "Extra attention is needed"
+- name: invalid
+  color: "e4e669"
+  description: "This doesn't seem right"
+- name: question
+  color: "d876e3"
+  description: "Further information is requested"
+- name: wontfix
+  color: "ffffff"
+  description: "This will not be worked on"
+- name: refactor
+  color: "0E8A16"
+  description: "Code restructuring without behaviour change"
+- name: tech-debt
+  color: "E4E669"
+  description: "Known shortcut to pay back"
+- name: chore
+  color: "C5DEF5"
+  description: "Maintenance and internal tasks"
+- name: release
+  color: "5319E7"
+  description: "Release tracking"
+- name: area:auth
+  color: "1D76DB"
+  description: "Login, PIN, biometric, session"
+- name: area:sync
+  color: "1D76DB"
+  description: "Offline sync and upload"
+- name: area:db
+  color: "1D76DB"
+  description: "Local SQLCipher database"
+- name: area:visit
+  color: "1D76DB"
+  description: "Visit flow and assessments"
+- name: area:cdss
+  color: "1D76DB"
+  description: "Clinical decision support"
+- name: area:scribe
+  color: "1D76DB"
+  description: "AI Scribe and realtime ASR"
+- name: area:coaching
+  color: "1D76DB"
+  description: "Coaching and briefing"
+- name: area:teleconsult
+  color: "1D76DB"
+  description: "Teleconsult"
+- name: area:household
+  color: "1D76DB"
+  description: "Household and member management"
+- name: area:push
+  color: "1D76DB"
+  description: "Push notifications"
+- name: area:release
+  color: "1D76DB"
+  description: "Release engineering"
+- name: area:ci
+  color: "1D76DB"
+  description: "CI/CD and tooling"
+- name: area:i18n
+  color: "1D76DB"
+  description: "Localization and strings"
+- name: prio:P0
+  color: "B60205"
+  description: "Drop everything: SKs cannot work"
+- name: prio:P1
+  color: "D93F0B"
+  description: "Fix this sprint"
+- name: prio:P2
+  color: "FBCA04"
+  description: "Planned"
+- name: prio:P3
+  color: "C2E0C6"
+  description: "Nice to have"
+- name: env:prod
+  color: "BFD4F2"
+  description: "Affects the production build"
+- name: env:training
+  color: "BFD4F2"
+  description: "Affects the training build"
+- name: env:dev
+  color: "BFD4F2"
+  description: "Affects the dev build"
+- name: status:blocked
+  color: "B60205"
+  description: "Blocked by another item"
+- name: status:needs-design
+  color: "D4C5F9"
+  description: "Needs design input before work"

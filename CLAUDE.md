@@ -6,6 +6,16 @@ Flutter 3.x · Provider · GoRouter · SQLCipher · Dart SDK ^3.12
 Parent context: `../CLAUDE.md` (leapfrog-setup) and `../../CLAUDE.md` (platform-setup).  
 **Canonical product spec:** `../design/apon-sushashthya-v1.md` — read before implementing any worklist, visit flow, risk scoring, or CDSS feature.
 
+## Process & ticketing
+
+- **Tickets live in leapwell** ([`Medtronic-LABS/leapwell`](https://github.com/Medtronic-LABS/leapwell)): everyone files bugs, features, tasks and releases there (`/lw-ticket` in the leapwell workspace). A developer routes each item into sub-issues in this repo (`/lw-route`). Jira is retired ([`docs/process/JIRA_RETIREMENT.md`](docs/process/JIRA_RETIREMENT.md)). Start Claude from the leapwell workspace (clone leapwell, run `/lw-setup`).
+- **Process:** [`docs/process/SDLC.md`](docs/process/SDLC.md) — S/M/L sizes, Definition of Ready/Done, branches `<type>/<N>-<slug>` from `develop`, PRs with `Closes #N` (local sub-issue) or `Refs Medtronic-LABS/leapwell#N`, CI budgets, release, hotfix, agent rules.
+- **Filing tickets:** not here — see leapwell (`docs/process/TICKETS.md` there). Admin setup: [`docs/process/CLAUDE_ADMIN_SETUP.md`](docs/process/CLAUDE_ADMIN_SETUP.md).
+- **Workflow skills:** `/lw-start <N>` → `/lw-fix <N>` (S/M) or `/lw-feature <N>` (L) → `/lw-pr`; `/lw-release` for releases.
+- **Agents** (`.claude/agents/`): `lw-architect`, `lw-implementer`, `lw-reviewer`, `lw-qa`, `lw-security`, `lw-release`.
+- **Never** (humans only): merge, push to `main`/`develop`, tag or release, set priority, touch prod keys or `env*.json`. The repo is public — no patient data, secrets or raw logs in issues, PRs, commits or tests.
+- One-time: `sh scripts/setup_dev.sh` (git hooks) and `gh auth login`.
+
 ## Visit Architecture
 
 All visits follow a 3-step progressive disclosure model:

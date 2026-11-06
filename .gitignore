@@ -18,6 +18,8 @@ env.production.json
 env.local.json
 env.deployed.json
 env.physical.json
+env.*.json
+!env.example.json
 
 # IDE
 .idea/
@@ -153,3 +155,7 @@ demo_jul_1/
 # Claude Code local settings (per-developer permission grants, machine-specific paths)
 .claude/settings.local.json
 .superpowers/
+
+# Local agent worktrees and build artifacts
+.claude/worktrees/
+dist/

@@ -206,7 +206,7 @@ workflow, `.github/workflows/confluence-docs.yml`, is unrelated doc-publishing, 
 ## 8. Build artifact
 
 ```
-scripts/release.sh production          # or: scripts/release.sh sktest, for a non-production env
+scripts/release.sh production          # or: scripts/release.sh sktest, for a non-production env; env.sktest.json is a local, untracked file you create from env.example.json
 ```
 
 (Internally: `flutter pub get` + `flutter build appbundle --release --dart-define-from-file=env.<flavor>.json`,
