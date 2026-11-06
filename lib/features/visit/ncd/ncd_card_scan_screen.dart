@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../immunisation/card_capture_quality_gate.dart';
 import '../immunisation/card_extraction_transport.dart' show CardBoundingBox;
 import '../immunisation/card_highlight_overlay.dart';
 import 'ncd_visit_extraction_models.dart';
@@ -111,10 +112,17 @@ class _NcdCardScanScreenState extends State<NcdCardScanScreen>
     try {
       final frame = await controller.takePicture();
       if (!mounted) return;
-      await _runExtraction(File(frame.path));
+      final image = File(frame.path);
+      if (!await _confirmQuality(image)) return;
+      await _runExtraction(image);
     } on CameraException catch (e) {
       debugPrint('NcdCardScanScreen: takePicture failed: $e');
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(EpiStrings.scanCaptureFailed)),
+        );
+      }
     }
   }
 
@@ -130,7 +138,18 @@ class _NcdCardScanScreenState extends State<NcdCardScanScreen>
       setState(() => _busy = false);
       return;
     }
-    await _runExtraction(File(picked.path));
+    final image = File(picked.path);
+    if (!await _confirmQuality(image)) return;
+    await _runExtraction(image);
+  }
+
+  /// Warns on a blurry/glary photo before spending an extraction call. Resets
+  /// the busy flag when the SK retakes, so the controls come back.
+  Future<bool> _confirmQuality(File image) async {
+    final quality = await confirmCaptureQualityOrRetake(context, image);
+    if (quality != null) return true;
+    if (mounted) setState(() => _busy = false);
+    return false;
   }
 
   /// Builds the ordered (label, formatted value) list for every field the

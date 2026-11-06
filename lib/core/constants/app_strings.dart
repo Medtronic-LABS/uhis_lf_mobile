@@ -5923,6 +5923,24 @@ abstract final class EpiStrings {
         'Epi.scanCameraUnavailable',
         'Camera unavailable — grant permission or upload an image',
       );
+  static String get scanCaptureFailed => getTranslatedString(
+        'Epi.scanCaptureFailed',
+        "Couldn't take the photo — please try again or upload an image",
+      );
+  static String get scanCardNotRecognised => getTranslatedString(
+        'Epi.scanCardNotRecognised',
+        "This doesn't look like the right card — retake the photo of the "
+            "card for this visit",
+      );
+  static String get scanImageUnreadable => getTranslatedString(
+        'Epi.scanImageUnreadable',
+        "The photo couldn't be read — retake it or enter the values manually",
+      );
+  static String get scanServiceUnavailable => getTranslatedString(
+        'Epi.scanServiceUnavailable',
+        'Card reading is unavailable right now — try again when online or '
+            'enter the values manually',
+      );
   static String get scanEngineGemini =>
       getTranslatedString('Epi.scanEngineGemini', 'Gemini Vision');
   static String get scanEngineOffline =>
