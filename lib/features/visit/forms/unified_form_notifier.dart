@@ -311,7 +311,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// applicable here) — see
   /// `AssessmentRepository.priorNcdVisitCount`'s doc comment.
   Future<int> resolveCurrentNcdVisitNumber() async {
-    return 1 + await _assessmentRepo.priorNcdVisitCount(_patientId);
+    return 1 +
+        await _assessmentRepo.priorNcdVisitCount(
+          _patientId,
+          alsoId: await _localPatientId(),
+        );
   }
 
   int? _asInt(dynamic value) {
