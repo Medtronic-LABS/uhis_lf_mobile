@@ -185,6 +185,31 @@ class TeleconsultScreen extends StatefulWidget {
   State<TeleconsultScreen> createState() => _TeleconsultScreenState();
 }
 
+/// Every mutable field below (including [_attemptGeneration]) MUST stay
+/// instance-scoped -- no `static`, no shared singleton/global for anything
+/// read or written by [_pollInBackground]/[_prefetchDocuments]/
+/// [_savePrescriptionToVisit]. Two patients' [TeleconsultScreen]s can be
+/// polling concurrently: an SK can back out of Patient A's in-progress call
+/// (status not yet `completed`) and immediately start a fresh call for
+/// Patient B. That's a *different* situation from a retry on the *same*
+/// screen (what [_attemptGeneration] guards against) -- here, both calls are
+/// legitimate and both must run to completion independently:
+///
+/// 1. Patient A's background poll keeps polling until its own terminal
+///    status or [AppConfig.teleconsultPollMaxAttempts] threshold, completely
+///    unaffected by Patient B's call starting -- it belongs to a different
+///    `_TeleconsultScreenState` instance.
+/// 2. Patient B's call gets its own, fully independent state (its own
+///    `_attemptGeneration` starting at 0, its own `_client`, its own
+///    `_booking`/`_status`/byte buffers) -- nothing here is shared across
+///    instances, so neither call can clobber the other's stage transitions
+///    or overwrite the other's prescription save (which is keyed on each
+///    screen's own `widget.visitId`, never a shared variable).
+///
+/// Each `/teleconsult` push ([router.dart]) creates a brand-new
+/// [TeleconsultScreen] with a brand-new `createState()` -- this guarantee
+/// holds as long as a future change doesn't introduce a cached/static field
+/// or shared service state in this class.
 class _TeleconsultScreenState extends State<TeleconsultScreen> {
   late final ShukheeClient _client;
   late final TeleconsultPermissionService _permissionService;
@@ -221,6 +246,19 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
 
   static const _minConnectingDuration = Duration(seconds: 2);
   Timer? _connectingMinDurationTimer;
+
+  // Incremented on every _submitBooking (including a retry) -- each
+  // _pollInBackground call captures the value current at its own start and
+  // compares against this field before touching any UI state or persisting a
+  // result. A retry/re-tap books a brand-new call with the backend (new
+  // call_log, new call_url/token) while the *previous* attempt's poll loop
+  // was otherwise left running orphaned forever (no cancellation existed) --
+  // observed live as concurrent get_consultation_status polls for superseded
+  // bookings, which could also surface an old, already-invalidated call_url.
+  // This doesn't stop the superseded attempt's HTTP polling outright (the
+  // SDK's pollStatus has no cancellation hook), but it makes every one of its
+  // side effects a no-op once superseded, which is what actually matters.
+  int _attemptGeneration = 0;
 
   @override
   void initState() {
@@ -307,7 +345,8 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       );
       if (!mounted) return;
       setState(() => _booking = booking);
-      unawaited(_pollInBackground(booking.callLog));
+      final generation = ++_attemptGeneration;
+      unawaited(_pollInBackground(booking.callLog, generation));
     } on ShukheeException catch (e) {
       if (mounted) _handleError(e);
     }
@@ -382,13 +421,22 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
 
   /// Polls until the call reaches a terminal status, then (if completed)
   /// downloads and saves the prescription/invoice. Deliberately keeps running
-  /// to completion even if the SK backs out of this screen mid-call --
+  /// to completion even if the SK backs out of this *screen* mid-call --
   /// `unawaited` in [_submitBooking] means nothing cancels this Future on
   /// dispose, so only the *UI-facing* `setState` calls below are guarded by
   /// [mounted]; the download/save side-effects are not, so a call that
   /// finishes after the SK has already left still ends up in the patient's
   /// visit timeline instead of being silently dropped.
-  Future<void> _pollInBackground(String callLog) async {
+  ///
+  /// [generation] is this specific *attempt*'s stamp from [_attemptGeneration]
+  /// at the moment it was booked -- distinct from leaving the screen (above):
+  /// a retry/re-tap books a brand-new call and bumps [_attemptGeneration], so
+  /// every check below against the (by-then-stale) [generation] short-circuits
+  /// this superseded attempt's side effects, including the DB save -- a
+  /// stale/abandoned attempt completing later must never attach its
+  /// prescription to the visit in place of (or alongside) the one the SK
+  /// actually continued with.
+  Future<void> _pollInBackground(String callLog, int generation) async {
     final status = await _client.pollStatus(
       callLog: callLog,
       maxAttempts: AppConfig.teleconsultPollMaxAttempts,
@@ -397,7 +445,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       // screen can show the assigned doctor as soon as Shukhee has one,
       // rather than waiting for the whole call to finish.
       onUpdate: (update) {
-        if (!mounted) return;
+        if (!mounted || generation != _attemptGeneration) return;
         setState(() => _status = update);
         // A delayed appointment-status arrival (e.g. the WebView finished
         // loading before Shukhee reported ConsultationStarted) can unblock a
@@ -413,6 +461,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       },
     );
     _liveTimer?.cancel();
+    if (generation != _attemptGeneration) return;
     if (!status.isCompleted) {
       if (mounted) {
         setState(() {
@@ -429,7 +478,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       });
     }
     await _prefetchDocuments(status);
-    if (mounted) setState(() => _stage = _Stage.wrapUp);
+    if (mounted && generation == _attemptGeneration) setState(() => _stage = _Stage.wrapUp);
   }
 
   /// Eagerly downloads whatever documents the completed call produced so the
