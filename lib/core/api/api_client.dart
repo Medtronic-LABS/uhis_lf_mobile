@@ -26,9 +26,7 @@ const String _kAttemptKey = 'uhisAttempt';
 /// replaying one can duplicate households, members and assessments. Most reads
 /// in this API are POSTs, so method alone is not a safe test.
 const Set<String> _retryableReadPaths = <String>{
-  Endpoints.offlineSyncHouseholds,
-  Endpoints.offlineSyncMembers,
-  Endpoints.offlineSyncFollowUps,
+  Endpoints.offlineSyncFetch,
   Endpoints.offlineSyncMemberAssessmentHistory,
   Endpoints.staticUserData,
   Endpoints.patientSearch,
