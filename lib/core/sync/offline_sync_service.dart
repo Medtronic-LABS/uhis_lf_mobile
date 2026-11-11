@@ -1600,6 +1600,7 @@ class OfflineSyncService extends ChangeNotifier {
         since: since,
       );
       if (items.isEmpty) return 0;
+      final persistTimer = _PersistStepTimer('assessment-history');
 
       if (replaceMahOnFullSync) {
         await _assessmentHistoryWriter?.clearAllForFullSync();
@@ -1609,6 +1610,8 @@ class OfflineSyncService extends ChangeNotifier {
         );
       }
 
+      persistTimer.lap('clearMah');
+
       // Collect unique member IDs and bulk-resolve to patient IDs.
       final memberIds = items
           .map((i) => i.householdMemberId)
@@ -1616,6 +1619,8 @@ class OfflineSyncService extends ChangeNotifier {
           .toList(growable: false);
       final memberToPatient =
           await _members.patientIdsByMemberIds(memberIds);
+
+      persistTimer.lap('memberToPatient');
 
       // Group programmes, latest visitDate, and nextFollowUpDate per patientId.
       final newProgrammes = <String, Set<Programme>>{};
@@ -1709,6 +1714,7 @@ class OfflineSyncService extends ChangeNotifier {
       }
       await _programmes.replaceForMany(programmesToWrite);
       final progUpdated = programmesToWrite.length;
+      persistTimer.lap('programmes');
 
       // Seed last_visit_at / next_due_at from assessment history. When the
       // latest visit has no follow-up date, explicitly clear next_due_at —
@@ -1725,6 +1731,7 @@ class OfflineSyncService extends ChangeNotifier {
       ];
       await _patients.patchVisitTimingMany(timingPatches);
       final schedUpdated = timingPatches.length;
+      persistTimer.lap('visitTiming');
 
       if (clearNextDueIds.isNotEmpty) {
         final removed = await _followUps
@@ -1756,6 +1763,8 @@ class OfflineSyncService extends ChangeNotifier {
         }
       }
 
+      persistTimer.lap('ancSeed+clearFollowUps');
+
       int poDeliverySeeded = 0;
       if (_pregnancyEpisode != null) {
         for (final entry in latestPoDeliveryMs.entries) {
@@ -1772,6 +1781,8 @@ class OfflineSyncService extends ChangeNotifier {
           );
         }
       }
+
+      persistTimer.lap('poDelivery');
 
       // P3: Synthesise FollowUpRow entries from assessment-history nextFollowUpDate
       // so the follow_ups table is populated even when the bulk-sync bundle
@@ -1799,6 +1810,8 @@ class OfflineSyncService extends ChangeNotifier {
         );
       }
 
+      persistTimer.lap('historyFollowUps');
+
       // Write an encounter row for every assessment-history item, not just
       // ones carrying extractable vitals (NCD/ANC/PNC have BP/weight etc. --
       // Eye Care/Cataract and other vitals-less programmes do not). Vitals
@@ -1812,7 +1825,7 @@ class OfflineSyncService extends ChangeNotifier {
       // Shukhee call booked from an Eye Care visit).
       int encounterRowsWritten = 0;
       // client-minted draft id -> the server's own FHIR Encounter id for the
-      // same visit, collected below whenever findPendingDraftId reconciles
+      // same visit, collected below whenever the pending-draft index reconciles
       // one -- fed to _attachPendingFhirEncounterIds afterward so a Shukhee
       // Call Logs row for that same visit can have its FHIR id durably
       // attached server-side (see that method's doc comment).
@@ -1820,6 +1833,9 @@ class OfflineSyncService extends ChangeNotifier {
       if (_encounterDao != null) {
         final encounterDao = _encounterDao;
         final encounterRows = <EncounterRow>[];
+        // One query for all pending drafts, matched in memory per item —
+        // replaces a per-item lookup that dominated first-login sync time.
+        final pendingDrafts = await encounterDao.pendingDraftIndex();
         for (final item in items) {
           final patientId = memberToPatient[item.householdMemberId];
           if (patientId == null || patientId.isEmpty) continue;
@@ -1829,7 +1845,7 @@ class OfflineSyncService extends ChangeNotifier {
           // so anything already anchored to that client-minted id (e.g. a
           // Shukhee Call Logs row's encounter_id) doesn't go stale the
           // moment this device syncs -- see EncounterDao.findPendingDraftId.
-          final draftId = await encounterDao.findPendingDraftId(
+          final draftId = pendingDrafts.match(
             patientId: patientId,
             programme: programme,
             around: item.visitDate,
@@ -1858,6 +1874,8 @@ class OfflineSyncService extends ChangeNotifier {
         await _encounterAttach?.attachAll(draftToServerEncounterId);
       }
 
+      persistTimer.lap('encounters');
+
       // Write assessment rows keyed by FHIR patient ID so AssessmentDao queries
       // by patientId resolve correctly (assessment history uses numeric
       // householdMemberId; the bulk-sync bundle may use a different field).
@@ -1880,13 +1898,17 @@ class OfflineSyncService extends ChangeNotifier {
       if (assessmentRows.isNotEmpty) {
         await _assessments.upsertMany(assessmentRows);
       }
+      persistTimer.lap('assessments');
 
       await _assessmentHistoryWriter?.upsertFromHistoryItems(items);
+      persistTimer.lap('mahUpsert');
       if (replaceMahOnFullSync) {
         // Pending visits live in local_assessments, not server history — restore
         // them into MAH before post-sync/dashboard so KPIs are not briefly empty.
         await _assessmentHistoryWriter?.rebuildFromLocalAssessments();
       }
+
+      persistTimer.lap('mahRebuildFromLocal');
 
       final projection = _pregnancyMahProjection;
       if (projection != null) {
@@ -1903,6 +1925,8 @@ class OfflineSyncService extends ChangeNotifier {
           }
         }
       }
+
+      persistTimer.lap('pregnancyProjection');
 
       // CCE: open referred visits → local referrals table (dedupe by encounter).
       var referralCount = 0;
@@ -1925,6 +1949,9 @@ class OfflineSyncService extends ChangeNotifier {
           referralCount = referralRows.length;
         }
       }
+
+      persistTimer.lap('referrals');
+      persistTimer.done();
 
       debugPrint(
         '[SyncPersist] assessmentHistory=${items.length} '
@@ -2318,3 +2345,26 @@ class _PersistTotals {
       );
 }
 
+/// Debug-only lap timer for the post-download persist steps, so a slow
+/// first-login sync can be attributed to a specific step from logcat alone
+/// (LEAP-94). Logs `[SyncPersist:timing] <scope> <step>=<ms>ms` per lap.
+class _PersistStepTimer {
+  _PersistStepTimer(this._scope) : _sw = Stopwatch()..start();
+
+  final String _scope;
+  final Stopwatch _sw;
+  int _lastMs = 0;
+
+  void lap(String step) {
+    if (!kDebugMode) return;
+    final now = _sw.elapsedMilliseconds;
+    debugPrint('[SyncPersist:timing] $_scope $step=${now - _lastMs}ms');
+    _lastMs = now;
+  }
+
+  void done() {
+    if (!kDebugMode) return;
+    debugPrint(
+        '[SyncPersist:timing] $_scope total=${_sw.elapsedMilliseconds}ms');
+  }
+}

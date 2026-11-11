@@ -181,4 +181,83 @@ void main() {
       expect(result, 'draft-close');
     });
   });
+
+  group('EncounterDao.pendingDraftIndex (LEAP-94 bulk matching)', () {
+    test('matches the same draft findPendingDraftId does, across patients',
+        () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      final ms = noon.millisecondsSinceEpoch;
+      await dao.upsert(_draft(id: 'p1-far', startedAt: ms - 3600000));
+      await dao.upsert(_draft(id: 'p1-near', startedAt: ms + 60000));
+      await dao.upsert(_draft(id: 'p2-only', patientId: 'p2', startedAt: ms));
+      await dao.upsert(_draft(
+        id: 'p3-synced',
+        patientId: 'p3',
+        startedAt: ms,
+        syncStatus: SyncStatus.synced,
+      ));
+
+      final index = await dao.pendingDraftIndex();
+
+      for (final pid in ['p1', 'p2', 'p3', 'p-none']) {
+        final single = await dao.findPendingDraftId(
+          patientId: pid,
+          programme: 'eye_care',
+          around: noon,
+        );
+        expect(
+          index.match(patientId: pid, programme: 'eye_care', around: noon),
+          single,
+          reason: 'patient $pid',
+        );
+      }
+      expect(
+        index.match(patientId: 'p1', programme: 'eye_care', around: noon),
+        'p1-near',
+      );
+      expect(
+        index.match(patientId: 'p3', programme: 'eye_care', around: noon),
+        isNull,
+      );
+    });
+
+    test('respects programme and time window', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      await dao.upsert(_draft(
+        id: 'ncd-draft',
+        programme: 'ncd',
+        startedAt: noon.millisecondsSinceEpoch,
+      ));
+      final index = await dao.pendingDraftIndex();
+
+      expect(
+        index.match(patientId: 'p1', programme: 'eye_care', around: noon),
+        isNull,
+      );
+      expect(
+        index.match(
+          patientId: 'p1',
+          programme: 'NCD',
+          around: noon.add(const Duration(hours: 21)),
+        ),
+        isNull,
+      );
+      expect(
+        index.match(patientId: 'p1', programme: 'NCD', around: noon),
+        'ncd-draft',
+      );
+    });
+
+    test('is empty when there are no pending drafts', () async {
+      final (db, dao) = await openTestDb();
+      addTearDown(db.close);
+
+      final index = await dao.pendingDraftIndex();
+      expect(index.isEmpty, isTrue);
+    });
+  });
 }

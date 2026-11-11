@@ -67,28 +67,35 @@ class PregnancyMahProjection {
       byPatient.putIfAbsent(patientId, () => []).add(d);
     }
 
+    // Build every episode and snapshot row in memory, then write them in two
+    // batches. Writing per patient (delete + insert per episode + snapshot
+    // upsert) was ~3,000 separate transactions on a first login (LEAP-94).
+    final episodesByPatient = <String, List<PregnancyEpisodeRow>>{};
+    final snapshots = <PregnancySnapshotRow>[];
     for (final entry in byPatient.entries) {
       final patientId = entry.key;
       final episodes = entry.value
         ..sort((a, b) => _endAtMs(b).compareTo(_endAtMs(a)));
 
-      await _replaceEpisodesForPatient(patientId, episodes, nowMs, now);
+      episodesByPatient[patientId] =
+          _episodeRowsForPatient(patientId, episodes, nowMs, now);
 
       final current = _pickCurrentEpisode(episodes, now: now);
       if (current != null) {
-        final snap = _snapshotFromDetail(patientId, current, now: now);
-        await _snapshot.upsertOne(snap);
+        snapshots.add(_snapshotFromDetail(patientId, current, now: now));
       }
     }
+    await _episode.replaceEpisodesForPatients(episodesByPatient);
+    await _snapshot.upsertMany(snapshots);
   }
 
-  Future<void> _replaceEpisodesForPatient(
+  List<PregnancyEpisodeRow> _episodeRowsForPatient(
     String patientId,
     List<PregnancyDetailRow> episodes,
     int nowMs,
     DateTime now,
-  ) async {
-    await _episode.deleteAllForPatient(patientId);
+  ) {
+    final rows = <PregnancyEpisodeRow>[];
     for (final d in episodes) {
       final snap = _snapshotFromDetail(patientId, d, now: now);
       final deliveryMs = snap.deliveryDateMillis;
@@ -103,15 +110,15 @@ class PregnancyMahProjection {
         closedAt = null;
       }
 
-      final row = PregnancyEpisodeRow(
+      rows.add(PregnancyEpisodeRow(
         id: d.pregnancyEpisodeId,
         patientId: patientId,
         startedAt: startedMs,
         closedAt: closedAt,
         obstetric: snap.copyWith(updatedAt: nowMs),
-      );
-      await _episode.insertEpisodeRow(row);
+      ));
     }
+    return rows;
   }
 
   static PregnancyDetailRow? _pickCurrentEpisode(

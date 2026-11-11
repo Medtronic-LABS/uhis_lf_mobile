@@ -349,6 +349,32 @@ class PregnancyEpisodeDao {
     );
   }
 
+  /// Replaces every patient's episodes in one batch: for each key, deletes
+  /// that patient's existing rows then inserts the given ones. Equivalent to
+  /// [deleteAllForPatient] + [insertEpisodeRow] per patient, but committed as
+  /// a single transaction instead of one write per row (LEAP-94).
+  Future<void> replaceEpisodesForPatients(
+    Map<String, List<PregnancyEpisodeRow>> byPatient,
+  ) async {
+    if (byPatient.isEmpty) return;
+    final batch = _db.db.batch();
+    for (final entry in byPatient.entries) {
+      batch.delete(
+        AppDatabase.tablePregnancyEpisodes,
+        where: 'patient_id = ?',
+        whereArgs: [entry.key],
+      );
+      for (final row in entry.value) {
+        batch.insert(
+          AppDatabase.tablePregnancyEpisodes,
+          row.toDb(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+    await batch.commit(noResult: true);
+  }
+
   Future<void> insertEpisodeRow(PregnancyEpisodeRow row) async {
     await _db.db.insert(
       AppDatabase.tablePregnancyEpisodes,

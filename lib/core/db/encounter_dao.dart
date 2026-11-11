@@ -294,30 +294,31 @@ class EncounterDao {
   }) async {
     final rows = await _db.db.query(
       AppDatabase.tableEncounters,
-      columns: ['id', 'programme', 'started_at'],
+      columns: ['id', 'patient_id', 'programme', 'started_at'],
       where: 'patient_id = ? AND sync_status = ?',
       whereArgs: [patientId, SyncStatus.pending.name],
     );
-    if (rows.isEmpty) return null;
+    return PendingDraftIndex.fromRows(rows).match(
+      patientId: patientId,
+      programme: programme,
+      around: around,
+      window: window,
+    );
+  }
 
-    final targetProgramme = Programme.fromString(programme);
-    final aroundMs = around.millisecondsSinceEpoch;
-    final windowMs = window.inMilliseconds;
-
-    String? bestId;
-    int? bestDelta;
-    for (final row in rows) {
-      if (Programme.fromString(row['programme'] as String) != targetProgramme) {
-        continue;
-      }
-      final delta = ((row['started_at'] as int) - aroundMs).abs();
-      if (delta > windowMs) continue;
-      if (bestDelta == null || delta < bestDelta) {
-        bestDelta = delta;
-        bestId = row['id'] as String;
-      }
-    }
-    return bestId;
+  /// Loads every still-[SyncStatus.pending] draft once, so a bulk caller can
+  /// run [findPendingDraftId]'s matching in memory instead of issuing one
+  /// query per item. Assessment-history ingestion on a first login used to
+  /// run ~6,000 sequential lookups here (LEAP-94); on a fresh install they
+  /// all came back empty.
+  Future<PendingDraftIndex> pendingDraftIndex() async {
+    final rows = await _db.db.query(
+      AppDatabase.tableEncounters,
+      columns: ['id', 'patient_id', 'programme', 'started_at'],
+      where: 'sync_status = ?',
+      whereArgs: [SyncStatus.pending.name],
+    );
+    return PendingDraftIndex.fromRows(rows);
   }
 
   /// Get all pending encounters that need syncing.
@@ -454,4 +455,68 @@ class EncounterDao {
     );
     return rows.map((r) => r['patient_id'] as String).toSet();
   }
+}
+
+/// In-memory snapshot of pending encounter drafts, grouped by patient, with
+/// the same closest-in-time matching rule as [EncounterDao.findPendingDraftId].
+class PendingDraftIndex {
+  PendingDraftIndex._(this._byPatient);
+
+  factory PendingDraftIndex.fromRows(List<Map<String, Object?>> rows) {
+    final byPatient = <String, List<_PendingDraft>>{};
+    for (final row in rows) {
+      byPatient.putIfAbsent(row['patient_id'] as String, () => []).add(
+            _PendingDraft(
+              id: row['id'] as String,
+              programme: Programme.fromString(row['programme'] as String),
+              startedAtMs: row['started_at'] as int,
+            ),
+          );
+    }
+    return PendingDraftIndex._(byPatient);
+  }
+
+  final Map<String, List<_PendingDraft>> _byPatient;
+
+  bool get isEmpty => _byPatient.isEmpty;
+
+  /// The pending draft for [patientId]/[programme] closest in time to
+  /// [around], or null if none falls inside [window].
+  String? match({
+    required String patientId,
+    required String programme,
+    required DateTime around,
+    Duration window = const Duration(hours: 20),
+  }) {
+    final drafts = _byPatient[patientId];
+    if (drafts == null) return null;
+    final targetProgramme = Programme.fromString(programme);
+    final aroundMs = around.millisecondsSinceEpoch;
+    final windowMs = window.inMilliseconds;
+
+    String? bestId;
+    int? bestDelta;
+    for (final d in drafts) {
+      if (d.programme != targetProgramme) continue;
+      final delta = (d.startedAtMs - aroundMs).abs();
+      if (delta > windowMs) continue;
+      if (bestDelta == null || delta < bestDelta) {
+        bestDelta = delta;
+        bestId = d.id;
+      }
+    }
+    return bestId;
+  }
+}
+
+class _PendingDraft {
+  const _PendingDraft({
+    required this.id,
+    required this.programme,
+    required this.startedAtMs,
+  });
+
+  final String id;
+  final Programme programme;
+  final int startedAtMs;
 }

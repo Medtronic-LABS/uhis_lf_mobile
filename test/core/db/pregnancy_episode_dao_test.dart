@@ -254,4 +254,58 @@ void main() {
       expect(projected?.deliveryDateMillis, 12345);
     });
   });
+
+  group('PregnancyEpisodeDao.replaceEpisodesForPatients (LEAP-94)', () {
+    PregnancyEpisodeRow episode(String id, String patientId, int startedAt) =>
+        PregnancyEpisodeRow(
+          id: id,
+          patientId: patientId,
+          startedAt: startedAt,
+          obstetric: PregnancySnapshotRow(
+            patientId: patientId,
+            facts: PregnancyFacts.empty,
+            lmpDate: startedAt,
+          ),
+        );
+
+    Future<Set<String>> idsFor(AppDatabase app, String patientId) async {
+      final rows = await app.db.query(
+        AppDatabase.tablePregnancyEpisodes,
+        columns: ['id'],
+        where: 'patient_id = ?',
+        whereArgs: [patientId],
+      );
+      return rows.map((r) => r['id'] as String).toSet();
+    }
+
+    test('replaces each listed patient\'s episodes and leaves others alone',
+        () async {
+      final (app, _, episodeDao) = await openTestDb();
+      const a = 'replace-batch-a';
+      const b = 'replace-batch-b';
+      const untouched = 'replace-batch-untouched';
+
+      await episodeDao.insertEpisodeRow(episode('a-old', a, 100));
+      await episodeDao.insertEpisodeRow(episode('keep', untouched, 100));
+
+      await episodeDao.replaceEpisodesForPatients({
+        a: [episode('a-new-1', a, 200), episode('a-new-2', a, 300)],
+        b: [episode('b-new', b, 400)],
+      });
+
+      expect(await idsFor(app, a), {'a-new-1', 'a-new-2'});
+      expect(await idsFor(app, b), {'b-new'});
+      expect(await idsFor(app, untouched), {'keep'});
+    });
+
+    test('an empty list clears that patient\'s episodes', () async {
+      final (app, _, episodeDao) = await openTestDb();
+      const p = 'replace-batch-clear';
+      await episodeDao.insertEpisodeRow(episode('gone', p, 100));
+
+      await episodeDao.replaceEpisodesForPatients({p: const []});
+
+      expect(await idsFor(app, p), isEmpty);
+    });
+  });
 }

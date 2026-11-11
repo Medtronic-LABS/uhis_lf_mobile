@@ -6,6 +6,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, kIsWeb;
 
 import '../config/app_config.dart';
+import '../debug/console_log.dart';
 import '../version/app_version_info.dart';
 import 'endpoints.dart';
 import 'browser_adapter_stub.dart'
@@ -17,6 +18,7 @@ const String _sessionCookieName = 'JSESSIONID';
 /// `RequestOptions.extra` key holding the 1-based attempt number, so a replayed
 /// request knows how many attempts have already been spent.
 const String _kAttemptKey = 'uhisAttempt';
+const String _kStartKey = 'uhisStartMs';
 
 /// Read-only POST endpoints that are safe to replay.
 ///
@@ -216,6 +218,40 @@ class ApiClient {
         },
       ),
     );
+    // Debug-only per-request timing. Sits before the retry interceptor so a
+    // failed attempt is timed too; each retry is re-timed as its own attempt.
+    if (kDebugMode) {
+      String label(RequestOptions o) {
+        final attempt = (o.extra[_kAttemptKey] as int?) ?? 1;
+        return '${o.method} ${o.uri.path}${attempt > 1 ? ' (attempt $attempt)' : ''}';
+      }
+
+      int elapsed(RequestOptions o) {
+        final start = o.extra[_kStartKey] as int?;
+        return start == null ? -1 : DateTime.now().millisecondsSinceEpoch - start;
+      }
+
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            options.extra[_kStartKey] = DateTime.now().millisecondsSinceEpoch;
+            handler.next(options);
+          },
+          onResponse: (response, handler) {
+            final o = response.requestOptions;
+            ConsoleLog.step('[ApiTiming] ${label(o)} → '
+                '${response.statusCode} in ${elapsed(o)} ms');
+            handler.next(response);
+          },
+          onError: (e, handler) {
+            final o = e.requestOptions;
+            ConsoleLog.warn('[ApiTiming] ${label(o)} → '
+                '${e.response?.statusCode ?? e.type.name} in ${elapsed(o)} ms');
+            handler.next(e);
+          },
+        ),
+      );
+    }
     // Retry must sit before LogInterceptor so a retried attempt is logged as
     // its own request/response pair rather than folded into the first.
     dio.interceptors.add(
