@@ -261,10 +261,11 @@ class AuthRepository {
           AppUpdateStrings.forcedUpdateMessage(minVersionLabel),
         );
       case AppVersionCheckFailed():
-        await _api.clearSession();
-        throw AppVersionCheckFailedException(
-          AppUpdateStrings.versionCheckUnavailable,
-        );
+        // No policy reachable and none cached (LEAP-144): fail open. Blocking
+        // here would lock every SK out whenever the AI service is down; the
+        // home gate re-checks once it is reachable, and any policy seen
+        // before keeps being enforced from cache.
+        debugPrint('[Auth] app-version check unavailable — continuing login');
     }
 
     await _storage.write(key: _kUsername, value: username);

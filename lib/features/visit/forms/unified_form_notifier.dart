@@ -311,7 +311,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// applicable here) — see
   /// `AssessmentRepository.priorNcdVisitCount`'s doc comment.
   Future<int> resolveCurrentNcdVisitNumber() async {
-    return 1 + await _assessmentRepo.priorNcdVisitCount(_patientId);
+    return 1 +
+        await _assessmentRepo.priorNcdVisitCount(
+          _patientId,
+          alsoId: await _localPatientId(),
+        );
   }
 
   int? _asInt(dynamic value) {
@@ -3607,7 +3611,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
           'dangerSignsExperienced28To40': _optionNamesForField(
               'dangerSignsExperienced28To40',
               _data.getValue('dangerSignsExperienced28To40')),
-          'gestationalWeeks': asDouble('gestationalAge')?.toInt() ??
+          // _gestationalWeeks first: an LMP entered on this form is stored
+          // only as the display string `gestationalWeek` ("14 weeks 3 days"),
+          // so neither field id below ever carries it.
+          'gestationalWeeks': _gestationalWeeks ??
+              asDouble('gestationalAge')?.toInt() ??
               asDouble('gestationalWeeks')?.toInt(),
           'temperatureFahrenheit': tempF,
           'temperatureCelsius': tempC,

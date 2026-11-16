@@ -2,11 +2,18 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/core/i18n/app_date_format.dart';
 import 'package:uhis_next/features/visit/forms/unified_form_notifier.dart';
 
 import '../../../helpers/fake_form_deps.dart';
 
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    // An LMP change formats the EDD with the app's date formats.
+    await AppDateFormat.ensureInitialised();
+  });
+
   group('buildNabaReferralAssessmentsForTesting', () {
     test('pregnancy outcome visit emits PREGNANCYOUTCOME assessment type', () {
       final notifier = buildTestNotifier(
@@ -52,6 +59,20 @@ void main() {
         assessments.map((a) => a.assessmentType),
         containsAll(['PREGNANCYOUTCOME', 'PNC_MOTHER']),
       );
+    });
+    test('ANC gestationalWeeks comes from an LMP entered on this form', () {
+      final notifier = buildTestNotifier(
+        draftDao: FakeAssessmentDraftDao(),
+        activeFormTypes: const ['pwProfile', 'anc'],
+      );
+      final lmp = DateTime.now().subtract(const Duration(days: 14 * 7 + 3));
+      notifier.updateField('lmp', lmp.toIso8601String().substring(0, 10));
+
+      final anc = notifier
+          .buildNabaReferralAssessmentsForTesting(isNcdFollowUp: false)
+          .firstWhere((a) => a.assessmentType == 'ANC');
+
+      expect(anc.referralInputs['gestationalWeeks'], 14);
     });
   });
 }

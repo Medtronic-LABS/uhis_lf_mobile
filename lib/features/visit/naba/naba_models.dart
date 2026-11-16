@@ -139,8 +139,14 @@ class NabaReferralAssessment {
       };
 }
 
+/// LMPs further back than this are a data-entry error, not a pregnancy
+/// (same bound as the backend's `_MAX_GESTATIONAL_WEEKS`).
+const int _maxNabaGestationalWeeks = 45;
+
 /// Top-level [NabaRequest.gestationalWeeks]: visit snapshot first, then the
-/// Step 2 ANC assessment, then LMP back-calculation.
+/// Step 2 ANC assessment, then the LMP entered on this visit's PW profile
+/// (a pregnancy registered today has no snapshot yet), then LMP
+/// back-calculation from the snapshot.
 int? resolveNabaGestationalWeeks({
   int? visitGestationalWeeks,
   int? lmpMs,
@@ -152,6 +158,16 @@ int? resolveNabaGestationalWeeks({
     final raw = a.referralInputs['gestationalWeeks'];
     if (raw is int) return raw;
     if (raw is num) return raw.toInt();
+  }
+  for (final a in assessments) {
+    if (a.assessmentType != 'PWPROFILE') continue;
+    final lmp = DateTime.tryParse(a.referralInputs['lmp']?.toString() ?? '');
+    if (lmp == null) continue;
+    // Check days, not weeks: ~/ truncates, so an LMP up to 6 days in the
+    // future would otherwise pass as week 0.
+    final days = DateTime.now().difference(lmp).inDays;
+    final weeks = days ~/ 7;
+    if (days >= 0 && weeks <= _maxNabaGestationalWeeks) return weeks;
   }
   if (lmpMs != null) {
     final weeks = DateTime.now()

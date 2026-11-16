@@ -718,16 +718,21 @@ class AssessmentRepository extends ChangeNotifier {
   /// "prior count + 1" convention as ANC's server-synced `ancVisitNo`, just
   /// without a dedicated snapshot counter since NCD visits aren't
   /// pregnancy-episode-scoped.
-  Future<int> priorNcdVisitCount(String patientId) async {
-    if (patientId.isEmpty) return 0;
-    final localRows = await _dao.getByPatientId(patientId);
-    var count =
-        localRows.where((r) => r.assessmentType.toUpperCase() == 'NCD').length;
-    if (_historyDao == null) return count;
-    final historyMap = await _historyDao.forMany([patientId]);
-    final rows = historyMap[patientId] ?? const [];
-    count += rows.where((r) => _isNcdKind(r.kind?.toUpperCase() ?? '')).length;
-    return count;
+  ///
+  /// Pass [alsoId] (the local member PK) when it differs from [patientId] —
+  /// same multi-key rule as [priorAncVisitCount], since a visit and its synced
+  /// history can be filed under different ids. Rows are de-duplicated by row
+  /// id, so a visit present under both ids counts once.
+  Future<int> priorNcdVisitCount(String patientId, {String? alsoId}) async {
+    final ids = _idsFor(patientId, alsoId);
+    if (ids.isEmpty) return 0;
+    final localCount = (await _localRows(ids))
+        .where((r) => r.assessmentType.toUpperCase() == 'NCD')
+        .length;
+    final historyCount = (await _historyRows(ids))
+        .where((r) => _isNcdKind(r.kind?.toUpperCase() ?? ''))
+        .length;
+    return localCount + historyCount;
   }
 
   /// Number of childhood visits already recorded for [patientId], across this

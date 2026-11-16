@@ -14835,6 +14835,22 @@
     "en": "+ Add date",
     "bn": "+ তারিখ যোগ করুন"
   },
+  "Epi.scanCaptureFailed": {
+    "en": "Couldn't take the photo — please try again or upload an image",
+    "bn": "ছবি তোলা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন অথবা একটি ছবি আপলোড করুন।"
+  },
+  "Epi.scanCardNotRecognised": {
+    "en": "This doesn't look like the right card — retake the photo of the card for this visit",
+    "bn": "এটি সঠিক কার্ড বলে মনে হচ্ছে না। এই ভিজিটের জন্য নির্ধারিত কার্ডটির ছবি আবার তুলুন।"
+  },
+  "Epi.scanImageUnreadable": {
+    "en": "The photo couldn't be read — retake it or enter the values manually",
+    "bn": "ছবিটি থেকে তথ্য পড়া যায়নি। অনুগ্রহ করে আবার ছবি তুলুন অথবা ম্যানুয়ালি তথ্যগুলো লিখুন।"
+  },
+  "Epi.scanServiceUnavailable": {
+    "en": "Card reading is unavailable right now — try again when online or enter the values manually",
+    "bn": "এই মুহূর্তে কার্ড থেকে তথ্য পড়ার সুবিধাটি সক্রিয় নেই। ইন্টারনেট সংযোগ চালু হলে আবার চেষ্টা করুন অথবা ম্যানুয়ালি তথ্যগুলো লিখুন।"
+  },
   "Epi.scanQualityWarningTitle": {
     "en": "Check before scanning",
     "bn": "স্ক্যান করার আগে পরীক্ষা করুন"

@@ -2,13 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 /// The running app's version, read once from the platform package metadata.
-///
-/// > **Reconstructed file.** The original `lib/core/version/` sources (added by
-/// > PR #689 "Force update") were never committed — the repo's `.gitignore`
-/// > contained a bare `version` rule that silently ignored this whole
-/// > directory. This is a faithful, minimal reimplementation from the call
-/// > sites so the app builds; reconcile with the original force-update feature
-/// > when it is recovered.
+/// Sent as `App-Version` / `App-Version-Code` on API requests and compared
+/// against the server's policy by `AppVersionService` (LEAP-144).
 class AppVersionInfo {
   const AppVersionInfo({required this.versionName, required this.versionCode});
 
