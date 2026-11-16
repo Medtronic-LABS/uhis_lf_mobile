@@ -10,6 +10,8 @@
 /// there is no other copy, this table is the system of record.
 library;
 
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../api/api_client.dart';
@@ -71,7 +73,13 @@ class TelemetryUploader {
 
         final ids = await _postBatch(batch);
         if (ids == null) break; // failed — leave them pending, try next time
-        await _dao.markUploaded(ids);
+        await _dao.markUploaded(ids, sentPayloads: {
+          // Visit and assistant-session rows are re-saved while open; only
+          // mark the copy that was actually sent (see TelemetryDao.markUploaded).
+          for (final e in batch)
+            if (TelemetryEventType.updatable.contains(e.eventType))
+              e.id: jsonEncode(e.payload),
+        });
         accepted += ids.length;
 
         // A short batch means the queue is drained.

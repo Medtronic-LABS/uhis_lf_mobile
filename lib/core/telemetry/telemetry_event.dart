@@ -31,6 +31,24 @@ abstract final class TelemetryEventType {
   /// duration, and the per-field provenance buckets (report metrics 1-4).
   static const String visitCompleted = 'visit_completed';
 
+  /// One row per visit, created when the visit flow opens and re-saved at
+  /// each step (see `VisitTelemetryRecorder`). Its id is the visit's
+  /// [TelemetryEvent.visitUuid], so every save replaces the same row and the
+  /// server keeps the latest copy. Carries the [visitCompleted] payload keys
+  /// unchanged, plus visit-level, `step1`, `step2` and `step3` fields.
+  static const String visit = 'visit';
+
+  /// One row per opening of the patient AI assistant sheet, re-saved after
+  /// each question (see `AssistantSessionRecorder`). Its id is the session
+  /// id. Non-PHI: the question/answer text stays in the assistant-content
+  /// stream, joined per question by correlator.
+  static const String assistantSession = 'assistant_session';
+
+  /// Row types re-saved under the same id while they are open, so the server
+  /// keeps the latest copy and the uploader guards against marking a newer
+  /// local copy uploaded.
+  static const Set<String> updatable = {visit, assistantSession};
+
   /// One per share tap on the counselling screen (report metric 5).
   static const String counsellingShare = 'counselling_share';
 
@@ -213,6 +231,10 @@ class TelemetryEvent {
 /// than present a zero as a finding.
 const int kTelemetryPayloadVersion = 4;
 
+/// [TelemetryEvent.payloadVersion] of the [TelemetryEventType.assistantSession]
+/// row — its own schema, versioned independently of the visit payloads.
+const int kAssistantSessionPayloadVersion = 1;
+
 /// The AI feature these events belong to, matching the server's feature
 /// registry key. A constant rather than a literal at the send site so adding a
 /// second feature is a new constant, not a search for string duplicates.
@@ -233,7 +255,8 @@ const _kEpiCardEventTypes = {
 /// — every event type that predates the assistant feature belongs to it, so a
 /// row with no explicit mapping reads exactly as before.
 String telemetryAiFeatureForEvent(String eventType) {
-  if (eventType == TelemetryEventType.assistantAsk) {
+  if (eventType == TelemetryEventType.assistantAsk ||
+      eventType == TelemetryEventType.assistantSession) {
     return kTelemetryAiFeatureAssistant;
   }
   if (_kEpiCardEventTypes.contains(eventType)) {

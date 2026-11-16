@@ -18,6 +18,8 @@ import '../version/app_version_info.dart';
 import 'epi_card_telemetry.dart';
 import 'telemetry_dao.dart';
 import 'telemetry_event.dart';
+import 'assistant_session_recorder.dart';
+import 'visit_telemetry_recorder.dart';
 
 class TelemetryService {
   TelemetryService({
@@ -67,6 +69,145 @@ class TelemetryService {
   /// Returns the stable telemetry correlator for [encounterId], minting once.
   String ensureVisitUuid(String encounterId) =>
       _visitUuidByEncounter.putIfAbsent(encounterId, () => _uuid.v4());
+
+  // ── One row per visit ([TelemetryEventType.visit]) ────────────────────────
+
+  final Map<String, VisitTelemetryRecorder> _visitRecorders = {};
+
+  /// Saves run one after another so an older snapshot can never land after
+  /// a newer one.
+  Future<void> _visitSaves = Future.value();
+
+  /// Starts a new visit row for [encounterId] — called each time the visit
+  /// flow opens. Re-opening a draft is a new visit, so this always mints a
+  /// fresh correlator and replaces the one [ensureVisitUuid] hands out; every
+  /// other visit-scoped stream (visit-content, value-audit, visit_completed)
+  /// then joins to this row.
+  ///
+  /// Saves the initial `in_progress` row straight away, so a visit left
+  /// before Step 1 Next is still recorded.
+  VisitTelemetryRecorder startVisit(
+    String encounterId, {
+    int Function()? clock,
+  }) {
+    final visitUuid = _uuid.v4();
+    _visitUuidByEncounter[encounterId] = visitUuid;
+    final recorder = VisitTelemetryRecorder(visitUuid: visitUuid, clock: clock);
+    _visitRecorders[encounterId] = recorder;
+    _visitSaves = _visitSaves.then((_) async {
+      try {
+        recorder.skUserId = (await _userIdResolver())?.toString();
+        recorder.capturedTenantId = await _tenantIdResolver?.call();
+      } on Object catch (e) {
+        debugPrint('[Telemetry] visit identity not resolved: $e');
+      }
+    });
+    saveVisit(recorder);
+    return recorder;
+  }
+
+  /// The open visit's recorder for [encounterId], or null outside the visit
+  /// flow (e.g. the standalone form route) — every caller treats null as
+  /// "nothing to record".
+  VisitTelemetryRecorder? visitRecorderFor(String? encounterId) =>
+      encounterId == null ? null : _visitRecorders[encounterId];
+
+  /// Same, looked up by the telemetry correlator.
+  VisitTelemetryRecorder? visitRecorderByUuid(String? visitUuid) {
+    if (visitUuid == null) return null;
+    for (final r in _visitRecorders.values) {
+      if (r.visitUuid == visitUuid) return r;
+    }
+    return null;
+  }
+
+  /// Writes [recorder]'s current state to its row. The payload is snapshotted
+  /// now, synchronously; the write is queued behind earlier saves.
+  ///
+  /// With a null [recorder] nothing is saved; the returned future completes
+  /// once every save already queued has been written.
+  Future<void> saveVisit(VisitTelemetryRecorder? recorder) {
+    if (recorder == null) return _visitSaves;
+    final payload = recorder.toPayload();
+    return _visitSaves = _visitSaves.then((_) async {
+      try {
+        await _dao.upsert(TelemetryEvent(
+          id: recorder.visitUuid,
+          eventType: TelemetryEventType.visit,
+          occurredAt: recorder.visitStartTime,
+          visitUuid: recorder.visitUuid,
+          skUserId: recorder.skUserId,
+          capturedTenantId: recorder.capturedTenantId,
+          appVersion: AppVersionInfo.current.versionName,
+          appBuild: AppVersionInfo.current.versionCode,
+          payloadVersion: kTelemetryPayloadVersion,
+          payload: payload,
+        ));
+      } on Object catch (e) {
+        // Never rethrow: a lost metric is acceptable, a failed visit is not.
+        debugPrint('[Telemetry] visit row not saved: $e');
+      }
+    });
+  }
+
+  /// Saves [encounterId]'s visit row, if one is open.
+  Future<void> saveVisitFor(String? encounterId) =>
+      saveVisit(visitRecorderFor(encounterId));
+
+  // ── One row per assistant session ([TelemetryEventType.assistantSession]) ─
+
+  /// Starts a session row for one opening of the patient AI assistant and
+  /// saves it straight away, so a session closed without a question is still
+  /// counted.
+  AssistantSessionRecorder startAssistantSession({
+    required String context,
+    required String appLanguage,
+    bool deceasedContext = false,
+    int Function()? clock,
+  }) {
+    final recorder = AssistantSessionRecorder(
+      sessionId: _uuid.v4(),
+      context: context,
+      appLanguage: appLanguage,
+      deceasedContext: deceasedContext,
+      clock: clock,
+    );
+    _visitSaves = _visitSaves.then((_) async {
+      try {
+        recorder.skUserId = (await _userIdResolver())?.toString();
+        recorder.capturedTenantId = await _tenantIdResolver?.call();
+      } on Object catch (e) {
+        debugPrint('[Telemetry] assistant session identity not resolved: $e');
+      }
+    });
+    saveAssistantSession(recorder);
+    return recorder;
+  }
+
+  /// Writes [recorder]'s current state to its row — same snapshot-now,
+  /// write-in-order rule as [saveVisit], on the same queue. A null
+  /// [recorder] just waits for queued saves.
+  Future<void> saveAssistantSession(AssistantSessionRecorder? recorder) {
+    if (recorder == null) return _visitSaves;
+    final payload = recorder.toPayload();
+    return _visitSaves = _visitSaves.then((_) async {
+      try {
+        await _dao.upsert(TelemetryEvent(
+          id: recorder.sessionId,
+          eventType: TelemetryEventType.assistantSession,
+          occurredAt: recorder.sessionStartTime,
+          skUserId: recorder.skUserId,
+          capturedTenantId: recorder.capturedTenantId,
+          appVersion: AppVersionInfo.current.versionName,
+          appBuild: AppVersionInfo.current.versionCode,
+          payloadVersion: kAssistantSessionPayloadVersion,
+          payload: payload,
+        ));
+      } on Object catch (e) {
+        debugPrint('[Telemetry] assistant session row not saved: $e');
+      }
+    });
+  }
 
   /// The correlator minted for [encounterId], if any.
   String? visitUuidFor(String encounterId) =>
@@ -130,6 +271,8 @@ class TelemetryService {
       outcome: outcome,
       failureReasons: failureReasons,
     );
+    // The visit row carries this payload verbatim (existing keys unchanged).
+    visitRecorderByUuid(visitUuid)?.recordStep2VisitCompleted(payload.toJson());
     await _insert(
       eventType: TelemetryEventType.visitCompleted,
       payload: payload.toJson(),
@@ -150,6 +293,12 @@ class TelemetryService {
     String? visitUuid,
     DateTime? occurredAt,
   }) async {
+    visitRecorderByUuid(visitUuid)?.addShare(
+      channel: channel,
+      surface: surface,
+      hasMessage: hasMessage,
+      launched: launched,
+    );
     await _insert(
       eventType: TelemetryEventType.counsellingShare,
       payload: CounsellingSharePayload(
@@ -249,6 +398,11 @@ class TelemetryService {
     String? visitUuid,
     DateTime? occurredAt,
   }) async {
+    // A detected dose the SK saved (not one flagged as wrongly marked) is
+    // "filled by scan" on the visit row.
+    if (ocrDetected && changeType != EpiVaccinationChangeTypeWire.wronglyMarked) {
+      visitRecorderByUuid(visitUuid)?.markEpiScanFilled(vaccineKey);
+    }
     await _insertEpiCard(
       eventType: TelemetryEventType.epiVaccinationUpdate,
       payload: epiVaccinationUpdatePayload(

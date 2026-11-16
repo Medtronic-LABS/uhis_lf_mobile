@@ -860,6 +860,8 @@ class _ImmunisationTimelineScreenState
     final telemetry = context.read<TelemetryService>();
     final visitUuid = _telemetryVisitUuid(telemetry);
     final scanSessionId = telemetry.newScanSessionId();
+    final scanTelemetry = telemetry.visitRecorderFor(widget.encounterId);
+    final scanOpenedAt = scanTelemetry?.ocrScanOpened();
 
     final closeResult = await Navigator.of(context).push<EpiCardScanCloseResult>(
       MaterialPageRoute(
@@ -895,6 +897,9 @@ class _ImmunisationTimelineScreenState
 
     final result = closeResult?.scanResult;
     final appliedToApp = result != null && result.anyMatched;
+    if (scanOpenedAt != null) {
+      scanTelemetry?.ocrScanClosed(scanOpenedAt, applied: appliedToApp);
+    }
     final outcome = closeResult == null
         ? EpiCardScanSessionOutcomeWire.cancelled
         : appliedToApp
