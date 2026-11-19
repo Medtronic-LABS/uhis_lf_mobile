@@ -4,11 +4,12 @@ name: Release Build
 # develop -> training -> main:
 #
 #   push to `training`   -> build the training app, upload to its Internal testing track
-#   `v*` tag (on main)   -> build the prod app, upload to its Internal testing track
+#   push to `main`       -> build the prod app, upload to its Internal testing track,
+#                           then tag the commit `v<version>` and create a GitHub Release
 #   manual run           -> build the chosen app only, never upload
 #
-# A push to `training` that does not change the version in pubspec.yaml is
-# skipped: Play rejects a versionCode it has already received.
+# A push that does not change the version in pubspec.yaml is skipped: Play
+# rejects a versionCode it has already received.
 #
 # Each app's build and upload run in that app's GitHub Environment
 # (`production`, `training`). The environment supplies the per-app secrets:
@@ -22,8 +23,7 @@ name: Release Build
 
 on:
   push:
-    branches: [training]
-    tags: ['v*']
+    branches: [training, main]
   workflow_dispatch:
     inputs:
       app:
@@ -61,23 +61,19 @@ jobs:
           PUBLISH=false
 
           case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
-            push:refs/tags/v*)
-              APP_FLAVOR=prod
-              PUBLISH=true
-              if [[ "v${VERSION}" != "${GITHUB_REF_NAME}" ]]; then
-                echo "::error::Tag ${GITHUB_REF_NAME} does not match pubspec.yaml version ${VERSION}. Tag the commit on main that carries the version bump."
-                exit 1
+            push:refs/heads/training|push:refs/heads/main)
+              if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+                APP_FLAVOR=prod
+              else
+                APP_FLAVOR=training
               fi
-              ;;
-            push:refs/heads/training)
-              APP_FLAVOR=training
               PUBLISH=true
               PREVIOUS_VERSION=""
               if [[ ! "${BEFORE_SHA}" =~ ^0+$ ]] && git fetch --quiet --depth=1 origin "${BEFORE_SHA}"; then
                 PREVIOUS_VERSION=$(git show "${BEFORE_SHA}:pubspec.yaml" | awk '/^version:/{print $2; exit}')
               fi
               if [[ "${PREVIOUS_VERSION}" == "${VERSION}" ]]; then
-                echo "::notice::pubspec.yaml version is still ${VERSION}; nothing new to release to the training app."
+                echo "::notice::pubspec.yaml version is still ${VERSION}; nothing new to release to the ${APP_FLAVOR} app."
                 RUN=false
                 PUBLISH=false
               fi
@@ -174,10 +170,11 @@ jobs:
           if-no-files-found: error
 
   github-release:
-    name: Attach the bundle to the GitHub Release
-    needs: [plan, build]
+    name: Tag the release and attach the bundle
+    # Runs after the upload, so a tag always marks a build that reached Play.
     # Only the prod app is tagged, so only it gets a GitHub Release.
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [plan, build, publish-play-store]
+    if: needs.plan.outputs.publish == 'true' && needs.plan.outputs.app_flavor == 'prod'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -188,9 +185,11 @@ jobs:
           name: aab-${{ needs.plan.outputs.app_flavor }}
           path: bundle
 
-      - name: Create GitHub Release
+      - name: Create the tag and the GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: v${{ needs.plan.outputs.version }}
+          target_commitish: ${{ github.sha }}
           files: bundle/*.aab
           fail_on_unmatched_files: true
 
