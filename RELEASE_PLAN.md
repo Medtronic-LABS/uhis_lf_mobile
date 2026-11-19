@@ -195,10 +195,22 @@ workflow artifact and attaches it to a GitHub Release on tag pushes.
 `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (values from §2's credentials), and
 `ENV_PRODUCTION_JSON_BASE64` (base64 of a real `env.production.json`, shaped like `env.example.json`).
 
-**Play Console upload is intentionally not wired live** — left as a commented-out job stub
-(`r0adkll/upload-google-play`) gated on a `PLAY_SERVICE_ACCOUNT_JSON` secret that doesn't exist yet.
-Creating a Play service account (Play Console → API access) is an admin action outside this codebase;
-uncomment that job once the secret is added.
+**Both Play apps build from one tag.** The `build` job is a matrix over the two Gradle flavors:
+`prod` (`com.medtroniclabs.uhis_next`, `env.production.json`) and `training`
+(`com.medtroniclabs.uhis_next.training`, `env.training.json`). The training leg needs one more repo
+secret, `ENV_TRAINING_JSON_BASE64`. A tag that does not match the `pubspec.yaml` version fails the build.
+
+**Play Console upload** — on a `v*` tag push the `publish-play-store` job uploads each bundle to its
+own listing's **Internal testing** track (`r0adkll/upload-google-play`; the service account needs
+release permission on both apps). "What's new" comes from
+`store_assets/release_notes/<X.Y.Z>_<locale>.txt`. Each upload runs in its own GitHub Environment —
+`production` for the prod app, `training` for the training app — and reads the
+`PLAY_SERVICE_ACCOUNT_JSON` secret **from that environment**, so the secret must be set in both.
+Required reviewers on an environment make its upload wait for approval; an environment without them
+publishes as soon as the build passes. **Create `production` with the secret and reviewers before the
+first tagged run**, because GitHub auto-creates a missing environment with neither. Promotion
+from Internal testing to Production stays manual in Play Console. Manual `workflow_dispatch` runs
+build only and never publish.
 
 Previously (still true): no Fastlane, no Codemagic config anywhere in the repo. The other existing
 workflow, `.github/workflows/confluence-docs.yml`, is unrelated doc-publishing, untouched by this work.
