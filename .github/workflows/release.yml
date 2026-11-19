@@ -1,9 +1,14 @@
 name: Release Build
 
-# Builds and signs both Play Store apps (the `prod` and `training` Gradle
-# flavors) and, on a `v*` tag push, uploads each to its own Play listing on the
-# Internal testing track. Promotion to Production stays a manual step in Play
-# Console.
+# Ships each Play Store app from its own branch, following the promotion flow
+# develop -> training -> main:
+#
+#   push to `training`   -> build the training app, upload to its Internal testing track
+#   `v*` tag (on main)   -> build the prod app, upload to its Internal testing track
+#   manual run           -> build the chosen app only, never upload
+#
+# A push to `training` that does not change the version in pubspec.yaml is
+# skipped: Play rejects a versionCode it has already received.
 #
 # Each app's build and upload run in that app's GitHub Environment
 # (`production`, `training`). The environment supplies the per-app secrets:
@@ -11,44 +16,118 @@ name: Release Build
 # Both environments MUST exist before this workflow runs: GitHub auto-creates a
 # missing environment with no secrets and no protection rules. Required
 # reviewers on an environment make every job that uses it wait for approval.
+#
+# Promotion from Internal testing to Production stays a manual step in Play
+# Console.
 
 on:
   push:
+    branches: [training]
     tags: ['v*']
   workflow_dispatch:
     inputs:
+      app:
+        description: 'Which app to build (build only, never published)'
+        type: choice
+        options: [prod, training]
+        default: prod
       version:
-        description: 'X.Y.Z+N, or patch/minor/major, or blank to use pubspec.yaml as-is (build only, never published)'
+        description: 'X.Y.Z+N, or patch/minor/major, or blank to use pubspec.yaml as-is'
         required: false
 
 jobs:
-  build:
-    name: Build ${{ matrix.app_flavor }}
+  plan:
+    name: Decide what to release
     runs-on: ubuntu-latest
-    strategy:
-      # One app's failure must not cancel the other app's build.
-      fail-fast: false
-      matrix:
-        include:
-          - app_flavor: prod
-            env_name: production
-            environment: production
-          - app_flavor: training
-            env_name: training
-            environment: training
-    environment: ${{ matrix.environment }}
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      publish: ${{ steps.plan.outputs.publish }}
+      app_flavor: ${{ steps.plan.outputs.app_flavor }}
+      env_name: ${{ steps.plan.outputs.env_name }}
+      package_name: ${{ steps.plan.outputs.package_name }}
+      version: ${{ steps.plan.outputs.version }}
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Check the tag matches pubspec.yaml
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Work out the app, the version and whether to publish
+        id: plan
+        env:
+          INPUT_APP: ${{ github.event.inputs.app }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          PUBSPEC_VERSION=$(awk '/^version:/{print $2; exit}' pubspec.yaml)
-          if [[ "v${PUBSPEC_VERSION}" != "${GITHUB_REF_NAME}" ]]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match pubspec.yaml version ${PUBSPEC_VERSION}. Merge the version bump to main before tagging."
-            exit 1
-          fi
+          VERSION=$(awk '/^version:/{print $2; exit}' pubspec.yaml)
+          RUN=true
+          PUBLISH=false
+
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+            push:refs/tags/v*)
+              APP_FLAVOR=prod
+              PUBLISH=true
+              if [[ "v${VERSION}" != "${GITHUB_REF_NAME}" ]]; then
+                echo "::error::Tag ${GITHUB_REF_NAME} does not match pubspec.yaml version ${VERSION}. Tag the commit on main that carries the version bump."
+                exit 1
+              fi
+              ;;
+            push:refs/heads/training)
+              APP_FLAVOR=training
+              PUBLISH=true
+              PREVIOUS_VERSION=""
+              if [[ ! "${BEFORE_SHA}" =~ ^0+$ ]] && git fetch --quiet --depth=1 origin "${BEFORE_SHA}"; then
+                PREVIOUS_VERSION=$(git show "${BEFORE_SHA}:pubspec.yaml" | awk '/^version:/{print $2; exit}')
+              fi
+              if [[ "${PREVIOUS_VERSION}" == "${VERSION}" ]]; then
+                echo "::notice::pubspec.yaml version is still ${VERSION}; nothing new to release to the training app."
+                RUN=false
+                PUBLISH=false
+              fi
+              ;;
+            workflow_dispatch:*)
+              APP_FLAVOR="${INPUT_APP}"
+              ;;
+            *)
+              echo "::error::Unexpected trigger ${GITHUB_EVENT_NAME} on ${GITHUB_REF}."
+              exit 1
+              ;;
+          esac
+
+          case "${APP_FLAVOR}" in
+            prod)
+              ENV_NAME=production
+              PACKAGE_NAME=com.medtroniclabs.uhis_next
+              ;;
+            training)
+              ENV_NAME=training
+              PACKAGE_NAME=com.medtroniclabs.uhis_next.training
+              ;;
+            *)
+              echo "::error::Unknown app '${APP_FLAVOR}'."
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "run=${RUN}"
+            echo "publish=${PUBLISH}"
+            echo "app_flavor=${APP_FLAVOR}"
+            echo "env_name=${ENV_NAME}"
+            echo "package_name=${PACKAGE_NAME}"
+            echo "version=${VERSION}"
+          } >> "${GITHUB_OUTPUT}"
+
+  build:
+    name: Build ${{ needs.plan.outputs.app_flavor }}
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    # The environment is named after the env file: production or training.
+    environment: ${{ needs.plan.outputs.env_name }}
+    env:
+      APP_FLAVOR: ${{ needs.plan.outputs.app_flavor }}
+      ENV_NAME: ${{ needs.plan.outputs.env_name }}
+
+    steps:
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v5
         with:
@@ -71,34 +150,34 @@ jobs:
           storeFile=${{ github.workspace }}/android/app/keystore/upload.jks
           EOF
 
-      - name: Reconstruct env.${{ matrix.env_name }}.json
+      - name: Reconstruct the env file
         env:
           ENV_JSON_BASE64: ${{ secrets.ENV_JSON_BASE64 }}
         run: |
           if [[ -z "${ENV_JSON_BASE64}" ]]; then
-            echo "::error::ENV_JSON_BASE64 is not set in the '${{ matrix.environment }}' environment."
+            echo "::error::ENV_JSON_BASE64 is not set in the '${ENV_NAME}' environment."
             exit 1
           fi
-          echo "${ENV_JSON_BASE64}" | base64 -d > "env.${{ matrix.env_name }}.json"
+          echo "${ENV_JSON_BASE64}" | base64 -d > "env.${ENV_NAME}.json"
 
       - name: Build and verify signer
         env:
           VERSION_INPUT: ${{ github.event.inputs.version }}
         run: |
           chmod +x scripts/release.sh
-          scripts/release.sh "${{ matrix.env_name }}" "${VERSION_INPUT}" --app-flavor "${{ matrix.app_flavor }}"
+          scripts/release.sh "${ENV_NAME}" "${VERSION_INPUT}" --app-flavor "${APP_FLAVOR}"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: aab-${{ matrix.app_flavor }}
-          path: build/app/outputs/bundle/${{ matrix.app_flavor }}Release/app-${{ matrix.app_flavor }}-release.aab
+          name: aab-${{ needs.plan.outputs.app_flavor }}
+          path: build/app/outputs/bundle/${{ needs.plan.outputs.app_flavor }}Release/app-${{ needs.plan.outputs.app_flavor }}-release.aab
           if-no-files-found: error
 
   github-release:
-    name: Attach bundles to the GitHub Release
-    needs: build
-    # Runs even if one app's build failed, so the other app's bundle is still attached.
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    name: Attach the bundle to the GitHub Release
+    needs: [plan, build]
+    # Only the prod app is tagged, so only it gets a GitHub Release.
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -106,34 +185,26 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: aab-*
-          merge-multiple: true
-          path: bundles
+          name: aab-${{ needs.plan.outputs.app_flavor }}
+          path: bundle
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: bundles/*.aab
+          files: bundle/*.aab
           fail_on_unmatched_files: true
 
   publish-play-store:
-    name: Publish ${{ matrix.app_flavor }} to Play (internal track)
-    needs: build
-    # Tag pushes only: a manual run can bump the version without committing it,
-    # so it must never reach Play. Runs even if the other app's build failed.
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    name: Publish ${{ needs.plan.outputs.app_flavor }} to Play (internal track)
+    needs: [plan, build]
+    # Never on a manual run: it can bump the version without committing it.
+    if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - app_flavor: prod
-            package_name: com.medtroniclabs.uhis_next
-            environment: production
-          - app_flavor: training
-            package_name: com.medtroniclabs.uhis_next.training
-            environment: training
-    environment: ${{ matrix.environment }}
+    environment: ${{ needs.plan.outputs.env_name }}
+    env:
+      APP_FLAVOR: ${{ needs.plan.outputs.app_flavor }}
+      ENV_NAME: ${{ needs.plan.outputs.env_name }}
+      VERSION: ${{ needs.plan.outputs.version }}
 
     steps:
       - uses: actions/checkout@v7
@@ -144,11 +215,10 @@ jobs:
         env:
           LC_ALL: C.UTF-8
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
           VERSION_NAME="${VERSION%%+*}"
           NOTES_DIR="store_assets/release_notes"
           if [[ ! -f "${NOTES_DIR}/${VERSION_NAME}_en-US.txt" ]]; then
-            echo "::error::${NOTES_DIR}/${VERSION_NAME}_en-US.txt is missing. Commit the release notes before tagging."
+            echo "::error::${NOTES_DIR}/${VERSION_NAME}_en-US.txt is missing. Commit the release notes with the version bump."
             exit 1
           fi
           mkdir -p whatsnew
@@ -165,7 +235,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: aab-${{ matrix.app_flavor }}
+          name: aab-${{ needs.plan.outputs.app_flavor }}
           path: bundle
 
       - name: Check the Play service account secret is available
@@ -173,15 +243,15 @@ jobs:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           if [[ -z "${PLAY_SERVICE_ACCOUNT_JSON}" ]]; then
-            echo "::error::PLAY_SERVICE_ACCOUNT_JSON is not set in the '${{ matrix.environment }}' environment."
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON is not set in the '${ENV_NAME}' environment."
             exit 1
           fi
 
       - uses: r0adkll/upload-google-play@v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: ${{ matrix.package_name }}
-          releaseFiles: bundle/app-${{ matrix.app_flavor }}-release.aab
+          packageName: ${{ needs.plan.outputs.package_name }}
+          releaseFiles: bundle/app-${{ needs.plan.outputs.app_flavor }}-release.aab
           track: internal
           status: completed
           whatsNewDirectory: whatsnew

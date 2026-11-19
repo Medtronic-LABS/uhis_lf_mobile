@@ -195,10 +195,18 @@ workflow artifact and attaches it to a GitHub Release on tag pushes.
 `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (values from §2's credentials). The env file is no longer a
 repo secret; see the environment secrets below.
 
-**Both Play apps build from one tag.** The `build` job is a matrix over the two Gradle flavors:
-`prod` (`com.medtroniclabs.uhis_next`, `env.production.json`) and `training`
-(`com.medtroniclabs.uhis_next.training`, `env.training.json`). A tag that does not match the
-`pubspec.yaml` version fails the build.
+**Each Play app ships from its own branch**, following the promotion flow `develop` → `training` →
+`main`. The version bump and its release notes are committed on `develop` and travel through both
+promotions unchanged.
+
+| Trigger | App built | Result |
+|---|---|---|
+| Push to `training` (a `develop` → `training` PR merged) | `training` flavor, `com.medtroniclabs.uhis_next.training`, `env.training.json` | Uploaded to the training listing |
+| `v*` tag on `main` (after a `training` → `main` PR merged) | `prod` flavor, `com.medtroniclabs.uhis_next`, `env.production.json` | Uploaded to the prod listing, attached to a GitHub Release |
+| Manual `workflow_dispatch` | The app chosen in the run form | Build only, never uploaded |
+
+A push to `training` that leaves the `pubspec.yaml` version unchanged is skipped, because Play rejects
+a versionCode it has already received. A tag that does not match the `pubspec.yaml` version fails.
 
 **Per-app secrets live in GitHub Environments.** Each app's build and upload jobs run in that app's
 environment — `production` for the prod app, `training` for the training app — and read two secrets
@@ -207,12 +215,11 @@ from it under the same names: `ENV_JSON_BASE64` (base64 of that app's `env.<name
 share the upload keystore. Required reviewers on an environment make every job that uses it wait for
 approval; an environment without them runs as soon as it is reached.
 
-**Play Console upload** — on a `v*` tag push the `publish-play-store` job uploads each bundle to its
-own listing's **Internal testing** track (`r0adkll/upload-google-play`; the service account needs
+**Play Console upload** — the `publish-play-store` job uploads the bundle to its app's
+listing on the **Internal testing** track (`r0adkll/upload-google-play`; the service account needs
 release permission on both apps). "What's new" comes from
 `store_assets/release_notes/<X.Y.Z>_<locale>.txt`. Promotion
-from Internal testing to Production stays manual in Play Console. Manual `workflow_dispatch` runs
-build only and never publish.
+from Internal testing to Production stays manual in Play Console.
 
 Previously (still true): no Fastlane, no Codemagic config anywhere in the repo. The other existing
 workflow, `.github/workflows/confluence-docs.yml`, is unrelated doc-publishing, untouched by this work.
