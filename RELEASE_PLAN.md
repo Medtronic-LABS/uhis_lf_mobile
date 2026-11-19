@@ -207,8 +207,11 @@ promotions unchanged.
 
 Merges into `develop` do not release to Play. `.github/workflows/develop-build.yml` builds a signed
 release APK of the prod-identity app against `env.develop.json` (from the `develop` environment's
-`ENV_JSON_BASE64` secret) and keeps it for 14 days as a workflow artifact named
-`LW-Develop-<version>-<commit>`. The setup both workflows share — Java, Flutter, the keystore and the
+`ENV_JSON_BASE64` secret) and publishes it as the `develop-latest` GitHub pre-release, replaced on
+every merge, so testers always use the same link:
+`https://github.com/Medtronic-LABS/uhis_lf_mobile/releases/download/develop-latest/LW-Develop.apk`.
+The repo is public, so that link is too. Each build is also kept for 14 days as a workflow artifact
+named `LW-Develop-<version>-<commit>`. The setup both workflows share — Java, Flutter, the keystore and the
 env file — lives in the composite action `.github/actions/prepare-release-build`.
 
 A push that leaves the `pubspec.yaml` version unchanged is skipped, because Play rejects a
