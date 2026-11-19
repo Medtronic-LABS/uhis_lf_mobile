@@ -202,11 +202,12 @@ promotions unchanged.
 | Trigger | App built | Result |
 |---|---|---|
 | Push to `training` (a `develop` → `training` PR merged) | `training` flavor, `com.medtroniclabs.uhis_next.training`, `env.training.json` | Uploaded to the training listing |
-| `v*` tag on `main` (after a `training` → `main` PR merged) | `prod` flavor, `com.medtroniclabs.uhis_next`, `env.production.json` | Uploaded to the prod listing, attached to a GitHub Release |
+| Push to `main` (a `training` → `main` PR merged) | `prod` flavor, `com.medtroniclabs.uhis_next`, `env.production.json` | Uploaded to the prod listing, then tagged `v<version>` with a GitHub Release |
 | Manual `workflow_dispatch` | The app chosen in the run form | Build only, never uploaded |
 
-A push to `training` that leaves the `pubspec.yaml` version unchanged is skipped, because Play rejects
-a versionCode it has already received. A tag that does not match the `pubspec.yaml` version fails.
+A push that leaves the `pubspec.yaml` version unchanged is skipped, because Play rejects a
+versionCode it has already received. Tags are created by the workflow after a successful prod
+upload, never by hand, so a `v*` tag always marks a build that reached Play.
 
 **Per-app secrets live in GitHub Environments.** Each app's build and upload jobs run in that app's
 environment — `production` for the prod app, `training` for the training app — and read two secrets
