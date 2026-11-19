@@ -186,19 +186,40 @@ Confirmed: publishing under an **Organization (Workspace-verified)** Play Consol
 
 **Built this session**: `.github/workflows/release.yml` — triggers on `v*` tag push or manual
 `workflow_dispatch`. Sets up Java 21 (temurin) + Flutter 3.44.8, reconstructs `android/key.properties`
-and `env.production.json` from repo secrets, then calls `scripts/release.sh` directly (§10) so CI and
+and each app's `env.<name>.json` from secrets, then calls `scripts/release.sh` directly (§10) so CI and
 local releases share one build path instead of duplicating logic in YAML. Uploads the `.aab` as a
 workflow artifact and attaches it to a GitHub Release on tag pushes.
 
 **Required repo secrets** (none created yet — this is a manual GitHub admin step):
 `ANDROID_KEYSTORE_BASE64` (base64 of `apon-sushashthya-upload.jks`), `ANDROID_KEYSTORE_PASSWORD`,
-`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (values from §2's credentials), and
-`ENV_PRODUCTION_JSON_BASE64` (base64 of a real `env.production.json`, shaped like `env.example.json`).
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (values from §2's credentials). The env file is no longer a
+repo secret; see the environment secrets below.
 
-**Play Console upload is intentionally not wired live** — left as a commented-out job stub
-(`r0adkll/upload-google-play`) gated on a `PLAY_SERVICE_ACCOUNT_JSON` secret that doesn't exist yet.
-Creating a Play service account (Play Console → API access) is an admin action outside this codebase;
-uncomment that job once the secret is added.
+**Each Play app ships from its own branch**, following the promotion flow `develop` → `training` →
+`main`. The version bump and its release notes are committed on `develop` and travel through both
+promotions unchanged.
+
+| Trigger | App built | Result |
+|---|---|---|
+| Push to `training` (a `develop` → `training` PR merged) | `training` flavor, `com.medtroniclabs.uhis_next.training`, `env.training.json` | Uploaded to the training listing |
+| `v*` tag on `main` (after a `training` → `main` PR merged) | `prod` flavor, `com.medtroniclabs.uhis_next`, `env.production.json` | Uploaded to the prod listing, attached to a GitHub Release |
+| Manual `workflow_dispatch` | The app chosen in the run form | Build only, never uploaded |
+
+A push to `training` that leaves the `pubspec.yaml` version unchanged is skipped, because Play rejects
+a versionCode it has already received. A tag that does not match the `pubspec.yaml` version fails.
+
+**Per-app secrets live in GitHub Environments.** Each app's build and upload jobs run in that app's
+environment — `production` for the prod app, `training` for the training app — and read two secrets
+from it under the same names: `ENV_JSON_BASE64` (base64 of that app's `env.<name>.json`) and
+`PLAY_SERVICE_ACCOUNT_JSON`. The signing secrets (`ANDROID_*`) stay at repo level because both apps
+share the upload keystore. Required reviewers on an environment make every job that uses it wait for
+approval; an environment without them runs as soon as it is reached.
+
+**Play Console upload** — the `publish-play-store` job uploads the bundle to its app's
+listing on the **Internal testing** track (`r0adkll/upload-google-play`; the service account needs
+release permission on both apps). "What's new" comes from
+`store_assets/release_notes/<X.Y.Z>_<locale>.txt`. Promotion
+from Internal testing to Production stays manual in Play Console.
 
 Previously (still true): no Fastlane, no Codemagic config anywhere in the repo. The other existing
 workflow, `.github/workflows/confluence-docs.yml`, is unrelated doc-publishing, untouched by this work.

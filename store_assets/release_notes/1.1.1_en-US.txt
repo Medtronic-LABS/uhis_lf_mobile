@@ -1,0 +1,6 @@
+What's new in 1.1.1:
+• Teleconsultation: connect a patient to a doctor by video call during a visit, with patient consent
+• Learning: daily learning streak with weekend bonus days, and a simpler Learning Library list
+• Pregnancy visits: counselling advice now matches the stage of pregnancy when the last period date is entered during the visit
+• Fixed: scanning an NCD card on a follow-up visit now reads the correct visit
+• Clearer Bangla messages when a card scan fails
