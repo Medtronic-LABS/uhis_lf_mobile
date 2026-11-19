@@ -1,0 +1,71 @@
+name: Prepare a signed release build
+description: >
+  Sets up Java and Flutter, then recreates the two files a signed build needs
+  and git never holds: android/key.properties (with the upload keystore) and
+  env.<env-name>.json. The repository must be checked out first.
+
+inputs:
+  env-name:
+    description: Name of the env file to create, e.g. production creates env.production.json
+    required: true
+  env-json-base64:
+    description: Base64 of the env file, from the GitHub Environment's ENV_JSON_BASE64 secret
+    required: true
+  keystore-base64:
+    description: Base64 of the upload keystore
+    required: true
+  keystore-password:
+    description: Keystore password
+    required: true
+  key-alias:
+    description: Key alias inside the keystore
+    required: true
+  key-password:
+    description: Key password
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: '21'
+
+    - uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.44.8'
+        channel: stable
+
+    - name: Reconstruct signing keystore
+      shell: bash
+      env:
+        KEYSTORE_BASE64: ${{ inputs.keystore-base64 }}
+        KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+        KEY_ALIAS: ${{ inputs.key-alias }}
+        KEY_PASSWORD: ${{ inputs.key-password }}
+      run: |
+        if [[ -z "${KEYSTORE_BASE64}" ]]; then
+          echo "::error::The upload keystore secret is not set; refusing to build with debug signing."
+          exit 1
+        fi
+        mkdir -p android/app/keystore
+        echo "${KEYSTORE_BASE64}" | base64 -d > android/app/keystore/upload.jks
+        {
+          echo "storePassword=${KEYSTORE_PASSWORD}"
+          echo "keyPassword=${KEY_PASSWORD}"
+          echo "keyAlias=${KEY_ALIAS}"
+          echo "storeFile=${GITHUB_WORKSPACE}/android/app/keystore/upload.jks"
+        } > android/key.properties
+
+    - name: Reconstruct the env file
+      shell: bash
+      env:
+        ENV_NAME: ${{ inputs.env-name }}
+        ENV_JSON_BASE64: ${{ inputs.env-json-base64 }}
+      run: |
+        if [[ -z "${ENV_JSON_BASE64}" ]]; then
+          echo "::error::ENV_JSON_BASE64 is not set in the '${ENV_NAME}' environment."
+          exit 1
+        fi
+        echo "${ENV_JSON_BASE64}" | base64 -d > "env.${ENV_NAME}.json"

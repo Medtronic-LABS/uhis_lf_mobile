@@ -13,6 +13,8 @@
 .env.*
 env.json
 env.development.json
+env.develop.json
+env.training.json
 env.staging.json
 env.production.json
 env.local.json
