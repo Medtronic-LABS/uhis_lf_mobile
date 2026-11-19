@@ -219,7 +219,16 @@ approval; an environment without them runs as soon as it is reached.
 listing on the **Internal testing** track (`r0adkll/upload-google-play`; the service account needs
 release permission on both apps). "What's new" comes from
 `store_assets/release_notes/<X.Y.Z>_<locale>.txt`. Promotion
-from Internal testing to Production stays manual in Play Console.
+from Internal testing to Production is a separate, manually started step.
+
+**Promotion to Production** — `.github/workflows/promote.yml` (run from the Actions tab) takes the
+app, the build number and a rollout percentage (20, 50 or 100), and moves that build from the
+app's Internal testing track to its Production track through `scripts/play_promote.py`. Nothing is
+rebuilt, so the bundle testers received is the bundle users get. Run it again with a higher
+percentage to widen a staged rollout. It runs in the app's environment, so required reviewers there
+gate it. It refuses a build that is not a completed release on Internal testing, a build older than
+the live one, and a percentage that is not higher than the current rollout. A `dry_run` option
+prints the plan without changing Play. The same promotion can still be done by hand in Play Console.
 
 Previously (still true): no Fastlane, no Codemagic config anywhere in the repo. The other existing
 workflow, `.github/workflows/confluence-docs.yml`, is unrelated doc-publishing, untouched by this work.
