@@ -5,11 +5,12 @@ name: Release Build
 # Internal testing track. Promotion to Production stays a manual step in Play
 # Console.
 #
-# Each upload runs in a GitHub Environment (`production`, `training`) and reads
-# PLAY_SERVICE_ACCOUNT_JSON from that environment's secrets. Both environments
-# MUST exist before this workflow runs on a tag: GitHub auto-creates a missing
-# environment with no secrets and no protection rules. Required reviewers on an
-# environment are what make its upload wait for approval.
+# Each app's build and upload run in that app's GitHub Environment
+# (`production`, `training`). The environment supplies the per-app secrets:
+# ENV_JSON_BASE64 (the app's env.<name>.json) and PLAY_SERVICE_ACCOUNT_JSON.
+# Both environments MUST exist before this workflow runs: GitHub auto-creates a
+# missing environment with no secrets and no protection rules. Required
+# reviewers on an environment make every job that uses it wait for approval.
 
 on:
   push:
@@ -31,10 +32,11 @@ jobs:
         include:
           - app_flavor: prod
             env_name: production
-            env_secret: ENV_PRODUCTION_JSON_BASE64
+            environment: production
           - app_flavor: training
             env_name: training
-            env_secret: ENV_TRAINING_JSON_BASE64
+            environment: training
+    environment: ${{ matrix.environment }}
 
     steps:
       - uses: actions/checkout@v7
@@ -71,10 +73,10 @@ jobs:
 
       - name: Reconstruct env.${{ matrix.env_name }}.json
         env:
-          ENV_JSON_BASE64: ${{ secrets[matrix.env_secret] }}
+          ENV_JSON_BASE64: ${{ secrets.ENV_JSON_BASE64 }}
         run: |
           if [[ -z "${ENV_JSON_BASE64}" ]]; then
-            echo "::error::Repo secret ${{ matrix.env_secret }} is not set."
+            echo "::error::ENV_JSON_BASE64 is not set in the '${{ matrix.environment }}' environment."
             exit 1
           fi
           echo "${ENV_JSON_BASE64}" | base64 -d > "env.${{ matrix.env_name }}.json"
