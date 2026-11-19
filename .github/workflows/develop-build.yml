@@ -1,0 +1,62 @@
+name: Develop Build
+
+# Builds a signed release APK from every merge into `develop`, configured by
+# env.develop.json, and keeps it as a workflow artifact for testers to install.
+#
+# It is not uploaded to Play. There are two Play listings (prod and training);
+# this is the prod-identity app (com.medtroniclabs.uhis_next) pointed at the
+# develop backend, so it must never reach the prod listing.
+#
+# The job runs in the `develop` GitHub Environment and reads ENV_JSON_BASE64
+# (base64 of env.develop.json) from it.
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer merge supersedes a build still running for an older one.
+  group: develop-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build develop APK
+    runs-on: ubuntu-latest
+    environment: develop
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/prepare-release-build
+        with:
+          env-name: develop
+          env-json-base64: ${{ secrets.ENV_JSON_BASE64 }}
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Build release APK
+        run: |
+          chmod +x scripts/build_apk.sh
+          scripts/build_apk.sh develop --release --app-flavor prod
+
+      - name: Name the APK after its version and commit
+        id: apk
+        run: |
+          VERSION=$(awk '/^version:/{print $2; exit}' pubspec.yaml)
+          NAME="LW-Develop-${VERSION}-${GITHUB_SHA::8}"
+          cp build/app/outputs/flutter-apk/app-prod-release.apk "${NAME}.apk"
+          echo "name=${NAME}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.name }}.apk
+          if-no-files-found: error
+          retention-days: 14
