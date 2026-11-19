@@ -1,0 +1,7 @@
+# Code owners for uhis_lf_mobile.
+#
+# The main and training branches require one approving review from a code
+# owner (see the repository rulesets), so every pull request into them needs
+# approval from one of the people below. A pull request author cannot approve
+# their own pull request.
+* @amreshyadavgit @Venkatesh-Prasad-MDT-LABS
