@@ -98,6 +98,8 @@ import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
+import 'features/visit/naba/guideline_visual_repository.dart';
+import 'core/api/frappe_client.dart';
 import 'features/visit/immunisation/epi_date_extraction_repository.dart';
 import 'features/visit/anc/anc_visit_extraction_repository.dart';
 import 'features/visit/ncd/ncd_visit_extraction_repository.dart';
@@ -714,6 +716,12 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<VisitBriefingRepository>(
             create: (_) =>
                 VisitBriefingRepository(widget.api, cache: _aiCacheDao)),
+        // NABA guideline pictures (Step 3) — Frappe spice_next_ai, cached on disk
+        Provider<GuidelineVisualRepository>(
+            create: (_) => GuidelineVisualRepository(buildFrappeAiClient(
+                  widget.api,
+                  baseUrl: AppConfig.spiceNextAiApiBaseUrl,
+                ))),
         // AI Card Extraction — Gemini-vision date read for scanned EPI cards
         Provider<EpiDateExtractionRepository>(
             create: (_) => EpiDateExtractionRepository(widget.api)),

@@ -38,6 +38,7 @@ import '../../core/db/audio_sample_dao.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/config/app_config.dart';
+import '../../core/api/frappe_client.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/telemetry/share_telemetry.dart';
@@ -64,6 +65,8 @@ import '../../core/theme/app_theme.dart';
 import 'naba/naba_models.dart';
 import 'naba/prior_visit_mapper.dart';
 import 'naba/naba_repository.dart';
+import 'naba/guideline_visual_selector.dart';
+import 'naba/widgets/guideline_visual_strip.dart';
 import 'pathway/pathway_engine.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../patient/followup_call_service.dart';
@@ -1643,7 +1646,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       return _ruleBasedNaba();
     }
     try {
-      final repo = NabaRepository(apiClient);
+      final repo = NabaRepository(buildFrappeAiClient(
+        apiClient,
+        baseUrl: AppConfig.spiceNextAiApiBaseUrl,
+      ));
       final programmes = <String>[
         for (final p in widget.confirmedProgrammes)
           if (p != Programme.unknown) p.wireTag,
@@ -1727,6 +1733,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           doctorHandover: ai.doctorHandover,
           referralRecommendation: ai.referralRecommendation,
           contextTruncated: ai.contextTruncated,
+          citations: ai.citations,
+          visuals: ai.visuals,
         );
       }
       if (ai.whatsappSummary != null) return ai;
@@ -1747,8 +1755,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         doctorHandover: ai.doctorHandover,
         referralRecommendation: ai.referralRecommendation,
         contextTruncated: ai.contextTruncated,
+        citations: ai.citations,
+        visuals: ai.visuals,
       );
-    } catch (e) {
+    } on FrappeException catch (e) {
       debugPrint('[NABA] AI failed — rule-based fallback: $e');
       return _ruleBasedNaba();
     }
@@ -2622,6 +2632,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           ? fetched.referralRecommendation
           : local.referralRecommendation,
       contextTruncated: fetched.contextTruncated,
+      // Guideline pictures illustrate the AI summary; with that card replaced
+      // by local content, AI-cited pictures would no longer match it.
+      citations: toggles.step3SummaryEnabled ? fetched.citations : const {},
+      visuals: toggles.step3SummaryEnabled ? fetched.visuals : const {},
     );
   }
 
@@ -3169,6 +3183,16 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             ),
             const SizedBox(height: 12),
           ],
+
+          // ── Guideline pictures (NABA `visuals`) — up to 3, captioned;
+          // ── tap opens the picture full-size. Takes no space when none load.
+          GuidelineVisualStrip(
+            visuals: GuidelineVisualSelector.select(
+              naba,
+              bangla: AppLocale.isBangla,
+              seed: widget.visitId,
+            ),
+          ),
 
           // ── 3. AI Counselling Guide (WhatsApp preview) ──────────────
           if (naba.whatsappSummary != null) ...[
