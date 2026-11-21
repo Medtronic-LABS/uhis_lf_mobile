@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/i18n/app_date_format.dart';
 import '../../../core/telemetry/epi_card_telemetry.dart';
+import 'card_capture_quality_gate.dart';
 import 'card_highlight_overlay.dart';
 import 'epi_card_scanner.dart';
 import 'epi_date_extraction_models.dart' show UnmatchedVaccineRow;
@@ -227,7 +228,12 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
       await _runOcr(image);
     } on CameraException catch (e) {
       debugPrint('EpiCardScanScreen: takePicture failed: $e');
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(EpiStrings.scanCaptureFailed)),
+        );
+      }
     }
   }
 
@@ -259,37 +265,15 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
   /// fine, when the SK chooses "Use anyway", or if the dialog can't be shown
   /// because the widget unmounted mid-check.
   Future<bool> _confirmQualityOrRetake(File image) async {
-    final quality = await EpiCardScanner.assessCaptureQuality(image);
-    if (!quality.hasIssue || !mounted) return true;
-    final message = quality.isBlurry && quality.hasGlare
-        ? EpiStrings.scanQualityBothMessage
-        : quality.isBlurry
-            ? EpiStrings.scanQualityBlurryMessage
-            : EpiStrings.scanQualityGlareMessage;
-    final useAnyway = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(EpiStrings.scanQualityWarningTitle),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(EpiStrings.scanQualityRetake),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(EpiStrings.scanQualityUseAnyway),
-          ),
-        ],
-      ),
-    );
-    if (useAnyway == true) {
+    final quality = await confirmCaptureQualityOrRetake(context, image);
+    if (quality == null) return false;
+    if (quality.hasIssue) {
       _pendingCaptureQuality = epiCardCaptureQualityWire(
         isBlurry: quality.isBlurry,
         hasGlare: quality.hasGlare,
       );
     }
-    return useAnyway ?? false;
+    return true;
   }
 
   /// Shows the chosen image with the scan-line sweep while OCR runs — Gemini

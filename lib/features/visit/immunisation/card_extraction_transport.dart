@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/endpoints.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/constants/app_strings.dart';
 
 /// Normalized (0-1) bounding box, relative to the full card photo — lets a
 /// scan screen draw a highlight without any separate CV pass. Shared by
@@ -34,14 +35,39 @@ class CardBoundingBox {
       );
 }
 
+/// Why a card-extraction call failed — each value maps to one localized,
+/// actionable message so the SK knows whether to retake the photo, enter the
+/// values by hand, or retry online.
+enum CardExtractionFailure {
+  /// The service looked at the photo and it is not the expected card.
+  notRecognised,
+
+  /// The service rejected the image itself (HTTP 422: empty or unreadable).
+  unreadable,
+
+  /// Network, timeout or server error — nothing was read.
+  unavailable,
+
+  /// A 2xx response whose body was not the expected JSON object.
+  badResponse,
+}
+
 /// Typed failure for a card-extraction call — never leak a raw [DioException]
 /// (or its stack trace) up to the UI layer. Shared by every programme's
 /// repository (EPI, ANC, ...) so each can catch/map its own exception type.
 class CardExtractionTransportException implements Exception {
-  const CardExtractionTransportException(this.message, {this.statusCode});
+  const CardExtractionTransportException(this.failure, {this.statusCode});
 
-  final String message;
+  final CardExtractionFailure failure;
   final int? statusCode;
+
+  /// Localized, user-facing text for [failure].
+  String get message => switch (failure) {
+        CardExtractionFailure.notRecognised => EpiStrings.scanCardNotRecognised,
+        CardExtractionFailure.unreadable => EpiStrings.scanImageUnreadable,
+        CardExtractionFailure.unavailable => EpiStrings.scanServiceUnavailable,
+        CardExtractionFailure.badResponse => EpiStrings.scanFailed,
+      };
 
   @override
   String toString() => message;
@@ -125,16 +151,23 @@ class CardExtractionTransport {
       final raw = response.data;
       if (raw is! Map<String, dynamic>) {
         throw const CardExtractionTransportException(
-          'Unexpected response from card extraction.',
+          CardExtractionFailure.badResponse,
+        );
+      }
+      // Optional: an older service omits it, which reads as "recognised".
+      if (raw['cardRecognised'] == false) {
+        throw const CardExtractionTransportException(
+          CardExtractionFailure.notRecognised,
         );
       }
       return raw;
     } on DioException catch (e) {
+      final status = e.response?.statusCode;
       throw CardExtractionTransportException(
-        e.response?.statusCode == 422
-            ? 'Could not read this card.'
-            : 'Card extraction unavailable — try again when online.',
-        statusCode: e.response?.statusCode,
+        status == 422
+            ? CardExtractionFailure.unreadable
+            : CardExtractionFailure.unavailable,
+        statusCode: status,
       );
     }
   }
