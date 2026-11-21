@@ -1,0 +1,11 @@
+* @Medtronic-LABS/leapfrogging
+
+/.github/ @amreshyadavgit @adityab24840
+/lib/core/auth/ @amreshyadavgit @adityab24840
+/lib/core/db/ @amreshyadavgit @adityab24840
+/lib/core/api/endpoints.dart @amreshyadavgit @adityab24840
+/android/ @amreshyadavgit @adityab24840
+/pubspec.yaml @amreshyadavgit @adityab24840
+/scripts/release.sh @amreshyadavgit @adityab24840
+/.claude/ @amreshyadavgit @adityab24840
+/scripts/sdlc/ @amreshyadavgit @adityab24840

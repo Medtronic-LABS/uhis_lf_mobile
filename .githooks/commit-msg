@@ -1,0 +1,8 @@
+#!/bin/sh
+# Commit subject must reference an issue (#N) or use a Conventional Commit type.
+# Activated by scripts/setup_dev.sh (git config core.hooksPath .githooks).
+# Git runs hooks from the worktree root and passes a root-relative or absolute
+# message path, so "$1" stays valid after the cd below.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+exec python3 scripts/sdlc/commit_msg.py "$1"

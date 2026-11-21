@@ -1,0 +1,6 @@
+# False positive: i18n rationale key name, not a credential.
+6d4869238281afa622358376af043ef97ac17b75:lib/features/visit/composer/cds_rules.dart:generic-api-key:153
+# False positive: i18n rationale key name, not a credential.
+6d4869238281afa622358376af043ef97ac17b75:lib/features/visit/composer/cds_rules.dart:generic-api-key:288
+# False positive: base64 test fixture of the plain text "wrapped-key-bytes", not a key.
+7e27560f5f81c8b3e12650aa4fff87f7b4d5f14e:test/core/device_messaging/device_messaging_transport_test.dart:generic-api-key:12

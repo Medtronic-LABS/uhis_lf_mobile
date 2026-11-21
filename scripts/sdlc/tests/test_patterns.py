@@ -1,0 +1,161 @@
+"""Tests for scripts.sdlc.patterns (sensitive-data scan, protected paths, issue refs)."""
+import unittest
+
+from scripts.sdlc.patterns import (
+    CREDENTIAL_CATEGORIES,
+    ISSUE_REF_RE,
+    TRACKER_REF_RE,
+    find_sensitive,
+    is_protected_path,
+)
+
+
+class TestFindSensitive(unittest.TestCase):
+    def test_flags_bd_phone_both_forms(self):
+        self.assertEqual(find_sensitive("call 01712345678"), ["bd_phone"])
+        self.assertEqual(find_sensitive("call +880 1712-345678"), ["bd_phone"])
+
+    def test_ignores_versions_dates_and_short_numbers(self):
+        text = "LEAPWELL 1.1.0+15 on 2026-11-04, build 14, id 123456789, code 4821"
+        self.assertEqual(find_sensitive(text), [])
+
+    def test_ignores_epoch_millis(self):
+        self.assertEqual(find_sensitive('"visitDate": 1750000000000'), [])
+
+    def test_national_id_flagged_with_keyword_or_17_digits(self):
+        for text in (
+            "NID: 1234567890", "national id 2234567890123", "NID No 1234567890123",
+            "জাতীয় পরিচয় 1234567890", "12345678901234567", "id 19900101123456789",
+        ):
+            self.assertEqual(find_sensitive(text), ["national_id"], text)
+
+    def test_national_id_false_positives_not_flagged(self):
+        for text in (
+            "commit " + "1234567890" + "abcdef0123456789abcdef0123456789",
+            "commit " + "a" * 7 + "1234567890" + "b" * 23,
+            "id 123e4567-e89b-12d3-a456-" + "1234567890ab",
+            "Patient/" + "2234567890123",
+            "ref=" + "2234567890123",
+            "created 1750000000",
+            "max 2147483647",
+            "bare 1234567890",
+            "bare 2234567890123",
+            "v" + "1234567890" + ".5",
+        ):
+            self.assertEqual(find_sensitive(text), [], text)
+
+    def test_keyword_must_be_nearby(self):
+        text = "NID is mentioned here" + " " * 40 + "1234567890"
+        self.assertEqual(find_sensitive(text), [])
+
+    def test_email(self):
+        self.assertEqual(find_sensitive("mail jane.doe@clinic.org now"), ["email"])
+
+    def test_placeholder_emails_ignored(self):
+        self.assertEqual(find_sensitive("a@example.com noreply@anthropic.com"), [])
+
+    def test_bearer_category_only(self):
+        text = "Authorization: Bearer " + "abcdefghijklmnopqrstuvwxyz123456"
+        self.assertEqual(find_sensitive(text), ["bearer_token"])
+
+    def test_hf_token(self):
+        self.assertEqual(find_sensitive("key " + "hf_" + "a" * 34), ["hf_token"])
+
+    def test_github_token(self):
+        self.assertEqual(find_sensitive("t " + "ghp_" + "A1" * 18), ["github_token"])
+        self.assertEqual(find_sensitive("t " + "github_pat_" + "b" * 30), ["github_token"])
+
+    def test_google_api_key(self):
+        self.assertEqual(find_sensitive("k " + "AIza" + "x" * 35), ["google_api_key"])
+
+    def test_private_key(self):
+        self.assertEqual(
+            find_sensitive("-----BEGIN " + "RSA PRIVATE KEY-----"), ["private_key"]
+        )
+
+    def test_jwt(self):
+        jwt = "eyJ" + "a" * 10 + ".eyJ" + "b" * 10 + "." + "c" * 10
+        self.assertEqual(find_sensitive("token=" + jwt), ["jwt"])
+
+    def test_realistic_logcat_tokens(self):
+        header = "eyJ" + "hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+        payload = "eyJ" + "zdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNzAwMDAwMDAwfQ"
+        signature = "SflKxwRJSMeKKF2QT4fw" + "pMeJf36POk6yJV_adQssw5c"
+        jwt = header + "." + payload + "." + signature
+        self.assertEqual(find_sensitive("I/flutter: Authorization: Bearer " + jwt), ["bearer_token", "jwt"])
+        opaque = "a1B2c3D4e5F6g7H8" + "i9J0k1L2m3N4o5P6"
+        self.assertEqual(find_sensitive("D/Dio: Authorization: Bearer " + opaque), ["bearer_token"])
+
+    def test_password_assignment_forms(self):
+        for text in ("password=hunter2abc", 'password: "Sup3rSecret"', '"password": "abc12345"'):
+            self.assertEqual(find_sensitive(text), ["password_assignment"], text)
+
+    def test_password_label_strings_not_flagged(self):
+        self.assertEqual(find_sensitive("static const password = 'Password';"), [])
+        self.assertEqual(find_sensitive("password: <redacted>"), [])
+        self.assertEqual(find_sensitive("passwordHashKey = widget.key"), [])
+
+    def test_sorted_unique_multiple(self):
+        text = "01712345678 and 01812345678 and a@clinic.org"
+        self.assertEqual(find_sensitive(text), ["bd_phone", "email"])
+
+    def test_empty(self):
+        self.assertEqual(find_sensitive(""), [])
+
+    def test_category_filter(self):
+        text = "call 0171" + "2345678 key hf_" + "a" * 34
+        self.assertEqual(find_sensitive(text, CREDENTIAL_CATEGORIES), ["hf_token"])
+        self.assertEqual(find_sensitive(text, {"bd_phone"}), ["bd_phone"])
+        self.assertEqual(find_sensitive(text), ["bd_phone", "hf_token"])
+
+    def test_credential_categories_exclude_phi(self):
+        self.assertEqual(
+            CREDENTIAL_CATEGORIES,
+            {"bearer_token", "hf_token", "github_token", "google_api_key",
+             "private_key", "jwt", "password_assignment"},
+        )
+
+
+class TestProtectedPath(unittest.TestCase):
+    def test_protected(self):
+        for path in (
+            "env.production.json", "env.development.json", "env.json",
+            "cfg/env.local.json",
+            "android/key.properties", "release.jks", "a/b/upload.keystore",
+            "android/app/google-services.json", "ios/Runner/GoogleService-Info.plist",
+            ".env", ".env.local", "sub/.env.production",
+        ):
+            self.assertTrue(is_protected_path(path), path)
+
+    def test_not_protected(self):
+        for path in (
+            "env.example.json", "pubspec.yaml", "lib/environment.dart",
+            "lib/env_config.dart", "docs/env.md", "key_properties.md",
+            "environment_config.json", "env_response.json", "assets/env_response.json",
+            ".env.example", "sub/.env.example", "env-dev.json",
+        ):
+            self.assertFalse(is_protected_path(path), path)
+
+
+class TestIssueRef(unittest.TestCase):
+    def test_matches(self):
+        for text in (
+            "closes #12", "Refs #7", "Fixes #3", "resolved #9", "Close #1",
+            "Closes Medtronic-LABS/leapwell#12", "Refs Medtronic-LABS/leapwell#7",
+        ):
+            self.assertIsNotNone(ISSUE_REF_RE.search(text), text)
+
+    def test_rejects(self):
+        for text in (
+            "see #12", "#12", "LEAP-12", "closes 12", "prefix#4",
+            "Closes Medtronic-LABS/other#1", "Closes other/leapwell#1",
+        ):
+            self.assertIsNone(ISSUE_REF_RE.search(text), text)
+
+    def test_tracker_ref_is_cross_repo_only(self):
+        self.assertIsNotNone(TRACKER_REF_RE.search("Refs Medtronic-LABS/leapwell#7"))
+        self.assertIsNone(TRACKER_REF_RE.search("Refs #7"))
+
+
+if __name__ == "__main__":
+    unittest.main()
