@@ -48,6 +48,7 @@ import '../../core/telemetry/visit_content_dao.dart';
 import '../../core/telemetry/visit_content_entry.dart';
 import '../../core/telemetry/visit_content_service.dart';
 import '../../core/telemetry/visit_content_uploader.dart';
+import '../../core/telemetry/visit_telemetry_recorder.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../core/preferences/scribe_audio_settings_notifier.dart';
@@ -255,10 +256,24 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   void initState() {
     super.initState();
     debugPrint('[_VisitFlowState] initState');
+    // One telemetry row per open of the visit flow. Started synchronously,
+    // before the first build, so every step widget that asks for the visit's
+    // correlator (ensureVisitUuid) gets this visit's — visit-content (Step 3),
+    // value-audit and visit_completed all share it.
+    try {
+      _telemetry = context.read<TelemetryService>();
+    } on Object {
+      _telemetry = null; // not provided (widget tests) — record nothing
+    }
+    final recorder = _visitTelemetry = _telemetry?.startVisit(widget.visitId);
+    if (recorder != null) {
+      _visitLifecycle = AppLifecycleListener(
+        onHide: () => recorder.pause(VisitTelemetryPause.background),
+        onShow: () => recorder.resume(VisitTelemetryPause.background),
+      );
+      unawaited(_recordConnectivity(recorder));
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Mint the per-visit telemetry correlator once so visit-content (Step 3),
-      // value-audit and visit_completed all share the same visitUuid.
-      context.read<TelemetryService>().ensureVisitUuid(widget.visitId);
       // Always load — even when patientName is supplied we still need DOB + age
       // for the smart age label (months for infants). ??-guards inside prevent
       // overwriting values already provided by the caller.
@@ -316,8 +331,47 @@ class _VisitFlowState extends State<VisitFlowScreen> {
 
   @override
   void dispose() {
+    _visitLifecycle?.dispose();
+    // Any way out of the flow other than Step 3 Done (leave dialog, system
+    // back, navigation elsewhere) ends here with the visit still open.
+    final recorder = _visitTelemetry;
+    if (recorder != null && recorder.isOpen) {
+      recorder.abandon();
+      unawaited(_telemetry?.saveVisit(recorder));
+    }
     _step1Scribe?.dispose();
     super.dispose();
+  }
+
+  // ── Visit telemetry ─────────────────────────────────────────────────────
+
+  TelemetryService? _telemetry;
+  VisitTelemetryRecorder? _visitTelemetry;
+  AppLifecycleListener? _visitLifecycle;
+
+  /// `isOnline` is the network state when the visit opened.
+  Future<void> _recordConnectivity(VisitTelemetryRecorder recorder) async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      recorder.isOnline = results.any((r) => r != ConnectivityResult.none);
+      unawaited(_telemetry?.saveVisit(recorder));
+    } on Object catch (e) {
+      debugPrint('[Telemetry] connectivity not recorded: $e');
+    }
+  }
+
+  /// Keeps the visit row's step clock in line with [_step]. Called from
+  /// build, so every path that changes the step is covered without touching
+  /// each setState; a no-op when the step has not changed. A forward move is
+  /// a save point (Step 1 Next, Step 2 submit).
+  void _syncVisitTelemetryStep() {
+    final recorder = _visitTelemetry;
+    if (recorder != null && recorder.enterStep(_step + 1)) {
+      if (_confirmedProgrammes.isNotEmpty) {
+        recorder.setProgrammes(_confirmedProgrammes.map((p) => p.name));
+      }
+      unawaited(_telemetry?.saveVisit(recorder));
+    }
   }
 
   Future<void> _loadPatientNameFromDb() async {
@@ -609,6 +663,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   }
 
   Widget _buildStepBody() {
+    _syncVisitTelemetryStep();
     switch (_step) {
       case 0:
         if (_step1Scribe == null) {
@@ -1628,7 +1683,27 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     super.dispose();
   }
 
+  /// Set when the WhatsApp message in the returned recommendation was written
+  /// by the AI service; left false when the rule-based template filled it.
+  bool _whatsappFromAi = false;
+
+  /// Times the recommendation / WhatsApp message request for the visit row
+  /// and records whether the message came from the AI or the offline
+  /// template.
   Future<NabaResponse> _fetchNaba() async {
+    final recorder = context
+        .read<TelemetryService>()
+        .visitRecorderFor(widget.visitId); // read before any await
+    _whatsappFromAi = false;
+    recorder?.markWhatsappRequested();
+    final naba = await _fetchNabaInner();
+    recorder?.markWhatsappReturned(_whatsappFromAi
+        ? VisitTelemetryMessageSource.online
+        : VisitTelemetryMessageSource.offline);
+    return naba;
+  }
+
+  Future<NabaResponse> _fetchNabaInner() async {
     debugPrint('[_Step3AiRecoState] _fetchNaba');
     final apiClient = context.read<ApiClient>(); // read before any await
     final toggles =
@@ -1712,6 +1787,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             : null,
       );
       final ai = await repo.generate(req);
+      _whatsappFromAi = ai.whatsappSummary != null;
       // Backfill empty fields from rule-based fallback so the UI always
       // has counselling and follow-up content even when AI data is sparse.
       if (ai.counselling.isEmpty || ai.followUp.isEmpty) {
@@ -2644,6 +2720,14 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
+
+    // Step 3 Done is the moment the SK tapped it — stamped before the slow
+    // summary / follow-up / worklist work below, so that time is not counted
+    // as Step 3 and a leave during it cannot turn a Done into "abandoned".
+    final telemetry = context.read<TelemetryService>();
+    final visitRecorder = telemetry.visitRecorderFor(widget.visitId);
+    visitRecorder?.complete(referralRecommended: _isUiReferred);
+    unawaited(telemetry.saveVisit(visitRecorder));
 
     unawaited(_recordSummaryCompleted(naba));
 
@@ -3822,6 +3906,10 @@ class _AiCounsellingCardState extends State<_AiCounsellingCard> {
       _vote = vote;
       _savingVote = true;
     });
+    context
+        .read<TelemetryService>()
+        .visitRecorderByUuid(widget.visitUuid)
+        ?.isHelpful = vote;
     try {
       await context.read<VisitContentService>().recordHelpfulnessVote(
             visitUuid: widget.visitUuid,

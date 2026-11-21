@@ -46,6 +46,8 @@ import 'unified_symptom_catalog.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
 import '../../../core/i18n/app_date_format.dart';
+import '../../../core/telemetry/telemetry_service.dart';
+import '../../../core/telemetry/visit_telemetry_recorder.dart';
 
 /// Symptom picker screen for the triage step.
 ///
@@ -227,9 +229,25 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// card never renders and this value has no effect.
   bool get _vaccinationSelected => _patientContext?.isYoungChild ?? false;
 
+  /// This visit's telemetry row, resolved once while the element is active.
+  /// The scribe banner reports its final span from its own dispose(), after
+  /// this screen has unmounted — reading context there would throw.
+  VisitTelemetryRecorder? _visitTelemetry;
+
+  VisitTelemetryRecorder? _resolveVisitTelemetry() {
+    try {
+      return context
+          .read<TelemetryService>()
+          .visitRecorderFor(widget.encounterId);
+    } on Object {
+      return null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _visitTelemetry = _resolveVisitTelemetry();
     debugPrint('[_SymptomPickerScreenState] initState');
     // Defer to after first frame to ensure context is available
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -950,6 +968,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         vm.customSymptomText,
         vm.scribePreTickedCodes,
       );
+      _visitTelemetry
+        ?..recordStep1Symptoms(
+          selected: vm.selectedSymptoms,
+          scribeAdded: vm.scribeEverAddedCodes,
+          scribeDeselected: vm.scribeDeselectedCodes,
+        )
+        ..setProgrammes(result.programmes.map((p) => p.name));
       onAdvance(pathways);
       return;
     }
@@ -1263,6 +1288,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                             vm.patientContext.sex == Sex.female,
                         tapStartsLiveAsr: true,
                         symptomVocab: vm.applicableVocabCodes,
+                        onScribeSpan: (startedAtMs, endedAtMs) =>
+                            _visitTelemetry?.markStep1ScribeSpan(
+                              startedAtMs: startedAtMs,
+                              endedAtMs: endedAtMs,
+                            ),
                         onReviewReady: (ctrl) {
                           final result = ctrl.session.triageExtractionResult;
                           if (result != null) {

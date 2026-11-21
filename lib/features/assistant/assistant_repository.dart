@@ -15,6 +15,7 @@ import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
 import '../../core/i18n/app_locale.dart';
 import 'assistant_models.dart';
+import '../../core/telemetry/assistant_session_recorder.dart' show AssistantFailureReason;
 
 class AssistantRepository {
   const AssistantRepository(this._client);
@@ -78,6 +79,7 @@ class AssistantRepository {
         throw AssistantException(
           AssistantStrings.settingUpRetryLater,
           statusCode: 404,
+          failureReason: AssistantFailureReason.serverError,
         );
       }
       if (statusCode >= 400) {
@@ -90,13 +92,18 @@ class AssistantRepository {
             ),
           ),
           statusCode: statusCode,
+          failureReason: AssistantFailureReason.serverError,
         );
       }
       final data = response.data;
-      if (data == null) throw AssistantException(AssistantStrings.emptyResponse);
+      if (data == null) {
+        throw AssistantException(AssistantStrings.emptyResponse,
+            failureReason: AssistantFailureReason.emptyAnswer);
+      }
       final answer = data['answer'] as String?;
       if (answer == null || answer.isEmpty) {
-        throw AssistantException(AssistantStrings.noAnswerInResponse);
+        throw AssistantException(AssistantStrings.noAnswerInResponse,
+            failureReason: AssistantFailureReason.emptyAnswer);
       }
       final suggestedQuestions =
           (data['suggested_questions'] as List<dynamic>? ?? [])
@@ -137,7 +144,8 @@ class AssistantRepository {
     } on DioException catch (e) {
       ConsoleLog.warn('[PayloadDebug] coaching-rag error: $e');
       throw AssistantException(NetworkErrorMapper.friendly(e),
-          statusCode: e.response?.statusCode);
+          statusCode: e.response?.statusCode,
+          failureReason: assistantFailureReasonOf(e));
     }
   }
 
@@ -163,10 +171,14 @@ class AssistantRepository {
       ConsoleLog.step('[PayloadDebug] assistant-ask → ${response.statusCode}');
       ConsoleLog.json('[PayloadDebug] assistant-ask response', response.data);
       final data = response.data;
-      if (data == null) throw AssistantException(AssistantStrings.emptyResponse);
+      if (data == null) {
+        throw AssistantException(AssistantStrings.emptyResponse,
+            failureReason: AssistantFailureReason.emptyAnswer);
+      }
       final answer = data['answer'] as String?;
       if (answer == null || answer.isEmpty) {
-        throw AssistantException(AssistantStrings.noAnswerInResponse);
+        throw AssistantException(AssistantStrings.noAnswerInResponse,
+            failureReason: AssistantFailureReason.emptyAnswer);
       }
       final rawActions = data['actions'];
       final actions = <AssistantAction>[];
@@ -182,7 +194,20 @@ class AssistantRepository {
     } on DioException catch (e) {
       ConsoleLog.warn('[PayloadDebug] assistant-ask error: $e');
       throw AssistantException(NetworkErrorMapper.friendly(e),
-          statusCode: e.response?.statusCode);
+          statusCode: e.response?.statusCode,
+          failureReason: assistantFailureReasonOf(e));
     }
   }
 }
+
+/// Maps a transport error to a coarse [AssistantFailureReason] for session
+/// telemetry.
+String assistantFailureReasonOf(DioException e) => switch (e.type) {
+      DioExceptionType.connectionError => AssistantFailureReason.offline,
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout =>
+        AssistantFailureReason.timeout,
+      DioExceptionType.badResponse => AssistantFailureReason.serverError,
+      _ => AssistantFailureReason.other,
+    };

@@ -2018,15 +2018,23 @@ class _AncScanFab extends StatelessWidget {
       return;
     }
     final repo = context.read<AncVisitExtractionRepository>();
+    final scanTelemetry = context
+        .read<TelemetryService>()
+        .visitRecorderFor(notifier.encounterId);
+    final scanOpenedAt = scanTelemetry?.ocrScanOpened();
     final result = await Navigator.of(context).push<AncVisitExtractionResult?>(
       MaterialPageRoute(
         builder: (_) =>
             AncCardScanScreen(visitNumber: visitNumber, repository: repo),
       ),
     );
+    final visit = result?.visit;
+    final scanApplied = visit != null && visit.anyFieldFound;
+    if (scanOpenedAt != null) {
+      scanTelemetry?.ocrScanClosed(scanOpenedAt, applied: scanApplied);
+    }
     if (result == null || !context.mounted) return;
-    final visit = result.visit;
-    if (visit == null || !visit.anyFieldFound) {
+    if (!scanApplied) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(EpiStrings.scanFailed)),
       );
@@ -2079,15 +2087,23 @@ class _NcdScanFab extends StatelessWidget {
       return;
     }
     final repo = context.read<NcdVisitExtractionRepository>();
+    final scanTelemetry = context
+        .read<TelemetryService>()
+        .visitRecorderFor(notifier.encounterId);
+    final scanOpenedAt = scanTelemetry?.ocrScanOpened();
     final result = await Navigator.of(context).push<NcdVisitExtractionResult?>(
       MaterialPageRoute(
         builder: (_) =>
             NcdCardScanScreen(visitNumber: visitNumber, repository: repo),
       ),
     );
+    final visit = result?.visit;
+    final scanApplied = visit != null && visit.anyFieldFound;
+    if (scanOpenedAt != null) {
+      scanTelemetry?.ocrScanClosed(scanOpenedAt, applied: scanApplied);
+    }
     if (result == null || !context.mounted) return;
-    final visit = result.visit;
-    if (visit == null || !visit.anyFieldFound) {
+    if (!scanApplied) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(EpiStrings.scanFailed)),
       );

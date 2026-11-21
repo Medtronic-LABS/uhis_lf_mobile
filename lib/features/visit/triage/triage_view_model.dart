@@ -72,6 +72,18 @@ class TriageViewModel extends ChangeNotifier {
   final Set<String> _scribePreTicked = {};
   Set<String> get scribePreTickedSymptoms => Set.unmodifiable(_scribePreTicked);
 
+  /// Every code AI Scribe ever added in this triage, kept even after the SK
+  /// removes it ([removeSymptom] drops it from [_scribePreTicked]). Visit
+  /// telemetry needs it to report scribe symptoms the SK deselected.
+  final Set<String> _scribeEverAdded = {};
+
+  /// Every code AI Scribe added, whether or not it is still selected.
+  Set<String> get scribeEverAddedCodes => Set.unmodifiable(_scribeEverAdded);
+
+  /// Scribe-added codes the SK has since removed from the selection.
+  Set<String> get scribeDeselectedCodes =>
+      _scribeEverAdded.difference(_selectedSymptoms);
+
   /// Free-text symptom description entered manually by the SK.
   String? _customSymptomText;
   String? get customSymptomText => _customSymptomText;
@@ -401,6 +413,7 @@ class TriageViewModel extends ChangeNotifier {
         continue;
       }
       _scribePreTicked.add(extracted.fieldId);
+      _scribeEverAdded.add(extracted.fieldId);
       _addPreTick(extracted.fieldId);
       appliedCount++;
       debugPrint(

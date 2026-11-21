@@ -2,6 +2,7 @@
 library;
 
 import '../../core/constants/app_strings.dart';
+import '../../core/telemetry/assistant_session_recorder.dart' show AssistantFailureReason;
 
 enum MessageRole { user, assistant }
 
@@ -140,9 +141,16 @@ class ChatMessage {
 }
 
 class AssistantException implements Exception {
-  const AssistantException(this.message, {this.statusCode});
+  const AssistantException(
+    this.message, {
+    this.statusCode,
+    this.failureReason = AssistantFailureReason.other,
+  });
   final String message;
   final int? statusCode;
+
+  /// Coarse category for session telemetry — one of [AssistantFailureReason].
+  final String failureReason;
 
   @override
   String toString() => 'AssistantException($statusCode): $message';

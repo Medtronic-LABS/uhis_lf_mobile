@@ -51,6 +51,8 @@ import '../../core/errors/domain_exceptions.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/counselling_launcher.dart';
+import '../../core/telemetry/telemetry_service.dart';
+import '../../core/telemetry/visit_telemetry_recorder.dart';
 import 'clinical_data_card.dart';
 import 'pdf_viewer_screen.dart';
 import 'shukhee_client_factory.dart';
@@ -233,13 +235,34 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
           assessmentDao: context.read<LocalAssessmentDao>(),
           pregnancySnapshotDao: context.read<PregnancySnapshotDao>(),
         );
+    _visitTelemetry = _resolveVisitTelemetry();
+    // Time on the call screen is Sukhee time, not Step 3 reading time.
+    _visitTelemetry?.pause(VisitTelemetryPause.teleconsult);
   }
 
   @override
   void dispose() {
     _liveTimer?.cancel();
     _connectingMinDurationTimer?.cancel();
+    // Leaving mid-call ends the SK's part of it; a no-op if already ended.
+    _visitTelemetry?.markShukiEnded();
+    _visitTelemetry?.resume(VisitTelemetryPause.teleconsult);
     super.dispose();
+  }
+
+  /// The visit row this call belongs to, when opened from a visit's Step 3.
+  /// Null from the standalone route, or where telemetry isn't provided
+  /// (widget tests) — every use is null-safe.
+  VisitTelemetryRecorder? _visitTelemetry;
+
+  VisitTelemetryRecorder? _resolveVisitTelemetry() {
+    try {
+      return context
+          .read<TelemetryService>()
+          .visitRecorderFor(widget.visitId);
+    } on Object {
+      return null;
+    }
   }
 
   Future<void> _submitBooking({
@@ -351,6 +374,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         _callStartedAt = DateTime.now();
         _liveElapsed = Duration.zero;
       });
+      _visitTelemetry?.markShukiStarted();
       _startLiveTimer();
     }
   }
@@ -408,11 +432,13 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         // show it as soon as it's known, not only once the whole poll
         // resolves.
         if (update.isConsultationEnded && _stage == _Stage.connected) {
+          _visitTelemetry?.markShukiEnded();
           setState(() => _stage = _Stage.generatingPrescription);
         }
       },
     );
     _liveTimer?.cancel();
+    _visitTelemetry?.markShukiEnded();
     if (!status.isCompleted) {
       if (mounted) {
         setState(() {

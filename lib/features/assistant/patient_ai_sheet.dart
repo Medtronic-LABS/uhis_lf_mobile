@@ -9,6 +9,7 @@ library;
 
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +21,7 @@ import '../../core/i18n/app_locale.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/telemetry/assistant_content_service.dart';
+import '../../core/telemetry/assistant_session_recorder.dart';
 import '../../core/telemetry/telemetry_service.dart';
 import '../visit/visit_start_helper.dart';
 import '../../core/models/programme.dart';
@@ -176,9 +178,42 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   bool _speechAvail = false;
   bool _listening = false;
 
+  /// Speech filled the input since the last send — the next typed-path send
+  /// is reported as `voice`, even if the SK edited the text afterwards.
+  bool _inputFromVoice = false;
+
+  // ── Session telemetry (one row per opening of this sheet) ───────────────
+  TelemetryService? _telemetry;
+  AssistantSessionRecorder? _session;
+  AppLifecycleListener? _lifecycle;
+
+  void _startSessionTelemetry() {
+    _telemetry = _telemetryOrNull();
+    final session = _session = _telemetry?.startAssistantSession(
+      context: 'patient-scoped',
+      appLanguage: AppLocale.isBangla ? 'bn' : 'en',
+      deceasedContext: widget.ctx.isDeceased,
+    );
+    if (session == null) return;
+    _lifecycle = AppLifecycleListener(
+      onHide: session.pause,
+      onShow: session.resume,
+    );
+    unawaited(() async {
+      try {
+        final results = await Connectivity().checkConnectivity();
+        session.isOnline = results.any((r) => r != ConnectivityResult.none);
+        await _telemetry?.saveAssistantSession(session);
+      } on Object catch (e) {
+        debugPrint('[PatientAI] connectivity not recorded: $e');
+      }
+    }());
+  }
+
   @override
   void initState() {
     super.initState();
+    _startSessionTelemetry();
     final ctx = widget.ctx.apiContext;
     debugPrint(
       '[PatientAI] context loaded — '
@@ -221,6 +256,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     _speech.listen(
       onResult: (r) {
         final words = r.recognizedWords;
+        if (words.isNotEmpty) _inputFromVoice = true;
         _input.text = words;
         _input.selection =
             TextSelection.fromPosition(TextPosition(offset: words.length));
@@ -240,16 +276,29 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   @override
   void dispose() {
     debugPrint('[_PatientAiSheetState] dispose');
+    _lifecycle?.dispose();
+    // Closing the sheet ends the session. A question still in flight is
+    // recorded on the row when its answer arrives (see _send).
+    _session?.complete();
+    unawaited(_telemetry?.saveAssistantSession(_session));
     _speech.stop();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _send(String question) async {
+  /// Sends [question]. [source] is set by the chip and retry paths; the
+  /// keyboard and send-button paths leave it null and it is resolved to
+  /// `typed` or `voice` here.
+  Future<void> _send(String question, {String? source}) async {
     debugPrint('[_PatientAiSheetState] _send question=$question');
     final q = question.trim();
     if (q.isEmpty || _loading) return;
+    final askSource = source ??
+        (_inputFromVoice
+            ? AssistantQuestionSource.voice
+            : AssistantQuestionSource.typed);
+    _inputFromVoice = false;
     // Snapshot prior turns before appending this question — the backend
     // gets what led up to this question, not the question itself twice.
     final history = _recentHistory();
@@ -267,6 +316,12 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     // the gated question/answer content so the server can join them.
     final correlator = const Uuid().v4();
     final stopwatch = Stopwatch()..start();
+    final session = _session;
+    session?.questionAsked(
+      correlator: correlator,
+      source: askSource,
+      askedAgain: askedAgain,
+    );
     _input.clear();
     setState(() {
       _error = null;
@@ -285,6 +340,11 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
             history: history,
           );
       stopwatch.stop();
+      session?.questionAnswered(
+        correlator,
+        responseTimeMs: stopwatch.elapsedMilliseconds,
+      );
+      unawaited(telemetry?.saveAssistantSession(session));
       // Fire-and-forget, non-PHI usage telemetry (LEAP-47). No question/answer
       // text — that is PHI and must never enter a telemetry event.
       unawaited(telemetry
@@ -319,6 +379,16 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
       });
       _input.clear();
     } on AssistantException catch (e) {
+      _recordFailedAsk(
+        session: session,
+        telemetry: telemetry,
+        content: content,
+        correlator: correlator,
+        question: q,
+        appLanguage: appLanguage,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        reason: e.failureReason,
+      );
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -326,6 +396,16 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
       });
       _input.clear();
     } on Object catch (_) {
+      _recordFailedAsk(
+        session: session,
+        telemetry: telemetry,
+        content: content,
+        correlator: correlator,
+        question: q,
+        appLanguage: appLanguage,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        reason: AssistantFailureReason.other,
+      );
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -345,6 +425,36 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   /// The telemetry service if it is in the tree, else null. Telemetry is
   /// best-effort: a missing provider (e.g. in a test harness) must never break
   /// the chat.
+  /// A question that got no answer: marked failed on the session row, and
+  /// its text kept (with no answer) on the gated content stream so product
+  /// can see what was asked when the assistant failed.
+  void _recordFailedAsk({
+    required AssistantSessionRecorder? session,
+    required TelemetryService? telemetry,
+    required AssistantContentService? content,
+    required String correlator,
+    required String question,
+    required String appLanguage,
+    required int elapsedMs,
+    required String reason,
+  }) {
+    session?.questionFailed(
+      correlator,
+      responseTimeMs: elapsedMs,
+      reason: reason,
+    );
+    unawaited(telemetry?.saveAssistantSession(session));
+    unawaited(content
+        ?.recordAsk(
+          correlator: correlator,
+          question: question,
+          answer: '',
+          patientId: widget.ctx.patientId,
+          appLanguage: appLanguage,
+        )
+        .catchError((_) {}));
+  }
+
   TelemetryService? _telemetryOrNull() {
     try {
       return context.read<TelemetryService>();
@@ -559,7 +669,11 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
           spacing: 8,
           runSpacing: 8,
           children: widget.ctx.suggestedStarters
-              .map((s) => ActionChip(label: Text(s), onPressed: () => _send(s)))
+              .map((s) => ActionChip(
+                    label: Text(s),
+                    onPressed: () =>
+                        _send(s, source: AssistantQuestionSource.suggested),
+                  ))
               .toList(),
         ),
       ],
@@ -656,7 +770,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
               );
               if (last.text.isNotEmpty) {
                 setState(() => _error = null);
-                _send(last.text);
+                _send(last.text, source: AssistantQuestionSource.retry);
               }
             },
             child: Text(AssistantStrings.retryLabel),

@@ -29,6 +29,19 @@ class TelemetryDao {
     );
   }
 
+  /// Inserts or replaces one event by id — for the one-row-per-visit
+  /// [TelemetryEventType.visit] row, which is re-saved at each visit step.
+  ///
+  /// The caller passes the row as `pending`, so a save after an earlier copy
+  /// was uploaded queues the newer copy for upload again.
+  Future<void> upsert(TelemetryEvent event) async {
+    await _db.db.insert(
+      _table,
+      event.toDb(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   /// Events whose [TelemetryEvent.occurredAt] falls within [from]..[to].
   ///
   /// **Inclusive of both endpoints, to whole-day resolution**: [from] is
@@ -64,18 +77,44 @@ class TelemetryDao {
 
   /// Flags [ids] as accepted by the server, stamping the time so
   /// [purgeUploadedOlderThan] has a retention clock to measure from.
-  Future<int> markUploaded(List<String> ids, {DateTime? at}) async {
+  ///
+  /// [sentPayloads] guards rows that can change after they are read for
+  /// upload (the [TelemetryEventType.visit] row): an id listed there is only
+  /// marked uploaded if its stored payload is still exactly what was sent. A
+  /// visit step saved while the batch was in flight therefore stays
+  /// `pending` and goes up on the next flush instead of being lost.
+  Future<int> markUploaded(
+    List<String> ids, {
+    DateTime? at,
+    Map<String, String> sentPayloads = const {},
+  }) async {
     if (ids.isEmpty) return 0;
-    final placeholders = List.filled(ids.length, '?').join(',');
-    return _db.db.update(
-      _table,
-      {
-        'upload_status': TelemetryUploadStatus.uploaded,
-        'uploaded_at': (at ?? DateTime.now()).millisecondsSinceEpoch,
-      },
-      where: 'id IN ($placeholders)',
-      whereArgs: ids,
-    );
+    final values = {
+      'upload_status': TelemetryUploadStatus.uploaded,
+      'uploaded_at': (at ?? DateTime.now()).millisecondsSinceEpoch,
+    };
+    final plain = ids.where((id) => !sentPayloads.containsKey(id)).toList();
+    var updated = 0;
+    if (plain.isNotEmpty) {
+      final placeholders = List.filled(plain.length, '?').join(',');
+      updated += await _db.db.update(
+        _table,
+        values,
+        where: 'id IN ($placeholders)',
+        whereArgs: plain,
+      );
+    }
+    for (final id in ids) {
+      final sent = sentPayloads[id];
+      if (sent == null) continue;
+      updated += await _db.db.update(
+        _table,
+        values,
+        where: 'id = ? AND payload = ?',
+        whereArgs: [id, sent],
+      );
+    }
+    return updated;
   }
 
   /// Deletes rows uploaded longer ago than [retain] (default 30 days).
