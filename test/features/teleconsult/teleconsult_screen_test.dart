@@ -190,7 +190,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
@@ -284,7 +284,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         visitId: 'VISIT-1',
         reason: 'Severe pneumonia, referral recommended',
         client: client,
@@ -310,7 +310,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
@@ -349,7 +349,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         // Maternity Coach is gated to female patients (see the dedicated
         // gender-gating test group below); this test is about selection
@@ -381,7 +381,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         patientGender: 'Male',
         client: client,
@@ -414,7 +414,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
@@ -440,7 +440,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
@@ -464,7 +464,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
@@ -480,6 +480,75 @@ void main() {
     expect(find.text(TeleconsultStrings.tryAgain), findsNothing);
   });
 
+  testWidgets('blocks booking when the number is not a valid BD mobile', (tester) async {
+    final client = _FailingShukheeClient(() => const ShukheeBookingException('should not be called'));
+    await tester.pumpWidget(
+      _wrap(TeleconsultScreen(
+        patientLabel: 'Test Patient',
+        patientId: 'p1',
+        reason: 'Fever',
+        client: client,
+        prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
+        permissionService: _FakePermissionService(),
+      )),
+    );
+    await tester.pump();
+    // The 10-digit number the training backend rejected.
+    await tester.enterText(find.byType(TextField), '0143534334');
+    await tester.tap(find.text(TeleconsultStrings.startConsultationButton));
+    await tester.pump();
+
+    expect(find.text(TeleconsultStrings.contactNumberInvalid), findsOneWidget);
+    expect(client.callCount, 0);
+  });
+
+  testWidgets('sends the number without spaces or dashes', (tester) async {
+    final client = _FailingShukheeClient(() => const ShukheeBookingException('boom'));
+    await tester.pumpWidget(
+      _wrap(TeleconsultScreen(
+        patientLabel: 'Test Patient',
+        patientId: 'p1',
+        reason: 'Fever',
+        client: client,
+        prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
+        permissionService: _FakePermissionService(),
+      )),
+    );
+    await _fillAndSubmitBookingForm(tester, phoneToEnter: '017-1234 5678');
+    await tester.pumpAndSettle();
+
+    expect(client.contactNumbers, ['01712345678']);
+  });
+
+  testWidgets('a backend invalid-mobile rejection returns to the form with the number kept', (tester) async {
+    final client = _FailingShukheeClient(
+        () => const ShukheeBookingException('Invalid Bangladeshi mobile number'));
+    await tester.pumpWidget(
+      _wrap(TeleconsultScreen(
+        patientLabel: 'Test Patient',
+        patientId: 'p1',
+        patientPhone: '+8801700000000',
+        reason: 'Fever',
+        client: client,
+        prescriptionDao: testDao,
+        clinicalDataBuilder: testClinicalDataBuilder,
+        permissionService: _FakePermissionService(),
+      )),
+    );
+    await _fillAndSubmitBookingForm(tester);
+    await tester.pumpAndSettle();
+
+    expect(client.callCount, 1);
+    // Back on the booking form, not the error screen, with the reason shown.
+    expect(find.text(TeleconsultStrings.startConsultationButton), findsOneWidget);
+    expect(find.text(CommonStrings.retry), findsNothing);
+    expect(find.text(TeleconsultStrings.contactNumberInvalid), findsOneWidget);
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, '+8801700000000');
+  });
+
   testWidgets('shows a retryable error state for ShukheeBookingException, and Retry re-books with the same values', (tester) async {
     final client = _FailingShukheeClient(() => const ShukheeBookingException('Network error'));
 
@@ -487,7 +556,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
@@ -510,7 +579,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(client.callCount, 2);
-    expect(client.contactNumbers, ['+8801000000000', '+8801000000000']);
+    expect(client.contactNumbers, ['+8801700000000', '+8801700000000']);
     expect(client.specialities, ['General Physician', 'General Physician']);
   });
 
@@ -523,7 +592,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         consentVersionId: 'VER-2',
         consentLng: 'bn',
@@ -553,7 +622,7 @@ void main() {
       _wrap(TeleconsultScreen(
         patientLabel: 'Test Patient',
         patientId: 'p1',
-        patientPhone: '+8801000000000',
+        patientPhone: '+8801700000000',
         reason: 'Fever',
         client: client,
         prescriptionDao: testDao,
