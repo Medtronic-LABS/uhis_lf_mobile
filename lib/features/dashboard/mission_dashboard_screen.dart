@@ -43,6 +43,8 @@ import '../settings/settings_actions.dart';
 import '../settings/settings_screen.dart';
 import '../settings/widgets/settings_row.dart';
 import 'sk_performance_screen.dart';
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 
 /// AI Mission Dashboard — the operational command center for the SK.
 ///
@@ -182,15 +184,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   /// Open CCE alerts, then re-query the badge so a closed follow-up
   /// (wrong number / attempts exhausted) is reflected immediately.
-  Future<void> _openCceAlerts() async {
+  Future<void> _openCceAlerts({String source = AnalyticsValue.banner}) async {
+    Analytics.event(AnalyticsEvent.referralAlertsOpened, {
+      AnalyticsParam.source: source,
+      AnalyticsParam.count: _notificationCount,
+    });
     await CceAlertsDrawer.show(context);
     if (!mounted) return;
     await _refreshNotificationCount();
   }
 
+  /// GA `filter_applied` (LEAP-152). [value] is a fixed key (programme
+  /// filter name or `all`), never a village name.
+  void _trackFilter(String filter, String action, String? value) =>
+      Analytics.event(AnalyticsEvent.filterApplied, {
+        AnalyticsParam.source: AnalyticsValue.home,
+        AnalyticsParam.filter: filter,
+        AnalyticsParam.action: action,
+        AnalyticsParam.filterValue: value,
+        AnalyticsParam.activeFilters: _selectedNeeds.length +
+            (_selectedVillageChipName != null ? 1 : 0),
+      });
+
+  /// GA `patient_tapped` from Home (LEAP-152). [list] is `queue` or `search`;
+  /// [position] is the 1-based place in the list, to see whether SKs follow
+  /// the ranking. No patient id.
+  void _trackPatientTap({
+    required String list,
+    required String target,
+    required int position,
+    Programme? programme,
+    bool? completed,
+  }) =>
+      Analytics.event(AnalyticsEvent.patientTapped, {
+        AnalyticsParam.source: AnalyticsValue.home,
+        AnalyticsParam.list: list,
+        AnalyticsParam.target: target,
+        AnalyticsParam.position: position,
+        AnalyticsParam.programme: programme?.name,
+        AnalyticsParam.completed: completed,
+      });
+
+  /// Debounces GA `search_used` so a typed query logs once, not per key.
+  Timer? _searchTrackTimer;
+  int? _lastTrackedQueryLength;
+
+  /// GA `search_used` from Home, ~1.5 s after the SK stops typing. Only the
+  /// query's length and shape are sent — never the text (names, NID, phone).
+  void _scheduleSearchTracking(String query) {
+    _searchTrackTimer?.cancel();
+    if (query.length < 2) {
+      if (query.isEmpty) _lastTrackedQueryLength = null;
+      return;
+    }
+    _searchTrackTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (query.length == _lastTrackedQueryLength) return;
+      _lastTrackedQueryLength = query.length;
+      final hasDigit = query.contains(RegExp(r'\d'));
+      final hasLetter = query.contains(RegExp(r'[^\d\s]'));
+      Analytics.event(AnalyticsEvent.searchUsed, {
+        AnalyticsParam.source: AnalyticsValue.home,
+        AnalyticsParam.queryLength: query.length,
+        AnalyticsParam.queryType: hasDigit && hasLetter
+            ? AnalyticsValue.mixed
+            : (hasDigit ? AnalyticsValue.digits : AnalyticsValue.text),
+      });
+    });
+  }
+
   @override
   void dispose() {
     debugPrint('[_DashboardScreenState] dispose');
+    _searchTrackTimer?.cancel();
     _globalSearchDebounce?.cancel();
     _missionRepo?.changes.removeListener(_onMissionChanges);
     _postSyncRefresher?.isRefreshing.removeListener(_onPostSyncRefreshingChanged);
@@ -648,15 +713,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
               locationLine: _locationLine(),
               onPerformance: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
+                  // GA screen_view (LEAP-152)
+                  settings:
+                      const RouteSettings(name: AnalyticsScreen.skPerformance),
                   builder: (_) => const SkPerformanceScreen(),
                 ),
               ),
               settingsMenu: const _SettingsMenu(),
               notificationCount: _notificationCount,
-              onNotificationTap: _openCceAlerts,
+              onNotificationTap: () =>
+                  _openCceAlerts(source: AnalyticsValue.bell),
               searchQuery: _searchQuery,
               onSearchChanged: (q) {
                 _filterState.setSearchQuery(q);
+                _scheduleSearchTracking(q.trim());
                 setState(() {
                   _queueRevealCount = _kQueuePageSize;
                 });
@@ -695,7 +765,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // so it reads as a system-level alert before the worklist.
             _ReferralAlertBanner(
               key: ValueKey('referral_banner_$_refreshVersion'),
-              onTap: _openCceAlerts,
+              onTap: () => _openCceAlerts(source: AnalyticsValue.banner),
               count: _notificationCount,
             ),
             Expanded(
@@ -771,6 +841,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               selectedVillageValue: _selectedVillageChipName,
                               onVillageSelected: (name) {
                                 _filterState.setVillage(name);
+                                // Village name is not sent — only that one
+                                // was picked or cleared (LEAP-152).
+                                _trackFilter(
+                                  AnalyticsValue.village,
+                                  name == null
+                                      ? AnalyticsValue.clear
+                                      : AnalyticsValue.select,
+                                  name == null ? AnalyticsValue.all : null,
+                                );
                                 setState(() {
                                   _queueRevealCount = _kQueuePageSize;
                                 });
@@ -781,12 +860,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               onNeedToggled: (need) {
                                 final updated =
                                     Set<NeedFilter>.from(_selectedNeeds);
-                                if (updated.contains(need)) {
+                                final removing = updated.contains(need);
+                                if (removing) {
                                   updated.remove(need);
                                 } else {
                                   updated.add(need);
                                 }
                                 _filterState.setNeeds(updated);
+                                _trackFilter(
+                                  AnalyticsValue.programme,
+                                  removing
+                                      ? AnalyticsValue.remove
+                                      : AnalyticsValue.add,
+                                  need.name,
+                                );
                                 setState(() {
                                   _queueRevealCount = _kQueuePageSize;
                                 });
@@ -850,7 +937,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               padding: const EdgeInsets.only(bottom: 8),
                               child: _GlobalSearchResultCard(
                                 hit: hit,
-                                onStartVisit: () => _startVisitFromHit(hit),
+                                onStartVisit: () {
+                                  _trackPatientTap(
+                                    list: AnalyticsValue.search,
+                                    target: AnalyticsValue.visitButton,
+                                    position: globalIndex,
+                                  );
+                                  _startVisitFromHit(hit);
+                                },
                               ),
                             );
                           }
@@ -912,8 +1006,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               item: item,
                               compact: true,
                               isCompleted: done,
-                              onTap: () => _startVisitFromQueue(item),
-                              onAction: () => _startVisitFromQueue(item),
+                              onTap: () {
+                                _trackPatientTap(
+                                  list: AnalyticsValue.queue,
+                                  target: AnalyticsValue.card,
+                                  position: queueIndex + 1,
+                                  programme: item.badgePrimaryProgramme,
+                                  completed: done,
+                                );
+                                _startVisitFromQueue(item);
+                              },
+                              onAction: () {
+                                _trackPatientTap(
+                                  list: AnalyticsValue.queue,
+                                  target: AnalyticsValue.visitButton,
+                                  position: queueIndex + 1,
+                                  programme: item.badgePrimaryProgramme,
+                                  completed: done,
+                                );
+                                _startVisitFromQueue(item);
+                              },
                             ),
                           );
                         },
@@ -951,11 +1063,20 @@ class _SettingsMenu extends StatelessWidget {
           minimumSize: Size.zero,
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
+        // GA (LEAP-152): ⚙ icon tapped, then which option was picked.
+        onOpened: () => Analytics.event(AnalyticsEvent.settingsMenuOpened),
         onSelected: (v) async {
+          Analytics.event(AnalyticsEvent.settingsOptionSelected, {
+            AnalyticsParam.source: AnalyticsValue.menu,
+            AnalyticsParam.option: v,
+          });
           switch (v) {
             case 'settings':
               Navigator.of(ctx).push(
-                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+                MaterialPageRoute<void>(
+                  // GA screen_view (LEAP-152)
+                  settings: const RouteSettings(name: AnalyticsScreen.settings),
+                  builder: (_) => const SettingsScreen()),
               );
               break;
             case 'language':
@@ -1141,7 +1262,11 @@ class _CreateHouseholdFab extends StatelessWidget {
           color: tokens.fabBackground,
           borderRadius: BorderRadius.circular(AppRadius.fabPill),
           child: InkWell(
-            onTap: () => showEnrollmentEntrySheet(context),
+            onTap: () {
+              Analytics.event(AnalyticsEvent.addHouseholdTapped,
+                  {AnalyticsParam.source: AnalyticsValue.fab});
+              showEnrollmentEntrySheet(context, source: AnalyticsValue.fab);
+            },
             borderRadius: BorderRadius.circular(AppRadius.fabPill),
             splashColor: Colors.white.withValues(alpha: 0.15),
             child: Padding(

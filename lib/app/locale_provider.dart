@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../core/analytics/analytics.dart';
+import '../core/analytics/analytics_events.dart';
 import '../core/i18n/app_locale.dart';
 
 /// Manages the app's language with persistence — same shape as
@@ -43,15 +45,23 @@ class LocaleProvider extends ChangeNotifier {
 
   Future<void> setLanguage(AppLanguage lang) async {
     if (AppLocale.current == lang) return;
+    final from = AppLocale.current;
     AppLocale.current = lang;
     notifyListeners();
+    Analytics.event(AnalyticsEvent.languageChanged, {
+      AnalyticsParam.from: _code(from),
+      AnalyticsParam.to: _code(lang),
+    });
+    Analytics.setLanguage(_code(lang));
     try {
       await _storage.write(
         key: _key,
-        value: lang == AppLanguage.bangla ? 'bn' : 'en',
+        value: lang.code,
       );
     } catch (_) {
       // Ignore storage errors
     }
   }
+
+  static String _code(AppLanguage lang) => lang.code;
 }

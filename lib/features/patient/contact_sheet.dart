@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/telemetry/share_telemetry.dart';
@@ -106,14 +108,20 @@ void _shareTap(
   TelemetryService? telemetry,
   String channel, {
   required bool launched,
-}) =>
-    recordShareTap(
-      telemetry,
-      channel: channel,
-      surface: TelemetryShareSurface.contactSheet,
-      hasMessage: true,
-      launched: launched,
-    );
+}) {
+  Analytics.event(AnalyticsEvent.messageShared, {
+    AnalyticsParam.source: AnalyticsValue.contact,
+    AnalyticsParam.channel: channel,
+    AnalyticsParam.launched: launched,
+  });
+  recordShareTap(
+    telemetry,
+    channel: channel,
+    surface: TelemetryShareSurface.contactSheet,
+    hasMessage: true,
+    launched: launched,
+  );
+}
 
 Future<void> _whatsApp(
     BuildContext ctx, String phone, String patientName) async {

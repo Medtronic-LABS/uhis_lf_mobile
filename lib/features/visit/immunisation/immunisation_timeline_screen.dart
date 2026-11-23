@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/analytics/analytics.dart';
+import '../../../core/analytics/analytics_events.dart';
+import '../../../core/analytics/visit_analytics.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/telemetry/epi_card_telemetry.dart';
 import '../../../core/telemetry/telemetry_service.dart';
@@ -860,9 +863,11 @@ class _ImmunisationTimelineScreenState
     final telemetry = context.read<TelemetryService>();
     final visitUuid = _telemetryVisitUuid(telemetry);
     final scanSessionId = telemetry.newScanSessionId();
+    final gaScanOpenedAt = DateTime.now().millisecondsSinceEpoch; // GA
 
     final closeResult = await Navigator.of(context).push<EpiCardScanCloseResult>(
       MaterialPageRoute(
+        settings: const RouteSettings(name: AnalyticsScreen.cardScanEpi),
         builder: (_) => EpiCardScanScreen(
           targetCodes: allCodes,
           codeLabels: codeLabels,
@@ -875,6 +880,17 @@ class _ImmunisationTimelineScreenState
             required int matchedVaccineCount,
             String? captureQuality,
           }) {
+            // GA epi_scan_attempt (LEAP-152): one per photo, no image data.
+            Analytics.event(AnalyticsEvent.epiScanAttempt, {
+              AnalyticsParam.visitId: GaVisit.idFor(widget.encounterId),
+              AnalyticsParam.attemptIndex: attemptIndex,
+              AnalyticsParam.result:
+                  success ? AnalyticsValue.success : AnalyticsValue.failed,
+              AnalyticsParam.failureReason: success ? null : failureReason,
+              AnalyticsParam.engine: engine,
+              AnalyticsParam.captureQuality: captureQuality,
+              AnalyticsParam.matchedVaccines: matchedVaccineCount,
+            });
             unawaited(
               telemetry.recordEpiCardScanAttempt(
                 scanSessionId: scanSessionId,
@@ -895,6 +911,33 @@ class _ImmunisationTimelineScreenState
 
     final result = closeResult?.scanResult;
     final appliedToApp = result != null && result.anyMatched;
+    // GA card_scan_result (LEAP-152) — vaccine count only, no dates.
+    final gaVisit = GaVisit.of(widget.encounterId);
+    if (appliedToApp) gaVisit?.markScanUsed();
+    // Due vaccines at scan time and how many of them the scan found.
+    final gaDue = appliedToApp ? epiPendingVaccineKeys(milestones) : null;
+    final gaFound = gaDue == null || result == null
+        ? null
+        : epiDetectedPendingKeys(
+            pendingKeys: gaDue,
+            matchedCodes: result.matchedCodes,
+          );
+    Analytics.event(AnalyticsEvent.cardScanResult, {
+      AnalyticsParam.visitId: gaVisit?.visitId,
+      AnalyticsParam.card: 'epi',
+      AnalyticsParam.result: closeResult == null
+          ? AnalyticsValue.cancelled
+          : appliedToApp
+              ? AnalyticsValue.success
+              : AnalyticsValue.failed,
+      AnalyticsParam.scanMs:
+          DateTime.now().millisecondsSinceEpoch - gaScanOpenedAt,
+      AnalyticsParam.fieldsFilled: result?.matchedCodes.length,
+      AnalyticsParam.attempts: closeResult?.attemptCount,
+      AnalyticsParam.photosRead: closeResult?.successfulAttemptCount,
+      AnalyticsParam.vaccinesDue: gaDue?.length,
+      AnalyticsParam.vaccinesFound: gaFound?.length,
+    });
     final outcome = closeResult == null
         ? EpiCardScanSessionOutcomeWire.cancelled
         : appliedToApp
@@ -1751,6 +1794,20 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
           sameCalendarDayAsPrefill: sameDayAsPrefill,
           dateChangedFromPrefill: _dateChangedFromPrefill,
         );
+      }
+      // GA ai_field_outcome for EPI (LEAP-152), only when a scan was applied
+      // in this timeline session — otherwise "missed" would be meaningless.
+      if (widget.scanMatchedCodes.isNotEmpty) {
+        final outcome = epiOutcome(epiVaccinationChangeTypeWire(changeType));
+        Analytics.event(AnalyticsEvent.aiFieldOutcome, {
+          AnalyticsParam.visitId: GaVisit.idFor(widget.encounterId),
+          AnalyticsParam.feature: AiFeature.epiCard,
+          AnalyticsParam.field: v.code,
+          AnalyticsParam.outcome: outcome,
+          AnalyticsParam.filledBy:
+              outcome == AiOutcome.missed ? AnalyticsValue.manual : null,
+          AnalyticsParam.programmes: 'epi',
+        });
       }
       await telemetry.recordEpiVaccinationUpdate(
         vaccineKey: v.code,

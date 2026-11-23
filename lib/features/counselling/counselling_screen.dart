@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/telemetry/share_telemetry.dart';
 import '../../core/telemetry/telemetry_service.dart';
@@ -62,14 +64,20 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
     TelemetryService? telemetry,
     String channel, {
     required bool launched,
-  }) =>
-      recordShareTap(
-        telemetry,
-        channel: channel,
-        surface: TelemetryShareSurface.counselling,
-        hasMessage: _hasMessage,
-        launched: launched,
-      );
+  }) {
+    Analytics.event(AnalyticsEvent.messageShared, {
+      AnalyticsParam.source: AnalyticsValue.counselling,
+      AnalyticsParam.channel: channel,
+      AnalyticsParam.launched: launched,
+    });
+    recordShareTap(
+      telemetry,
+      channel: channel,
+      surface: TelemetryShareSurface.counselling,
+      hasMessage: _hasMessage,
+      launched: launched,
+    );
+  }
 
   Future<void> _copy() async {
     if (!_hasMessage) return;

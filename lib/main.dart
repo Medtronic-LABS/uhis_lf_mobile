@@ -16,6 +16,7 @@ import 'core/i18n/app_locale.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
 import 'app/theme_provider.dart';
+import 'core/analytics/analytics.dart';
 import 'core/api/api_client.dart';
 import 'core/api/realtime_asr_service.dart';
 import 'core/preferences/ai_feature_toggles_notifier.dart';
@@ -139,6 +140,8 @@ Future<void> main() async {
   await AppDateFormat.ensureInitialised();
   await FormConfig.loadAndCache(rootBundle);
   await AppVersionInfo.ensureLoaded();
+  // Google Analytics (LEAP-152). Never throws; analytics stays off on failure.
+  await Analytics.init();
   final api = await ApiClient.create();
   final appVersionService = AppVersionService(api);
   final authRepo = AuthRepository(api, appVersionService: appVersionService);
@@ -539,11 +542,28 @@ class _UhisNextAppState extends State<UhisNextApp>
   /// Called whenever the user switches app language. Updates SDK language
   /// via setLanguage (no re-init needed — SDK supports live language swap).
   void _onLocaleChanged() {
-    final lang = AppLocale.isBangla ? 'bn' : 'en';
+    final lang = AppLocale.code;
     MicroCoachingService.setLanguage(lang);
   }
 
   bool _sdkInitialized = false;
+
+  /// GA user = backend user id (never name/phone/NID) + coarse location.
+  Future<void> _setAnalyticsUser() async {
+    try {
+      final repo = widget.authRepo;
+      final profile = await repo.userProfileSummary();
+      await Analytics.setUser(
+        tenantId: await repo.currentTenantId(),
+        userId: await repo.userId(),
+        upazila: profile.upazila,
+        unionArea: profile.area,
+        appLanguage: AppLocale.code,
+      );
+    } catch (e) {
+      debugPrint('[Analytics] set user failed: $e');
+    }
+  }
 
   Future<void> _onAuthStateChanged() async {
     if (widget.authState.status != AuthStatus.signedIn) return;
@@ -551,6 +571,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     // biometric/PIN restore). Non-fatal — defaults remain if the call fails.
     unawaited(_userHierarchy.refreshFeatureFlags());
     unawaited(_userHierarchy.refreshShukheeControls());
+    // GA user id + properties on every sign-in (login or PIN/biometric restore).
+    unawaited(_setAnalyticsUser());
     if (_sdkInitialized) return;
     _sdkInitialized = true;
     final token = await widget.authRepo.getToken();
@@ -559,7 +581,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       return;
     }
     try {
-      final lang = AppLocale.isBangla ? 'bn' : 'en';
+      final lang = AppLocale.code;
       await MicroCoachingService.initialize(
         authToken: token,
         backendUrl: AppConfig.coachingServiceUrl,
@@ -569,7 +591,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       // Re-sync language immediately after init in case LocaleProvider's
       // async _loadFromStorage() completed after AppLocale.current was read
       // above (race window on cold start). setLanguage is a no-op if unchanged.
-      await MicroCoachingService.setLanguage(AppLocale.isBangla ? 'bn' : 'en');
+      await MicroCoachingService.setLanguage(AppLocale.code);
       debugPrint('[MicroCoaching] SDK initialized lang=$lang');
     } catch (e) {
       _sdkInitialized = false;

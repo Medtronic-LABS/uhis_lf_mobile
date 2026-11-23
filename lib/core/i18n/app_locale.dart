@@ -14,4 +14,12 @@ abstract final class AppLocale {
   static AppLanguage current = AppLanguage.bangla;
 
   static bool get isBangla => current == AppLanguage.bangla;
+
+  /// `bn` / `en` for the current language.
+  static String get code => current.code;
+}
+
+extension AppLanguageCode on AppLanguage {
+  /// `bn` / `en`, the wire and storage code for this language.
+  String get code => this == AppLanguage.bangla ? 'bn' : 'en';
 }

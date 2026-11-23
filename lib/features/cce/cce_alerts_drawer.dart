@@ -18,6 +18,8 @@ import 'cce_repository.dart';
 import 'widgets/cce_alert_card.dart';
 import 'widgets/cce_call_result_sheet.dart';
 import 'widgets/cce_journey_strip.dart';
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 
 /// CCE drawer — open REFERRED follow-ups from offline fetch only, with
 /// Android SK-style dial → call-result flow.
@@ -27,6 +29,7 @@ class CceAlertsDrawer extends StatefulWidget {
   final CceRepository repository;
 
   static Future<void> show(BuildContext context) {
+    Analytics.screen(AnalyticsScreen.alertsDrawer); // GA (LEAP-152)
     final repository = CceRepository(
       followUps: context.read<FollowUpDao>(),
       members: context.read<MemberDao>(),
@@ -303,14 +306,20 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer>
     TelemetryService? telemetry,
     String channel, {
     required bool launched,
-  }) =>
-      recordShareTap(
-        telemetry,
-        channel: channel,
-        surface: TelemetryShareSurface.cceDrawer,
-        hasMessage: true,
-        launched: launched,
-      );
+  }) {
+    Analytics.event(AnalyticsEvent.messageShared, {
+      AnalyticsParam.source: AnalyticsValue.alerts,
+      AnalyticsParam.channel: channel,
+      AnalyticsParam.launched: launched,
+    });
+    recordShareTap(
+      telemetry,
+      channel: channel,
+      surface: TelemetryShareSurface.cceDrawer,
+      hasMessage: true,
+      launched: launched,
+    );
+  }
 
   Future<void> _onWhatsapp(CceAlert alert) async {
     final telemetry = shareTelemetryOf(context);

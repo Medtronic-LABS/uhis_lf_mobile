@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -6,6 +7,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/analytics/analytics.dart';
+import '../../../core/analytics/analytics_events.dart';
+import '../../../core/analytics/visit_analytics.dart';
 import '../../../core/clinical/ai_context_fields.dart';
 import '../../../core/clinical/briefing_rules/briefing_findings_aggregator.dart';
 import '../../../core/clinical/patient_assessment_aliases.dart';
@@ -160,6 +164,35 @@ AncRevisitLockInput _ancRevisitLockInput(_AncRevisitStatus status) =>
     );
 
 class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
+  /// GA `symptom_outcome` at Step 1 Next (LEAP-152): one event per symptom
+  /// the SK or AI Scribe touched — catalogue keys only, never free text.
+  /// Also sets Step 1's `input_mode` on the GA visit.
+  void _trackSymptomOutcomes(TriageViewModel vm) {
+    final visit = GaVisit.of(widget.encounterId);
+    final selected = vm.selectedSymptoms;
+    final scribe = vm.scribeEverAddedCodes;
+    for (final code in {...selected, ...scribe}.toList()..sort()) {
+      Analytics.event(AnalyticsEvent.symptomOutcome, {
+        AnalyticsParam.visitId: visit?.visitId,
+        AnalyticsParam.symptomKey: code,
+        AnalyticsParam.addedBy: scribe.contains(code)
+            ? AiFeature.scribe
+            : AnalyticsValue.manual,
+        AnalyticsParam.outcome: selected.contains(code)
+            ? AiOutcome.kept
+            : AnalyticsValue.remove,
+      });
+    }
+    final usedScribe = scribe.isNotEmpty;
+    final usedManual = selected.difference(scribe).isNotEmpty;
+    if (usedScribe) visit?.markScribeUsed(step: 1);
+    visit?.setInputMode(
+        1,
+        usedScribe && usedManual
+            ? AnalyticsValue.mixed
+            : (usedScribe ? AnalyticsValue.voice : AnalyticsValue.manual));
+  }
+
   TriageViewModel? _viewModel;
   PatientContext? _patientContext;
   bool _isLoading = true;
@@ -950,6 +983,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         vm.customSymptomText,
         vm.scribePreTickedCodes,
       );
+      _trackSymptomOutcomes(vm);
       onAdvance(pathways);
       return;
     }
@@ -1257,6 +1291,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: AiScribeBanner(
+                        analyticsStep: 1,
+                        onScribeSpan: (startedAtMs, endedAtMs) =>
+                            GaVisit.of(widget.encounterId)?.markScribeSpan(1,
+                                startedAtMs: startedAtMs,
+                                endedAtMs: endedAtMs),
                         encounterId: widget.encounterId,
                         patientId: _patientId,
                         isFemale:
@@ -1906,20 +1945,59 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
     debugPrint('[_UnifiedSymptomPickerState] initState');
     _searchCtrl.addListener(() {
       setState(() => _query = _searchCtrl.text.trim().toLowerCase());
+      _scheduleSearchTracking(_query);
     });
   }
 
+  // ── GA (LEAP-152) ──────────────────────────────────────────────────
+  Timer? _searchTrackTimer;
+  int? _lastTrackedQueryLength;
+
+  /// GA `search_used` {source: symptoms} once the SK stops typing. Only the
+  /// query length is sent — never the typed text.
+  void _scheduleSearchTracking(String query) {
+    _searchTrackTimer?.cancel();
+    if (query.length < 2) {
+      if (query.isEmpty) _lastTrackedQueryLength = null;
+      return;
+    }
+    _searchTrackTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (query.length == _lastTrackedQueryLength) return;
+      _lastTrackedQueryLength = query.length;
+      Analytics.event(AnalyticsEvent.searchUsed, {
+        AnalyticsParam.visitId: GaVisit.currentId,
+        AnalyticsParam.source: AnalyticsValue.symptoms,
+        AnalyticsParam.queryLength: query.length,
+      });
+    });
+  }
+
+  /// GA `symptom_selected`. [code] is the symptom catalogue key (e.g.
+  /// `headache`) — not patient text; free-text "other" chips send no code.
+  void _trackSymptom(String action, {String? code, required String via}) =>
+      Analytics.event(AnalyticsEvent.symptomSelected, {
+        AnalyticsParam.visitId: GaVisit.currentId,
+        AnalyticsParam.action: action,
+        AnalyticsParam.symptomKey: code,
+        AnalyticsParam.addedBy: via,
+      });
+
   @override
   void dispose() {
+    _searchTrackTimer?.cancel();
     _searchCtrl.dispose();
     debugPrint('[_UnifiedSymptomPickerState] dispose');
     super.dispose();
   }
 
   void _toggleSymptom(String code) {
+    final via =
+        _query.isNotEmpty ? AnalyticsValue.search : AnalyticsValue.grid;
     if (widget.vm.isSelected(code)) {
+      _trackSymptom(AnalyticsValue.remove, code: code, via: via);
       widget.vm.removeSymptom(code);
     } else {
+      _trackSymptom(AnalyticsValue.add, code: code, via: via);
       _addSymptomAndClearSearch(code);
     }
   }
@@ -2088,6 +2166,8 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               if (isSearching && _query.isNotEmpty)
                 GestureDetector(
                   onTap: () {
+                    _trackSymptom(AnalyticsValue.add,
+                        via: AnalyticsValue.otherText);
                     vm.addOtherChip(_query);
                     _searchCtrl.clear();
                     FocusScope.of(context).unfocus();

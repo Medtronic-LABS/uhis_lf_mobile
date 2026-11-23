@@ -59,6 +59,8 @@ import '../visit/visit_start_helper.dart';
 import 'referral_narrative.dart';
 import 'vitals_repository.dart';
 import '../../core/i18n/app_date_format.dart';
+import '../../core/analytics/analytics_events.dart';
+import '../../core/analytics/analytics.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -1018,7 +1020,7 @@ class _PatientContextScreenState
     });
     try {
       final syncSvc = context.read<OfflineSyncService>();
-      final report = await syncSvc.warmSync();
+      final report = await syncSvc.warmSync(trigger: AnalyticsValue.pullRefresh);
       if (!mounted) return;
       if (report.errors.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1304,6 +1306,8 @@ class _PatientContextScreenState
   /// runs here, not at timeline load. Cached in [_aiContextFuture] after first open.
   Future<void> _openAssistant(PatientOrMemberData data) async {
     if (_openingAssistant) return;
+    Analytics.event(AnalyticsEvent.aiAssistantOpened,
+        {AnalyticsParam.source: AnalyticsValue.patientProfile});
     setState(() => _openingAssistant = true);
     try {
       _aiContextFuture ??= _aiContext(data);
@@ -3080,6 +3084,11 @@ class _AiInsightCardState extends State<_AiInsightCard> {
 
   void _showDetail(BuildContext context, String summary, {bool patientKnown = true}) {
     final isEmpty = summary.trim().isEmpty;
+    // GA (LEAP-152): only whether an AI summary was there — never its text.
+    Analytics.event(AnalyticsEvent.aiInsightOpened, {
+      AnalyticsParam.source: AnalyticsValue.patientProfile,
+      AnalyticsParam.hasSummary: !isEmpty,
+    });
     final riskReasons = widget.riskReasons;
     final lastAssessedDate = widget.lastAssessedDate;
 
@@ -3819,7 +3828,8 @@ class _StatsGrid extends StatelessWidget {
                   final (progBg, progFg) = _progBadgeColors(prog);
                   return InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    onTap: () => _TimelineEventSheet.show(sheetCtx, assessment),
+                    onTap: () => _TimelineEventSheet.show(sheetCtx, assessment,
+                        source: AnalyticsValue.history),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Row(
@@ -5020,7 +5030,9 @@ void _openPrescriptionDocument(
   required Uint8List bytes,
 }) {
   Navigator.of(context).push(
-    MaterialPageRoute<void>(builder: (_) => PdfViewerScreen(title: title, bytes: bytes)),
+    MaterialPageRoute<void>(
+        settings: const RouteSettings(name: AnalyticsScreen.pdfViewer),
+        builder: (_) => PdfViewerScreen(title: title, bytes: bytes)),
   );
 }
 
@@ -5079,7 +5091,14 @@ class _TimelineEventSheet extends StatelessWidget {
     MemberAssessment assessment, {
     PregnancySnapshotRow? pregnancySnapshot,
     _PrescriptionRef? prescription,
+    String source = AnalyticsValue.timeline,
   }) {
+    // GA (LEAP-152): which programme's visit was opened — no ids or values.
+    Analytics.screen(AnalyticsScreen.visitDetails);
+    Analytics.event(AnalyticsEvent.visitDetailsViewed, {
+      AnalyticsParam.source: source,
+      AnalyticsParam.programme: Programme.fromString(assessment.type).name,
+    });
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -6796,6 +6815,10 @@ class _NoServicesCardState extends State<_NoServicesCard> {
 
   Future<void> _startVisit() async {
     if (_starting || widget.isDeceased) return;
+    Analytics.event(AnalyticsEvent.startVisitTapped, {
+      AnalyticsParam.source: AnalyticsValue.patientProfile,
+      AnalyticsParam.button: AnalyticsValue.noServicesCard,
+    });
     setState(() => _starting = true);
 
     final controller = context.read<VisitController>();

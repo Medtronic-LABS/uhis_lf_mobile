@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/analytics/analytics.dart';
+import '../../../core/analytics/analytics_events.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../household/enrollment/enrollment_entry_sheet.dart';
@@ -85,7 +87,12 @@ class _DashboardSearchFieldState extends State<DashboardSearchField> {
                   tooltip: SearchStrings.scanNidTooltip,
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
-                  onPressed: () => showEnrollmentEntrySheet(context),
+                  onPressed: () {
+                    Analytics.event(AnalyticsEvent.addHouseholdTapped,
+                        {AnalyticsParam.source: AnalyticsValue.searchScan});
+                    showEnrollmentEntrySheet(context,
+                        source: AnalyticsValue.searchScan);
+                  },
                 );
               }
               return IconButton(

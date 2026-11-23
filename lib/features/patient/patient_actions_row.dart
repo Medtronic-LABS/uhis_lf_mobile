@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/clinical/service_eligibility.dart';
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/models/programme.dart';
 import '../visit/visit_controller.dart';
@@ -63,6 +65,13 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
 
   Future<void> _startVisit() async {
     if (_starting || widget.isDeceased) return;
+    Analytics.event(AnalyticsEvent.startVisitTapped, {
+      AnalyticsParam.source: AnalyticsValue.patientProfile,
+      AnalyticsParam.button: AnalyticsValue.actionsRow,
+      AnalyticsParam.programme: widget.programmes.isNotEmpty
+          ? widget.programmes.first.name
+          : null,
+    });
     if (!hasAnyEligibleProgramme(ageYears: widget.patientAge)) {
       _showNotEligibleToast();
       return;
