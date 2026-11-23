@@ -51,6 +51,7 @@ import '../../core/errors/domain_exceptions.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/counselling_launcher.dart';
+import 'bd_mobile_number.dart';
 import 'clinical_data_card.dart';
 import 'pdf_viewer_screen.dart';
 import 'shukhee_client_factory.dart';
@@ -201,6 +202,10 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   final _callViewKey = GlobalKey();
 
   _Stage _stage = _Stage.booking;
+
+  /// Shown under the contact number when the backend rejected it, so the SK
+  /// fixes the number instead of retrying the same one.
+  String? _phoneServerError;
   DomainException? _error;
   ShukheeBooking? _booking;
   ShukheeStatus? _status;
@@ -250,6 +255,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
     _lastContactNumber = contactNumber;
     _lastSpeciality = speciality;
     _lastMediaGroups = mediaGroups;
+    _phoneServerError = null;
 
     final permitted = await _permissionService.ensureCameraAndMicPermission(context);
     if (!mounted) return;
@@ -309,7 +315,18 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       setState(() => _booking = booking);
       unawaited(_pollInBackground(booking.callLog));
     } on ShukheeException catch (e) {
-      if (mounted) _handleError(e);
+      if (!mounted) return;
+      if (isInvalidMobileError(e)) {
+        // Back to the form with the number kept and the reason shown --
+        // retrying the same number can never succeed.
+        _connectingMinDurationTimer?.cancel();
+        setState(() {
+          _stage = _Stage.booking;
+          _phoneServerError = TeleconsultStrings.contactNumberInvalid;
+        });
+        return;
+      }
+      _handleError(e);
     }
   }
 
@@ -550,7 +567,8 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       case _Stage.booking:
         return _BookingFormView(
           client: _client,
-          initialPhone: widget.patientPhone,
+          initialPhone: _lastContactNumber ?? widget.patientPhone,
+          initialPhoneError: _phoneServerError,
           patientGender: widget.patientGender,
           onSubmit: _submitBooking,
         );
@@ -760,12 +778,16 @@ class _BookingFormView extends StatefulWidget {
   const _BookingFormView({
     required this.client,
     required this.initialPhone,
+    this.initialPhoneError,
     required this.patientGender,
     required this.onSubmit,
   });
 
   final ShukheeClient client;
   final String? initialPhone;
+
+  /// The backend's rejection of the last number, shown under the field.
+  final String? initialPhoneError;
   final String? patientGender;
   final Future<void> Function({
     required String contactNumber,
@@ -814,7 +836,18 @@ class _BookingFormViewState extends State<_BookingFormView> {
     _MediaGroup(type: 'prescription', label: TeleconsultStrings.documentTypePrescription),
     _MediaGroup(type: 'lab_report', label: TeleconsultStrings.documentTypeLabReports),
   ];
-  String? _phoneError;
+  late String? _phoneError = widget.initialPhoneError;
+
+  @override
+  void didUpdateWidget(covariant _BookingFormView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The form can stay mounted across a failed booking: show the backend's
+    // rejection when the parent passes a new one.
+    if (widget.initialPhoneError != null &&
+        widget.initialPhoneError != oldWidget.initialPhoneError) {
+      _phoneError = widget.initialPhoneError;
+    }
+  }
   bool _submitting = false;
 
   @override
@@ -960,6 +993,10 @@ class _BookingFormViewState extends State<_BookingFormView> {
       setState(() => _phoneError = TeleconsultStrings.contactNumberRequired);
       return;
     }
+    if (!isValidBdMobile(phone)) {
+      setState(() => _phoneError = TeleconsultStrings.contactNumberInvalid);
+      return;
+    }
     setState(() {
       _phoneError = null;
       _submitting = true;
@@ -983,7 +1020,7 @@ class _BookingFormViewState extends State<_BookingFormView> {
     // .title -- the exact API field value -- is what's sent, never a
     // translated display label; .specialityId only tracks selection above.
     await widget.onSubmit(
-      contactNumber: phone,
+      contactNumber: normalizeBdMobile(phone),
       speciality: _selectedSpeciality?.title ?? kTeleconsultSpecialities.first,
       mediaGroups: mediaGroups,
     );
