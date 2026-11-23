@@ -1,0 +1,75 @@
+name: Promote to Production
+
+# Moves a build that is already on an app's Internal testing track to its
+# Production track as a staged rollout. Nothing is rebuilt: Play promotes the
+# exact bundle that release.yml uploaded.
+#
+# Run it again with a higher percentage to widen the rollout (20 -> 50 -> 100).
+#
+# The job runs in the app's GitHub Environment (`production` or `training`) and
+# reads PLAY_SERVICE_ACCOUNT_JSON from it. Required reviewers on that
+# environment make the promotion wait for approval.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app to promote'
+        type: choice
+        options: [prod, training]
+        required: true
+      version_code:
+        description: 'Build number on the Internal testing track, e.g. 17'
+        required: true
+      rollout:
+        description: 'Percentage of users on the Production track'
+        type: choice
+        options: ['20', '50', '100']
+        default: '20'
+      dry_run:
+        description: 'Show the plan without changing Play'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # One promotion per app at a time: two open Play edits would overwrite each other.
+  group: play-promote-${{ inputs.app }}
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.app }} build ${{ inputs.version_code }} to ${{ inputs.rollout }}%
+    runs-on: ubuntu-latest
+    # The environment is named after the env file: production or training.
+    environment: ${{ inputs.app == 'prod' && 'production' || 'training' }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install the Google auth client
+        run: pip install --quiet 'google-auth>=2,<3' 'requests>=2,<3'
+
+      - name: Check the promotion plan logic
+        run: python scripts/test_play_promote.py
+
+      - name: Promote on Play
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PACKAGE_NAME: ${{ inputs.app == 'prod' && 'com.medtroniclabs.uhis_next' || 'com.medtroniclabs.uhis_next.training' }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          ROLLOUT: ${{ inputs.rollout }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          ARGS=(--package "${PACKAGE_NAME}" --version-code "${VERSION_CODE}" --rollout "${ROLLOUT}")
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            ARGS+=(--dry-run)
+          fi
+          python scripts/play_promote.py "${ARGS[@]}"

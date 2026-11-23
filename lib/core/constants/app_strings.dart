@@ -4293,6 +4293,25 @@ abstract final class VisitFlowStrings {
 }
 
 /// Strings for the AI Next Best Action (NABA) Step 3 screen.
+/// Step 3 guideline picture strip + full-size viewer (NABA `visuals`).
+abstract final class NabaVisualStrings {
+  NabaVisualStrings._();
+
+  /// Screen-reader label for a picture tile; [caption] is the tile's caption.
+  static String openPicture(String caption) => getTranslatedString(
+      'NabaVisual.openPicture', 'Open picture: {caption}',
+      params: {'caption': caption});
+  static String get close => getTranslatedString('NabaVisual.close', 'Close');
+  static String get previous =>
+      getTranslatedString('NabaVisual.previous', 'Previous picture');
+  static String get next => getTranslatedString('NabaVisual.next', 'Next picture');
+
+  /// Viewer position counter, e.g. "1 / 3".
+  static String pageOf(int current, int total) => getTranslatedString(
+      'NabaVisual.pageOf', '{current} / {total}',
+      params: {'current': '$current', 'total': '$total'});
+}
+
 abstract final class NabaStrings {
   NabaStrings._();
 

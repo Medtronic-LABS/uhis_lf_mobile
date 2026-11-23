@@ -1,7 +1,8 @@
 /// Dart models for the AI Next Best Action (NABA) service.
 ///
-/// Mirrors the Python Pydantic models in
-/// `leapfrog-setup/ai-scribe-service/app/models/naba.py`.
+/// Mirrors the NABA response of `spice_next_ai.api.naba.generate` (Frappe),
+/// which is the ai-scribe-service `NabaResponse` plus `citations` and
+/// `visuals`.
 ///
 /// Every [NabaResponse] carries a mandatory [RationalePayload] (architecture.md §5.2).
 /// The response is a *proposal* — FHIR resources are written only after the SK accepts.
@@ -438,6 +439,115 @@ class NabaFollowUpItem {
 
 // ── Primary response ──────────────────────────────────────────────────────────
 
+/// One guideline image as listed in a NABA response's `visuals` block.
+class NabaVisualImage {
+  const NabaVisualImage({
+    required this.visualKey,
+    required this.order,
+    required this.sha256,
+    required this.imagePath,
+  });
+
+  /// Stable server key, e.g. `anc-1-1-01`.
+  final String visualKey;
+
+  /// Position within its guideline pointer (1 = first).
+  final int order;
+
+  /// SHA-256 of the SVG bytes — also the server's ETag and the cache key.
+  final String sha256;
+
+  /// Server path to `GET` the SVG (relative to the Frappe base URL).
+  final String imagePath;
+
+  /// Null when a required field is missing or blank.
+  static NabaVisualImage? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final key = raw['visualKey'];
+    final sha = raw['sha256'];
+    final path = raw['imagePath'];
+    if (key is! String || key.isEmpty) return null;
+    if (sha is! String || sha.isEmpty) return null;
+    if (path is! String || path.isEmpty) return null;
+    final order = raw['order'];
+    return NabaVisualImage(
+      visualKey: key,
+      order: order is num ? order.toInt() : 0,
+      sha256: sha,
+      imagePath: path,
+    );
+  }
+}
+
+/// A guideline pointer's captions and images (`visuals[pointerId]`).
+class NabaGuidelineVisual {
+  const NabaGuidelineVisual({
+    required this.captionEn,
+    required this.captionBn,
+    required this.captionBnMachine,
+    required this.images,
+  });
+
+  final String captionEn;
+  final String captionBn;
+
+  /// True when [captionBn] is machine-translated and not yet clinically
+  /// reviewed. Shown as-is (product decision).
+  final bool captionBnMachine;
+
+  /// Sorted by [NabaVisualImage.order], ascending.
+  final List<NabaVisualImage> images;
+
+  /// Caption in the app's language; empty when none is stored for it.
+  String captionFor({required bool bangla}) =>
+      (bangla ? captionBn : captionEn).trim();
+
+  static NabaGuidelineVisual? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final rawImages = raw['images'];
+    final images = <NabaVisualImage>[
+      if (rawImages is List)
+        for (final i in rawImages) ?NabaVisualImage.tryParse(i),
+    ]..sort((a, b) => a.order.compareTo(b.order));
+    final en = raw['captionEn'];
+    final bn = raw['captionBn'];
+    return NabaGuidelineVisual(
+      captionEn: en is String ? en : '',
+      captionBn: bn is String ? bn : '',
+      captionBnMachine: raw['captionBnMachine'] == true,
+      images: List.unmodifiable(images),
+    );
+  }
+}
+
+/// Parses the `visuals` block; anything malformed is dropped, never thrown.
+Map<String, NabaGuidelineVisual> parseNabaVisuals(Object? raw) {
+  if (raw is! Map) return const {};
+  final out = <String, NabaGuidelineVisual>{};
+  raw.forEach((key, value) {
+    if (key is! String) return;
+    final visual = NabaGuidelineVisual.tryParse(value);
+    if (visual != null) out[key] = visual;
+  });
+  return Map.unmodifiable(out);
+}
+
+/// Parses the `citations` block: field name → one id list per item.
+Map<String, List<List<String>>> parseNabaCitations(Object? raw) {
+  if (raw is! Map) return const {};
+  final out = <String, List<List<String>>>{};
+  raw.forEach((field, rows) {
+    if (field is! String || rows is! List) return;
+    out[field] = List.unmodifiable([
+      for (final row in rows)
+        List<String>.unmodifiable(
+          row is List ? row.whereType<String>() : const <String>[],
+        ),
+    ]);
+  });
+  return Map.unmodifiable(out);
+}
+
 class NabaResponse {
   const NabaResponse({
     required this.requestId,
@@ -456,6 +566,8 @@ class NabaResponse {
     this.doctorHandover,
     this.referralRecommendation,
     this.contextTruncated = false,
+    this.citations = const {},
+    this.visuals = const {},
   });
 
   final String requestId;
@@ -474,6 +586,14 @@ class NabaResponse {
   final String? doctorHandover;
   final NabaReferralRecommendation? referralRecommendation;
   final bool contextTruncated;
+
+  /// Guideline pointer ids cited per response field, one list per item
+  /// (e.g. `citations['counselling'][i]`). Empty for the rule-based fallback.
+  final Map<String, List<List<String>>> citations;
+
+  /// Guideline images keyed by pointer id — only cited pointers that have
+  /// images. Empty when absent (rule-based fallback, older servers).
+  final Map<String, NabaGuidelineVisual> visuals;
 
   factory NabaResponse.fromJson(Map<String, dynamic> j) => NabaResponse(
         requestId: j['requestId'] as String? ?? '',
@@ -504,5 +624,7 @@ class NabaResponse {
                 j['referral_recommendation'] as Map<String, dynamic>)
             : null,
         contextTruncated: j['contextTruncated'] as bool? ?? false,
+        citations: parseNabaCitations(j['citations']),
+        visuals: parseNabaVisuals(j['visuals']),
       );
 }

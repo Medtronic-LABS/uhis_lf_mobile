@@ -1,0 +1,91 @@
+name: Develop Build
+
+# Builds a signed release APK from every merge into `develop`, configured by
+# env.develop.json, and publishes it for testers at a link that never changes:
+#
+#   https://github.com/<owner>/<repo>/releases/download/develop-latest/LW-Develop.apk
+#
+# The link is the `develop-latest` GitHub pre-release, replaced on every merge.
+# Each build is also kept for 14 days as a workflow artifact, for going back to
+# an earlier commit.
+#
+# It is not uploaded to Play. There are two Play listings (prod and training);
+# this is the prod-identity app (com.medtroniclabs.uhis_next) pointed at the
+# develop backend, so it must never reach the prod listing.
+#
+# The job runs in the `develop` GitHub Environment and reads ENV_JSON_BASE64
+# (base64 of env.develop.json) from it.
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  # Needed to replace the `develop-latest` pre-release and its tag.
+  contents: write
+
+concurrency:
+  # A newer merge supersedes a build still running for an older one.
+  group: develop-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build develop APK
+    runs-on: ubuntu-latest
+    environment: develop
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/prepare-release-build
+        with:
+          env-name: develop
+          env-json-base64: ${{ secrets.ENV_JSON_BASE64 }}
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Build release APK
+        run: |
+          chmod +x scripts/build_apk.sh
+          scripts/build_apk.sh develop --release --app-flavor prod
+
+      - name: Name the APK after its version and commit
+        id: apk
+        run: |
+          VERSION=$(awk '/^version:/{print $2; exit}' pubspec.yaml)
+          NAME="LW-Develop-${VERSION}-${GITHUB_SHA::8}"
+          cp build/app/outputs/flutter-apk/app-prod-release.apk "${NAME}.apk"
+          echo "name=${NAME}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.name }}.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish the APK at the shareable develop-latest link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_NAME: ${{ steps.apk.outputs.name }}
+          VERSION: ${{ steps.apk.outputs.version }}
+          RELEASE_TAG: develop-latest
+          STABLE_NAME: LW-Develop.apk
+        run: |
+          cp "${APK_NAME}.apk" "${STABLE_NAME}"
+          # Replace the previous build: the tag has to move to this commit.
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release delete "${RELEASE_TAG}" --cleanup-tag --yes
+          fi
+          gh release create "${RELEASE_TAG}" "${STABLE_NAME}" "${APK_NAME}.apk" \
+            --target "${GITHUB_SHA}" \
+            --prerelease \
+            --latest=false \
+            --title "Develop build ${VERSION} (${GITHUB_SHA::8})" \
+            --notes "Latest build of the \`develop\` branch, pointed at the develop backend. Not a Play Store release. Replaced on every merge into \`develop\`."
+          echo "Shareable link: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${STABLE_NAME}" >> "${GITHUB_STEP_SUMMARY}"

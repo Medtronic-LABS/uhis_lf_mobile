@@ -1,88 +1,253 @@
 name: Release Build
 
+# Ships each Play Store app from its own branch, following the promotion flow
+# develop -> training -> main:
+#
+#   push to `training`   -> build the training app, upload to its Internal testing track
+#   push to `main`       -> build the prod app, upload to its Internal testing track,
+#                           then tag the commit `v<version>` and create a GitHub Release
+#   manual run           -> build the chosen app only, never upload
+#
+# A push that does not change the version in pubspec.yaml is skipped: Play
+# rejects a versionCode it has already received.
+#
+# Each app's build and upload run in that app's GitHub Environment
+# (`production`, `training`). The environment supplies the per-app secrets:
+# ENV_JSON_BASE64 (the app's env.<name>.json) and PLAY_SERVICE_ACCOUNT_JSON.
+# Both environments MUST exist before this workflow runs: GitHub auto-creates a
+# missing environment with no secrets and no protection rules. Required
+# reviewers on an environment make every job that uses it wait for approval.
+#
+# Promotion from Internal testing to Production stays a manual step in Play
+# Console.
+
 on:
   push:
-    tags: ['v*']
+    branches: [training, main]
   workflow_dispatch:
     inputs:
+      app:
+        description: 'Which app to build (build only, never published)'
+        type: choice
+        options: [prod, training]
+        default: prod
       version:
         description: 'X.Y.Z+N, or patch/minor/major, or blank to use pubspec.yaml as-is'
         required: false
 
 jobs:
-  build:
+  plan:
+    name: Decide what to release
     runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      publish: ${{ steps.plan.outputs.publish }}
+      app_flavor: ${{ steps.plan.outputs.app_flavor }}
+      env_name: ${{ steps.plan.outputs.env_name }}
+      package_name: ${{ steps.plan.outputs.package_name }}
+      version: ${{ steps.plan.outputs.version }}
 
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.8'
-          channel: stable
-
-      - name: Reconstruct signing keystore
+      - name: Work out the app, the version and whether to publish
+        id: plan
+        env:
+          INPUT_APP: ${{ github.event.inputs.app }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          mkdir -p android/app/keystore
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore/upload.jks
-          cat > android/key.properties <<EOF
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          storeFile=${{ github.workspace }}/android/app/keystore/upload.jks
-          EOF
+          VERSION=$(awk '/^version:/{print $2; exit}' pubspec.yaml)
+          RUN=true
+          PUBLISH=false
 
-      - name: Reconstruct env.production.json
-        run: echo "${{ secrets.ENV_PRODUCTION_JSON_BASE64 }}" | base64 -d > env.production.json
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+            push:refs/heads/training|push:refs/heads/main)
+              if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+                APP_FLAVOR=prod
+              else
+                APP_FLAVOR=training
+              fi
+              PUBLISH=true
+              PREVIOUS_VERSION=""
+              if [[ ! "${BEFORE_SHA}" =~ ^0+$ ]] && git fetch --quiet --depth=1 origin "${BEFORE_SHA}"; then
+                PREVIOUS_VERSION=$(git show "${BEFORE_SHA}:pubspec.yaml" | awk '/^version:/{print $2; exit}')
+              fi
+              if [[ "${PREVIOUS_VERSION}" == "${VERSION}" ]]; then
+                echo "::notice::pubspec.yaml version is still ${VERSION}; nothing new to release to the ${APP_FLAVOR} app."
+                RUN=false
+                PUBLISH=false
+              fi
+              ;;
+            workflow_dispatch:*)
+              APP_FLAVOR="${INPUT_APP}"
+              ;;
+            *)
+              echo "::error::Unexpected trigger ${GITHUB_EVENT_NAME} on ${GITHUB_REF}."
+              exit 1
+              ;;
+          esac
+
+          case "${APP_FLAVOR}" in
+            prod)
+              ENV_NAME=production
+              PACKAGE_NAME=com.medtroniclabs.uhis_next
+              ;;
+            training)
+              ENV_NAME=training
+              PACKAGE_NAME=com.medtroniclabs.uhis_next.training
+              ;;
+            *)
+              echo "::error::Unknown app '${APP_FLAVOR}'."
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "run=${RUN}"
+            echo "publish=${PUBLISH}"
+            echo "app_flavor=${APP_FLAVOR}"
+            echo "env_name=${ENV_NAME}"
+            echo "package_name=${PACKAGE_NAME}"
+            echo "version=${VERSION}"
+          } >> "${GITHUB_OUTPUT}"
+
+  build:
+    name: Build ${{ needs.plan.outputs.app_flavor }}
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    # The environment is named after the env file: production or training.
+    environment: ${{ needs.plan.outputs.env_name }}
+    env:
+      APP_FLAVOR: ${{ needs.plan.outputs.app_flavor }}
+      ENV_NAME: ${{ needs.plan.outputs.env_name }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/prepare-release-build
+        with:
+          env-name: ${{ needs.plan.outputs.env_name }}
+          env-json-base64: ${{ secrets.ENV_JSON_BASE64 }}
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Write Firebase config (LEAP-152)
         env:
-          GOOGLE_SERVICES_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_PROD_BASE64 }}
+          GS_PROD: ${{ secrets.GOOGLE_SERVICES_PROD_BASE64 }}
+          GS_TRAINING: ${{ secrets.GOOGLE_SERVICES_TRAINING_BASE64 }}
         run: |
-          # A store release must ship analytics: fail loudly if the secret is missing.
-          if [ -z "$GOOGLE_SERVICES_PROD_BASE64" ]; then
-            echo "Missing repository secret GOOGLE_SERVICES_PROD_BASE64" >&2
+          # google-services.json is not committed (public repo). A store build
+          # must ship analytics, so fail if this app's config is missing.
+          if [ "${APP_FLAVOR}" = "prod" ]; then
+            DATA="${GS_PROD}"; SECRET=GOOGLE_SERVICES_PROD_BASE64
+          else
+            DATA="${GS_TRAINING}"; SECRET=GOOGLE_SERVICES_TRAINING_BASE64
+          fi
+          if [ -z "${DATA}" ]; then
+            echo "::error::Missing repository secret ${SECRET}"
             exit 1
           fi
-          mkdir -p android/app/src/prod
-          echo "$GOOGLE_SERVICES_PROD_BASE64" | base64 -d > android/app/src/prod/google-services.json
+          mkdir -p "android/app/src/${APP_FLAVOR}"
+          echo "${DATA}" | base64 -d > "android/app/src/${APP_FLAVOR}/google-services.json"
 
-      - name: Build, verify signer, and (on tag push) skip re-tagging
+      - name: Build and verify signer
+        env:
+          VERSION_INPUT: ${{ github.event.inputs.version }}
         run: |
           chmod +x scripts/release.sh
-          scripts/release.sh production "${{ github.event.inputs.version }}" --app-flavor prod
+          scripts/release.sh "${ENV_NAME}" "${VERSION_INPUT}" --app-flavor "${APP_FLAVOR}"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: app-release-aab
-          path: build/app/outputs/bundle/prodRelease/app-prod-release.aab
+          name: aab-${{ needs.plan.outputs.app_flavor }}
+          path: build/app/outputs/bundle/${{ needs.plan.outputs.app_flavor }}Release/app-${{ needs.plan.outputs.app_flavor }}-release.aab
+          if-no-files-found: error
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+  github-release:
+    name: Tag the release and attach the bundle
+    # Runs after the upload, so a tag always marks a build that reached Play.
+    # Only the prod app is tagged, so only it gets a GitHub Release.
+    needs: [plan, build, publish-play-store]
+    if: needs.plan.outputs.publish == 'true' && needs.plan.outputs.app_flavor == 'prod'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: aab-${{ needs.plan.outputs.app_flavor }}
+          path: bundle
+
+      - name: Create the tag and the GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: build/app/outputs/bundle/prodRelease/app-prod-release.aab
+          tag_name: v${{ needs.plan.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          files: bundle/*.aab
+          fail_on_unmatched_files: true
 
-  # ── Follow-up, NOT wired live ────────────────────────────────────────────
-  # No Play Console service account exists yet for this app (creating one is a
-  # Play Console admin action outside this codebase — see RELEASE_PLAN.md).
-  # Once PLAY_SERVICE_ACCOUNT_JSON is added as a repo secret, uncomment:
-  #
-  # publish-play-store:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/download-artifact@v8
-  #       with:
-  #         name: app-release-aab
-  #     - uses: r0adkll/upload-google-play@v1.1.5
-  #       with:
-  #         serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-  #         packageName: com.medtroniclabs.uhis_next
-  #         releaseFiles: app-release.aab
-  #         track: internal
+  publish-play-store:
+    name: Publish ${{ needs.plan.outputs.app_flavor }} to Play (internal track)
+    needs: [plan, build]
+    # Never on a manual run: it can bump the version without committing it.
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.plan.outputs.env_name }}
+    env:
+      APP_FLAVOR: ${{ needs.plan.outputs.app_flavor }}
+      ENV_NAME: ${{ needs.plan.outputs.env_name }}
+      VERSION: ${{ needs.plan.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: store_assets/release_notes
+
+      - name: Prepare "what's new" from the release notes
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          VERSION_NAME="${VERSION%%+*}"
+          NOTES_DIR="store_assets/release_notes"
+          if [[ ! -f "${NOTES_DIR}/${VERSION_NAME}_en-US.txt" ]]; then
+            echo "::error::${NOTES_DIR}/${VERSION_NAME}_en-US.txt is missing. Commit the release notes with the version bump."
+            exit 1
+          fi
+          mkdir -p whatsnew
+          for notes in "${NOTES_DIR}/${VERSION_NAME}"_*.txt; do
+            locale="${notes##*_}"
+            locale="${locale%.txt}"
+            chars=$(wc -m < "${notes}")
+            if (( chars > 500 )); then
+              echo "::error::${notes} is ${chars} characters; Play allows 500 per language."
+              exit 1
+            fi
+            cp "${notes}" "whatsnew/whatsnew-${locale}"
+          done
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: aab-${{ needs.plan.outputs.app_flavor }}
+          path: bundle
+
+      - name: Check the Play service account secret is available
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [[ -z "${PLAY_SERVICE_ACCOUNT_JSON}" ]]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON is not set in the '${ENV_NAME}' environment."
+            exit 1
+          fi
+
+      - uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ needs.plan.outputs.package_name }}
+          releaseFiles: bundle/app-${{ needs.plan.outputs.app_flavor }}-release.aab
+          track: internal
+          status: completed
+          whatsNewDirectory: whatsnew

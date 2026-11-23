@@ -15022,5 +15022,25 @@
   "Epi.scanNcdCardCta": {
     "en": "Scan NCD card",
     "bn": "এনসিডি কার্ড স্ক্যান করুন"
+  },
+  "NabaVisual.openPicture": {
+    "en": "Open picture: {caption}",
+    "bn": "ছবিটি খুলুন: {caption}"
+  },
+  "NabaVisual.close": {
+    "en": "Close",
+    "bn": "বন্ধ করুন"
+  },
+  "NabaVisual.previous": {
+    "en": "Previous picture",
+    "bn": "আগের ছবি"
+  },
+  "NabaVisual.next": {
+    "en": "Next picture",
+    "bn": "পরের ছবি"
+  },
+  "NabaVisual.pageOf": {
+    "en": "{current} / {total}",
+    "bn": "{current} / {total}"
   }
 }

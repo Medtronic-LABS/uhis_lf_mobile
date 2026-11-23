@@ -468,6 +468,21 @@ class AppConfig {
     return _joinGatewaySegment(_shukheeGatewaySegment);
   }
 
+  /// Base URL of the Frappe site's `spice_next_ai` app — Step 3 NABA
+  /// (`spice_next_ai.api.naba.generate`) and its guideline images
+  /// (`naba.visual_image`). Own getter for the same reason as
+  /// [spiceNextCoreApiBaseUrl]: if the apps are split behind different
+  /// gateway paths, only this getter changes.
+  ///
+  /// - Dev/prod: `<API_BASE_URL>/admin-api`, same as [shukheeApiBaseUrl].
+  /// - Local override: set `SPICE_NEXT_AI_API_BASE_URL` to a complete base
+  ///   URL (e.g. `http://127.0.0.1:8081` with `adb reverse tcp:8081 tcp:8081`).
+  static String get spiceNextAiApiBaseUrl {
+    const local = String.fromEnvironment('SPICE_NEXT_AI_API_BASE_URL', defaultValue: '');
+    if (local.isNotEmpty) return local;
+    return _joinGatewaySegment(_shukheeGatewaySegment);
+  }
+
   /// Feature flag: whether the real Shukhee teleconsult flow is wired up.
   /// Default off -- this integrates against a real third-party vendor with
   /// per-SK provisioning requirements on the backend (an Active `UHIS
