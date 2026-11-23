@@ -137,7 +137,7 @@ class AssistantRepository {
     } on DioException catch (e) {
       ConsoleLog.warn('[PayloadDebug] coaching-rag error: $e');
       throw AssistantException(NetworkErrorMapper.friendly(e),
-          statusCode: e.response?.statusCode);
+          statusCode: e.response?.statusCode, cause: e);
     }
   }
 
@@ -182,7 +182,7 @@ class AssistantRepository {
     } on DioException catch (e) {
       ConsoleLog.warn('[PayloadDebug] assistant-ask error: $e');
       throw AssistantException(NetworkErrorMapper.friendly(e),
-          statusCode: e.response?.statusCode);
+          statusCode: e.response?.statusCode, cause: e);
     }
   }
 }

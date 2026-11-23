@@ -60,13 +60,15 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
                     ?: (BuildConfig.API_BASE_URL.trimEnd('/') + "/micro-coaching/medtronics-api/")
                 val lang = call.argument<String>("language") ?: "bn"
                 val hfToken = call.argument<String>("hfToken") ?: ""
-                Log.d(TAG, "initialize: url=$url lang=$lang hfToken=${hfToken.isNotEmpty()} token=${token.take(10)}...")
+                val analyticsEnabled = call.argument<Boolean>("analyticsEnabled") ?: false
+                Log.d(TAG, "initialize: url=$url lang=$lang hfToken=${hfToken.isNotEmpty()} analytics=$analyticsEnabled token=${token.take(10)}...")
                 try {
                     MainApplication.initSdk(
                         authToken = token,
                         backendUrl = url,
                         language = lang,
                         hfToken = hfToken,
+                        analyticsEnabled = analyticsEnabled,
                     )
                     Log.d(TAG, "initialize: SDK init success")
                     result.success(null)

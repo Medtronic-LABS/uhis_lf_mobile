@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
@@ -90,8 +92,29 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
+    _tabs.addListener(_onTabChanged);
     _load();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadProfile());
+  }
+
+  // GA (LEAP-152) — tab keys in TabBar order.
+  static const _gaTabs = ['performance', 'my_patients', 'dashboard'];
+  int _gaLastTab = 0;
+
+  void _onTabChanged() {
+    if (_tabs.indexIsChanging || _tabs.index == _gaLastTab) return;
+    // Each tab is its own page in GA.
+    Analytics.screen(const [
+      AnalyticsScreen.skPerformance,
+      AnalyticsScreen.skMyPatients,
+      AnalyticsScreen.skKpiDashboard,
+    ][_tabs.index]);
+    Analytics.event(AnalyticsEvent.tabSelected, {
+      AnalyticsParam.source: AnalyticsValue.performance,
+      AnalyticsParam.tab: _gaTabs[_tabs.index],
+      AnalyticsParam.fromTab: _gaTabs[_gaLastTab],
+    });
+    _gaLastTab = _tabs.index;
   }
 
   Future<void> _loadProfile() async {
@@ -186,7 +209,17 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
                 children: [
                   _PeriodToggle(
                     showMonth: _showMonth,
-                    onToggle: (v) => setState(() => _showMonth = v),
+                    onToggle: (v) {
+                      if (v != _showMonth) {
+                        Analytics.event(AnalyticsEvent.filterApplied, {
+                          AnalyticsParam.source: AnalyticsValue.performance,
+                          AnalyticsParam.filter: AnalyticsValue.period,
+                          AnalyticsParam.action: AnalyticsValue.select,
+                          AnalyticsParam.filterValue: v ? 'month' : 'week',
+                        });
+                      }
+                      setState(() => _showMonth = v);
+                    },
                   ),
                   const SizedBox(height: 14),
                   _HeroCard(stats: stats, showMonth: _showMonth),
@@ -229,6 +262,10 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
                 itemBuilder: (context, i) => _MyPatientCard(
                   item: items[i],
                   onTap: () {
+                    Analytics.event(AnalyticsEvent.patientTapped, {
+                      AnalyticsParam.source: AnalyticsValue.performance,
+                      AnalyticsParam.position: i + 1,
+                    });
                     final pid = items[i].patient.id;
                     if (pid.isNotEmpty) context.push('/patients/$pid');
                   },

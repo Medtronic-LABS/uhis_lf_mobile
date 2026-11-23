@@ -5,6 +5,9 @@ import 'dart:io' show GZipCodec;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../analytics/analytics.dart';
+import '../analytics/analytics_events.dart';
+
 import '../api/api_client.dart';
 import '../debug/console_log.dart';
 import '../api/endpoints.dart';
@@ -240,19 +243,79 @@ class OfflineSyncService extends ChangeNotifier {
   /// by the online-login flow (`SyncProgressScreen`), never by
   /// `worklist_screen.dart`'s cold-sync safety net, so an already-signed-in
   /// user who simply hasn't synced yet never has their data wiped.
-  Future<SyncReport> coldSync({bool wipeBeforeSync = false}) =>
-      _runSync(fullSync: true, wipeBeforeSync: wipeBeforeSync);
+  Future<SyncReport> coldSync({bool wipeBeforeSync = false}) => _tracked(
+      wipeBeforeSync ? AnalyticsValue.firstLogin : AnalyticsValue.fullSync,
+      () => _runSync(fullSync: true, wipeBeforeSync: wipeBeforeSync));
 
   /// Pull-to-refresh — delta filter using the cached `lastSyncTime`. Never
   /// wipes local data.
-  Future<SyncReport> warmSync() => _runSync(fullSync: false);
+  ///
+  /// [trigger] is only the GA `sync_completed.trigger` label (LEAP-152):
+  /// `manual`, `pull_refresh` or `auto`.
+  Future<SyncReport> warmSync({String trigger = AnalyticsValue.manual}) =>
+      _tracked(trigger, () => _runSync(fullSync: false));
 
   /// Same-user relogin after session expiry: delta record filter (bandwidth-
   /// friendly) but an always-fresh village/sub-village scope (a relogin gap
   /// is exactly when a server-side reassignment is most plausible).
   Future<SyncReport> reloginSync() {
     debugPrint('[OfflineSyncService] reloginSync() — delta fetch, fresh village scope');
-    return _runSync(fullSync: false, refreshVillageIds: true);
+    return _tracked(AnalyticsValue.relogin,
+        () => _runSync(fullSync: false, refreshVillageIds: true));
+  }
+
+  /// True when [_runSync] would short-circuit with "Sync already running".
+  bool get _busy =>
+      _running ||
+      SyncActivity.householdMemberPushInFlight ||
+      SyncActivity.assessmentPushInFlight;
+
+  /// GA `sync_started` / `sync_completed` around one pull (LEAP-152).
+  /// Skips the no-op "already running" short-circuit, so every
+  /// `sync_started` has a matching `sync_completed`.
+  Future<SyncReport> _tracked(
+      String trigger, Future<SyncReport> Function() run) async {
+    if (_busy) return run();
+    Analytics.event(
+        AnalyticsEvent.syncStarted, {AnalyticsParam.trigger: trigger});
+    final report = await run();
+    if (report.errors.length == 1 &&
+        report.errors.first == 'Sync already running') {
+      return report;
+    }
+    Analytics.event(AnalyticsEvent.syncCompleted, {
+      AnalyticsParam.trigger: trigger,
+      AnalyticsParam.result:
+          report.ok ? AnalyticsValue.success : AnalyticsValue.failed,
+      AnalyticsParam.failureReason:
+          report.ok ? null : _syncFailureReason(report.errors.first),
+      AnalyticsParam.durationMs:
+          report.finishedAt.difference(report.startedAt).inMilliseconds,
+      AnalyticsParam.households: report.households,
+      AnalyticsParam.members: report.members,
+    });
+    return report;
+  }
+
+  /// Fixed GA failure label from a sync error string (never the text).
+  static String _syncFailureReason(String error) {
+    final e = error.toLowerCase();
+    if (e.contains('timeout') || e.contains('timed out')) {
+      return AnalyticsValue.timeout;
+    }
+    if (e.contains('socket') ||
+        e.contains('connection') ||
+        e.contains('network') ||
+        e.contains('offline')) {
+      return AnalyticsValue.offline;
+    }
+    if (e.contains('userid') || e.contains('re-login')) {
+      return AnalyticsValue.sessionExpired;
+    }
+    if (e.contains(' 5') || e.contains('server')) {
+      return AnalyticsValue.serverError;
+    }
+    return AnalyticsValue.other;
   }
 
   Future<SyncReport> _runSync({
@@ -260,9 +323,7 @@ class OfflineSyncService extends ChangeNotifier {
     bool wipeBeforeSync = false,
     bool? refreshVillageIds,
   }) async {
-    if (_running ||
-        SyncActivity.householdMemberPushInFlight ||
-        SyncActivity.assessmentPushInFlight) {
+    if (_busy) {
       return SyncReport.empty().copyWith(
         errors: const ['Sync already running'],
       );

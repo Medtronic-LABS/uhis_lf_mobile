@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/analytics/analytics.dart';
+import '../../../core/analytics/analytics_events.dart';
+import '../../../core/analytics/visit_analytics.dart';
 import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/clinical/referral_evaluator.dart';
@@ -2151,11 +2154,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// applied, for the caller's confirmation UI / telemetry.
   int applyScannedAncVisit(AncVisitExtraction visit) {
     var appliedCount = 0;
-    for (final entry in _ancScanFieldMap(visit).entries) {
+    final scanned = _ancScanFieldMap(visit);
+    if (scanned.isNotEmpty) _gaScanCards.add('anc'); // GA (LEAP-152)
+    for (final entry in scanned.entries) {
       final fieldId = entry.key;
       if (_isSkOwned(fieldId)) {
         debugPrint('[AncScan] SKIPPED [$fieldId] SK-owned — '
             'value "${entry.value}" NOT applied');
+        // GA: the card had a value but the SK's own entry won → rejected.
+        _gaScanSkipped.addAll(_captureLeaves(fieldId));
         continue;
       }
       _data = _data.setValue(fieldId, entry.value);
@@ -2201,11 +2208,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// UI / telemetry.
   int applyScannedNcdVisit(NcdVisitExtraction visit) {
     var appliedCount = 0;
-    for (final entry in _ncdScanFieldMap(visit).entries) {
+    final scanned = _ncdScanFieldMap(visit);
+    if (scanned.isNotEmpty) _gaScanCards.add('ncd'); // GA (LEAP-152)
+    for (final entry in scanned.entries) {
       final fieldId = entry.key;
       if (_isSkOwned(fieldId)) {
         debugPrint('[NcdScan] SKIPPED [$fieldId] SK-owned — '
             'value "${entry.value}" NOT applied');
+        // GA: the card had a value but the SK's own entry won → rejected.
+        _gaScanSkipped.addAll(_captureLeaves(fieldId));
         continue;
       }
       _data = _data.setValue(fieldId, entry.value);
@@ -2486,7 +2497,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         }
       }
 
-      final skLocation = await LocationService.getCurrentPosition();
+      final skLocation = await LocationService.getCurrentPosition(source: 'visit');
       for (final payload in payloads) {
         ConsoleLog.banner(
           '[PayloadDebug] submit — ${payload.assessmentType} payload:\n'
@@ -2595,6 +2606,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       // Report telemetry last: every clinical write above has succeeded by
       // now, and this call cannot throw (see _emitVisitTelemetry).
       await _emitVisitTelemetry();
+      await _emitAnalytics();
       return savedIds;
     } catch (e) {
       _submitError = e.toString();
@@ -2692,6 +2704,164 @@ class UnifiedFormNotifier extends ChangeNotifier {
       await _writeValueAudit(visitUuid);
     } on Object catch (e) {
       debugPrint('[Telemetry] visit_completed not emitted: $e');
+    }
+  }
+
+  // ── Google Analytics (LEAP-152) ────────────────────────────────────────
+  // Separate from the in-house telemetry above: reads the same provenance
+  // and changes nothing it reports.
+
+  /// Leaf fields each card can fill — mirrors [_ancScanFieldMap] /
+  /// [_ncdScanFieldMap] (blood pressure as its leaves).
+  static const Map<String, Set<String>> _gaScanTargets = {
+    'anc': {
+      'weight', 'systolic', 'diastolic', 'pulse', 'temperature',
+      'hemoglobin', 'glucose', 'fundalHeight', 'edema', 'urinaryAlbumin',
+      'urinaryBilirubin', 'ultrasound', 'ttTdCompleted',
+    },
+    'ncd': {'weight', 'height', 'systolic', 'diastolic', 'glucose', 'glucoseType'},
+  };
+
+  /// Cards whose scan was applied to this form (`anc`, `ncd`).
+  final Set<String> _gaScanCards = {};
+
+  /// Fields the card had a value for but the SK had already entered.
+  final Set<String> _gaScanSkipped = {};
+
+  /// GA `form_submitted`, one `ai_field_outcome` per AI-related field and
+  /// `scribe_result`, after a successful save. Values never leave the phone;
+  /// only field ids, outcomes and counts. Never throws.
+  Future<void> _emitAnalytics() async {
+    try {
+      final b = classifyFieldProvenance();
+      final capture = telemetryVisitCapture();
+      final visibleLeaves = {
+        for (final id in _visibleFieldIds) ..._captureLeaves(id),
+      };
+      final scanTargets = {
+        for (final c in _gaScanCards) ...?_gaScanTargets[c],
+      }.intersection(visibleLeaves);
+      final aiKept = capture.aiAcceptedUnchanged.toSet();
+      final aiEdited = capture.aiCorrected.toSet();
+      final scanFilled = {...b.scanCorrected, ...b.scanAcceptedUnchanged};
+      final scribeUsed = _scribeStartedAtMs != null ||
+          aiKept.isNotEmpty ||
+          aiEdited.isNotEmpty ||
+          _aiOverriddenFieldIds.isNotEmpty;
+      final scanUsed = _gaScanCards.isNotEmpty;
+
+      String filledBy(String f) {
+        if (b.manual.contains(f)) return AnalyticsValue.manual;
+        if (scanFilled.contains(f)) return AnalyticsValue.scan;
+        if (b.prefilled.contains(f)) return 'prefilled';
+        if (b.derived.contains(f)) return 'derived';
+        return _data.getValue(f) == null ? 'empty' : 'other';
+      }
+
+      final visit = GaVisit.of(_encounterId);
+      final programmes = (List<String>.from(_activeFormTypes)..sort()).join(',');
+      final aiCount = aiKept.length + aiEdited.length;
+      final started = _scribeStartedAtMs;
+      final ended = _scribeEndedAtMs;
+
+      Analytics.event(AnalyticsEvent.formSubmitted, {
+        AnalyticsParam.visitId: visit?.visitId,
+        AnalyticsParam.programmes: programmes,
+        AnalyticsParam.fieldsTotal: b.libraryTotal,
+        AnalyticsParam.fieldsShown: _renderedFieldCount,
+        AnalyticsParam.fieldsExtractable: capture.extractableVisible,
+        AnalyticsParam.fieldsAi: aiCount,
+        AnalyticsParam.fieldsScan: scanFilled.length,
+        AnalyticsParam.fieldsManual: b.manual.length,
+        AnalyticsParam.fieldsPrefilled: b.prefilled.length,
+        AnalyticsParam.fieldsDerived: b.derived.length,
+        AnalyticsParam.fieldsEmpty: b.empty.length,
+        AnalyticsParam.formMs: await _visitDurationMs(),
+        AnalyticsParam.manualEditMs: _manualEditingMs(),
+        AnalyticsParam.scribeUsed: scribeUsed,
+        AnalyticsParam.scanUsed: scanUsed,
+        AnalyticsParam.micSecTotal: visit?.micSecTotal(2),
+        AnalyticsParam.micSessions: visit?.micSessions(2),
+        AnalyticsParam.scribeSpanMs: started != null &&
+                ended != null &&
+                ended > started
+            ? ended - started
+            : null,
+      });
+
+      sendAiFieldOutcomes(
+        aiFieldOutcomes(
+          scribeCapture: capture.captureFieldIds.toSet(),
+          aiKept: aiKept,
+          aiEdited: aiEdited,
+          aiRejected: _aiOverriddenFieldIds.toSet(),
+          scribeUsed: scribeUsed,
+          scanTargets: scanTargets,
+          scanKept: b.scanAcceptedUnchanged,
+          scanEdited: b.scanCorrected,
+          scanRejected: _gaScanSkipped,
+          scanUsed: scanUsed,
+          filledBy: filledBy,
+        ),
+        visitId: visit?.visitId,
+        programmes: programmes,
+      );
+
+      // Fields outside scribe's capture list, by name (LEAP-152): which
+      // fields SKs type or leave empty that scribe doesn't try to fill.
+      for (final f in fieldSourcesOutsideCapture(
+        capture: capture.captureFieldIds.toSet(),
+        manual: b.manual,
+        prefilled: b.prefilled,
+        derived: b.derived,
+        empty: b.empty,
+      )) {
+        Analytics.event(AnalyticsEvent.fieldSource, {
+          AnalyticsParam.visitId: visit?.visitId,
+          AnalyticsParam.field: f.field,
+          AnalyticsParam.filledBy: f.source,
+          AnalyticsParam.programmes: programmes,
+        });
+      }
+
+      if (scribeUsed) {
+        final reasons = asrFailureReasons;
+        String? topReason;
+        if (reasons != null && reasons.isNotEmpty) {
+          topReason = (reasons.entries.toList()
+                ..sort((a, b) => b.value.compareTo(a.value)))
+              .first
+              .key;
+        }
+        Analytics.event(AnalyticsEvent.scribeResult, {
+          AnalyticsParam.visitId: visit?.visitId,
+          AnalyticsParam.step: 2,
+          AnalyticsParam.result: asrOutcome ?? AnalyticsValue.failed,
+          AnalyticsParam.failureReason: topReason,
+          AnalyticsParam.fieldsFilled: aiCount,
+        });
+      }
+
+      if (visit != null) {
+        if (scribeUsed) visit.markScribeUsed(step: 2);
+        if (scanUsed) visit.markScanUsed();
+        final ai = aiCount > 0;
+        final scan = scanFilled.isNotEmpty;
+        final manual = b.manual.isNotEmpty;
+        final modes = [ai, scan, manual].where((x) => x).length;
+        visit.setInputMode(
+          2,
+          modes > 1
+              ? AnalyticsValue.mixed
+              : ai
+                  ? AnalyticsValue.voice
+                  : scan
+                      ? AnalyticsValue.scan
+                      : AnalyticsValue.manual,
+        );
+      }
+    } on Object catch (e) {
+      debugPrint('[Analytics] form events not sent: $e');
     }
   }
 

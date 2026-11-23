@@ -9,6 +9,7 @@ import '../../features/visit/assessment_repository.dart';
 import 'call_log_sync_service.dart';
 import 'offline_push_service.dart';
 import 'offline_sync_service.dart';
+import '../analytics/analytics_events.dart';
 
 const _retryDelay = Duration(seconds: 30);
 
@@ -183,7 +184,7 @@ class SyncConnectivityService {
             return;
           }
           // Warm pull after push so the worklist refreshes with any server updates.
-          await _syncService.warmSync();
+          await _syncService.warmSync(trigger: AnalyticsValue.auto);
           debugPrint('[SyncConnectivity] AutomaticSync warm pull complete');
         })
         .then((_) {

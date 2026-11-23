@@ -41,6 +41,10 @@ import 'package:pdfx/pdfx.dart';
 import 'package:provider/provider.dart';
 import 'package:shukhee_sdk/shukhee_sdk.dart';
 
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
+import '../../core/analytics/teleconsult_analytics.dart';
+import '../../core/analytics/visit_analytics.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/local_assessment_dao.dart';
@@ -219,6 +223,18 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   String? _lastSpeciality;
   Map<String, List<ShukheeMediaFile>> _lastMediaGroups = const {};
 
+  // GA (LEAP-152) teleconsult funnel state.
+  int _gaAttempt = 0;
+  int? _gaBookedAtMs;
+  bool _gaDoctorSent = false;
+  bool _gaEndSent = false;
+  /// Shown under the contact number when the backend rejected it, so the SK
+  /// fixes the number instead of retrying the same one.
+  String? _phoneServerError;
+
+  String? get _gaVisitId => _gaVisit?.visitId;
+  int get _nowMs => DateTime.now().millisecondsSinceEpoch;
+
   static const _minConnectingDuration = Duration(seconds: 2);
   Timer? _connectingMinDurationTimer;
 
@@ -233,12 +249,23 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
           assessmentDao: context.read<LocalAssessmentDao>(),
           pregnancySnapshotDao: context.read<PregnancySnapshotDao>(),
         );
+    // GA (LEAP-152): time on the call screen is not Step 3 time.
+    _gaVisit = GaVisit.of(widget.visitId);
+    _gaVisit?.pause(GaVisitPause.teleconsult);
   }
+
+  /// The GA visit this call belongs to, when opened from a visit's Step 3.
+  GaVisit? _gaVisit;
 
   @override
   void dispose() {
     _liveTimer?.cancel();
     _connectingMinDurationTimer?.cancel();
+    // GA: SK left after booking but before a final status.
+    if (_booking != null) _gaCallEnded(AnalyticsValue.left);
+    _gaVisit
+      ?..markTeleconsultEnded()
+      ..resume(GaVisitPause.teleconsult);
     super.dispose();
   }
 
@@ -250,10 +277,21 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
     _lastContactNumber = contactNumber;
     _lastSpeciality = speciality;
     _lastMediaGroups = mediaGroups;
+    _phoneServerError = null;
+    _gaAttempt++;
+    Analytics.event(AnalyticsEvent.teleconsultBookingSubmitted, {
+      AnalyticsParam.visitId: _gaVisitId,
+      AnalyticsParam.speciality: speciality,
+      AnalyticsParam.photosPrescription: mediaGroups['prescription']?.length ?? 0,
+      AnalyticsParam.photosLabReport: mediaGroups['lab_report']?.length ?? 0,
+      AnalyticsParam.contactFromRecord: sameBdMobile(contactNumber, widget.patientPhone),
+      AnalyticsParam.attempt: _gaAttempt,
+    });
 
     final permitted = await _permissionService.ensureCameraAndMicPermission(context);
     if (!mounted) return;
     if (!permitted) {
+      _gaBookingResult(failureReason: AnalyticsValue.cameraMicDenied);
       setState(() {
         _stage = _Stage.error;
         _error = TeleconsultCameraMicRequiredException(TeleconsultStrings.cameraMicRequiredBody);
@@ -284,6 +322,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         referredReasons: widget.referredReasons,
       );
       if (!mounted) return;
+      final gaStartedMs = _nowMs;
       final booking = await _client.startConsultation(
         contactNumber: contactNumber,
         reason: (widget.reason?.trim().isNotEmpty ?? false)
@@ -305,12 +344,62 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         lng: widget.consentLng ?? (AppLocale.isBangla ? 'bn' : 'en'),
         itemsChecked: widget.itemsChecked,
       );
+      _gaBookedAtMs = _nowMs;
+      _gaDoctorSent = false;
+      _gaEndSent = false;
+      _gaBookingResult(responseMs: _gaBookedAtMs! - gaStartedMs);
       if (!mounted) return;
       setState(() => _booking = booking);
       unawaited(_pollInBackground(booking.callLog));
     } on ShukheeException catch (e) {
-      if (mounted) _handleError(e);
+      final reason = teleconsultFailureReason(e);
+      _gaBookingResult(failureReason: reason);
+      if (!mounted) return;
+      if (reason == AnalyticsValue.invalidMobile) {
+        // Back to the form with the number kept and the reason shown --
+        // retrying the same number can never succeed.
+        _connectingMinDurationTimer?.cancel();
+        setState(() {
+          _stage = _Stage.booking;
+          _phoneServerError = TeleconsultStrings.contactNumberInvalid;
+        });
+        return;
+      }
+      _handleError(e);
     }
+  }
+
+  void _gaBookingResult({String? failureReason, int? responseMs}) {
+    Analytics.event(AnalyticsEvent.teleconsultBookingResult, {
+      AnalyticsParam.visitId: _gaVisitId,
+      AnalyticsParam.result:
+          failureReason == null ? AnalyticsValue.success : AnalyticsValue.failed,
+      AnalyticsParam.failureReason: failureReason,
+      AnalyticsParam.attempt: _gaAttempt,
+      AnalyticsParam.responseMs: responseMs,
+    });
+  }
+
+  /// GA `teleconsult_call_ended` — once per booking.
+  void _gaCallEnded(String result) {
+    if (_gaEndSent) return;
+    _gaEndSent = true;
+    final booked = _gaBookedAtMs;
+    final started = _callStartedAt?.millisecondsSinceEpoch;
+    Analytics.event(AnalyticsEvent.teleconsultCallEnded, {
+      AnalyticsParam.visitId: _gaVisitId,
+      AnalyticsParam.result: result,
+      AnalyticsParam.speciality: _lastSpeciality,
+      AnalyticsParam.waitMs: (booked != null && started != null) ? started - booked : null,
+      AnalyticsParam.callMs: started != null ? _nowMs - started : null,
+    });
+  }
+
+  void _gaContinueWithoutCall(String after) {
+    Analytics.event(AnalyticsEvent.teleconsultContinueWithoutCall, {
+      AnalyticsParam.visitId: _gaVisitId,
+      AnalyticsParam.after: after,
+    });
   }
 
   /// Re-submits with the values from the most recent attempt -- used by the
@@ -351,6 +440,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         _callStartedAt = DateTime.now();
         _liveElapsed = Duration.zero;
       });
+      _gaVisit?.markTeleconsultStarted();
       _startLiveTimer();
     }
   }
@@ -398,6 +488,15 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       // rather than waiting for the whole call to finish.
       onUpdate: (update) {
         if (!mounted) return;
+        if (!_gaDoctorSent && (update.doctorName?.trim().isNotEmpty ?? false)) {
+          _gaDoctorSent = true;
+          final booked = _gaBookedAtMs;
+          Analytics.event(AnalyticsEvent.teleconsultDoctorAssigned, {
+            AnalyticsParam.visitId: _gaVisitId,
+            AnalyticsParam.speciality: _lastSpeciality,
+            AnalyticsParam.waitMs: booked == null ? null : _nowMs - booked,
+          });
+        }
         setState(() => _status = update);
         // A delayed appointment-status arrival (e.g. the WebView finished
         // loading before Shukhee reported ConsultationStarted) can unblock a
@@ -408,11 +507,13 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
         // show it as soon as it's known, not only once the whole poll
         // resolves.
         if (update.isConsultationEnded && _stage == _Stage.connected) {
+          _gaVisit?.markTeleconsultEnded();
           setState(() => _stage = _Stage.generatingPrescription);
         }
       },
     );
     _liveTimer?.cancel();
+    _gaCallEnded(teleconsultEndStatus(status));
     if (!status.isCompleted) {
       if (mounted) {
         setState(() {
@@ -550,7 +651,8 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       case _Stage.booking:
         return _BookingFormView(
           client: _client,
-          initialPhone: widget.patientPhone,
+          initialPhone: _lastContactNumber ?? widget.patientPhone,
+          initialPhoneError: _phoneServerError,
           patientGender: widget.patientGender,
           onSubmit: _submitBooking,
         );
@@ -683,7 +785,10 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
           primaryLabel: TeleconsultStrings.tryAgain,
           onPrimary: _retryBooking,
           secondaryLabel: TeleconsultStrings.continueWithoutCall,
-          onSecondary: () => Navigator.of(context).pop(),
+          onSecondary: () {
+            _gaContinueWithoutCall(AnalyticsValue.notCompleted);
+            Navigator.of(context).pop();
+          },
         );
       case _Stage.notProvisioned:
         return _CenteredMessage(
@@ -692,7 +797,10 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
           title: TeleconsultStrings.notProvisionedTitle,
           body: _error?.localizedMessage ?? TeleconsultStrings.notProvisionedBody,
           primaryLabel: TeleconsultStrings.doneButton,
-          onPrimary: () => Navigator.of(context).pop(),
+          onPrimary: () {
+            _gaContinueWithoutCall(AnalyticsValue.notProvisioned);
+            Navigator.of(context).pop();
+          },
         );
       case _Stage.error:
         return _CenteredMessage(
@@ -703,7 +811,10 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
           primaryLabel: CommonStrings.retry,
           onPrimary: _retryBooking,
           secondaryLabel: TeleconsultStrings.continueWithoutCall,
-          onSecondary: () => Navigator.of(context).pop(),
+          onSecondary: () {
+            _gaContinueWithoutCall(AnalyticsValue.error);
+            Navigator.of(context).pop();
+          },
         );
       case _Stage.booking:
       case _Stage.connecting:
@@ -760,12 +871,15 @@ class _BookingFormView extends StatefulWidget {
   const _BookingFormView({
     required this.client,
     required this.initialPhone,
+    this.initialPhoneError,
     required this.patientGender,
     required this.onSubmit,
   });
 
   final ShukheeClient client;
   final String? initialPhone;
+  /// Backend rejection of the last number (e.g. not a valid BD mobile).
+  final String? initialPhoneError;
   final String? patientGender;
   final Future<void> Function({
     required String contactNumber,
@@ -814,7 +928,7 @@ class _BookingFormViewState extends State<_BookingFormView> {
     _MediaGroup(type: 'prescription', label: TeleconsultStrings.documentTypePrescription),
     _MediaGroup(type: 'lab_report', label: TeleconsultStrings.documentTypeLabReports),
   ];
-  String? _phoneError;
+  late String? _phoneError = widget.initialPhoneError;
   bool _submitting = false;
 
   @override
@@ -831,11 +945,21 @@ class _BookingFormViewState extends State<_BookingFormView> {
 
   Future<void> _loadSpecialities() async {
     List<ShukheeSpeciality> fetched;
+    final gaStartedMs = DateTime.now().millisecondsSinceEpoch;
+    String? gaFailure;
     try {
       fetched = await widget.client.getSpecialities();
-    } on ShukheeException {
+      if (fetched.isEmpty) gaFailure = AnalyticsValue.other;
+    } on ShukheeException catch (e) {
       fetched = const [];
+      gaFailure = teleconsultFailureReason(e);
     }
+    Analytics.event(AnalyticsEvent.teleconsultSpecialitiesLoaded, {
+      AnalyticsParam.visitId: GaVisit.currentId,
+      AnalyticsParam.result: gaFailure == null ? AnalyticsValue.success : AnalyticsValue.failed,
+      AnalyticsParam.failureReason: gaFailure,
+      AnalyticsParam.responseMs: DateTime.now().millisecondsSinceEpoch - gaStartedMs,
+    });
     if (fetched.isEmpty) {
       // Live fetch failed or returned nothing -- fall back to the
       // last-known-good list rather than leaving the form with no options.
@@ -958,6 +1082,10 @@ class _BookingFormViewState extends State<_BookingFormView> {
     final phone = _phoneController.text.trim();
     if (phone.isEmpty) {
       setState(() => _phoneError = TeleconsultStrings.contactNumberRequired);
+      return;
+    }
+    if (!isValidBdMobile(phone)) {
+      setState(() => _phoneError = TeleconsultStrings.contactNumberInvalid);
       return;
     }
     setState(() {
@@ -1662,12 +1790,21 @@ class _WrapUpView extends StatelessWidget {
           if (_hasMessage) ...[
             const SizedBox(height: AppSpacing.h6xl),
             FilledButton(
-              onPressed: () => sendCounsellingWhatsApp(
-                context: context,
-                message: whatsappMessage!,
-                phone: patientPhone,
-                notInstalledMessage: NabaStrings.whatsAppNotInstalled,
-              ),
+              onPressed: () async {
+                final launched = await sendCounsellingWhatsApp(
+                  context: context,
+                  message: whatsappMessage!,
+                  phone: patientPhone,
+                  notInstalledMessage: NabaStrings.whatsAppNotInstalled,
+                );
+                // GA: same event as every other share; text/number never sent.
+                Analytics.event(AnalyticsEvent.messageShared, {
+                  AnalyticsParam.visitId: GaVisit.currentId,
+                  AnalyticsParam.source: AnalyticsValue.teleconsult,
+                  AnalyticsParam.channel: AnalyticsValue.whatsapp,
+                  AnalyticsParam.launched: launched,
+                });
+              },
               style: FilledButton.styleFrom(backgroundColor: AppColors.pinkWorklist),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1772,8 +1909,15 @@ class _DocumentPreviewCardState extends State<_DocumentPreviewCard> {
   void _openFull() {
     final bytes = _bytes;
     if (bytes == null) return;
+    Analytics.event(AnalyticsEvent.teleconsultPrescriptionViewed, {
+      AnalyticsParam.visitId: GaVisit.currentId,
+      AnalyticsParam.documentType: widget.docType,
+      AnalyticsParam.source: AnalyticsValue.wrapUp,
+    });
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => PdfViewerScreen(title: widget.title, bytes: bytes)),
+      MaterialPageRoute<void>(
+          settings: const RouteSettings(name: AnalyticsScreen.pdfViewer),
+          builder: (_) => PdfViewerScreen(title: widget.title, bytes: bytes)),
     );
   }
 

@@ -4383,6 +4383,7 @@ abstract final class TeleconsultStrings {
       );
   static String get contactNumberLabel => getTranslatedString('Teleconsult.contactNumberLabel', 'Contact Number');
   static String get contactNumberRequired => getTranslatedString('Teleconsult.contactNumberRequired', 'Enter a contact number to continue.');
+  static String get contactNumberInvalid => getTranslatedString('Teleconsult.contactNumberInvalid', 'Enter a valid 11-digit mobile number, e.g. 01712345678.');
   static String get documentTypePrescription => getTranslatedString('Teleconsult.documentTypePrescription', 'Prescription');
   static String get documentTypeLabReports => getTranslatedString('Teleconsult.documentTypeLabReports', 'Lab Reports');
   static String get selectDocumentsLabel => getTranslatedString('Teleconsult.selectDocumentsLabel', 'Select Medical Documents');

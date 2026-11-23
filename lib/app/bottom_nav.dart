@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/analytics/coaching_analytics.dart';
+import '../core/analytics/analytics.dart';
+import '../core/analytics/analytics_events.dart';
 import '../core/auth/auth_repository.dart';
 import '../core/config/app_config.dart';
 import '../core/constants/app_strings.dart';
@@ -88,7 +93,9 @@ class _BottomNavShellState extends State<BottomNavShell>
         );
       }
       await MicroCoachingService.launch(chwId);
+      unawaited(trackCoachingOpened()); // GA (LEAP-152)
     } catch (e) {
+      unawaited(trackCoachingOpened(error: e)); // GA (LEAP-152)
       if (!mounted) return;
       // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context)
@@ -100,8 +107,31 @@ class _BottomNavShellState extends State<BottomNavShell>
     }
   }
 
+  // GA tab names, by branch index (LEAP-152). The Assistant tab opens the
+  // native micro-coaching (training) module.
+  static const List<String> _gaTabNames = ['home', 'patients', 'training'];
+  // Root screen of each branch; goBranch(initialLocation: true) may not push
+  // a route (branch already at root), so the screen_view is logged here.
+  static const List<String> _gaTabScreens = ['dashboard', 'patients_list'];
+
+  void _trackTab(int toBranch) {
+    final from = widget.navigationShell.currentIndex;
+    Analytics.event(AnalyticsEvent.tabSelected, {
+      AnalyticsParam.source: AnalyticsValue.bottomNav,
+      AnalyticsParam.tab: _gaTabNames[toBranch],
+      AnalyticsParam.fromTab:
+          from < _gaTabNames.length ? _gaTabNames[from] : null,
+    });
+    if (toBranch < _gaTabScreens.length) {
+      Analytics.screen(_gaTabScreens[toBranch]);
+    } else {
+      Analytics.screen(AnalyticsScreen.microCoaching);
+    }
+  }
+
   Future<void> _onTap(BuildContext context, int visibleIndex) async {
     if (visibleIndex == _assistantVisibleIndex) {
+      _trackTab(_visibleBranchIndices[visibleIndex]);
       await _launchMicroCoaching(context);
       return;
     }
@@ -110,6 +140,7 @@ class _BottomNavShellState extends State<BottomNavShell>
     // in-progress visit here; VisitFlowScreen's own PopScope already confirms
     // before leaving via the back button.
     final branchIndex = _visibleBranchIndices[visibleIndex];
+    _trackTab(branchIndex);
     widget.navigationShell.goBranch(branchIndex, initialLocation: true);
   }
 

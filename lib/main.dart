@@ -16,6 +16,7 @@ import 'core/i18n/app_locale.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
 import 'app/theme_provider.dart';
+import 'core/analytics/analytics.dart';
 import 'core/api/api_client.dart';
 import 'core/api/realtime_asr_service.dart';
 import 'core/preferences/ai_feature_toggles_notifier.dart';
@@ -137,6 +138,8 @@ Future<void> main() async {
   await AppDateFormat.ensureInitialised();
   await FormConfig.loadAndCache(rootBundle);
   await AppVersionInfo.ensureLoaded();
+  // Google Analytics (LEAP-152). Never throws; analytics stays off on failure.
+  await Analytics.init();
   final api = await ApiClient.create();
   final appVersionService = AppVersionService(api);
   final authRepo = AuthRepository(api, appVersionService: appVersionService);
@@ -543,12 +546,31 @@ class _UhisNextAppState extends State<UhisNextApp>
 
   bool _sdkInitialized = false;
 
+  /// GA user = backend user id (never name/phone/NID) + coarse location.
+  Future<void> _setAnalyticsUser() async {
+    try {
+      final repo = widget.authRepo;
+      final profile = await repo.userProfileSummary();
+      await Analytics.setUser(
+        tenantId: await repo.currentTenantId(),
+        userId: await repo.userId(),
+        upazila: profile.upazila,
+        unionArea: profile.area,
+        appLanguage: AppLocale.isBangla ? 'bn' : 'en',
+      );
+    } catch (e) {
+      debugPrint('[Analytics] set user failed: $e');
+    }
+  }
+
   Future<void> _onAuthStateChanged() async {
     if (widget.authState.status != AuthStatus.signedIn) return;
     // Refresh server-side feature flags on every sign-in (fresh login or
     // biometric/PIN restore). Non-fatal — defaults remain if the call fails.
     unawaited(_userHierarchy.refreshFeatureFlags());
     unawaited(_userHierarchy.refreshShukheeControls());
+    // GA user id + properties on every sign-in (login or PIN/biometric restore).
+    unawaited(_setAnalyticsUser());
     if (_sdkInitialized) return;
     _sdkInitialized = true;
     final token = await widget.authRepo.getToken();

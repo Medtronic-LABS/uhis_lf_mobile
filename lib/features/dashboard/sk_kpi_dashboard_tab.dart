@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/spice_dashboard_dao.dart';
@@ -65,6 +67,22 @@ class _SkKpiDashboardTabState extends State<SkKpiDashboardTab> {
     });
   }
 
+  /// GA `filter_applied` for the From/To date chips (LEAP-152): which end
+  /// changed and the resulting range length in days — not the dates.
+  void _trackDate(bool isFrom, DateTime picked) {
+    final day = DateTime(picked.year, picked.month, picked.day);
+    final from = isFrom ? day : _from;
+    var to = isFrom ? _to : day;
+    if (to.isBefore(from)) to = from;
+    Analytics.event(AnalyticsEvent.filterApplied, {
+      AnalyticsParam.source: AnalyticsValue.kpiDashboard,
+      AnalyticsParam.filter:
+          isFrom ? AnalyticsValue.dateFrom : AnalyticsValue.dateTo,
+      AnalyticsParam.action: AnalyticsValue.select,
+      AnalyticsParam.rangeDays: to.difference(from).inDays + 1,
+    });
+  }
+
   Future<void> _pickDate({required bool isFrom}) async {
     final initial = isFrom ? _from : _to;
     final picked = await showDatePicker(
@@ -75,6 +93,7 @@ class _SkKpiDashboardTabState extends State<SkKpiDashboardTab> {
     );
     if (picked == null) return;
     setState(() {
+      _trackDate(isFrom, picked);
       if (isFrom) {
         _from = DateTime(picked.year, picked.month, picked.day);
         if (_to.isBefore(_from)) _to = _from;
@@ -156,6 +175,13 @@ class _SkKpiDashboardTabState extends State<SkKpiDashboardTab> {
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
+                      Analytics.event(AnalyticsEvent.filterApplied, {
+                        AnalyticsParam.source: AnalyticsValue.kpiDashboard,
+                        AnalyticsParam.filter: AnalyticsValue.ssSubVillage,
+                        AnalyticsParam.action: AnalyticsValue.select,
+                        AnalyticsParam.activeFilters: _selectedSsIds.length +
+                            _selectedSubVillageIds.length,
+                      });
                       Navigator.pop(ctx);
                       _reload();
                     },
@@ -196,13 +222,34 @@ class _SkKpiDashboardTabState extends State<SkKpiDashboardTab> {
       children: [
         _SpiceDashboardTabs(
           selected: _tab,
-          onSelected: (t) => setState(() => _tab = t),
+          onSelected: (t) {
+            if (t != _tab) {
+              Analytics.event(AnalyticsEvent.tabSelected, {
+                AnalyticsParam.source: AnalyticsValue.kpiDashboard,
+                AnalyticsParam.tab: t.name,
+                AnalyticsParam.fromTab: _tab.name,
+              });
+            }
+            setState(() => _tab = t);
+          },
         ),
         if (_tab == _SkDashboardTab.services)
           _SpiceServiceSubTabs(
             categories: serviceSubTabs,
             selected: _effectiveServiceCategory(),
-            onSelected: (c) => setState(() => _serviceCategory = c),
+            onSelected: (c) {
+              if (c != _serviceCategory) {
+                Analytics.event(AnalyticsEvent.filterApplied, {
+                  AnalyticsParam.source: AnalyticsValue.kpiDashboard,
+                  AnalyticsParam.filter: AnalyticsValue.programme,
+                  AnalyticsParam.action: c == SkDashboardServicesCategory.all
+                      ? AnalyticsValue.clear
+                      : AnalyticsValue.select,
+                  AnalyticsParam.filterValue: c.name,
+                });
+              }
+              setState(() => _serviceCategory = c);
+            },
           ),
         Material(
           color: const Color(0xFFF8F8FD),

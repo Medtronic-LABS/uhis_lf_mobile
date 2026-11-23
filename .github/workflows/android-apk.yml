@@ -63,6 +63,23 @@ jobs:
               DEV_PASS: ""
             }' > env.ci.json
 
+      - name: Write Firebase config (LEAP-152)
+        env:
+          GOOGLE_SERVICES_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_PROD_BASE64 }}
+          GOOGLE_SERVICES_TRAINING_BASE64: ${{ secrets.GOOGLE_SERVICES_TRAINING_BASE64 }}
+        run: |
+          # Not committed (public repo). Missing secret = build without analytics.
+          if [ -n "$GOOGLE_SERVICES_PROD_BASE64" ]; then
+            mkdir -p android/app/src/prod
+            echo "$GOOGLE_SERVICES_PROD_BASE64" | base64 -d > android/app/src/prod/google-services.json
+          else
+            echo "::warning::GOOGLE_SERVICES_PROD_BASE64 not set; building without Firebase Analytics"
+          fi
+          if [ -n "$GOOGLE_SERVICES_TRAINING_BASE64" ]; then
+            mkdir -p android/app/src/training
+            echo "$GOOGLE_SERVICES_TRAINING_BASE64" | base64 -d > android/app/src/training/google-services.json
+          fi
+
       - name: Build release APK
         run: scripts/build_apk.sh ci --release
 

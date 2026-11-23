@@ -414,6 +414,22 @@ After initial sync:
 
 `env.*.json` is gitignored; only `env.example.json` is committed.
 
+### Firebase Analytics config (`google-services.json`)
+
+Google Analytics (LEAP-152) needs one Firebase config file per Android flavor.
+They are **not committed** (this repo is public). Get both from the team vault and copy them to:
+
+| Flavor | File | Firebase project |
+|---|---|---|
+| `prod` | `android/app/src/prod/google-services.json` | `leapwell-prod` |
+| `training` | `android/app/src/training/google-services.json` | `leapwell-training-4c87d` |
+
+Without them the app still builds and runs; analytics is just off (Gradle logs a warning).
+CI writes them from the `GOOGLE_SERVICES_PROD_BASE64` / `GOOGLE_SERVICES_TRAINING_BASE64`
+repository secrets; `release.yml` fails if the prod secret is missing.
+Analytics events are only sent when built with `--dart-define=ANALYTICS_ENABLED=true`
+(defaults to on for release builds).
+
 ---
 
 ## Configuration (`env.*.json`)

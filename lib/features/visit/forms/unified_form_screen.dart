@@ -5,6 +5,9 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/analytics/analytics.dart';
+import '../../../core/analytics/analytics_events.dart';
+import '../../../core/analytics/visit_analytics.dart';
 import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/pnc_mandatory_rules.dart';
 import '../../../core/widgets/gestational_age_card.dart';
@@ -660,6 +663,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
                 child: AiScribeBanner(
+                  analyticsStep: 2,
                   encounterId: notifier.encounterId,
                   patientId: notifier.patientId,
                   isFemale: renderFormTypes.contains('anc') ||
@@ -1999,10 +2003,35 @@ class _DateSubBox extends StatelessWidget {
 /// visit, rather than tied to one section's header. Targets the scan at
 /// whichever visit the SK is currently recording (`ancVisitNumber`, already
 /// tracked by the form) — see [AncCardScanScreen]/[AncVisitExtractionRepository].
+/// GA `card_scan_result` (LEAP-152): how a card scan ended, how long the
+/// scan screen was open and how many fields it filled. No values.
+void _trackCardScanResult(
+  String card,
+  String encounterId,
+  int openedAtMs,
+  String result, {
+  int? fieldsFilled,
+}) {
+  final visit = GaVisit.of(encounterId);
+  if (result == AnalyticsValue.success) visit?.markScanUsed();
+  Analytics.event(AnalyticsEvent.cardScanResult, {
+    AnalyticsParam.visitId: visit?.visitId,
+    AnalyticsParam.card: card,
+    AnalyticsParam.result: result,
+    AnalyticsParam.scanMs: DateTime.now().millisecondsSinceEpoch - openedAtMs,
+    AnalyticsParam.fieldsFilled: fieldsFilled,
+  });
+}
+
 class _AncScanFab extends StatelessWidget {
   const _AncScanFab();
 
   Future<void> _scan(BuildContext context) async {
+    Analytics.event(AnalyticsEvent.cardScanTapped, {
+      AnalyticsParam.visitId: GaVisit.currentId,
+      AnalyticsParam.step: 2,
+      AnalyticsParam.programme: 'anc',
+    });
     final notifier = context.read<UnifiedFormNotifier>();
     // `ancVisitNumber` is normally only assigned inside `submit()` — the SK
     // needs it here, mid-visit, well before that — so this resolves the same
@@ -2018,21 +2047,32 @@ class _AncScanFab extends StatelessWidget {
       return;
     }
     final repo = context.read<AncVisitExtractionRepository>();
+    final scanOpenedAt = DateTime.now().millisecondsSinceEpoch;
     final result = await Navigator.of(context).push<AncVisitExtractionResult?>(
       MaterialPageRoute(
+        settings: const RouteSettings(name: AnalyticsScreen.cardScanAnc),
         builder: (_) =>
             AncCardScanScreen(visitNumber: visitNumber, repository: repo),
       ),
     );
+    if (result == null) {
+      _trackCardScanResult('anc', notifier.encounterId, scanOpenedAt,
+          AnalyticsValue.cancelled);
+    }
     if (result == null || !context.mounted) return;
     final visit = result.visit;
     if (visit == null || !visit.anyFieldFound) {
+      _trackCardScanResult('anc', notifier.encounterId, scanOpenedAt,
+          AnalyticsValue.failed);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(EpiStrings.scanFailed)),
       );
       return;
     }
     final applied = notifier.applyScannedAncVisit(visit);
+    _trackCardScanResult('anc', notifier.encounterId, scanOpenedAt,
+        AnalyticsValue.success,
+        fieldsFilled: applied);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.flagged && result.flagReason != null
@@ -2069,6 +2109,11 @@ class _NcdScanFab extends StatelessWidget {
   const _NcdScanFab();
 
   Future<void> _scan(BuildContext context) async {
+    Analytics.event(AnalyticsEvent.cardScanTapped, {
+      AnalyticsParam.visitId: GaVisit.currentId,
+      AnalyticsParam.step: 2,
+      AnalyticsParam.programme: 'ncd',
+    });
     final notifier = context.read<UnifiedFormNotifier>();
     final visitNumber = await notifier.resolveCurrentNcdVisitNumber();
     if (!context.mounted) return;
@@ -2079,21 +2124,32 @@ class _NcdScanFab extends StatelessWidget {
       return;
     }
     final repo = context.read<NcdVisitExtractionRepository>();
+    final scanOpenedAt = DateTime.now().millisecondsSinceEpoch;
     final result = await Navigator.of(context).push<NcdVisitExtractionResult?>(
       MaterialPageRoute(
+        settings: const RouteSettings(name: AnalyticsScreen.cardScanNcd),
         builder: (_) =>
             NcdCardScanScreen(visitNumber: visitNumber, repository: repo),
       ),
     );
+    if (result == null) {
+      _trackCardScanResult('ncd', notifier.encounterId, scanOpenedAt,
+          AnalyticsValue.cancelled);
+    }
     if (result == null || !context.mounted) return;
     final visit = result.visit;
     if (visit == null || !visit.anyFieldFound) {
+      _trackCardScanResult('ncd', notifier.encounterId, scanOpenedAt,
+          AnalyticsValue.failed);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(EpiStrings.scanFailed)),
       );
       return;
     }
     final applied = notifier.applyScannedNcdVisit(visit);
+    _trackCardScanResult('ncd', notifier.encounterId, scanOpenedAt,
+        AnalyticsValue.success,
+        fieldsFilled: applied);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.flagged && result.flagReason != null

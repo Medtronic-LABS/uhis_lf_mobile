@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/analytics/coaching_analytics.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/services/micro_coaching_service.dart';
@@ -34,9 +37,11 @@ class _TrainingScreenState extends State<TrainingScreen> {
       final initialized = await MicroCoachingService.isInitialized();
       debugPrint('[MicroCoaching] TrainingScreen: isInitialized=$initialized');
       await MicroCoachingService.launch(chwId);
+      unawaited(trackCoachingOpened()); // GA (LEAP-152)
       debugPrint('[MicroCoaching] TrainingScreen: launch returned (user came back from SDK)');
     } catch (e) {
       debugPrint('[MicroCoaching] TrainingScreen: launch error=$e');
+      unawaited(trackCoachingOpened(error: e)); // GA (LEAP-152)
       if (mounted) setState(() { _failed = true; });
     } finally {
       if (mounted) setState(() => _busy = false);

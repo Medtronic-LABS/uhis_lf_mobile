@@ -28,6 +28,8 @@ import '../referral/referral_repository.dart';
 import '../visit/visit_controller.dart';
 import 'assistant_models.dart';
 import 'assistant_repository.dart';
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 
 /// Everything the patient-scoped assistant needs: identity for the action
 /// routines, a one-line context chip, a 2-line clinical summary, and the
@@ -148,6 +150,7 @@ class PatientAiSheet extends StatefulWidget {
   final PatientAiContext ctx;
 
   static Future<void> show(BuildContext context, PatientAiContext ctx) {
+    Analytics.screen(AnalyticsScreen.aiAssistant); // GA (LEAP-152)
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -221,6 +224,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     _speech.listen(
       onResult: (r) {
         final words = r.recognizedWords;
+        if (words.isNotEmpty) _gaInputFromVoice = true;
         _input.text = words;
         _input.selection =
             TextSelection.fromPosition(TextPosition(offset: words.length));
@@ -237,19 +241,73 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     _setListening(false);
   }
 
+  // ── GA (LEAP-152): question counts and timings, never the text ─────────
+  final int _gaOpenedAt = DateTime.now().millisecondsSinceEpoch;
+  int _gaQuestions = 0;
+  int _gaAnswered = 0;
+  int _gaFailed = 0;
+  int _gaTotalResponseMs = 0;
+
+  /// Speech filled the input since the last send, so the next send counts
+  /// as `voice` even if the SK edited the words.
+  bool _gaInputFromVoice = false;
+
+  void _gaAnswer({
+    required bool ok,
+    required int responseMs,
+    String? failureReason,
+  }) {
+    if (ok) {
+      _gaAnswered++;
+      _gaTotalResponseMs += responseMs;
+    } else {
+      _gaFailed++;
+    }
+    Analytics.event(AnalyticsEvent.assistantAnswered, {
+      AnalyticsParam.result:
+          ok ? AnalyticsValue.success : AnalyticsValue.failed,
+      AnalyticsParam.failureReason: failureReason,
+      AnalyticsParam.responseMs: responseMs,
+    });
+  }
+
+  static String _gaFailureReason(Object e) {
+    if (e is AssistantException) {
+      final cause = e.cause;
+      if (cause != null) return Analytics.failureReason(cause);
+      return e.statusCode != null
+          ? AnalyticsValue.serverError
+          : AnalyticsValue.emptyAnswer;
+    }
+    return Analytics.failureReason(e);
+  }
+
   @override
   void dispose() {
     debugPrint('[_PatientAiSheetState] dispose');
+    Analytics.event(AnalyticsEvent.assistantClosed, {
+      AnalyticsParam.durationMs:
+          DateTime.now().millisecondsSinceEpoch - _gaOpenedAt,
+      AnalyticsParam.questions: _gaQuestions,
+      AnalyticsParam.answered: _gaAnswered,
+      AnalyticsParam.failed: _gaFailed,
+      AnalyticsParam.totalResponseMs: _gaTotalResponseMs,
+    });
     _speech.stop();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _send(String question) async {
+  /// [source] is set by the suggested-question chips and the retry button;
+  /// typed and voice sends leave it null (GA `assistant_asked.source`).
+  Future<void> _send(String question, {String? source}) async {
     debugPrint('[_PatientAiSheetState] _send question=$question');
     final q = question.trim();
     if (q.isEmpty || _loading) return;
+    final gaSource = source ??
+        (_gaInputFromVoice ? AnalyticsValue.voice : AnalyticsValue.typed);
+    _gaInputFromVoice = false;
     // Snapshot prior turns before appending this question — the backend
     // gets what led up to this question, not the question itself twice.
     final history = _recentHistory();
@@ -267,6 +325,13 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     // the gated question/answer content so the server can join them.
     final correlator = const Uuid().v4();
     final stopwatch = Stopwatch()..start();
+    _gaQuestions++;
+    Analytics.event(AnalyticsEvent.assistantAsked, {
+      AnalyticsParam.source: gaSource,
+      // A retry re-sends after a failure; it is not the SK repeating.
+      AnalyticsParam.askedAgain:
+          gaSource != AnalyticsValue.retry && askedAgain,
+    });
     _input.clear();
     setState(() {
       _error = null;
@@ -285,6 +350,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
             history: history,
           );
       stopwatch.stop();
+      _gaAnswer(ok: true, responseMs: stopwatch.elapsedMilliseconds);
       // Fire-and-forget, non-PHI usage telemetry (LEAP-47). No question/answer
       // text — that is PHI and must never enter a telemetry event.
       unawaited(telemetry
@@ -319,13 +385,23 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
       });
       _input.clear();
     } on AssistantException catch (e) {
+      _gaAnswer(
+        ok: false,
+        responseMs: stopwatch.elapsedMilliseconds,
+        failureReason: _gaFailureReason(e),
+      );
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = e.message;
       });
       _input.clear();
-    } on Object catch (_) {
+    } on Object catch (e) {
+      _gaAnswer(
+        ok: false,
+        responseMs: stopwatch.elapsedMilliseconds,
+        failureReason: _gaFailureReason(e),
+      );
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -559,7 +635,11 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
           spacing: 8,
           runSpacing: 8,
           children: widget.ctx.suggestedStarters
-              .map((s) => ActionChip(label: Text(s), onPressed: () => _send(s)))
+              .map((s) => ActionChip(
+                    label: Text(s),
+                    onPressed: () =>
+                        _send(s, source: AnalyticsValue.suggested),
+                  ))
               .toList(),
         ),
       ],
@@ -656,7 +736,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
               );
               if (last.text.isNotEmpty) {
                 setState(() => _error = null);
-                _send(last.text);
+                _send(last.text, source: AnalyticsValue.retry);
               }
             },
             child: Text(AssistantStrings.retryLabel),

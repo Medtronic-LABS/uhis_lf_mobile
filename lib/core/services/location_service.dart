@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../device/permission_gate.dart';
 
 /// Wraps device GPS for household/member enrollment and assessments.
 ///
@@ -14,7 +15,10 @@ class LocationService {
   ///
   /// Matches Spice `withLocationCheck` / `requestLocationPermissions` on member
   /// registration — call when the add-member screen opens or before save.
-  static Future<bool> ensurePermission() async {
+  ///
+  /// [source] is only the GA `permission_result.source` label (LEAP-152):
+  /// `enrollment` or `visit`.
+  static Future<bool> ensurePermission({String source = 'enrollment'}) async {
     if (kIsWeb) return false;
 
     try {
@@ -22,7 +26,8 @@ class LocationService {
       if (status.isGranted) return true;
 
       if (status.isDenied || status.isLimited) {
-        status = await Permission.locationWhenInUse.request();
+        status = await requestPermissionTracked(Permission.locationWhenInUse,
+            source: source);
         if (status.isGranted) return true;
       }
 
@@ -45,9 +50,10 @@ class LocationService {
   }
 
   /// Returns the current GPS position, or (0.0, 0.0) on any failure.
-  static Future<({double latitude, double longitude})> getCurrentPosition() async {
+  static Future<({double latitude, double longitude})> getCurrentPosition(
+      {String source = 'enrollment'}) async {
     try {
-      if (!await ensurePermission()) return _zero;
+      if (!await ensurePermission(source: source)) return _zero;
 
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/analytics/analytics_events.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/theme/app_theme.dart';
@@ -272,6 +273,8 @@ class _DebugDbViewerScreenState extends State<DebugDbViewerScreen> {
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute<void>(
+                                settings: const RouteSettings(
+                                    name: AnalyticsScreen.debugDbTable),
                                 builder: (_) => _DebugTableDetailScreen(
                                   tableName: t.name,
                                 ),

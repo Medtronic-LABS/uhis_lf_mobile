@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import '../../app/theme.dart';
 import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/debug/console_log.dart';
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/assessment_dao.dart';
@@ -812,6 +814,12 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     final active = localMembers.where((m) => m.isActive).toList();
     if (!mounted) return;
     final saved = await showMemberDeceasedDialog(context, activeMembers: active);
+    // GA (LEAP-152): outcome only — never which member or the reason.
+    Analytics.event(AnalyticsEvent.memberDeceased, {
+      AnalyticsParam.result:
+          saved == true ? AnalyticsValue.saved : AnalyticsValue.cancelled,
+      AnalyticsParam.members: active.length,
+    });
     if (saved == true && mounted) {
       await _fetchMembers();
       await _loadQueueItems();
@@ -822,8 +830,13 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   Future<void> _addMember() async {
     final localId = _household.id ?? '';
     if (localId.isEmpty) return;
+    Analytics.event(AnalyticsEvent.addMemberTapped, {
+      AnalyticsParam.source: AnalyticsValue.householdDetail,
+      AnalyticsParam.members: _household.members.length,
+    });
 
-    final result = await showNidScannerForMember(context);
+    final result = await showNidScannerForMember(context,
+        source: AnalyticsValue.householdDetail);
     if (!mounted || result == null) return;
 
     HouseholdMemberData? head;
@@ -853,7 +866,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       headName: head?.name ?? '',
       headPhoneNumber: head?.phoneNumber?.trim() ?? '',
       scanResult: result,
-    );
+    )..['gaSource'] = AnalyticsValue.householdDetail;
     if (!mounted) return;
     await context.push('/household/enrollment/link-member', extra: extra);
     // The new member is written to the local DB before the push returns, so a
@@ -1150,6 +1163,10 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   /// compat but GoRouter drops `extra` when redirecting, losing referenceId.
   void _navigateToPatientDetails(BuildContext context, HouseholdMemberData member) {
     debugPrint('[_HouseholdDetailScreenState] _navigateToPatientDetails patientId=${member.patientId} memberId=${member.id} name=${member.name}');
+    Analytics.event(AnalyticsEvent.patientTapped, {
+      AnalyticsParam.source: AnalyticsValue.householdDetail,
+      AnalyticsParam.isHead: member.isHead,
+    });
     final navId = (member.patientId != null && member.patientId!.isNotEmpty)
         ? member.patientId!
         : member.id;

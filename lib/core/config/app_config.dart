@@ -392,6 +392,14 @@ class AppConfig {
       const bool.fromEnvironment('ASSISTANT_CONTENT_TELEMETRY',
           defaultValue: true);
 
+  /// Google Analytics (Firebase) usage events (LEAP-152). On by default in
+  /// release builds only, so local debug runs (often the prod flavor against a
+  /// dev backend) don't land in the prod GA property. Force it either way with
+  /// `--dart-define=ANALYTICS_ENABLED=true|false` (true for DebugView testing).
+  static bool get analyticsEnabled => const bool.fromEnvironment(
+      'ANALYTICS_ENABLED',
+      defaultValue: bool.fromEnvironment('dart.vm.product'));
+
   /// Feature flag: use the uhis_form JSON-driven renderer instead of the
   /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
   static const bool useDynamicForms = bool.fromEnvironment(

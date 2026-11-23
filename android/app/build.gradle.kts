@@ -24,6 +24,21 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Firebase Analytics (LEAP-152). google-services.json is per flavor
+// (src/prod/ → leapwell-prod, src/training/ → leapwell-training) and is NOT
+// committed (public repo): CI writes it from GitHub secrets, developers copy it
+// from the team vault. Without it the plugin is skipped and the app still
+// builds — analytics is simply off (the Dart side no-ops when Firebase fails to
+// initialise).
+val hasFirebaseConfig = listOf("prod", "training").any {
+    file("src/$it/google-services.json").exists()
+}
+if (hasFirebaseConfig) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.warn("google-services.json not found for any flavor — building without Firebase Analytics")
+}
+
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 val hasReleaseKeystore = keystorePropertiesFile.exists()

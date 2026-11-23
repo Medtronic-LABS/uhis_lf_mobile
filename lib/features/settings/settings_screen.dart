@@ -7,6 +7,8 @@ import '../../app/locale_provider.dart';
 import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/device/battery_optimization_gate.dart';
 import '../../core/device/battery_optimization_service.dart';
@@ -148,6 +150,7 @@ class _SettingsBody extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _SettingsTapRow(
+                option: 'device_unlock',
                 row: SettingsRow(
                   emoji: auth.biometricEnabled ? '🔒' : '🔓',
                   chipColor: AppColors.aiSurfaceStart,
@@ -161,6 +164,7 @@ class _SettingsBody extends StatelessWidget {
               ),
               const Divider(height: 20),
               _SettingsTapRow(
+                option: 'pin',
                 row: SettingsRow(
                   emoji: '🔢',
                   chipColor: AppColors.ancSurface,
@@ -174,6 +178,7 @@ class _SettingsBody extends StatelessWidget {
               ),
               const Divider(height: 20),
               _SettingsTapRow(
+                option: 'appearance',
                 row: SettingsRow(
                   emoji: '🌓',
                   chipColor: AppColors.catChildSurface,
@@ -196,6 +201,7 @@ class _SettingsBody extends StatelessWidget {
               ),
               const Divider(height: 20),
               _SettingsTapRow(
+                option: 'battery_optimization',
                 row: SettingsRow(
                   emoji: '🔋',
                   chipColor: AppColors.catHomeSurface,
@@ -213,6 +219,7 @@ class _SettingsBody extends StatelessWidget {
               ),
               const Divider(height: 20),
               _SettingsTapRow(
+                option: 'language',
                 row: SettingsRow(
                   emoji: '🌐',
                   chipColor: AppColors.catHomeSurface,
@@ -235,6 +242,7 @@ class _SettingsBody extends StatelessWidget {
               if (kDebugMode || AppConfig.telemetryScreenEnabled) ...[
                 const Divider(height: 20),
                 _SettingsTapRow(
+                  option: 'debug_db_viewer',
                   row: SettingsRow(
                     emoji: '🗄️',
                     chipColor: AppColors.catChildSurface,
@@ -243,11 +251,14 @@ class _SettingsBody extends StatelessWidget {
                   ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
+                      settings: const RouteSettings(
+                          name: AnalyticsScreen.debugDbViewer),
                       builder: (_) => const DebugDbViewerScreen(),
                     ),
                   ),
                 ),
                 _SettingsTapRow(
+                  option: 'debug_telemetry',
                   row: SettingsRow(
                     emoji: '📊',
                     chipColor: AppColors.catChildSurface,
@@ -256,6 +267,8 @@ class _SettingsBody extends StatelessWidget {
                   ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
+                      settings: const RouteSettings(
+                          name: AnalyticsScreen.telemetryViewer),
                       builder: (_) => const TelemetryViewerScreen(),
                     ),
                   ),
@@ -366,15 +379,27 @@ class _MicCaptureCard extends StatelessWidget {
 /// Makes a [SettingsRow] fully tappable — used on this page (unlike the
 /// popup menu, where `PopupMenuItem.onSelected` already handles the tap).
 class _SettingsTapRow extends StatelessWidget {
-  const _SettingsTapRow({required this.row, required this.onTap});
+  const _SettingsTapRow({
+    required this.option,
+    required this.row,
+    required this.onTap,
+  });
 
+  /// Fixed GA `settings_option_selected.option` key (LEAP-152).
+  final String option;
   final SettingsRow row;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        Analytics.event(AnalyticsEvent.settingsOptionSelected, {
+          AnalyticsParam.source: AnalyticsValue.settingsScreen,
+          AnalyticsParam.option: option,
+        });
+        onTap();
+      },
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),

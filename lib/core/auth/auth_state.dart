@@ -4,6 +4,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../analytics/analytics.dart';
+import '../analytics/analytics_events.dart';
 import '../config/app_config.dart';
 import '../constants/app_strings.dart';
 import '../debug/console_log.dart';
@@ -130,6 +132,15 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<bool> login(String username, String password) async {
+    final watch = Stopwatch()..start();
+    void track(String method, String result, [String? reason]) =>
+        Analytics.event(AnalyticsEvent.login, {
+          AnalyticsParam.method: method,
+          AnalyticsParam.result: result,
+          AnalyticsParam.failureReason: reason,
+          AnalyticsParam.durationMs: watch.elapsedMilliseconds,
+        });
+    const method = AnalyticsValue.online;
     _busy = true;
     _error = null;
     _appUpdateMessage = null;
@@ -152,6 +163,7 @@ class AuthState extends ChangeNotifier {
           _status = AuthStatus.signedIn;
           _locked = false;
           debugPrint('[AuthState] login: offline password verified${restored ? ', session restored' : ', no prior session'}');
+          track(AnalyticsValue.offline, AnalyticsValue.success);
           return true;
         }
         // Fall through to online login when the offline probe false-positives
@@ -172,21 +184,30 @@ class AuthState extends ChangeNotifier {
       _status = AuthStatus.signedIn;
       _locked = false;
       debugPrint('[AuthState] login: online success');
+      track(method, AnalyticsValue.success);
       return true;
     } on AppUpdateRequiredException catch (e) {
       debugPrint('[AuthState] login: update required — ${e.message}');
       _appUpdateMessage = e.message;
       _status = AuthStatus.signedOut;
+      track(method, AnalyticsValue.failed, AnalyticsValue.updateRequired);
       return false;
     } on AppVersionCheckFailedException catch (e) {
       debugPrint('[AuthState] login: version check failed — ${e.message}');
       _error = e.message;
       _status = AuthStatus.signedOut;
+      track(method, AnalyticsValue.failed, AnalyticsValue.versionCheckFailed);
       return false;
     } catch (e) {
       debugPrint('[AuthState] login: failed — $e');
       _error = NetworkErrorMapper.friendly(e);
       _status = AuthStatus.signedOut;
+      track(
+          method,
+          AnalyticsValue.failed,
+          e is AuthException
+              ? AnalyticsValue.wrongCredentials
+              : Analytics.failureReason(e));
       return false;
     } finally {
       _busy = false;
@@ -205,22 +226,31 @@ class AuthState extends ChangeNotifier {
       final ok = await _biometric.authenticate(
         reason: AppConfig.biometricReason,
       );
-      if (!ok) return false;
+      if (!ok) {
+        _trackUnlock(AnalyticsValue.biometric, AnalyticsValue.failed,
+            AnalyticsValue.cancelled);
+        return false;
+      }
       final restored = await _repo.restorePersistedSession();
       debugPrint('[AuthState] biometricUnlock: restored=$restored');
       if (!restored) {
         // No persisted credentials left (cleared / never enrolled). Server
         // session death is handled separately via 401 → handleSessionExpired.
         await _repo.clearExpiredReentrySession();
+        _trackUnlock(AnalyticsValue.biometric, AnalyticsValue.failed,
+            AnalyticsValue.sessionExpired);
         return _failExpiredRestore();
       }
       _username = await _repo.biometricLastUsername() ?? _username;
       _onboardingComplete = await _repo.isOnboardingComplete();
       _status = AuthStatus.signedIn;
       _locked = false;
+      _trackUnlock(AnalyticsValue.biometric, AnalyticsValue.success);
       return true;
     } catch (e) {
       _error = NetworkErrorMapper.friendly(e);
+      _trackUnlock(AnalyticsValue.biometric, AnalyticsValue.failed,
+          Analytics.failureReason(e));
       return false;
     } finally {
       _busy = false;
@@ -229,6 +259,14 @@ class AuthState extends ChangeNotifier {
       _scheduleNotify();
     }
   }
+
+  /// GA `pin_unlock` (LEAP-152) — covers both PIN and biometric re-entry.
+  void _trackUnlock(String method, String result, [String? reason]) =>
+      Analytics.event(AnalyticsEvent.pinUnlock, {
+        AnalyticsParam.method: method,
+        AnalyticsParam.result: result,
+        AnalyticsParam.failureReason: reason,
+      });
 
   /// Whether the device currently has no usable network interface.
   /// Used by unlock / logout flows that need an offline-grace path.
@@ -323,6 +361,8 @@ class AuthState extends ChangeNotifier {
     try {
       final ok = await _repo.verifyPin(pin);
       if (!ok) {
+        _trackUnlock(
+            AnalyticsValue.pin, AnalyticsValue.failed, AnalyticsValue.wrongPin);
         final left = await pinAttemptsRemaining();
         _error = left <= 0
             ? PinStrings.tooManyAttempts
@@ -332,15 +372,20 @@ class AuthState extends ChangeNotifier {
       final restored = await _repo.restorePersistedSession();
       if (!restored) {
         await _repo.clearExpiredReentrySession();
+        _trackUnlock(AnalyticsValue.pin, AnalyticsValue.failed,
+            AnalyticsValue.sessionExpired);
         return _failExpiredRestore();
       }
       _username = await _repo.biometricLastUsername() ?? _username;
       _onboardingComplete = await _repo.isOnboardingComplete();
       _status = AuthStatus.signedIn;
       _locked = false;
+      _trackUnlock(AnalyticsValue.pin, AnalyticsValue.success);
       return true;
     } catch (e) {
       _error = NetworkErrorMapper.friendly(e);
+      _trackUnlock(
+          AnalyticsValue.pin, AnalyticsValue.failed, Analytics.failureReason(e));
       return false;
     } finally {
       _busy = false;
@@ -404,6 +449,7 @@ class AuthState extends ChangeNotifier {
       return;
     }
     debugPrint('[AuthState] handleSessionExpired() — signing out, username preserved for relogin lock');
+    Analytics.event(AnalyticsEvent.sessionExpired);
     await _repo.handleSessionExpired();
     _status = AuthStatus.signedOut;
     _locked = false;
@@ -424,6 +470,9 @@ class AuthState extends ChangeNotifier {
 
   Future<void> logout({bool? online}) async {
     final netOnline = online ?? !await isDeviceOffline();
+    // Logged before the user is cleared so it is attributed to this SK.
+    Analytics.event(
+        AnalyticsEvent.logout, {AnalyticsParam.isOnline: netOnline});
     ConsoleLog.step(
         '🔐 [AuthState] logout() Step 1/4 — ending server session (online=$netOnline)...');
     await _repo.logout(online: netOnline);
@@ -451,6 +500,7 @@ class AuthState extends ChangeNotifier {
     }
     _status = AuthStatus.signedOut;
     _locked = false;
+    await Analytics.clearUser();
     // Re-read persisted enrolment + username — UHIS keeps these across logout
     // so LoginScreen shows a locked, prefilled username and offline login works.
     _username = await _repo.lastUsername();
