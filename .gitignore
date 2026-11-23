@@ -13,6 +13,8 @@
 .env.*
 env.json
 env.development.json
+env.develop.json
+env.training.json
 env.staging.json
 env.production.json
 env.local.json
@@ -153,3 +155,9 @@ demo_jul_1/
 # Claude Code local settings (per-developer permission grants, machine-specific paths)
 .claude/settings.local.json
 .superpowers/
+
+# Firebase config (LEAP-152) — per flavor, never committed (public repo).
+# CI writes them from the GOOGLE_SERVICES_*_BASE64 secrets; developers copy
+# them from the team vault (see README "Firebase Analytics config").
+android/app/src/*/google-services.json
+google-services*.json

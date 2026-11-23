@@ -37,6 +37,8 @@ import 'household_detail_screen.dart';
 import 'members_service_type_dropdown.dart';
 import 'service_member_list_tile.dart';
 import 'service_static_filter.dart';
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 
 /// Watches the Patients branch navigator; registered in `router.dart`.
 ///
@@ -280,9 +282,59 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     if (mounted) _loadData();
   }
 
+  // ── GA (LEAP-152) ────────────────────────────────────────────────────
+
+  /// Debounces `search_used` so a typed query logs once, not per keystroke.
+  Timer? _searchTrackTimer;
+
+  /// Last query length logged — a refined query (e.g. more letters) logs
+  /// again; re-typing the same length or a cleared field does not.
+  int? _lastTrackedQueryLength;
+
+  /// GA `filter_applied` on the Members page. [value] is a fixed key (the
+  /// dropdown option's enum name or `all`), never a village name.
+  void _trackFilter(String filter, String action, String? value,
+      {int? resultCount}) {
+    Analytics.event(AnalyticsEvent.filterApplied, {
+      AnalyticsParam.source: AnalyticsValue.members,
+      AnalyticsParam.filter: filter,
+      AnalyticsParam.action: action,
+      AnalyticsParam.filterValue: value,
+      AnalyticsParam.resultCount: resultCount,
+    });
+  }
+
+  /// GA `search_used`, ~1.5 s after the SK stops typing. Only the query's
+  /// length and shape (digits / text / mixed) are sent — never the text,
+  /// which holds names, phone and NID numbers.
+  void _scheduleSearchTracking(String query) {
+    _searchTrackTimer?.cancel();
+    if (query.length < 2) {
+      if (query.isEmpty) _lastTrackedQueryLength = null;
+      return;
+    }
+    _searchTrackTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (query.length == _lastTrackedQueryLength) return;
+      _lastTrackedQueryLength = query.length;
+      final hasDigit = query.contains(RegExp(r'\d'));
+      final hasLetter = query.contains(RegExp(r'[^\d\s]'));
+      Analytics.event(AnalyticsEvent.searchUsed, {
+        AnalyticsParam.source: AnalyticsValue.members,
+        AnalyticsParam.listMode: _serviceFilter == ServiceStaticFilter.allMembers
+            ? AnalyticsValue.households
+            : _serviceFilter.name,
+        AnalyticsParam.queryLength: query.length,
+        AnalyticsParam.queryType: hasDigit && hasLetter
+            ? AnalyticsValue.mixed
+            : (hasDigit ? AnalyticsValue.digits : AnalyticsValue.text),
+      });
+    });
+  }
+
   @override
   void dispose() {
     debugPrint('[_HouseholdListScreenState] dispose');
+    _searchTrackTimer?.cancel();
     rosterRevision.removeListener(_onRosterChanged);
     patientsRouteObserver.unsubscribe(this);
     _searchController.dispose();
@@ -378,6 +430,16 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
   }
 
   void _onServiceFilterSelected(ServiceStaticFilter filter) {
+    if (filter != _serviceFilter) {
+      _trackFilter(
+        AnalyticsValue.service,
+        filter == ServiceStaticFilter.allMembers
+            ? AnalyticsValue.clear
+            : AnalyticsValue.select,
+        filter.name,
+        resultCount: _serviceCounts[filter],
+      );
+    }
     setState(() {
       _serviceFilter = filter;
       if (filter == ServiceStaticFilter.allMembers) {
@@ -409,7 +471,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     setState(() => _refreshing = true);
     try {
       final syncSvc = context.read<OfflineSyncService>();
-      final report = await syncSvc.warmSync();
+      final report = await syncSvc.warmSync(trigger: AnalyticsValue.pullRefresh);
       if (!mounted) return;
       final msg = report.errors.isNotEmpty
           ? HouseholdListStrings.refreshFailed(report.errors.first)
@@ -755,7 +817,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
             final info = _MemberInfo.fromServiceRow(row);
             return ServiceMemberListTile(
               row: row,
-              onTap: () => _navigateToMemberDetail(context, info),
+              onTap: () => _navigateToMemberDetail(context, info,
+                  row: AnalyticsValue.serviceList),
             );
           },
         );
@@ -860,6 +923,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
                     onChanged: (v) {
                       setState(() => _searchQuery = v.trim().toLowerCase());
                       _loadServiceFilterMeta();
+                      _scheduleSearchTracking(_searchQuery);
                     },
                     style: const TextStyle(
                       fontFamily: AppFonts.body,
@@ -900,6 +964,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
                       _searchController.clear();
                       setState(() => _searchQuery = '');
                       _loadServiceFilterMeta();
+                      _scheduleSearchTracking('');
                     },
                     child: Icon(
                       Icons.clear,
@@ -947,6 +1012,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
                 label: MissionDashboardStrings.allVillages,
                 isActive: _selectedInlineVillageId == null,
                 onTap: () {
+                  if (_selectedInlineVillageId != null) {
+                    _trackFilter(AnalyticsValue.village, AnalyticsValue.clear,
+                        AnalyticsValue.all);
+                  }
                   setState(() => _selectedInlineVillageId = null);
                   _loadServiceFilterMeta();
                 },
@@ -956,6 +1025,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
                   label: titleCaseWords(v.name),
                   isActive: _selectedInlineVillageId == v.id,
                   onTap: () {
+                    if (_selectedInlineVillageId != v.id) {
+                      _trackFilter(
+                          AnalyticsValue.village, AnalyticsValue.select, null);
+                    }
                     setState(() => _selectedInlineVillageId = v.id);
                     _loadServiceFilterMeta();
                   },
@@ -1027,17 +1100,33 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
               : null,
           otherMembers: others,
           isExpanded: _expandedHouseholdIds.contains(id),
-          onToggleExpanded: () => setState(() {
-            if (!_expandedHouseholdIds.remove(id)) {
-              _expandedHouseholdIds.add(id);
-            }
-          }),
+          onToggleExpanded: () {
+            final expanding = !_expandedHouseholdIds.contains(id);
+            Analytics.event(AnalyticsEvent.householdExpanded, {
+              AnalyticsParam.action: expanding
+                  ? AnalyticsValue.expand
+                  : AnalyticsValue.collapse,
+              AnalyticsParam.otherMembers: others.length,
+            });
+            setState(() {
+              if (!_expandedHouseholdIds.remove(id)) {
+                _expandedHouseholdIds.add(id);
+              }
+            });
+          },
           onMemberTap: (other) => _navigateToMemberDetail(
             context,
             _MemberInfo.fromMember(other, item),
+            row: AnalyticsValue.otherMember,
           ),
           onTap: () => _navigateToDetail(context, item),
-          onAddMember: () => _addMemberToHousehold(item),
+          onAddMember: () {
+            Analytics.event(AnalyticsEvent.addMemberTapped, {
+              AnalyticsParam.source: AnalyticsValue.members,
+              AnalyticsParam.members: item.members.length,
+            });
+            _addMemberToHousehold(item);
+          },
         );
       },
     );
@@ -1084,7 +1173,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
 
     // Use the screen State's context — not a ListView itemBuilder context,
     // which is deactivated after the async scanner closes.
-    final result = await showNidScannerForMember(context);
+    final result = await showNidScannerForMember(context,
+        source: AnalyticsValue.members);
     if (!mounted || result == null) return;
 
     final itemForLink = item.id == localId
@@ -1099,7 +1189,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
             members: item.members,
             rawJson: item.rawJson,
           );
-    final extra = _linkMemberExtraFromHouseholdItem(itemForLink, result);
+    final extra = _linkMemberExtraFromHouseholdItem(itemForLink, result)
+      ..['gaSource'] = AnalyticsValue.members;
     if (!mounted) return;
     await context.push('/household/enrollment/link-member', extra: extra);
     if (mounted) _loadData();
@@ -1167,7 +1258,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     );
   }
 
-  void _navigateToMemberDetail(BuildContext context, _MemberInfo member) {
+  /// [row] is only the GA `patient_tapped.row` label (LEAP-152):
+  /// `head`, `other_member` or `service_list`.
+  void _navigateToMemberDetail(BuildContext context, _MemberInfo member,
+      {required String row}) {
     debugPrint('[_HouseholdListScreenState] _navigateToMemberDetail patientId=${member.patientId} id=${member.id} name=${member.name}');
     final id = (member.patientId != null && member.patientId!.isNotEmpty)
         ? member.patientId!
@@ -1179,6 +1273,15 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
       );
       return;
     }
+    // GA: which row/list SKs open patients from — no patient id or name.
+    Analytics.event(AnalyticsEvent.patientTapped, {
+      AnalyticsParam.source: AnalyticsValue.members,
+      AnalyticsParam.row: row,
+      AnalyticsParam.listMode: _serviceFilter == ServiceStaticFilter.allMembers
+          ? AnalyticsValue.households
+          : _serviceFilter.name,
+      AnalyticsParam.searching: _searchQuery.isNotEmpty,
+    });
     // Push directly to /patients/:id — the /patient/:id redirect drops extra.
     context.push(
       '/patients/$id?origin=household',
@@ -1229,7 +1332,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
             recentServiceKind: member.recentService,
             serviceBadgePending: serviceBadgePending,
             isDeceased: !member.isActive,
-            onTap: () => _navigateToMemberDetail(context, member),
+            onTap: () => _navigateToMemberDetail(context, member,
+                row: AnalyticsValue.head),
           ),
         ),
         if (scheduleTier != null && scheduleTier != DashboardTier.upcoming) ...[

@@ -3259,6 +3259,10 @@
     "bn": "চালিয়ে যেতে একটি যোগাযোগের নম্বর লিখুন।",
     "en": "Enter a contact number to continue."
   },
+  "Teleconsult.contactNumberInvalid": {
+    "bn": "১১ সংখ্যার একটি সঠিক মোবাইল নম্বর লিখুন, যেমন 01712345678।",
+    "en": "Enter a valid 11-digit mobile number, e.g. 01712345678."
+  },
   "Teleconsult.continueWithoutCall": {
     "bn": "টেলি-পরামর্শ ছাড়াই চালিয়ে যান",
     "en": "Continue without teleconsult"
@@ -15018,5 +15022,25 @@
   "Epi.scanNcdCardCta": {
     "en": "Scan NCD card",
     "bn": "এনসিডি কার্ড স্ক্যান করুন"
+  },
+  "NabaVisual.openPicture": {
+    "en": "Open picture: {caption}",
+    "bn": "ছবিটি খুলুন: {caption}"
+  },
+  "NabaVisual.close": {
+    "en": "Close",
+    "bn": "বন্ধ করুন"
+  },
+  "NabaVisual.previous": {
+    "en": "Previous picture",
+    "bn": "আগের ছবি"
+  },
+  "NabaVisual.next": {
+    "en": "Next picture",
+    "bn": "পরের ছবি"
+  },
+  "NabaVisual.pageOf": {
+    "en": "{current} / {total}",
+    "bn": "{current} / {total}"
   }
 }

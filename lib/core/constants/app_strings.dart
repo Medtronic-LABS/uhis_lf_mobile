@@ -4293,6 +4293,25 @@ abstract final class VisitFlowStrings {
 }
 
 /// Strings for the AI Next Best Action (NABA) Step 3 screen.
+/// Step 3 guideline picture strip + full-size viewer (NABA `visuals`).
+abstract final class NabaVisualStrings {
+  NabaVisualStrings._();
+
+  /// Screen-reader label for a picture tile; [caption] is the tile's caption.
+  static String openPicture(String caption) => getTranslatedString(
+      'NabaVisual.openPicture', 'Open picture: {caption}',
+      params: {'caption': caption});
+  static String get close => getTranslatedString('NabaVisual.close', 'Close');
+  static String get previous =>
+      getTranslatedString('NabaVisual.previous', 'Previous picture');
+  static String get next => getTranslatedString('NabaVisual.next', 'Next picture');
+
+  /// Viewer position counter, e.g. "1 / 3".
+  static String pageOf(int current, int total) => getTranslatedString(
+      'NabaVisual.pageOf', '{current} / {total}',
+      params: {'current': '$current', 'total': '$total'});
+}
+
 abstract final class NabaStrings {
   NabaStrings._();
 
@@ -4383,6 +4402,7 @@ abstract final class TeleconsultStrings {
       );
   static String get contactNumberLabel => getTranslatedString('Teleconsult.contactNumberLabel', 'Contact Number');
   static String get contactNumberRequired => getTranslatedString('Teleconsult.contactNumberRequired', 'Enter a contact number to continue.');
+  static String get contactNumberInvalid => getTranslatedString('Teleconsult.contactNumberInvalid', 'Enter a valid 11-digit mobile number, e.g. 01712345678.');
   static String get documentTypePrescription => getTranslatedString('Teleconsult.documentTypePrescription', 'Prescription');
   static String get documentTypeLabReports => getTranslatedString('Teleconsult.documentTypeLabReports', 'Lab Reports');
   static String get selectDocumentsLabel => getTranslatedString('Teleconsult.selectDocumentsLabel', 'Select Medical Documents');

@@ -13,6 +13,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shukhee_sdk/shukhee_sdk.dart';
 
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
 import '../../core/constants/app_strings.dart';
 import 'pdf_viewer_screen.dart';
 
@@ -50,8 +52,13 @@ class _DocumentDownloadButtonState extends State<DocumentDownloadButton> {
       );
       final bytes = Uint8List.fromList(result.bytes);
       if (!mounted) return;
+      Analytics.event(AnalyticsEvent.teleconsultPrescriptionViewed, {
+        AnalyticsParam.documentType: widget.docType,
+        AnalyticsParam.source: AnalyticsValue.history,
+      });
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
+          settings: const RouteSettings(name: AnalyticsScreen.pdfViewer),
           builder: (_) => PdfViewerScreen(title: widget.title, bytes: bytes),
         ),
       );

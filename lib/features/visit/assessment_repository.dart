@@ -111,7 +111,7 @@ class AssessmentRepository extends ChangeNotifier {
     var resolvedLat = latitude;
     var resolvedLng = longitude;
     if (resolvedLat == 0.0 && resolvedLng == 0.0) {
-      final pos = await LocationService.getCurrentPosition();
+      final pos = await LocationService.getCurrentPosition(source: 'visit');
       resolvedLat = pos.latitude;
       resolvedLng = pos.longitude;
     }
@@ -194,7 +194,7 @@ class AssessmentRepository extends ChangeNotifier {
     String? referralFacilityType,
     String? referredSiteId,
   }) async {
-    final position = await LocationService.getCurrentPosition();
+    final position = await LocationService.getCurrentPosition(source: 'visit');
     final updated = await _dao.mergeOtherDetailsForEncounter(
       encounterId: encounterId,
       patchFor: (row) => VisitSummaryDetails.patchFor(

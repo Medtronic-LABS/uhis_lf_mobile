@@ -230,7 +230,17 @@ class Endpoints {
       '/ai-scribe/programme-recommendation/recommend';
 
   // ── AI Next Best Action: post-assessment care plan proposal ──────────────
-  static const String nabaGenerate = '/ai-scribe/naba/generate';
+  /// Frappe `spice_next_ai` NABA — same request/response as the legacy
+  /// ai-scribe route plus `citations` and `visuals`; the body arrives wrapped
+  /// in Frappe's `{"message": ...}`. Base URL: [AppConfig.spiceNextAiApiBaseUrl].
+  static const String nabaGenerateFrappe =
+      '/api/method/spice_next_ai.api.naba.generate';
+
+  /// Prefix every guideline image path from a NABA `visuals` block must start
+  /// with. The server supplies the full `imagePath`; anything else is refused
+  /// so a response can never point the app's authenticated client elsewhere.
+  static const String nabaVisualImagePrefix =
+      '/api/method/spice_next_ai.api.naba.visual_image';
 
   // ── AI Assistant: conversational Q&A ────────────────────────────────────
   static const String assistantAsk = '/ai-scribe/assistant/ask';

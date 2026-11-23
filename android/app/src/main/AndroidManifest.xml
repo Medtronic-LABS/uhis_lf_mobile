@@ -1,5 +1,11 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Firebase Analytics merges in the advertising-id permission; we never use
+         the ad id (see google_analytics_adid_collection_enabled below). -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove"/>
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove"/>
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <!-- GPS location for household/member enrollment coordinates -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -81,6 +87,15 @@
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="true">
+        <!-- Firebase Analytics (LEAP-152): usage analytics only. No advertising
+             id, no ad personalisation, no Google Signals ad features. -->
+        <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_user_data" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_storage" android:value="false" />
+        <!-- Screens are logged by name from Flutter; the native auto-reporter
+             would add a meaningless "MainActivity" screen_view on every resume. -->
+        <meta-data android:name="google_analytics_automatic_screen_reporting_enabled" android:value="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

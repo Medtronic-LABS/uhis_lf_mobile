@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/analytics/analytics_events.dart';
+import '../../../core/analytics/analytics.dart';
 import '../../../app/theme.dart';
 import '../scribe_controller.dart';
 import '../../../core/api/scribe_api_service.dart';
@@ -11,6 +13,7 @@ import '../../../core/constants/app_strings.dart';
 /// SK must scroll past all 4 SOAP sections before Accept becomes enabled
 /// when [ScribeRationale.humanReviewRequired] is true.
 Future<void> showScribeReviewSheet(BuildContext context) {
+  Analytics.screen(AnalyticsScreen.scribeReview); // GA (LEAP-152)
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,

@@ -13,6 +13,7 @@ import 'card_highlight_overlay.dart';
 import 'epi_card_scanner.dart';
 import 'epi_date_extraction_models.dart' show UnmatchedVaccineRow;
 import 'epi_date_extraction_repository.dart';
+import '../../../core/device/permission_gate.dart';
 
 /// Returned when the scan screen closes — [scanResult] is null when the SK
 /// dismissed without a successful read; attempt counts support telemetry only.
@@ -171,7 +172,7 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
   }
 
   Future<void> _initCamera() async {
-    final status = await Permission.camera.request();
+    final status = await requestPermissionTracked(Permission.camera, source: 'card_scan');
     if (!mounted) return;
     if (!status.isGranted) {
       setState(() => _cameraUnavailable = true);

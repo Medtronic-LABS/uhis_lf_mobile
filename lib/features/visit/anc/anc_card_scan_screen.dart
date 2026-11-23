@@ -10,6 +10,7 @@ import '../immunisation/card_extraction_transport.dart' show CardBoundingBox;
 import '../immunisation/card_highlight_overlay.dart';
 import 'anc_visit_extraction_models.dart';
 import 'anc_visit_extraction_repository.dart';
+import '../../../core/device/permission_gate.dart';
 
 /// Full-screen "scan" surface for the ANC "মা ও নবজাতক স্বাস্থ্য তথ্যকার্ড"
 /// card — a live rear-camera viewfinder with a capture button and an
@@ -62,7 +63,7 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
   }
 
   Future<void> _initCamera() async {
-    final status = await Permission.camera.request();
+    final status = await requestPermissionTracked(Permission.camera, source: 'card_scan');
     if (!mounted) return;
     if (!status.isGranted) {
       setState(() => _cameraUnavailable = true);

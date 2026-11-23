@@ -202,11 +202,21 @@ promotions unchanged.
 | Trigger | App built | Result |
 |---|---|---|
 | Push to `training` (a `develop` → `training` PR merged) | `training` flavor, `com.medtroniclabs.uhis_next.training`, `env.training.json` | Uploaded to the training listing |
-| `v*` tag on `main` (after a `training` → `main` PR merged) | `prod` flavor, `com.medtroniclabs.uhis_next`, `env.production.json` | Uploaded to the prod listing, attached to a GitHub Release |
+| Push to `main` (a `training` → `main` PR merged) | `prod` flavor, `com.medtroniclabs.uhis_next`, `env.production.json` | Uploaded to the prod listing, then tagged `v<version>` with a GitHub Release |
 | Manual `workflow_dispatch` | The app chosen in the run form | Build only, never uploaded |
 
-A push to `training` that leaves the `pubspec.yaml` version unchanged is skipped, because Play rejects
-a versionCode it has already received. A tag that does not match the `pubspec.yaml` version fails.
+Merges into `develop` do not release to Play. `.github/workflows/develop-build.yml` builds a signed
+release APK of the prod-identity app against `env.develop.json` (from the `develop` environment's
+`ENV_JSON_BASE64` secret) and publishes it as the `develop-latest` GitHub pre-release, replaced on
+every merge, so testers always use the same link:
+`https://github.com/Medtronic-LABS/uhis_lf_mobile/releases/download/develop-latest/LW-Develop.apk`.
+The repo is public, so that link is too. Each build is also kept for 14 days as a workflow artifact
+named `LW-Develop-<version>-<commit>`. The setup both workflows share — Java, Flutter, the keystore and the
+env file — lives in the composite action `.github/actions/prepare-release-build`.
+
+A push that leaves the `pubspec.yaml` version unchanged is skipped, because Play rejects a
+versionCode it has already received. Tags are created by the workflow after a successful prod
+upload, never by hand, so a `v*` tag always marks a build that reached Play.
 
 **Per-app secrets live in GitHub Environments.** Each app's build and upload jobs run in that app's
 environment — `production` for the prod app, `training` for the training app — and read two secrets
@@ -219,7 +229,16 @@ approval; an environment without them runs as soon as it is reached.
 listing on the **Internal testing** track (`r0adkll/upload-google-play`; the service account needs
 release permission on both apps). "What's new" comes from
 `store_assets/release_notes/<X.Y.Z>_<locale>.txt`. Promotion
-from Internal testing to Production stays manual in Play Console.
+from Internal testing to Production is a separate, manually started step.
+
+**Promotion to Production** — `.github/workflows/promote.yml` (run from the Actions tab) takes the
+app, the build number and a rollout percentage (20, 50 or 100), and moves that build from the
+app's Internal testing track to its Production track through `scripts/play_promote.py`. Nothing is
+rebuilt, so the bundle testers received is the bundle users get. Run it again with a higher
+percentage to widen a staged rollout. It runs in the app's environment, so required reviewers there
+gate it. It refuses a build that is not a completed release on Internal testing, a build older than
+the live one, and a percentage that is not higher than the current rollout. A `dry_run` option
+prints the plan without changing Play. The same promotion can still be done by hand in Play Console.
 
 Previously (still true): no Fastlane, no Codemagic config anywhere in the repo. The other existing
 workflow, `.github/workflows/confluence-docs.yml`, is unrelated doc-publishing, untouched by this work.

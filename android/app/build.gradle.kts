@@ -20,8 +20,21 @@ val dartDefines = parseDartDefines(project)
 
 plugins {
     id("com.android.application")
+    // Firebase Analytics (LEAP-152). google-services.json is per flavor
+    // (src/prod/ → leapwell-prod, src/training/ → leapwell-training).
+    id("com.google.gms.google-services")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// google-services.json is NOT committed (public repo): release CI writes it
+// from the GitHub environment secret, developers copy it from the team vault.
+// WARN makes a variant whose flavor has no file still build (analytics off:
+// the Dart side no-ops when Firebase can't initialise), per variant, so a
+// developer with only the prod file can still build training.
+googleServices {
+    missingGoogleServicesStrategy =
+        com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy.WARN
 }
 
 val keystorePropertiesFile = rootProject.file("key.properties")

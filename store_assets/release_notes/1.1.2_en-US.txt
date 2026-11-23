@@ -1,0 +1,4 @@
+What's new in 1.1.2:
+• Visit summary: guideline pictures on the recommendation step, tap to see them full size
+• Call a doctor: the contact number is checked before booking, with a clear message if it's not a valid mobile number
+• Improvements to help us understand how the app is used and make it better

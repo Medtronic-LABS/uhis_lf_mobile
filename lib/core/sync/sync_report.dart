@@ -14,6 +14,8 @@ class SyncReport {
     this.members = 0,
     this.errors = const <String>[],
     this.wasFullSync = false,
+    this.failure,
+    this.skipped = false,
   });
 
   factory SyncReport.empty() {
@@ -33,6 +35,12 @@ class SyncReport {
   final List<String> errors;
   final bool wasFullSync;
 
+  /// The error that stopped the sync, kept typed for analytics (LEAP-152).
+  final Object? failure;
+
+  /// True when the sync did not run because another one was in flight.
+  final bool skipped;
+
   bool get ok => errors.isEmpty;
 
   SyncReport copyWith({
@@ -46,6 +54,8 @@ class SyncReport {
     int? members,
     List<String>? errors,
     bool? wasFullSync,
+    Object? failure,
+    bool? skipped,
   }) =>
       SyncReport(
         startedAt: startedAt,
@@ -59,5 +69,7 @@ class SyncReport {
         members: members ?? this.members,
         errors: errors ?? this.errors,
         wasFullSync: wasFullSync ?? this.wasFullSync,
+        failure: failure ?? this.failure,
+        skipped: skipped ?? this.skipped,
       );
 }

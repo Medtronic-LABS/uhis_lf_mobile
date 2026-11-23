@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/analytics/analytics.dart';
+import '../../../core/analytics/analytics_events.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/household_dao.dart';
 import '../../../core/db/member_dao.dart';
@@ -135,6 +137,10 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
     debugPrint('[_SelectHouseholdScreenState] _onProceed householdId=${_selected?.id} householdNo=${_selected?.householdNo}');
     final hh = _selected;
     if (hh == null) return;
+    Analytics.event(AnalyticsEvent.addMemberTapped, {
+      AnalyticsParam.source: AnalyticsValue.selectHousehold,
+      AnalyticsParam.nidScan: widget.fromNidScan,
+    });
     final added = await context.push<bool>(
         '/household/enrollment/link-member', extra: {
       'householdId': hh.id,
@@ -147,6 +153,7 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
       'villageName': hh.village ?? '',
       'subVillageId': hh.subVillageId ?? '',
       'subVillageName': hh.subVillageName ?? '',
+      'gaSource': AnalyticsValue.selectHousehold,
       // Thread NID scan data so LinkMemberScreen can pre-fill the form.
       if (widget.fromNidScan) 'fromNidScan': true,
       if (widget.scannedNidNumber != null) 'nidNumber': widget.scannedNidNumber,

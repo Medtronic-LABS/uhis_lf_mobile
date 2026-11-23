@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../analytics/analytics.dart';
+
 /// The permissions the app asks for, in the order they are requested.
 ///
 /// Notifications last, deliberately: it is the least alarming of the four, so
@@ -81,6 +83,9 @@ class PermissionGate {
       debugPrint('[Permissions] request failed: $e');
     }
     await _markAsked();
+    statuses.forEach((permission, status) => Analytics.permissionResult(
+        gaPermissionName(permission), status.isGranted,
+        source: 'onboarding'));
     debugPrint('[Permissions] result: '
         '${statuses.map((k, v) => MapEntry(k.toString().split('.').last, v.name))}');
     return statuses;
@@ -117,4 +122,33 @@ class PermissionGate {
       return false;
     }
   }
+}
+
+/// GA name for a permission (LEAP-152).
+String gaPermissionName(Permission p) {
+  if (p == Permission.camera) return 'camera';
+  if (p == Permission.microphone) return 'microphone';
+  if (p == Permission.notification) return 'notifications';
+  if (p == Permission.location ||
+      p == Permission.locationWhenInUse ||
+      p == Permission.locationAlways) {
+    return 'location';
+  }
+  return 'other';
+}
+
+/// `permission.request()` that also logs GA `permission_result` — but only
+/// when the system dialog could actually have been shown (status was not
+/// already granted), so re-opening a screen doesn't count as a new answer.
+Future<PermissionStatus> requestPermissionTracked(
+  Permission permission, {
+  required String source,
+}) async {
+  final before = await permission.status;
+  final after = before.isGranted ? before : await permission.request();
+  if (!before.isGranted) {
+    Analytics.permissionResult(gaPermissionName(permission), after.isGranted,
+        source: source);
+  }
+  return after;
 }

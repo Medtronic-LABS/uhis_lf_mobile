@@ -3,6 +3,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/device/permission_gate.dart';
 
 /// Wraps runtime RECORD_AUDIO permission request with rationale dialog.
 class ScribePermissionService {
@@ -23,7 +24,7 @@ class ScribePermissionService {
       if (!proceed) return false;
     }
 
-    final result = await Permission.microphone.request();
+    final result = await requestPermissionTracked(Permission.microphone, source: 'scribe');
     if (result.isPermanentlyDenied && context.mounted) {
       await _showSettingsDialog(context);
     }

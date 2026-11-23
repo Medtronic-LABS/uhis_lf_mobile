@@ -38,6 +38,7 @@ import '../../core/db/audio_sample_dao.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/config/app_config.dart';
+import '../../core/api/frappe_client.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/sync_connectivity_service.dart';
 import '../../core/telemetry/share_telemetry.dart';
@@ -64,6 +65,8 @@ import '../../core/theme/app_theme.dart';
 import 'naba/naba_models.dart';
 import 'naba/prior_visit_mapper.dart';
 import 'naba/naba_repository.dart';
+import 'naba/guideline_visual_selector.dart';
+import 'naba/widgets/guideline_visual_strip.dart';
 import 'pathway/pathway_engine.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../patient/followup_call_service.dart';
@@ -80,6 +83,9 @@ import 'immunisation/immunisation_timeline_screen.dart';
 import 'triage/symptom_picker_screen.dart';
 import 'visit_flow_header.dart';
 import 'visit_form_screen.dart';
+import '../../core/analytics/analytics.dart';
+import '../../core/analytics/analytics_events.dart';
+import '../../core/analytics/visit_analytics.dart';
 
 /// Single-route 3-step visit flow wrapper.
 class VisitFlowScreen extends StatefulWidget {
@@ -252,6 +258,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   void initState() {
     super.initState();
     debugPrint('[_VisitFlowState] initState');
+    _startGaVisit();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Mint the per-visit telemetry correlator once so visit-content (Step 3),
       // value-audit and visit_completed all share the same visitUuid.
@@ -313,8 +320,45 @@ class _VisitFlowState extends State<VisitFlowScreen> {
 
   @override
   void dispose() {
+    _gaLifecycle?.dispose();
+    // Any way out other than Step 3 Done (leave dialog, back, navigating
+    // away) ends the GA visit as abandoned; a no-op after Done.
+    _gaVisit?.abandon();
     _step1Scribe?.dispose();
     super.dispose();
+  }
+
+  // ── GA visit (LEAP-152) — separate from the in-house telemetry ──────────
+  GaVisit? _gaVisit;
+  AppLifecycleListener? _gaLifecycle;
+
+  void _startGaVisit() {
+    final visit = _gaVisit = GaVisit.start(widget.visitId);
+    _gaLifecycle = AppLifecycleListener(
+      onHide: () => visit.pause(GaVisitPause.background),
+      onShow: () => visit.resume(GaVisitPause.background),
+    );
+    unawaited(() async {
+      var online = false;
+      try {
+        final results = await Connectivity().checkConnectivity();
+        online = results.any((r) => r != ConnectivityResult.none);
+      } on Object catch (e) {
+        debugPrint('[Analytics] visit_started: connectivity check failed: $e');
+      }
+      visit.announceStart(online: online);
+    }());
+  }
+
+  /// Keeps the GA visit's step in line with [_step]; called from build, a
+  /// no-op when the step has not changed.
+  void _syncGaVisitStep() {
+    final visit = _gaVisit;
+    if (visit == null) return;
+    if (_confirmedProgrammes.isNotEmpty) {
+      visit.setProgrammes(_confirmedProgrammes.map((p) => p.name));
+    }
+    visit.enterStep(_step + 1);
   }
 
   Future<void> _loadPatientNameFromDb() async {
@@ -605,7 +649,49 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     if (ok == true) context.go('/home');
   }
 
+  /// GA screen_view for the current visit step (LEAP-152). Safe to call on
+  /// every build — [Analytics.screen] ignores back-to-back repeats.
+  void _trackStepScreen() {
+    final String name;
+    switch (_step) {
+      case 0:
+        name = AnalyticsScreen.visitStep1;
+      case 1:
+        if (_isChildVisit) {
+          name = AnalyticsScreen.visitStep2Form('child');
+        } else if (_confirmedProgrammes.isEmpty) {
+          name = AnalyticsScreen.visitStep2Programmes;
+        } else {
+          final programmes = _confirmedProgrammes.map((p) => p.name).toList()
+            ..sort();
+          name = AnalyticsScreen.visitStep2Form(programmes.join('_'));
+        }
+      default:
+        name = AnalyticsScreen.visitStep3;
+    }
+    Analytics.screen(name);
+  }
+
+  /// Last step state the GA step tracking ran for (step + programmes).
+  String? _gaTrackedStepKey;
+
+  /// Runs the GA step tracking after this frame, and only when the step or
+  /// its programmes changed, so no analytics side effect happens inside
+  /// build().
+  void _scheduleGaStepTracking() {
+    final key = '$_step|$_isChildVisit|'
+        '${(_confirmedProgrammes.map((p) => p.name).toList()..sort()).join(',')}';
+    if (key == _gaTrackedStepKey) return;
+    _gaTrackedStepKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _trackStepScreen();
+      _syncGaVisitStep();
+    });
+  }
+
   Widget _buildStepBody() {
+    _scheduleGaStepTracking();
     switch (_step) {
       case 0:
         if (_step1Scribe == null) {
@@ -1625,7 +1711,39 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     super.dispose();
   }
 
+  /// Set when the recommendation / WhatsApp message came from the AI
+  /// service; false when the offline rule-based template filled it.
+  bool _gaSummaryFromAi = false;
+
+  /// GA `ai_summary_generated` around the recommendation fetch (LEAP-152).
   Future<NabaResponse> _fetchNaba() async {
+    final visitId = GaVisit.idFor(widget.visitId);
+    final started = DateTime.now().millisecondsSinceEpoch;
+    _gaSummaryFromAi = false;
+    try {
+      final naba = await _fetchNabaInner();
+      Analytics.event(AnalyticsEvent.aiSummaryGenerated, {
+        AnalyticsParam.visitId: visitId,
+        AnalyticsParam.result: _gaSummaryFromAi
+            ? AnalyticsValue.success
+            : AnalyticsValue.offlineTemplate,
+        AnalyticsParam.generationMs:
+            DateTime.now().millisecondsSinceEpoch - started,
+      });
+      return naba;
+    } on Object catch (e) {
+      Analytics.event(AnalyticsEvent.aiSummaryGenerated, {
+        AnalyticsParam.visitId: visitId,
+        AnalyticsParam.result: AnalyticsValue.failed,
+        AnalyticsParam.failureReason: Analytics.failureReason(e),
+        AnalyticsParam.generationMs:
+            DateTime.now().millisecondsSinceEpoch - started,
+      });
+      rethrow;
+    }
+  }
+
+  Future<NabaResponse> _fetchNabaInner() async {
     debugPrint('[_Step3AiRecoState] _fetchNaba');
     final apiClient = context.read<ApiClient>(); // read before any await
     final toggles =
@@ -1643,7 +1761,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       return _ruleBasedNaba();
     }
     try {
-      final repo = NabaRepository(apiClient);
+      final repo = NabaRepository(buildFrappeAiClient(
+        apiClient,
+        baseUrl: AppConfig.spiceNextAiApiBaseUrl,
+      ));
       final programmes = <String>[
         for (final p in widget.confirmedProgrammes)
           if (p != Programme.unknown) p.wireTag,
@@ -1706,6 +1827,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             : null,
       );
       final ai = await repo.generate(req);
+      _gaSummaryFromAi = true;
       // Backfill empty fields from rule-based fallback so the UI always
       // has counselling and follow-up content even when AI data is sparse.
       if (ai.counselling.isEmpty || ai.followUp.isEmpty) {
@@ -1727,6 +1849,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           doctorHandover: ai.doctorHandover,
           referralRecommendation: ai.referralRecommendation,
           contextTruncated: ai.contextTruncated,
+          citations: ai.citations,
+          visuals: ai.visuals,
         );
       }
       if (ai.whatsappSummary != null) return ai;
@@ -1747,8 +1871,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         doctorHandover: ai.doctorHandover,
         referralRecommendation: ai.referralRecommendation,
         contextTruncated: ai.contextTruncated,
+        citations: ai.citations,
+        visuals: ai.visuals,
       );
-    } catch (e) {
+    } on FrappeException catch (e) {
       debugPrint('[NABA] AI failed — rule-based fallback: $e');
       return _ruleBasedNaba();
     }
@@ -2622,6 +2748,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           ? fetched.referralRecommendation
           : local.referralRecommendation,
       contextTruncated: fetched.contextTruncated,
+      // Guideline pictures illustrate the AI summary; with that card replaced
+      // by local content, AI-cited pictures would no longer match it.
+      citations: toggles.step3SummaryEnabled ? fetched.citations : const {},
+      visuals: toggles.step3SummaryEnabled ? fetched.visuals : const {},
     );
   }
 
@@ -2630,6 +2760,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
+    // GA: Step 3 Done is the tap, before the slow saves below (LEAP-152).
+    GaVisit.of(widget.visitId)?.complete(referred: _isUiReferred);
 
     unawaited(_recordSummaryCompleted(naba));
 
@@ -3020,6 +3152,19 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   bool _showPwSummaryFor(NabaResponse naba) =>
       _isPwVisit && _pwSummaryBody(naba).isNotEmpty;
 
+  /// GA (LEAP-152) `referral_facility_changed`: which programme's picker and
+  /// whether the SK kept the app's pre-selection. The facility is never sent.
+  void _gaFacilityChanged({
+    required Programme programme,
+    required bool isDefault,
+  }) {
+    Analytics.event(AnalyticsEvent.referralFacilityChanged, {
+      AnalyticsParam.visitId: GaVisit.currentId,
+      AnalyticsParam.programme: programme.name,
+      AnalyticsParam.isDefault: isDefault,
+    });
+  }
+
   Programme _rmnchReferralProgramme() {
     if (widget.confirmedProgrammes.contains(Programme.anc)) {
       return Programme.anc;
@@ -3164,11 +3309,32 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           if (_householdMembers != null && _householdMembers!.length > 1) ...[
             _HouseholdMemberStrip(
               members: _householdMembers!,
-              onTapMember: (patientId) =>
-                  context.push('/patients/$patientId'),
+              onTapMember: (patientId) {
+                // GA (LEAP-152): another household member opened from Step 3.
+                final members = _householdMembers!;
+                final i = members.indexWhere((m) => m.patientId == patientId);
+                Analytics.event(AnalyticsEvent.patientTapped, {
+                  AnalyticsParam.visitId: GaVisit.currentId,
+                  AnalyticsParam.source: AnalyticsValue.visitStep3,
+                  AnalyticsParam.position: i < 0 ? null : i + 1,
+                  AnalyticsParam.programme:
+                      i < 0 ? null : members[i].primaryProgramme.name,
+                });
+                context.push('/patients/$patientId');
+              },
             ),
             const SizedBox(height: 12),
           ],
+
+          // ── Guideline pictures (NABA `visuals`) — up to 3, captioned;
+          // ── tap opens the picture full-size. Takes no space when none load.
+          GuidelineVisualStrip(
+            visuals: GuidelineVisualSelector.select(
+              naba,
+              bangla: AppLocale.isBangla,
+              seed: widget.visitId,
+            ),
+          ),
 
           // ── 3. AI Counselling Guide (WhatsApp preview) ──────────────
           if (naba.whatsappSummary != null) ...[
@@ -3213,8 +3379,17 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                 disambiguate: disambiguateReferralLabels,
               ),
               selectedId: rmnchFacilityId,
-              onChanged: (id) =>
-                  setState(() => _selectedRmnchFacilityId = id),
+              onChanged: (id) {
+                if (id == rmnchFacilityId) return; // same choice re-picked
+                _gaFacilityChanged(
+                  programme: _rmnchReferralProgramme(),
+                  isDefault: id ==
+                      RmnchReferralFacility.initialSelection(
+                        preferredId: widget.referralFacility,
+                      ),
+                );
+                setState(() => _selectedRmnchFacilityId = id);
+              },
             ),
             const SizedBox(height: 16),
           ],
@@ -3228,7 +3403,16 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               ),
               facilities: ncdSites,
               selectedFhirId: ncdSiteId,
-              onChanged: (id) => setState(() => _selectedNcdSiteId = id),
+              onChanged: (id) {
+                if (id == ncdSiteId) return; // same choice re-picked
+                final def = ncdSites.where((f) => f.isDefault).firstOrNull ??
+                    ncdSites.firstOrNull;
+                _gaFacilityChanged(
+                  programme: Programme.ncd,
+                  isDefault: id == def?.fhirId,
+                );
+                setState(() => _selectedNcdSiteId = id);
+              },
             ),
             const SizedBox(height: 16),
           ],
@@ -3782,8 +3966,17 @@ class _AiCounsellingCardState extends State<_AiCounsellingCard> {
     TelemetryService? telemetry,
     String channel, {
     required bool launched,
-  }) =>
-      recordShareTap(
+  }) {
+    // GA (LEAP-152) — channel and whether the app opened; never the text.
+    Analytics.event(AnalyticsEvent.messageShared, {
+      AnalyticsParam.visitId: GaVisit.currentId,
+      AnalyticsParam.source: AnalyticsValue.visitStep3,
+      AnalyticsParam.channel: channel == TelemetryShareChannel.sms
+          ? AnalyticsValue.sms
+          : AnalyticsValue.whatsapp,
+      AnalyticsParam.launched: launched,
+    });
+    recordShareTap(
         telemetry,
         channel: channel,
         surface: TelemetryShareSurface.visitFlow,
@@ -3791,9 +3984,14 @@ class _AiCounsellingCardState extends State<_AiCounsellingCard> {
         launched: launched,
         visitUuid: widget.visitUuid,
       );
+  }
 
   Future<void> _onVote(String vote) async {
     if (_savingVote) return;
+    Analytics.event(AnalyticsEvent.helpfulVote, {
+      AnalyticsParam.visitId: GaVisit.currentId,
+      AnalyticsParam.vote: vote,
+    });
     setState(() {
       _vote = vote;
       _savingVote = true;
@@ -4380,6 +4578,18 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
     );
     if (picked != null && mounted) {
+      // GA (LEAP-152): how far out, and how much the SK moved it — no dates.
+      final today = DateTime.now();
+      final day0 = DateTime(today.year, today.month, today.day);
+      final pickedDay = DateTime(picked.year, picked.month, picked.day);
+      final prevDay = DateTime(_date.year, _date.month, _date.day);
+      if (pickedDay != prevDay) {
+        Analytics.event(AnalyticsEvent.followUpDateChanged, {
+          AnalyticsParam.visitId: GaVisit.currentId,
+          AnalyticsParam.daysAhead: pickedDay.difference(day0).inDays,
+          AnalyticsParam.daysChanged: pickedDay.difference(prevDay).inDays,
+        });
+      }
       setState(() => _date = picked);
       widget.onDateChanged?.call(picked);
     }
@@ -4661,6 +4871,10 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
   /// accepted `version`/`lng` are forwarded so `TeleconsultScreen` can attach
   /// them to the resulting Call Logs row once booking succeeds.
   Future<void> _onTap(BuildContext context) async {
+    Analytics.event(AnalyticsEvent.callDoctorTapped, {
+      AnalyticsParam.visitId: GaVisit.currentId,
+      AnalyticsParam.source: AnalyticsValue.visitStep3,
+    });
     final result = await context.push<TeleconsultConsentDecision>(
       '/teleconsult/consent',
       extra: {
@@ -4670,6 +4884,12 @@ class _TeleconsultButtonState extends State<_TeleconsultButton> {
         if (widget.patientDob != null) 'patientDob': widget.patientDob,
       },
     );
+    Analytics.event(AnalyticsEvent.teleconsultConsent, {
+      AnalyticsParam.visitId: GaVisit.currentId,
+      AnalyticsParam.result: result == null
+          ? AnalyticsValue.cancelled
+          : (result.agreed ? AnalyticsValue.agreed : AnalyticsValue.declined),
+    });
     if (result?.agreed != true || !context.mounted) return;
     context.push(
       '/teleconsult',
