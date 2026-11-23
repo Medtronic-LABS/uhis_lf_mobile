@@ -21,14 +21,19 @@ class MicroCoachingService {
     String? backendUrl,
     String language = 'bn',
     String hfToken = '',
+    bool? analyticsEnabled,
   }) async {
     final sdkUrl = _sdkUrl(backendUrl ?? AppConfig.coachingServiceUrl);
-    debugPrint('[MicroCoaching] initialize url=$sdkUrl lang=$language');
+    // GA (LEAP-152): coaching screens follow the same switch as the Flutter
+    // events, so debug runs without ANALYTICS_ENABLED never reach GA.
+    final analytics = analyticsEnabled ?? AppConfig.analyticsEnabled;
+    debugPrint('[MicroCoaching] initialize url=$sdkUrl lang=$language analytics=$analytics');
     await _channel.invokeMethod('initialize', {
       'authToken': authToken,
       'backendUrl': sdkUrl,
       'language': language,
       'hfToken': hfToken,
+      'analyticsEnabled': analytics,
     });
     debugPrint('[MicroCoaching] initialize ✓');
   }

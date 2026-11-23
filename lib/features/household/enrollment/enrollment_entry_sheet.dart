@@ -8,6 +8,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/analytics/analytics_events.dart';
+import '../../../core/analytics/analytics.dart';
+import '../../../core/analytics/enrollment_analytics.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_repository.dart';
 import '../../../core/auth/auth_repository.dart';
@@ -17,6 +20,7 @@ import '../../../core/theme/app_theme.dart';
 import 'enrollment_controller.dart';
 import 'nid_ocr_service.dart';
 import 'patient_lookup_repository.dart';
+import '../../../core/device/permission_gate.dart';
 
 /// Full-screen dark overlay with NID camera viewfinder.
 ///
@@ -29,18 +33,27 @@ import 'patient_lookup_repository.dart';
 /// Rest of enrollment (form screens) uses GoRouter routes.
 /// Shows the NID scanner overlay for adding a household member.
 /// Returns the scanned [NidScanResult] when the user captures, or null on cancel.
-Future<NidScanResult?> showNidScannerForMember(BuildContext context) {
+///
+/// [source] is the GA `source` of `nid_scan_result`: where the scanner was
+/// opened (members_list / household_detail / add_member).
+Future<NidScanResult?> showNidScannerForMember(
+  BuildContext context, {
+  String? source,
+}) {
+  Analytics.screen(AnalyticsScreen.nidScanMember); // GA (LEAP-152)
   return showModalBottomSheet<NidScanResult>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.transparent,
     enableDrag: false,
-    builder: (_) => const _MemberNidScanOverlay(),
+    builder: (_) => _MemberNidScanOverlay(gaSource: source),
   );
 }
 
-void showEnrollmentEntrySheet(BuildContext context) {
+/// [source] = which home button opened it (fab / search_scan), for GA.
+void showEnrollmentEntrySheet(BuildContext context, {String? source}) {
+  Analytics.screen(AnalyticsScreen.addHouseholdScan); // GA (LEAP-152)
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -52,7 +65,7 @@ void showEnrollmentEntrySheet(BuildContext context) {
         auth: ctx.read<AuthRepository>(),
         apiClient: ctx.read<ApiClient>(),
       ),
-      child: const _EnrollmentOverlay(),
+      child: _EnrollmentOverlay(gaSource: source),
     ),
   );
 }
@@ -60,7 +73,9 @@ void showEnrollmentEntrySheet(BuildContext context) {
 enum _OverlayState { scanner, postScan }
 
 class _EnrollmentOverlay extends StatefulWidget {
-  const _EnrollmentOverlay();
+  const _EnrollmentOverlay({this.gaSource});
+
+  final String? gaSource;
 
   @override
   State<_EnrollmentOverlay> createState() => _EnrollmentOverlayState();
@@ -87,6 +102,21 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
 
+  // GA (LEAP-152): this scanner session and the SK's choice in the sheet.
+  late final GaNidScan _ga = GaNidScan(widget.gaSource);
+  bool _gaPathSent = false;
+
+  void _gaPath(String action) {
+    if (_gaPathSent) return;
+    _gaPathSent = true;
+    gaEnrollmentPathChosen(
+      source: widget.gaSource,
+      action: action,
+      existingPatient: _ga.succeeded ? _ga.existing : null,
+    );
+    _ga.finish();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -104,7 +134,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
 
   /// Request camera permission and start the live preview inside the overlay.
   Future<void> _initCamera() async {
-    final status = await Permission.camera.request();
+    final status = await requestPermissionTracked(Permission.camera, source: 'nid_scan');
     if (!mounted) return;
     if (!status.isGranted) {
       setState(() => _cameraUnavailable = true);
@@ -143,6 +173,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   @override
   void dispose() {
     debugPrint('[_EnrollmentOverlayState] dispose');
+    _gaPath(AnalyticsValue.closed);
     _cameraController?.dispose();
     _sweepCtrl.dispose();
     super.dispose();
@@ -165,6 +196,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     }
     if (!mounted) return;
     setState(() => _isScanning = false);
+    _ga.attemptFrom(result, AnalyticsValue.camera);
     _onResult(result);
   }
 
@@ -192,6 +224,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     }
     if (!mounted) return;
     setState(() => _isScanning = false);
+    _ga.attemptFrom(result, AnalyticsValue.gallery);
     _onResult(result);
   }
 
@@ -205,6 +238,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
           _existingPatient = null;
           _overlayState = _OverlayState.postScan;
         });
+        _ga.existingPatient(null); // unknown until the lookup answers
         final nid = result.data?.nidNumber;
         if (nid != null) _lookupExisting(nid);
       case NidScanStatus.notFound:
@@ -228,6 +262,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     final repo = context.read<PatientLookupRepository>();
     try {
       final patient = await repo.lookupByNid(nid);
+      _ga.existingPatient(patient != null);
       if (!mounted || patient == null) return;
       setState(() => _existingPatient = patient);
     } on DioException catch (_) {
@@ -258,11 +293,14 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                 onCapture: _handleCapture,
                 onPickFromGallery: _pickFromGallery,
                 onCreateHousehold: () {
+                  _gaPath(AnalyticsValue.manualCreate);
                   Navigator.of(context).pop();
-                  context.push('/household/enrollment/create');
+                  context.push('/household/enrollment/create',
+                      extra: {'gaSource': widget.gaSource});
                 },
                 onCancel: () => Navigator.of(context).pop(),
                 onRegisterManually: () {
+                  _gaPath(AnalyticsValue.manualRegister);
                   Navigator.of(context).pop();
                   context.push('/household/enrollment/select-household');
                 },
@@ -272,6 +310,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                   data: _scanned,
                   existing: _existingPatient,
                   onLinkExisting: () {
+                    _gaPath(AnalyticsValue.scanLink);
                     Navigator.of(context).pop();
                     context.push(
                       '/household/enrollment/select-household',
@@ -286,10 +325,12 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                     );
                   },
                   onCreateNew: () {
+                    _gaPath(AnalyticsValue.scanCreate);
                     Navigator.of(context).pop();
                     context.push(
                       '/household/enrollment/create',
                       extra: {
+                        'gaSource': widget.gaSource,
                         'fromNidScan': true,
                         'nidNumber': _scanned?.nidNumber,
                         'name': _scanned?.name,
@@ -313,7 +354,9 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
 /// Simplified NID scanner overlay used when adding a household member.
 /// On capture success, pops with [NidScanResult]; cancel pops with null.
 class _MemberNidScanOverlay extends StatefulWidget {
-  const _MemberNidScanOverlay();
+  const _MemberNidScanOverlay({this.gaSource});
+
+  final String? gaSource;
 
   @override
   State<_MemberNidScanOverlay> createState() => _MemberNidScanOverlayState();
@@ -329,6 +372,9 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
 
   /// Non-null once a card has been read — drives the editable review step.
   NidCardData? _scanned;
+
+  /// GA (LEAP-152): this scanner session → `nid_scan_result` on close.
+  late final GaNidScan _ga = GaNidScan(widget.gaSource);
 
   /// A picked/captured still shown with the scan sweep while OCR runs.
   File? _picked;
@@ -359,7 +405,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   }
 
   Future<void> _initCamera() async {
-    final status = await Permission.camera.request();
+    final status = await requestPermissionTracked(Permission.camera, source: 'nid_scan');
     if (!mounted) return;
     if (!status.isGranted) {
       setState(() => _cameraUnavailable = true);
@@ -398,6 +444,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     final controller = _cameraController;
     _cameraController = null;
     _cameraReady = false;
+    _ga.finish();
     Navigator.of(context).pop(result);
     if (controller != null) {
       controller.dispose().catchError((Object e) {
@@ -409,6 +456,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   @override
   void dispose() {
     debugPrint('[_MemberNidScanOverlayState] dispose');
+    _ga.finish();
     _sweepCtrl.dispose();
     _nameCtrl.dispose();
     final controller = _cameraController;
@@ -433,6 +481,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     }
     if (!mounted) return;
     setState(() => _isScanning = false);
+    _ga.attemptFrom(result, AnalyticsValue.camera);
     _onResult(result);
   }
 
@@ -461,6 +510,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
     }
     if (!mounted) return;
     setState(() => _isScanning = false);
+    _ga.attemptFrom(result, AnalyticsValue.gallery);
     _onResult(result);
   }
 
@@ -1872,5 +1922,33 @@ class _NidDivider extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
       color: Colors.white.withValues(alpha: 0.12),
     );
+  }
+}
+
+/// GA (LEAP-152): maps an OCR read onto the scanner session.
+extension on GaNidScan {
+  void attemptFrom(NidScanResult result, String method) {
+    switch (result.status) {
+      case NidScanStatus.success:
+        final d = result.data;
+        attempt(
+          method: method,
+          success: true,
+          fieldsFilled: [d?.name, d?.nidNumber, d?.dateOfBirth, d?.gender]
+              .where((v) => v != null)
+              .length,
+        );
+      case NidScanStatus.notFound:
+        attempt(
+            method: method,
+            success: false,
+            failureReason: AnalyticsValue.notFound);
+      case NidScanStatus.error:
+        attempt(
+            method: method, success: false, failureReason: AnalyticsValue.error);
+      case NidScanStatus.cancelled:
+      case NidScanStatus.skipped:
+        break; // not a read attempt
+    }
   }
 }

@@ -140,9 +140,13 @@ class ChatMessage {
 }
 
 class AssistantException implements Exception {
-  const AssistantException(this.message, {this.statusCode});
+  const AssistantException(this.message, {this.statusCode, this.cause});
   final String message;
   final int? statusCode;
+
+  /// The transport error behind this one, if any — lets analytics tell
+  /// offline from timeout without reading the message (LEAP-152).
+  final Object? cause;
 
   @override
   String toString() => 'AssistantException($statusCode): $message';

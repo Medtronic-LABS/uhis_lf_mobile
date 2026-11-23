@@ -12,6 +12,8 @@ import 'package:in_app_update/in_app_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../analytics/analytics.dart';
+import '../analytics/analytics_events.dart';
 import '../constants/app_strings.dart';
 
 bool _forcedDialogShowing = false;
@@ -45,6 +47,7 @@ Future<void> showAppUpdateRequiredDialog(
 }) async {
   if (!context.mounted || _forcedDialogShowing) return;
   _forcedDialogShowing = true;
+  _trackUpdate(AnalyticsEvent.appUpdatePrompt, AnalyticsValue.force);
   try {
     await showDialog<void>(
       context: context,
@@ -57,7 +60,11 @@ Future<void> showAppUpdateRequiredDialog(
           content: Text(message ?? AppUpdateStrings.pleaseUpdateTheApp),
           actions: [
             FilledButton(
-              onPressed: () => startAppUpdate(dialogContext),
+              onPressed: () {
+                _trackUpdate(AnalyticsEvent.appUpdateAction,
+                    AnalyticsValue.force, AnalyticsValue.update);
+                startAppUpdate(dialogContext);
+              },
               child: Text(AppUpdateStrings.openPlayStore),
             ),
           ],
@@ -75,6 +82,7 @@ Future<void> showOptionalUpdateDialog(
   required String message,
 }) async {
   if (!context.mounted || _forcedDialogShowing) return;
+  _trackUpdate(AnalyticsEvent.appUpdatePrompt, AnalyticsValue.optional);
   final update = await showDialog<bool>(
     context: context,
     useRootNavigator: true,
@@ -93,8 +101,17 @@ Future<void> showOptionalUpdateDialog(
       ],
     ),
   );
+  _trackUpdate(AnalyticsEvent.appUpdateAction, AnalyticsValue.optional,
+      update == true ? AnalyticsValue.update : AnalyticsValue.later);
   if (update == true && context.mounted) await startAppUpdate(context);
 }
+
+/// GA `app_update_prompt` / `app_update_action` (LEAP-152).
+void _trackUpdate(String event, String type, [String? action]) =>
+    Analytics.event(event, {
+      AnalyticsParam.type: type,
+      AnalyticsParam.action: action,
+    });
 
 /// Starts the Play immediate update when available, else opens the store.
 Future<void> startAppUpdate(BuildContext context) async {

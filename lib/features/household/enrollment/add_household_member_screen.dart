@@ -19,6 +19,9 @@ import '../../../core/debug/console_log.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/analytics/analytics.dart';
+import '../../../core/analytics/analytics_events.dart';
+import '../../../core/analytics/enrollment_analytics.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
 import 'enrollment_dob.dart';
@@ -74,6 +77,7 @@ class AddHouseholdMemberScreen extends StatefulWidget {
     this.existingHouseholdName,
     this.existingHeadName,
     this.existingHeadPhoneNumber,
+    this.gaSource,
   });
 
   /// When non-null, the screen operates in standalone mode: submits the member
@@ -105,6 +109,10 @@ class AddHouseholdMemberScreen extends StatefulWidget {
   final String? existingHouseholdName;
   final String? existingHeadName;
   final String? existingHeadPhoneNumber;
+
+  /// GA `source` of `member_added`: where Add member started
+  /// (members_list / household_detail / select_household / add_guardian).
+  final String? gaSource;
 
   bool get isStandalone => existingHouseholdId != null;
 
@@ -235,6 +243,17 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   String _ageUnit = '';
 
   bool _submitting = false;
+
+  // GA (LEAP-152): form open time and whether scanned details were cleared.
+  final int _gaOpenedAtMs = DateTime.now().millisecondsSinceEpoch;
+  bool _gaScanCleared = false;
+
+  void _gaMemberAdded() => gaMemberAdded(
+        source: widget.gaSource,
+        nidScan: _nidScanned,
+        scanCleared: _gaScanCleared,
+        formMs: DateTime.now().millisecondsSinceEpoch - _gaOpenedAtMs,
+      );
 
   final Map<String, GlobalKey> _fieldKeys = {};
   Map<String, String?> _fieldErrors = {};
@@ -493,6 +512,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       ),
     );
     if (proceed != true || !mounted) return;
+    Analytics.event(AnalyticsEvent.addMemberTapped,
+        {AnalyticsParam.source: AnalyticsValue.addGuardian});
 
     // Unique formInstanceId forces a fresh MaterialPage (new State) so the
     // child form is discarded and a blank Add Member opens — same household.
@@ -507,12 +528,16 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         'subVillageId': widget.existingSubVillageId,
         'subVillageName': widget.existingSubVillageName,
         'formInstanceId': formInstanceId,
+        'gaSource': AnalyticsValue.addGuardian,
       };
       context.pushReplacement('/household/enrollment/link-member', extra: extra);
     } else {
       context.pushReplacement(
         '/household/enrollment/add-member',
-        extra: <String, dynamic>{'formInstanceId': formInstanceId},
+        extra: <String, dynamic>{
+          'formInstanceId': formInstanceId,
+          'gaSource': AnalyticsValue.addGuardian,
+        },
       );
     }
   }
@@ -615,7 +640,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   Future<void> _scanNid() async {
     debugPrint('[_AddHouseholdMemberScreenState] _scanNid');
-    final result = await showNidScannerForMember(context);
+    final result = await showNidScannerForMember(context,
+        source: AnalyticsValue.addMember);
     if (!mounted || result == null) return;
 
     switch (result.status) {
@@ -772,6 +798,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       await _submitStandalone(member);
     } else {
       controller.addMember(member);
+      _gaMemberAdded();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -976,6 +1003,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
             'member queued for Offline Sync');
       }
 
+      _gaMemberAdded();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(EnrollmentStrings.memberAddedSuccess)),
@@ -1126,6 +1154,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                         _fieldErrors.remove('idType');
                         _fieldErrors.remove('idNumber');
                         if (_idType != EnrollmentIdNumber.nationalId) {
+                          if (_nidScanned) _gaScanCleared = true;
                           _nidScanned = false;
                           _brnCtrl.clear();
                           _existingPatient = null;
@@ -1234,6 +1263,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                                 ),
                                 GestureDetector(
                                   onTap: () => setState(() {
+                                    _gaScanCleared = true;
                                     _nidScanned = false;
                                     _brnCtrl.clear();
                                     _existingPatient = null;

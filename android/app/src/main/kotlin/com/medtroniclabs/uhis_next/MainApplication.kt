@@ -31,6 +31,8 @@ class MainApplication : Application() {
         private const val K_URL = "backendUrl"
         private const val K_LANG = "language"
         private const val K_HF = "hfToken"
+        /** GA for coaching screens (LEAP-152). Mirrors Flutter's ANALYTICS_ENABLED. */
+        private const val K_ANALYTICS = "analyticsEnabled"
 
         /** Coaching backend URL derived from the app's API base URL. */
         private val DEFAULT_COACHING_URL: String
@@ -44,6 +46,7 @@ class MainApplication : Application() {
                 backendUrl = p.getString(K_URL, DEFAULT_COACHING_URL) ?: DEFAULT_COACHING_URL,
                 language = p.getString(K_LANG, "bn") ?: "bn",
                 hfToken = p.getString(K_HF, "") ?: "",
+                analyticsEnabled = p.getBoolean(K_ANALYTICS, false),
             )
         }
 
@@ -52,8 +55,10 @@ class MainApplication : Application() {
             backendUrl: String,
             language: String,
             hfToken: String = "",
+            analyticsEnabled: Boolean = false,
         ) {
             val prefs = instance.getSharedPreferences(PREFS_SDK, Context.MODE_PRIVATE)
+            val previousAnalytics = prefs.getBoolean(K_ANALYTICS, false)
             val previousHfToken = prefs.getString(K_HF, "") ?: ""
             val previousLang = prefs.getString(K_LANG, "bn") ?: "bn"
             val previousUrl = prefs.getString(K_URL, "") ?: ""
@@ -64,14 +69,18 @@ class MainApplication : Application() {
                 .putString(K_URL, backendUrl)
                 .putString(K_LANG, language)
                 .putString(K_HF, hfToken)
+                .putBoolean(K_ANALYTICS, analyticsEnabled)
                 .apply()
 
             if (MicroCoachingSDK.isInitialized()) {
                 // SDK already running. Re-init if backend URL, HF token, or auth token changed.
                 // Builder.build() calls shutdown() internally — safe because _initSdkInternal()
                 // re-writes mc_onboarded_v1=true immediately after.
-                if (backendUrl != previousUrl || (hfToken.isNotEmpty() && hfToken != previousHfToken)) {
-                    _initSdkInternal(authToken, backendUrl, language, hfToken)
+                if (backendUrl != previousUrl ||
+                    (hfToken.isNotEmpty() && hfToken != previousHfToken) ||
+                    analyticsEnabled != previousAnalytics
+                ) {
+                    _initSdkInternal(authToken, backendUrl, language, hfToken, analyticsEnabled)
                 } else if (language != previousLang) {
                     // Language switched without other config change — update running SDK via
                     // setLanguage so CoachingFlowActivity reflects the user's current app language.
@@ -80,7 +89,7 @@ class MainApplication : Application() {
                 }
                 return
             }
-            _initSdkInternal(authToken, backendUrl, language, hfToken)
+            _initSdkInternal(authToken, backendUrl, language, hfToken, analyticsEnabled)
         }
 
         fun clearSdkConfig() {
@@ -92,6 +101,7 @@ class MainApplication : Application() {
             backendUrl: String,
             language: String,
             hfToken: String,
+            analyticsEnabled: Boolean,
         ) {
             val lang = if (language == "bn") Language.BANGLA else Language.ENGLISH
 
@@ -116,6 +126,10 @@ class MainApplication : Application() {
                 .enableLearnModule(true)
                 .enableApplyModule(true)
                 .enableTelemetry(false)
+                // GA for the coaching screens, through THIS app's Firebase project
+                // (prod / training by flavor). No keys are passed; the SDK no-ops
+                // safely if Firebase is missing. Follows Flutter's ANALYTICS_ENABLED.
+                .enableAnalytics(analyticsEnabled)
                 .forceMode(CoachingMode.ONLINE)
                 .selectedModel(selectedModelId)
                 .modelDownloadStrategy(downloadStrategy)

@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/analytics/analytics.dart';
+import '../../../core/analytics/analytics_events.dart';
+import '../../../core/analytics/visit_analytics.dart';
 import '../../../core/api/realtime_asr_service.dart';
 import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/constants/app_strings.dart';
@@ -60,7 +63,11 @@ class AiScribeBanner extends StatefulWidget {
     this.onLiveSymptomCodes,
     this.visibleFieldIds,
     this.onLiveControllerReady,
+    this.analyticsStep,
   });
+
+  /// Visit step (1 or 2) for GA `scribe_started` (LEAP-152); null = not sent.
+  final int? analyticsStep;
 
   final String encounterId;
   final String patientId;
@@ -149,6 +156,57 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
   bool _resultConsumed = false;
   ScribeController? _scribe;
 
+  // ── GA mic time (LEAP-152) ───────────────────────────────────────────────
+  /// When the mic went on for the open session, or null when it is off.
+  int? _gaMicOnSince;
+  String _gaMicMode = AnalyticsValue.live;
+
+  /// The SK tapped stop, so the session's end is `user`, not `auto`.
+  bool _gaUserStopped = false;
+
+  void _gaMicOn(String mode) {
+    if (widget.analyticsStep == null || _gaMicOnSince != null) return;
+    _gaMicOnSince = DateTime.now().millisecondsSinceEpoch;
+    _gaMicMode = mode;
+    _gaUserStopped = false;
+  }
+
+  /// Ends the open mic session: `scribe_stopped` with its seconds, added to
+  /// the visit step's total. [stoppedBy] overrides the user/auto guess.
+  void _gaMicOff({String? stoppedBy}) {
+    final since = _gaMicOnSince;
+    final step = widget.analyticsStep;
+    if (since == null || step == null) return;
+    _gaMicOnSince = null;
+    final ms = DateTime.now().millisecondsSinceEpoch - since;
+    final visit = GaVisit.of(widget.encounterId);
+    visit?.addMicSession(step, ms);
+    Analytics.event(AnalyticsEvent.scribeStopped, {
+      AnalyticsParam.visitId: visit?.visitId,
+      AnalyticsParam.step: step,
+      AnalyticsParam.mode: _gaMicMode,
+      AnalyticsParam.micSec: (ms / 1000).round(),
+      AnalyticsParam.stoppedBy: stoppedBy ??
+          (_gaUserStopped ? AnalyticsValue.user : AnalyticsValue.auto),
+    });
+    _gaUserStopped = false;
+  }
+
+  /// Mic is on only while capturing: live `listening`, batch `recording`.
+  void _gaTrackMic() {
+    final live = _liveCtrl.state;
+    final recording = _scribe?.session.state == ScribeState.recording;
+    if (live == RealtimeAsrState.listening) {
+      _gaMicOn(AnalyticsValue.live);
+    } else if (recording) {
+      _gaMicOn(AnalyticsValue.record);
+    } else if (_gaMicOnSince != null) {
+      _gaMicOff(
+        stoppedBy: live == RealtimeAsrState.error ? AnalyticsValue.error : null,
+      );
+    }
+  }
+
   late final RealtimeAsrController _liveCtrl;
   RealtimeClinicalFields? _lastAppliedLiveFields;
   FormPrefillResult? _lastAppliedFormFill;
@@ -230,6 +288,8 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
   @override
   void dispose() {
+    // Mic still on while leaving the screen: count it up to now.
+    _gaMicOff(stoppedBy: AnalyticsValue.left);
     _scribe?.removeListener(_onScribeChanged);
     _liveCtrl.removeListener(_onLiveChanged);
     // Leaving mid-session (e.g. advancing Step 1 -> Step 2, or backing out)
@@ -281,6 +341,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
   }
 
   void _onLiveChanged() {
+    _gaTrackMic();
     if (!mounted) return;
     // On EVERY notification, not only when a fill arrives. The span used to be
     // sent from inside the fill branch below, and a fill happens MID-session —
@@ -336,6 +397,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
   }
 
   void _onScribeChanged() {
+    _gaTrackMic();
     if (!mounted || _showDone) return;
     final session = _scribe!.session;
     if (session.state == ScribeState.reviewReady && !_resultConsumed) {
@@ -410,14 +472,27 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     void onTap() {
       controller.bindContext(context);
       if (idleChoice) {
+        if (widget.analyticsStep != null) {
+          GaVisit.of(widget.encounterId)
+              ?.markScribeUsed(step: widget.analyticsStep);
+          Analytics.event(AnalyticsEvent.scribeStarted, {
+            AnalyticsParam.visitId: GaVisit.idFor(widget.encounterId),
+            AnalyticsParam.step: widget.analyticsStep,
+            AnalyticsParam.mode: widget.tapStartsLiveAsr
+                ? AnalyticsValue.live
+                : AnalyticsValue.record,
+          });
+        }
         if (widget.tapStartsLiveAsr) {
           _startAsr();
         } else {
           controller.startRecording();
         }
       } else if (liveActive) {
+        _gaUserStopped = true;
         _liveCtrl.stop();
       } else if (isRecording) {
+        _gaUserStopped = true;
         controller.stopRecording(
           patientId: widget.patientId,
           encounterId: widget.encounterId,

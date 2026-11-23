@@ -63,6 +63,10 @@ jobs:
               DEV_PASS: ""
             }' > env.ci.json
 
+      # No google-services.json here on purpose (LEAP-152): this APK points at
+      # the dev backend, and with the prod Firebase config testers' activity
+      # would land in the production GA property. The Gradle plugin is skipped
+      # when the file is missing, so the build still passes with analytics off.
       - name: Build release APK
         run: scripts/build_apk.sh ci --release
 

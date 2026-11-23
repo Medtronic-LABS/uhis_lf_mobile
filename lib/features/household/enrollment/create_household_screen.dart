@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/analytics/enrollment_analytics.dart';
 import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/db/household_dao.dart';
 import '../../../core/db/member_dao.dart';
@@ -34,6 +35,7 @@ enum _DuplicateAction { cancel, viewRecord, continueAnyway }
 class CreateHouseholdScreen extends StatefulWidget {
   const CreateHouseholdScreen({
     super.key,
+    this.gaSource,
     this.fromNidScan = false,
     this.scannedNidNumber,
     this.scannedName,
@@ -41,6 +43,8 @@ class CreateHouseholdScreen extends StatefulWidget {
     this.scannedGender,
   });
 
+  /// GA `source`: which home button started it (fab / search_scan).
+  final String? gaSource;
   final bool fromNidScan;
   final String? scannedNidNumber;
   final String? scannedName;
@@ -80,6 +84,10 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   String? _maritalStatus;
   String? _disabilityStatus;
   bool _prefilledFromScan = false;
+
+  // GA (LEAP-152): form open time and whether scanned details were cleared.
+  final int _gaOpenedAtMs = DateTime.now().millisecondsSinceEpoch;
+  bool _gaScanCleared = false;
 
   /// Age in whole years — drives the marital-status gate and the `age` sent to
   /// the server. [_ageCtrl] instead shows the most meaningful unit, named by
@@ -540,6 +548,15 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       return;
     }
 
+    gaHouseholdCreated(
+      source: widget.gaSource,
+      nidScan: widget.fromNidScan && _prefilledFromScan,
+      scanCleared: _gaScanCleared,
+      type: _householdType,
+      members: int.tryParse(_totalMembersCtrl.text) ?? 0,
+      formMs: DateTime.now().millisecondsSinceEpoch - _gaOpenedAtMs,
+    );
+
     final detail = await _detailDataForPersistedHousehold(
       context,
       controller,
@@ -909,7 +926,10 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                                   ),
                                 ),
                                 GestureDetector(
-                                  onTap: () => setState(() => _prefilledFromScan = false),
+                                  onTap: () => setState(() {
+                                    _prefilledFromScan = false;
+                                    _gaScanCleared = true;
+                                  }),
                                   child: Text(
                                     EnrollmentStrings.clearNidScan,
                                     style: const TextStyle(

@@ -134,6 +134,29 @@ jobs:
           key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
+      - name: Write Firebase config (LEAP-152)
+        env:
+          # Stored per GitHub Environment (production / training), like ENV_JSON_BASE64.
+          GOOGLE_SERVICES_BASE64: ${{ secrets.GOOGLE_SERVICES_BASE64 }}
+          PACKAGE_NAME: ${{ needs.plan.outputs.package_name }}
+        run: |
+          # google-services.json is not committed (public repo). A store build
+          # must ship analytics, so fail if this environment's config is missing
+          # or is not a Firebase config for this app.
+          if [ -z "${GOOGLE_SERVICES_BASE64}" ]; then
+            echo "::error::Missing secret GOOGLE_SERVICES_BASE64 in the '${ENV_NAME}' environment"
+            exit 1
+          fi
+          FILE="android/app/src/${APP_FLAVOR}/google-services.json"
+          mkdir -p "$(dirname "${FILE}")"
+          echo "${GOOGLE_SERVICES_BASE64}" | base64 -d > "${FILE}"
+          if ! jq -e --arg pkg "${PACKAGE_NAME}" \
+              '.project_info.project_id and any(.client[]; .client_info.android_client_info.package_name == $pkg)' \
+              "${FILE}" > /dev/null; then
+            echo "::error::GOOGLE_SERVICES_BASE64 in '${ENV_NAME}' is not a google-services.json for ${PACKAGE_NAME}"
+            exit 1
+          fi
+
       - name: Build and verify signer
         env:
           VERSION_INPUT: ${{ github.event.inputs.version }}

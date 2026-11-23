@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/analytics/analytics_events.dart';
+import '../../core/analytics/analytics.dart';
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/member_dao.dart';
@@ -24,6 +26,7 @@ Future<bool?> showMemberDeceasedDialog(
     );
     return Future.value(null);
   }
+  Analytics.screen(AnalyticsScreen.memberDeceased); // GA (LEAP-152)
   return showDialog<bool>(
     context: context,
     barrierDismissible: false,

@@ -14,6 +14,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shukhee_sdk/shukhee_sdk.dart';
 
+import '../../core/analytics/analytics_events.dart';
 import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
@@ -128,7 +129,10 @@ class _HistoryEntryRow extends StatelessWidget {
     final summary = _clinicalSummary();
     return InkWell(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => TeleconsultCallDetailScreen(row: row)),
+        MaterialPageRoute<void>(
+            settings: const RouteSettings(
+                name: AnalyticsScreen.teleconsultCallDetail),
+            builder: (_) => TeleconsultCallDetailScreen(row: row)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),

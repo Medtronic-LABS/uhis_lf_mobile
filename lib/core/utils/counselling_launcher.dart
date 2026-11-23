@@ -11,7 +11,8 @@ import 'package:url_launcher/url_launcher.dart';
 /// Opens WhatsApp (native app, falling back to the wa.me web link) with
 /// [message] pre-filled, addressed to [phone] when given. Shows
 /// [notInstalledMessage] via a [SnackBar] if neither can be launched.
-Future<void> sendCounsellingWhatsApp({
+/// Returns whether WhatsApp (app or web) was opened.
+Future<bool> sendCounsellingWhatsApp({
   required BuildContext context,
   required String message,
   String? phone,
@@ -22,19 +23,18 @@ Future<void> sendCounsellingWhatsApp({
   final phoneParam = rawPhone.isNotEmpty ? 'phone=$rawPhone&' : '';
   final nativeUri = Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
   if (await canLaunchUrl(nativeUri)) {
-    await launchUrl(nativeUri);
-    return;
+    return launchUrl(nativeUri);
   }
   final webUri = Uri.parse(
       'https://wa.me/${rawPhone.isNotEmpty ? rawPhone : ''}?text=$encoded');
   if (await canLaunchUrl(webUri)) {
-    await launchUrl(webUri, mode: LaunchMode.externalApplication);
-    return;
+    return launchUrl(webUri, mode: LaunchMode.externalApplication);
   }
   if (context.mounted) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(notInstalledMessage)));
   }
+  return false;
 }
 
 /// Opens the SMS composer with [message] pre-filled, addressed to [phone].
