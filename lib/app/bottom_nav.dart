@@ -109,10 +109,17 @@ class _BottomNavShellState extends State<BottomNavShell>
 
   // GA tab names, by branch index (LEAP-152). The Assistant tab opens the
   // native micro-coaching (training) module.
-  static const List<String> _gaTabNames = ['home', 'patients', 'training'];
+  static const List<String> _gaTabNames = [
+    AnalyticsValue.home,
+    AnalyticsValue.patients,
+    AnalyticsValue.training,
+  ];
   // Root screen of each branch; goBranch(initialLocation: true) may not push
   // a route (branch already at root), so the screen_view is logged here.
-  static const List<String> _gaTabScreens = ['dashboard', 'patients_list'];
+  static const List<String> _gaTabScreens = [
+    AnalyticsScreen.dashboard,
+    AnalyticsScreen.patientsList,
+  ];
 
   void _trackTab(int toBranch) {
     final from = widget.navigationShell.currentIndex;

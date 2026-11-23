@@ -279,44 +279,31 @@ class OfflineSyncService extends ChangeNotifier {
     Analytics.event(
         AnalyticsEvent.syncStarted, {AnalyticsParam.trigger: trigger});
     final report = await run();
-    if (report.errors.length == 1 &&
-        report.errors.first == 'Sync already running') {
-      return report;
-    }
-    Analytics.event(AnalyticsEvent.syncCompleted, {
-      AnalyticsParam.trigger: trigger,
-      AnalyticsParam.result:
-          report.ok ? AnalyticsValue.success : AnalyticsValue.failed,
-      AnalyticsParam.failureReason:
-          report.ok ? null : _syncFailureReason(report.errors.first),
-      AnalyticsParam.durationMs:
-          report.finishedAt.difference(report.startedAt).inMilliseconds,
-      AnalyticsParam.households: report.households,
-      AnalyticsParam.members: report.members,
-    });
+    if (report.skipped) return report;
+    Analytics.event(
+        AnalyticsEvent.syncCompleted, syncCompletedParams(trigger, report));
     return report;
   }
 
-  /// Fixed GA failure label from a sync error string (never the text).
-  static String _syncFailureReason(String error) {
-    final e = error.toLowerCase();
-    if (e.contains('timeout') || e.contains('timed out')) {
-      return AnalyticsValue.timeout;
-    }
-    if (e.contains('socket') ||
-        e.contains('connection') ||
-        e.contains('network') ||
-        e.contains('offline')) {
-      return AnalyticsValue.offline;
-    }
-    if (e.contains('userid') || e.contains('re-login')) {
-      return AnalyticsValue.sessionExpired;
-    }
-    if (e.contains(' 5') || e.contains('server')) {
-      return AnalyticsValue.serverError;
-    }
-    return AnalyticsValue.other;
-  }
+  /// GA `sync_completed` params for [report]. The failure reason comes from
+  /// the typed error the sync stopped on, never from its message text.
+  @visibleForTesting
+  static Map<String, Object?> syncCompletedParams(
+          String trigger, SyncReport report) =>
+      {
+        AnalyticsParam.trigger: trigger,
+        AnalyticsParam.result:
+            report.ok ? AnalyticsValue.success : AnalyticsValue.failed,
+        AnalyticsParam.failureReason: report.ok
+            ? null
+            : (report.failure == null
+                ? AnalyticsValue.other
+                : Analytics.failureReason(report.failure!)),
+        AnalyticsParam.durationMs:
+            report.finishedAt.difference(report.startedAt).inMilliseconds,
+        AnalyticsParam.households: report.households,
+        AnalyticsParam.members: report.members,
+      };
 
   Future<SyncReport> _runSync({
     required bool fullSync,
@@ -326,6 +313,7 @@ class OfflineSyncService extends ChangeNotifier {
     if (_busy) {
       return SyncReport.empty().copyWith(
         errors: const ['Sync already running'],
+        skipped: true,
       );
     }
     _running = true;
@@ -348,6 +336,7 @@ class OfflineSyncService extends ChangeNotifier {
         return report.copyWith(
           finishedAt: DateTime.now(),
           errors: const [msg],
+          failure: const SessionExpiredException(),
         );
       }
 
@@ -542,6 +531,7 @@ class OfflineSyncService extends ChangeNotifier {
       return report.copyWith(
         finishedAt: DateTime.now(),
         errors: ['Sync failed: $e'],
+        failure: e,
       );
     } finally {
       _running = false;

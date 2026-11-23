@@ -343,7 +343,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       try {
         final results = await Connectivity().checkConnectivity();
         online = results.any((r) => r != ConnectivityResult.none);
-      } on Object catch (_) {}
+      } on Object catch (e) {
+        debugPrint('[Analytics] visit_started: connectivity check failed: $e');
+      }
       visit.announceStart(online: online);
     }());
   }
@@ -670,9 +672,26 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     Analytics.screen(name);
   }
 
+  /// Last step state the GA step tracking ran for (step + programmes).
+  String? _gaTrackedStepKey;
+
+  /// Runs the GA step tracking after this frame, and only when the step or
+  /// its programmes changed, so no analytics side effect happens inside
+  /// build().
+  void _scheduleGaStepTracking() {
+    final key = '$_step|$_isChildVisit|'
+        '${(_confirmedProgrammes.map((p) => p.name).toList()..sort()).join(',')}';
+    if (key == _gaTrackedStepKey) return;
+    _gaTrackedStepKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _trackStepScreen();
+      _syncGaVisitStep();
+    });
+  }
+
   Widget _buildStepBody() {
-    _trackStepScreen();
-    _syncGaVisitStep();
+    _scheduleGaStepTracking();
     switch (_step) {
       case 0:
         if (_step1Scribe == null) {

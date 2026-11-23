@@ -7,13 +7,6 @@ import 'analytics_events.dart';
 /// Never sent: patient name, contact number, reason text, doctor name,
 /// Shukhee/Call Log ids or document content.
 
-/// Bangladeshi mobile: 11 digits `01[3-9]XXXXXXXX`, optionally prefixed with
-/// `88` / `+88`. Spaces and dashes are ignored.
-bool isValidBdMobile(String input) {
-  final digits = input.replaceAll(RegExp(r'[\s-]'), '');
-  return RegExp(r'^(?:\+?88)?01[3-9]\d{8}$').hasMatch(digits);
-}
-
 /// Same number ignoring formatting and the `88` country prefix.
 bool sameBdMobile(String? a, String? b) {
   String norm(String? v) {

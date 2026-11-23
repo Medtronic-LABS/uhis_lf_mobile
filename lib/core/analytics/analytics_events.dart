@@ -239,6 +239,12 @@ abstract final class AnalyticsUserProperty {
 
 /// Common parameter values.
 abstract final class AnalyticsValue {
+  // Period filter and bottom-nav tab values.
+  static const month = 'month';
+  static const week = 'week';
+  static const patients = 'patients';
+  static const training = 'training';
+
   static const success = 'success';
   static const failed = 'failed';
   static const cancelled = 'cancelled';
@@ -393,6 +399,32 @@ abstract final class AnalyticsValue {
 /// Screen names for `screen_view`. GoRoutes are logged by their route
 /// `name`; these cover pages and steps that are not GoRoutes.
 abstract final class AnalyticsScreen {
+  // Router / route-observer page names.
+  static const splash = 'splash';
+  static const login = 'login';
+  static const lock = 'lock';
+  static const forgotPassword = 'forgot_password';
+  static const onboarding = 'onboarding';
+  static const syncProgress = 'sync_progress';
+  static const offlineSync = 'offline_sync';
+  static const pinSetup = 'pin_setup';
+  static const pinUnlock = 'pin_unlock';
+  static const dashboard = 'dashboard';
+  static const patientsList = 'patients_list';
+  static const householdDetail = 'household_detail';
+  static const patientProfile = 'patient_profile';
+  static const immunisationTimeline = 'immunisation_timeline';
+  static const programmeEnroll = 'programme_enroll';
+  static const assistant = 'assistant';
+  static const householdCreate = 'household_create';
+  static const memberAdd = 'member_add';
+  static const memberLink = 'member_link';
+  static const enrollmentConsent = 'enrollment_consent';
+  static const householdSelect = 'household_select';
+  static const teleconsultConsent = 'teleconsult_consent';
+  static const teleconsult = 'teleconsult';
+  static const counselling = 'counselling';
+
   static const visitStep1 = 'visit_step1_symptoms';
   static const visitStep2Programmes = 'visit_step2_programmes';
   static const visitStep2Vaccination = 'visit_step2_vaccination';

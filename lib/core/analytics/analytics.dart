@@ -56,6 +56,9 @@ abstract final class Analytics {
   /// GA4 limit for string parameter / user property values.
   static const int maxValueLength = 100;
 
+  /// GA4 drops user property values longer than 36 characters.
+  static const int maxUserPropertyLength = 36;
+
   /// Initialise Firebase. Call once in `main()` before `runApp`. Android only;
   /// failure is logged and leaves analytics disabled.
   static Future<void> init() async {
@@ -129,9 +132,10 @@ abstract final class Analytics {
     try {
       await sink.setUserId(id);
       await sink.setUserProperty(AnalyticsUserProperty.tenantId, tenantId);
-      await sink.setUserProperty(AnalyticsUserProperty.upazila, _cap(upazila));
       await sink.setUserProperty(
-          AnalyticsUserProperty.unionArea, _cap(unionArea));
+          AnalyticsUserProperty.upazila, capUserProperty(upazila));
+      await sink.setUserProperty(
+          AnalyticsUserProperty.unionArea, capUserProperty(unionArea));
       await sink.setUserProperty(
           AnalyticsUserProperty.appLanguage, appLanguage);
       await sink.setUserProperty(AnalyticsUserProperty.appFlavor,
@@ -139,6 +143,40 @@ abstract final class Analytics {
     } catch (e) {
       debugPrint('[Analytics] setUser failed: $e');
     }
+  }
+
+  /// Update the location user properties once the SK's hierarchy is known
+  /// (the first sync after login), without waiting for the next app start.
+  static void setLocation({String? upazila, String? unionArea}) {
+    final sink = _sink;
+    if (sink == null) return;
+    _guard(
+        sink.setUserProperty(
+            AnalyticsUserProperty.upazila, capUserProperty(upazila)),
+        'upazila');
+    _guard(
+        sink.setUserProperty(
+            AnalyticsUserProperty.unionArea, capUserProperty(unionArea)),
+        'union_area');
+  }
+
+  /// [value] cut to GA4's 36-character user property limit.
+  static String? capUserProperty(String? value) =>
+      (value == null || value.length <= maxUserPropertyLength)
+          ? value
+          : value.substring(0, maxUserPropertyLength);
+
+  /// `union_area` for an SK assigned to [unionNames] (the user-data
+  /// `villages`, labelled "Union" in this app): the single union, or the
+  /// first one alphabetically plus how many more ("Kundapukur +2").
+  static String? unionAreaLabel(Iterable<String> unionNames) {
+    final names = {
+      for (final n in unionNames)
+        if (n.trim().isNotEmpty) n.trim(),
+    }.toList()
+      ..sort();
+    if (names.isEmpty) return null;
+    return names.length == 1 ? names.first : '${names.first} +${names.length - 1}';
   }
 
   /// Update the language user property after a switch.
@@ -173,7 +211,7 @@ abstract final class Analytics {
   }
 
   /// Maps an error to a fixed `failure_reason` value — never the message.
-  static String failureReason(Object error) {
+  static String failureReason(Object error, {bool login = false}) {
     if (error is DioException) {
       switch (error.type) {
         case DioExceptionType.connectionTimeout:
@@ -184,7 +222,11 @@ abstract final class Analytics {
           return AnalyticsValue.offline;
         case DioExceptionType.badResponse:
           final code = error.response?.statusCode ?? 0;
-          if (code == 401 || code == 403) return AnalyticsValue.wrongCredentials;
+          if (code == 401 || code == 403) {
+            return login
+                ? AnalyticsValue.wrongCredentials
+                : AnalyticsValue.unauthorized;
+          }
           if (code >= 500) return AnalyticsValue.serverError;
           return AnalyticsValue.other;
         default:
@@ -194,9 +236,13 @@ abstract final class Analytics {
     if (error is TimeoutException) return AnalyticsValue.timeout;
     if (error is NetworkException) {
       final cause = error.cause;
-      return cause != null ? failureReason(cause) : AnalyticsValue.offline;
+      return cause != null
+          ? failureReason(cause, login: login)
+          : AnalyticsValue.offline;
     }
-    if (error is UnauthorizedException) return AnalyticsValue.wrongCredentials;
+    if (error is UnauthorizedException) {
+      return login ? AnalyticsValue.wrongCredentials : AnalyticsValue.unauthorized;
+    }
     if (error is SessionExpiredException) return AnalyticsValue.sessionExpired;
     return AnalyticsValue.other;
   }

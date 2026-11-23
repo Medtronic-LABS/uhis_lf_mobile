@@ -425,9 +425,9 @@ They are **not committed** (this repo is public). Get both from the team vault a
 | `training` | `android/app/src/training/google-services.json` | `leapwell-training-4c87d` |
 
 Without them the app still builds and runs; analytics is just off (Gradle logs a warning).
-`release.yml` writes the file for the app it is building (prod or training) from the
-`GOOGLE_SERVICES_PROD_BASE64` / `GOOGLE_SERVICES_TRAINING_BASE64` repository secrets and
-fails if that secret is missing. The PR build (`android-apk.yml`) and the develop APK
+`release.yml` writes the file for the app it is building from the `GOOGLE_SERVICES_BASE64`
+secret of its GitHub Environment (`production` or `training`), checks it is a Firebase config
+for that app's package, and fails otherwise. The PR build (`android-apk.yml`) and the develop APK
 (`develop-build.yml`) deliberately build **without** it: they point at the dev backend,
 and their events must not land in the production GA property.
 Analytics events are only sent when built with `--dart-define=ANALYTICS_ENABLED=true`

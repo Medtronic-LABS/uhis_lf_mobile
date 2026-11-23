@@ -228,9 +228,6 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
   int? _gaBookedAtMs;
   bool _gaDoctorSent = false;
   bool _gaEndSent = false;
-  /// Shown under the contact number when the backend rejected it, so the SK
-  /// fixes the number instead of retrying the same one.
-  String? _phoneServerError;
 
   String? get _gaVisitId => _gaVisit?.visitId;
   int get _nowMs => DateTime.now().millisecondsSinceEpoch;
@@ -277,7 +274,6 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
     _lastContactNumber = contactNumber;
     _lastSpeciality = speciality;
     _lastMediaGroups = mediaGroups;
-    _phoneServerError = null;
     _gaAttempt++;
     Analytics.event(AnalyticsEvent.teleconsultBookingSubmitted, {
       AnalyticsParam.visitId: _gaVisitId,
@@ -352,20 +348,8 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       setState(() => _booking = booking);
       unawaited(_pollInBackground(booking.callLog));
     } on ShukheeException catch (e) {
-      final reason = teleconsultFailureReason(e);
-      _gaBookingResult(failureReason: reason);
-      if (!mounted) return;
-      if (reason == AnalyticsValue.invalidMobile) {
-        // Back to the form with the number kept and the reason shown --
-        // retrying the same number can never succeed.
-        _connectingMinDurationTimer?.cancel();
-        setState(() {
-          _stage = _Stage.booking;
-          _phoneServerError = TeleconsultStrings.contactNumberInvalid;
-        });
-        return;
-      }
-      _handleError(e);
+      _gaBookingResult(failureReason: teleconsultFailureReason(e));
+      if (mounted) _handleError(e);
     }
   }
 
@@ -651,8 +635,7 @@ class _TeleconsultScreenState extends State<TeleconsultScreen> {
       case _Stage.booking:
         return _BookingFormView(
           client: _client,
-          initialPhone: _lastContactNumber ?? widget.patientPhone,
-          initialPhoneError: _phoneServerError,
+          initialPhone: widget.patientPhone,
           patientGender: widget.patientGender,
           onSubmit: _submitBooking,
         );
@@ -871,15 +854,12 @@ class _BookingFormView extends StatefulWidget {
   const _BookingFormView({
     required this.client,
     required this.initialPhone,
-    this.initialPhoneError,
     required this.patientGender,
     required this.onSubmit,
   });
 
   final ShukheeClient client;
   final String? initialPhone;
-  /// Backend rejection of the last number (e.g. not a valid BD mobile).
-  final String? initialPhoneError;
   final String? patientGender;
   final Future<void> Function({
     required String contactNumber,
@@ -928,7 +908,7 @@ class _BookingFormViewState extends State<_BookingFormView> {
     _MediaGroup(type: 'prescription', label: TeleconsultStrings.documentTypePrescription),
     _MediaGroup(type: 'lab_report', label: TeleconsultStrings.documentTypeLabReports),
   ];
-  late String? _phoneError = widget.initialPhoneError;
+  String? _phoneError;
   bool _submitting = false;
 
   @override
@@ -1082,10 +1062,6 @@ class _BookingFormViewState extends State<_BookingFormView> {
     final phone = _phoneController.text.trim();
     if (phone.isEmpty) {
       setState(() => _phoneError = TeleconsultStrings.contactNumberRequired);
-      return;
-    }
-    if (!isValidBdMobile(phone)) {
-      setState(() => _phoneError = TeleconsultStrings.contactNumberInvalid);
       return;
     }
     setState(() {

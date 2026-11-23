@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'analytics.dart';
+import 'analytics_events.dart';
 
 /// Sends a GA `screen_view` whenever a named page becomes the top route
 /// (LEAP-152).
@@ -16,20 +17,20 @@ class AnalyticsRouteObserver extends NavigatorObserver {
   /// GoRoute name / path template → GA screen name. Routes not listed fall
   /// back to [screenNameFor]'s normalisation.
   static const Map<String, String> _names = {
-    '/': 'splash',
-    '/login': 'login',
-    '/lock': 'lock',
-    '/forgot-password': 'forgot_password',
-    '/onboarding': 'onboarding',
-    '/sync': 'sync_progress',
-    '/offline-sync': 'offline_sync',
-    '/pin-setup': 'pin_setup',
-    '/pin-unlock': 'pin_unlock',
-    '/home': 'dashboard',
-    '/patients': 'patients_list',
-    'households': 'patients_list',
-    'household/:id': 'household_detail',
-    ':id': 'patient_profile',
+    '/': AnalyticsScreen.splash,
+    '/login': AnalyticsScreen.login,
+    '/lock': AnalyticsScreen.lock,
+    '/forgot-password': AnalyticsScreen.forgotPassword,
+    '/onboarding': AnalyticsScreen.onboarding,
+    '/sync': AnalyticsScreen.syncProgress,
+    '/offline-sync': AnalyticsScreen.offlineSync,
+    '/pin-setup': AnalyticsScreen.pinSetup,
+    '/pin-unlock': AnalyticsScreen.pinUnlock,
+    '/home': AnalyticsScreen.dashboard,
+    '/patients': AnalyticsScreen.patientsList,
+    'households': AnalyticsScreen.patientsList,
+    'household/:id': AnalyticsScreen.householdDetail,
+    ':id': AnalyticsScreen.patientProfile,
   };
 
   /// GA screen name for a route name, or `null` to skip it.

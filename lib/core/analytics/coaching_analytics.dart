@@ -1,4 +1,5 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'analytics.dart';
@@ -29,7 +30,9 @@ Future<void> trackCoachingOpened({Object? error}) async {
   try {
     final results = await Connectivity().checkConnectivity();
     online = results.any((r) => r != ConnectivityResult.none);
-  } on Object catch (_) {}
+  } on Object catch (e) {
+    debugPrint('[Analytics] coaching_opened: connectivity check failed: $e');
+  }
   Analytics.event(AnalyticsEvent.coachingOpened, {
     AnalyticsParam.result:
         error == null ? AnalyticsValue.success : AnalyticsValue.failed,

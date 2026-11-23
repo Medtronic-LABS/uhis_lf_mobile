@@ -207,7 +207,7 @@ class AuthState extends ChangeNotifier {
           AnalyticsValue.failed,
           e is AuthException
               ? AnalyticsValue.wrongCredentials
-              : Analytics.failureReason(e));
+              : Analytics.failureReason(e, login: true));
       return false;
     } finally {
       _busy = false;

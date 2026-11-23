@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/analytics/analytics_events.dart';
 import '../core/analytics/analytics_route_observer.dart';
 import '../core/auth/auth_state.dart';
 import '../core/version/app_version_home_gate.dart';
@@ -250,7 +251,7 @@ GoRouter buildRouter(AuthState auth) {
                           ? state.extra as Map<String, dynamic>
                           : <String, dynamic>{};
                       return MaterialPage(
-                        name: 'immunisation_timeline', // GA screen_view (LEAP-152)
+                        name: AnalyticsScreen.immunisationTimeline, // GA screen_view (LEAP-152)
                         key: ValueKey(
                             'immunisation-${state.pathParameters['id']}'),
                         child: ImmunisationTimelineScreen(
@@ -273,7 +274,7 @@ GoRouter buildRouter(AuthState auth) {
                           ? state.extra as Map<String, dynamic>
                           : <String, dynamic>{};
                       return MaterialPage(
-                        name: 'programme_enroll', // GA screen_view (LEAP-152)
+                        name: AnalyticsScreen.programmeEnroll, // GA screen_view (LEAP-152)
                         key: ValueKey(
                             'enroll-${state.pathParameters['id']}'),
                         child: ProgrammeEnrollScreen(
@@ -304,7 +305,7 @@ GoRouter buildRouter(AuthState auth) {
                 path: '/assistant',
                 name: 'assistant',
                 pageBuilder: (context, state) => const MaterialPage(
-                  name: 'assistant', // GA screen_view (LEAP-152)
+                  name: AnalyticsScreen.assistant, // GA screen_view (LEAP-152)
                   key: ValueKey('assistant-page'),
                   child: AssistantScreen(),
                 ),
@@ -350,7 +351,7 @@ GoRouter buildRouter(AuthState auth) {
             pageBuilder: (context, state) {
               final extra = state.extra as Map<String, dynamic>?;
               return MaterialPage(
-                name: 'household_create', // GA screen_view (LEAP-152)
+                name: AnalyticsScreen.householdCreate, // GA screen_view (LEAP-152)
                 key: const ValueKey('enrollment-create'),
                 child: CreateHouseholdScreen(
                   gaSource: extra?['gaSource'] as String?,
@@ -374,7 +375,7 @@ GoRouter buildRouter(AuthState auth) {
               final instanceId =
                   extra['formInstanceId'] as String? ?? 'default';
               return MaterialPage(
-                name: 'member_add', // GA screen_view (LEAP-152)
+                name: AnalyticsScreen.memberAdd, // GA screen_view (LEAP-152)
                 key: ValueKey('enrollment-add-member-$instanceId'),
                 child: AddHouseholdMemberScreen(
                   gaSource: extra['gaSource'] as String?,
@@ -391,7 +392,7 @@ GoRouter buildRouter(AuthState auth) {
               final instanceId =
                   extra['formInstanceId'] as String? ?? 'default';
               return MaterialPage(
-                name: 'member_link', // GA screen_view (LEAP-152)
+                name: AnalyticsScreen.memberLink, // GA screen_view (LEAP-152)
                 key: ValueKey('link-member-$instanceId'),
                 child: AddHouseholdMemberScreen(
                   existingHouseholdId: extra['householdId'] as String?,
@@ -429,7 +430,7 @@ GoRouter buildRouter(AuthState auth) {
         path: '/household/enrollment/consent',
         name: 'enrollment-consent',
         pageBuilder: (context, state) => const MaterialPage(
-          name: 'enrollment_consent', // GA screen_view (LEAP-152)
+          name: AnalyticsScreen.enrollmentConsent, // GA screen_view (LEAP-152)
           key: ValueKey('enrollment-consent'),
           child: ConsentScreen(),
         ),
@@ -443,7 +444,7 @@ GoRouter buildRouter(AuthState auth) {
               ? state.extra as Map<String, dynamic>
               : <String, dynamic>{};
           return MaterialPage(
-            name: 'household_select', // GA screen_view (LEAP-152)
+            name: AnalyticsScreen.householdSelect, // GA screen_view (LEAP-152)
             key: const ValueKey('select-household'),
             child: SelectHouseholdScreen(
               fromNidScan: extra['fromNidScan'] == true,
@@ -510,7 +511,7 @@ GoRouter buildRouter(AuthState auth) {
               ? state.extra as Map<String, dynamic>
               : <String, dynamic>{};
           return MaterialPage(
-            name: 'teleconsult_consent', // GA screen_view (LEAP-152)
+            name: AnalyticsScreen.teleconsultConsent, // GA screen_view (LEAP-152)
             key: const ValueKey('teleconsult-consent-page'),
             child: TeleconsultConsentScreen(
               patientId: extra['patientId'] as String? ?? '',
@@ -529,7 +530,7 @@ GoRouter buildRouter(AuthState auth) {
               ? state.extra as Map<String, dynamic>
               : <String, dynamic>{};
           return MaterialPage(
-            name: 'teleconsult', // GA screen_view (LEAP-152)
+            name: AnalyticsScreen.teleconsult, // GA screen_view (LEAP-152)
             key: const ValueKey('teleconsult-page'),
             child: TeleconsultScreen(
               patientLabel: extra['patientLabel'] as String? ?? '',
@@ -561,7 +562,7 @@ GoRouter buildRouter(AuthState auth) {
               ? state.extra as Map<String, dynamic>
               : <String, dynamic>{};
           return MaterialPage(
-            name: 'counselling', // GA screen_view (LEAP-152)
+            name: AnalyticsScreen.counselling, // GA screen_view (LEAP-152)
             key: const ValueKey('counselling-page'),
             child: CounsellingScreen(
               patientLabel: extra['patientLabel'] as String? ?? '',

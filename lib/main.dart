@@ -542,7 +542,7 @@ class _UhisNextAppState extends State<UhisNextApp>
   /// Called whenever the user switches app language. Updates SDK language
   /// via setLanguage (no re-init needed — SDK supports live language swap).
   void _onLocaleChanged() {
-    final lang = AppLocale.isBangla ? 'bn' : 'en';
+    final lang = AppLocale.code;
     MicroCoachingService.setLanguage(lang);
   }
 
@@ -558,7 +558,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         userId: await repo.userId(),
         upazila: profile.upazila,
         unionArea: profile.area,
-        appLanguage: AppLocale.isBangla ? 'bn' : 'en',
+        appLanguage: AppLocale.code,
       );
     } catch (e) {
       debugPrint('[Analytics] set user failed: $e');
@@ -581,7 +581,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       return;
     }
     try {
-      final lang = AppLocale.isBangla ? 'bn' : 'en';
+      final lang = AppLocale.code;
       await MicroCoachingService.initialize(
         authToken: token,
         backendUrl: AppConfig.coachingServiceUrl,
@@ -591,7 +591,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       // Re-sync language immediately after init in case LocaleProvider's
       // async _loadFromStorage() completed after AppLocale.current was read
       // above (race window on cold start). setLanguage is a no-op if unchanged.
-      await MicroCoachingService.setLanguage(AppLocale.isBangla ? 'bn' : 'en');
+      await MicroCoachingService.setLanguage(AppLocale.code);
       debugPrint('[MicroCoaching] SDK initialized lang=$lang');
     } catch (e) {
       _sdkInitialized = false;

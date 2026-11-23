@@ -20,23 +20,21 @@ val dartDefines = parseDartDefines(project)
 
 plugins {
     id("com.android.application")
+    // Firebase Analytics (LEAP-152). google-services.json is per flavor
+    // (src/prod/ → leapwell-prod, src/training/ → leapwell-training).
+    id("com.google.gms.google-services")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Firebase Analytics (LEAP-152). google-services.json is per flavor
-// (src/prod/ → leapwell-prod, src/training/ → leapwell-training) and is NOT
-// committed (public repo): CI writes it from GitHub secrets, developers copy it
-// from the team vault. Without it the plugin is skipped and the app still
-// builds — analytics is simply off (the Dart side no-ops when Firebase fails to
-// initialise).
-val hasFirebaseConfig = listOf("prod", "training").any {
-    file("src/$it/google-services.json").exists()
-}
-if (hasFirebaseConfig) {
-    apply(plugin = "com.google.gms.google-services")
-} else {
-    logger.warn("google-services.json not found for any flavor — building without Firebase Analytics")
+// google-services.json is NOT committed (public repo): release CI writes it
+// from the GitHub environment secret, developers copy it from the team vault.
+// WARN makes a variant whose flavor has no file still build (analytics off:
+// the Dart side no-ops when Firebase can't initialise), per variant, so a
+// developer with only the prod file can still build training.
+googleServices {
+    missingGoogleServicesStrategy =
+        com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy.WARN
 }
 
 val keystorePropertiesFile = rootProject.file("key.properties")

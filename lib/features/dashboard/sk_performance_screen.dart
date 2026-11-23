@@ -215,7 +215,8 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen>
                           AnalyticsParam.source: AnalyticsValue.performance,
                           AnalyticsParam.filter: AnalyticsValue.period,
                           AnalyticsParam.action: AnalyticsValue.select,
-                          AnalyticsParam.filterValue: v ? 'month' : 'week',
+                          AnalyticsParam.filterValue:
+                              v ? AnalyticsValue.month : AnalyticsValue.week,
                         });
                       }
                       setState(() => _showMonth = v);

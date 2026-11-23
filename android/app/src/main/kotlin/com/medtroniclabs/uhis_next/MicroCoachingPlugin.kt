@@ -61,7 +61,7 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
                 val lang = call.argument<String>("language") ?: "bn"
                 val hfToken = call.argument<String>("hfToken") ?: ""
                 val analyticsEnabled = call.argument<Boolean>("analyticsEnabled") ?: false
-                Log.d(TAG, "initialize: url=$url lang=$lang hfToken=${hfToken.isNotEmpty()} analytics=$analyticsEnabled token=${token.take(10)}...")
+                Log.d(TAG, "initialize: url=$url lang=$lang hfToken=${hfToken.isNotEmpty()} analytics=$analyticsEnabled")
                 try {
                     MainApplication.initSdk(
                         authToken = token,
@@ -81,7 +81,7 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
             "updateToken" -> {
                 val token = call.argument<String>("authToken")
                     ?: return result.error("MISSING_ARG", "authToken required", null)
-                Log.d(TAG, "updateToken: token=${token.take(10)}... (stored in prefs; no SDK API to update in-process)")
+                Log.d(TAG, "updateToken: stored in prefs (no SDK API to update in-process)")
                 // SDK has no updateToken() — store in prefs so next process restart uses fresh token
                 MainApplication.instance.getSharedPreferences("coaching_sdk_config", Context.MODE_PRIVATE)
                     .edit().putString("authToken", token).apply()

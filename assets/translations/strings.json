@@ -3259,10 +3259,6 @@
     "bn": "চালিয়ে যেতে একটি যোগাযোগের নম্বর লিখুন।",
     "en": "Enter a contact number to continue."
   },
-  "Teleconsult.contactNumberInvalid": {
-    "bn": "১১ সংখ্যার একটি সঠিক মোবাইল নম্বর লিখুন, যেমন 01712345678।",
-    "en": "Enter a valid 11-digit mobile number, e.g. 01712345678."
-  },
   "Teleconsult.continueWithoutCall": {
     "bn": "টেলি-পরামর্শ ছাড়াই চালিয়ে যান",
     "en": "Continue without teleconsult"

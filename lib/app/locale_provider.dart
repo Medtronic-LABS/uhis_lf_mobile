@@ -56,13 +56,12 @@ class LocaleProvider extends ChangeNotifier {
     try {
       await _storage.write(
         key: _key,
-        value: lang == AppLanguage.bangla ? 'bn' : 'en',
+        value: lang.code,
       );
     } catch (_) {
       // Ignore storage errors
     }
   }
 
-  static String _code(AppLanguage lang) =>
-      lang == AppLanguage.bangla ? 'bn' : 'en';
+  static String _code(AppLanguage lang) => lang.code;
 }

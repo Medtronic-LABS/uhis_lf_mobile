@@ -2711,16 +2711,35 @@ class UnifiedFormNotifier extends ChangeNotifier {
   // Separate from the in-house telemetry above: reads the same provenance
   // and changes nothing it reports.
 
-  /// Leaf fields each card can fill — mirrors [_ancScanFieldMap] /
-  /// [_ncdScanFieldMap] (blood pressure as its leaves).
-  static const Map<String, Set<String>> _gaScanTargets = {
-    'anc': {
-      'weight', 'systolic', 'diastolic', 'pulse', 'temperature',
-      'hemoglobin', 'glucose', 'fundalHeight', 'edema', 'urinaryAlbumin',
-      'urinaryBilirubin', 'ultrasound', 'ttTdCompleted',
-    },
-    'ncd': {'weight', 'height', 'systolic', 'diastolic', 'glucose', 'glucoseType'},
+  /// Leaf fields each card can fill, read off [_ancScanFieldMap] /
+  /// [_ncdScanFieldMap] themselves (via a card with every value present), so
+  /// a field added to a scan map is counted here automatically. Nested
+  /// lists such as NCD `bpLogDetails` count as their leaves.
+  static final Map<String, Set<String>> _gaScanTargets = {
+    'anc': _scanLeaves(_ancScanFieldMap(const AncVisitExtraction(
+      weightKg: 1, bpSystolic: 1, bpDiastolic: 1, fundalHeightCm: 1,
+      hemoglobinGmDl: 1, glucoseMmolL: 1, pulseBpm: 1, temperatureF: 1,
+      urinaryAlbuminPresent: true, urinaryBilirubinPresent: true,
+      edemaPresent: true, ttTdCompleted: true, usgDone: true,
+    ))),
+    'ncd': _scanLeaves(_ncdScanFieldMap(const NcdVisitExtraction(
+      weightKg: 1, heightCm: 1, bpSystolic: 1, bpDiastolic: 1,
+      glucoseMmolL: 1, glucoseType: 'FBS',
+    ))),
   };
+
+  static Set<String> _scanLeaves(Map<String, dynamic> scanned) => {
+        for (final e in scanned.entries)
+          if (e.value is List)
+            for (final row in e.value as List)
+              if (row is Map) ...row.keys.cast<String>()
+              else e.key
+          else
+            e.key,
+      };
+
+  @visibleForTesting
+  static Map<String, Set<String>> get gaScanTargetsForTesting => _gaScanTargets;
 
   /// Cards whose scan was applied to this form (`anc`, `ncd`).
   final Set<String> _gaScanCards = {};
@@ -2753,9 +2772,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
       String filledBy(String f) {
         if (b.manual.contains(f)) return AnalyticsValue.manual;
         if (scanFilled.contains(f)) return AnalyticsValue.scan;
-        if (b.prefilled.contains(f)) return 'prefilled';
-        if (b.derived.contains(f)) return 'derived';
-        return _data.getValue(f) == null ? 'empty' : 'other';
+        if (b.prefilled.contains(f)) return FieldSourceValue.prefilled;
+        if (b.derived.contains(f)) return FieldSourceValue.derived;
+        return _data.getValue(f) == null
+            ? FieldSourceValue.empty
+            : AnalyticsValue.other;
       }
 
       final visit = GaVisit.of(_encounterId);

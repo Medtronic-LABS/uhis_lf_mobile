@@ -446,6 +446,15 @@ class AuthRepository {
   /// endpoints (Bearer token and/or auth cookie).
   bool get hasSessionCredentials => _api.hasSessionCredentials;
 
+  /// The SK's union(s), as shown on the GA `union_area` user property.
+  Future<void> saveArea(String? label) async {
+    if (label != null && label.isNotEmpty) {
+      await _storage.write(key: _kArea, value: label);
+    } else {
+      await _storage.delete(key: _kArea);
+    }
+  }
+
   Future<void> saveUpazila(String? name) async {
     if (name != null && name.isNotEmpty) {
       await _storage.write(key: _kUpazila, value: name);

@@ -8,6 +8,7 @@ import '../api/endpoints.dart';
 import '../config/app_config.dart';
 import '../db/health_facility_dao.dart';
 import '../db/ss_linked_village_dao.dart';
+import '../analytics/analytics.dart';
 import 'auth_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -509,6 +510,11 @@ class UserHierarchyService extends ChangeNotifier {
     }
     debugPrint('[UserHierarchyService] upazila → $upazilaName');
     await _auth.saveUpazila(upazilaName);
+    // GA (LEAP-152) union_area: the SK's unions are the user-data `villages`.
+    final unionArea =
+        Analytics.unionAreaLabel((_villages ?? const []).map((v) => v.name));
+    await _auth.saveArea(unionArea);
+    Analytics.setLocation(upazila: upazilaName, unionArea: unionArea);
 
     // ── Persist LINKED_VILLAGE_IDS for offline sync ──────────────────────
     // Mirror Android MetaRepository: use sub-villages nested within each

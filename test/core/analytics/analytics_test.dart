@@ -129,7 +129,12 @@ void main() {
           AnalyticsValue.timeout);
       expect(Analytics.failureReason(dio(DioExceptionType.connectionError)),
           AnalyticsValue.offline);
+      // 401/403 is only "wrong credentials" on login; elsewhere unauthorized.
       expect(Analytics.failureReason(dio(DioExceptionType.badResponse, 401)),
+          AnalyticsValue.unauthorized);
+      expect(
+          Analytics.failureReason(dio(DioExceptionType.badResponse, 403),
+              login: true),
           AnalyticsValue.wrongCredentials);
       expect(Analytics.failureReason(dio(DioExceptionType.badResponse, 503)),
           AnalyticsValue.serverError);
@@ -137,6 +142,26 @@ void main() {
           AnalyticsValue.timeout);
       expect(Analytics.failureReason(StateError('secret text')),
           AnalyticsValue.other);
+    });
+
+    test('user properties are capped at GA4\'s 36 characters', () async {
+      final sink = _FakeSink();
+      Analytics.sink = sink;
+      final long = 'U' * 50;
+      await Analytics.setUser(
+          tenantId: '11', userId: 44, upazila: long, unionArea: long);
+      expect(sink.props[AnalyticsUserProperty.upazila]!.length, 36);
+      expect(sink.props[AnalyticsUserProperty.unionArea]!.length, 36);
+      expect(Analytics.capUserProperty('short'), 'short');
+      expect(Analytics.capUserProperty(null), isNull);
+      Analytics.sink = null;
+    });
+
+    test('union_area label: one union, several, none', () {
+      expect(Analytics.unionAreaLabel(['Kundapukur']), 'Kundapukur');
+      expect(Analytics.unionAreaLabel(['Tupamari', 'Kundapukur', ' ', 'Tupamari']),
+          'Kundapukur +1');
+      expect(Analytics.unionAreaLabel(const []), isNull);
     });
 
     test('visit step 2 screen names are snake_case', () {
