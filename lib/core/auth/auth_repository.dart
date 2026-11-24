@@ -13,6 +13,7 @@ import '../api/endpoints.dart';
 import '../config/app_config.dart';
 import '../constants/app_strings.dart';
 import '../version/app_version_service.dart';
+import '../version/required_update_guard.dart';
 
 /// Hash password using HmacSHA512 keyed by [AppConfig.passwordHashKey],
 /// matching the Spice Android EncryptionUtil.getSecurePassword() implementation.
@@ -36,8 +37,13 @@ String _newPinSalt() {
 }
 
 class AuthRepository {
-  AuthRepository(this._api, {AppVersionService? appVersionService})
-      : _appVersionService = appVersionService ?? AppVersionService(_api),
+  AuthRepository(
+    this._api, {
+    AppVersionService? appVersionService,
+    RequiredUpdateResolver requiredUpdateResolver =
+        const AlwaysBlockRequiredUpdate(),
+  })  : _appVersionService = appVersionService ?? AppVersionService(_api),
+        _requiredUpdateResolver = requiredUpdateResolver,
         _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   ) {
@@ -68,6 +74,7 @@ class AuthRepository {
 
   final ApiClient _api;
   final AppVersionService _appVersionService;
+  final RequiredUpdateResolver _requiredUpdateResolver;
   final FlutterSecureStorage _storage;
 
   /// Set by [AuthState] to [AuthState.handleSessionExpired] — see
@@ -255,11 +262,18 @@ class AuthRepository {
       case AppVersionUpToDate():
       case AppVersionUpdateAvailable():
         break;
-      case AppVersionUpdateRequired(:final minVersionLabel):
-        await _api.clearSession();
-        throw AppUpdateRequiredException(
-          AppUpdateStrings.forcedUpdateMessage(minVersionLabel),
-        );
+      case final AppVersionUpdateRequired required:
+        // Block sign-in only where Play can deliver the update; otherwise
+        // let the user in — the home gate shows a dismissible warning.
+        final decision = await _requiredUpdateResolver.resolve(required);
+        if (decision == RequiredUpdateDecision.blockWithUpdate) {
+          await _api.clearSession();
+          throw AppUpdateRequiredException(
+            AppUpdateStrings.forcedUpdateMessage(required.minVersionLabel),
+          );
+        }
+        debugPrint('[Auth] required update not deliverable via Play '
+            '(${decision.name}) — continuing login');
       case AppVersionCheckFailed():
         // No policy reachable and none cached (LEAP-144): fail open. Blocking
         // here would lock every SK out whenever the AI service is down; the

@@ -15042,5 +15042,33 @@
   "NabaVisual.pageOf": {
     "en": "{current} / {total}",
     "bn": "{current} / {total}"
+  },
+  "updateOk": {
+    "bn": "ঠিক আছে",
+    "en": "OK"
+  },
+  "requiredUpdateNotYetAvailable": {
+    "bn": "এই ডিভাইসের জন্য একটি আবশ্যক আপডেট এখনও Google Play-তে পাওয়া যাচ্ছে না। আপডেটটি পাওয়া গেলেই অনুগ্রহ করে আপডেট করুন।",
+    "en": "A required update is not available on Google Play for this device yet. Please update as soon as it appears."
+  },
+  "requiredUpdateContactSupport": {
+    "bn": "এই অ্যাপ সংস্করণটি পুরনো এবং এই ডিভাইসে Google Play আপডেট দিতে পারছে না। অনুমোদিত সংস্করণ পেতে অনুগ্রহ করে আপনার সুপারভাইজারের সাথে যোগাযোগ করুন।",
+    "en": "This app version is out of date and Google Play cannot provide the update on this device. Please contact your supervisor to get the approved version."
+  },
+  "updateAskAdminForNewBuild": {
+    "bn": "এই বিল্ডটি Google Play-এর মাধ্যমে আপডেট হয় না। নতুন বিল্ডের জন্য অনুগ্রহ করে আপনার অ্যাডমিনিস্ট্রেটরকে বলুন।",
+    "en": "This build is not updated through Google Play. Please ask your administrator for the new build."
+  },
+  "updateReadyToRestart": {
+    "bn": "আপডেট প্রস্তুত। ইনস্টল সম্পন্ন করতে অ্যাপটি রিস্টার্ট করুন।",
+    "en": "Update ready. Restart the app to finish installing."
+  },
+  "updateRestartAction": {
+    "bn": "রিস্টার্ট",
+    "en": "Restart"
+  },
+  "updateCouldNotComplete": {
+    "bn": "আপডেট সম্পন্ন করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।",
+    "en": "The update could not be completed. Please try again later."
   }
 }

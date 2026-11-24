@@ -178,6 +178,18 @@ class TeleconsultCameraMicRequiredException extends DomainException {
   const TeleconsultCameraMicRequiredException([super.localizedMessage]);
 }
 
+// ── App update ───────────────────────────────────────────────────────────────
+
+/// Google Play could not run the in-app update API: app not installed from
+/// Play, Play services missing, Play not yet serving the build, or another
+/// platform-reported failure. [code] is the Play / platform error code and is
+/// for diagnostics only — never shown to users.
+class PlayUpdateUnavailableException extends DomainException {
+  final String? code;
+  const PlayUpdateUnavailableException({this.code, String? message})
+      : super(message);
+}
+
 // ── Local DB ─────────────────────────────────────────────────────────────────
 
 /// Drift/SQLite write or read failure.

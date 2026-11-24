@@ -109,6 +109,51 @@ void main() {
       final p = AppVersionPolicy.fromJson({'minAppVersionCode': 5})!;
       expect(p.latestAppVersionCode, 5);
     });
+
+    group('server-decided grace', () {
+      Map<String, Object?> body({int? until, int? now, Object? revision}) => {
+            'minAppVersionCode': 10,
+            'graceUntilEpochMs': ?until,
+            'serverTimeEpochMs': ?now,
+            'policyRevision': ?revision,
+          };
+
+      test('absent grace fields → not expired', () {
+        expect(AppVersionPolicy.fromJson(body())!.graceExpired, isFalse);
+      });
+
+      test('server time before the deadline → not expired', () {
+        expect(AppVersionPolicy.fromJson(body(until: 2000, now: 1000))!
+            .graceExpired, isFalse);
+      });
+
+      test('server time at or after the deadline → expired', () {
+        expect(AppVersionPolicy.fromJson(body(until: 1000, now: 1000))!
+            .graceExpired, isTrue);
+        expect(AppVersionPolicy.fromJson(body(until: 1000, now: 5000))!
+            .graceExpired, isTrue);
+      });
+
+      test('deadline without server time is never decided from the device clock',
+          () {
+        expect(AppVersionPolicy.fromJson(body(until: 1))!.graceExpired, isFalse);
+      });
+
+      test('the verdict survives the cache round-trip, revision included', () {
+        final fresh = AppVersionPolicy.fromJson(
+            body(until: 1000, now: 5000, revision: 'r7'))!;
+        final cached = AppVersionPolicy.fromJson(fresh.toJson())!;
+        expect(cached.graceExpired, isTrue);
+        expect(cached.policyRevision, 'r7');
+      });
+
+      test('an expired policy yields an expired required-update result', () {
+        final p = AppVersionPolicy.fromJson(body(until: 1000, now: 5000))!;
+        final r = p.evaluate(6) as AppVersionUpdateRequired;
+        expect(r.minVersionCode, 10);
+        expect(r.graceExpired, isTrue);
+      });
+    });
   });
 
   group('AppVersionService.check', () {
