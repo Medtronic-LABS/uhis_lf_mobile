@@ -284,6 +284,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     members: _memberDao,
     appDb: widget.appDb,
     pregnancyProjection: _pregnancyMahProjection,
+    currentUserFhirId: widget.authRepo.userFhirId,
   );
   late final SkSpiceDashboardRepository _skSpiceDashboardRepo =
       SkSpiceDashboardRepository(

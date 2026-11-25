@@ -17,15 +17,26 @@ class MemberAssessmentHistoryWriter {
     required MemberDao members,
     required AppDatabase appDb,
     PregnancyMahProjection? pregnancyProjection,
+    Future<String?> Function()? currentUserFhirId,
   })  : _mah = mah,
         _members = members,
         _appDb = appDb,
-        _pregnancyProjection = pregnancyProjection;
+        _pregnancyProjection = pregnancyProjection,
+        _currentUserFhirId = currentUserFhirId;
 
   final MemberAssessmentHistoryDao _mah;
   final MemberDao _members;
   final AppDatabase _appDb;
   final PregnancyMahProjection? _pregnancyProjection;
+
+  /// The logged-in SK. Spice stamps it on every visit saved on the device, and
+  /// the linked-to-care count only counts NCD visits stamped with this user.
+  final Future<String?> Function()? _currentUserFhirId;
+
+  Future<String?> _practitionerId() async {
+    final id = (await _currentUserFhirId?.call())?.trim();
+    return id == null || id.isEmpty ? null : id;
+  }
 
   /// Clears MAH before a full assessment-history pull (Spice initial sync parity).
   Future<void> clearAllForFullSync() => _mah.deleteAll();
@@ -47,10 +58,12 @@ class MemberAssessmentHistoryWriter {
   Future<int> rebuildFromLocalAssessments() async {
     const table = AppDatabase.tableLocalAssessments;
     final rows = await _appDb.db.query(table);
+    final practitionerId = await _practitionerId();
     for (final row in rows) {
-      await upsertFromLocal(
+      await _upsertFromLocal(
         LocalAssessmentEntity.fromDb(row),
         projectPregnancy: false,
+        practitionerId: practitionerId,
       );
     }
     return rows.length;
@@ -69,18 +82,34 @@ class MemberAssessmentHistoryWriter {
     final memberToLocal = await _resolveLocalMemberIds(memberIds);
     final rows = <MemberAssessmentHistoryRow>[];
     for (final item in items) {
+      // Spice drops these before saving synced history.
+      if (MemberAssessmentHistoryDao.isMedicalReviewService(
+          item.serviceProvided)) {
+        continue;
+      }
       final row = _fromHistoryItem(
         item,
         memberId: memberToLocal[item.householdMemberId],
       );
       if (row != null) rows.add(row);
     }
-    await _mah.upsertMany(rows);
+    await _mah.upsertMany(rows, fromServer: true);
   }
 
   Future<void> upsertFromLocal(
     LocalAssessmentEntity entity, {
     bool projectPregnancy = true,
+  }) async =>
+      _upsertFromLocal(
+        entity,
+        projectPregnancy: projectPregnancy,
+        practitionerId: await _practitionerId(),
+      );
+
+  Future<void> _upsertFromLocal(
+    LocalAssessmentEntity entity, {
+    required bool projectPregnancy,
+    required String? practitionerId,
   }) async {
     var localMemberId = entity.householdMemberLocalId;
     if (localMemberId <= 0) {
@@ -104,10 +133,37 @@ class MemberAssessmentHistoryWriter {
     final visitAt = entity.createdAt ?? entity.updatedAt ?? DateTime.now();
     final visitDate = visitAt.toUtc().toIso8601String();
     final serviceProvided = wireServiceProvided(entity.assessmentType);
+    final memberId = localMemberId > 0 ? localMemberId : null;
+
+    // Once uploaded, the server's copy of this visit (pulled from
+    // member-assessment-history under its own encounter id) is the one the
+    // dashboard counts. Keeping this device copy too counted every synced
+    // visit twice (LEAP-128).
+    final serverId = entity.fhirId?.trim();
+    final serverEncounterId =
+        serverId == null || serverId.isEmpty || serverId == 'null'
+            ? null
+            : serverId;
+    if (await _mah.hasOtherCopyOfVisit(
+      deviceEncounterId: encounterId,
+      serverEncounterId: serverEncounterId,
+      service: serviceProvided,
+      visitDate: visitDate,
+      memberId: memberId,
+      memberFhirId: entity.memberId,
+    )) {
+      await _mah.deleteByEncounter(encounterId, serviceProvided);
+      if (projectPregnancy &&
+          localMemberId > 0 &&
+          PregnancyDetailRebuilder.isMotherServiceProvided(serviceProvided)) {
+        await _pregnancyProjection?.rebuildMembersAndProject([localMemberId]);
+      }
+      return;
+    }
 
     await _mah.upsertMany([
       MemberAssessmentHistoryRow(
-        memberId: localMemberId > 0 ? localMemberId : null,
+        memberId: memberId,
         memberFhirId: entity.memberId,
         visitDate: visitDate,
         serviceProvided: serviceProvided,
@@ -120,7 +176,7 @@ class MemberAssessmentHistoryWriter {
                 : 'Referred')
             : entity.referralStatus,
         referralReason: entity.referredReasons,
-        practitionerId: null,
+        practitionerId: practitionerId,
         observationsJson:
             observations.isNotEmpty ? jsonEncode(observations) : null,
         shasthyaShebikaId: null,

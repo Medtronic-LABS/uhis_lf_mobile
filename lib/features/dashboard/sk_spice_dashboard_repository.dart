@@ -29,13 +29,23 @@ class SkSpiceDashboardRepository {
   /// Call after offline sync so the next dashboard load rebuilds MAH from SQLite.
   void invalidateMahCache() => _mahHydrated = false;
 
-  /// Re-upsert MAH from synced [assessments] + [local_assessments] using current
-  /// parse/normalize rules (e.g. after a pull with `customStatus` fixes).
+  /// Re-merge [local_assessments] into MAH after a sync, then clean up.
+  ///
+  /// Sync has already written the server's rows. This does not rebuild from
+  /// the [assessments] cache: that cache is never cleared, so rebuilding from
+  /// it after a full sync brought back visits the server no longer has.
   Future<void> refreshMahFromLocalCaches() async {
-    await _mahWriter.rebuildFromAssessmentsTable();
     await _mahWriter.rebuildFromLocalAssessments();
+    await _cleanUpMah();
     await _pregnancyDetail.rebuildAllFromMah();
     _mahHydrated = true;
+  }
+
+  /// Spice parity: no medical-review rows, and duplicates removed the way
+  /// Spice does on every app start.
+  Future<void> _cleanUpMah() async {
+    await _mah.deleteMedicalReviewRows();
+    await _mah.deleteDuplicateRecords();
   }
 
   Future<SpiceDashboardCounts> load({
@@ -46,12 +56,15 @@ class SkSpiceDashboardRepository {
   }) async {
     if (!_mahHydrated) {
       _mahHydrated = true;
+      // Fill from the cached history only when there is nothing yet (first
+      // run before a history sync). Otherwise sync keeps the table current,
+      // and rebuilding from the never-cleared cache would undo a full sync.
       if (await _mah.countAll() == 0) {
         await _mah.backfillFromLegacyAssessmentsTable();
+        await _mahWriter.rebuildFromAssessmentsTable();
       }
-      // Same data Spice uses: full assessment-history cache + local visits.
-      await _mahWriter.rebuildFromAssessmentsTable();
       await _mahWriter.rebuildFromLocalAssessments();
+      await _cleanUpMah();
     }
     await _pregnancyDetail.rebuildAllFromMah();
 

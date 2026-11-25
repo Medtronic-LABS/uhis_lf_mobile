@@ -88,7 +88,20 @@ class MemberAssessmentHistoryDao {
     await _db.db.delete(tableName);
   }
 
-  Future<void> upsertMany(List<MemberAssessmentHistoryRow> rows) async {
+  /// Inserts [rows], replacing any row with the same encounter id + service.
+  ///
+  /// [fromServer]: the rows come from member-assessment-history. A visit saved
+  /// on this device is first written under the app's own visit id, and the
+  /// server returns it under its own encounter id, so the encounter match alone
+  /// leaves both rows and the dashboard counts the visit twice (LEAP-128). For
+  /// server rows we also drop the device's copy of the same visit, found the way
+  /// Spice's AssessmentHistoryResolver does it: same member + service + visit
+  /// time (to the second, the precision the visit is uploaded with), or the
+  /// local assessment the server stamped with this encounter id.
+  Future<void> upsertMany(
+    List<MemberAssessmentHistoryRow> rows, {
+    bool fromServer = false,
+  }) async {
     if (rows.isEmpty) return;
     await _db.db.transaction((tx) async {
       for (final row in rows) {
@@ -104,11 +117,157 @@ class MemberAssessmentHistoryDao {
             where: 'encounter_id = ? AND LOWER(service_provided) = ?',
             whereArgs: [encounterId, service],
           );
+          if (fromServer) {
+            await _deleteDeviceCopies(tx, row, encounterId, service);
+          }
         }
         await tx.insert(tableName, dbRow);
       }
     });
   }
+
+  /// The visit time a row is matched on: UTC ISO-8601 cut to whole seconds.
+  static String visitSecond(String visitDate) {
+    final parsed = DateTime.tryParse(visitDate);
+    final iso = parsed == null ? visitDate : parsed.toUtc().toIso8601String();
+    return iso.length >= 19 ? iso.substring(0, 19) : iso;
+  }
+
+  /// "Same visit" conditions for the dedupe queries, as `OR`-ed SQL parts
+  /// with their arguments. A part is only added when its value is present:
+  /// SQLCipher on Android rejects a null bind value ("the bind value at index
+  /// N is null"), unlike the desktop SQLite the unit tests run on.
+  static ({List<String> parts, List<Object> args}) _sameVisitMatch({
+    required String visitDate,
+    required int? memberId,
+    required String? memberFhirId,
+    String? encounterId,
+    String? stampedServerEncounterId,
+  }) {
+    final parts = <String>[];
+    final args = <Object>[];
+    final fhir = memberFhirId?.trim();
+    final member = <String>[];
+    final memberArgs = <Object>[];
+    if (fhir != null && fhir.isNotEmpty) {
+      member.add('member_fhir_id = ?');
+      memberArgs.add(fhir);
+    }
+    if (memberId != null) {
+      member.add('member_id = ?');
+      memberArgs.add(memberId);
+    }
+    if (member.isNotEmpty) {
+      parts.add('(substr(visit_date, 1, 19) = ? AND (${member.join(' OR ')}))');
+      args
+        ..add(visitSecond(visitDate))
+        ..addAll(memberArgs);
+    }
+    final server = encounterId?.trim();
+    if (server != null && server.isNotEmpty) {
+      parts.add('encounter_id = ?');
+      args.add(server);
+    }
+    final stamped = stampedServerEncounterId?.trim();
+    if (stamped != null && stamped.isNotEmpty) {
+      parts.add('''
+encounter_id IN (
+  SELECT json_extract(la.other_details, '\$.encounterId')
+  FROM ${AppDatabase.tableLocalAssessments} AS la
+  WHERE la.fhir_id = ? AND la.other_details IS NOT NULL
+)''');
+      args.add(stamped);
+    }
+    return (parts: parts, args: args);
+  }
+
+  Future<void> _deleteDeviceCopies(
+    DatabaseExecutor tx,
+    MemberAssessmentHistoryRow row,
+    String encounterId,
+    String service,
+  ) async {
+    final match = _sameVisitMatch(
+      visitDate: row.visitDate,
+      memberId: row.memberId,
+      memberFhirId: row.memberFhirId,
+      stampedServerEncounterId: encounterId,
+    );
+    if (match.parts.isEmpty) return;
+    await tx.delete(
+      tableName,
+      where: 'LOWER(service_provided) = ? AND encounter_id != ? '
+          'AND (${match.parts.join(' OR ')})',
+      whereArgs: [service, encounterId, ...match.args],
+    );
+  }
+
+  /// True when a row for the same visit is already present under another
+  /// encounter id than [deviceEncounterId] (normally the server's copy).
+  Future<bool> hasOtherCopyOfVisit({
+    required String deviceEncounterId,
+    required String? serverEncounterId,
+    required String service,
+    required String visitDate,
+    required int? memberId,
+    required String? memberFhirId,
+  }) async {
+    final match = _sameVisitMatch(
+      visitDate: visitDate,
+      memberId: memberId,
+      memberFhirId: memberFhirId,
+      encounterId: serverEncounterId,
+    );
+    if (match.parts.isEmpty) return false;
+    final rows = await _db.db.rawQuery(
+      'SELECT 1 FROM $tableName '
+      'WHERE LOWER(service_provided) = ? AND encounter_id != ? '
+      'AND (${match.parts.join(' OR ')}) LIMIT 1',
+      [service.toLowerCase(), deviceEncounterId, ...match.args],
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// Removes the row written under the device's own visit id.
+  Future<void> deleteByEncounter(String encounterId, String service) async {
+    await _db.db.delete(
+      tableName,
+      where: 'encounter_id = ? AND LOWER(service_provided) = ?',
+      whereArgs: [encounterId, service.toLowerCase()],
+    );
+  }
+
+  /// Services Spice leaves out of this table when it saves synced history
+  /// (`AssessmentUtil.isMedicalReviewVisitService`).
+  static const medicalReviewServices = ['medicalreviewvisit', 'medicalreview'];
+
+  static bool isMedicalReviewService(String? service) =>
+      service != null &&
+      medicalReviewServices.contains(service.trim().toLowerCase());
+
+  /// Drops medical-review rows written before they were filtered out on sync.
+  Future<int> deleteMedicalReviewRows() => _db.db.delete(
+        tableName,
+        where: 'LOWER(service_provided) IN '
+            '(${List.filled(medicalReviewServices.length, '?').join(',')})',
+        whereArgs: medicalReviewServices,
+      );
+
+  /// Spice `deleteDuplicateRecords`, run on every app start: keeps the first
+  /// row of each member + service + visit time + custom status on or after
+  /// [since]. The member is the local id, or the FHIR id when there is none,
+  /// so two different members with no local id are never merged; the visit
+  /// time is compared to the second, as uploads carry no milliseconds.
+  Future<int> deleteDuplicateRecords({String since = '2026-05-01'}) =>
+      _db.db.rawDelete('''
+DELETE FROM $tableName
+WHERE id NOT IN (
+  SELECT MIN(id) FROM $tableName
+  GROUP BY COALESCE(CAST(member_id AS TEXT), member_fhir_id),
+    LOWER(service_provided), substr(visit_date, 1, 19), custom_status
+)
+AND date(datetime(visit_date, 'localtime')) >= ?
+''', [since]);
 
   /// Backfill `referral_status` from MAH `custom_status` (Spice SQL uses the column only,
   /// but synced rows often carry referral in the custom-status list).
@@ -223,7 +382,7 @@ WHERE LOWER(a.kind) IN ('ncd', 'bd_ncd')
       );
       added++;
     }
-    if (rows.isNotEmpty) await upsertMany(rows);
+    if (rows.isNotEmpty) await upsertMany(rows, fromServer: true);
     return added;
   }
 
@@ -359,7 +518,7 @@ ORDER BY member_id ASC, visit_date ASC, id ASC
         ),
       );
     }
-    await upsertMany(rows);
+    await upsertMany(rows, fromServer: true);
     return rows.length;
   }
 
