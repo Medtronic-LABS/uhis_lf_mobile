@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../../../core/api/api_client.dart';
+import '../../../core/api/frappe_client.dart';
 import '../immunisation/card_extraction_transport.dart';
 import 'ncd_visit_extraction_models.dart';
 
@@ -28,8 +28,8 @@ class NcdVisitExtractionException implements Exception {
 /// [AncVisitExtractionRepository]/[EpiDateExtractionRepository] — this class
 /// owns only the NCD-specific request shape and response typing.
 class NcdVisitExtractionRepository {
-  NcdVisitExtractionRepository(ApiClient client)
-      : _transport = CardExtractionTransport(client);
+  NcdVisitExtractionRepository(FrappeClient client)
+    : _transport = CardExtractionTransport(client);
 
   final CardExtractionTransport _transport;
 

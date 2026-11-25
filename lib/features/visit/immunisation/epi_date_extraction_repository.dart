@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../../../core/api/api_client.dart';
+import '../../../core/api/frappe_client.dart';
 import 'card_extraction_transport.dart';
 import 'epi_date_extraction_models.dart';
 
@@ -22,8 +22,8 @@ class EpiDateExtractionException implements Exception {
 /// [CardExtractionTransport], shared with [AncVisitExtractionRepository] —
 /// this class owns only the EPI-specific request shape and response typing.
 class EpiDateExtractionRepository {
-  EpiDateExtractionRepository(ApiClient client)
-      : _transport = CardExtractionTransport(client);
+  EpiDateExtractionRepository(FrappeClient client)
+    : _transport = CardExtractionTransport(client);
 
   final CardExtractionTransport _transport;
 

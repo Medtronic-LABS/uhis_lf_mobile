@@ -2,9 +2,8 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
-import '../../../core/api/api_client.dart';
 import '../../../core/api/endpoints.dart';
-import '../../../core/config/app_config.dart';
+import '../../../core/api/frappe_client.dart';
 
 /// Normalized (0-1) bounding box, relative to the full card photo — lets a
 /// scan screen draw a highlight without any separate CV pass. Shared by
@@ -47,9 +46,11 @@ class CardExtractionTransportException implements Exception {
   String toString() => message;
 }
 
-/// Shared HTTP plumbing for every `/card-extraction/extract` call — gateway/
-/// direct dual-path resolution, the long vote-call timeout, and multipart
-/// upload. Mirrors [VisitBriefingRepository]'s gateway/direct pattern.
+/// Shared HTTP plumbing for every card-extraction call — the Frappe
+/// `spice_next_ai` endpoint ([Endpoints.cardExtractionExtract]) via
+/// [FrappeClient], the long vote-call timeout, and the multipart upload
+/// (same `card_image` / `programme` / `visit_number` fields as the legacy
+/// ai-scribe route).
 ///
 /// Extracted once EPI and ANC both needed the identical transport (only the
 /// `programme` value and a couple of optional form fields differ) — each
@@ -59,7 +60,7 @@ class CardExtractionTransportException implements Exception {
 class CardExtractionTransport {
   const CardExtractionTransport(this._client);
 
-  final ApiClient _client;
+  final FrappeClient _client;
 
   /// The backend majority-votes 3 independent Gemini calls per card (see
   /// `card_extraction_service._majority_vote`/`_majority_vote_anc`) to catch
@@ -69,21 +70,6 @@ class CardExtractionTransport {
   /// independent of [ApiClient]'s shorter global default which the rest of
   /// the app's fast endpoints rely on.
   static const timeout = Duration(seconds: 180);
-
-  (Dio, String) _resolve(String gatewayPath, String directPath) {
-    final aiUrl = AppConfig.aiServiceBaseUrl;
-    if (aiUrl.isNotEmpty) {
-      final direct = Dio(BaseOptions(
-        baseUrl: aiUrl,
-        connectTimeout: const Duration(seconds: 5),
-        sendTimeout: timeout,
-        receiveTimeout: timeout,
-      ));
-      _client.attachAiServiceAuth(direct);
-      return (direct, directPath);
-    }
-    return (_client.dio, gatewayPath);
-  }
 
   /// Sends [cardImage] to the card-extraction service for [programme],
   /// optionally pinning [visitNumber] (ANC/NCD only — selects which visit
@@ -98,10 +84,6 @@ class CardExtractionTransport {
     required File cardImage,
     int? visitNumber,
   }) async {
-    final (dio, path) = _resolve(
-      Endpoints.cardExtractionExtract,
-      '/card-extraction/extract',
-    );
     final ext = cardImage.path.split('.').last.toLowerCase();
     final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
     final form = FormData.fromMap({
@@ -114,27 +96,21 @@ class CardExtractionTransport {
       ),
     });
     try {
-      final response = await dio.post<dynamic>(
-        path,
-        data: form,
-        // Per-request override — the gateway path's [dio] is [ApiClient]'s
-        // shared instance, whose global timeout is sized for the rest of
-        // the app's fast endpoints, not this call's ~130s vote latency.
-        options: Options(sendTimeout: timeout, receiveTimeout: timeout),
+      return await _client.postMultipart(
+        Endpoints.cardExtractionExtract,
+        form,
+        // The vote calls take far longer than FrappeClient's default budget.
+        sendTimeout: timeout,
+        receiveTimeout: timeout,
       );
-      final raw = response.data;
-      if (raw is! Map<String, dynamic>) {
-        throw const CardExtractionTransportException(
-          'Unexpected response from card extraction.',
-        );
-      }
-      return raw;
-    } on DioException catch (e) {
+    } on FrappeException catch (e) {
+      // spice_next_ai answers 417 when the photo itself can't be read (bad
+      // type, too large, nothing legible); anything else is "unavailable".
       throw CardExtractionTransportException(
-        e.response?.statusCode == 422
+        e.statusCode == 417
             ? 'Could not read this card.'
             : 'Card extraction unavailable — try again when online.',
-        statusCode: e.response?.statusCode,
+        statusCode: e.statusCode,
       );
     }
   }

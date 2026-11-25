@@ -1,14 +1,15 @@
-/// HTTP client for the conversational AI assistant service.
+/// HTTP client for the conversational AI assistant.
 ///
-/// Routes through the nginx gateway at [Endpoints.assistantAsk], or directly
-/// to the local service when [AppConfig.aiServiceBaseUrl] is set (same dart-
-/// define that routes Visit Briefing and AI Scribe to a local container).
+/// Patient-scoped and general questions go to the Frappe `spice_next_ai` app
+/// ([Endpoints.assistantAsk]) via [FrappeClient]; base URL:
+/// [AppConfig.spiceNextAiApiBaseUrl]. General questions go to the coaching
+/// RAG backend instead when [AppConfig.coachingServiceUrl] is set.
 library;
 
 import 'package:dio/dio.dart';
 
-import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/api/frappe_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/debug/console_log.dart';
@@ -19,29 +20,16 @@ import 'assistant_models.dart';
 class AssistantRepository {
   const AssistantRepository(this._client);
 
-  final ApiClient _client;
+  final FrappeClient _client;
 
-  (Dio, String) _resolve() {
-    final aiUrl = AppConfig.assistantBaseUrl;
-    // When aiServiceBaseUrl is the gateway itself, use the gateway path.
-    // When it points to a local service, strip the nginx prefix.
-    if (AppConfig.aiServiceBaseUrl.isNotEmpty) {
-      final direct = Dio(BaseOptions(
-        baseUrl: aiUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 30),
-      ));
-      _client.attachAiServiceAuth(direct);
-      return (direct, '/assistant/ask');
-    }
-    return (_client.dio, Endpoints.assistantAsk);
-  }
+  /// Same answer budget the assistant had on the legacy ai-scribe route.
+  static const _askTimeout = Duration(seconds: 30);
 
   /// Ask the assistant a question.
   ///
   /// Routes to the coaching RAG backend (`/medtronics-api/coaching/rag-query`)
   /// when [AppConfig.coachingServiceUrl] is set and no [patientContext] is
-  /// provided. Falls back to the UHIS AI-Scribe assistant endpoint otherwise.
+  /// provided. Falls back to the `spice_next_ai` assistant endpoint otherwise.
   Future<AssistantAnswer> ask(
     String question, {
     Map<String, dynamic>? patientContext,
@@ -54,7 +42,7 @@ class AssistantRepository {
       }
       return _askCoachingRag(question, coachingUrl);
     }
-    return _askAiScribe(question, patientContext: patientContext, history: history);
+    return _askSpiceNextAi(question, patientContext: patientContext, history: history);
   }
 
   Future<AssistantAnswer> _askCoachingRag(
@@ -141,12 +129,12 @@ class AssistantRepository {
     }
   }
 
-  Future<AssistantAnswer> _askAiScribe(
+  Future<AssistantAnswer> _askSpiceNextAi(
     String question, {
     Map<String, dynamic>? patientContext,
     List<Map<String, String>>? history,
   }) async {
-    final (dio, path) = _resolve();
+    const path = Endpoints.assistantAsk;
     final appLanguage = AppLocale.isBangla ? 'bn' : 'en';
     ConsoleLog.step('[AssistantAsk] appLanguage=$appLanguage context=${patientContext == null ? 'community-health-worker' : 'patient-scoped'}');
     final body = {
@@ -157,32 +145,43 @@ class AssistantRepository {
       if (patientContext != null) 'patientContext': patientContext,
       if (history != null && history.isNotEmpty) 'history': history,
     };
-    ConsoleLog.json('[PayloadDebug] assistant-ask', body);
+    ConsoleLog.json('[PayloadDebug] assistant-ask ${_client.baseUrl}$path', body);
+    final Map<String, dynamic> data;
     try {
-      final response = await dio.post<Map<String, dynamic>>(path, data: body);
-      ConsoleLog.step('[PayloadDebug] assistant-ask → ${response.statusCode}');
-      ConsoleLog.json('[PayloadDebug] assistant-ask response', response.data);
-      final data = response.data;
-      if (data == null) throw AssistantException(AssistantStrings.emptyResponse);
-      final answer = data['answer'] as String?;
-      if (answer == null || answer.isEmpty) {
-        throw AssistantException(AssistantStrings.noAnswerInResponse);
-      }
-      final rawActions = data['actions'];
-      final actions = <AssistantAction>[];
-      if (rawActions is List) {
-        for (final a in rawActions) {
-          if (a is Map<String, dynamic>) {
-            final parsed = AssistantAction.fromJson(a);
-            if (parsed != null) actions.add(parsed);
-          }
+      data = await _client.postJson(path, body, receiveTimeout: _askTimeout);
+    } on FrappeException catch (e) {
+      ConsoleLog.warn('[PayloadDebug] assistant-ask error: $e');
+      throw _toAssistantException(e);
+    }
+    ConsoleLog.json('[PayloadDebug] assistant-ask response', data);
+    final answer = data['answer'] as String?;
+    if (answer == null || answer.isEmpty) {
+      throw AssistantException(AssistantStrings.noAnswerInResponse);
+    }
+    final rawActions = data['actions'];
+    final actions = <AssistantAction>[];
+    if (rawActions is List) {
+      for (final a in rawActions) {
+        if (a is Map<String, dynamic>) {
+          final parsed = AssistantAction.fromJson(a);
+          if (parsed != null) actions.add(parsed);
         }
       }
-      return AssistantAnswer(text: answer, actions: actions);
-    } on DioException catch (e) {
-      ConsoleLog.warn('[PayloadDebug] assistant-ask error: $e');
-      throw AssistantException(NetworkErrorMapper.friendly(e),
-          statusCode: e.response?.statusCode, cause: e);
     }
+    return AssistantAnswer(text: answer, actions: actions);
+  }
+
+  /// Keeps the user message and analytics cause the legacy route produced:
+  /// the underlying [DioException] drives both when there is one.
+  static AssistantException _toAssistantException(FrappeException e) {
+    final cause = e.cause;
+    if (cause == null && e.kind == FrappeErrorKind.badResponse) {
+      return AssistantException(AssistantStrings.emptyResponse, cause: e);
+    }
+    return AssistantException(
+      NetworkErrorMapper.friendly(cause ?? e),
+      statusCode: e.statusCode,
+      cause: cause ?? e,
+    );
   }
 }
