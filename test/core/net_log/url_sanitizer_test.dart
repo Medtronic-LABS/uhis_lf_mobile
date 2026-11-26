@@ -27,7 +27,15 @@ void main() {
     }
   });
 
-  test('random garbage never throws and never exceeds the cap', () {
+  test('sanitize is idempotent over every vector input', () {
+    for (final raw in vectors['cases'] as List<dynamic>) {
+      final input = (raw as Map<String, dynamic>)['input'] as String;
+      final once = UrlSanitizer.sanitize(input);
+      expect(UrlSanitizer.sanitize(once), once, reason: raw['name'] as String);
+    }
+  });
+
+  test('random garbage never throws, stays capped and is idempotent', () {
     final rng = Random(778);
     const alphabet = 'abc/:?&=%#@+ .-_09০৯…\u{1F600}[]';
     final chars = alphabet.runes.toList();
@@ -37,7 +45,9 @@ void main() {
         List.generate(len, (_) => chars[rng.nextInt(chars.length)]),
       );
       final prefixed = n.isEven ? 'https://h.example.test/$s?$s' : s;
-      expect(UrlSanitizer.sanitize(prefixed).length, lessThanOrEqualTo(2048));
+      final once = UrlSanitizer.sanitize(prefixed);
+      expect(once.length, lessThanOrEqualTo(2048));
+      expect(UrlSanitizer.sanitize(once), once);
     }
   });
 }

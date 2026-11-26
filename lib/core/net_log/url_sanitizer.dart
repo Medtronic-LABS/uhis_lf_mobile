@@ -5,7 +5,14 @@ import 'dart:convert';
 /// `test/fixtures/net_log/url_sanitizer_vectors.json`; keep the regexes
 /// portable (no look-behind).
 ///
-/// Pure and total: never throws, result is at most [maxLength] characters.
+/// Pure and total: never throws, result is at most [maxLength] characters,
+/// and `sanitize(sanitize(x)) == sanitize(x)` (the app re-sanitises rows).
+///
+/// Hosts are trusted and kept verbatim apart from lowercasing and the port
+/// rule. Known limitations, accepted by owner decision D1:
+/// - digits are counted per path segment, so `/017/123/4567` passes;
+/// - opaque tokens without `@`, `;`, a UUID or digits are not masked;
+/// - circled or other non-decimal digits do not count as digits.
 abstract final class UrlSanitizer {
   static const int maxLength = 2048;
   static const String unparsable = '<unparsable>';
@@ -33,22 +40,33 @@ abstract final class UrlSanitizer {
     'from_date',
     'to_date',
   };
-  static const int _maxDecodePasses = 3;
+  static const int maxInputLength = 8192;
+  static const String capMarker = '…';
+  static const int _maxDecodePasses = 8;
+  static const int _minTotalDigits = 7;
+  static const Set<String> _atSigns = {'@', '\uFF20', '\uFE6B'};
 
   static final RegExp _uuid = RegExp(
     r'[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}',
   );
-  static final RegExp _phoneLike = RegExp(
-    r'^\+?[\p{Nd} ()\-.]{7,}$',
-    unicode: true,
-  );
+  static final RegExp _dashlessUuid = RegExp(r'[0-9a-fA-F]{32}');
   static final RegExp _digit = RegExp(r'\p{Nd}', unicode: true);
   static final RegExp _digitRun = RegExp(r'\p{Nd}{6,}', unicode: true);
-  static const int _phoneMinDigits = 7;
+  static final RegExp _escape = RegExp(r'%[0-9a-fA-F]{2}');
+  static final RegExp _trailingEscapes = RegExp(r'(%[0-9a-fA-F]{0,2})+$');
+  static final RegExp _trailingIdPrefix = RegExp(r'\{(i|id)?$');
 
   static String sanitize(String raw) {
+    if (raw.length > maxInputLength) return unparsable;
     try {
-      return _cap(_sanitize(raw));
+      // A trailing cap marker from an earlier pass is not data: strip it,
+      // sanitise the rest and put it back, so the cap output is a fixed point.
+      final hadMarker = raw.endsWith(capMarker);
+      final body = _sanitize(
+        hadMarker ? raw.substring(0, raw.length - capMarker.length) : raw,
+      );
+      if (body == unparsable) return unparsable;
+      return _cap(body, hadMarker);
     } on Object {
       // Total by contract: any unforeseen failure yields the marker.
       return unparsable;
@@ -93,34 +111,31 @@ abstract final class UrlSanitizer {
     if (segment.isEmpty) return segment;
     final decoded = _decodeStable(segment);
     if (decoded == null || _isSensitive(decoded)) return idToken;
+    if (decoded == idToken) return idToken;
     return Uri.encodeComponent(decoded);
   }
 
   static String? _decodeStable(String value) {
     var current = value;
     try {
-      for (var i = 0; i < _maxDecodePasses && current.contains('%'); i++) {
-        final next = Uri.decodeComponent(current);
-        if (next == current) break;
-        current = next;
+      for (var i = 0; i < _maxDecodePasses && current.contains(_escape); i++) {
+        current = Uri.decodeComponent(current);
       }
     } on FormatException {
       return null;
     } on ArgumentError {
       return null;
     }
-    return current;
+    return current.contains(_escape) ? null : current;
   }
 
-  static bool _isSensitive(String segment) {
-    if (segment.contains('@') ||
-        _uuid.hasMatch(segment) ||
-        _digitRun.hasMatch(segment)) {
-      return true;
-    }
-    return _phoneLike.hasMatch(segment) &&
-        _digit.allMatches(segment).length >= _phoneMinDigits;
-  }
+  static bool _isSensitive(String segment) =>
+      _atSigns.any(segment.contains) ||
+      segment.contains(';') ||
+      _uuid.hasMatch(segment) ||
+      _dashlessUuid.hasMatch(segment) ||
+      _digitRun.hasMatch(segment) ||
+      _digit.allMatches(segment).length >= _minTotalDigits;
 
   static String _sanitizeQuery(String rawQuery) {
     if (rawQuery.isEmpty) return '';
@@ -144,7 +159,24 @@ abstract final class UrlSanitizer {
     return out.join('&');
   }
 
-  static String _cap(String value) => value.length <= maxLength
-      ? value
-      : '${value.substring(0, maxLength - 1)}…';
+  static String _cap(String body, bool hadMarker) {
+    final combined = hadMarker ? '$body$capMarker' : body;
+    if (combined.length <= maxLength) return combined;
+    final cut = _dropPartialToken(body.substring(0, maxLength - 1));
+    return '$cut$capMarker';
+  }
+
+  /// Drops a token the cut split (escape run, `{id`, or a half query pair) so
+  /// a second pass over the capped text leaves it unchanged.
+  static String _dropPartialToken(String cut) {
+    var out = cut
+        .replaceFirst(_trailingEscapes, '')
+        .replaceFirst(_trailingIdPrefix, '');
+    final q = out.indexOf('?');
+    if (q >= 0 && !out.endsWith('=$redacted')) {
+      final amp = out.lastIndexOf('&');
+      out = out.substring(0, amp > q ? amp : q);
+    }
+    return out;
+  }
 }
