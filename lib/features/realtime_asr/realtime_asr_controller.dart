@@ -443,7 +443,11 @@ class RealtimeAsrController extends ChangeNotifier {
       );
       debugPrint('[RealtimeASR] connecting to ${info.uri} headers=${info.headers.keys}');
       _logEvent('ASR_WS_CONNECT_START', const {});
-      _channel = connectRealtimeChannel(info.uri, info.headers);
+      _channel = connectRealtimeChannel(
+        info.uri,
+        info.headers,
+        recorder: _service.api.networkRecorder,
+      );
       // Diagnostic-only: `.ready` completes once the handshake actually
       // finishes (or errors) — logged purely for observability, never
       // awaited by the control flow below, so it cannot change timing or
