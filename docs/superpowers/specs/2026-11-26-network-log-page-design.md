@@ -241,16 +241,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_network_log_native
 - The purge evicts the oldest *inserted* rows. Native rows merged late can therefore be evicted later than their timestamp suggests. This is documented and accepted.
 
 ### 7f. URL rule (shared with Kotlin)
+0. A raw input longer than 8,192 characters gives `<unparsable>` before any parsing (R14).
 1. Run `Uri.tryParse`. Null, a scheme outside `{http, https, ws, wss}`, or an empty host gives `<unparsable>`.
-2. Emit the lowercase scheme and host, plus the port only if it is not the default. Drop userinfo and fragment.
+2. Emit the lowercase scheme and host, plus the port only if it is not the default. Drop userinfo and fragment. Hosts are trusted and kept as-is (R13); an IDN host is emitted in its percent-encoded lowercase form, recorded in the vectors.
 3. Path, per segment:
-   - percent-decode up to 3 times until stable (a decoding failure gives `{id}`, which is conservative);
-   - mask the whole segment as `{id}` if it contains `@`, matches a UUID (`[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}` anywhere), is phone-like (`^\+?[0-9 ()\-.]{7,}$` with at least 7 digits), or contains a run of 6 or more digits;
+   - percent-decode to a fixed point (at most 8 passes); if a `%` followed by two hex digits is still present after the cap, or a decoding failure occurs, the segment is `{id}` (conservative) (R8);
+   - mask the whole segment as `{id}` if it contains `@` (also U+FF20 and U+FE6B, R12) or `;` (matrix parameters, R11), matches a UUID (`[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}` anywhere, or 32 hex characters with no dashes, R11), has 7 or more decimal digits in total anywhere in the segment (R10), or contains a run of 6 or more digits;
+   - a decoded segment that is exactly `{id}` stays `{id}` (idempotence, R9);
    - otherwise re-encode the segment with `encodeComponent`.
+   - Known limitations, accepted: an identifier split across several path segments (`/017/123/4567`), opaque tokens of 24+ characters with fewer than 6 consecutive digits, and circled digits such as `①` are not masked.
    - Owner decision D1: the rule is exactly the one above. There is **no** template-aware masking after `users/`, `patients/` or `members/`, and **no** 16+ hex-run rule. Builder's call within that rule: a "digit" is any Unicode decimal digit (so Bengali digits `০-৯` count towards the 6+ run), identical on the Dart and Kotlin sides through the v1 vectors.
 4. Query: decode, keep only allowlisted keys in their original order, once each, as `key=<redacted>`. Drop the query if it cannot be parsed.
-5. Cap at 2,048 chars: truncate to 2,047 and append `…`.
-6. Regexes stay portable (no look-behind) so Dart and Kotlin agree.
+5. Cap at 2,048 chars: truncate to 2,047 and append `…`. If the cut splits a token (a trailing escape run, a `{id` prefix or half a query pair) the partial token is dropped, so a capped result may be shorter; a trailing `…` is stripped and re-added so a second pass changes nothing. The Kotlin port must reproduce this exactly (see the Dart `_dropPartialToken` and the vectors).
+6. Regexes stay portable (no look-behind) so Dart and Kotlin agree. `sanitize(sanitize(x)) == sanitize(x)` for every input (R9); the vectors and a test over all of them assert it.
 
 **Query keys found** in Dart: `encounter` and `_count` (`endpoints.dart:203`); `key` (NABA visual image path, `test/features/visit/naba/naba_visuals_fixtures.dart:20`, fetched at `guideline_visual_repository.dart:113`); `_lang` (shukhee_sdk `:327-330`); and `language`, `model`, `assessmentType`, `symptomVocab`, `encounterId` and `tenantId` on the WebSocket (`realtime_asr_service.dart:57-76`). In the SDK: `since`, `from_date`, `to_date`, `limit`, `offset` and `po_user_id` (`spice-coaching-android …/network/CoachingApiService.kt:49-216`). No other `queryParameters:` users exist; `api_repository.dart:33-36` is generic and currently unused with params.
 
