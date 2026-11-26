@@ -44,9 +44,18 @@ class NetworkLogRepository {
   final NativeNetworkEventSource _native;
   final ServiceClassifier? _classifier;
 
+  /// Native status of the last pull; later pages reuse it.
+  NativeNetworkStatus _nativeStatus = NativeNetworkStatus.unavailable;
+
+  /// Loads one page. The first page (offset 0) flushes the recorder and pulls
+  /// native events; later pages only read the table, so rows arriving between
+  /// pages cannot shift the offset.
   Future<NetworkLogPage> load({String? service, int offset = 0}) async {
-    await _recorder.flush();
-    final nativeStatus = await _pullNative();
+    if (offset == 0) {
+      await _recorder.flush();
+      _nativeStatus = await _pullNative();
+    }
+    final nativeStatus = _nativeStatus;
     // One extra row tells us whether anything lies beyond this page.
     final fetched = await _dao.page(
       limit: pageSize + 1,

@@ -29,12 +29,18 @@ class CountingRepo extends NetworkLogRepository {
       );
   int loads = 0;
   Completer<void>? gate;
+  Object? failWith;
 
   @override
   Future<NetworkLogPage> load({String? service, int offset = 0}) async {
     loads++;
     final g = gate;
     if (g != null) await g.future;
+    final f = failWith;
+    if (f != null) {
+      failWith = null;
+      throw f;
+    }
     return super.load(service: service, offset: offset);
   }
 }
@@ -109,6 +115,60 @@ void main() {
     await Future.wait([a, b, d]);
     await pumpEventQueue();
     expect(repo.loads, 2);
+    c.dispose();
+  });
+
+  test('a load during a load returns the queued re-run future', () async {
+    final c = NetworkLogController(repo);
+    final gate = Completer<void>();
+    repo.gate = gate;
+    final first = c.load();
+    var refreshed = false;
+    final second = c.refresh().then((_) => refreshed = true);
+    repo.gate = null;
+    gate.complete();
+    await first;
+    expect(refreshed, isFalse);
+    await second;
+    expect(repo.loads, 2);
+    expect(refreshed, isTrue);
+    c.dispose();
+  });
+
+  test('a throwing load keeps state and queues no spurious reload', () async {
+    await dao.insertBatch([_e(1, 'core')]);
+    final c = NetworkLogController(repo);
+    await c.load();
+    repo.failWith = Exception('boom');
+    await c.load();
+    expect(c.rows, hasLength(1));
+    expect(c.loading, isFalse);
+    final before = repo.loads;
+    await pumpEventQueue();
+    expect(repo.loads, before);
+    await c.load();
+    expect(repo.loads, before + 1);
+    c.dispose();
+  });
+
+  test('setService with a failing reload leaves no unhandled error', () async {
+    await dao.insertBatch([_e(1, 'core')]);
+    final c = NetworkLogController(repo);
+    await c.load();
+    repo.failWith = Exception('boom');
+    c.setService('core');
+    await pumpEventQueue();
+    expect(c.rows, hasLength(1));
+    c.dispose();
+  });
+
+  test('loadMore reads the next page without a native pull', () async {
+    await dao.insertBatch([for (var i = 1; i <= 250; i++) _e(i, 'core')]);
+    final c = NetworkLogController(repo);
+    await c.load();
+    await c.loadMore();
+    final ids = c.rows.map((r) => r.startedAtMs).toSet();
+    expect(ids.length, 250);
     c.dispose();
   });
 

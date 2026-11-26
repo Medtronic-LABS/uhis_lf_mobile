@@ -6,6 +6,7 @@ import 'package:uhis_next/core/net_log/network_log_dao.dart';
 import 'package:uhis_next/core/net_log/network_log_entry.dart';
 import 'package:uhis_next/core/net_log/network_log_repository.dart';
 import 'package:uhis_next/core/net_log/network_request_recorder.dart';
+import 'package:uhis_next/core/net_log/service_classifier.dart';
 
 class FakeRecorder implements ManagedNetworkRequestRecorder {
   final List<String> calls;
@@ -35,6 +36,28 @@ class FakeRecorder implements ManagedNetworkRequestRecorder {
     calls.add('clearBuffer');
     buffer = [];
     epoch++;
+  }
+}
+
+/// Records `dao.clear` into the shared call log and every merged batch.
+class SpyDao extends NetworkLogDao {
+  SpyDao(super.db, this.calls);
+  final List<String> calls;
+  final List<List<NetworkLogEntry>> merged = [];
+
+  @override
+  Future<int> mergeNative(
+    List<NetworkLogEntry> entries, {
+    int? cursorTo,
+  }) {
+    merged.add(entries);
+    return super.mergeNative(entries, cursorTo: cursorTo);
+  }
+
+  @override
+  Future<void> clear() {
+    calls.add('dao.clear');
+    return super.clear();
   }
 }
 
@@ -90,7 +113,7 @@ void main() {
   });
 
   late AppDatabase db;
-  late NetworkLogDao dao;
+  late SpyDao dao;
   late FakeRecorder recorder;
   late List<String> calls;
 
@@ -103,8 +126,8 @@ void main() {
       ),
     );
     db = AppDatabase.forTesting(raw);
-    dao = NetworkLogDao(db);
     calls = [];
+    dao = SpyDao(db, calls);
     recorder = FakeRecorder(calls)..dao = dao;
   });
   tearDown(() => db.close());
@@ -212,6 +235,76 @@ void main() {
       expect(page.rows, hasLength(1));
     });
 
+    test('hands the DAO a sanitised url and the exact service', () async {
+      final classifier = ServiceClassifier(const [
+        ConfiguredEndpoint(
+          service: 'micro-coaching',
+          url: 'https://coach.example.test/sdk',
+          rule: 'test',
+        ),
+      ]);
+      final r = NetworkLogRepository(
+        dao: dao,
+        recorder: recorder,
+        native: FakeSource(
+          (_, _) async => _ok([
+            _native(
+              1,
+              url: 'https://u:pw@coach.example.test/sdk/v1/e?X-Amz-Signature=abc',
+            ),
+          ]),
+        ),
+        classifier: classifier,
+      );
+      await r.load();
+      final e = dao.merged.single.single;
+      expect(e.url, isNot(contains('?')));
+      expect(e.url, isNot(contains('pw')));
+      expect(e.url, isNot(contains('Signature')));
+      expect(e.service, 'micro-coaching');
+      expect(e.source, 'native');
+      expect(e.timing, 'headers');
+    });
+
+    test('reset with an empty result stores cursor 0', () async {
+      await dao.mergeNative(const [], cursorTo: 50);
+      final src = FakeSource((_, _) async => _ok(const [], 0));
+      await repo(src).load();
+      expect(src.afterIds.first, 50);
+      expect((await dao.nativeState()).cursor, 0);
+    });
+
+    test('epoch change before the reset path leaves the cursor', () async {
+      await dao.mergeNative(const [], cursorTo: 50);
+      final src = FakeSource((_, _) async {
+        recorder.epoch++;
+        return _ok(const [], 0);
+      });
+      await repo(src).load();
+      expect(src.afterIds, [50]);
+      expect((await dao.nativeState()).cursor, 50);
+    });
+
+    test('an Error from the source propagates', () async {
+      final src = FakeSource((_, _) async => throw StateError('bug'));
+      expect(repo(src).load(), throwsA(isA<StateError>()));
+    });
+
+    test('later pages do not flush or pull native rows', () async {
+      await dao.insertBatch([for (var i = 1; i <= 250; i++) _dart(i)]);
+      final src = FakeSource((_, _) async => _ok([_native(9)]));
+      final r = repo(src);
+      final first = await r.load();
+      expect(src.afterIds, [0]);
+      calls.clear();
+      final second = await r.load(offset: first.rows.length);
+      expect(src.afterIds, [0]);
+      expect(calls, isEmpty);
+      final ids = {...first.rows, ...second.rows};
+      expect(ids.length, first.rows.length + second.rows.length);
+      expect(second.nativeStatus, first.nativeStatus);
+    });
+
     test('hasMore reflects rows beyond the page and offset pages on', () async {
       await dao.insertBatch([for (var i = 1; i <= 201; i++) _dart(i)]);
       final r = repo(unavailable());
@@ -245,11 +338,9 @@ void main() {
     test('clear drops the buffer before the table and rows stay gone', () async {
       recorder.record(_dart(1));
       await dao.insertBatch([_dart(2)]);
-      final order = <String>[];
       calls.clear();
       await repo(unavailable()).clear();
-      order.addAll(calls);
-      expect(order, ['clearBuffer']);
+      expect(calls, ['clearBuffer', 'dao.clear']);
       final page = await repo(unavailable()).load();
       expect(page.rows, isEmpty);
     });

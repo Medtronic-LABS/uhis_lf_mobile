@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/net_log/native_network_event_source.dart';
 import '../../core/net_log/network_log_entry.dart';
 import '../../core/net_log/network_log_repository.dart';
@@ -28,7 +31,8 @@ class NetworkLogController extends ChangeNotifier {
   bool loading = false;
   bool hasMore = false;
   bool _disposed = false;
-  bool _reloadQueued = false;
+  Future<void>? _inFlight;
+  Future<void>? _queued;
 
   List<ConfiguredEndpoint> get endpoints =>
       _endpoints ?? AppConfig.configuredEndpoints;
@@ -36,22 +40,33 @@ class NetworkLogController extends ChangeNotifier {
   void setService(String? s) {
     if (s == service) return;
     service = s;
-    load();
+    unawaited(load());
   }
 
+  /// Starts a load, or queues one re-run behind the load in flight. Every
+  /// caller during that load gets the same queued future, which completes
+  /// after the re-run.
   Future<void> load() {
-    if (loading) {
-      _reloadQueued = true;
-      return Future.value();
-    }
-    return _run(() => _repo.load(service: service), append: false);
+    if (_disposed) return Future.value();
+    final running = _inFlight;
+    if (running == null) return _start(() => _repo.load(service: service));
+    return _queued ??= running.then(
+      (_) => _startQueued(),
+      onError: (Object _) => _startQueued(),
+    );
+  }
+
+  Future<void> _startQueued() {
+    _queued = null;
+    return load();
   }
 
   Future<void> refresh() => load();
 
   Future<void> loadMore() {
     if (!hasMore) return Future.value();
-    return _run(
+    if (loading) return Future.value();
+    return _start(
       () => _repo.load(service: service, offset: rows.length),
       append: true,
     );
@@ -69,11 +84,22 @@ class NetworkLogController extends ChangeNotifier {
   Future<List<NetworkLogEntry>> rowsForCopy() =>
       _repo.copyRows(service: service);
 
+  Future<void> _start(
+    Future<NetworkLogPage> Function() read, {
+    bool append = false,
+  }) {
+    final run = _run(read, append: append);
+    _inFlight = run;
+    return run.whenComplete(() {
+      if (identical(_inFlight, run)) _inFlight = null;
+    });
+  }
+
+  /// A failed read keeps the last good state and is logged by type only.
   Future<void> _run(
     Future<NetworkLogPage> Function() read, {
     required bool append,
   }) async {
-    if (loading || _disposed) return;
     loading = true;
     _notify();
     try {
@@ -83,13 +109,11 @@ class NetworkLogController extends ChangeNotifier {
       nativeStatus = page.nativeStatus;
       droppedCount = page.droppedCount;
       hasMore = page.hasMore;
+    } on Exception catch (e) {
+      ConsoleLog.warn('[NetworkLog] load failed: ${e.runtimeType}');
     } finally {
       loading = false;
       _notify();
-    }
-    if (_reloadQueued && !_disposed) {
-      _reloadQueued = false;
-      await load();
     }
   }
 
