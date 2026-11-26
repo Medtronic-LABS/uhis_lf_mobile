@@ -122,6 +122,9 @@ class MicroCoachingService {
       ConsoleLog.warn('[MicroCoaching] clearNetworkEvents PlatformException');
     } on TimeoutException {
       ConsoleLog.warn('[MicroCoaching] clearNetworkEvents TimeoutException');
+    } on Object catch (e) {
+      // Contract: never throws (the wipe calls this unawaited). Type only.
+      ConsoleLog.warn('[MicroCoaching] clearNetworkEvents ${e.runtimeType}');
     }
     return false;
   }

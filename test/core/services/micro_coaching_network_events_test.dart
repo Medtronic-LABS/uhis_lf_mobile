@@ -270,6 +270,10 @@ void main() {
     test('false when the channel is unregistered', () async {
       expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
     });
+    test('false on an unexpected exception type, never throws', () async {
+      _handle((_) async => throw StateError('secret'));
+      expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
+    });
     test('false on PlatformException, never throws', () async {
       _handle((_) async => throw PlatformException(code: 'x', message: 'secret'));
       expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
