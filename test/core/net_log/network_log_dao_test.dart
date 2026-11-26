@@ -143,6 +143,31 @@ void main() {
       },
     );
 
+    test('mergeNative accepts a row at the max future skew and rejects one past it',
+        () async {
+      final (db, dao) = await open();
+      addTearDown(db.close);
+      final before = DateTime.now().millisecondsSinceEpoch;
+
+      // The DAO reads its own clock (no seam), so exact 1 ms is not testable:
+      // 'before' is never later than that clock, 'now + 1 s' never earlier.
+      final accepted = await dao.mergeNative([
+        _e(before + NetworkLogDao.maxFutureSkewMs, source: 'native', nativeId: 1),
+      ]);
+      final rejected = await dao.mergeNative([
+        _e(
+          DateTime.now().millisecondsSinceEpoch +
+              NetworkLogDao.maxFutureSkewMs +
+              1000,
+          source: 'native',
+          nativeId: 2,
+        ),
+      ]);
+
+      expect(accepted, 1);
+      expect(rejected, 0);
+    });
+
     test(
       'mergeNative caps a call at 200 rows and keeps Dart history',
       () async {
@@ -245,7 +270,7 @@ void main() {
           service: 'Bad Service!',
           method: 'GET /x',
           url: 'https://user:pw@example.test/a/jane@example.org?token=abc',
-          finalUrl: 'https://example.test/${'a' * 5000}',
+          finalUrl: 'https://example.test/a/jane@example.org?token=abc',
           timing: 'whatever',
           errorType: 'SocketException: Failed host lookup',
         ),
@@ -257,10 +282,25 @@ void main() {
       expect(row['method'], 'UNKNOWN');
       expect(row['timing'], 'total');
       expect(row['error_type'], 'unknown');
-      final url = row['url'] as String;
-      expect(url, isNot(contains('pw')));
-      expect(url, isNot(contains('jane')));
-      expect(url, isNot(contains('token=abc')));
+      expect(row['url'], 'https://example.test/a/{id}');
+      expect(row['final_url'], 'https://example.test/a/{id}');
+    });
+
+    test('write path caps an over-long final url at 2048 characters', () async {
+      final (db, dao) = await open();
+      addTearDown(db.close);
+      await dao.insertBatch([
+        NetworkLogEntry(
+          startedAtMs: 1,
+          source: 'dart',
+          service: 'core',
+          method: 'GET',
+          url: 'https://example.test/x',
+          finalUrl: 'https://example.test/${'a' * 5000}',
+        ),
+      ]);
+
+      final row = (await db.db.query(AppDatabase.tableNetworkLog)).single;
       expect((row['final_url'] as String).length, lessThanOrEqualTo(2048));
     });
 

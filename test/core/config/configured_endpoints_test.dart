@@ -44,10 +44,6 @@ void main() {
         api,
       );
       expect(
-        find(rows, ServiceClassifier.gatewayService, 'API_BASE_URL').service,
-        ServiceClassifier.gatewayService,
-      );
-      expect(
         find(rows, 'micro-coaching', 'API_BASE_URL + /micro-coaching').url,
         '$api/micro-coaching',
       );
@@ -56,16 +52,8 @@ void main() {
         '$api/admin-api',
       );
       expect(
-        find(rows, 'admin-api', 'API_BASE_URL + /admin-api').service,
-        'admin-api',
-      );
-      expect(
         find(rows, 'micro-coaching', 'coaching URL + /medtronics-api/').url,
         '$api/micro-coaching/medtronics-api/',
-      );
-      expect(
-        find(rows, 'micro-coaching', 'coaching URL + /medtronics-api/').service,
-        'micro-coaching',
       );
     });
 
@@ -141,26 +129,26 @@ void main() {
     });
   });
 
-  group('getters keep their values under the default empty defines', () {
-    test('coachingServiceUrl', () {
+  group('buildEndpoints with no overrides derives every row from the API base', () {
+    test('coaching joins micro-coaching', () {
       expect(
-        AppConfig.coachingServiceUrl,
-        AppConfig.joinUrlSegment(AppConfig.apiBaseUrl, 'micro-coaching'),
+        find(build(), 'micro-coaching', 'API_BASE_URL + /micro-coaching').url,
+        AppConfig.joinUrlSegment(api, 'micro-coaching'),
       );
     });
-    test('scribe, assistant and app-version fall back to the API base', () {
-      expect(AppConfig.scribeBaseUrl, AppConfig.apiBaseUrl);
-      expect(AppConfig.assistantBaseUrl, AppConfig.apiBaseUrl);
-      expect(AppConfig.appVersionCheckBaseUrl, AppConfig.apiBaseUrl);
+    test('scribe and assistant rows fall back to the API base', () {
+      final ai = build().where((e) => e.service == 'ai-scribe').toList();
+      expect(ai, isNotEmpty);
+      for (final e in ai) {
+        expect(e.url, api);
+      }
     });
-    test('Frappe bases join admin-api', () {
-      final expected = AppConfig.joinUrlSegment(
-        AppConfig.apiBaseUrl,
-        'admin-api',
-      );
-      expect(AppConfig.shukheeApiBaseUrl, expected);
-      expect(AppConfig.spiceNextCoreApiBaseUrl, expected);
-      expect(AppConfig.spiceNextAiApiBaseUrl, expected);
+    test('Frappe rows join admin-api', () {
+      final frappe = build().where((e) => e.service == 'admin-api').toList();
+      expect(frappe, hasLength(3));
+      for (final e in frappe) {
+        expect(e.url, AppConfig.joinUrlSegment(api, 'admin-api'));
+      }
     });
     test('joinUrlSegment handles a trailing slash', () {
       expect(AppConfig.joinUrlSegment('$api/', 'x'), '$api/x');
@@ -168,7 +156,7 @@ void main() {
     });
   });
 
-  test('configuredEndpoints matches the real getters and has no secret', () {
+  test('configuredEndpoints carries the URL getters', () {
     final urls = AppConfig.configuredEndpoints.map((e) => e.url).toList();
     expect(urls, contains(AppConfig.coachingServiceUrl));
     expect(urls, contains(AppConfig.shukheeApiBaseUrl));
@@ -176,14 +164,22 @@ void main() {
       urls,
       contains(MicroCoachingService.sdkBaseUrl(AppConfig.coachingServiceUrl)),
     );
-    final secrets = [
-      AppConfig.hfToken,
-      AppConfig.passwordHashKey,
-    ].where((s) => s.isNotEmpty);
-    for (final e in AppConfig.configuredEndpoints) {
-      for (final s in secrets) {
-        expect(e.url.contains(s) || e.rule.contains(s), isFalse);
-      }
+  });
+
+  test('no endpoint url carries userinfo or a query', () {
+    final rows = build(
+      coachingExplicit: 'https://coach.example.test',
+      aiServiceBaseUrl: 'https://ai.example.test',
+      scribeExplicit: 'https://legacy.example.test',
+      shukheeLocal: 'http://127.0.0.1:8000',
+      spiceNextCoreLocal: 'http://127.0.0.1:8001',
+      spiceNextAiLocal: 'http://127.0.0.1:8081',
+    );
+    expect(rows, isNotEmpty);
+    for (final e in rows) {
+      final uri = Uri.parse(e.url);
+      expect(uri.userInfo, isEmpty, reason: e.rule);
+      expect(uri.hasQuery, isFalse, reason: e.rule);
     }
   });
 

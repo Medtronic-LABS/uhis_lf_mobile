@@ -98,6 +98,18 @@ class _FakeSync extends ChangeNotifier implements OfflineSyncService {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// A signed-in session that has finished onboarding; the splash stays up so
+/// the router does not leave for /home on its own.
+class _SignedInAuth extends AuthState {
+  _SignedInAuth(super.repo, super.biometric);
+
+  @override
+  AuthStatus get status => AuthStatus.signedIn;
+
+  @override
+  bool get onboardingComplete => true;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -144,6 +156,39 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(NetworkLogScreen), findsOneWidget);
       expect(find.byType(LoginScreen), findsNothing);
+    });
+
+    testWidgets('signed-out user is still sent from /home to /login', (
+      tester,
+    ) async {
+      final router = await pumpApp(tester);
+      router.go('/home');
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.byType(NetworkLogScreen), findsNothing);
+    });
+
+    testWidgets('signed-in user reaches /diagnostics/network', (tester) async {
+      await tester.runAsync(() async {
+        auth = _SignedInAuth(
+          AuthRepository(await ApiClient.create()),
+          _NoBiometric(),
+        );
+      });
+      final router = buildRouter(auth);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthState>.value(value: auth),
+            Provider<NetworkLogRepository>.value(value: _Repo()),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 3));
+      router.go('/diagnostics/network');
+      await tester.pumpAndSettle();
+      expect(find.byType(NetworkLogScreen), findsOneWidget);
     });
 
     testWidgets('allowed from /login?from=lock with re-entry enabled', (

@@ -18,6 +18,19 @@ void main() {
     expect(vectors['vectors_version'], 1);
   });
 
+  test('vectors file documents its notation and constants for the SDK port', () {
+    final notes = vectors['notes'] as Map<String, dynamic>;
+    expect(notes.keys, containsAll(['purpose', 'runner', 'notation', 'constants']));
+    final constants = notes['constants'] as Map<String, dynamic>;
+    expect(
+      (constants['query_allowlist'] as List<dynamic>).toSet(),
+      {
+        '_count', '_lang', 'encounter', 'key', 'language', 'model', 'since',
+        'limit', 'offset', 'cursor', 'from_date', 'to_date',
+      },
+    );
+  });
+
   group('shared vectors', () {
     for (final raw in vectors['cases'] as List<dynamic>) {
       final c = raw as Map<String, dynamic>;

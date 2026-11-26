@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uhis_next/core/net_log/network_log_entry.dart';
 import 'package:uhis_next/core/net_log/network_request_recorder.dart';
+import 'package:uhis_next/core/net_log/service_classifier.dart';
 import 'package:uhis_next/features/realtime_asr/realtime_asr_channel_io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -38,6 +39,14 @@ class _ThrowingRecorder implements NetworkRequestRecorder {
   void record(NetworkLogEntry e) => throw StateError('boom');
 }
 
+final _classifier = ServiceClassifier(const [
+  ConfiguredEndpoint(
+    service: ConfiguredEndpoint.gatewayService,
+    url: 'wss://example.test',
+    rule: 'API_BASE_URL',
+  ),
+]);
+
 final Uri _uri = Uri.parse(
     'wss://example.test/ai-scribe/scribe/realtime/transcribe'
     '?encounterId=ENC-1&tenantId=42&language=en');
@@ -57,6 +66,7 @@ void main() {
         h ?? _headers,
         recorder: rec ?? recorder,
         connect: (_, _) => channel,
+        classifier: _classifier,
       );
 
   setUp(() {
@@ -82,7 +92,7 @@ void main() {
     expect(row.url, isNot(contains('encounterId')));
     expect(row.url, isNot(contains('tenantId')));
     expect(row.url, isNot(contains('ENC-1')));
-    expect(row.service, isNotEmpty);
+    expect(row.service, 'ai-scribe');
   });
 
   final mapped = <String, Object>{

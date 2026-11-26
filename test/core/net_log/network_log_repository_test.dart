@@ -169,8 +169,17 @@ void main() {
     test('stores a raw presigned native url sanitised and classified', () async {
       final raw =
           'https://user:pw@bucket.example.test/file.mp3?X-Amz-Signature=abc&t=1';
-      final page = await repo(
-        FakeSource((_, _) async => _ok([_native(1, url: raw)])),
+      final page = await NetworkLogRepository(
+        dao: dao,
+        recorder: recorder,
+        native: FakeSource((_, _) async => _ok([_native(1, url: raw)])),
+        classifier: const ServiceClassifier([
+          ConfiguredEndpoint(
+            service: ConfiguredEndpoint.gatewayService,
+            url: 'https://gw.example.test',
+            rule: 'API_BASE_URL',
+          ),
+        ]),
       ).load();
       final row = page.rows.single;
       expect(row.source, 'native');
@@ -178,7 +187,7 @@ void main() {
       expect(row.url, isNot(contains('?')));
       expect(row.url, isNot(contains('pw')));
       expect(row.url, isNot(contains('Signature')));
-      expect(row.service, isNotEmpty);
+      expect(row.service, ServiceClassifier.otherHost);
     });
 
     test('cursor advances and the next load asks from it', () async {
@@ -192,6 +201,30 @@ void main() {
       await r.load();
       expect(src.afterIds.first, 7);
       expect((await dao.nativeState()).cursor, 7);
+    });
+
+    test('after Clear a native pull does not bring back pre-clear events, '
+        'and the cursor is kept by design', () async {
+      final preClear = NetworkLogEntry(
+        startedAtMs: _now() - 60000,
+        source: 'native',
+        nativeId: 4,
+        service: '',
+        method: 'GET',
+        url: 'https://example.test/n',
+        statusCode: 200,
+      );
+      // A native store that replays the old event regardless of the cursor.
+      final src = FakeSource((_, _) async => _ok([preClear]));
+      final r = repo(src);
+      expect((await r.load()).rows, hasLength(1));
+
+      await r.clear();
+      src.afterIds.clear();
+      final after = await r.load();
+
+      expect(after.rows, isEmpty);
+      expect(src.afterIds.first, 4, reason: 'the cursor survives Clear');
     });
 
     test('an oversized batch is capped and the cursor stops at the 200th id', () async {
@@ -357,8 +390,10 @@ void main() {
       final second = await r.load(offset: first.rows.length);
       expect(src.afterIds, [0]);
       expect(calls, isEmpty);
-      final ids = {...first.rows, ...second.rows};
-      expect(ids.length, first.rows.length + second.rows.length);
+      final starts = [...first.rows, ...second.rows].map((e) => e.startedAtMs);
+      // 250 Dart rows plus the one merged native row, no duplicates or gaps.
+      expect(starts.toSet(), hasLength(251));
+      expect(starts, hasLength(251));
       expect(second.nativeStatus, first.nativeStatus);
     });
 

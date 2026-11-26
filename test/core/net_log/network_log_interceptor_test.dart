@@ -129,6 +129,26 @@ void main() {
     expect(rec.entries.single.statusCode, isNull);
   });
 
+  for (final type in const [
+    DioExceptionType.connectionError,
+    DioExceptionType.badCertificate,
+    DioExceptionType.cancel,
+  ]) {
+    test('${type.name} records the error type and no status', () async {
+      final rec = _FakeRecorder();
+      final (api, adapter) = await _client(rec, {'/x': 1});
+      adapter.failureType = type;
+
+      await expectLater(
+        api.dio.post<dynamic>('/x'),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(rec.entries.single.errorType, type.name);
+      expect(rec.entries.single.statusCode, isNull);
+    });
+  }
+
   test('attach with a null recorder adds nothing', () {
     final dio = Dio();
     final before = dio.interceptors.length;

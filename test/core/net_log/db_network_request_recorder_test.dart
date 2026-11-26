@@ -83,10 +83,14 @@ void main() {
 
   List<_FakeTimer> active() => timers.where((t) => t.isActive).toList();
 
-  test('noop recorder has epoch 0 and ignores records', () {
+  test('noop recorder has epoch 0 and ignores everything', () async {
     const r = NoopNetworkRequestRecorder();
     r.record(_e());
+    await r.flush();
+    await r.flushQuietly();
+    r.clearBuffer();
     expect(r.epoch, 0);
+    expect(r.droppedCount, 0);
   });
 
   test(

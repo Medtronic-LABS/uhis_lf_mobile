@@ -119,7 +119,8 @@ void main() {
 
   Future<ShukheeClient> buildThroughFactory(
     WidgetTester tester,
-    NetworkRequestRecorder sessionRecorder, {
+    NetworkRequestRecorder sessionRecorder,
+    ScriptedAdapter adapter, {
     NetworkRequestRecorder? override,
   }) async {
     late ShukheeClient client;
@@ -133,8 +134,8 @@ void main() {
             client = buildShukheeClient(
               context,
               recorder: override,
-              // Nothing listens here, so the call fails fast without a network.
-              baseUrl: 'http://127.0.0.1:1',
+              baseUrl: 'https://shukhee.example.test',
+              httpAdapter: adapter,
             );
             return const SizedBox();
           },
@@ -148,13 +149,17 @@ void main() {
     tester,
   ) async {
     final session = _FakeRecorder();
-    final client = await buildThroughFactory(tester, session);
+    final adapter = ScriptedAdapter(const {})..successStatus = 200;
+    final client = await buildThroughFactory(tester, session, adapter);
 
     await tester.runAsync(
       () => client.getSpecialities().then<void>((_) {}, onError: (Object _) {}),
     );
 
     expect(session.entries, hasLength(1));
+    expect(session.entries.single.statusCode, 200);
+    expect(session.entries.single.errorType, isNull);
+    expect(session.entries.single.url, contains('get_specialities'));
   });
 
   testWidgets('an explicit recorder overrides the ApiClient one', (
@@ -162,9 +167,11 @@ void main() {
   ) async {
     final session = _FakeRecorder();
     final override = _FakeRecorder();
+    final adapter = ScriptedAdapter(const {})..successStatus = 200;
     final client = await buildThroughFactory(
       tester,
       session,
+      adapter,
       override: override,
     );
 
@@ -173,6 +180,8 @@ void main() {
     );
 
     expect(override.entries, hasLength(1));
+    expect(override.entries.single.statusCode, 200);
+    expect(override.entries.single.errorType, isNull);
     expect(session.entries, isEmpty);
   });
 }

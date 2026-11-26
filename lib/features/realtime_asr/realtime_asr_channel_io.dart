@@ -22,6 +22,7 @@ WebSocketChannel connectRealtimeChannel(
   NetworkRequestRecorder? recorder,
   @visibleForTesting
   WebSocketChannel Function(Uri uri, Map<String, String> headers)? connect,
+  @visibleForTesting ServiceClassifier? classifier,
 }) {
   // Android ≤ 7.1 doesn't trust ISRG Root X1 (Let's Encrypt post-2021 chain).
   // In debug builds, bypass cert verification so engineers can test on older
@@ -33,7 +34,7 @@ WebSocketChannel connectRealtimeChannel(
   final channel = connect != null
       ? connect(uri, headers)
       : IOWebSocketChannel.connect(uri, headers: headers, customClient: client);
-  if (recorder != null) _observeHandshake(channel, uri, recorder);
+  if (recorder != null) _observeHandshake(channel, uri, recorder, classifier);
   return channel;
 }
 
@@ -44,6 +45,7 @@ void _observeHandshake(
   WebSocketChannel channel,
   Uri uri,
   NetworkRequestRecorder recorder,
+  ServiceClassifier? classifier,
 ) {
   // Deliberately broad catches: logging must never affect the connection.
   final int epoch;
@@ -64,7 +66,7 @@ void _observeHandshake(
       recorder.record(NetworkLogEntry(
         startedAtMs: startedAtMs,
         source: 'dart',
-        service: ServiceClassifier.fromConfig().classify(url),
+        service: (classifier ?? ServiceClassifier.fromConfig()).classify(url),
         method: 'WS',
         url: url,
         statusCode: statusCode,

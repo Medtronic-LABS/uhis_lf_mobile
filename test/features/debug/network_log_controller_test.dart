@@ -28,6 +28,7 @@ class CountingRepo extends NetworkLogRepository {
         native: const UnavailableNativeNetworkEventSource(),
       );
   int loads = 0;
+  int clears = 0;
   Completer<void>? gate;
   Object? failWith;
 
@@ -42,6 +43,12 @@ class CountingRepo extends NetworkLogRepository {
       throw f;
     }
     return super.load(service: service, offset: offset);
+  }
+
+  @override
+  Future<void> clear() {
+    clears++;
+    return super.clear();
   }
 }
 
@@ -80,7 +87,7 @@ void main() {
     c.dispose();
   });
 
-  test('loadMore appends the next page, refresh replaces', () async {
+  test('loadMore appends the next page with unique rows, refresh replaces', () async {
     await dao.insertBatch([for (var i = 1; i <= 250; i++) _e(i, 'core')]);
     final c = NetworkLogController(repo);
     await c.load();
@@ -88,6 +95,7 @@ void main() {
     expect(c.hasMore, isTrue);
     await c.loadMore();
     expect(c.rows, hasLength(250));
+    expect(c.rows.map((r) => r.startedAtMs).toSet(), hasLength(250));
     expect(c.hasMore, isFalse);
     await c.refresh();
     expect(c.rows, hasLength(200));
@@ -162,17 +170,6 @@ void main() {
     c.dispose();
   });
 
-  test('loadMore appends the next page with unique rows', () async {
-    await dao.insertBatch([for (var i = 1; i <= 250; i++) _e(i, 'core')]);
-    final c = NetworkLogController(repo);
-    await c.load();
-    await c.loadMore();
-    final ids = c.rows.map((r) => r.startedAtMs).toSet();
-    expect(ids.length, 250);
-    expect(c.rows, hasLength(250));
-    c.dispose();
-  });
-
   test('no notifyListeners after dispose', () async {
     final c = NetworkLogController(repo);
     repo.gate = Completer<void>();
@@ -185,10 +182,14 @@ void main() {
   test('clear empties rows and rowsForCopy honours the filter', () async {
     await dao.insertBatch([_e(1, 'core'), _e(2, 'auth-service')]);
     final c = NetworkLogController(repo);
+    await c.load();
+    expect(c.rows, hasLength(2));
     c.service = 'core';
     expect(await c.rowsForCopy(), hasLength(1));
     await c.clear();
     expect(c.rows, isEmpty);
+    expect(repo.clears, 1);
+    expect(await dao.page(limit: 10, offset: 0), isEmpty);
     c.dispose();
   });
 
