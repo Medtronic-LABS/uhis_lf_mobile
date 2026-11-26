@@ -106,6 +106,9 @@ import 'features/visit/anc/anc_visit_extraction_repository.dart';
 import 'features/visit/ncd/ncd_visit_extraction_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'core/config/app_config.dart';
+import 'core/net_log/db_network_request_recorder.dart';
+import 'core/net_log/network_log_dao.dart';
+import 'core/net_log/network_request_recorder.dart';
 import 'core/widgets/environment_banner.dart';
 import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
@@ -142,10 +145,6 @@ Future<void> main() async {
   await AppVersionInfo.ensureLoaded();
   // Google Analytics (LEAP-152). Never throws; analytics stays off on failure.
   await Analytics.init();
-  final api = await ApiClient.create();
-  final appVersionService = AppVersionService(api);
-  final authRepo = AuthRepository(api, appVersionService: appVersionService);
-  final biometric = BiometricService();
   final appDb = await AppDatabase.open().onError((e, st) async {
     if (kIsWeb) {
       debugPrint('[main] Web DB open failed ($e) — retrying with in-memory path');
@@ -153,6 +152,12 @@ Future<void> main() async {
     }
     throw e!;
   });
+  final recorder = DbNetworkRequestRecorder(NetworkLogDao(appDb));
+  appDb.addWipeParticipant(recorder);
+  final api = await ApiClient.create(networkRecorder: recorder);
+  final appVersionService = AppVersionService(api);
+  final authRepo = AuthRepository(api, appVersionService: appVersionService);
+  final biometric = BiometricService();
   AudioSampleSyncService.init(db: appDb, api: ScribeApiService(api));
   final authState = AuthState(
     authRepo,
@@ -165,6 +170,7 @@ Future<void> main() async {
     authState: authState,
     biometric: biometric,
     appDb: appDb,
+    networkRecorder: recorder,
     appVersionService: appVersionService,
   ));
 }
@@ -177,6 +183,7 @@ class UhisNextApp extends StatefulWidget {
     required this.authState,
     required this.biometric,
     required this.appDb,
+    required this.networkRecorder,
     required this.appVersionService,
   });
 
@@ -185,6 +192,7 @@ class UhisNextApp extends StatefulWidget {
   final AuthState authState;
   final BiometricService biometric;
   final AppDatabase appDb;
+  final DbNetworkRequestRecorder networkRecorder;
   final AppVersionService appVersionService;
 
   @override
@@ -614,6 +622,8 @@ class _UhisNextAppState extends State<UhisNextApp>
       unawaited(_referrals.recomputeAllAfterSync());
       // Play Core requires re-showing an in-progress immediate update on resume.
       unawaited(resumeInProgressAppUpdateIfAny());
+    } else if (state == AppLifecycleState.paused) {
+      unawaited(widget.networkRecorder.flush());
     }
   }
 
@@ -622,6 +632,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     return MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: widget.api),
+        Provider<NetworkRequestRecorder>.value(value: widget.networkRecorder),
         Provider<AppVersionService>.value(value: widget.appVersionService),
         Provider<AppVersionEnforcer>.value(value: _appVersionEnforcer),
         Provider<AuthRepository>.value(value: widget.authRepo),
