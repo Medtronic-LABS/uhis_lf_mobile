@@ -9,7 +9,7 @@ class MicroCoachingService {
 
   // Retrofit requires base URL to end with '/' and include the full path prefix.
   // AppConfig.coachingServiceUrl omits 'medtronics-api/' for Dio callers — normalize here.
-  static String _sdkUrl(String url) {
+  static String sdkBaseUrl(String url) {
     var u = url.endsWith('/') ? url : '$url/';
     if (!u.contains('medtronics-api')) u = '${u}medtronics-api/';
     return u;
@@ -23,7 +23,7 @@ class MicroCoachingService {
     String hfToken = '',
     bool? analyticsEnabled,
   }) async {
-    final sdkUrl = _sdkUrl(backendUrl ?? AppConfig.coachingServiceUrl);
+    final sdkUrl = sdkBaseUrl(backendUrl ?? AppConfig.coachingServiceUrl);
     // GA (LEAP-152): coaching screens follow the same switch as the Flutter
     // events, so debug runs without ANALYTICS_ENABLED never reach GA.
     final analytics = analyticsEnabled ?? AppConfig.analyticsEnabled;

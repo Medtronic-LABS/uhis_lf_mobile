@@ -1,5 +1,8 @@
 import 'package:meta/meta.dart';
 
+import '../net_log/service_classifier.dart';
+import '../services/micro_coaching_service.dart';
+
 /// Build-time configuration. Every value is sourced via
 /// [String.fromEnvironment], which is populated by either
 /// `--dart-define=KEY=VALUE` or `--dart-define-from-file=env.*.json`
@@ -111,10 +114,17 @@ class AppConfig {
   /// Do NOT include /medtronics-api in the dart-define value — use just the host+mount prefix.
   /// Set `COACHING_SERVICE_URL` to override; otherwise derived from [apiBaseUrl]
   /// as `<API_BASE_URL>/micro-coaching`, matching the native `BuildConfig.API_BASE_URL` default.
-  static String get coachingServiceUrl {
-    const explicit = String.fromEnvironment('COACHING_SERVICE_URL', defaultValue: '');
-    return explicit.isNotEmpty ? explicit : joinUrlSegment(apiBaseUrl, 'micro-coaching');
-  }
+  static String get coachingServiceUrl =>
+      _resolveCoaching(apiBaseUrl, _coachingExplicit).url;
+
+  static const String _coachingExplicit =
+      String.fromEnvironment('COACHING_SERVICE_URL', defaultValue: '');
+
+  static _Resolved _resolveCoaching(String api, String explicit) =>
+      explicit.isNotEmpty
+          ? _Resolved(explicit, 'COACHING_SERVICE_URL')
+          : _Resolved(joinUrlSegment(api, 'micro-coaching'),
+              'API_BASE_URL + /micro-coaching');
 
   /// HuggingFace API token for micro-coaching SDK model download.
   /// Used as a client-side fallback when the backend /api/v1/models/gemma/download
@@ -149,27 +159,35 @@ class AppConfig {
   /// `SCRIBE_BASE_URL` define (default: local emulator) for back-compat.
   /// Nginx strips the `/ai-scribe-service/` routing prefix; direct calls omit
   /// it. When deployed behind nginx, set `AI_SERVICE_URL` to [apiBaseUrl].
-  static String get scribeBaseUrl {
-    if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
+  static String get scribeBaseUrl =>
+      _resolveScribe(apiBaseUrl, aiServiceBaseUrl, _scribeExplicit).url;
+
+  static const String _scribeExplicit =
+      String.fromEnvironment('SCRIBE_BASE_URL', defaultValue: '');
+
+  static _Resolved _resolveScribe(String api, String ai, String explicit) {
+    if (ai.isNotEmpty) return _Resolved(ai, 'AI_SERVICE_URL');
     // No AI_SERVICE_URL → route through the main API gateway (nginx).
-    final explicit = const String.fromEnvironment('SCRIBE_BASE_URL', defaultValue: '');
-    return explicit.isNotEmpty ? explicit : apiBaseUrl;
+    return explicit.isNotEmpty
+        ? _Resolved(explicit, 'SCRIBE_BASE_URL')
+        : _Resolved(api, 'API_BASE_URL');
   }
+
+  /// AI base shared by the assistant and app-version callers: the direct AI
+  /// service when set, otherwise the nginx gateway.
+  static _Resolved _resolveAiOrGateway(String api, String ai) =>
+      ai.isNotEmpty ? _Resolved(ai, 'AI_SERVICE_URL') : _Resolved(api, 'API_BASE_URL');
 
   /// Base URL for the AI Assistant service (port 8097 when running locally).
   /// Derives from [aiServiceBaseUrl] when set; otherwise routes through nginx.
-  static String get assistantBaseUrl {
-    if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
-    return apiBaseUrl;
-  }
+  static String get assistantBaseUrl =>
+      _resolveAiOrGateway(apiBaseUrl, aiServiceBaseUrl).url;
 
   /// Base URL for `POST /mobile/app-version` on leapfrog-ai-service. Uses
   /// [aiServiceBaseUrl] when set (e.g. `http://<emulator-host>:8095`); otherwise
   /// [apiBaseUrl] with the `/ai-scribe/mobile/app-version` gateway path.
-  static String get appVersionCheckBaseUrl {
-    if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
-    return apiBaseUrl;
-  }
+  static String get appVersionCheckBaseUrl =>
+      _resolveAiOrGateway(apiBaseUrl, aiServiceBaseUrl).url;
 
   /// Transcription model for AI Scribe.
   /// Options: 'gpt-4o-mini-transcribe', 'whisper-1', 'gemini-2.5-flash'
@@ -416,19 +434,10 @@ class AppConfig {
   /// either way, only this base segment differs.
   static const String _shukheeGatewaySegment = 'admin-api';
 
-  /// Joins [apiBaseUrl] with a gateway path segment, normalizing the slash
-  /// between them regardless of whether `API_BASE_URL` was supplied with or
-  /// without a trailing slash -- a bare `'$apiBaseUrl$segment'` concatenation
-  /// silently produces a malformed host (e.g.
-  /// `uhis-next-backend.labsplatform.comadmin-api`, a real production
-  /// incident this fixes) whenever the build's `API_BASE_URL` dart-define
-  /// has no trailing slash, since the one in [apiBaseUrl]'s own default
-  /// value masks the bug for every build that copies that convention.
-  static String _joinGatewaySegment(String segment) =>
-      joinUrlSegment(apiBaseUrl, segment);
-
-  /// Pure join logic, factored out so it's testable independent of
-  /// [apiBaseUrl]'s compile-time `--dart-define` value.
+  /// Joins a base URL with a gateway path segment, normalizing the slash
+  /// between them regardless of a trailing slash on the base -- a bare
+  /// concatenation once produced a malformed production host. Pure, so it is
+  /// testable independent of [apiBaseUrl]'s compile-time value.
   @visibleForTesting
   static String joinUrlSegment(String base, String segment) {
     final trimmedBase = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
@@ -443,11 +452,19 @@ class AppConfig {
   ///   (e.g. `http://<emulator-host>:8000`) pointing directly at a local
   ///   `frappe-uhis-next` instance -- used verbatim, no gateway segment
   ///   appended, since a direct local instance isn't behind that route.
-  static String get shukheeApiBaseUrl {
-    const local = String.fromEnvironment('SHUKHEE_API_BASE_URL', defaultValue: '');
-    if (local.isNotEmpty) return local;
-    return _joinGatewaySegment(_shukheeGatewaySegment);
-  }
+  static String get shukheeApiBaseUrl =>
+      _resolveFrappe(apiBaseUrl, _shukheeLocal, 'SHUKHEE_API_BASE_URL').url;
+
+  static const String _shukheeLocal =
+      String.fromEnvironment('SHUKHEE_API_BASE_URL', defaultValue: '');
+
+  /// Shared Frappe base resolution: a complete local override is used
+  /// verbatim, otherwise the gateway [_shukheeGatewaySegment] is appended.
+  static _Resolved _resolveFrappe(String api, String local, String localRule) =>
+      local.isNotEmpty
+          ? _Resolved(local, localRule)
+          : _Resolved(joinUrlSegment(api, _shukheeGatewaySegment),
+              'API_BASE_URL + /$_shukheeGatewaySegment');
 
   /// Base URL of the same `frappe-uhis-next` backend's `spice_next_core` app
   /// (currently only `spice_next_core.api.sync.pull`, consumed by
@@ -462,11 +479,12 @@ class AppConfig {
   ///   appended, same as [shukheeApiBaseUrl].
   /// - Local override: set `SPICE_NEXT_CORE_API_BASE_URL` to a complete base
   ///   URL, same convention as `SHUKHEE_API_BASE_URL`.
-  static String get spiceNextCoreApiBaseUrl {
-    const local = String.fromEnvironment('SPICE_NEXT_CORE_API_BASE_URL', defaultValue: '');
-    if (local.isNotEmpty) return local;
-    return _joinGatewaySegment(_shukheeGatewaySegment);
-  }
+  static String get spiceNextCoreApiBaseUrl => _resolveFrappe(
+          apiBaseUrl, _spiceNextCoreLocal, 'SPICE_NEXT_CORE_API_BASE_URL')
+      .url;
+
+  static const String _spiceNextCoreLocal =
+      String.fromEnvironment('SPICE_NEXT_CORE_API_BASE_URL', defaultValue: '');
 
   /// Base URL of the Frappe site's `spice_next_ai` app — Step 3 NABA
   /// (`spice_next_ai.api.naba.generate`) and its guideline images
@@ -477,10 +495,58 @@ class AppConfig {
   /// - Dev/prod: `<API_BASE_URL>/admin-api`, same as [shukheeApiBaseUrl].
   /// - Local override: set `SPICE_NEXT_AI_API_BASE_URL` to a complete base
   ///   URL (e.g. `http://127.0.0.1:8081` with `adb reverse tcp:8081 tcp:8081`).
-  static String get spiceNextAiApiBaseUrl {
-    const local = String.fromEnvironment('SPICE_NEXT_AI_API_BASE_URL', defaultValue: '');
-    if (local.isNotEmpty) return local;
-    return _joinGatewaySegment(_shukheeGatewaySegment);
+  static String get spiceNextAiApiBaseUrl => _resolveFrappe(
+          apiBaseUrl, _spiceNextAiLocal, 'SPICE_NEXT_AI_API_BASE_URL')
+      .url;
+
+  static const String _spiceNextAiLocal =
+      String.fromEnvironment('SPICE_NEXT_AI_API_BASE_URL', defaultValue: '');
+
+  /// Every resolved base URL with the config rule that produced it, for the
+  /// hidden Network page and [ServiceClassifier]. URL getters only; never a
+  /// secret such as [hfToken].
+  static List<ConfiguredEndpoint> get configuredEndpoints => buildEndpoints(
+        apiBaseUrl: apiBaseUrl,
+        coachingExplicit: _coachingExplicit,
+        aiServiceBaseUrl: aiServiceBaseUrl,
+        scribeExplicit: _scribeExplicit,
+        shukheeLocal: _shukheeLocal,
+        spiceNextCoreLocal: _spiceNextCoreLocal,
+        spiceNextAiLocal: _spiceNextAiLocal,
+      );
+
+  /// Pure form of [configuredEndpoints] over the raw define values, so the
+  /// rules are testable independent of the compile-time constants.
+  @visibleForTesting
+  static List<ConfiguredEndpoint> buildEndpoints({
+    required String apiBaseUrl,
+    String coachingExplicit = '',
+    String aiServiceBaseUrl = '',
+    String scribeExplicit = '',
+    String shukheeLocal = '',
+    String spiceNextCoreLocal = '',
+    String spiceNextAiLocal = '',
+  }) {
+    ConfiguredEndpoint row(String service, _Resolved r) =>
+        ConfiguredEndpoint(service: service, url: r.url, rule: r.rule);
+
+    final coaching = _resolveCoaching(apiBaseUrl, coachingExplicit);
+    return [
+      row(ServiceClassifier.gatewayService, _Resolved(apiBaseUrl, 'API_BASE_URL')),
+      row('micro-coaching', coaching),
+      ConfiguredEndpoint(
+        service: 'micro-coaching',
+        url: MicroCoachingService.sdkBaseUrl(coaching.url),
+        rule: 'coaching URL + /medtronics-api/',
+      ),
+      row('ai-scribe', _resolveScribe(apiBaseUrl, aiServiceBaseUrl, scribeExplicit)),
+      row('ai-scribe', _resolveAiOrGateway(apiBaseUrl, aiServiceBaseUrl)),
+      row('admin-api', _resolveFrappe(apiBaseUrl, shukheeLocal, 'SHUKHEE_API_BASE_URL')),
+      row('admin-api',
+          _resolveFrappe(apiBaseUrl, spiceNextCoreLocal, 'SPICE_NEXT_CORE_API_BASE_URL')),
+      row('admin-api',
+          _resolveFrappe(apiBaseUrl, spiceNextAiLocal, 'SPICE_NEXT_AI_API_BASE_URL')),
+    ];
   }
 
   /// Feature flag: whether the real Shukhee teleconsult flow is wired up.
@@ -520,4 +586,12 @@ class AppConfig {
     'TELECONSULT_DEFAULT_PHONE',
     defaultValue: '',
   );
+}
+
+/// A resolved URL and the config identifier that produced it.
+class _Resolved {
+  const _Resolved(this.url, this.rule);
+
+  final String url;
+  final String rule;
 }
