@@ -3,11 +3,13 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:uhis_next/core/api/api_client.dart';
 import 'package:uhis_next/core/auth/auth_repository.dart';
 import 'package:uhis_next/core/auth/auth_state.dart';
 import 'package:uhis_next/core/auth/biometric_service.dart';
+import 'package:uhis_next/core/db/app_database.dart';
 
 /// Bypasses the real network/secure-storage logout implementation so this
 /// test can isolate AuthState's logout orchestration.
@@ -49,6 +51,29 @@ void main() {
 
     expect(repo.logoutCalled, isTrue);
     expect(authState.status, AuthStatus.signedOut);
+  });
+
+  test('logout() leaves network_log rows in place', () async {
+    sqfliteFfiInit();
+    final raw = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(
+        version: AppDatabase.schemaVersion,
+        onCreate: AppDatabase.createSchema,
+      ),
+    );
+    addTearDown(raw.close);
+    await raw.insert(AppDatabase.tableNetworkLog, {
+      'started_at_ms': 1,
+      'source': 'dart',
+      'service': 'core',
+      'method': 'GET',
+      'url': 'https://example.test/x',
+    });
+
+    await AuthState(repo, biometric).logout();
+
+    expect(await raw.query(AppDatabase.tableNetworkLog), hasLength(1));
   });
 
   test('logout() runs registered logout hooks, clearing in-memory caches',

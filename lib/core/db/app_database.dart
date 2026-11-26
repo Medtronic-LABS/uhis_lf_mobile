@@ -24,7 +24,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 59;
+  static const int schemaVersion = 60;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -63,6 +63,15 @@ class AppDatabase {
   static const String tableHealthFacilities = 'health_facilities';
   static const String tableAudioSamples = 'audio_samples';
   static const String tableTelemetryEvents = 'telemetry_events';
+
+  /// Hidden Network page request log. Non-PHI (sanitised URLs only) but still
+  /// in [_allTables]: a different-SK login must not inherit the previous SK's
+  /// request history.
+  static const String tableNetworkLog = 'network_log';
+
+  /// `sync_meta` entity holding the native SDK merge cursor and the floor
+  /// (epoch ms) below which native events are ignored.
+  static const String networkLogNativeEntity = 'network_log.native';
 
   /// Before/after values of AI-filled fields the SK edited.
   ///
@@ -852,6 +861,8 @@ class AppDatabase {
       'CREATE INDEX IF NOT EXISTS idx_audio_samples_retry '
       'ON $tableAudioSamples(next_retry_at)',
     );
+
+    await _createNetworkLog(db);
 
     // v47 — AI Scribe / counselling telemetry. Deliberately absent from
     // [_allTables]: see the comment on that list, and the "why this data is
@@ -2529,6 +2540,51 @@ class AppDatabase {
       // left to carry forward from whatever this device had queued.
       await db.execute('DROP TABLE IF EXISTS teleconsult_consent_log');
     }
+    if (from < 60) {
+      // v60 — hidden Network page request log.
+      await _createNetworkLog(db);
+    }
+  }
+
+  static Future<void> _createNetworkLog(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableNetworkLog (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        started_at_ms INTEGER NOT NULL,
+        source        TEXT    NOT NULL,
+        native_id     INTEGER,
+        service       TEXT    NOT NULL,
+        method        TEXT    NOT NULL,
+        url           TEXT    NOT NULL,
+        final_url     TEXT,
+        status_code   INTEGER,
+        duration_ms   INTEGER,
+        timing        TEXT    NOT NULL DEFAULT 'total',
+        attempt       INTEGER NOT NULL DEFAULT 1,
+        error_type    TEXT
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_network_log_started '
+      'ON $tableNetworkLog(started_at_ms DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_network_log_service '
+      'ON $tableNetworkLog(service, started_at_ms DESC)',
+    );
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_network_log_native '
+      'ON $tableNetworkLog(native_id, started_at_ms) WHERE source = \'native\'',
+    );
+    await db.insert(
+      tableSyncMeta,
+      {
+        'entity': networkLogNativeEntity,
+        'last_sync_time': 0,
+        'cursor': 0,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -2566,6 +2622,7 @@ class AppDatabase {
     tableVisitContentTelemetry,
     tableTeleconsultPrescriptions, tableCallLogHistory,
     tableAssistantContentTelemetry,
+    tableNetworkLog,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the
@@ -2578,6 +2635,10 @@ class AppDatabase {
   /// (login sync) — not on logout (UHIS parity keeps local data).
   Future<void> wipeAllData() async {
     var totalRows = 0;
+    final participants = List<WipeParticipant>.of(_wipeParticipants);
+    for (final p in participants) {
+      p.onWipeStarting();
+    }
     await db.transaction((tx) async {
       for (final table in _allTables) {
         final before = Sqflite.firstIntValue(
@@ -2586,6 +2647,16 @@ class AppDatabase {
         await tx.delete(table);
         totalRows += before;
       }
+      // The native SDK store is not wiped, so events older than this moment
+      // must never be re-imported from it.
+      await tx.insert(tableSyncMeta, {
+        'entity': networkLogNativeEntity,
+        'last_sync_time': DateTime.now().millisecondsSinceEpoch,
+        'cursor': 0,
+      });
+      for (final p in participants) {
+        await p.onWipeInTransaction(tx);
+      }
     });
     debugPrint(
       '[AppDatabase] wipeAllData complete — ${_allTables.length} tables, '
@@ -2593,5 +2664,20 @@ class AppDatabase {
     );
   }
 
+  final List<WipeParticipant> _wipeParticipants = [];
+
+  /// Registers [p] to be told about every [wipeAllData] (see [WipeParticipant]).
+  void addWipeParticipant(WipeParticipant p) => _wipeParticipants.add(p);
+
   Future<void> close() => db.close();
+}
+
+/// Something that holds state alongside the database and must react to
+/// [AppDatabase.wipeAllData] (e.g. the network-log recorder's buffer).
+abstract interface class WipeParticipant {
+  /// Synchronous, called before the wipe transaction is queued.
+  void onWipeStarting();
+
+  /// Called at the end of the wipe transaction, after truncation.
+  Future<void> onWipeInTransaction(Transaction tx);
 }

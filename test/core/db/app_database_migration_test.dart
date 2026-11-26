@@ -51,4 +51,36 @@ void main() {
 
     await db.close();
   });
+
+  test('onUpgrade 59 -> 60 creates network_log, its indexes and the seed row',
+      () async {
+    final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+    await db.execute(
+        'CREATE TABLE ${AppDatabase.tableSyncMeta} (entity TEXT PRIMARY KEY, '
+        'last_sync_time INTEGER, last_full_sync_at INTEGER, cursor INTEGER)');
+    await db.insert(AppDatabase.tableSyncMeta, {'entity': 'worklist'});
+
+    await AppDatabase.onUpgrade(db, 59, 60);
+
+    final indexes = (await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='index' "
+            "AND tbl_name='${AppDatabase.tableNetworkLog}'"))
+        .map((r) => r['name'])
+        .toSet();
+    expect(
+        indexes,
+        containsAll([
+          'idx_network_log_started',
+          'idx_network_log_service',
+          'idx_network_log_native',
+        ]));
+    final seed = await db.query(AppDatabase.tableSyncMeta,
+        where: 'entity = ?', whereArgs: ['network_log.native']);
+    expect(seed.single['cursor'], 0);
+    expect(seed.single['last_sync_time'], 0);
+    expect(await db.query(AppDatabase.tableSyncMeta), hasLength(2),
+        reason: 'existing data is kept');
+
+    await db.close();
+  });
 }
