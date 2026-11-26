@@ -14779,10 +14779,6 @@
     "en": "Date pre-filled from card · Edit if needed",
     "bn": "কার্ড থেকে তারিখ আগে থেকে পূরণ করা হয়েছে · প্রয়োজনে সম্পাদনা করুন"
   },
-  "Epi.scanFailed": {
-    "en": "Couldn't read card — please enter manually",
-    "bn": "কার্ড পড়া যায়নি — অনুগ্রহ করে নিজে লিখুন"
-  },
   "CardScan.blurry": {
     "en": "The photo is blurry — hold the phone steady, fill the frame and retake it.",
     "bn": "ছবিটি অস্পষ্ট — ফোন স্থির রাখুন, ফ্রেম পূর্ণ করুন এবং আবার ছবি তুলুন।"
@@ -14806,6 +14802,10 @@
   "CardScan.serviceUnavailable": {
     "en": "Card reading is unavailable right now — enter the values manually.",
     "bn": "কার্ড পড়ার সেবা এখন পাওয়া যাচ্ছে না — মানগুলো নিজে লিখুন।"
+  },
+  "CardScan.visitNotResolved": {
+    "en": "Couldn't work out which visit this is — enter the values manually.",
+    "bn": "কোন ভিজিটের কার্ড তা নির্ধারণ করা যায়নি — মানগুলো নিজে লিখুন।"
   },
   "Epi.dateBeforeDobError": {
     "en": "Date cannot be before the patient's date of birth",

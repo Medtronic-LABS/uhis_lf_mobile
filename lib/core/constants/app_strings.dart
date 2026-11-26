@@ -5849,10 +5849,6 @@ abstract final class EpiStrings {
         'Epi.scanDatePrefilled',
         'Date pre-filled from card · Edit if needed',
       );
-  static String get scanFailed => getTranslatedString(
-        'Epi.scanFailed',
-        "Couldn't read card — please enter manually",
-      );
   static String get dateBeforeDobError => getTranslatedString(
         'Epi.dateBeforeDobError',
         "Date cannot be before the patient's date of birth",
@@ -7484,9 +7480,13 @@ abstract final class AncScanStrings {
 abstract final class CardScanFailureStrings {
   CardScanFailureStrings._();
 
-  /// [visitNumber] fills the `{n}` token of the visit-data-missing message.
-  static String forFailure(CardScanFailure failure, {required int visitNumber}) =>
+  /// [visitNumber] fills the `{n}` token of the visit-data-missing message;
+  /// scans that are not visit-targeted (EPI) omit it and a missing-visit
+  /// failure then reads as a plain unreadable photo.
+  static String forFailure(CardScanFailure failure, {int? visitNumber}) =>
       switch (failure) {
+      CardScanFailure.visitDataMissing when visitNumber == null =>
+        forFailure(CardScanFailure.unreadable),
       CardScanFailure.blurry => getTranslatedString(
         'CardScan.blurry',
         "The photo is blurry — hold the phone steady, fill the frame and retake it.",
@@ -7499,6 +7499,10 @@ abstract final class CardScanFailureStrings {
         'CardScan.visitDataMissing',
         "This card has no data for visit {n} — enter the values manually.",
         params: {'n': '$visitNumber'},
+      ),
+      CardScanFailure.visitNotResolved => getTranslatedString(
+        'CardScan.visitNotResolved',
+        "Couldn't work out which visit this is — enter the values manually.",
       ),
       CardScanFailure.unreadable => getTranslatedString(
         'CardScan.unreadable',

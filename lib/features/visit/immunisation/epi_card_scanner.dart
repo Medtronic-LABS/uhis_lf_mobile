@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'card_scan_failure.dart';
 import 'epi_date_extraction_models.dart' show UnmatchedVaccineRow;
 import 'epi_date_extraction_repository.dart';
 
@@ -28,6 +29,7 @@ class EpiScanResult {
     this.unmatchedRows = const [],
     this.flagged = false,
     this.flagReason,
+    this.failure,
   });
 
   /// Vaccine codes (from [EpiCardScanner._aliases]) found in the OCR output.
@@ -64,6 +66,23 @@ class EpiScanResult {
   /// `EpiDateExtractionResult.flagged`. Always false offline (no dates read).
   final bool flagged;
   final String? flagReason;
+
+  /// Why nothing could be read, when [anyMatched] is false — drives the
+  /// cause-specific message the timeline shows instead of a generic error.
+  final CardScanFailure? failure;
+
+  EpiScanResult withFailure(CardScanFailure cause) => EpiScanResult(
+        matchedCodes: matchedCodes,
+        extractedDate: extractedDate,
+        rawText: rawText,
+        engine: engine,
+        dateByCode: dateByCode,
+        confidenceByCode: confidenceByCode,
+        unmatchedRows: unmatchedRows,
+        flagged: flagged,
+        flagReason: flagReason,
+        failure: cause,
+      );
 
   bool get anyMatched =>
       matchedCodes.isNotEmpty || extractedDate != null || dateByCode.isNotEmpty;
@@ -214,6 +233,7 @@ abstract final class EpiCardScanner {
   ) async {
     final connectivity = await Connectivity().checkConnectivity();
     final isOnline = connectivity.any((r) => r != ConnectivityResult.none);
+    CardScanFailure? onlineFailure;
     if (isOnline) {
       try {
         final prepared = await prepareForVisionUpload(image);
@@ -231,9 +251,13 @@ abstract final class EpiCardScanner {
       } on EpiDateExtractionException catch (e) {
         debugPrint('[EpiCardScanner] Gemini vision extraction failed, '
             'falling back to offline OCR: $e');
+        onlineFailure = e.failure;
       }
     }
-    return scanImage(image, targetCodes);
+    final offline = await scanImage(image, targetCodes);
+    return offline.anyMatched || onlineFailure == null
+        ? offline
+        : offline.withFailure(onlineFailure);
   }
 
   /// Pure text-matching path — exposed for unit tests (no camera/ML Kit needed).

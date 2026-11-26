@@ -16,6 +16,7 @@ import '../../../core/telemetry/telemetry_service.dart';
 import '../../../core/telemetry/visit_content_service.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../../core/constants/app_strings.dart';
+import '../immunisation/card_scan_failure.dart';
 import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/i18n/app_date_format.dart';
 import '../../../core/i18n/app_locale.dart';
@@ -2042,7 +2043,11 @@ class _AncScanFab extends StatelessWidget {
     if (!context.mounted) return;
     if (visitNumber < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(EpiStrings.scanFailed)),
+        SnackBar(
+          content: Text(CardScanFailureStrings.forFailure(
+            CardScanFailure.visitNotResolved,
+          )),
+        ),
       );
       return;
     }
@@ -2065,7 +2070,12 @@ class _AncScanFab extends StatelessWidget {
       _trackCardScanResult('anc', notifier.encounterId, scanOpenedAt,
           AnalyticsValue.failed);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(EpiStrings.scanFailed)),
+        SnackBar(
+          content: Text(CardScanFailureStrings.forFailure(
+            CardScanFailure.visitDataMissing,
+            visitNumber: visitNumber,
+          )),
+        ),
       );
       return;
     }
@@ -2119,7 +2129,11 @@ class _NcdScanFab extends StatelessWidget {
     if (!context.mounted) return;
     if (visitNumber < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(EpiStrings.scanFailed)),
+        SnackBar(
+          content: Text(CardScanFailureStrings.forFailure(
+            CardScanFailure.visitNotResolved,
+          )),
+        ),
       );
       return;
     }
@@ -2142,7 +2156,12 @@ class _NcdScanFab extends StatelessWidget {
       _trackCardScanResult('ncd', notifier.encounterId, scanOpenedAt,
           AnalyticsValue.failed);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(EpiStrings.scanFailed)),
+        SnackBar(
+          content: Text(CardScanFailureStrings.forFailure(
+            CardScanFailure.visitDataMissing,
+            visitNumber: visitNumber,
+          )),
+        ),
       );
       return;
     }

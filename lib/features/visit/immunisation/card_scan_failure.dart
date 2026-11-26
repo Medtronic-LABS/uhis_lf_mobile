@@ -18,6 +18,9 @@ enum CardScanFailure {
   /// Card was found but its contents could not be read.
   unreadable,
 
+  /// The visit the scan targets could not be determined before scanning.
+  visitNotResolved,
+
   /// No connectivity (or the request timed out) — manual entry is the fallback.
   offline,
 
