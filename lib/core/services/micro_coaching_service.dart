@@ -3,17 +3,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../config/app_config.dart';
+import '../config/coaching_sdk_url.dart';
 
 class MicroCoachingService {
   static const _channel = MethodChannel('com.medtroniclabs.uhis_next/micro_coaching');
 
-  // Retrofit requires base URL to end with '/' and include the full path prefix.
-  // AppConfig.coachingServiceUrl omits 'medtronics-api/' for Dio callers — normalize here.
-  static String sdkBaseUrl(String url) {
-    var u = url.endsWith('/') ? url : '$url/';
-    if (!u.contains('medtronics-api')) u = '${u}medtronics-api/';
-    return u;
-  }
+  /// The base URL the SDK uses for [url]; see [coachingSdkBaseUrl].
+  static String sdkBaseUrl(String url) => coachingSdkBaseUrl(url);
 
   /// Initialize SDK after login. Maps to MicroCoachingSDK.Builder(...).build().
   static Future<void> initialize({

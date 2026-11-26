@@ -6,7 +6,7 @@ import 'package:uhis_next/core/services/micro_coaching_service.dart';
 void main() {
   const api = 'https://api.example.test';
 
-  Map<String, ConfiguredEndpoint> build({
+  List<ConfiguredEndpoint> build({
     String apiBaseUrl = api,
     String coachingExplicit = '',
     String aiServiceBaseUrl = '',
@@ -14,33 +14,59 @@ void main() {
     String shukheeLocal = '',
     String spiceNextCoreLocal = '',
     String spiceNextAiLocal = '',
-  }) {
-    final list = AppConfig.buildEndpoints(
-      apiBaseUrl: apiBaseUrl,
-      coachingExplicit: coachingExplicit,
-      aiServiceBaseUrl: aiServiceBaseUrl,
-      scribeExplicit: scribeExplicit,
-      shukheeLocal: shukheeLocal,
-      spiceNextCoreLocal: spiceNextCoreLocal,
-      spiceNextAiLocal: spiceNextAiLocal,
-    );
-    // First row per rule: rows that share a rule also share a URL.
-    return {for (final e in list.reversed) e.rule: e};
+  }) => AppConfig.buildEndpoints(
+    apiBaseUrl: apiBaseUrl,
+    coachingExplicit: coachingExplicit,
+    aiServiceBaseUrl: aiServiceBaseUrl,
+    scribeExplicit: scribeExplicit,
+    shukheeLocal: shukheeLocal,
+    spiceNextCoreLocal: spiceNextCoreLocal,
+    spiceNextAiLocal: spiceNextAiLocal,
+  );
+
+  ConfiguredEndpoint find(
+    List<ConfiguredEndpoint> rows,
+    String service,
+    String rule,
+  ) {
+    final matches = rows
+        .where((e) => e.service == service && e.rule == rule)
+        .toList();
+    expect(matches, isNotEmpty, reason: 'no row $service / $rule');
+    return matches.first;
   }
 
   group('buildEndpoints defaults', () {
     test('derives from API_BASE_URL', () {
-      final byRule = build();
-      expect(byRule['API_BASE_URL']!.url, api);
-      expect(byRule['API_BASE_URL']!.service, ServiceClassifier.gatewayService);
-      expect(byRule['API_BASE_URL + /micro-coaching']!.url,
-          '$api/micro-coaching');
-      expect(byRule['API_BASE_URL + /admin-api']!.url, '$api/admin-api');
-      expect(byRule['API_BASE_URL + /admin-api']!.service, 'admin-api');
-      expect(byRule['coaching URL + /medtronics-api/']!.url,
-          '$api/micro-coaching/medtronics-api/');
-      expect(byRule['coaching URL + /medtronics-api/']!.service,
-          'micro-coaching');
+      final rows = build();
+      expect(
+        find(rows, ServiceClassifier.gatewayService, 'API_BASE_URL').url,
+        api,
+      );
+      expect(
+        find(rows, ServiceClassifier.gatewayService, 'API_BASE_URL').service,
+        ServiceClassifier.gatewayService,
+      );
+      expect(
+        find(rows, 'micro-coaching', 'API_BASE_URL + /micro-coaching').url,
+        '$api/micro-coaching',
+      );
+      expect(
+        find(rows, 'admin-api', 'API_BASE_URL + /admin-api').url,
+        '$api/admin-api',
+      );
+      expect(
+        find(rows, 'admin-api', 'API_BASE_URL + /admin-api').service,
+        'admin-api',
+      );
+      expect(
+        find(rows, 'micro-coaching', 'coaching URL + /medtronics-api/').url,
+        '$api/micro-coaching/medtronics-api/',
+      );
+      expect(
+        find(rows, 'micro-coaching', 'coaching URL + /medtronics-api/').service,
+        'micro-coaching',
+      );
     });
 
     test('every endpoint has a non-empty rule and service', () {
@@ -51,17 +77,25 @@ void main() {
     });
 
     test('trailing slash on the base is normalised', () {
-      final byRule = build(apiBaseUrl: '$api/');
-      expect(byRule['API_BASE_URL + /admin-api']!.url, '$api/admin-api');
+      final rows = build(apiBaseUrl: '$api/');
+      expect(
+        find(rows, 'admin-api', 'API_BASE_URL + /admin-api').url,
+        '$api/admin-api',
+      );
     });
   });
 
   group('buildEndpoints overrides', () {
     test('explicit coaching URL', () {
-      final byRule = build(coachingExplicit: 'https://coach.example.test');
-      expect(byRule['COACHING_SERVICE_URL']!.url, 'https://coach.example.test');
-      expect(byRule['coaching URL + /medtronics-api/']!.url,
-          'https://coach.example.test/medtronics-api/');
+      final rows = build(coachingExplicit: 'https://coach.example.test');
+      expect(
+        find(rows, 'micro-coaching', 'COACHING_SERVICE_URL').url,
+        'https://coach.example.test',
+      );
+      expect(
+        find(rows, 'micro-coaching', 'coaching URL + /medtronics-api/').url,
+        'https://coach.example.test/medtronics-api/',
+      );
     });
 
     test('AI_SERVICE_URL drives every AI row', () {
@@ -79,27 +113,40 @@ void main() {
     });
 
     test('SCRIBE_BASE_URL applies only to the scribe row', () {
-      final byRule = build(scribeExplicit: 'https://legacy.example.test');
-      expect(byRule['SCRIBE_BASE_URL']!.url, 'https://legacy.example.test');
+      final rows = build(scribeExplicit: 'https://legacy.example.test');
+      final ai = rows.where((e) => e.service == 'ai-scribe').toList();
+      expect(ai.map((e) => e.rule), ['SCRIBE_BASE_URL', 'API_BASE_URL']);
+      expect(ai.first.url, 'https://legacy.example.test');
+      expect(ai.last.url, api);
     });
 
     test('local Frappe overrides are used verbatim', () {
-      final byRule = build(
+      final rows = build(
         shukheeLocal: 'http://127.0.0.1:8000',
         spiceNextCoreLocal: 'http://127.0.0.1:8001',
         spiceNextAiLocal: 'http://127.0.0.1:8081',
       );
-      expect(byRule['SHUKHEE_API_BASE_URL']!.url, 'http://127.0.0.1:8000');
-      expect(byRule['SPICE_NEXT_CORE_API_BASE_URL']!.url,
-          'http://127.0.0.1:8001');
-      expect(byRule['SPICE_NEXT_AI_API_BASE_URL']!.url, 'http://127.0.0.1:8081');
+      expect(
+        find(rows, 'admin-api', 'SHUKHEE_API_BASE_URL').url,
+        'http://127.0.0.1:8000',
+      );
+      expect(
+        find(rows, 'admin-api', 'SPICE_NEXT_CORE_API_BASE_URL').url,
+        'http://127.0.0.1:8001',
+      );
+      expect(
+        find(rows, 'admin-api', 'SPICE_NEXT_AI_API_BASE_URL').url,
+        'http://127.0.0.1:8081',
+      );
     });
   });
 
   group('getters keep their values under the default empty defines', () {
     test('coachingServiceUrl', () {
-      expect(AppConfig.coachingServiceUrl,
-          AppConfig.joinUrlSegment(AppConfig.apiBaseUrl, 'micro-coaching'));
+      expect(
+        AppConfig.coachingServiceUrl,
+        AppConfig.joinUrlSegment(AppConfig.apiBaseUrl, 'micro-coaching'),
+      );
     });
     test('scribe, assistant and app-version fall back to the API base', () {
       expect(AppConfig.scribeBaseUrl, AppConfig.apiBaseUrl);
@@ -107,7 +154,10 @@ void main() {
       expect(AppConfig.appVersionCheckBaseUrl, AppConfig.apiBaseUrl);
     });
     test('Frappe bases join admin-api', () {
-      final expected = AppConfig.joinUrlSegment(AppConfig.apiBaseUrl, 'admin-api');
+      final expected = AppConfig.joinUrlSegment(
+        AppConfig.apiBaseUrl,
+        'admin-api',
+      );
       expect(AppConfig.shukheeApiBaseUrl, expected);
       expect(AppConfig.spiceNextCoreApiBaseUrl, expected);
       expect(AppConfig.spiceNextAiApiBaseUrl, expected);
@@ -122,10 +172,14 @@ void main() {
     final urls = AppConfig.configuredEndpoints.map((e) => e.url).toList();
     expect(urls, contains(AppConfig.coachingServiceUrl));
     expect(urls, contains(AppConfig.shukheeApiBaseUrl));
-    expect(urls,
-        contains(MicroCoachingService.sdkBaseUrl(AppConfig.coachingServiceUrl)));
-    final secrets = [AppConfig.hfToken, AppConfig.passwordHashKey]
-        .where((s) => s.isNotEmpty);
+    expect(
+      urls,
+      contains(MicroCoachingService.sdkBaseUrl(AppConfig.coachingServiceUrl)),
+    );
+    final secrets = [
+      AppConfig.hfToken,
+      AppConfig.passwordHashKey,
+    ].where((s) => s.isNotEmpty);
     for (final e in AppConfig.configuredEndpoints) {
       for (final s in secrets) {
         expect(e.url.contains(s) || e.rule.contains(s), isFalse);
@@ -134,9 +188,13 @@ void main() {
   });
 
   test('sdkBaseUrl normalises the slash and appends medtronics-api', () {
-    expect(MicroCoachingService.sdkBaseUrl('$api/micro-coaching'),
-        '$api/micro-coaching/medtronics-api/');
-    expect(MicroCoachingService.sdkBaseUrl('$api/medtronics-api/'),
-        '$api/medtronics-api/');
+    expect(
+      MicroCoachingService.sdkBaseUrl('$api/micro-coaching'),
+      '$api/micro-coaching/medtronics-api/',
+    );
+    expect(
+      MicroCoachingService.sdkBaseUrl('$api/medtronics-api/'),
+      '$api/medtronics-api/',
+    );
   });
 }

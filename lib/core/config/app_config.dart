@@ -1,7 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../net_log/service_classifier.dart';
-import '../services/micro_coaching_service.dart';
+import 'coaching_sdk_url.dart';
 
 /// Build-time configuration. Every value is sourced via
 /// [String.fromEnvironment], which is populated by either
@@ -536,7 +536,7 @@ class AppConfig {
       row('micro-coaching', coaching),
       ConfiguredEndpoint(
         service: 'micro-coaching',
-        url: MicroCoachingService.sdkBaseUrl(coaching.url),
+        url: coachingSdkBaseUrl(coaching.url),
         rule: 'coaching URL + /medtronics-api/',
       ),
       row('ai-scribe', _resolveScribe(apiBaseUrl, aiServiceBaseUrl, scribeExplicit)),

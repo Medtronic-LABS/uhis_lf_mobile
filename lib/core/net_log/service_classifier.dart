@@ -12,6 +12,12 @@ class ConfiguredEndpoint {
 }
 
 /// Labels a request URL with the backend service it targets.
+///
+/// [gatewayService] is the extra label of the configured-endpoints row for
+/// `API_BASE_URL` itself. It supplies the gateway host for first-path-segment
+/// matching and is never returned by [classify]; the page lists it as a normal
+/// row. An `API_BASE_URL` carrying its own path prefix is not stripped before
+/// first-segment matching, so such requests fall to `other`.
 class ServiceClassifier {
   const ServiceClassifier(this.endpoints);
 
@@ -36,7 +42,7 @@ class ServiceClassifier {
 
   String classify(String url) {
     final gateway = _gatewayUri();
-    final prefixMatch = _longestPrefixService(url, gateway);
+    final prefixMatch = _longestPrefixService(url);
     if (prefixMatch != null) return prefixMatch;
 
     final uri = Uri.tryParse(url);
@@ -47,17 +53,24 @@ class ServiceClassifier {
     return _segmentServices[segments.first] ?? other;
   }
 
-  Uri? _gatewayUri() {
+  ConfiguredEndpoint? _gatewayEndpoint() {
     for (final e in endpoints) {
-      if (e.service != gatewayService) continue;
-      final uri = Uri.tryParse(e.url);
-      return uri != null && uri.hasAuthority ? uri : null;
+      if (e.service == gatewayService) return e;
     }
     return null;
   }
 
-  String? _longestPrefixService(String url, Uri? gateway) {
-    final gatewayUrl = gateway == null ? null : _trimSlash(gateway.toString());
+  Uri? _gatewayUri() {
+    final e = _gatewayEndpoint();
+    if (e == null) return null;
+    final uri = Uri.tryParse(e.url);
+    return uri != null && uri.hasAuthority ? uri : null;
+  }
+
+  String? _longestPrefixService(String url) {
+    final gatewayEndpoint = _gatewayEndpoint();
+    final gatewayUrl =
+        gatewayEndpoint == null ? null : _trimSlash(gatewayEndpoint.url);
     String? service;
     var bestLength = -1;
     for (final e in endpoints) {

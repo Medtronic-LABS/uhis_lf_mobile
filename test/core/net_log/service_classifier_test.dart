@@ -22,6 +22,41 @@ void main() {
         'micro-coaching');
   });
 
+  test('prefix beats first segment when they disagree', () {
+    final c = ServiceClassifier([
+      ep(ServiceClassifier.gatewayService, api),
+      ep('admin-api', '$api/admin-api'),
+      ep('ai-scribe', '$api/admin-api/x'),
+      ep('micro-coaching', 'https://local.example.test:8000'),
+    ]);
+    expect(c.classify('$api/admin-api/x/y'), 'ai-scribe');
+    expect(c.classify('$api/admin-api/other'), 'admin-api');
+    expect(c.classify('https://local.example.test:8000/api/method/z'),
+        'micro-coaching');
+  });
+
+  test('the longest of nested prefixes wins', () {
+    final c = ServiceClassifier([
+      ep(ServiceClassifier.gatewayService, api),
+      ep('micro-coaching', '$api/micro-coaching'),
+      ep('ai-scribe', '$api/micro-coaching/medtronics-api/'),
+    ]);
+    expect(c.classify('$api/micro-coaching/medtronics-api/sync'), 'ai-scribe');
+    expect(c.classify('$api/micro-coaching/other'), 'micro-coaching');
+  });
+
+  test('API-base fallback rows are skipped even for a non-normalised base', () {
+    const raw = 'HTTPS://Api.Example.Test:443';
+    final c = ServiceClassifier([
+      ep(ServiceClassifier.gatewayService, raw),
+      ep('ai-scribe', raw),
+      ep('admin-api', '$raw/admin-api'),
+    ]);
+    expect(c.classify('$api/auth-service/session'), 'auth-service');
+    expect(c.classify('$api/admin-api/x'), 'admin-api');
+    expect(c.classify('$api/unknown'), 'other');
+  });
+
   test('a direct AI service host maps to ai-scribe', () {
     expect(classifier.classify('$ai/scribe/transcribe'), 'ai-scribe');
   });
