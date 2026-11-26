@@ -52,9 +52,9 @@ void main() {
       ep('ai-scribe', raw),
       ep('admin-api', '$raw/admin-api'),
     ]);
-    expect(c.classify('$api/auth-service/session'), 'auth-service');
-    expect(c.classify('$api/admin-api/x'), 'admin-api');
-    expect(c.classify('$api/unknown'), 'other');
+    expect(c.classify('$raw/auth-service/session'), 'auth-service');
+    expect(c.classify('$raw/admin-api/x'), 'admin-api');
+    expect(c.classify('$raw/unknown'), 'other');
   });
 
   test('a direct AI service host maps to ai-scribe', () {
