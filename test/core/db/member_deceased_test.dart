@@ -29,6 +29,9 @@ void main() {
         sync_status TEXT
       )''');
 
+    await db.execute(
+        'CREATE TABLE ${AppDatabase.tableSyncMeta} (entity TEXT PRIMARY KEY, '
+        'last_sync_time INTEGER, last_full_sync_at INTEGER, cursor INTEGER)');
     await AppDatabase.onUpgrade(db, 44, AppDatabase.schemaVersion);
 
     final cols = await db.rawQuery(

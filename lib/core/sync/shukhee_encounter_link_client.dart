@@ -31,9 +31,7 @@ class ShukheeEncounterLinkClient {
                 receiveTimeout: receiveTimeout,
               ),
             ) {
-    if (networkRecorder != null) {
-      NetworkLogInterceptor.attach(_dio, networkRecorder);
-    }
+    NetworkLogInterceptor.attach(_dio, networkRecorder);
   }
 
   static const String attachPath =

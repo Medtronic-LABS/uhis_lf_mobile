@@ -110,9 +110,11 @@ class MicroCoachingService {
   ) {
     const failed = NativeNetworkEventsResult(status: NativeNetworkStatus.failed);
     if (response is! Map) return failed;
-    final version = response['sdk_event_version'];
-    // Checked first: another contract version may reshape the rest.
-    if (version is int && version != _networkContractVersion) {
+    // Checked first: another contract version may reshape the rest. Any value
+    // other than the int we speak (any type) means the SDK is not usable.
+    final rawVersion = response['sdk_event_version'];
+    if (response.containsKey('sdk_event_version') &&
+        !(rawVersion is int && rawVersion == _networkContractVersion)) {
       return const NativeNetworkEventsResult(
         status: NativeNetworkStatus.unavailable,
       );
@@ -120,7 +122,7 @@ class MicroCoachingService {
     final status = response['status'];
     final events = response['events'];
     final maxId = response['max_id'];
-    if (version is! int || status is! String || events is! List || maxId is! int) {
+    if (rawVersion is! int || status is! String || events is! List || maxId is! int) {
       return failed;
     }
     if (status == 'notInitialized') {

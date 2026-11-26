@@ -264,6 +264,36 @@ void main() {
       expect((row['final_url'] as String).length, lessThanOrEqualTo(2048));
     });
 
+    test('insertBatch runs one transaction per chunk of 50 rows', () async {
+      final (db, dao) = await open();
+      addTearDown(db.close);
+      var checks = 0;
+
+      await dao.insertBatch(
+        [for (var i = 0; i < 120; i++) _e(i)],
+        isCurrent: () {
+          checks++;
+          return true;
+        },
+      );
+
+      expect(checks, 3, reason: 'isCurrent is re-checked per chunk transaction');
+      expect(await db.db.query(AppDatabase.tableNetworkLog), hasLength(120));
+    });
+
+    test('a wipe between chunks stops the remaining chunks', () async {
+      final (db, dao) = await open();
+      addTearDown(db.close);
+      var checks = 0;
+
+      await dao.insertBatch(
+        [for (var i = 0; i < 120; i++) _e(i)],
+        isCurrent: () => ++checks == 1,
+      );
+
+      expect(await db.db.query(AppDatabase.tableNetworkLog), hasLength(50));
+    });
+
     test(
       'insertBatch ignores duplicate native keys and chunks big batches',
       () async {

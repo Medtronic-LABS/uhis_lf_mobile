@@ -6,6 +6,7 @@ import 'package:uhis_next/core/api/scribe_api_service.dart';
 import 'package:uhis_next/core/auth/auth_repository.dart';
 import 'package:uhis_next/core/auth/user_hierarchy_service.dart';
 import 'package:uhis_next/core/net_log/network_log_entry.dart';
+import 'package:uhis_next/core/net_log/network_log_interceptor.dart';
 import 'package:uhis_next/core/net_log/network_request_recorder.dart';
 import 'package:uhis_next/core/sync/call_log_sync_client.dart';
 import 'package:uhis_next/core/sync/shukhee_encounter_link_client.dart';
@@ -122,6 +123,14 @@ void main() {
       expectOneSanitisedRow();
     },
   );
+
+  test('ScribeApiService attaches the log after its auth interceptor',
+      () async {
+    final api = await ApiClient.create(networkRecorder: rec);
+    final service = ScribeApiService(api, httpAdapter: adapter);
+
+    expect(service.dio.interceptors.last, isA<NetworkLogInterceptor>());
+  });
 
   test('UserHierarchyService records the get_controls 404', () async {
     final api = await ApiClient.create(networkRecorder: rec);

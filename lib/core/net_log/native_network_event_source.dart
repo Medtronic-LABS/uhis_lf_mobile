@@ -11,7 +11,8 @@ abstract interface class NativeNetworkEventSource {
   });
 }
 
-/// Source used until a platform implementation exists.
+/// Null object: reports the native source as unavailable. Used by tests and
+/// by any platform without a native implementation.
 class UnavailableNativeNetworkEventSource implements NativeNetworkEventSource {
   const UnavailableNativeNetworkEventSource();
 

@@ -66,9 +66,7 @@ class FrappeClient {
                receiveTimeout: receiveTimeout,
              ),
            ) {
-    if (networkRecorder != null) {
-      NetworkLogInterceptor.attach(_dio, networkRecorder);
-    }
+    NetworkLogInterceptor.attach(_dio, networkRecorder);
   }
 
   final Future<String?> Function() authTokenProvider;

@@ -91,9 +91,7 @@ class CallLogSyncClient {
                 receiveTimeout: receiveTimeout,
               ),
             ) {
-    if (networkRecorder != null) {
-      NetworkLogInterceptor.attach(_dio, networkRecorder);
-    }
+    NetworkLogInterceptor.attach(_dio, networkRecorder);
   }
 
   static const String pullPath = '/api/method/spice_next_core.api.sync.pull';

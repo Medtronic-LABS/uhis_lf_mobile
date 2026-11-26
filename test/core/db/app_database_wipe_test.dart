@@ -71,9 +71,16 @@ void main() {
     await db.wipeAllData();
 
     for (final table in AppDatabase.allTablesForTesting) {
+      if (table == AppDatabase.tableSyncMeta) continue;
       final rows = await db.db.query(table);
       expect(rows, isEmpty, reason: '$table must be empty after wipeAllData()');
     }
+    final meta = await db.db.query(AppDatabase.tableSyncMeta);
+    expect(
+      meta.map((r) => r['entity']),
+      [AppDatabase.networkLogNativeEntity],
+      reason: 'sync_meta keeps only the native network log floor row',
+    );
   });
 
   test('wipeAllData leaves the schema queryable (tables not dropped)',

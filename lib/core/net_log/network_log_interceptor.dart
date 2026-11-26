@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../api/request_extras.dart';
-import '../config/app_config.dart';
 import '../debug/console_log.dart';
 import 'network_log_entry.dart';
 import 'network_request_recorder.dart';
@@ -18,17 +17,14 @@ import 'url_sanitizer.dart';
 class NetworkLogInterceptor extends Interceptor {
   NetworkLogInterceptor._(this._recorder, this._classifier);
 
-  /// Adds the interceptor to [dio] unless it already has one.
-  static void attach(
-    Dio dio,
-    NetworkRequestRecorder recorder, {
-    ServiceClassifier? classifier,
-  }) {
+  /// Adds the interceptor to [dio] unless it already has one. A null
+  /// [recorder] (logging not wired for this client) is a no-op.
+  static void attach(Dio dio, NetworkRequestRecorder? recorder) {
+    if (recorder == null) return;
     if (dio.interceptors.any((i) => i is NetworkLogInterceptor)) return;
-    dio.interceptors.add(NetworkLogInterceptor._(
-      recorder,
-      classifier ?? ServiceClassifier(AppConfig.configuredEndpoints),
-    ));
+    dio.interceptors.add(
+      NetworkLogInterceptor._(recorder, ServiceClassifier.fromConfig()),
+    );
   }
 
   /// `RequestOptions.extra` key holding the per-attempt [_Start].

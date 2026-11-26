@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart';
 
-import '../net_log/service_classifier.dart';
+import 'configured_endpoint.dart';
 import 'coaching_sdk_url.dart';
 
 /// Build-time configuration. Every value is sourced via
@@ -532,7 +532,7 @@ class AppConfig {
 
     final coaching = _resolveCoaching(apiBaseUrl, coachingExplicit);
     return [
-      row(ServiceClassifier.gatewayService, _Resolved(apiBaseUrl, 'API_BASE_URL')),
+      row(ConfiguredEndpoint.gatewayService, _Resolved(apiBaseUrl, 'API_BASE_URL')),
       row('micro-coaching', coaching),
       ConfiguredEndpoint(
         service: 'micro-coaching',

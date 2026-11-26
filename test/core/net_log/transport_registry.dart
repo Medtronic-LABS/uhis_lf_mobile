@@ -69,15 +69,22 @@ class TransportEntry {
 }
 
 const _dio = r'\bDio\s*\(';
-const _httpClient = r'HttpClient\(\)';
+const _httpClient = r'\bHttpClient\s*\(';
 const _ioWs = 'IOWebSocketChannel';
 const _wsConnect = r'WebSocketChannel\.connect';
 const _pkgHttp = 'package:http/';
 const _shukheeClient = r'(?<![A-Za-z0-9_])ShukheeClient\(';
 
+const _dioTearOff = r'\bDio\.new\b';
+const _webSocketConnect = r'WebSocket\.connect\(';
+const _dioSubclass = r'extends\s+(DioMixin|DioForNative)';
+
 /// Source patterns that identify a transport.
 const transportPatterns = <String>[
   _dio,
+  _dioTearOff,
+  _webSocketConnect,
+  _dioSubclass,
   _ioWs,
   _wsConnect,
   _httpClient,

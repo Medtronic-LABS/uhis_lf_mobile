@@ -154,6 +154,14 @@ void main() {
     await Future<void>.delayed(Duration.zero);
   });
 
+  test('flushQuietly absorbs a non-database error instead of throwing',
+      () async {
+    sink.error = StateError('boom');
+    rec.record(_e());
+
+    await expectLater(rec.flushQuietly(), completes);
+  });
+
   test('clearBuffer empties, cancels the timer and bumps the epoch', () async {
     rec.record(_e());
     final before = rec.epoch;

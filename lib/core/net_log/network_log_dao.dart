@@ -24,21 +24,22 @@ class NetworkLogDao implements NetworkLogSink {
   static const int maxPageLimit = 1000;
   static const String _table = AppDatabase.tableNetworkLog;
 
-  /// Inserts Dart-side [entries] (source forced to `dart`, text normalised)
-  /// in chunks of [insertChunk] and purges to [maxRows]. [isCurrent] is the
-  /// first statement of the transaction: when it returns false (a wipe
-  /// happened since the batch was snapshotted) nothing is written.
+  /// Inserts Dart-side [entries] (source forced to `dart`, text normalised),
+  /// one transaction per chunk of [insertChunk] rows, each purging to
+  /// [maxRows]. [isCurrent] is the first statement of every chunk transaction:
+  /// when it returns false (a wipe happened since the batch was snapshotted)
+  /// that chunk and the rest are not written.
   @override
   Future<void> insertBatch(
     List<NetworkLogEntry> entries, {
     bool Function()? isCurrent,
   }) async {
-    await _db.db.transaction((tx) async {
-      if (isCurrent != null && !isCurrent()) return;
-      for (var i = 0; i < entries.length; i += insertChunk) {
-        final end = i + insertChunk < entries.length
-            ? i + insertChunk
-            : entries.length;
+    for (var i = 0; i < entries.length; i += insertChunk) {
+      final end = i + insertChunk < entries.length
+          ? i + insertChunk
+          : entries.length;
+      final proceed = await _db.db.transaction((tx) async {
+        if (isCurrent != null && !isCurrent()) return false;
         for (final e in entries.sublist(i, end)) {
           await tx.insert(
             _table,
@@ -46,9 +47,11 @@ class NetworkLogDao implements NetworkLogSink {
             conflictAlgorithm: ConflictAlgorithm.ignore,
           );
         }
-      }
-      await _purge(tx);
-    });
+        await _purge(tx);
+        return true;
+      });
+      if (!proceed) return;
+    }
   }
 
   /// Merges native SDK rows and optionally moves the cursor, all in one

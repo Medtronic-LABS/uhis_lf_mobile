@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import '../../core/config/app_config.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/net_log/network_log_entry.dart';
 import '../../core/net_log/network_request_recorder.dart';
@@ -65,7 +64,7 @@ void _observeHandshake(
       recorder.record(NetworkLogEntry(
         startedAtMs: startedAtMs,
         source: 'dart',
-        service: ServiceClassifier(AppConfig.configuredEndpoints).classify(url),
+        service: ServiceClassifier.fromConfig().classify(url),
         method: 'WS',
         url: url,
         statusCode: statusCode,

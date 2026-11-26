@@ -271,6 +271,18 @@ void main() {
       expect(problems.single, contains('register'));
     });
 
+    for (final snippet in const [
+      'final make = Dio.new;',
+      'final s = WebSocket.connect(url);',
+      'final c = HttpClient(context: ctx);',
+      'class MyDio extends DioMixin {}',
+      'class MyDio extends DioForNative {}',
+    ]) {
+      test('scanner reports a transport hidden as: $snippet', () {
+        expect(scanSource('lib/fake/x.dart', snippet), isNotEmpty);
+      });
+    }
+
     test('removing a registry entry produces a diff', () {
       final trimmed = transportRegistry.skip(1).toList();
       final problems = diffAgainst({

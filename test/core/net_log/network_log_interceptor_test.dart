@@ -129,6 +129,15 @@ void main() {
     expect(rec.entries.single.statusCode, isNull);
   });
 
+  test('attach with a null recorder adds nothing', () {
+    final dio = Dio();
+    final before = dio.interceptors.length;
+
+    NetworkLogInterceptor.attach(dio, null);
+
+    expect(dio.interceptors, hasLength(before));
+  });
+
   test('attaching twice still records one row', () async {
     final rec = _FakeRecorder();
     final (api, _) = await _client(rec);
@@ -150,6 +159,17 @@ void main() {
     await direct.get<dynamic>('/briefing');
 
     expect(rec.entries, hasLength(1));
+  });
+
+  test('attachAiServiceAuth attaches the log after the auth interceptor',
+      () async {
+    final (api, _) = await _client(_FakeRecorder());
+    final direct = Dio(BaseOptions(baseUrl: AppConfig.apiBaseUrl));
+
+    api.attachAiServiceAuth(direct);
+
+    expect(direct.interceptors.last, isA<NetworkLogInterceptor>());
+    expect(direct.interceptors.whereType<InterceptorsWrapper>(), hasLength(1));
   });
 
   // Checks leakage into the RECORDED fields only; the structural guarantee is

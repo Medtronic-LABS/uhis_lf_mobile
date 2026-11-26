@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/net_log/network_log_entry.dart';
+import '../../core/net_log/url_sanitizer.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Text and colour rules for one network log row, shared by the list and Copy.
@@ -18,9 +19,6 @@ abstract final class NetworkLogFormat {
   static String status(NetworkLogEntry e) =>
       e.statusCode?.toString() ?? e.errorType ?? unknownStatus;
 
-  /// Shown instead of an endpoint value that cannot be parsed as a URI.
-  static const String unparsable = '<unparsable>';
-
   /// A configured endpoint for display: scheme, host, port and path only.
   /// Userinfo, query and fragment never reach the screen.
   static String endpointUrl(String raw) {
@@ -28,7 +26,7 @@ abstract final class NetworkLogFormat {
     try {
       u = Uri.parse(raw);
     } on FormatException {
-      return unparsable;
+      return UrlSanitizer.unparsable;
     }
     return Uri(
       scheme: u.scheme,

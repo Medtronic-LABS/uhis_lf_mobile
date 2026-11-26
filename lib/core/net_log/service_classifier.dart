@@ -1,15 +1,7 @@
-/// One resolved base URL from `AppConfig`, with the config rule that produced it.
-class ConfiguredEndpoint {
-  const ConfiguredEndpoint({
-    required this.service,
-    required this.url,
-    required this.rule,
-  });
+import '../config/app_config.dart';
+import '../config/configured_endpoint.dart';
 
-  final String service;
-  final String url;
-  final String rule;
-}
+export '../config/configured_endpoint.dart';
 
 /// Labels a request URL with the backend service it targets.
 ///
@@ -21,8 +13,12 @@ class ConfiguredEndpoint {
 class ServiceClassifier {
   const ServiceClassifier(this.endpoints);
 
+  /// Classifier over the endpoints resolved from `AppConfig`.
+  factory ServiceClassifier.fromConfig() =>
+      ServiceClassifier(AppConfig.configuredEndpoints);
+
   /// Service label of the `API_BASE_URL` row; it supplies the gateway host.
-  static const String gatewayService = 'api-gateway';
+  static const String gatewayService = ConfiguredEndpoint.gatewayService;
   static const String otherHost = 'other-host';
   static const String other = 'other';
 

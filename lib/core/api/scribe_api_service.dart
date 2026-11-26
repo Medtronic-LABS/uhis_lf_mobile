@@ -268,7 +268,6 @@ class ScribeApiService extends ApiRepository {
       validateStatus: (s) => s != null && s < 500,
     ));
     if (httpAdapter != null) _dio.httpClientAdapter = httpAdapter;
-    api.attachNetworkLog(_dio);
     // Inject Bearer token + tenantId at request time so scribe HTTP calls
     // are authenticated the same way RealtimeAsrService authenticates WS.
     _dio.interceptors.add(InterceptorsWrapper(
@@ -282,9 +281,13 @@ class ScribeApiService extends ApiRepository {
         handler.next(options);
       },
     ));
+    api.attachNetworkLog(_dio);
   }
 
   late final Dio _dio;
+
+  @visibleForTesting
+  Dio get dio => _dio;
 
   static String _effectiveBaseUrl() {
     final ai = AppConfig.aiServiceBaseUrl;

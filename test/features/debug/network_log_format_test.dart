@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uhis_next/core/net_log/network_log_entry.dart';
 import 'package:uhis_next/core/theme/app_theme.dart';
+import 'package:uhis_next/core/net_log/url_sanitizer.dart';
 import 'package:uhis_next/features/debug/network_log_format.dart';
 
 NetworkLogEntry _entry(int? status) => NetworkLogEntry(
@@ -55,7 +56,7 @@ void main() {
     test('an unparsable value is shown as a fixed marker', () {
       expect(
         NetworkLogFormat.endpointUrl('https://exa mple:port/x'),
-        NetworkLogFormat.unparsable,
+        UrlSanitizer.unparsable,
       );
     });
   });

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uhis_next/core/config/app_config.dart';
 import 'package:uhis_next/core/net_log/service_classifier.dart';
 
 void main() {
@@ -112,6 +113,15 @@ void main() {
     expect(
       const ServiceClassifier([]).classify('$api/auth-service/x'),
       'other',
+    );
+  });
+
+  test('fromConfig classifies with the configured endpoints', () {
+    final fromConfig = ServiceClassifier.fromConfig();
+
+    expect(
+      fromConfig.endpoints.map((e) => e.service),
+      AppConfig.configuredEndpoints.map((e) => e.service),
     );
   });
 }

@@ -53,13 +53,13 @@ class _NetworkLogScreenState extends State<NetworkLogScreen> {
     final List<NetworkLogEntry> rows;
     try {
       rows = await _controller.rowsForCopy();
+      await Clipboard.setData(
+        ClipboardData(text: rows.map(NetworkLogFormat.line).join('\n')),
+      );
     } on Exception catch (e) {
       _reportFailure('copy', e);
       return;
     }
-    await Clipboard.setData(
-      ClipboardData(text: rows.map(NetworkLogFormat.line).join('\n')),
-    );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(NetworkLogStrings.copied(rows.length))),

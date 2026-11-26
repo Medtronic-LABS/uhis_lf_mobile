@@ -19,6 +19,7 @@ void main() {
       'onUpgrade from v30 adds every column across the merged v31-35 chain',
       () async {
     final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+    addTearDown(db.close);
 
     // Minimal "device last seen on v30" stub — just the tables this range
     // of migrations touches, deliberately missing every column v31-35 are
@@ -30,6 +31,9 @@ void main() {
     await db.execute(
         'CREATE TABLE ${AppDatabase.tableImmunisations} (id TEXT PRIMARY KEY)');
 
+    await db.execute(
+        'CREATE TABLE ${AppDatabase.tableSyncMeta} (entity TEXT PRIMARY KEY, '
+        'last_sync_time INTEGER, last_full_sync_at INTEGER, cursor INTEGER)');
     await AppDatabase.onUpgrade(db, 30, AppDatabase.schemaVersion);
 
     Future<Set<String>> columnsOf(String table) async {

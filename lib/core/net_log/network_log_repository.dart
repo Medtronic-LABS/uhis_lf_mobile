@@ -1,4 +1,3 @@
-import '../config/app_config.dart';
 import '../debug/console_log.dart';
 import 'native_network_event_source.dart';
 import 'network_log_dao.dart';
@@ -72,8 +71,11 @@ class NetworkLogRepository {
     );
   }
 
-  Future<List<NetworkLogEntry>> copyRows({String? service}) =>
-      _dao.newest(pageSize, service: service);
+  /// Flushes first, like [load], so the newest buffered rows are copied too.
+  Future<List<NetworkLogEntry>> copyRows({String? service}) async {
+    await _recorder.flush();
+    return _dao.newest(pageSize, service: service);
+  }
 
   /// Buffer first: otherwise queued rows would be flushed back after Clear.
   Future<void> clear() async {
@@ -84,7 +86,7 @@ class NetworkLogRepository {
   Future<NativeNetworkStatus> _pullNative() async {
     final epoch = _recorder.epoch;
     final classifier =
-        _classifier ?? ServiceClassifier(AppConfig.configuredEndpoints);
+        _classifier ?? ServiceClassifier.fromConfig();
     var cursor = (await _dao.nativeState()).cursor;
     var status = NativeNetworkStatus.unavailable;
     for (var call = 0; call < maxNativeCalls; call++) {

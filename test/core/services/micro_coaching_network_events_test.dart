@@ -203,14 +203,26 @@ void main() {
   final badEnvelopes = <String, Map<String, Object?>>{
     'events not a list': {..._ok([]), 'events': 'x'},
     'status not a string': {..._ok([]), 'status': 1},
-    'version as double': {..._ok([]), 'sdk_event_version': 1.0},
-    'version as string': {..._ok([]), 'sdk_event_version': '1'},
+    'version missing': {'status': 'ok', 'events': [], 'max_id': 0},
     'events missing': {'status': 'ok', 'sdk_event_version': 1, 'max_id': 1},
   };
   badEnvelopes.forEach((name, payload) {
     test('envelope $name is failed', () async {
       _handle((_) async => payload);
       expect((await pull()).status, NativeNetworkStatus.failed);
+    });
+  });
+
+  final nonOneVersions = <String, Object?>{
+    'double': 1.0,
+    'string': '1',
+    'null': null,
+    'zero': 0,
+  };
+  nonOneVersions.forEach((name, version) {
+    test('sdk_event_version $name is unavailable', () async {
+      _handle((_) async => {..._ok([]), 'sdk_event_version': version});
+      expect((await pull()).status, NativeNetworkStatus.unavailable);
     });
   });
 

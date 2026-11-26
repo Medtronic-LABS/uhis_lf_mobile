@@ -22,6 +22,9 @@ class FakeRecorder implements ManagedNetworkRequestRecorder {
   void record(NetworkLogEntry e) => buffer.add(e);
 
   @override
+  Future<void> flushQuietly() => flush();
+
+  @override
   Future<void> flush() async {
     calls.add('flush');
     final d = dao;
@@ -387,6 +390,18 @@ void main() {
       final f = await r.copyRows(service: 'auth-service');
       expect(f, hasLength(3));
       expect(f.every((e) => e.service == 'auth-service'), isTrue);
+    });
+
+    test('copyRows flushes the recorder first so recent rows are included',
+        () async {
+      recorder.dao = dao;
+      recorder.record(_dart(5));
+      calls.clear();
+
+      final rows = await repo(unavailable()).copyRows();
+
+      expect(calls, contains('flush'));
+      expect(rows.map((e) => e.startedAtMs), [5]);
     });
 
     test('clear drops the buffer before the table and rows stay gone', () async {

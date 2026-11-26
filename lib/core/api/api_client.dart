@@ -356,7 +356,6 @@ class ApiClient {
   /// and/or session cookies plus `tenantId`. The ai-scribe service rejects
   /// requests missing any of these with HTTP 401.
   void attachAiServiceAuth(Dio direct) {
-    attachNetworkLog(direct);
     direct.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
@@ -386,6 +385,8 @@ class ApiClient {
         },
       ),
     );
+    // After the auth interceptor, so the timing excludes the cookie export.
+    attachNetworkLog(direct);
   }
 
   Future<({String? jsession, String? authCookie})> exportAuthCookies() async {

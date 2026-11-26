@@ -77,6 +77,13 @@ class DbNetworkRequestRecorder
     }
   }
 
+  @override
+  Future<void> flushQuietly() => flush().catchError((Object e) {
+    // Deliberately broad: fire-and-forget callers have no handler, so an
+    // error here would surface as an unhandled zone error. Type only.
+    ConsoleLog.warn('[NetworkLog] flush failed: ${e.runtimeType}');
+  });
+
   /// Drops buffered entries and invalidates in-flight batches and entries.
   @override
   void clearBuffer() {
@@ -107,8 +114,6 @@ class DbNetworkRequestRecorder
   }
 
   void _flushInBackground() {
-    flush().catchError((Object e) {
-      ConsoleLog.warn('[NetworkLog] background flush failed: ${e.runtimeType}');
-    });
+    unawaited(flushQuietly());
   }
 }

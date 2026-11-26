@@ -142,6 +142,32 @@ void main() {
     expect(find.textContaining('example.test/core/r1'), findsOneWidget);
   });
 
+  testWidgets('a failing clipboard write keeps the page usable and says so', (
+    tester,
+  ) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          throw PlatformException(code: 'unavailable');
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _pump(tester, _FakeRepo([_e(1, 'core')]));
+    await tester.tap(find.byTooltip(NetworkLogStrings.copy));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(NetworkLogStrings.actionFailed), findsOneWidget);
+    expect(find.text(NetworkLogStrings.copied(1)), findsNothing);
+  });
+
   testWidgets('a failing clear keeps the page usable and says so', (
     tester,
   ) async {

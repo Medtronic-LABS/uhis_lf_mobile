@@ -627,7 +627,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       // Play Core requires re-showing an in-progress immediate update on resume.
       unawaited(resumeInProgressAppUpdateIfAny());
     } else if (state == AppLifecycleState.paused) {
-      unawaited(widget.networkRecorder.flush());
+      unawaited(widget.networkRecorder.flushQuietly());
     }
   }
 
@@ -637,9 +637,6 @@ class _UhisNextAppState extends State<UhisNextApp>
       providers: [
         Provider<ApiClient>.value(value: widget.api),
         Provider<NetworkRequestRecorder>.value(value: widget.networkRecorder),
-        Provider<ManagedNetworkRequestRecorder>.value(
-          value: widget.networkRecorder,
-        ),
         Provider<NetworkLogDao>(create: (_) => NetworkLogDao(widget.appDb)),
         Provider<NativeNetworkEventSource>.value(
           value: const MicroCoachingNetworkEventSource(),

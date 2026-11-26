@@ -15,6 +15,10 @@ abstract interface class ManagedNetworkRequestRecorder
     implements NetworkRequestRecorder {
   Future<void> flush();
 
+  /// Like [flush] but never throws, for fire-and-forget callers (app pause,
+  /// background timers) where an error would otherwise be unhandled.
+  Future<void> flushQuietly();
+
   /// Drops buffered entries and bumps [epoch].
   void clearBuffer();
 
@@ -28,6 +32,9 @@ class NoopNetworkRequestRecorder implements ManagedNetworkRequestRecorder {
 
   @override
   Future<void> flush() async {}
+
+  @override
+  Future<void> flushQuietly() async {}
 
   @override
   void clearBuffer() {}

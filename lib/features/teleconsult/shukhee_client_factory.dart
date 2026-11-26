@@ -22,6 +22,7 @@ ShukheeClient buildShukheeClient(
   BuildContext context, {
   @visibleForTesting NetworkRequestRecorder? recorder,
   @visibleForTesting String? baseUrl,
+  @visibleForTesting HttpClientAdapter? httpAdapter,
 }) {
   final apiClient = context.read<ApiClient>();
   final config = ShukheeConfig(
@@ -57,7 +58,11 @@ ShukheeClient buildShukheeClient(
     // injected, so every Shukhee HTTP call would be invisible. Injecting ours
     // (same BaseOptions the SDK would have built) records each call in the
     // network log in every build mode, using the session's own recorder.
-    dio: buildShukheeDio(config, recorder ?? apiClient.networkRecorder),
+    dio: buildShukheeDio(
+      config,
+      recorder ?? apiClient.networkRecorder,
+      httpAdapter: httpAdapter,
+    ),
   );
 }
 
@@ -69,6 +74,7 @@ Dio buildShukheeDio(
   ShukheeConfig config,
   NetworkRequestRecorder recorder, {
   @visibleForTesting bool debugLogging = kDebugMode,
+  @visibleForTesting HttpClientAdapter? httpAdapter,
 }) {
   final dio = Dio(
     BaseOptions(
@@ -77,6 +83,7 @@ Dio buildShukheeDio(
       receiveTimeout: config.receiveTimeout,
     ),
   );
+  if (httpAdapter != null) dio.httpClientAdapter = httpAdapter;
   NetworkLogInterceptor.attach(dio, recorder);
   if (debugLogging) _addDebugLogging(dio);
   return dio;
