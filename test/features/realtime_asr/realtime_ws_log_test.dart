@@ -42,14 +42,15 @@ class _ThrowingRecorder implements NetworkRequestRecorder {
 final _classifier = ServiceClassifier(const [
   ConfiguredEndpoint(
     service: ConfiguredEndpoint.gatewayService,
-    url: 'wss://example.test',
+    url: 'https://example.test',
     rule: 'API_BASE_URL',
   ),
 ]);
 
 final Uri _uri = Uri.parse(
-    'wss://example.test/ai-scribe/scribe/realtime/transcribe'
-    '?encounterId=ENC-1&tenantId=42&language=en');
+  'wss://example.test/ai-scribe/scribe/realtime/transcribe'
+  '?encounterId=ENC-1&tenantId=42&language=en',
+);
 const Map<String, String> _headers = {
   'Authorization': 'Bearer SECRET-MARKER',
   'Cookie': 'sid=SECRET-MARKER',
@@ -60,14 +61,16 @@ void main() {
   late _FakeChannel channel;
   late _Recorder recorder;
 
-  WebSocketChannel connect({NetworkRequestRecorder? rec, Map<String, String>? h}) =>
-      connectRealtimeChannel(
-        _uri,
-        h ?? _headers,
-        recorder: rec ?? recorder,
-        connect: (_, _) => channel,
-        classifier: _classifier,
-      );
+  WebSocketChannel connect({
+    NetworkRequestRecorder? rec,
+    Map<String, String>? h,
+  }) => connectRealtimeChannel(
+    _uri,
+    h ?? _headers,
+    recorder: rec ?? recorder,
+    connect: (_, _) => channel,
+    classifier: _classifier,
+  );
 
   setUp(() {
     channel = _FakeChannel();
@@ -138,8 +141,14 @@ void main() {
     channel.readyCompleter.complete();
     await Future<void>.delayed(Duration.zero);
     final r = recorder.rows.single;
-    final all = [r.url, r.finalUrl, r.service, r.method, r.timing, r.errorType]
-        .join('|');
+    final all = [
+      r.url,
+      r.finalUrl,
+      r.service,
+      r.method,
+      r.timing,
+      r.errorType,
+    ].join('|');
     expect(all, isNot(contains('SECRET-MARKER')));
     expect(all, isNot(contains('Bearer')));
   });

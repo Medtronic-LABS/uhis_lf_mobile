@@ -39,6 +39,21 @@
   },
   "cases": [
     {
+      "name": "forgot-password value without an at-sign",
+      "input": "https://api.example.test/user-service/user/forgot-password/jane/mobile",
+      "expected": "https://api.example.test/user-service/user/forgot-password/{id}/mobile"
+    },
+    {
+      "name": "forgot-password value as the last segment",
+      "input": "https://api.example.test/user-service/user/forgot-password/jane",
+      "expected": "https://api.example.test/user-service/user/forgot-password/{id}"
+    },
+    {
+      "name": "forgot-password parent match is exact",
+      "input": "https://api.example.test/user-service/user/Forgot-Password/jane/forgot-password-help",
+      "expected": "https://api.example.test/user-service/user/Forgot-Password/jane/forgot-password-help"
+    },
+    {
       "name": "forgot-password email encoded",
       "input": "https://api.example.test/user-service/user/forgot-password/jane.doe%40example.test/mobile",
       "expected": "https://api.example.test/user-service/user/forgot-password/{id}/mobile"

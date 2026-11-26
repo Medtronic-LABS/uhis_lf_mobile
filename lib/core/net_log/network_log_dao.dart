@@ -12,12 +12,19 @@ import 'network_log_entry.dart';
 import 'network_log_sink.dart';
 
 class NetworkLogDao implements NetworkLogSink {
-  NetworkLogDao(this._db) : _syncMeta = SyncMetaDao(_db);
+  NetworkLogDao(this._db, {this.retention = defaultRetention})
+    : _syncMeta = SyncMetaDao(_db);
 
   final AppDatabase _db;
   final SyncMetaDao _syncMeta;
 
   static const int maxRows = 2000;
+
+  /// Rows older than [retention] are dropped, so a quiet device does not keep
+  /// weeks of history across logouts.
+  static const Duration defaultRetention = Duration(days: 7);
+
+  final Duration retention;
   static const int insertChunk = 50;
   static const int mergeCap = 200;
   static const int maxFutureSkewMs = 5 * 60 * 1000;
@@ -102,15 +109,22 @@ class NetworkLogDao implements NetworkLogSink {
     return inserted;
   }
 
+  /// Rows newest first. [maxId], when given, hides rows written after it, so
+  /// later pages of one listing never shift while the recorder keeps writing.
   Future<List<NetworkLogEntry>> page({
     required int limit,
     required int offset,
     String? service,
+    int? maxId,
   }) async {
+    final conditions = <String>[
+      if (service != null) 'service = ?',
+      if (maxId != null) 'id <= ?',
+    ];
     final rows = await _db.db.query(
       _table,
-      where: service == null ? null : 'service = ?',
-      whereArgs: service == null ? null : [service],
+      where: conditions.isEmpty ? null : conditions.join(' AND '),
+      whereArgs: [?service, ?maxId],
       orderBy: 'started_at_ms DESC, id DESC',
       limit: limit.clamp(0, maxPageLimit),
       offset: offset < 0 ? 0 : offset,
@@ -120,6 +134,12 @@ class NetworkLogDao implements NetworkLogSink {
 
   Future<List<NetworkLogEntry>> newest(int limit, {String? service}) =>
       page(limit: limit, offset: 0, service: service);
+
+  /// Highest row id, 0 when the table is empty.
+  Future<int> maxId() async {
+    final rows = await _db.db.rawQuery('SELECT MAX(id) AS m FROM $_table');
+    return (rows.first['m'] as int?) ?? 0;
+  }
 
   Future<Map<String, int>> countsByService() async {
     final rows = await _db.db.rawQuery(
@@ -151,8 +171,13 @@ class NetworkLogDao implements NetworkLogSink {
     return (cursor: row.cursor ?? 0, floorMs: row.lastSyncTime ?? 0);
   }
 
-  Future<void> _purge(Transaction tx) => tx.rawDelete(
-    'DELETE FROM $_table WHERE id <= '
-    '(SELECT MAX(id) FROM $_table) - $maxRows',
-  );
+  Future<void> _purge(Transaction tx) async {
+    await tx.rawDelete(
+      'DELETE FROM $_table WHERE id <= '
+      '(SELECT MAX(id) FROM $_table) - $maxRows',
+    );
+    final cutoff =
+        DateTime.now().millisecondsSinceEpoch - retention.inMilliseconds;
+    await tx.rawDelete('DELETE FROM $_table WHERE started_at_ms < ?', [cutoff]);
+  }
 }

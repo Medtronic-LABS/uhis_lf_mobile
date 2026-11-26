@@ -57,14 +57,18 @@ class _MemoryStorage extends FlutterSecureStoragePlatform {
 
 class _Repo implements NetworkLogRepository {
   @override
-  Future<NetworkLogPage> load({String? service, int offset = 0}) async =>
-      const NetworkLogPage(
-        rows: <NetworkLogEntry>[],
-        counts: {},
-        nativeStatus: NativeNetworkStatus.ok,
-        droppedCount: 0,
-        hasMore: false,
-      );
+  Future<NetworkLogPage> load({
+    String? service,
+    int offset = 0,
+    int? maxId,
+  }) async => const NetworkLogPage(
+    rows: <NetworkLogEntry>[],
+    counts: {},
+    nativeStatus: NativeNetworkStatus.ok,
+    droppedCount: 0,
+    hasMore: false,
+    maxId: 0,
+  );
 
   @override
   Future<List<NetworkLogEntry>> copyRows({String? service}) async => const [];

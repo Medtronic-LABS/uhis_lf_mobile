@@ -14,6 +14,7 @@ class NetworkLogPage {
     required this.nativeStatus,
     required this.droppedCount,
     required this.hasMore,
+    required this.maxId,
   });
 
   final List<NetworkLogEntry> rows;
@@ -21,6 +22,9 @@ class NetworkLogPage {
   final NativeNetworkStatus nativeStatus;
   final int droppedCount;
   final bool hasMore;
+
+  /// Highest row id when the listing started; pass it back for later pages.
+  final int maxId;
 }
 
 /// Merges Dart-recorded and native SDK requests and serves the log page.
@@ -46,20 +50,27 @@ class NetworkLogRepository {
   /// Native status of the last pull; later pages reuse it.
   NativeNetworkStatus _nativeStatus = NativeNetworkStatus.unavailable;
 
-  /// Loads one page. The first page (offset 0) flushes the recorder and pulls
-  /// native events; later pages only read the table, so rows arriving between
-  /// pages cannot shift the offset.
-  Future<NetworkLogPage> load({String? service, int offset = 0}) async {
+  /// Loads one page. The first page (offset 0) flushes the recorder, pulls
+  /// native events and records the highest row id. Later pages pass that id
+  /// back as [maxId] and only read rows up to it, so rows arriving between
+  /// pages cannot shift the offset or repeat a row.
+  Future<NetworkLogPage> load({
+    String? service,
+    int offset = 0,
+    int? maxId,
+  }) async {
     if (offset == 0) {
       await _recorder.flush();
       _nativeStatus = await _pullNative();
     }
     final nativeStatus = _nativeStatus;
+    final bound = offset == 0 ? await _dao.maxId() : maxId;
     // One extra row tells us whether anything lies beyond this page.
     final fetched = await _dao.page(
       limit: pageSize + 1,
       offset: offset,
       service: service,
+      maxId: bound,
     );
     final counts = await _dao.countsByService();
     return NetworkLogPage(
@@ -68,6 +79,7 @@ class NetworkLogRepository {
       nativeStatus: nativeStatus,
       droppedCount: _recorder.droppedCount,
       hasMore: fetched.length > pageSize,
+      maxId: bound ?? 0,
     );
   }
 
@@ -85,8 +97,7 @@ class NetworkLogRepository {
 
   Future<NativeNetworkStatus> _pullNative() async {
     final epoch = _recorder.epoch;
-    final classifier =
-        _classifier ?? ServiceClassifier.fromConfig();
+    final classifier = _classifier ?? ServiceClassifier.fromConfig();
     var cursor = (await _dao.nativeState()).cursor;
     var status = NativeNetworkStatus.unavailable;
     for (var call = 0; call < maxNativeCalls; call++) {
@@ -109,7 +120,11 @@ class NetworkLogRepository {
         (m, e) => (e.nativeId ?? 0) > m ? (e.nativeId ?? 0) : m,
       );
       final lastRaw = truncated ? 0 : (result.lastRawId ?? 0);
-      final next = [cursor, lastMerged, lastRaw].reduce((a, b) => a > b ? a : b);
+      final next = [
+        cursor,
+        lastMerged,
+        lastRaw,
+      ].reduce((a, b) => a > b ? a : b);
       if (rows.isNotEmpty || next > cursor) {
         // A wipe during the pull: a stale cursor could skip new SDK events.
         if (_recorder.epoch != epoch) break;
@@ -127,7 +142,9 @@ class NetworkLogRepository {
       return await _native.fetch(afterId: afterId, limit: pageSize);
     } on Exception catch (e) {
       ConsoleLog.warn('[NetworkLog] native fetch failed: ${e.runtimeType}');
-      return const NativeNetworkEventsResult(status: NativeNetworkStatus.failed);
+      return const NativeNetworkEventsResult(
+        status: NativeNetworkStatus.failed,
+      );
     }
   }
 

@@ -35,7 +35,7 @@ void main() {
       ),
     );
     final app = AppDatabase.forTesting(raw);
-    return (app, NetworkLogDao(app));
+    return (app, NetworkLogDao(app, retention: const Duration(days: 36500)));
   }
 
   group('NetworkLogDao', () {
@@ -143,30 +143,36 @@ void main() {
       },
     );
 
-    test('mergeNative accepts a row at the max future skew and rejects one past it',
-        () async {
-      final (db, dao) = await open();
-      addTearDown(db.close);
-      final before = DateTime.now().millisecondsSinceEpoch;
+    test(
+      'mergeNative accepts a row at the max future skew and rejects one past it',
+      () async {
+        final (db, dao) = await open();
+        addTearDown(db.close);
+        final before = DateTime.now().millisecondsSinceEpoch;
 
-      // The DAO reads its own clock (no seam), so exact 1 ms is not testable:
-      // 'before' is never later than that clock, 'now + 1 s' never earlier.
-      final accepted = await dao.mergeNative([
-        _e(before + NetworkLogDao.maxFutureSkewMs, source: 'native', nativeId: 1),
-      ]);
-      final rejected = await dao.mergeNative([
-        _e(
-          DateTime.now().millisecondsSinceEpoch +
-              NetworkLogDao.maxFutureSkewMs +
-              1000,
-          source: 'native',
-          nativeId: 2,
-        ),
-      ]);
+        // The DAO reads its own clock (no seam), so exact 1 ms is not testable:
+        // 'before' is never later than that clock, 'now + 1 s' never earlier.
+        final accepted = await dao.mergeNative([
+          _e(
+            before + NetworkLogDao.maxFutureSkewMs,
+            source: 'native',
+            nativeId: 1,
+          ),
+        ]);
+        final rejected = await dao.mergeNative([
+          _e(
+            DateTime.now().millisecondsSinceEpoch +
+                NetworkLogDao.maxFutureSkewMs +
+                1000,
+            source: 'native',
+            nativeId: 2,
+          ),
+        ]);
 
-      expect(accepted, 1);
-      expect(rejected, 0);
-    });
+        expect(accepted, 1);
+        expect(rejected, 0);
+      },
+    );
 
     test(
       'mergeNative caps a call at 200 rows and keeps Dart history',
@@ -317,7 +323,11 @@ void main() {
         },
       );
 
-      expect(checks, 3, reason: 'isCurrent is re-checked per chunk transaction');
+      expect(
+        checks,
+        3,
+        reason: 'isCurrent is re-checked per chunk transaction',
+      );
       expect(await db.db.query(AppDatabase.tableNetworkLog), hasLength(120));
     });
 
@@ -326,10 +336,9 @@ void main() {
       addTearDown(db.close);
       var checks = 0;
 
-      await dao.insertBatch(
-        [for (var i = 0; i < 120; i++) _e(i)],
-        isCurrent: () => ++checks == 1,
-      );
+      await dao.insertBatch([
+        for (var i = 0; i < 120; i++) _e(i),
+      ], isCurrent: () => ++checks == 1);
 
       expect(await db.db.query(AppDatabase.tableNetworkLog), hasLength(50));
     });
@@ -398,4 +407,20 @@ void main() {
       expect(state.cursor, 9);
     });
   });
+
+  test(
+    'rows older than the retention window are purged on the next write',
+    () async {
+      final (app, _) = await open();
+      final dao = NetworkLogDao(app);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final old =
+          now - NetworkLogDao.defaultRetention.inMilliseconds - 60 * 1000;
+
+      await dao.insertBatch([_e(old), _e(now)]);
+
+      final rows = await dao.page(limit: 10, offset: 0);
+      expect(rows.map((e) => e.startedAtMs), [now]);
+    },
+  );
 }

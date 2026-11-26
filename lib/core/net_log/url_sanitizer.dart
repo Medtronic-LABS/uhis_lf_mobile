@@ -13,6 +13,10 @@ import 'dart:convert';
 /// - digits are counted per path segment, so `/017/123/4567` passes;
 /// - opaque tokens without `@`, `;`, a UUID or digits are not masked;
 /// - circled or other non-decimal digits do not count as digits.
+///
+/// The one exception to "opaque tokens are kept" is the value that follows a
+/// literal `forgot-password` segment (see [_idParents]): it is typed by a
+/// signed-out user and may be a username or an email without an at-sign.
 abstract final class UrlSanitizer {
   static const int maxLength = 2048;
   static const String unparsable = '<unparsable>';
@@ -40,6 +44,9 @@ abstract final class UrlSanitizer {
     'from_date',
     'to_date',
   };
+
+  /// Literal path segments whose next segment is always an identifier.
+  static const Set<String> _idParents = {'forgot-password'};
   static const int maxInputLength = 8192;
   static const String capMarker = '…';
   static const int _maxDecodePasses = 8;
@@ -86,7 +93,7 @@ abstract final class UrlSanitizer {
     final port = uri.hasPort && uri.port != _defaultPorts[scheme]
         ? ':${uri.port}'
         : '';
-    final path = uri.path.split('/').map(_sanitizeSegment).join('/');
+    final path = _sanitizePath(uri.path);
     final query = _sanitizeQuery(uri.query);
     return '$scheme://$authority$port$path${query.isEmpty ? '' : '?$query'}';
   }
@@ -105,6 +112,21 @@ abstract final class UrlSanitizer {
       }
     }
     return buffer.toString();
+  }
+
+  static String _sanitizePath(String rawPath) {
+    final segments = rawPath.split('/');
+    final out = <String>[];
+    for (var i = 0; i < segments.length; i++) {
+      final afterIdParent =
+          i > 0 && _idParents.contains(_decodeStable(segments[i - 1]));
+      out.add(
+        afterIdParent && segments[i].isNotEmpty
+            ? idToken
+            : _sanitizeSegment(segments[i]),
+      );
+    }
+    return out.join('/');
   }
 
   static String _sanitizeSegment(String segment) {

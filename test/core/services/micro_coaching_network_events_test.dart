@@ -8,7 +8,11 @@ import 'package:uhis_next/core/services/micro_coaching_service.dart';
 
 const _channel = MethodChannel('com.medtroniclabs.uhis_next/micro_coaching');
 
-Map<String, Object?> _row(int id, {Object? statusCode = 200, Object? errorType}) => {
+Map<String, Object?> _row(
+  int id, {
+  Object? statusCode = 200,
+  Object? errorType,
+}) => {
   'id': id,
   'started_at_ms': 1000 + id,
   'method': 'GET',
@@ -18,7 +22,11 @@ Map<String, Object?> _row(int id, {Object? statusCode = 200, Object? errorType})
   'error_type': errorType,
 };
 
-Map<String, Object?> _ok(List<Object?> events, {int maxId = 3, Object? extra}) => {
+Map<String, Object?> _ok(
+  List<Object?> events, {
+  int maxId = 3,
+  Object? extra,
+}) => {
   'status': 'ok',
   'sdk_event_version': 1,
   'events': events,
@@ -59,7 +67,12 @@ void main() {
   });
 
   test('notInitialized ignores events and keeps max_id', () async {
-    _handle((_) async => {..._ok([_row(1)], maxId: 9), 'status': 'notInitialized'});
+    _handle(
+      (_) async => {
+        ..._ok([_row(1)], maxId: 9),
+        'status': 'notInitialized',
+      },
+    );
     final r = await pull();
     expect(r.status, NativeNetworkStatus.notInitialized);
     expect(r.events, isEmpty);
@@ -87,11 +100,13 @@ void main() {
   });
 
   test('good payload maps to native entries', () async {
-    _handle((_) async => _ok([
-      _row(1),
-      _row(2, statusCode: 500),
-      _row(3, statusCode: null, errorType: 'Timeout'),
-    ]));
+    _handle(
+      (_) async => _ok([
+        _row(1),
+        _row(2, statusCode: 500),
+        _row(3, statusCode: null, errorType: 'Timeout'),
+      ]),
+    );
     final r = await pull();
     expect(r.status, NativeNetworkStatus.ok);
     expect(r.maxId, 3);
@@ -113,13 +128,15 @@ void main() {
   });
 
   test('malformed row is skipped, others kept', () async {
-    _handle((_) async => _ok([
-      _row(1),
-      {..._row(2), 'url': 5},
-      {'id': 'x'},
-      'junk',
-      _row(4),
-    ], maxId: 4));
+    _handle(
+      (_) async => _ok([
+        _row(1),
+        {..._row(2), 'url': 5},
+        {'id': 'x'},
+        'junk',
+        _row(4),
+      ], maxId: 4),
+    );
     final r = await pull();
     expect(r.status, NativeNetworkStatus.ok);
     expect(r.events.map((e) => e.nativeId), [1, 4]);
@@ -146,7 +163,11 @@ void main() {
     await pull(afterId: 0, limit: 9999);
     await pull(afterId: 0, limit: 0);
     expect(seen.first.method, 'getNetworkEvents');
-    expect(seen[0].arguments, {'afterId': 5, 'limit': 200, 'contract_version': 1});
+    expect(seen[0].arguments, {
+      'afterId': 5,
+      'limit': 200,
+      'contract_version': 1,
+    });
     expect(seen[1].arguments['limit'], 500);
     expect(seen[2].arguments['limit'], 1);
   });
@@ -166,7 +187,9 @@ void main() {
   });
 
   test('events beyond the requested limit are not read', () async {
-    _handle((_) async => _ok([for (var i = 1; i <= 5000; i++) _row(i)], maxId: 5000));
+    _handle(
+      (_) async => _ok([for (var i = 1; i <= 5000; i++) _row(i)], maxId: 5000),
+    );
     final r = await pull(limit: 200);
     expect(r.events, hasLength(200));
     expect(r.rawCount, 200);
@@ -174,11 +197,13 @@ void main() {
   });
 
   test('lastRawId and rawCount include skipped rows', () async {
-    _handle((_) async => _ok([
-      _row(1),
-      {..._row(9), 'url': 5},
-      {'id': 'x'},
-    ], maxId: 9));
+    _handle(
+      (_) async => _ok([
+        _row(1),
+        {..._row(9), 'url': 5},
+        {'id': 'x'},
+      ], maxId: 9),
+    );
     final r = await pull();
     expect(r.events, hasLength(1));
     expect(r.rawCount, 3);
@@ -264,8 +289,20 @@ void main() {
 
   group('clearNetworkEvents', () {
     test('true when the SDK confirms', () async {
-      _handle((c) async => c.method == 'clearNetworkEvents' ? null : throw MissingPluginException());
+      _handle(
+        (c) async => c.method == 'clearNetworkEvents'
+            ? {'status': 'ok'}
+            : throw MissingPluginException(),
+      );
       expect(await MicroCoachingService.clearNetworkEvents(), isTrue);
+    });
+    test('false when the SDK is not initialised', () async {
+      _handle((_) async => {'status': 'notInitialized'});
+      expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
+    });
+    test('false on an empty or malformed reply', () async {
+      _handle((_) async => null);
+      expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
     });
     test('false when the channel is unregistered', () async {
       expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
@@ -275,7 +312,9 @@ void main() {
       expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
     });
     test('false on PlatformException, never throws', () async {
-      _handle((_) async => throw PlatformException(code: 'x', message: 'secret'));
+      _handle(
+        (_) async => throw PlatformException(code: 'x', message: 'secret'),
+      );
       expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
     });
   });

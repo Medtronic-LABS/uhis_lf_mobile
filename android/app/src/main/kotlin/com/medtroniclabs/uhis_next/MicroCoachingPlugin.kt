@@ -452,7 +452,8 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
 
             "clearNetworkEvents" -> {
                 runNetworkCall("clearNetworkEvents", result) {
-                    MicroCoachingSDK.clearNetworkEvents().status to null
+                    val r = MicroCoachingSDK.clearNetworkEvents()
+                    r.status to mapOf("status" to r.status.wire)
                 }
             }
 

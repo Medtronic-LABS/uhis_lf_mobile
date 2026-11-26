@@ -34,7 +34,7 @@ void main() {
         ),
       );
       db = AppDatabase.forTesting(raw);
-      final dao = NetworkLogDao(db);
+      final dao = NetworkLogDao(db, retention: const Duration(days: 36500));
       final recorder = DbNetworkRequestRecorder(dao);
       final api = await ApiClient.create(networkRecorder: recorder);
       api.dio.httpClientAdapter = ScriptedAdapter(const {})

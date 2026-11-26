@@ -97,7 +97,7 @@ void main() {
   group('network_log wipe seam', () {
     test('wipeAllData truncates network_log and re-seeds the floor to now',
         () async {
-      final dao = NetworkLogDao(db);
+      final dao = NetworkLogDao(db, retention: const Duration(days: 36500));
       await dao.insertBatch([
         const NetworkLogEntry(
           startedAtMs: 1,

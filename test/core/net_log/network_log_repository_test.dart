@@ -44,15 +44,12 @@ class FakeRecorder implements ManagedNetworkRequestRecorder {
 
 /// Records `dao.clear` into the shared call log and every merged batch.
 class SpyDao extends NetworkLogDao {
-  SpyDao(super.db, this.calls);
+  SpyDao(super.db, this.calls) : super(retention: const Duration(days: 36500));
   final List<String> calls;
   final List<List<NetworkLogEntry>> merged = [];
 
   @override
-  Future<int> mergeNative(
-    List<NetworkLogEntry> entries, {
-    int? cursorTo,
-  }) {
+  Future<int> mergeNative(List<NetworkLogEntry> entries, {int? cursorTo}) {
     merged.add(entries);
     return super.mergeNative(entries, cursorTo: cursorTo);
   }
@@ -227,24 +224,27 @@ void main() {
       expect(src.afterIds.first, 4, reason: 'the cursor survives Clear');
     });
 
-    test('an oversized batch is capped and the cursor stops at the 200th id', () async {
-      final src = FakeSource((after, _) async {
-        if (after == 0) {
-          return NativeNetworkEventsResult(
-            status: NativeNetworkStatus.ok,
-            events: [for (var i = 1; i <= 5000; i++) _native(i)],
-            maxId: 5000,
-          );
-        }
-        return _ok(const [], 5000);
-      });
-      final r = repo(src);
-      await r.load();
-      expect(dao.merged.first, hasLength(200));
-      expect((await dao.nativeState()).cursor, 200);
-      await r.load();
-      expect(src.afterIds.last, 200);
-    });
+    test(
+      'an oversized batch is capped and the cursor stops at the 200th id',
+      () async {
+        final src = FakeSource((after, _) async {
+          if (after == 0) {
+            return NativeNetworkEventsResult(
+              status: NativeNetworkStatus.ok,
+              events: [for (var i = 1; i <= 5000; i++) _native(i)],
+              maxId: 5000,
+            );
+          }
+          return _ok(const [], 5000);
+        });
+        final r = repo(src);
+        await r.load();
+        expect(dao.merged.first, hasLength(200));
+        expect((await dao.nativeState()).cursor, 200);
+        await r.load();
+        expect(src.afterIds.last, 200);
+      },
+    );
 
     test('a fully malformed batch advances the cursor past it', () async {
       final src = FakeSource((after, _) async {
@@ -340,7 +340,8 @@ void main() {
           (_, _) async => _ok([
             _native(
               1,
-              url: 'https://u:pw@coach.example.test/sdk/v1/e?X-Amz-Signature=abc',
+              url:
+                  'https://u:pw@coach.example.test/sdk/v1/e?X-Amz-Signature=abc',
             ),
           ]),
         ),
@@ -403,10 +404,28 @@ void main() {
       final first = await r.load();
       expect(first.rows, hasLength(200));
       expect(first.hasMore, isTrue);
-      final second = await r.load(offset: 200);
+      final second = await r.load(offset: 200, maxId: first.maxId);
       expect(second.rows, hasLength(1));
       expect(second.hasMore, isFalse);
     });
+
+    test(
+      'rows written between pages do not shift or repeat later pages',
+      () async {
+        await dao.insertBatch([for (var i = 1; i <= 201; i++) _dart(i)]);
+        final r = repo(unavailable());
+        final first = await r.load();
+        // The recorder keeps writing while the user scrolls.
+        await dao.insertBatch([for (var i = 1000; i < 1010; i++) _dart(i)]);
+        final second = await r.load(offset: 200, maxId: first.maxId);
+        final firstKeys = first.rows.map((e) => e.startedAtMs).toSet();
+        expect(
+          second.rows.map((e) => e.startedAtMs).toSet().intersection(firstKeys),
+          isEmpty,
+        );
+        expect(second.rows, hasLength(1));
+      },
+    );
 
     test('exposes the recorder dropped count', () async {
       recorder.droppedCount = 4;
@@ -427,26 +446,31 @@ void main() {
       expect(f.every((e) => e.service == 'auth-service'), isTrue);
     });
 
-    test('copyRows flushes the recorder first so recent rows are included',
-        () async {
-      recorder.dao = dao;
-      recorder.record(_dart(5));
-      calls.clear();
+    test(
+      'copyRows flushes the recorder first so recent rows are included',
+      () async {
+        recorder.dao = dao;
+        recorder.record(_dart(5));
+        calls.clear();
 
-      final rows = await repo(unavailable()).copyRows();
+        final rows = await repo(unavailable()).copyRows();
 
-      expect(calls, contains('flush'));
-      expect(rows.map((e) => e.startedAtMs), [5]);
-    });
+        expect(calls, contains('flush'));
+        expect(rows.map((e) => e.startedAtMs), [5]);
+      },
+    );
 
-    test('clear drops the buffer before the table and rows stay gone', () async {
-      recorder.record(_dart(1));
-      await dao.insertBatch([_dart(2)]);
-      calls.clear();
-      await repo(unavailable()).clear();
-      expect(calls, ['clearBuffer', 'dao.clear']);
-      final page = await repo(unavailable()).load();
-      expect(page.rows, isEmpty);
-    });
+    test(
+      'clear drops the buffer before the table and rows stay gone',
+      () async {
+        recorder.record(_dart(1));
+        await dao.insertBatch([_dart(2)]);
+        calls.clear();
+        await repo(unavailable()).clear();
+        expect(calls, ['clearBuffer', 'dao.clear']);
+        final page = await repo(unavailable()).load();
+        expect(page.rows, isEmpty);
+      },
+    );
   });
 }

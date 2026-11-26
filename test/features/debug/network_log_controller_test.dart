@@ -33,7 +33,11 @@ class CountingRepo extends NetworkLogRepository {
   Object? failWith;
 
   @override
-  Future<NetworkLogPage> load({String? service, int offset = 0}) async {
+  Future<NetworkLogPage> load({
+    String? service,
+    int offset = 0,
+    int? maxId,
+  }) async {
     loads++;
     final g = gate;
     if (g != null) await g.future;
@@ -42,7 +46,7 @@ class CountingRepo extends NetworkLogRepository {
       failWith = null;
       throw f;
     }
-    return super.load(service: service, offset: offset);
+    return super.load(service: service, offset: offset, maxId: maxId);
   }
 
   @override
@@ -71,7 +75,7 @@ void main() {
       ),
     );
     db = AppDatabase.forTesting(raw);
-    dao = NetworkLogDao(db);
+    dao = NetworkLogDao(db, retention: const Duration(days: 36500));
     repo = CountingRepo(dao);
   });
   tearDown(() => db.close());
@@ -87,20 +91,23 @@ void main() {
     c.dispose();
   });
 
-  test('loadMore appends the next page with unique rows, refresh replaces', () async {
-    await dao.insertBatch([for (var i = 1; i <= 250; i++) _e(i, 'core')]);
-    final c = NetworkLogController(repo);
-    await c.load();
-    expect(c.rows, hasLength(200));
-    expect(c.hasMore, isTrue);
-    await c.loadMore();
-    expect(c.rows, hasLength(250));
-    expect(c.rows.map((r) => r.startedAtMs).toSet(), hasLength(250));
-    expect(c.hasMore, isFalse);
-    await c.refresh();
-    expect(c.rows, hasLength(200));
-    c.dispose();
-  });
+  test(
+    'loadMore appends the next page with unique rows, refresh replaces',
+    () async {
+      await dao.insertBatch([for (var i = 1; i <= 250; i++) _e(i, 'core')]);
+      final c = NetworkLogController(repo);
+      await c.load();
+      expect(c.rows, hasLength(200));
+      expect(c.hasMore, isTrue);
+      await c.loadMore();
+      expect(c.rows, hasLength(250));
+      expect(c.rows.map((r) => r.startedAtMs).toSet(), hasLength(250));
+      expect(c.hasMore, isFalse);
+      await c.refresh();
+      expect(c.rows, hasLength(200));
+      c.dispose();
+    },
+  );
 
   test('setService reloads from offset 0', () async {
     await dao.insertBatch([_e(1, 'core'), _e(2, 'auth-service')]);

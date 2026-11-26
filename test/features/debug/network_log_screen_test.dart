@@ -45,7 +45,11 @@ class _FakeRepo implements NetworkLogRepository {
         ..sort((a, b) => b.startedAtMs.compareTo(a.startedAtMs));
 
   @override
-  Future<NetworkLogPage> load({String? service, int offset = 0}) async {
+  Future<NetworkLogPage> load({
+    String? service,
+    int offset = 0,
+    int? maxId,
+  }) async {
     final rows = _filtered(service);
     final counts = <String, int>{};
     for (final e in all) {
@@ -57,6 +61,7 @@ class _FakeRepo implements NetworkLogRepository {
       nativeStatus: native,
       droppedCount: dropped,
       hasMore: rows.length > offset + 200,
+      maxId: 0,
     );
   }
 

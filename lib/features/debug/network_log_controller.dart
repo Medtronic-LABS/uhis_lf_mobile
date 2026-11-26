@@ -15,10 +15,8 @@ import '../../core/net_log/service_classifier.dart';
 /// re-run after it finishes (so a filter change is never lost); [loadMore]
 /// while loading is ignored.
 class NetworkLogController extends ChangeNotifier {
-  NetworkLogController(
-    this._repo, {
-    List<ConfiguredEndpoint>? endpoints,
-  }) : _endpoints = endpoints;
+  NetworkLogController(this._repo, {List<ConfiguredEndpoint>? endpoints})
+    : _endpoints = endpoints;
 
   final NetworkLogRepository _repo;
   final List<ConfiguredEndpoint>? _endpoints;
@@ -30,6 +28,9 @@ class NetworkLogController extends ChangeNotifier {
   int droppedCount = 0;
   bool loading = false;
   bool hasMore = false;
+
+  /// Highest row id when the current listing started (see [NetworkLogRepository.load]).
+  int _listingMaxId = 0;
   bool _disposed = false;
   Future<void>? _inFlight;
   Future<void>? _queued;
@@ -67,7 +68,11 @@ class NetworkLogController extends ChangeNotifier {
     if (!hasMore) return Future.value();
     if (loading) return Future.value();
     return _start(
-      () => _repo.load(service: service, offset: rows.length),
+      () => _repo.load(
+        service: service,
+        offset: rows.length,
+        maxId: _listingMaxId,
+      ),
       append: true,
     );
   }
@@ -109,6 +114,7 @@ class NetworkLogController extends ChangeNotifier {
       nativeStatus = page.nativeStatus;
       droppedCount = page.droppedCount;
       hasMore = page.hasMore;
+      if (!append) _listingMaxId = page.maxId;
     } on Exception catch (e) {
       ConsoleLog.warn('[NetworkLog] load failed: ${e.runtimeType}');
     } finally {

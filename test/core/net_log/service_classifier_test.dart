@@ -17,6 +17,19 @@ void main() {
     ep('ai-scribe', api),
   ]);
 
+  test('a wss handshake on the https gateway is classified by its path', () {
+    expect(
+      classifier.classify(
+        'wss://api.example.test/ai-scribe/scribe/realtime/transcribe',
+      ),
+      'ai-scribe',
+    );
+    expect(
+      classifier.classify('wss://other.example.test/x'),
+      ServiceClassifier.otherHost,
+    );
+  });
+
   test('longest base-URL prefix wins over the first path segment', () {
     expect(classifier.classify('$api/admin-api/api/method/x'), 'admin-api');
     expect(

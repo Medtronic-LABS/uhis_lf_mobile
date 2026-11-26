@@ -11,7 +11,9 @@ import '../net_log/native_network_events_result.dart';
 import '../net_log/network_log_entry.dart';
 
 class MicroCoachingService {
-  static const _channel = MethodChannel('com.medtroniclabs.uhis_next/micro_coaching');
+  static const _channel = MethodChannel(
+    'com.medtroniclabs.uhis_next/micro_coaching',
+  );
 
   /// The base URL the SDK uses for [url]; see [coachingSdkBaseUrl].
   static String sdkBaseUrl(String url) => coachingSdkBaseUrl(url);
@@ -28,7 +30,9 @@ class MicroCoachingService {
     // GA (LEAP-152): coaching screens follow the same switch as the Flutter
     // events, so debug runs without ANALYTICS_ENABLED never reach GA.
     final analytics = analyticsEnabled ?? AppConfig.analyticsEnabled;
-    debugPrint('[MicroCoaching] initialize url=$sdkUrl lang=$language analytics=$analytics');
+    debugPrint(
+      '[MicroCoaching] initialize url=$sdkUrl lang=$language analytics=$analytics',
+    );
     await _channel.invokeMethod('initialize', {
       'authToken': authToken,
       'backendUrl': sdkUrl,
@@ -77,7 +81,9 @@ class MicroCoachingService {
     const unavailable = NativeNetworkEventsResult(
       status: NativeNetworkStatus.unavailable,
     );
-    const failed = NativeNetworkEventsResult(status: NativeNetworkStatus.failed);
+    const failed = NativeNetworkEventsResult(
+      status: NativeNetworkStatus.failed,
+    );
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return unavailable;
     }
@@ -92,7 +98,9 @@ class MicroCoachingService {
           })
           .timeout(timeout);
     } on MissingPluginException {
-      ConsoleLog.warn('[MicroCoaching] getNetworkEvents MissingPluginException');
+      ConsoleLog.warn(
+        '[MicroCoaching] getNetworkEvents MissingPluginException',
+      );
       return unavailable;
     } on PlatformException {
       ConsoleLog.warn('[MicroCoaching] getNetworkEvents PlatformException');
@@ -114,10 +122,16 @@ class MicroCoachingService {
   }) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
     try {
-      await _channel.invokeMethod<Object?>('clearNetworkEvents').timeout(timeout);
-      return true;
+      final reply = await _channel
+          .invokeMethod<Object?>('clearNetworkEvents')
+          .timeout(timeout);
+      // Only an explicit `ok` counts: `notInitialized` means the SDK store was
+      // not reachable, so its rows were not deleted.
+      return reply is Map && reply['status'] == 'ok';
     } on MissingPluginException {
-      ConsoleLog.warn('[MicroCoaching] clearNetworkEvents MissingPluginException');
+      ConsoleLog.warn(
+        '[MicroCoaching] clearNetworkEvents MissingPluginException',
+      );
     } on PlatformException {
       ConsoleLog.warn('[MicroCoaching] clearNetworkEvents PlatformException');
     } on TimeoutException {
@@ -133,7 +147,9 @@ class MicroCoachingService {
     Object? response,
     int limit,
   ) {
-    const failed = NativeNetworkEventsResult(status: NativeNetworkStatus.failed);
+    const failed = NativeNetworkEventsResult(
+      status: NativeNetworkStatus.failed,
+    );
     if (response is! Map) return failed;
     // Checked first: another contract version may reshape the rest. Any value
     // other than the int we speak (any type) means the SDK is not usable.
@@ -147,7 +163,10 @@ class MicroCoachingService {
     final status = response['status'];
     final events = response['events'];
     final maxId = response['max_id'];
-    if (rawVersion is! int || status is! String || events is! List || maxId is! int) {
+    if (rawVersion is! int ||
+        status is! String ||
+        events is! List ||
+        maxId is! int) {
       return failed;
     }
     if (status == 'notInitialized') {
@@ -172,7 +191,9 @@ class MicroCoachingService {
       }
     }
     if (skipped > 0) {
-      ConsoleLog.warn('[MicroCoaching] getNetworkEvents skipped $skipped malformed rows');
+      ConsoleLog.warn(
+        '[MicroCoaching] getNetworkEvents skipped $skipped malformed rows',
+      );
     }
     return NativeNetworkEventsResult(
       status: NativeNetworkStatus.ok,
@@ -202,7 +223,8 @@ class MicroCoachingService {
       return null;
     }
     // A wrongly typed or out-of-range optional field skips the whole row.
-    if (statusCode != null && (statusCode is! int || statusCode < 100 || statusCode > 599)) {
+    if (statusCode != null &&
+        (statusCode is! int || statusCode < 100 || statusCode > 599)) {
       return null;
     }
     if (errorType != null && errorType is! String) return null;
