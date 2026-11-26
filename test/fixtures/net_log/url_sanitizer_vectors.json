@@ -600,7 +600,7 @@
       "expected": "<unparsable>"
     },
     {
-      "name": "host: uppercase IDN is lowercased and percent-encoded",
+      "name": "host: uppercase IDN is lowercased and percent-encoded (reference behaviour)",
       "rule": "7f.2",
       "input": "https://BÜCHER.example.test/a",
       "expected": "https://b%c3%9ccher.example.test/a"
@@ -628,6 +628,270 @@
       "rule": "7f.0",
       "input": "https://a.example.test/a?limit=1&xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx😀",
       "expected": "<unparsable>"
+    },
+    {
+      "name": "path: leading BOM escape in a segment is stripped by the decoder (reference behaviour)",
+      "input": "https://h.test/x/%EF%BB%BFabc",
+      "expected": "https://h.test/x/abc",
+      "rule": "7f.3"
+    },
+    {
+      "name": "path: BOM escape before a six digit run still masks the segment (reference behaviour)",
+      "input": "https://h.test/x/%EF%BB%BF123456",
+      "expected": "https://h.test/x/{id}",
+      "rule": "7f.3"
+    },
+    {
+      "name": "query: leading BOM escape in a key hides an allowlisted key (reference behaviour)",
+      "input": "https://h.test/q?%EF%BB%BFlimit=1&since=2",
+      "expected": "https://h.test/q?limit=<redacted>&since=<redacted>",
+      "rule": "7f.4"
+    },
+    {
+      "name": "path: lone high surrogate in a segment (reference behaviour)",
+      "input": "https://h.test/x/a\ud800b",
+      "expected": "https://h.test/x/a%EF%BF%BDb",
+      "rule": "7f.3"
+    },
+    {
+      "name": "path: lone low surrogate in a segment (reference behaviour)",
+      "input": "https://h.test/x/a\udc00b",
+      "expected": "https://h.test/x/a%EF%BF%BDb",
+      "rule": "7f.3"
+    },
+    {
+      "name": "path: backslash is a separator (reference behaviour)",
+      "input": "https://h.test/a\\b",
+      "expected": "https://h.test/a/b",
+      "rule": "7f.3"
+    },
+    {
+      "name": "authority: backslash ends the authority so the rest is path (reference behaviour)",
+      "input": "https://h.test\\@evil.test/x",
+      "expected": "https://h.test/{id}/x",
+      "rule": "7f.2"
+    },
+    {
+      "name": "port: plus sign prefix is accepted (reference behaviour)",
+      "input": "https://h.test:+80/x",
+      "expected": "https://h.test:80/x",
+      "rule": "7f.2"
+    },
+    {
+      "name": "port: all zeros is port 0 and kept (reference behaviour)",
+      "input": "https://h.test:00/x",
+      "expected": "https://h.test:0/x",
+      "rule": "7f.2"
+    },
+    {
+      "name": "port: empty port after colon is no port (reference behaviour)",
+      "input": "https://h.test:/x",
+      "expected": "https://h.test/x",
+      "rule": "7f.2"
+    },
+    {
+      "name": "port: value above 65535 is kept as written (reference behaviour)",
+      "input": "https://h.test:65536/x",
+      "expected": "https://h.test:65536/x",
+      "rule": "7f.2"
+    },
+    {
+      "name": "port: non numeric is unparsable (reference behaviour)",
+      "input": "https://h.test:ab/x",
+      "expected": "<unparsable>",
+      "rule": "7f.2"
+    },
+    {
+      "name": "host: percent-encoded letter is decoded (reference behaviour)",
+      "input": "https://h%41/x",
+      "expected": "https://ha/x",
+      "rule": "7f.2"
+    },
+    {
+      "name": "host: malformed percent escape is escaped (reference behaviour)",
+      "input": "https://h%zz/x",
+      "expected": "https://h%25zz/x",
+      "rule": "7f.2"
+    },
+    {
+      "name": "host: space is percent-encoded (reference behaviour)",
+      "input": "https://h test/x",
+      "expected": "https://h%20test/x",
+      "rule": "7f.2"
+    },
+    {
+      "name": "host: userinfo with a bracket is unparsable (reference behaviour)",
+      "input": "https://u[v@h.test/x",
+      "expected": "<unparsable>",
+      "rule": "7f.2"
+    },
+    {
+      "name": "host: two at signs in the authority are unparsable (reference behaviour)",
+      "input": "https://a@b@h.test/x",
+      "expected": "<unparsable>",
+      "rule": "7f.2"
+    },
+    {
+      "name": "query: invalid UTF-8 key drops the whole query (reference behaviour)",
+      "input": "https://h.test/q?%E0%A4=1&limit=2",
+      "expected": "https://h.test/q",
+      "rule": "7f.4"
+    },
+    {
+      "name": "query: invalid percent in one key keeps the valid keys (reference behaviour)",
+      "input": "https://h.test/q?l%zzimit=1&limit=2",
+      "expected": "https://h.test/q?limit=<redacted>",
+      "rule": "7f.4"
+    },
+    {
+      "name": "query: plus in a key decodes to a space and is not allowlisted (reference behaviour)",
+      "input": "https://h.test/q?from+date=1&limit=2",
+      "expected": "https://h.test/q?limit=<redacted>",
+      "rule": "7f.4"
+    },
+    {
+      "name": "query: duplicate key through an escape is kept once (reference behaviour)",
+      "input": "https://h.test/q?limit=1&l%69mit=2",
+      "expected": "https://h.test/q?limit=<redacted>",
+      "rule": "7f.4"
+    },
+    {
+      "name": "digits: supplementary-plane mathematical digits make a masked run",
+      "input": "https://h.test/x/\ud835\udfd8\ud835\udfd9\ud835\udfda\ud835\udfdb\ud835\udfdc\ud835\udfdd",
+      "expected": "https://h.test/x/{id}",
+      "rule": "7f.3"
+    },
+    {
+      "name": "digits: Arabic-Indic digits make a masked run",
+      "input": "https://h.test/x/\u0660\u0661\u0662\u0663\u0664\u0665",
+      "expected": "https://h.test/x/{id}",
+      "rule": "7f.3"
+    },
+    {
+      "name": "digits: five Arabic-Indic digits are unchanged",
+      "input": "https://h.test/x/\u0660\u0661\u0662\u0663\u0664",
+      "expected": "https://h.test/x/%D9%A0%D9%A1%D9%A2%D9%A3%D9%A4",
+      "rule": "7f.3"
+    },
+    {
+      "name": "digits: six Arabic-Indic digits split by a letter are unchanged",
+      "input": "https://h.test/x/\u0660\u0661\u0662a\u0660\u0661\u0662",
+      "expected": "https://h.test/x/%D9%A0%D9%A1%D9%A2a%D9%A0%D9%A1%D9%A2",
+      "rule": "7f.3"
+    },
+    {
+      "name": "cap: trailing marker on a short input is kept",
+      "input": "https://h.test/a/b\u2026",
+      "expected": "https://h.test/a/b\u2026",
+      "rule": "7f.5"
+    },
+    {
+      "name": "cap: trailing marker after a query is kept",
+      "input": "https://h.test/a?limit=1\u2026",
+      "expected": "https://h.test/a?limit=<redacted>\u2026",
+      "rule": "7f.5"
+    },
+    {
+      "name": "path: trailing dot-dot collapses to the root (reference behaviour)",
+      "input": "https://h.test/a/..",
+      "expected": "https://h.test/",
+      "rule": "7f.3"
+    },
+    {
+      "name": "path: escaped dot then dot-dot segment is removed (reference behaviour)",
+      "input": "https://h.test/.%2E/a",
+      "expected": "https://h.test/a",
+      "rule": "7f.3"
+    },
+    {
+      "name": "path: dot-dot above the root is dropped (reference behaviour)",
+      "input": "https://h.test/../a",
+      "expected": "https://h.test/a",
+      "rule": "7f.3"
+    },
+    {
+      "name": "scheme: no slashes after the colon is unparsable (reference behaviour)",
+      "input": "https:h.test/x",
+      "expected": "<unparsable>",
+      "rule": "7f.1"
+    },
+    {
+      "name": "scheme: leading space is unparsable (reference behaviour)",
+      "input": " https://h.test/x",
+      "expected": "<unparsable>",
+      "rule": "7f.1"
+    },
+    {
+      "name": "scheme: uppercase scheme and host are lowercased and path case is kept (reference behaviour)",
+      "input": "HTTPS://H.TEST/X",
+      "expected": "https://h.test/X",
+      "rule": "7f.2"
+    },
+    {
+      "name": "scheme: one slash after the colon is unparsable (reference behaviour)",
+      "input": "https:/h.test/x",
+      "expected": "<unparsable>",
+      "rule": "7f.1"
+    },
+    {
+      "name": "host: empty host with a port is unparsable (reference behaviour)",
+      "input": "https://:8080/x",
+      "expected": "<unparsable>",
+      "rule": "7f.2"
+    },
+    {
+      "name": "host: ipv6 literal is lowercased and port kept (reference behaviour)",
+      "input": "http://[FE80::1]:8080/a",
+      "expected": "http://[fe80::1]:8080/a",
+      "rule": "7f.2"
+    },
+    {
+      "name": "host: invalid ipv6 literal is unparsable (reference behaviour)",
+      "input": "http://[zz::1]/a",
+      "expected": "<unparsable>",
+      "rule": "7f.2"
+    },
+    {
+      "name": "path: space in a segment is re-encoded (reference behaviour)",
+      "input": "https://h.test/a b/c",
+      "expected": "https://h.test/a%20b/c",
+      "rule": "7f.3"
+    },
+    {
+      "name": "path: bad percent escape is escaped then masked (reference behaviour)",
+      "input": "https://h.test/x/50%/y",
+      "expected": "https://h.test/x/50%25/y",
+      "rule": "7f.3"
+    },
+    {
+      "name": "path: escaped slash inside a segment stays escaped (reference behaviour)",
+      "input": "https://h.test/a%2Fb/c",
+      "expected": "https://h.test/a%2Fb/c",
+      "rule": "7f.3"
+    },
+    {
+      "name": "path: semicolon escaped is masked after decoding (reference behaviour)",
+      "input": "https://h.test/x/a%3Bb",
+      "expected": "https://h.test/x/{id}",
+      "rule": "7f.3"
+    },
+    {
+      "name": "fragment: only a fragment after the host leaves no path (reference behaviour)",
+      "input": "https://h.test#f",
+      "expected": "https://h.test",
+      "rule": "7f.2"
+    },
+    {
+      "name": "fragment: question mark inside a fragment is not a query (reference behaviour)",
+      "input": "https://h.test/a#f?limit=1",
+      "expected": "https://h.test/a",
+      "rule": "7f.2"
+    },
+    {
+      "name": "query: question mark before a fragment is bare (reference behaviour)",
+      "input": "https://h.test/a?#f",
+      "expected": "https://h.test/a",
+      "rule": "7f.4"
     }
   ]
 }
