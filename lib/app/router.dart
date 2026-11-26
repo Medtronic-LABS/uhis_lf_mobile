@@ -29,6 +29,7 @@ import '../features/sync/sync_progress_screen.dart';
 import '../features/sync/offline_sync_screen.dart';
 import '../features/counselling/counselling_screen.dart';
 import '../core/config/app_config.dart';
+import '../features/debug/network_log_screen.dart';
 import '../features/debug/telemetry_viewer_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/teleconsult/teleconsult_consent_screen.dart';
@@ -69,6 +70,7 @@ GoRouter buildRouter(AuthState auth) {
         case AuthStatus.signedOut:
           if (!auth.splashReady && loc == '/') return null;
           if (loc == '/forgot-password') return null;
+          if (loc == '/diagnostics/network') return null;
           if (auth.reentryEnabled) {
             // Cold-start or post-expiry with biometric or PIN still enrolled.
             // Bounce login attempts back through /lock unless user explicitly
@@ -134,6 +136,11 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/forgot-password',
         builder: (_, _) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/diagnostics/network',
+        name: 'network-diagnostics',
+        builder: (_, _) => const NetworkLogScreen(),
       ),
       GoRoute(
         path: '/onboarding',

@@ -107,7 +107,9 @@ import 'features/visit/ncd/ncd_visit_extraction_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'core/config/app_config.dart';
 import 'core/net_log/db_network_request_recorder.dart';
+import 'core/net_log/native_network_event_source.dart';
 import 'core/net_log/network_log_dao.dart';
+import 'core/net_log/network_log_repository.dart';
 import 'core/net_log/network_request_recorder.dart';
 import 'core/widgets/environment_banner.dart';
 import 'core/services/micro_coaching_service.dart';
@@ -637,6 +639,18 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<NetworkRequestRecorder>.value(value: widget.networkRecorder),
         Provider<ManagedNetworkRequestRecorder>.value(
           value: widget.networkRecorder,
+        ),
+        Provider<NetworkLogDao>(create: (_) => NetworkLogDao(widget.appDb)),
+        Provider<NativeNetworkEventSource>.value(
+          value: const UnavailableNativeNetworkEventSource(),
+        ),
+        ProxyProvider2<NetworkLogDao, NativeNetworkEventSource,
+            NetworkLogRepository>(
+          update: (_, dao, native, _) => NetworkLogRepository(
+            dao: dao,
+            recorder: widget.networkRecorder,
+            native: native,
+          ),
         ),
         Provider<AppVersionService>.value(value: widget.appVersionService),
         Provider<AppVersionEnforcer>.value(value: _appVersionEnforcer),

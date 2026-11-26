@@ -175,6 +175,10 @@ void main() {
     test('maps known routes', () {
       expect(AnalyticsRouteObserver.screenNameFor('/home'), 'dashboard');
       expect(AnalyticsRouteObserver.screenNameFor(':id'), 'patient_profile');
+      expect(AnalyticsRouteObserver.screenNameFor('/diagnostics/network'),
+          'network_diagnostics');
+      expect(AnalyticsRouteObserver.screenNameFor('network-diagnostics'),
+          'network_diagnostics');
       expect(AnalyticsRouteObserver.screenNameFor('household/:id'),
           'household_detail');
       expect(AnalyticsRouteObserver.screenNameFor('household_create'),

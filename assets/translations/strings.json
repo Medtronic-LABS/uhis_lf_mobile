@@ -2279,6 +2279,94 @@
     "bn": "অনুরোধ করা তথ্য পাওয়া যায়নি।",
     "en": "The requested data was not found."
   },
+  "NetworkLog.title": {
+    "bn": "নেটওয়ার্ক ডায়াগনস্টিকস",
+    "en": "Network diagnostics"
+  },
+  "NetworkLog.endpointsHeading": {
+    "bn": "কনফিগার করা এন্ডপয়েন্ট",
+    "en": "Configured endpoints"
+  },
+  "NetworkLog.logHeading": {
+    "bn": "রিকোয়েস্ট লগ",
+    "en": "Request log"
+  },
+  "NetworkLog.filterAll": {
+    "bn": "সব",
+    "en": "All"
+  },
+  "NetworkLog.chipLabel": {
+    "bn": "{service} ({count})",
+    "en": "{service} ({count})"
+  },
+  "NetworkLog.loadMore": {
+    "bn": "আরও দেখুন",
+    "en": "Load more"
+  },
+  "NetworkLog.refresh": {
+    "bn": "রিফ্রেশ",
+    "en": "Refresh"
+  },
+  "NetworkLog.clear": {
+    "bn": "মুছুন",
+    "en": "Clear"
+  },
+  "NetworkLog.copy": {
+    "bn": "কপি",
+    "en": "Copy"
+  },
+  "NetworkLog.copied": {
+    "bn": "{count}টি রিকোয়েস্ট কপি হয়েছে",
+    "en": "Copied {count} requests"
+  },
+  "NetworkLog.cancel": {
+    "bn": "বাতিল",
+    "en": "Cancel"
+  },
+  "NetworkLog.clearTitle": {
+    "bn": "রিকোয়েস্ট লগ মুছবেন?",
+    "en": "Clear the request log?"
+  },
+  "NetworkLog.clearBody": {
+    "bn": "এই ডিভাইস থেকে সব রেকর্ড করা রিকোয়েস্ট মুছে যাবে।",
+    "en": "This removes all recorded requests from this device."
+  },
+  "NetworkLog.clearConfirm": {
+    "bn": "মুছুন",
+    "en": "Clear"
+  },
+  "NetworkLog.empty": {
+    "bn": "এখনও কোনো রিকোয়েস্ট রেকর্ড হয়নি।",
+    "en": "No requests recorded yet."
+  },
+  "NetworkLog.nativeUnavailable": {
+    "bn": "এই ডিভাইসে নেটিভ ক্যাপচার পাওয়া যাচ্ছে না।",
+    "en": "Native capture is unavailable on this device."
+  },
+  "NetworkLog.nativeNotInitialized": {
+    "bn": "নেটিভ ক্যাপচার এখনও শুরু হয়নি।",
+    "en": "Native capture has not started yet."
+  },
+  "NetworkLog.nativeFailed": {
+    "bn": "নেটিভ ক্যাপচার পড়া যায়নি।",
+    "en": "Native capture could not be read."
+  },
+  "NetworkLog.droppedWrites": {
+    "bn": "{count}টি লগ লেখা বাদ পড়েছে।",
+    "en": "{count} log writes were dropped."
+  },
+  "NetworkLog.tagHeaders": {
+    "bn": "হেডার",
+    "en": "headers"
+  },
+  "NetworkLog.tagHandshake": {
+    "bn": "হ্যান্ডশেক",
+    "en": "handshake"
+  },
+  "NetworkLog.tagNative": {
+    "bn": "নেটিভ",
+    "en": "native"
+  },
   "NetworkError.requestCancelled": {
     "bn": "অনুরোধ বাতিল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।",
     "en": "Request was cancelled. Please try again."

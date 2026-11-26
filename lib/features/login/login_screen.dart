@@ -15,6 +15,7 @@ import '../../core/sync/sync_report.dart';
 import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_version_label.dart';
+import '../../core/widgets/hidden_tap_trigger.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.fromLock = false});
@@ -249,13 +250,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         const SizedBox(height: 32),
                         Center(
-                          child: SvgPicture.asset(
-                            // Foreground-only layer (no card/background fill,
-                            // unlike leapwell-icon.svg) — bare mark for the
-                            // login header.
-                            'assets/images/leapwell-icon-foreground.svg',
-                            width: 88,
-                            height: 88,
+                          child: HiddenTapTrigger(
+                            key: const Key('networkLog.trigger.login'),
+                            onTriggered: () =>
+                                context.push('/diagnostics/network'),
+                            child: SvgPicture.asset(
+                              // Foreground-only layer (no card/background
+                              // fill, unlike leapwell-icon.svg) — bare mark
+                              // for the login header.
+                              'assets/images/leapwell-icon-foreground.svg',
+                              width: 88,
+                              height: 88,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 8),
