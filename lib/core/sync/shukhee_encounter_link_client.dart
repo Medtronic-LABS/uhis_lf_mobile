@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import '../net_log/network_log_interceptor.dart';
+import '../net_log/network_request_recorder.dart';
 
 /// Thin client for `shukhee_integration.api.consultation.attach_fhir_encounter_id` --
 /// deliberately its own small class rather than a new method on `ShukheeClient`
@@ -18,6 +20,7 @@ class ShukheeEncounterLinkClient {
     required this.authTokenProvider,
     this.tenantIdProvider,
     Dio? dio,
+    NetworkRequestRecorder? networkRecorder,
     Duration connectTimeout = const Duration(seconds: 10),
     Duration receiveTimeout = const Duration(seconds: 15),
   }) : _dio = dio ??
@@ -27,7 +30,9 @@ class ShukheeEncounterLinkClient {
                 connectTimeout: connectTimeout,
                 receiveTimeout: receiveTimeout,
               ),
-            );
+            ) {
+    NetworkLogInterceptor.attach(_dio, networkRecorder);
+  }
 
   static const String attachPath =
       '/api/method/shukhee_integration.api.consultation.attach_fhir_encounter_id';

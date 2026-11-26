@@ -24,6 +24,8 @@ class AnalyticsRouteObserver extends NavigatorObserver {
     '/onboarding': AnalyticsScreen.onboarding,
     '/sync': AnalyticsScreen.syncProgress,
     '/offline-sync': AnalyticsScreen.offlineSync,
+    '/diagnostics/network': AnalyticsScreen.networkDiagnostics,
+    'network-diagnostics': AnalyticsScreen.networkDiagnostics,
     '/pin-setup': AnalyticsScreen.pinSetup,
     '/pin-unlock': AnalyticsScreen.pinUnlock,
     '/home': AnalyticsScreen.dashboard,

@@ -9,27 +9,43 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.domain.context.CHWWorkContext
 import com.medtroniclabs.microcoaching.domain.context.RecentPatientSummary
 import com.medtroniclabs.microcoaching.domain.context.TodaysVisit
+import com.medtroniclabs.microcoaching.sdk.diagnostics.NetworkEventsStatus
 import com.medtroniclabs.microcoaching.ui.flow.CoachingFlowActivity
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 private const val TAG = "MicroCoaching"
+private const val NETWORK_EVENTS_TIMEOUT_MS = 6_000L
+private const val NETWORK_EVENTS_ERROR = "NETWORK_EVENTS_FAILED"
+private const val NETWORK_STORE_ERROR_MSG = "store error"
+private const val NETWORK_TIMEOUT_MSG = "timeout"
 
 class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
 
     private lateinit var channel: MethodChannel
     private var activity: Activity? = null
+    private var scope = newScope()
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        scope = newScope()
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
         channel.setMethodCallHandler(this)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        scope.cancel()
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
@@ -422,7 +438,57 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
                 ))
             }
 
+            // ── Network diagnostics (contract v1) ─────────────────────────────
+            // Logs only the outcome kind, never URLs or exception messages.
+
+            "getNetworkEvents" -> {
+                val afterId = (call.argument<Number>("afterId") ?: 0).toLong()
+                val limit = (call.argument<Number>("limit") ?: 200).toInt()
+                runNetworkCall("getNetworkEvents", result) {
+                    val r = MicroCoachingSDK.getNetworkEvents(afterId, limit)
+                    r.status to r.toContractMap()
+                }
+            }
+
+            "clearNetworkEvents" -> {
+                runNetworkCall("clearNetworkEvents", result) {
+                    val r = MicroCoachingSDK.clearNetworkEvents()
+                    r.status to mapOf("status" to r.status.wire)
+                }
+            }
+
             else -> result.notImplemented()
+        }
+    }
+
+    private fun newScope() = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /**
+     * Runs one SDK diagnostics call with a timeout and answers [result]. A store
+     * error or timeout becomes a platform error, never a success payload.
+     * Logs only the outcome kind or exception class, never URLs or messages.
+     */
+    private fun runNetworkCall(
+        name: String,
+        result: MethodChannel.Result,
+        block: suspend () -> Pair<NetworkEventsStatus, Any?>,
+    ) {
+        scope.launch {
+            try {
+                val (status, payload) = withTimeout(NETWORK_EVENTS_TIMEOUT_MS) { block() }
+                if (status == NetworkEventsStatus.STORE_ERROR) {
+                    result.error(NETWORK_EVENTS_ERROR, NETWORK_STORE_ERROR_MSG, null)
+                } else {
+                    result.success(payload)
+                }
+            } catch (e: TimeoutCancellationException) {
+                result.error(NETWORK_EVENTS_ERROR, NETWORK_TIMEOUT_MSG, null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "$name failed: ${e.javaClass.simpleName}")
+                result.error(NETWORK_EVENTS_ERROR, e.javaClass.simpleName, null)
+            }
         }
     }
 

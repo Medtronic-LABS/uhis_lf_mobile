@@ -307,11 +307,21 @@ class UserHierarchyService extends ChangeNotifier {
     this._auth, {
     HealthFacilityDao? healthFacilities,
     SsLinkedVillageDao? ssLinkedVillages,
+    @visibleForTesting HttpClientAdapter? httpAdapter,
+    @visibleForTesting String? shukheeBaseUrl,
   })  : _healthFacilities = healthFacilities,
-        _ssLinkedVillages = ssLinkedVillages;
+        _ssLinkedVillages = ssLinkedVillages,
+        _httpAdapter = httpAdapter,
+        _shukheeBaseUrl = shukheeBaseUrl;
 
   final ApiClient _api;
   final AuthRepository _auth;
+
+  /// Replaces the real transport of the one-shot Dios below (tests only).
+  final HttpClientAdapter? _httpAdapter;
+
+  /// Overrides [AppConfig.shukheeApiBaseUrl] (tests only).
+  final String? _shukheeBaseUrl;
   final HealthFacilityDao? _healthFacilities;
   final SsLinkedVillageDao? _ssLinkedVillages;
 
@@ -562,7 +572,7 @@ class UserHierarchyService extends ChangeNotifier {
 
     if (_ssLinkedVillages != null && _ssWorkers != null) {
       try {
-        await _ssLinkedVillages!.replaceFromSsWorkers(_ssWorkers!);
+        await _ssLinkedVillages.replaceFromSsWorkers(_ssWorkers!);
       } on Object catch (e) {
         debugPrint('[UserHierarchyService] SS linked villages persist failed: $e');
       }
@@ -650,6 +660,7 @@ class UserHierarchyService extends ChangeNotifier {
         connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(seconds: 5),
       ));
+      _prepareOneShotDio(tempDio);
       final resp = await tempDio.get(configPath);
       final data = resp.data;
       if (data is Map) {
@@ -661,6 +672,12 @@ class UserHierarchyService extends ChangeNotifier {
     } catch (e) {
       debugPrint('[UserHierarchyService] _fetchFeatureFlags failed (non-fatal): $e');
     }
+  }
+
+  void _prepareOneShotDio(Dio dio) {
+    final adapter = _httpAdapter;
+    if (adapter != null) dio.httpClientAdapter = adapter;
+    _api.attachNetworkLog(dio);
   }
 
   /// Fetches the server-side Shukhee teleconsult kill-switch from
@@ -678,13 +695,14 @@ class UserHierarchyService extends ChangeNotifier {
       const prefix = 'Bearer ';
       final token = raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
       final tempDio = Dio(BaseOptions(
-        baseUrl: AppConfig.shukheeApiBaseUrl,
+        baseUrl: _shukheeBaseUrl ?? AppConfig.shukheeApiBaseUrl,
         connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(seconds: 5),
       ));
       final headers = <String, String>{'X-Auth-Token': 'Bearer $token'};
       final tenantId = _api.tenantId;
       if (tenantId != null && tenantId.isNotEmpty) headers['tenantId'] = tenantId;
+      _prepareOneShotDio(tempDio);
       final resp = await tempDio.post(
         Endpoints.shukheeGetControls,
         options: Options(headers: headers),

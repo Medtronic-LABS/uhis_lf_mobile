@@ -59,6 +59,9 @@ void main() {
       'anc_visit_no': 1,
     });
 
+    await db.execute(
+        'CREATE TABLE ${AppDatabase.tableSyncMeta} (entity TEXT PRIMARY KEY, '
+        'last_sync_time INTEGER, last_full_sync_at INTEGER, cursor INTEGER)');
     await AppDatabase.onUpgrade(db, 39, AppDatabase.schemaVersion);
 
     final rows = await db.query(AppDatabase.tablePregnancyEpisodes,

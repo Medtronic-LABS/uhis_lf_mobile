@@ -19,6 +19,7 @@ void main() {
       'onUpgrade from v30 adds every column across the merged v31-35 chain',
       () async {
     final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+    addTearDown(db.close);
 
     // Minimal "device last seen on v30" stub — just the tables this range
     // of migrations touches, deliberately missing every column v31-35 are
@@ -30,6 +31,9 @@ void main() {
     await db.execute(
         'CREATE TABLE ${AppDatabase.tableImmunisations} (id TEXT PRIMARY KEY)');
 
+    await db.execute(
+        'CREATE TABLE ${AppDatabase.tableSyncMeta} (entity TEXT PRIMARY KEY, '
+        'last_sync_time INTEGER, last_full_sync_at INTEGER, cursor INTEGER)');
     await AppDatabase.onUpgrade(db, 30, AppDatabase.schemaVersion);
 
     Future<Set<String>> columnsOf(String table) async {
@@ -48,6 +52,41 @@ void main() {
         containsAll(['status', 'missed_reason', 'referral_facility']),
         reason: 'v34/v35 — this branch\'s migrations, renumbered from the '
             'original v31/v33 to slot in after main\'s chain');
+
+    await db.close();
+  });
+
+  test('onUpgrade 59 -> 60 creates network_log, its indexes and the seed row',
+      () async {
+    final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+    await db.execute(
+        'CREATE TABLE ${AppDatabase.tableSyncMeta} (entity TEXT PRIMARY KEY, '
+        'last_sync_time INTEGER, last_full_sync_at INTEGER, cursor INTEGER)');
+    await db.insert(AppDatabase.tableSyncMeta, {'entity': 'worklist'});
+
+    final before = DateTime.now().millisecondsSinceEpoch;
+    await AppDatabase.onUpgrade(db, 59, 60);
+
+    final indexes = (await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='index' "
+            "AND tbl_name='${AppDatabase.tableNetworkLog}'"))
+        .map((r) => r['name'])
+        .toSet();
+    expect(
+        indexes,
+        containsAll([
+          'idx_network_log_started',
+          'idx_network_log_service',
+          'idx_network_log_native',
+        ]));
+    final seed = await db.query(AppDatabase.tableSyncMeta,
+        where: 'entity = ?', whereArgs: ['network_log.native']);
+    expect(seed.single['cursor'], 0);
+    expect(seed.single['last_sync_time'] as int,
+        greaterThanOrEqualTo(before),
+        reason: 'upgrade seeds the floor at now, not 0');
+    expect(await db.query(AppDatabase.tableSyncMeta), hasLength(2),
+        reason: 'existing data is kept');
 
     await db.close();
   });

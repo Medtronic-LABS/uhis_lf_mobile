@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/debug/console_log.dart';
+import '../../core/net_log/network_log_interceptor.dart';
+import '../../core/net_log/network_request_recorder.dart';
 
 /// Builds a [ShukheeConsentClient] wired to this app's own authenticated
 /// session ([ApiClient]) -- same token-stripping/tenantId convention as
@@ -26,6 +28,7 @@ ShukheeConsentClient buildShukheeConsentClient(BuildContext context) {
       return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
     },
     tenantIdProvider: () async => apiClient.tenantId,
+    networkRecorder: apiClient.networkRecorder,
   );
 }
 
@@ -117,6 +120,7 @@ class ShukheeConsentClient {
     required this.authTokenProvider,
     this.tenantIdProvider,
     Dio? dio,
+    NetworkRequestRecorder? networkRecorder,
     Duration connectTimeout = const Duration(seconds: 10),
     Duration receiveTimeout = const Duration(seconds: 15),
   }) : _dio = dio ??
@@ -126,7 +130,9 @@ class ShukheeConsentClient {
                 connectTimeout: connectTimeout,
                 receiveTimeout: receiveTimeout,
               ),
-            );
+            ) {
+    NetworkLogInterceptor.attach(_dio, networkRecorder);
+  }
 
   static const String consentPath =
       '/api/method/shukhee_integration.api.consent.get_consent';

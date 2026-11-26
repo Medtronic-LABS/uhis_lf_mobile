@@ -6,7 +6,7 @@
 library;
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shukhee_sdk/shukhee_sdk.dart';
@@ -15,11 +15,18 @@ import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/i18n/app_locale.dart';
+import '../../core/net_log/network_log_interceptor.dart';
+import '../../core/net_log/network_request_recorder.dart';
 
-ShukheeClient buildShukheeClient(BuildContext context) {
+ShukheeClient buildShukheeClient(
+  BuildContext context, {
+  @visibleForTesting NetworkRequestRecorder? recorder,
+  @visibleForTesting String? baseUrl,
+  @visibleForTesting HttpClientAdapter? httpAdapter,
+}) {
   final apiClient = context.read<ApiClient>();
   final config = ShukheeConfig(
-    baseUrl: AppConfig.shukheeApiBaseUrl,
+    baseUrl: baseUrl ?? AppConfig.shukheeApiBaseUrl,
     // ApiClient.exportAuthToken() returns the full "Bearer <token>" string
     // verbatim (its own request interceptor uses it as-is, with no scheme
     // prepended -- see api_client.dart's onRequest handlers) -- but
@@ -47,25 +54,44 @@ ShukheeClient buildShukheeClient(BuildContext context) {
   );
   return ShukheeClient(
     config,
-    // Debug-only: shukhee_sdk builds its own internal Dio with no logging
-    // (it has no dependency on this app's ConsoleLog/[ShukheeDebug]
-    // convention), so every Shukhee HTTP call is otherwise invisible on
-    // device. Injecting our own Dio here (same BaseOptions the SDK would
-    // have built itself) makes every call visible via `adb logcat` without
-    // touching the shared SDK package.
-    dio: kDebugMode ? _buildDebugDio(config) : null,
+    // shukhee_sdk builds its own internal Dio with no logging when none is
+    // injected, so every Shukhee HTTP call would be invisible. Injecting ours
+    // (same BaseOptions the SDK would have built) records each call in the
+    // network log in every build mode, using the session's own recorder.
+    dio: buildShukheeDio(
+      config,
+      recorder ?? apiClient.networkRecorder,
+      httpAdapter: httpAdapter,
+    ),
   );
 }
 
-/// Debug-only Dio, mirroring the BaseOptions shukhee_sdk would have built
-/// internally, plus a request/response/error logging interceptor -- see
-/// [buildShukheeClient]. `[ShukheeDebug]` tag, visible via `adb logcat`.
-Dio _buildDebugDio(ShukheeConfig config) {
-  final dio = Dio(BaseOptions(
-    baseUrl: config.baseUrl,
-    connectTimeout: config.connectTimeout,
-    receiveTimeout: config.receiveTimeout,
-  ));
+/// Dio mirroring the BaseOptions shukhee_sdk would have built internally,
+/// with the network log attached -- see [buildShukheeClient]. The
+/// `[ShukheeDebug]` console logger is added only when [debugLogging] is true
+/// (defaults to [kDebugMode]); it is never part of a release build.
+Dio buildShukheeDio(
+  ShukheeConfig config,
+  NetworkRequestRecorder recorder, {
+  @visibleForTesting bool debugLogging = kDebugMode,
+  @visibleForTesting HttpClientAdapter? httpAdapter,
+}) {
+  final dio = Dio(
+    BaseOptions(
+      baseUrl: config.baseUrl,
+      connectTimeout: config.connectTimeout,
+      receiveTimeout: config.receiveTimeout,
+    ),
+  );
+  if (httpAdapter != null) dio.httpClientAdapter = httpAdapter;
+  NetworkLogInterceptor.attach(dio, recorder);
+  if (debugLogging) _addDebugLogging(dio);
+  return dio;
+}
+
+/// Debug-only request/response/error logging interceptor, `[ShukheeDebug]`
+/// tag, visible via `adb logcat`.
+void _addDebugLogging(Dio dio) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
@@ -74,9 +100,11 @@ Dio _buildDebugDio(ShukheeConfig config) {
         if (data is FormData) {
           final fields = {for (final f in data.fields) f.key: f.value};
           final files = {
-            for (final f in data.files) f.key: '${f.value.filename} (${f.value.length}b)',
+            for (final f in data.files)
+              f.key: '${f.value.filename} (${f.value.length}b)',
           };
-          bodyDesc = 'fields=$fields'
+          bodyDesc =
+              'fields=$fields'
               '${files.isNotEmpty ? ' files=$files' : ''}';
         } else {
           bodyDesc = data?.toString() ?? '(none)';
@@ -104,5 +132,4 @@ Dio _buildDebugDio(ShukheeConfig config) {
       },
     ),
   );
-  return dio;
 }

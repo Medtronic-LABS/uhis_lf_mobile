@@ -106,6 +106,12 @@ import 'features/visit/anc/anc_visit_extraction_repository.dart';
 import 'features/visit/ncd/ncd_visit_extraction_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'core/config/app_config.dart';
+import 'core/net_log/db_network_request_recorder.dart';
+import 'core/net_log/native_network_log_wipe.dart';
+import 'core/net_log/native_network_event_source.dart';
+import 'core/net_log/network_log_dao.dart';
+import 'core/net_log/network_log_repository.dart';
+import 'core/net_log/network_request_recorder.dart';
 import 'core/widgets/environment_banner.dart';
 import 'core/services/micro_coaching_service.dart';
 import 'features/assistant/assistant_repository.dart';
@@ -142,10 +148,6 @@ Future<void> main() async {
   await AppVersionInfo.ensureLoaded();
   // Google Analytics (LEAP-152). Never throws; analytics stays off on failure.
   await Analytics.init();
-  final api = await ApiClient.create();
-  final appVersionService = AppVersionService(api);
-  final authRepo = AuthRepository(api, appVersionService: appVersionService);
-  final biometric = BiometricService();
   final appDb = await AppDatabase.open().onError((e, st) async {
     if (kIsWeb) {
       debugPrint('[main] Web DB open failed ($e) — retrying with in-memory path');
@@ -153,6 +155,13 @@ Future<void> main() async {
     }
     throw e!;
   });
+  final recorder = DbNetworkRequestRecorder(NetworkLogDao(appDb));
+  appDb.addWipeParticipant(recorder);
+  appDb.addWipeParticipant(const NativeNetworkLogWipe());
+  final api = await ApiClient.create(networkRecorder: recorder);
+  final appVersionService = AppVersionService(api);
+  final authRepo = AuthRepository(api, appVersionService: appVersionService);
+  final biometric = BiometricService();
   AudioSampleSyncService.init(db: appDb, api: ScribeApiService(api));
   final authState = AuthState(
     authRepo,
@@ -165,6 +174,7 @@ Future<void> main() async {
     authState: authState,
     biometric: biometric,
     appDb: appDb,
+    networkRecorder: recorder,
     appVersionService: appVersionService,
   ));
 }
@@ -177,6 +187,7 @@ class UhisNextApp extends StatefulWidget {
     required this.authState,
     required this.biometric,
     required this.appDb,
+    required this.networkRecorder,
     required this.appVersionService,
   });
 
@@ -185,6 +196,7 @@ class UhisNextApp extends StatefulWidget {
   final AuthState authState;
   final BiometricService biometric;
   final AppDatabase appDb;
+  final ManagedNetworkRequestRecorder networkRecorder;
   final AppVersionService appVersionService;
 
   @override
@@ -231,6 +243,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
     },
     tenantIdProvider: () async => widget.api.tenantId,
+    networkRecorder: widget.api.networkRecorder,
   );
   late final CallLogSyncService _callLogSync = CallLogSyncService(
     client: _callLogSyncClient,
@@ -251,6 +264,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
     },
     tenantIdProvider: () async => widget.api.tenantId,
+    networkRecorder: widget.api.networkRecorder,
   );
   // Shared by OfflineSyncService (pull-side catch-up), OfflinePushService and
   // AssessmentRepository (push-side, fires within seconds of a visit
@@ -614,6 +628,8 @@ class _UhisNextAppState extends State<UhisNextApp>
       unawaited(_referrals.recomputeAllAfterSync());
       // Play Core requires re-showing an in-progress immediate update on resume.
       unawaited(resumeInProgressAppUpdateIfAny());
+    } else if (state == AppLifecycleState.paused) {
+      unawaited(widget.networkRecorder.flushQuietly());
     }
   }
 
@@ -622,6 +638,19 @@ class _UhisNextAppState extends State<UhisNextApp>
     return MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: widget.api),
+        Provider<NetworkRequestRecorder>.value(value: widget.networkRecorder),
+        Provider<NetworkLogDao>(create: (_) => NetworkLogDao(widget.appDb)),
+        Provider<NativeNetworkEventSource>.value(
+          value: const MicroCoachingNetworkEventSource(),
+        ),
+        ProxyProvider2<NetworkLogDao, NativeNetworkEventSource,
+            NetworkLogRepository>(
+          update: (_, dao, native, _) => NetworkLogRepository(
+            dao: dao,
+            recorder: widget.networkRecorder,
+            native: native,
+          ),
+        ),
         Provider<AppVersionService>.value(value: widget.appVersionService),
         Provider<AppVersionEnforcer>.value(value: _appVersionEnforcer),
         Provider<AuthRepository>.value(value: widget.authRepo),

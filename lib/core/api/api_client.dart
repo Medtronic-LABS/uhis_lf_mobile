@@ -6,17 +6,16 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, kIsWeb;
 
 import '../config/app_config.dart';
+import '../net_log/network_log_interceptor.dart';
+import '../net_log/network_request_recorder.dart';
 import '../version/app_version_info.dart';
 import 'endpoints.dart';
+import 'request_extras.dart';
 import 'browser_adapter_stub.dart'
     if (dart.library.html) 'browser_adapter_web.dart';
 
 const String _authCookieName = 'AuthCookie';
 const String _sessionCookieName = 'JSESSIONID';
-
-/// `RequestOptions.extra` key holding the 1-based attempt number, so a replayed
-/// request knows how many attempts have already been spent.
-const String _kAttemptKey = 'uhisAttempt';
 
 /// Read-only POST endpoints that are safe to replay.
 ///
@@ -54,7 +53,9 @@ bool _isRetryable(DioException e) {
 }
 
 class ApiClient {
-  ApiClient._(this.dio, this._cookieJar);
+  ApiClient._(this.dio, this._cookieJar, this.networkRecorder);
+
+  final NetworkRequestRecorder networkRecorder;
 
   static String get _baseUrl => AppConfig.apiBaseUrl;
 
@@ -85,7 +86,9 @@ class ApiClient {
   // retries, not auth.
   void Function(String path, int attempt, int maxAttempts)? onRetryAttempt;
 
-  static Future<ApiClient> create() async {
+  static Future<ApiClient> create({
+    NetworkRequestRecorder networkRecorder = const NoopNetworkRequestRecorder(),
+  }) async {
     final cookieJar = CookieJar();
     final dio = Dio(
       BaseOptions(
@@ -98,7 +101,7 @@ class ApiClient {
         validateStatus: (s) => s != null && s < 500,
       ),
     );
-    final client = ApiClient._(dio, cookieJar);
+    final client = ApiClient._(dio, cookieJar, networkRecorder);
     // Android ≤ 7.1 (API ≤ 25) ships a root-CA store that predates ISRG Root X1
     // (Let's Encrypt's post-2021 chain). TLS handshakes to the dev backend fail
     // with CERTIFICATE_VERIFY_FAILED on those devices. In debug builds we bypass
@@ -216,12 +219,16 @@ class ApiClient {
         },
       ),
     );
+    // Outside any kDebugMode guard, and before the retry interceptor: each
+    // replayed attempt re-enters the chain and is its own row, and the retry
+    // delay is never counted in a row's duration.
+    client.attachNetworkLog(dio);
     // Retry must sit before LogInterceptor so a retried attempt is logged as
     // its own request/response pair rather than folded into the first.
     dio.interceptors.add(
       InterceptorsWrapper(
         onError: (e, handler) async {
-          final attempt = (e.requestOptions.extra[_kAttemptKey] as int?) ?? 1;
+          final attempt = (e.requestOptions.extra[kAttemptKey] as int?) ?? 1;
           if (!_isRetryable(e) || attempt >= AppConfig.apiMaxAttempts) {
             handler.next(e);
             return;
@@ -236,7 +243,7 @@ class ApiClient {
           // Carry the attempt counter on the replayed request so the nested
           // onError for that attempt stops at apiMaxAttempts overall.
           final options = e.requestOptions
-            ..extra[_kAttemptKey] = next;
+            ..extra[kAttemptKey] = next;
           try {
             handler.resolve(await dio.fetch<dynamic>(options));
           } on DioException catch (retryError) {
@@ -338,6 +345,10 @@ class ApiClient {
     _authToken = token;
   }
 
+  /// Record every request made through [dio] in the network log. Idempotent.
+  void attachNetworkLog(Dio dio) =>
+      NetworkLogInterceptor.attach(dio, networkRecorder);
+
   /// Attach UHIS auth headers to a direct ai-scribe Dio instance.
   ///
   /// When [AppConfig.aiServiceBaseUrl] bypasses the main [dio] stack, callers
@@ -374,6 +385,8 @@ class ApiClient {
         },
       ),
     );
+    // After the auth interceptor, so the timing excludes the cookie export.
+    attachNetworkLog(direct);
   }
 
   Future<({String? jsession, String? authCookie})> exportAuthCookies() async {

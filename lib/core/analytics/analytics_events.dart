@@ -407,6 +407,7 @@ abstract final class AnalyticsScreen {
   static const onboarding = 'onboarding';
   static const syncProgress = 'sync_progress';
   static const offlineSync = 'offline_sync';
+  static const networkDiagnostics = 'network_diagnostics';
   static const pinSetup = 'pin_setup';
   static const pinUnlock = 'pin_unlock';
   static const dashboard = 'dashboard';

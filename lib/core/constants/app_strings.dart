@@ -7503,3 +7503,61 @@ abstract final class NcdScanStrings {
   static String get notFoundValue =>
       getTranslatedString('Ncd.notFoundValue', 'Not found');
 }
+
+/// Hidden Network diagnostics page. Bangla values are builder drafts pending
+/// native-speaker review.
+abstract final class NetworkLogStrings {
+  NetworkLogStrings._();
+
+  static String get title =>
+      getTranslatedString('NetworkLog.title', 'Network diagnostics');
+  static String get endpointsHeading =>
+      getTranslatedString('NetworkLog.endpointsHeading', 'Configured endpoints');
+  static String get logHeading =>
+      getTranslatedString('NetworkLog.logHeading', 'Request log');
+  static String get filterAll =>
+      getTranslatedString('NetworkLog.filterAll', 'All');
+  static String chip(String service, int count) => getTranslatedString(
+      'NetworkLog.chipLabel', '{service} ({count})',
+      params: {'service': service, 'count': '$count'});
+  static String get loadMore =>
+      getTranslatedString('NetworkLog.loadMore', 'Load more');
+  static String get refresh =>
+      getTranslatedString('NetworkLog.refresh', 'Refresh');
+  static String get clear =>
+      getTranslatedString('NetworkLog.clear', 'Clear');
+  static String get copy =>
+      getTranslatedString('NetworkLog.copy', 'Copy');
+  static String copied(int count) => getTranslatedString(
+      'NetworkLog.copied', 'Copied {count} requests',
+      params: {'count': '$count'});
+  static String get cancel =>
+      getTranslatedString('NetworkLog.cancel', 'Cancel');
+  static String get clearTitle =>
+      getTranslatedString('NetworkLog.clearTitle', 'Clear the request log?');
+  static String get clearBody =>
+      getTranslatedString('NetworkLog.clearBody', 'This removes all recorded requests from this device.');
+  static String get clearConfirm =>
+      getTranslatedString('NetworkLog.clearConfirm', 'Clear');
+  static String get empty =>
+      getTranslatedString('NetworkLog.empty', 'No requests recorded yet.');
+  static String get nativeUnavailable =>
+      getTranslatedString('NetworkLog.nativeUnavailable', 'Native capture is unavailable on this device.');
+  static String get nativeNotInitialized =>
+      getTranslatedString('NetworkLog.nativeNotInitialized', 'Native capture has not started yet.');
+  static String get nativeFailed =>
+      getTranslatedString('NetworkLog.nativeFailed', 'Native capture could not be read.');
+  static String droppedWrites(int count) => getTranslatedString(
+      'NetworkLog.droppedWrites', '{count} log writes were dropped.',
+      params: {'count': '$count'});
+  static String get tagHeaders =>
+      getTranslatedString('NetworkLog.tagHeaders', 'headers');
+  static String get tagHandshake =>
+      getTranslatedString('NetworkLog.tagHandshake', 'handshake');
+  static String get tagNative =>
+      getTranslatedString('NetworkLog.tagNative', 'native');
+  static String durationMs(int n) => getTranslatedString(
+      'NetworkLog.durationMs', '{n} ms', params: {'n': '$n'});
+  static String get actionFailed =>
+      getTranslatedString('NetworkLog.actionFailed', 'That action could not be completed.');
+}

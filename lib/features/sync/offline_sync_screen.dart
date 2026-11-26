@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/offline_push_service.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/hidden_tap_trigger.dart';
 
 /// Spice-parity Offline Sync screen: shows pending counts and runs a single
 /// partitioned `offline-sync/create` push on Start.
@@ -118,12 +120,16 @@ class _OfflineSyncScreenState extends State<OfflineSyncScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  OfflineSyncStrings.title,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                HiddenTapTrigger(
+                  key: const Key('networkLog.trigger.offlineSync'),
+                  onTriggered: () => context.push('/diagnostics/network'),
+                  child: Text(
+                    OfflineSyncStrings.title,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),

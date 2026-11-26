@@ -55,7 +55,7 @@ dependencies:
   shukhee_sdk:
     git:
       url: https://github.com/Medtronic-LABS/shukhee_sdk.git
-      ref: main
+      ref: dd9742c6b782548352b4206d7bb6ba679123c00a
   in_app_update: ^4.2.3
   flutter_html: 3.0.0-beta.2
   firebase_core: ^5.2.0

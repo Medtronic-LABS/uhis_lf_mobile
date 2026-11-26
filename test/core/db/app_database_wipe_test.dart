@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/net_log/network_log_dao.dart';
+import 'package:uhis_next/core/net_log/network_log_entry.dart';
 
 Future<AppDatabase> _openInMemoryDb() async {
   final rawDb = await databaseFactory.openDatabase(
@@ -69,9 +71,16 @@ void main() {
     await db.wipeAllData();
 
     for (final table in AppDatabase.allTablesForTesting) {
+      if (table == AppDatabase.tableSyncMeta) continue;
       final rows = await db.db.query(table);
       expect(rows, isEmpty, reason: '$table must be empty after wipeAllData()');
     }
+    final meta = await db.db.query(AppDatabase.tableSyncMeta);
+    expect(
+      meta.map((r) => r['entity']),
+      [AppDatabase.networkLogNativeEntity],
+      reason: 'sync_meta keeps only the native network log floor row',
+    );
   });
 
   test('wipeAllData leaves the schema queryable (tables not dropped)',
@@ -84,4 +93,60 @@ void main() {
       await expectLater(db.db.query(table), completes);
     }
   });
+
+  group('network_log wipe seam', () {
+    test('wipeAllData truncates network_log and re-seeds the floor to now',
+        () async {
+      final dao = NetworkLogDao(db, retention: const Duration(days: 36500));
+      await dao.insertBatch([
+        const NetworkLogEntry(
+          startedAtMs: 1,
+          source: 'dart',
+          service: 'core',
+          method: 'GET',
+          url: 'https://example.test/x',
+        ),
+      ]);
+      await dao.mergeNative(const [], cursorTo: 7);
+
+      final before = DateTime.now().millisecondsSinceEpoch;
+      await db.wipeAllData();
+
+      expect(await db.db.query(AppDatabase.tableNetworkLog), isEmpty);
+      final state = await dao.nativeState();
+      expect(state.cursor, 0);
+      expect(state.floorMs, greaterThanOrEqualTo(before));
+    });
+
+    test('participants: onWipeStarting before the transaction, '
+        'onWipeInTransaction inside it', () async {
+      final order = <String>[];
+      final p = _RecordingParticipant(order);
+      db.addWipeParticipant(p);
+
+      await db.wipeAllData();
+
+      expect(order, ['starting', 'in-tx:empty']);
+      expect(p.sawTransaction, isTrue);
+    });
+  });
+}
+
+class _RecordingParticipant implements WipeParticipant {
+  _RecordingParticipant(this.order);
+
+  final List<String> order;
+  bool sawTransaction = false;
+
+  @override
+  void onWipeStarting() => order.add('starting');
+
+  @override
+  Future<void> onWipeInTransaction(Transaction tx) async {
+    sawTransaction = true;
+    final n = (await tx.rawQuery(
+            'SELECT COUNT(*) AS c FROM ${AppDatabase.tableNetworkLog}'))
+        .first['c'];
+    order.add('in-tx:${n == 0 ? 'empty' : 'rows'}');
+  }
 }
