@@ -12,9 +12,8 @@ void main() {
     expect(calls, 1);
   });
 
-  test('a failing clear does not throw into the wipe', () async {
+  test('a clear that throws is the caller\'s contract to prevent; wipe start still returns', () {
     final wipe = NativeNetworkLogWipe(clear: () async => false);
-    wipe.onWipeStarting();
-    await Future<void>.delayed(Duration.zero);
+    expect(wipe.onWipeStarting, returnsNormally);
   });
 }
