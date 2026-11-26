@@ -34,40 +34,74 @@ Directory _sdkLibDir() {
 String _stripComments(String src) =>
     src.split('\n').where((l) => !l.trimLeft().startsWith('//')).join('\n');
 
+final _dioRe = RegExp(_dioConstruction);
+final _injectedDefault = RegExp(r'\bdio\s*\?\?\s*Dio\s*\(');
+
+/// file -> number of `Dio(` constructions, comments stripped; zeros omitted.
+Map<String, int> countDioSites(Map<String, String> fileToSource) => {
+  for (final e in fileToSource.entries)
+    if (_dioRe.allMatches(_stripComments(e.value)).isNotEmpty)
+      e.key: _dioRe.allMatches(_stripComments(e.value)).length,
+};
+
+/// Problems with the SDK's Dio construction; empty when it is safe.
+List<String> driftProblems(Map<String, String> fileToSource) {
+  final sites = countDioSites(fileToSource);
+  final total = sites.values.fold<int>(0, (a, b) => a + b);
+  final problems = <String>[];
+  if (total != 1) {
+    problems.add('Expected one Dio( in the SDK, found $sites. $_hint');
+  }
+  final client = fileToSource.entries
+      .where((e) => e.key.endsWith('src/shukhee_client.dart'))
+      .toList();
+  if (client.isEmpty) {
+    problems.add('lib/src/shukhee_client.dart moved. $_hint');
+  } else {
+    if (!sites.keys.any((k) => k.endsWith('src/shukhee_client.dart'))) {
+      problems.add('The only Dio( must be in shukhee_client.dart. $_hint');
+    }
+    if (!_injectedDefault.hasMatch(_stripComments(client.single.value))) {
+      problems.add(
+        'The SDK Dio must stay the `dio ?? Dio(` default so our injected '
+        'Dio is used. $_hint',
+      );
+    }
+  }
+  return problems;
+}
+
 void main() {
   test('shukhee_sdk builds exactly one Dio, as the injected-Dio default', () {
     final lib = _sdkLibDir();
-    final sites = <String>[];
-    for (final f in lib.listSync(recursive: true).whereType<File>()) {
-      if (!f.path.endsWith('.dart')) continue;
-      final n = RegExp(
-        _dioConstruction,
-      ).allMatches(_stripComments(f.readAsStringSync())).length;
-      if (n > 0) sites.add('${f.path} x$n');
-    }
-    final clientPath = '${lib.path}/src/shukhee_client.dart';
-    expect(
-      File(clientPath).existsSync(),
-      isTrue,
-      reason: 'lib/src/shukhee_client.dart moved. $_hint',
-    );
-    expect(
-      sites,
-      hasLength(1),
-      reason: 'Expected one Dio( in the SDK, found $sites. $_hint',
-    );
-    expect(
-      sites.single,
-      endsWith('src/shukhee_client.dart x1'),
-      reason: 'The only Dio( must be in shukhee_client.dart. $_hint',
-    );
-    final src = _stripComments(File(clientPath).readAsStringSync());
-    expect(
-      RegExp(r'\bdio\s*\?\?\s*Dio\s*\(').hasMatch(src),
-      isTrue,
-      reason:
-          'The SDK Dio must stay the `dio ?? Dio(` default so our '
-          'injected Dio is used. $_hint',
-    );
+    final sources = {
+      for (final f in lib.listSync(recursive: true).whereType<File>())
+        if (f.path.endsWith('.dart')) f.path: f.readAsStringSync(),
+    };
+    final problems = driftProblems(sources);
+    expect(problems, isEmpty, reason: problems.join('\n'));
+  });
+
+  group('the drift check guards itself', () {
+    const ok = 'class C { C(c, {Dio? dio}) : _d = dio ?? Dio(BaseOptions()); }';
+    const path = 'sdk/lib/src/shukhee_client.dart';
+
+    test('accepts the injected default', () {
+      expect(driftProblems({path: ok}), isEmpty);
+    });
+
+    test('reports a second Dio in another file', () {
+      final p = driftProblems({
+        path: ok,
+        'sdk/lib/src/x.dart': 'final d = Dio();',
+      });
+      expect(p, hasLength(1));
+      expect(p.single, contains('bypass the network log'));
+    });
+
+    test('reports a Dio not written as `dio ??`', () {
+      final p = driftProblems({path: 'final d = Dio(BaseOptions());'});
+      expect(p.single, contains('dio ?? Dio('));
+    });
   });
 }

@@ -42,6 +42,7 @@ class TransportEntry {
     this.evidenceFile,
     this.evidenceToken,
     this.extraEvidence = const [],
+    this.minEvidence = 1,
   });
 
   final String file;
@@ -60,6 +61,9 @@ class TransportEntry {
 
   /// Further tokens that must also be present (a file with two Dios).
   final List<String> extraEvidence;
+
+  /// How many times the evidence token must appear (comment-stripped).
+  final int minEvidence;
 
   String get key => '$file | $pattern';
 }
@@ -89,6 +93,7 @@ const transportRegistry = <TransportEntry>[
     1,
     CoverageKind.apiClientChain,
     'main Dio; create() attaches the log',
+    evidenceToken: 'client.attachNetworkLog(',
   ),
   TransportEntry(
     'lib/core/api/api_client.dart',
@@ -96,6 +101,7 @@ const transportRegistry = <TransportEntry>[
     1,
     CoverageKind.coveredByOwner,
     'debug cert-bypass adapter of the main Dio',
+    evidenceToken: 'client.attachNetworkLog(',
   ),
   TransportEntry(
     'lib/core/api/frappe_client.dart',
@@ -118,6 +124,9 @@ const transportRegistry = <TransportEntry>[
     2,
     CoverageKind.attachNetworkLog,
     'feature-flag and Shukhee kill-switch one-shot Dios',
+    evidenceToken: '_prepareOneShotDio(tempDio)',
+    extraEvidence: ['_api.attachNetworkLog('],
+    minEvidence: 2,
   ),
   TransportEntry(
     'lib/core/sync/call_log_sync_client.dart',

@@ -85,8 +85,12 @@ String? callArgs(String src, int open) {
   return null;
 }
 
-/// Argument text of every call to [name]; declarations (followed by `{`,
-/// `:` or `=>`) are skipped.
+/// Text before a construction call that marks it as a call, not a declaration.
+final _callContext = RegExp(r'(=|\(|,|\?|:|=>|\breturn|\bawait|\bnew)$');
+
+/// Argument text of every call to [name]. A match is a declaration (skipped)
+/// unless the text before it ends in an operator that introduces an
+/// expression, so `cond ? Foo(x) : null` is still a call.
 List<({String file, String args})> callsOf(
   String name,
   Map<String, String> sources,
@@ -96,19 +100,41 @@ List<({String file, String args})> callsOf(
   sources.forEach((file, src) {
     final code = stripComments(src);
     for (final m in re.allMatches(code)) {
-      final open = m.end - 1;
-      final args = callArgs(code, open);
-      if (args == null) continue;
-      final after = code.substring(open + args.length + 2).trimLeft();
-      if (after.startsWith('{') ||
-          after.startsWith(':') ||
-          after.startsWith('=>')) {
+      if (!_callContext.hasMatch(code.substring(0, m.start).trimRight())) {
         continue;
       }
-      calls.add((file: file, args: args));
+      final args = callArgs(code, m.end - 1);
+      if (args != null) calls.add((file: file, args: args));
     }
   });
   return calls;
+}
+
+/// First positional argument is the ApiClient (`api`, `widget.api`, ...).
+final apiArg = RegExp(r'^\s*(widget\.)?(api|apiClient)\s*(,|$)');
+final contextArg = RegExp(r'^\s*context\s*(,|$)');
+
+/// Missing or too-rare evidence for [e] in [src] (comment-stripped).
+List<String> evidenceProblems(TransportEntry e, String src) {
+  final code = stripComments(src);
+  final file = e.evidenceFile ?? e.file;
+  final problems = <String>[];
+  final main = e.evidenceToken ?? e.kind.evidenceToken;
+  final seen = main.allMatches(code).length;
+  if (seen < e.minEvidence) {
+    problems.add(
+      '$file (${e.kind.name}) has "$main" $seen time(s), needs '
+      '${e.minEvidence}. ${e.reason}. $_register',
+    );
+  }
+  for (final t in e.extraEvidence) {
+    if (!code.contains(t)) {
+      problems.add(
+        '$file (${e.kind.name}) lacks "$t". ${e.reason}. $_register',
+      );
+    }
+  }
+  return problems;
 }
 
 /// Calls of [name] whose arguments do not match [mustHave].
@@ -147,21 +173,10 @@ void main() {
   });
 
   test('each registered file carries its coverage evidence', () {
-    final missing = <String>[];
-    for (final e in transportRegistry) {
-      final src = read(e.evidenceFile ?? e.file);
-      for (final t in [
-        e.evidenceToken ?? e.kind.evidenceToken,
-        ...e.extraEvidence,
-      ]) {
-        if (!src.contains(t)) {
-          missing.add(
-            '${e.evidenceFile ?? e.file} (${e.kind.name}) lacks '
-            '"$t". ${e.reason}. $_register',
-          );
-        }
-      }
-    }
+    final missing = <String>[
+      for (final e in transportRegistry)
+        ...evidenceProblems(e, read(e.evidenceFile ?? e.file)),
+    ];
     expect(missing, isEmpty, reason: missing.join('\n'));
   });
 
@@ -183,6 +198,7 @@ void main() {
 
     for (final name in [
       'CallLogSyncClient',
+      'FrappeClient',
       'ShukheeEncounterLinkClient',
       'ShukheeConsentClient',
     ]) {
@@ -204,7 +220,7 @@ void main() {
             'lib/features/teleconsult/shukhee_consent_client.dart',
       }.entries) {
         expect(
-          read(f.value),
+          stripComments(read(f.value)),
           contains('networkRecorder: '),
           reason:
               '${f.key} must pass networkRecorder to its client. '
@@ -213,16 +229,8 @@ void main() {
       }
       expect(callsOf('buildFrappeAiClient', sources), isNotEmpty);
       final bad = [
-        ...callsMissing(
-          'buildFrappeAiClient',
-          sources,
-          RegExp(r'\bapi(Client)?\b'),
-        ),
-        ...callsMissing(
-          'buildShukheeConsentClient',
-          sources,
-          RegExp(r'\bcontext\b'),
-        ),
+        ...callsMissing('buildFrappeAiClient', sources, apiArg),
+        ...callsMissing('buildShukheeConsentClient', sources, contextArg),
       ];
       expect(bad, isEmpty, reason: bad.join('\n'));
     });
@@ -240,10 +248,10 @@ void main() {
           isNotEmpty,
           reason: 'no ${f.key}( in main.dart; update this guard',
         );
-        final bad = callsMissing(f.key, main, RegExp(r'\bapi\b'));
+        final bad = callsMissing(f.key, main, apiArg);
         expect(bad, isEmpty, reason: bad.join('\n'));
         expect(
-          read(f.value),
+          stripComments(read(f.value)),
           contains('attachNetworkLog('),
           reason: '${f.value} must attach the network log. $_register',
         );
@@ -289,6 +297,95 @@ void main() {
         hasLength(1),
       );
       expect(callsOf('CallLogSyncClient', {'d': decl}), isEmpty);
+    });
+
+    test('an unlogged FrappeClient( construction is reported (I1)', () {
+      const bad = 'final c = FrappeClient(baseUrl: x, authTokenProvider: t);';
+      const ok =
+          'return FrappeClient(baseUrl: b, networkRecorder: api.networkRecorder);';
+      expect(
+        callsMissing('FrappeClient', {'bad': bad}, 'networkRecorder'),
+        hasLength(1),
+      );
+      expect(
+        callsMissing('FrappeClient', {'ok': ok}, 'networkRecorder'),
+        isEmpty,
+      );
+    });
+
+    test('a factory call must pass the ApiClient positionally (I2)', () {
+      const wrongWord = 'x = buildFrappeAiClient(baseUrl: api.url);';
+      const wrongRead = 'x = buildFrappeAiClient(ctx: context.read<Other>());';
+      const good = 'x = buildFrappeAiClient(\n widget.api,\n baseUrl: b);';
+      const goodClient = 'x = buildFrappeAiClient(apiClient, baseUrl: b);';
+      for (final bad in [wrongWord, wrongRead]) {
+        expect(
+          callsMissing('buildFrappeAiClient', {'b': bad}, apiArg),
+          hasLength(1),
+        );
+      }
+      for (final ok in [good, goodClient]) {
+        expect(callsMissing('buildFrappeAiClient', {'o': ok}, apiArg), isEmpty);
+      }
+      expect(
+        callsMissing('buildShukheeConsentClient', {
+          'b': 'x = buildShukheeConsentClient(ctx: context.read());',
+        }, contextArg),
+        hasLength(1),
+      );
+    });
+
+    test('a conditional construction is still checked (I3)', () {
+      const bad = 'final c = cond ? CallLogSyncClient(dio: d) : null;';
+      const ok =
+          'final c = cond ? CallLogSyncClient(networkRecorder: r) : null;';
+      expect(
+        callsMissing('CallLogSyncClient', {'bad': bad}, 'networkRecorder'),
+        hasLength(1),
+      );
+      expect(
+        callsMissing('CallLogSyncClient', {'ok': ok}, 'networkRecorder'),
+        isEmpty,
+      );
+      const decls =
+          'class A {\n  CallLogSyncClient({required this.a}) : b = 1;\n'
+          '  factory CallLogSyncClient.x() => y;\n}\n'
+          'Foo CallLogSyncClient(int a) {}';
+      expect(callsOf('CallLogSyncClient', {'d': decls}), isEmpty);
+    });
+
+    test('evidence must appear enough times, outside comments (M4, M5)', () {
+      const twoDios = TransportEntry(
+        'f.dart',
+        r'\bDio\s*\(',
+        2,
+        CoverageKind.attachNetworkLog,
+        'r',
+        evidenceToken: 'prepare(tempDio)',
+        minEvidence: 2,
+      );
+      expect(
+        evidenceProblems(twoDios, 'prepare(tempDio);\nprepare(tempDio);'),
+        isEmpty,
+      );
+      expect(evidenceProblems(twoDios, 'prepare(tempDio);'), hasLength(1));
+      expect(
+        evidenceProblems(twoDios, '// prepare(tempDio);\nprepare(tempDio);'),
+        hasLength(1),
+      );
+      const chain = TransportEntry(
+        'api_client.dart',
+        r'\bDio\s*\(',
+        1,
+        CoverageKind.apiClientChain,
+        'r',
+        evidenceToken: 'client.attachNetworkLog(',
+      );
+      expect(
+        evidenceProblems(chain, 'void attachNetworkLog(Dio d) => x(d);'),
+        hasLength(1),
+      );
+      expect(evidenceProblems(chain, 'client.attachNetworkLog(dio);'), isEmpty);
     });
   });
 }

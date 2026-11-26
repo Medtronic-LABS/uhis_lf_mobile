@@ -97,18 +97,23 @@ void main() {
     expect(fired, 1);
   });
 
-  test('a retried 500 logs one row per attempt, no duplicates', () async {
-    final rec = _FakeRecorder();
-    final (api, adapter) =
-        await _client(rec, {Endpoints.offlineSyncHouseholds: 2});
-    adapter.failureStatus = 500;
+  test(
+    'a retried 500 logs one row per attempt, no duplicates',
+    () async {
+      final rec = _FakeRecorder();
+      final (api, adapter) = await _client(rec, {
+        Endpoints.offlineSyncHouseholds: 2,
+      });
+      adapter.failureStatus = 500;
 
-    await api.dio.post<dynamic>(Endpoints.offlineSyncHouseholds);
+      await api.dio.post<dynamic>(Endpoints.offlineSyncHouseholds);
 
-    expect(rec.entries.map((e) => e.attempt).toList(), [1, 2, 3]);
-    expect(rec.entries.map((e) => e.statusCode).toList(), [500, 500, 200]);
-    expect(rec.entries.first.errorType, isNull);
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      expect(rec.entries.map((e) => e.attempt).toList(), [1, 2, 3]);
+      expect(rec.entries.map((e) => e.statusCode).toList(), [500, 500, 200]);
+      expect(rec.entries.first.errorType, isNull);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   test('a timeout records errorType connectionTimeout', () async {
     final rec = _FakeRecorder();
@@ -181,27 +186,31 @@ void main() {
     expect(rec.entries.single.url, isNot(contains('@example.com')));
   });
 
-  test('a recorder throwing an Error fails neither a 200 nor 401 handling',
-      () async {
-    final (api, adapter) = await _client(_ErrorRecorder());
-    var fired = 0;
-    api.onUnauthorized = () => fired++;
+  test(
+    'a recorder throwing an Error fails neither a 200 nor 401 handling',
+    () async {
+      final (api, adapter) = await _client(_ErrorRecorder());
+      var fired = 0;
+      api.onUnauthorized = () => fired++;
 
-    expect((await api.dio.get<dynamic>('/x')).statusCode, 200);
-    adapter.successStatus = 401;
-    expect((await api.dio.get<dynamic>('/y')).statusCode, 401);
-    expect(fired, 1);
-  });
+      expect((await api.dio.get<dynamic>('/x')).statusCode, 200);
+      adapter.successStatus = 401;
+      expect((await api.dio.get<dynamic>('/y')).statusCode, 401);
+      expect(fired, 1);
+    },
+  );
 
   test('an overwritten start extra does not fail the request', () async {
     final rec = _FakeRecorder();
     final (api, _) = await _client(rec);
-    api.dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (o, h) {
-        o.extra[NetworkLogInterceptor.startKey] = 'not-a-start';
-        h.next(o);
-      },
-    ));
+    api.dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (o, h) {
+          o.extra[NetworkLogInterceptor.startKey] = 'not-a-start';
+          h.next(o);
+        },
+      ),
+    );
 
     final res = await api.dio.get<dynamic>('/x');
 

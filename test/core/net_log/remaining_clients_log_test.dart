@@ -75,22 +75,27 @@ void main() {
     expect(rec.entries.single.url, contains(CallLogSyncClient.pullPath));
   });
 
-  test('ShukheeEncounterLinkClient with an injected Dio records one row',
-      () async {
-    final client = ShukheeEncounterLinkClient(
-      baseUrl: 'https://example.test',
-      authTokenProvider: () async => 'jwt',
-      dio: _injectedDio(adapter),
-      networkRecorder: rec,
-    );
+  test(
+    'ShukheeEncounterLinkClient with an injected Dio records one row',
+    () async {
+      final client = ShukheeEncounterLinkClient(
+        baseUrl: 'https://example.test',
+        authTokenProvider: () async => 'jwt',
+        dio: _injectedDio(adapter),
+        networkRecorder: rec,
+      );
 
-    await _ignoreOutcome(
-      client.attachFhirEncounterId(callLog: 'CL-1', fhirEncounterId: 'E-1'),
-    );
+      await _ignoreOutcome(
+        client.attachFhirEncounterId(callLog: 'CL-1', fhirEncounterId: 'E-1'),
+      );
 
-    expectOneSanitisedRow();
-    expect(rec.entries.single.url, contains(ShukheeEncounterLinkClient.attachPath));
-  });
+      expectOneSanitisedRow();
+      expect(
+        rec.entries.single.url,
+        contains(ShukheeEncounterLinkClient.attachPath),
+      );
+    },
+  );
 
   test('ShukheeConsentClient with an injected Dio records one row', () async {
     final client = ShukheeConsentClient(
@@ -106,15 +111,17 @@ void main() {
     expect(rec.entries.single.url, contains(ShukheeConsentClient.consentPath));
   });
 
-  test('ScribeApiService records its call through the ApiClient recorder',
-      () async {
-    final api = await ApiClient.create(networkRecorder: rec);
-    final service = ScribeApiService(api, httpAdapter: adapter);
+  test(
+    'ScribeApiService records its call through the ApiClient recorder',
+    () async {
+      final api = await ApiClient.create(networkRecorder: rec);
+      final service = ScribeApiService(api, httpAdapter: adapter);
 
-    await _ignoreOutcome(service.pollResult('job-1'));
+      await _ignoreOutcome(service.pollResult('job-1'));
 
-    expectOneSanitisedRow();
-  });
+      expectOneSanitisedRow();
+    },
+  );
 
   test('UserHierarchyService records the get_controls 404', () async {
     final api = await ApiClient.create(networkRecorder: rec);
