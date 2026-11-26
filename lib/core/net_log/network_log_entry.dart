@@ -1,3 +1,5 @@
+import 'url_sanitizer.dart';
+
 /// One recorded network request, as stored in the `network_log` table.
 ///
 /// Holds only sanitised, non-PHI fields (see the URL rule in the network log
@@ -38,6 +40,27 @@ class NetworkLogEntry {
 
   /// Recorder epoch captured when the request started. Not a DB column.
   final int epoch;
+
+  /// Row map with [source] forced and every text field normalised, so a
+  /// recorder or merge bug cannot persist tokens, query strings or raw
+  /// exception text. The DAO is the single choke point that calls this.
+  Map<String, Object?> toSanitizedDb({required String forcedSource}) => {
+        ...toDb(),
+        'source': forcedSource,
+        'method': _token(method, RegExp(r'^[A-Za-z]{1,16}$'), 'UNKNOWN'),
+        'service': _token(service, RegExp(r'^[a-z0-9-]{1,32}$'), 'other'),
+        'url': UrlSanitizer.sanitize(url),
+        'final_url': finalUrl == null ? null : UrlSanitizer.sanitize(finalUrl!),
+        'timing': _timings.contains(timing) ? timing : 'total',
+        'error_type': errorType == null
+            ? null
+            : _token(errorType!, RegExp(r'^[A-Za-z]{1,32}$'), 'unknown'),
+      };
+
+  static const Set<String> _timings = {'total', 'headers', 'handshake'};
+
+  static String _token(String v, RegExp allowed, String fallback) =>
+      allowed.hasMatch(v) ? v : fallback;
 
   Map<String, Object?> toDb() => {
         'started_at_ms': startedAtMs,

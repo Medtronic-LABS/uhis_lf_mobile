@@ -100,7 +100,7 @@ void main() {
           url: 'https://example.test/x',
         ),
       ]);
-      await dao.setNativeCursor(7);
+      await dao.mergeNative(const [], cursorTo: 7);
 
       final before = DateTime.now().millisecondsSinceEpoch;
       await db.wipeAllData();

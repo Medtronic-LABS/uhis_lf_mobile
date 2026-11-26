@@ -60,6 +60,7 @@ void main() {
         'last_sync_time INTEGER, last_full_sync_at INTEGER, cursor INTEGER)');
     await db.insert(AppDatabase.tableSyncMeta, {'entity': 'worklist'});
 
+    final before = DateTime.now().millisecondsSinceEpoch;
     await AppDatabase.onUpgrade(db, 59, 60);
 
     final indexes = (await db.rawQuery(
@@ -77,7 +78,9 @@ void main() {
     final seed = await db.query(AppDatabase.tableSyncMeta,
         where: 'entity = ?', whereArgs: ['network_log.native']);
     expect(seed.single['cursor'], 0);
-    expect(seed.single['last_sync_time'], 0);
+    expect(seed.single['last_sync_time'] as int,
+        greaterThanOrEqualTo(before),
+        reason: 'upgrade seeds the floor at now, not 0');
     expect(await db.query(AppDatabase.tableSyncMeta), hasLength(2),
         reason: 'existing data is kept');
 

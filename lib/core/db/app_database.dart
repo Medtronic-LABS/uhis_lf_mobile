@@ -862,7 +862,7 @@ class AppDatabase {
       'ON $tableAudioSamples(next_retry_at)',
     );
 
-    await _createNetworkLog(db);
+    await _createNetworkLog(db, floorMs: 0);
 
     // v47 — AI Scribe / counselling telemetry. Deliberately absent from
     // [_allTables]: see the comment on that list, and the "why this data is
@@ -2541,17 +2541,24 @@ class AppDatabase {
       await db.execute('DROP TABLE IF EXISTS teleconsult_consent_log');
     }
     if (from < 60) {
-      // v60 — hidden Network page request log.
-      await _createNetworkLog(db);
+      // v60 — hidden Network page request log. The floor is now, not 0: the
+      // native SDK store may hold earlier users' events on an upgraded device.
+      await _createNetworkLog(
+        db,
+        floorMs: DateTime.now().millisecondsSinceEpoch,
+      );
     }
   }
 
-  static Future<void> _createNetworkLog(DatabaseExecutor db) async {
+  static Future<void> _createNetworkLog(
+    DatabaseExecutor db, {
+    required int floorMs,
+  }) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $tableNetworkLog (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         started_at_ms INTEGER NOT NULL,
-        source        TEXT    NOT NULL,
+        source        TEXT    NOT NULL CHECK (source IN ('dart','native')),
         native_id     INTEGER,
         service       TEXT    NOT NULL,
         method        TEXT    NOT NULL,
@@ -2559,7 +2566,8 @@ class AppDatabase {
         final_url     TEXT,
         status_code   INTEGER,
         duration_ms   INTEGER,
-        timing        TEXT    NOT NULL DEFAULT 'total',
+        timing        TEXT    NOT NULL DEFAULT 'total'
+                      CHECK (timing IN ('total','headers','handshake')),
         attempt       INTEGER NOT NULL DEFAULT 1,
         error_type    TEXT
       )
@@ -2580,7 +2588,7 @@ class AppDatabase {
       tableSyncMeta,
       {
         'entity': networkLogNativeEntity,
-        'last_sync_time': 0,
+        'last_sync_time': floorMs,
         'cursor': 0,
       },
       conflictAlgorithm: ConflictAlgorithm.ignore,
@@ -2649,11 +2657,15 @@ class AppDatabase {
       }
       // The native SDK store is not wiped, so events older than this moment
       // must never be re-imported from it.
-      await tx.insert(tableSyncMeta, {
-        'entity': networkLogNativeEntity,
-        'last_sync_time': DateTime.now().millisecondsSinceEpoch,
-        'cursor': 0,
-      });
+      await tx.insert(
+        tableSyncMeta,
+        {
+          'entity': networkLogNativeEntity,
+          'last_sync_time': DateTime.now().millisecondsSinceEpoch,
+          'cursor': 0,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
       for (final p in participants) {
         await p.onWipeInTransaction(tx);
       }
