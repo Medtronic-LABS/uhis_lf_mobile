@@ -107,6 +107,7 @@ import 'features/visit/ncd/ncd_visit_extraction_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'core/config/app_config.dart';
 import 'core/net_log/db_network_request_recorder.dart';
+import 'core/net_log/native_network_log_wipe.dart';
 import 'core/net_log/native_network_event_source.dart';
 import 'core/net_log/network_log_dao.dart';
 import 'core/net_log/network_log_repository.dart';
@@ -156,6 +157,7 @@ Future<void> main() async {
   });
   final recorder = DbNetworkRequestRecorder(NetworkLogDao(appDb));
   appDb.addWipeParticipant(recorder);
+  appDb.addWipeParticipant(const NativeNetworkLogWipe());
   final api = await ApiClient.create(networkRecorder: recorder);
   final appVersionService = AppVersionService(api);
   final authRepo = AuthRepository(api, appVersionService: appVersionService);

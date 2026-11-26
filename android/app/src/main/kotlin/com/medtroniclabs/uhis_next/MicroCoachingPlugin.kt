@@ -9,19 +9,30 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.domain.context.CHWWorkContext
 import com.medtroniclabs.microcoaching.domain.context.RecentPatientSummary
 import com.medtroniclabs.microcoaching.domain.context.TodaysVisit
+import com.medtroniclabs.microcoaching.sdk.diagnostics.NetworkEventsStatus
 import com.medtroniclabs.microcoaching.ui.flow.CoachingFlowActivity
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 private const val TAG = "MicroCoaching"
+private const val NETWORK_EVENTS_TIMEOUT_MS = 6_000L
+private const val NETWORK_EVENTS_ERROR = "NETWORK_EVENTS_FAILED"
 
 class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
 
     private lateinit var channel: MethodChannel
     private var activity: Activity? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
@@ -30,6 +41,7 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        scope.cancel()
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
@@ -420,6 +432,60 @@ class MicroCoachingPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Acti
                     "villageId" to snap.villageId,
                     "upazilaId" to snap.upazilaId,
                 ))
+            }
+
+            // ── Network diagnostics (contract v1) ─────────────────────────────
+            // Logs only the outcome kind, never URLs or exception messages.
+
+            "getNetworkEvents" -> {
+                val afterId = (call.argument<Number>("afterId") ?: 0).toLong()
+                val limit = (call.argument<Number>("limit") ?: 200).toInt()
+                scope.launch {
+                    try {
+                        val r = withTimeout(NETWORK_EVENTS_TIMEOUT_MS) {
+                            MicroCoachingSDK.getNetworkEvents(afterId, limit)
+                        }
+                        if (r.status == NetworkEventsStatus.STORE_ERROR) {
+                            result.error(NETWORK_EVENTS_ERROR, "store error", null)
+                        } else {
+                            result.success(r.toContractMap())
+                        }
+                    } catch (e: CancellationException) {
+                        // A withTimeout expiry is a TimeoutCancellationException; a real
+                        // cancel (engine detached) must not be answered.
+                        if (e is kotlinx.coroutines.TimeoutCancellationException) {
+                            result.error(NETWORK_EVENTS_ERROR, "timeout", null)
+                        } else {
+                            throw e
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "getNetworkEvents failed: ${e.javaClass.simpleName}")
+                        result.error(NETWORK_EVENTS_ERROR, e.javaClass.simpleName, null)
+                    }
+                }
+            }
+
+            "clearNetworkEvents" -> {
+                scope.launch {
+                    try {
+                        val r = withTimeout(NETWORK_EVENTS_TIMEOUT_MS) {
+                            MicroCoachingSDK.clearNetworkEvents()
+                        }
+                        if (r.status == NetworkEventsStatus.STORE_ERROR) {
+                            result.error(NETWORK_EVENTS_ERROR, "store error", null)
+                        } else {
+                            result.success(null)
+                        }
+                    } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                        // The SDK finishes the delete later; report the wait as failed.
+                        result.error(NETWORK_EVENTS_ERROR, "timeout", null)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "clearNetworkEvents failed: ${e.javaClass.simpleName}")
+                        result.error(NETWORK_EVENTS_ERROR, e.javaClass.simpleName, null)
+                    }
+                }
             }
 
             else -> result.notImplemented()

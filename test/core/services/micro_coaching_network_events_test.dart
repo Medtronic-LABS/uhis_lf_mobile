@@ -261,4 +261,18 @@ void main() {
     expect(gotLimit, 50);
     expect(r.maxId, 7);
   });
+
+  group('clearNetworkEvents', () {
+    test('true when the SDK confirms', () async {
+      _handle((c) async => c.method == 'clearNetworkEvents' ? null : throw MissingPluginException());
+      expect(await MicroCoachingService.clearNetworkEvents(), isTrue);
+    });
+    test('false when the channel is unregistered', () async {
+      expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
+    });
+    test('false on PlatformException, never throws', () async {
+      _handle((_) async => throw PlatformException(code: 'x', message: 'secret'));
+      expect(await MicroCoachingService.clearNetworkEvents(), isFalse);
+    });
+  });
 }

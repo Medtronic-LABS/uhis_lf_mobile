@@ -104,6 +104,28 @@ class MicroCoachingService {
     return _parseNetworkEvents(response, clamped);
   }
 
+  /// Asks the native SDK to delete its stored request events (a user switch).
+  ///
+  /// Never throws: an SDK that is absent, older than this contract or failing
+  /// is not an error for the caller. Returns true only when the SDK confirmed
+  /// the delete. Logs exception types only.
+  static Future<bool> clearNetworkEvents({
+    Duration timeout = _networkTimeout,
+  }) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
+    try {
+      await _channel.invokeMethod<Object?>('clearNetworkEvents').timeout(timeout);
+      return true;
+    } on MissingPluginException {
+      ConsoleLog.warn('[MicroCoaching] clearNetworkEvents MissingPluginException');
+    } on PlatformException {
+      ConsoleLog.warn('[MicroCoaching] clearNetworkEvents PlatformException');
+    } on TimeoutException {
+      ConsoleLog.warn('[MicroCoaching] clearNetworkEvents TimeoutException');
+    }
+    return false;
+  }
+
   static NativeNetworkEventsResult _parseNetworkEvents(
     Object? response,
     int limit,
