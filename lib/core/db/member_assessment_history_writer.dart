@@ -20,12 +20,12 @@ class MemberAssessmentHistoryWriter {
     PregnancyMahProjection? pregnancyProjection,
     Future<String?> Function()? currentUserFhirId,
     SyncMetaDao? syncMeta,
-  })  : _mah = mah,
-        _members = members,
-        _appDb = appDb,
-        _pregnancyProjection = pregnancyProjection,
-        _currentUserFhirId = currentUserFhirId,
-        _syncMeta = syncMeta;
+  }) : _mah = mah,
+       _members = members,
+       _appDb = appDb,
+       _pregnancyProjection = pregnancyProjection,
+       _currentUserFhirId = currentUserFhirId,
+       _syncMeta = syncMeta;
 
   final MemberAssessmentHistoryDao _mah;
   final MemberDao _members;
@@ -63,10 +63,9 @@ class MemberAssessmentHistoryWriter {
 
   /// Records that every row now on the device follows the current rules.
   Future<void> markNormalized() async {
-    await _syncMeta?.upsert(const SyncMetaRow(
-      entity: _normalizeMetaEntity,
-      cursor: normalizeVersion,
-    ));
+    await _syncMeta?.upsert(
+      const SyncMetaRow(entity: _normalizeMetaEntity, cursor: normalizeVersion),
+    );
   }
 
   /// Rebuild MAH from the synced [assessments] cache (same source Spice persists after sync).
@@ -130,7 +129,8 @@ class MemberAssessmentHistoryWriter {
     for (final item in items) {
       // Spice drops these before saving synced history.
       if (MemberAssessmentHistoryDao.isMedicalReviewService(
-          item.serviceProvided)) {
+        item.serviceProvided,
+      )) {
         continue;
       }
       final row = _fromHistoryItem(
@@ -167,8 +167,9 @@ class MemberAssessmentHistoryWriter {
         local.localMemberId > 0 &&
         service != null &&
         PregnancyDetailRebuilder.isMotherServiceProvided(service)) {
-      await _pregnancyProjection
-          ?.rebuildMembersAndProject([local.localMemberId]);
+      await _pregnancyProjection?.rebuildMembersAndProject([
+        local.localMemberId,
+      ]);
     }
   }
 
@@ -213,27 +214,29 @@ class MemberAssessmentHistoryWriter {
       latestVisit: true,
       referralStatus: entity.isReferred
           ? (entity.referralStatus?.trim().isNotEmpty == true
-              ? entity.referralStatus
-              : 'Referred')
+                ? entity.referralStatus
+                : 'Referred')
           : entity.referralStatus,
       referralReason: entity.referredReasons,
       practitionerId: practitionerId,
-      observationsJson:
-          observations.isNotEmpty ? jsonEncode(observations) : null,
+      observationsJson: observations.isNotEmpty
+          ? jsonEncode(observations)
+          : null,
       shasthyaShebikaId: null,
     );
     return (
-      visit: (row: row, serverEncounterId: JsonRead.idOrNull(entity.fhirId)),
+      visit: (
+        row: row,
+        serverEncounterId: JsonRead.idOrNull(entity.fhirId),
+        uploaded: entity.syncStatus == AssessmentSyncStatus.success,
+      ),
       localMemberId: localMemberId,
     );
   }
 
   Future<Map<String, int?>> _resolveLocalMemberIds(List<String> keys) async {
     final resolved = await _members.patientIdsByMemberIds(keys);
-    return {
-      for (final e in resolved.entries)
-        e.key: int.tryParse(e.value),
-    };
+    return {for (final e in resolved.entries) e.key: int.tryParse(e.value)};
   }
 
   MemberAssessmentHistoryRow? _fromHistoryItem(
@@ -254,12 +257,12 @@ class MemberAssessmentHistoryWriter {
       referralStatus: _resolveReferralStatus(item),
       referralReason: item.referralReason,
       nextFollowUpDate: item.nextFollowUpDate?.toUtc().toIso8601String(),
-      practitionerId: JsonRead.firstString(
-        item.rawJson,
-        const ['practitionerId'],
-      ),
-      observationsJson:
-          item.observations != null ? jsonEncode(item.observations) : null,
+      practitionerId: JsonRead.firstString(item.rawJson, const [
+        'practitionerId',
+      ]),
+      observationsJson: item.observations != null
+          ? jsonEncode(item.observations)
+          : null,
     );
   }
 
@@ -270,10 +273,10 @@ class MemberAssessmentHistoryWriter {
       final t = s.trim();
       if (t == 'Referred' || t.startsWith('Referred To')) return t;
     }
-    return JsonRead.firstString(
-      item.rawJson,
-      const ['referralStatus', 'patientStatus'],
-    );
+    return JsonRead.firstString(item.rawJson, const [
+      'referralStatus',
+      'patientStatus',
+    ]);
   }
 
   static String? encounterIdFromOtherDetails(String? otherDetailsJson) =>

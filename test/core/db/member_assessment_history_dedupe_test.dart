@@ -62,22 +62,24 @@ void main() {
     DateTime? at,
     String? fhirId,
     String? customStatus,
-  }) =>
-      LocalAssessmentEntity(
-        id: id,
-        referenceId: reference,
-        householdMemberLocalId: 7,
-        memberId: 'member-fhir-1',
-        assessmentType: type,
-        assessmentDetails: '{}',
-        otherDetails: jsonEncode({'encounterId': clientVisitId}),
-        customStatus: customStatus,
-        createdAt: at ?? visitAt,
-        syncStatus: fhirId == null
-            ? AssessmentSyncStatus.pending
-            : AssessmentSyncStatus.success,
-        fhirId: fhirId,
-      );
+    bool uploaded = false,
+  }) => LocalAssessmentEntity(
+    id: id,
+    referenceId: reference,
+    householdMemberLocalId: 7,
+    memberId: 'member-fhir-1',
+    assessmentType: type,
+    assessmentDetails: '{}',
+    otherDetails: jsonEncode({'encounterId': clientVisitId}),
+    customStatus: customStatus,
+    createdAt: at ?? visitAt,
+    // Uploaded with no fhirId: the server id was never stored on it,
+    // the only case matched to a server row by visit second.
+    syncStatus: fhirId != null || uploaded
+        ? AssessmentSyncStatus.success
+        : AssessmentSyncStatus.pending,
+    fhirId: fhirId,
+  );
 
   /// The server's copy: uploaded with whole-second precision.
   AssessmentHistoryItem serverVisit({
@@ -90,8 +92,14 @@ void main() {
     return AssessmentHistoryItem(
       householdMemberId: 'member-fhir-1',
       encounterId: encounterId,
-      visitDate:
-          DateTime.utc(t.year, t.month, t.day, t.hour, t.minute, t.second),
+      visitDate: DateTime.utc(
+        t.year,
+        t.month,
+        t.day,
+        t.hour,
+        t.minute,
+        t.second,
+      ),
       serviceProvided: service,
       customStatus: customStatus,
     );
@@ -117,26 +125,27 @@ void main() {
     await writer.upsertFromLocal(e, projectPregnancy: false);
   }
 
-  test('visit saved, uploaded, then pulled back is one row (server copy)',
-      () async {
-    await saveLocal(localVisit());
-    await app.db.update(
-      LocalAssessmentDao.tableName,
-      {'fhir_id': 'server-enc-1', 'sync_status': 'success'},
-    );
-    await writer.upsertFromHistoryItems([serverVisit()]);
-    // Every dashboard load re-merges local_assessments.
-    await writer.rebuildFromLocalAssessments();
-
-    final rows = await mahRows();
-    expect(rows, hasLength(1));
-    expect(rows.single['encounter_id'], 'server-enc-1');
-  });
-
   test(
-      'matches on member + service + visit second when no server id was '
+    'visit saved, uploaded, then pulled back is one row (server copy)',
+    () async {
+      await saveLocal(localVisit());
+      await app.db.update(LocalAssessmentDao.tableName, {
+        'fhir_id': 'server-enc-1',
+        'sync_status': 'success',
+      });
+      await writer.upsertFromHistoryItems([serverVisit()]);
+      // Every dashboard load re-merges local_assessments.
+      await writer.rebuildFromLocalAssessments();
+
+      final rows = await mahRows();
+      expect(rows, hasLength(1));
+      expect(rows.single['encounter_id'], 'server-enc-1');
+    },
+  );
+
+  test('matches on member + service + visit second when no server id was '
       'stamped on the local row', () async {
-    await saveLocal(localVisit());
+    await saveLocal(localVisit(uploaded: true));
     await writer.upsertFromHistoryItems([serverVisit()]);
     await writer.rebuildFromLocalAssessments();
 
@@ -145,8 +154,7 @@ void main() {
     expect(rows.single['encounter_id'], 'server-enc-1');
   });
 
-  test(
-      'a device that already has the duplicate heals on the next dashboard '
+  test('a device that already has the duplicate heals on the next dashboard '
       'rebuild', () async {
     // State written by the old code: both copies of one visit.
     final local = localVisit(fhirId: 'server-enc-1');
@@ -171,8 +179,14 @@ void main() {
         id: 'server-enc-1',
         patientId: 'member-fhir-1',
         kind: 'ANC',
-        occurredAt:
-            DateTime.utc(2026, 11, 20, 9, 30, 15).millisecondsSinceEpoch,
+        occurredAt: DateTime.utc(
+          2026,
+          11,
+          20,
+          9,
+          30,
+          15,
+        ).millisecondsSinceEpoch,
         rawJson: jsonEncode({'householdMemberId': 'member-fhir-1'}),
       ),
     ]);
@@ -198,13 +212,16 @@ void main() {
 
   test('two real visits by the same member stay two rows', () async {
     final later = visitAt.add(const Duration(days: 30));
-    await saveLocal(localVisit());
-    await saveLocal(localVisit(
-      id: 'la-2',
-      reference: 2,
-      clientVisitId: 'client-visit-2',
-      at: later,
-    ));
+    await saveLocal(localVisit(uploaded: true));
+    await saveLocal(
+      localVisit(
+        id: 'la-2',
+        reference: 2,
+        clientVisitId: 'client-visit-2',
+        at: later,
+        uploaded: true,
+      ),
+    );
     await writer.upsertFromHistoryItems([
       serverVisit(),
       serverVisit(encounterId: 'server-enc-2', at: later),
@@ -215,11 +232,16 @@ void main() {
     expect(ids, {'server-enc-1', 'server-enc-2'});
   });
 
-  test('one visit covering two programmes keeps one row per service',
-      () async {
-    await saveLocal(localVisit());
+  test('one visit covering two programmes keeps one row per service', () async {
+    await saveLocal(localVisit(uploaded: true));
     await saveLocal(
-        localVisit(id: 'la-2', reference: 2, type: 'FAMILY_PLANNING'));
+      localVisit(
+        id: 'la-2',
+        reference: 2,
+        type: 'FAMILY_PLANNING',
+        uploaded: true,
+      ),
+    );
     await writer.upsertFromHistoryItems([
       serverVisit(),
       serverVisit(encounterId: 'server-enc-fp', service: 'family_planning'),
@@ -230,20 +252,27 @@ void main() {
     final services = rows.map((r) => r['service_provided'] as String).toList()
       ..sort();
     expect(services, ['anc', 'family_planning']);
-    expect(rows.map((r) => r['encounter_id']).toSet(),
-        {'server-enc-1', 'server-enc-fp'});
+    expect(rows.map((r) => r['encounter_id']).toSet(), {
+      'server-enc-1',
+      'server-enc-fp',
+    });
   });
 
   test('dashboard: 2 ANC visits with glasses sold show 2, not 4', () async {
     final later = visitAt.add(const Duration(days: 30));
-    await saveLocal(localVisit(customStatus: '["GLASSES_SOLD"]'));
-    await saveLocal(localVisit(
-      id: 'la-2',
-      reference: 2,
-      clientVisitId: 'client-visit-2',
-      at: later,
-      customStatus: '["GLASSES_SOLD"]',
-    ));
+    await saveLocal(
+      localVisit(customStatus: '["GLASSES_SOLD"]', uploaded: true),
+    );
+    await saveLocal(
+      localVisit(
+        id: 'la-2',
+        reference: 2,
+        clientVisitId: 'client-visit-2',
+        at: later,
+        customStatus: '["GLASSES_SOLD"]',
+        uploaded: true,
+      ),
+    );
     await writer.upsertFromHistoryItems([
       serverVisit(customStatus: const ['GLASSES_SOLD']),
       serverVisit(
@@ -290,68 +319,76 @@ void main() {
     expect(await mahRows(), isEmpty);
   });
 
-  test('a visit saved on the device is stamped with the logged-in SK',
-      () async {
-    writer = MemberAssessmentHistoryWriter(
-      mah: MemberAssessmentHistoryDao(app),
-      members: MemberDao(app),
-      appDb: app,
-      currentUserFhirId: () async => 'sk-fhir-9',
-    );
-    await saveLocal(localVisit(type: 'NCD'));
-    expect((await mahRows()).single['practitioner_id'], 'sk-fhir-9');
+  test(
+    'a visit saved on the device is stamped with the logged-in SK',
+    () async {
+      writer = MemberAssessmentHistoryWriter(
+        mah: MemberAssessmentHistoryDao(app),
+        members: MemberDao(app),
+        appDb: app,
+        currentUserFhirId: () async => 'sk-fhir-9',
+      );
+      await saveLocal(localVisit(type: 'NCD'));
+      expect((await mahRows()).single['practitioner_id'], 'sk-fhir-9');
 
-    await writer.rebuildFromLocalAssessments();
-    expect((await mahRows()).single['practitioner_id'], 'sk-fhir-9');
-  });
+      await writer.rebuildFromLocalAssessments();
+      expect((await mahRows()).single['practitioner_id'], 'sk-fhir-9');
+    },
+  );
 
-  test('a rebuild keeps the SK who saved the visit, not the one logged in now',
-      () async {
-    MemberAssessmentHistoryWriter as(String sk) =>
-        MemberAssessmentHistoryWriter(
-          mah: MemberAssessmentHistoryDao(app),
-          members: MemberDao(app),
-          appDb: app,
-          currentUserFhirId: () async => sk,
-        );
-    writer = as('sk-a');
-    await saveLocal(localVisit(type: 'NCD'));
+  test(
+    'a rebuild keeps the SK who saved the visit, not the one logged in now',
+    () async {
+      MemberAssessmentHistoryWriter as(String sk) =>
+          MemberAssessmentHistoryWriter(
+            mah: MemberAssessmentHistoryDao(app),
+            members: MemberDao(app),
+            appDb: app,
+            currentUserFhirId: () async => sk,
+          );
+      writer = as('sk-a');
+      await saveLocal(localVisit(type: 'NCD'));
 
-    // SK-B logs in on the same device and opens the dashboard.
-    await as('sk-b').rebuildFromLocalAssessments();
-    expect((await mahRows()).single['practitioner_id'], 'sk-a');
-  });
+      // SK-B logs in on the same device and opens the dashboard.
+      await as('sk-b').rebuildFromLocalAssessments();
+      expect((await mahRows()).single['practitioner_id'], 'sk-a');
+    },
+  );
 
-  test('a rebuild does not stamp a visit that was saved without an SK',
-      () async {
-    await saveLocal(localVisit(type: 'NCD'));
-    expect((await mahRows()).single['practitioner_id'], isNull);
+  test(
+    'a rebuild does not stamp a visit that was saved without an SK',
+    () async {
+      await saveLocal(localVisit(type: 'NCD'));
+      expect((await mahRows()).single['practitioner_id'], isNull);
 
-    await MemberAssessmentHistoryWriter(
-      mah: MemberAssessmentHistoryDao(app),
-      members: MemberDao(app),
-      appDb: app,
-      currentUserFhirId: () async => 'sk-b',
-    ).rebuildFromLocalAssessments();
-    expect((await mahRows()).single['practitioner_id'], isNull);
-  });
+      await MemberAssessmentHistoryWriter(
+        mah: MemberAssessmentHistoryDao(app),
+        members: MemberDao(app),
+        appDb: app,
+        currentUserFhirId: () async => 'sk-b',
+      ).rebuildFromLocalAssessments();
+      expect((await mahRows()).single['practitioner_id'], isNull);
+    },
+  );
 
-  test('unreadable other_details on another row does not lose the batch',
-      () async {
-    await saveLocal(localVisit());
-    await app.db.insert(
-      LocalAssessmentDao.tableName,
-      localVisit(id: 'la-bad', reference: 2).toDb()
-        ..['other_details'] = '{not json'
-        ..['fhir_id'] = 'server-enc-1',
-    );
+  test(
+    'unreadable other_details on another row does not lose the batch',
+    () async {
+      await saveLocal(localVisit(uploaded: true));
+      await app.db.insert(
+        LocalAssessmentDao.tableName,
+        localVisit(id: 'la-bad', reference: 2).toDb()
+          ..['other_details'] = '{not json'
+          ..['fhir_id'] = 'server-enc-1',
+      );
 
-    await writer.upsertFromHistoryItems([serverVisit()]);
+      await writer.upsertFromHistoryItems([serverVisit()]);
 
-    final rows = await mahRows();
-    expect(rows, hasLength(1));
-    expect(rows.single['encounter_id'], 'server-enc-1');
-  });
+      final rows = await mahRows();
+      expect(rows, hasLength(1));
+      expect(rows.single['encounter_id'], 'server-enc-1');
+    },
+  );
 
   test('two server encounters in the same second are both kept', () async {
     await writer.upsertFromHistoryItems([
@@ -378,7 +415,7 @@ void main() {
     });
 
     test('a device copy stored with an offset is still replaced', () async {
-      final local = localVisit();
+      final local = localVisit(uploaded: true);
       await app.db.insert(LocalAssessmentDao.tableName, local.toDb());
       await app.db.insert(MemberAssessmentHistoryDao.tableName, {
         'member_id': 7,
@@ -398,7 +435,9 @@ void main() {
 
     test('a device copy stored with no zone is still replaced', () async {
       await app.db.insert(
-          LocalAssessmentDao.tableName, localVisit().toDb());
+        LocalAssessmentDao.tableName,
+        localVisit(uploaded: true).toDb(),
+      );
       await app.db.insert(MemberAssessmentHistoryDao.tableName, {
         'member_id': 7,
         'member_fhir_id': 'member-fhir-1',
@@ -421,8 +460,14 @@ void main() {
             id: id,
             patientId: 'member-fhir-1',
             kind: 'ANC',
-            occurredAt:
-                DateTime.utc(2026, 11, 20, 9, 30, 15).millisecondsSinceEpoch,
+            occurredAt: DateTime.utc(
+              2026,
+              11,
+              20,
+              9,
+              30,
+              15,
+            ).millisecondsSinceEpoch,
             rawJson: jsonEncode({
               'householdMemberId': 'member-fhir-1',
               'customStatus': status,
@@ -468,34 +513,36 @@ void main() {
     expect(JsonRead.idOrNull(' 900004432063 '), '900004432063');
   });
 
-  test('two visits saved on the device in the same second are both kept',
-      () async {
-    await saveLocal(localVisit());
-    await saveLocal(localVisit(
-      id: 'la-2',
-      reference: 2,
-      clientVisitId: 'client-visit-2',
-    ));
-    final day = DateTime.utc(2026, 11, 20, 12);
-    await dashboardRepo().load(from: day, to: day);
+  test(
+    'two visits saved on the device in the same second are both kept',
+    () async {
+      await saveLocal(localVisit());
+      await saveLocal(
+        localVisit(id: 'la-2', reference: 2, clientVisitId: 'client-visit-2'),
+      );
+      final day = DateTime.utc(2026, 11, 20, 12);
+      await dashboardRepo().load(from: day, to: day);
 
-    expect(
-      (await mahRows()).map((r) => r['encounter_id']),
-      unorderedEquals(['client-visit-1', 'client-visit-2']),
-    );
-  });
+      expect(
+        (await mahRows()).map((r) => r['encounter_id']),
+        unorderedEquals(['client-visit-1', 'client-visit-2']),
+      );
+    },
+  );
 
-  test('two server encounters in the same second survive a dashboard load',
-      () async {
-    await writer.upsertFromHistoryItems([
-      serverVisit(encounterId: 'e1'),
-      serverVisit(encounterId: 'e2'),
-    ]);
-    final day = DateTime.utc(2026, 11, 20, 12);
-    await dashboardRepo().load(from: day, to: day);
+  test(
+    'two server encounters in the same second survive a dashboard load',
+    () async {
+      await writer.upsertFromHistoryItems([
+        serverVisit(encounterId: 'e1'),
+        serverVisit(encounterId: 'e2'),
+      ]);
+      final day = DateTime.utc(2026, 11, 20, 12);
+      await dashboardRepo().load(from: day, to: day);
 
-    expect((await mahRows()).map((r) => r['encounter_id']), ['e1', 'e2']);
-  });
+      expect((await mahRows()).map((r) => r['encounter_id']), ['e1', 'e2']);
+    },
+  );
 
   group('practitioner stamped at save time', () {
     setUp(() {
@@ -516,42 +563,47 @@ void main() {
           rawJson: {'practitionerId': ?practitionerId},
         );
 
-    test('moves to the server row when that row names no practitioner',
-        () async {
-      await saveLocal(localVisit(type: 'NCD'));
-      await writer.upsertFromHistoryItems([serverNcd()]);
+    test(
+      'moves to the server row when that row names no practitioner',
+      () async {
+        await saveLocal(localVisit(type: 'NCD', uploaded: true));
+        await writer.upsertFromHistoryItems([serverNcd()]);
 
-      final row = (await mahRows()).single;
-      expect(row['encounter_id'], 'server-enc-1');
-      expect(row['practitioner_id'], 'sk-fhir-9');
-    });
+        final row = (await mahRows()).single;
+        expect(row['encounter_id'], 'server-enc-1');
+        expect(row['practitioner_id'], 'sk-fhir-9');
+      },
+    );
 
     test('does not replace the practitioner the server sent', () async {
-      await saveLocal(localVisit(type: 'NCD'));
-      await writer
-          .upsertFromHistoryItems([serverNcd(practitionerId: 'sk-other')]);
+      await saveLocal(localVisit(type: 'NCD', uploaded: true));
+      await writer.upsertFromHistoryItems([
+        serverNcd(practitionerId: 'sk-other'),
+      ]);
 
       expect((await mahRows()).single['practitioner_id'], 'sk-other');
     });
 
-    test('moves to the server row when the rebuild replaces the device copy',
-        () async {
-      // Both copies present, as left by a build without the dedupe.
-      await saveLocal(localVisit(type: 'NCD'));
-      await app.db.insert(MemberAssessmentHistoryDao.tableName, {
-        'member_fhir_id': 'member-fhir-1',
-        'visit_date': '2026-11-20T09:30:15.000Z',
-        'service_provided': 'ncd',
-        'encounter_id': 'server-enc-1',
-        'latest_visit': 1,
-      });
+    test(
+      'moves to the server row when the rebuild replaces the device copy',
+      () async {
+        // Both copies present, as left by a build without the dedupe.
+        await saveLocal(localVisit(type: 'NCD', uploaded: true));
+        await app.db.insert(MemberAssessmentHistoryDao.tableName, {
+          'member_fhir_id': 'member-fhir-1',
+          'visit_date': '2026-11-20T09:30:15.000Z',
+          'service_provided': 'ncd',
+          'encounter_id': 'server-enc-1',
+          'latest_visit': 1,
+        });
 
-      await writer.rebuildFromLocalAssessments();
+        await writer.rebuildFromLocalAssessments();
 
-      final row = (await mahRows()).single;
-      expect(row['encounter_id'], 'server-enc-1');
-      expect(row['practitioner_id'], 'sk-fhir-9');
-    });
+        final row = (await mahRows()).single;
+        expect(row['encounter_id'], 'server-enc-1');
+        expect(row['practitioner_id'], 'sk-fhir-9');
+      },
+    );
   });
 
   group('practitioner on the server row survives later writes', () {
@@ -565,14 +617,14 @@ void main() {
     });
 
     AssessmentHistoryItem serverNcd() => AssessmentHistoryItem(
-          householdMemberId: 'member-fhir-1',
-          encounterId: 'server-enc-1',
-          visitDate: DateTime.utc(2026, 11, 20, 9, 30, 15),
-          serviceProvided: 'NCD',
-        );
+      householdMemberId: 'member-fhir-1',
+      encounterId: 'server-enc-1',
+      visitDate: DateTime.utc(2026, 11, 20, 9, 30, 15),
+      serviceProvided: 'NCD',
+    );
 
     test('the same encounter pulled again keeps the stamp', () async {
-      await saveLocal(localVisit(type: 'NCD'));
+      await saveLocal(localVisit(type: 'NCD', uploaded: true));
       await writer.upsertFromHistoryItems([serverNcd()]);
       await writer.upsertFromHistoryItems([serverNcd()]);
 
@@ -584,13 +636,18 @@ void main() {
     test('removes rows the server no longer returns, in one step', () async {
       await writer.upsertFromHistoryItems([
         serverVisit(encounterId: 'gone'),
-        serverVisit(encounterId: 'stays', at: visitAt.add(const Duration(hours: 1))),
+        serverVisit(
+          encounterId: 'stays',
+          at: visitAt.add(const Duration(hours: 1)),
+        ),
       ]);
 
-      await writer.upsertFromHistoryItems(
-        [serverVisit(encounterId: 'stays', at: visitAt.add(const Duration(hours: 1)))],
-        replaceAll: true,
-      );
+      await writer.upsertFromHistoryItems([
+        serverVisit(
+          encounterId: 'stays',
+          at: visitAt.add(const Duration(hours: 1)),
+        ),
+      ], replaceAll: true);
 
       expect((await mahRows()).single['encounter_id'], 'stays');
     });
@@ -604,24 +661,29 @@ void main() {
       );
       await saveLocal(localVisit(type: 'NCD'));
 
-      await writer.upsertFromHistoryItems(
-        [serverVisit(encounterId: 'other', at: visitAt.add(const Duration(hours: 1)))],
-        replaceAll: true,
-      );
+      await writer.upsertFromHistoryItems([
+        serverVisit(
+          encounterId: 'other',
+          at: visitAt.add(const Duration(hours: 1)),
+        ),
+      ], replaceAll: true);
       await writer.rebuildFromLocalAssessments();
 
       final rows = await mahRows();
-      expect(rows.map((r) => r['encounter_id']),
-          unorderedEquals(['client-visit-1', 'other']));
       expect(
-        rows.firstWhere((r) => r['encounter_id'] == 'client-visit-1')[
-            'practitioner_id'],
+        rows.map((r) => r['encounter_id']),
+        unorderedEquals(['client-visit-1', 'other']),
+      );
+      expect(
+        rows.firstWhere(
+          (r) => r['encounter_id'] == 'client-visit-1',
+        )['practitioner_id'],
         'sk-fhir-9',
       );
     });
 
     test('replaces the device copy of a visit the pull returns', () async {
-      await saveLocal(localVisit());
+      await saveLocal(localVisit(uploaded: true));
       await writer.upsertFromHistoryItems([serverVisit()], replaceAll: true);
       await writer.rebuildFromLocalAssessments();
 
@@ -629,15 +691,12 @@ void main() {
     });
   });
 
-  test(
-      'a pending visit in the same second as a synced one is not removed '
+  test('a pending visit in the same second as a synced one is not removed '
       'by the synced visit\'s server row', () async {
     await saveLocal(localVisit(fhirId: 'server-enc-1'));
-    await saveLocal(localVisit(
-      id: 'la-2',
-      reference: 2,
-      clientVisitId: 'client-visit-2',
-    ));
+    await saveLocal(
+      localVisit(id: 'la-2', reference: 2, clientVisitId: 'client-visit-2'),
+    );
 
     await writer.upsertFromHistoryItems([serverVisit()]);
 
@@ -647,47 +706,51 @@ void main() {
     );
   });
 
-  test('matches on the local member id when the device row has no FHIR id',
-      () async {
-    final local = LocalAssessmentEntity(
-      id: 'la-1',
-      referenceId: 1,
-      householdMemberLocalId: 7,
-      assessmentType: 'ANC',
-      assessmentDetails: '{}',
-      otherDetails: jsonEncode({'encounterId': 'client-visit-1'}),
-      createdAt: visitAt,
-      syncStatus: AssessmentSyncStatus.pending,
-    );
-    await saveLocal(local);
-    // The server row resolves to the same local member.
-    await MemberAssessmentHistoryDao(app).upsertMany([
-      MemberAssessmentHistoryRow(
-        memberId: 7,
-        memberFhirId: 'member-fhir-1',
-        visitDate: '2026-11-20T09:30:15.000Z',
-        serviceProvided: 'anc',
-        encounterId: 'server-enc-1',
-      ),
-    ], fromServer: true);
+  test(
+    'matches on the local member id when the device row has no FHIR id',
+    () async {
+      final local = LocalAssessmentEntity(
+        id: 'la-1',
+        referenceId: 1,
+        householdMemberLocalId: 7,
+        assessmentType: 'ANC',
+        assessmentDetails: '{}',
+        otherDetails: jsonEncode({'encounterId': 'client-visit-1'}),
+        createdAt: visitAt,
+        syncStatus: AssessmentSyncStatus.success,
+      );
+      await saveLocal(local);
+      // The server row resolves to the same local member.
+      await MemberAssessmentHistoryDao(app).upsertMany([
+        MemberAssessmentHistoryRow(
+          memberId: 7,
+          memberFhirId: 'member-fhir-1',
+          visitDate: '2026-11-20T09:30:15.000Z',
+          serviceProvided: 'anc',
+          encounterId: 'server-enc-1',
+        ),
+      ], fromServer: true);
 
-    expect((await mahRows()).single['encounter_id'], 'server-enc-1');
-  });
+      expect((await mahRows()).single['encounter_id'], 'server-enc-1');
+    },
+  );
 
-  test('the server spelling of family planning matches the device copy',
-      () async {
-    await saveLocal(localVisit(type: 'FAMILY_PLANNING'));
-    await writer.upsertFromHistoryItems([
-      serverVisit(service: 'familyPlanning'),
-    ]);
-    await writer.rebuildFromLocalAssessments();
+  test(
+    'the server spelling of family planning matches the device copy',
+    () async {
+      await saveLocal(localVisit(type: 'FAMILY_PLANNING', uploaded: true));
+      await writer.upsertFromHistoryItems([
+        serverVisit(service: 'familyPlanning'),
+      ]);
+      await writer.rebuildFromLocalAssessments();
 
-    expect((await mahRows()).single['encounter_id'], 'server-enc-1');
-  });
+      expect((await mahRows()).single['encounter_id'], 'server-enc-1');
+    },
+  );
 
   test('loads started together wait for one hydration', () async {
     // Both copies present, as left by a build without the dedupe.
-    await saveLocal(localVisit());
+    await saveLocal(localVisit(uploaded: true));
     await app.db.insert(MemberAssessmentHistoryDao.tableName, {
       'member_fhir_id': 'member-fhir-1',
       'visit_date': '2026-11-20T09:30:15.000Z',
@@ -707,32 +770,185 @@ void main() {
     expect(counts[1].ancCount, 1);
   });
 
-  test('a large pull costs about the same with visits saved on the device',
-      () async {
-    List<AssessmentHistoryItem> pull(String prefix) => [
-          for (var i = 0; i < 4000; i++)
-            AssessmentHistoryItem(
-              householdMemberId: 'member-${i % 400}',
-              encounterId: '$prefix-$i',
-              visitDate: DateTime.utc(2026, 11, 1).add(Duration(minutes: i)),
-              serviceProvided: 'ANC',
-            ),
-        ];
-    Future<int> timed(List<AssessmentHistoryItem> items) async {
-      final watch = Stopwatch()..start();
-      await writer.upsertFromHistoryItems(items);
-      return watch.elapsedMilliseconds;
-    }
+  test(
+    'a large pull costs about the same with visits saved on the device',
+    () async {
+      List<AssessmentHistoryItem> pull(String prefix) => [
+        for (var i = 0; i < 4000; i++)
+          AssessmentHistoryItem(
+            householdMemberId: 'member-${i % 400}',
+            encounterId: '$prefix-$i',
+            visitDate: DateTime.utc(2026, 11, 1).add(Duration(minutes: i)),
+            serviceProvided: 'ANC',
+          ),
+      ];
+      Future<int> timed(List<AssessmentHistoryItem> items) async {
+        final watch = Stopwatch()..start();
+        await writer.upsertFromHistoryItems(items);
+        return watch.elapsedMilliseconds;
+      }
 
-    final without = await timed(pull('a'));
-    await saveLocal(localVisit());
-    final withLocal = await timed(pull('b'));
+      final without = await timed(pull('a'));
+      await saveLocal(localVisit());
+      final withLocal = await timed(pull('b'));
 
-    // Each server row used to scan the whole table once a local visit
-    // existed, which made this several times slower and quadratic.
-    expect(withLocal, lessThan(without * 3 + 500));
-    expect(await mahRows(), hasLength(8001));
+      // Each server row used to scan the whole table once a local visit
+      // existed, which made this several times slower and quadratic.
+      expect(withLocal, lessThan(without * 3 + 500));
+      expect(await mahRows(), hasLength(8001));
+    },
+  );
+
+  group('the visit second is a hint, never proof (PR #776 review)', () {
+    List<Object?> ids(List<Map<String, Object?>> rows) =>
+        rows.map((r) => r['encounter_id']).toList();
+
+    test('sync: one server row does not remove two device visits saved in '
+        'the same second', () async {
+      await saveLocal(localVisit(uploaded: true));
+      await saveLocal(
+        localVisit(
+          id: 'la-2',
+          reference: 2,
+          clientVisitId: 'client-visit-2',
+          uploaded: true,
+        ),
+      );
+
+      await writer.upsertFromHistoryItems([serverVisit()]);
+
+      expect(
+        ids(await mahRows()),
+        unorderedEquals(['client-visit-1', 'client-visit-2', 'server-enc-1']),
+      );
+    });
+
+    test('save: a pending visit is written even when a server row shares '
+        'its second', () async {
+      await writer.upsertFromHistoryItems([serverVisit()]);
+      await saveLocal(
+        localVisit(id: 'la-2', reference: 2, clientVisitId: 'client-visit-2'),
+      );
+      await writer.rebuildFromLocalAssessments();
+
+      expect(
+        ids(await mahRows()),
+        unorderedEquals(['server-enc-1', 'client-visit-2']),
+      );
+      final counts = await SpiceDashboardDao(app).loadCounts();
+      expect(counts.ancCount, 2);
+    });
+
+    test('save: a visit whose own server row has not arrived is not matched '
+        'to another server visit in that second', () async {
+      await writer.upsertFromHistoryItems([serverVisit()]);
+      await saveLocal(
+        localVisit(
+          id: 'la-2',
+          reference: 2,
+          clientVisitId: 'client-visit-2',
+          fhirId: 'server-enc-9',
+        ),
+      );
+      await writer.rebuildFromLocalAssessments();
+
+      expect(
+        ids(await mahRows()),
+        unorderedEquals(['server-enc-1', 'client-visit-2']),
+      );
+    });
+
+    test('sync: a visit stamped with another server id is not removed by a '
+        'server row in its second', () async {
+      await saveLocal(localVisit(fhirId: 'server-enc-9'));
+      await writer.upsertFromHistoryItems([serverVisit()]);
+
+      expect(
+        ids(await mahRows()),
+        unorderedEquals(['client-visit-1', 'server-enc-1']),
+      );
+    });
+
+    test('save: two server visits in the second leave an unlinked device '
+        'visit alone', () async {
+      await writer.upsertFromHistoryItems([
+        serverVisit(encounterId: 'e1'),
+        serverVisit(encounterId: 'e2'),
+      ]);
+      await saveLocal(localVisit(uploaded: true));
+      await writer.rebuildFromLocalAssessments();
+
+      expect(
+        ids(await mahRows()),
+        unorderedEquals(['e1', 'e2', 'client-visit-1']),
+      );
+    });
+
+    test('sync: two server visits in the second leave an unlinked device '
+        'visit alone', () async {
+      await saveLocal(localVisit(uploaded: true));
+      await writer.upsertFromHistoryItems([
+        serverVisit(encounterId: 'e1'),
+        serverVisit(encounterId: 'e2'),
+      ]);
+
+      expect(
+        ids(await mahRows()),
+        unorderedEquals(['client-visit-1', 'e1', 'e2']),
+      );
+    });
+
+    test('a leftover device copy goes once the server id is stored', () async {
+      await saveLocal(localVisit(uploaded: true));
+      await saveLocal(
+        localVisit(
+          id: 'la-2',
+          reference: 2,
+          clientVisitId: 'client-visit-2',
+          uploaded: true,
+        ),
+      );
+      await writer.upsertFromHistoryItems([serverVisit()]);
+      expect(await mahRows(), hasLength(3));
+
+      await LocalAssessmentDao(app).applyFhirIdByReferenceId(1, 'server-enc-1');
+      await writer.upsertFromHistoryItems([serverVisit()]);
+
+      expect(
+        ids(await mahRows()),
+        unorderedEquals(['client-visit-2', 'server-enc-1']),
+      );
+    });
   });
+
+  test(
+    'a full pull keeps the SK stamp an earlier sync moved to the server row',
+    () async {
+      writer = MemberAssessmentHistoryWriter(
+        mah: MemberAssessmentHistoryDao(app),
+        members: MemberDao(app),
+        appDb: app,
+        currentUserFhirId: () async => 'sk-fhir-9',
+      );
+      AssessmentHistoryItem serverNcd() => AssessmentHistoryItem(
+        householdMemberId: 'member-fhir-1',
+        encounterId: 'server-enc-1',
+        visitDate: DateTime.utc(2026, 11, 20, 9, 30, 15),
+        serviceProvided: 'NCD',
+      );
+      await saveLocal(localVisit(type: 'NCD', fhirId: 'server-enc-1'));
+      await writer.upsertFromHistoryItems([serverNcd()]);
+      expect((await mahRows()).single['practitioner_id'], 'sk-fhir-9');
+
+      // Re-login: a full pull, the device copy is already gone.
+      await writer.upsertFromHistoryItems([serverNcd()], replaceAll: true);
+      await writer.rebuildFromLocalAssessments();
+
+      final row = (await mahRows()).single;
+      expect(row['encounter_id'], 'server-enc-1');
+      expect(row['practitioner_id'], 'sk-fhir-9');
+    },
+  );
 
   group('deleteDuplicateRecords', () {
     Future<void> row({
@@ -742,16 +958,15 @@ void main() {
       String service = 'anc',
       String encounterId = 'e',
       String? customStatus,
-    }) =>
-        app.db.insert(MemberAssessmentHistoryDao.tableName, {
-          'member_id': memberId,
-          'member_fhir_id': memberFhirId,
-          'visit_date': visitDate,
-          'service_provided': service,
-          'encounter_id': encounterId,
-          'custom_status': customStatus,
-          'latest_visit': 1,
-        });
+    }) => app.db.insert(MemberAssessmentHistoryDao.tableName, {
+      'member_id': memberId,
+      'member_fhir_id': memberFhirId,
+      'visit_date': visitDate,
+      'service_provided': service,
+      'encounter_id': encounterId,
+      'custom_status': customStatus,
+      'latest_visit': 1,
+    });
 
     test('a repeated encounter id + service becomes one row', () async {
       await row(encounterId: 'a');
