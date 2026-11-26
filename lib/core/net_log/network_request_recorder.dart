@@ -9,9 +9,31 @@ abstract interface class NetworkRequestRecorder {
   void record(NetworkLogEntry e);
 }
 
+/// A recorder the network log page can drain and reset: write out buffered
+/// entries, drop them on Clear, and report how many were lost.
+abstract interface class ManagedNetworkRequestRecorder
+    implements NetworkRequestRecorder {
+  Future<void> flush();
+
+  /// Drops buffered entries and bumps [epoch].
+  void clearBuffer();
+
+  /// Entries lost to overflow or a failed write since startup.
+  int get droppedCount;
+}
+
 /// Recorder that discards everything (tests, and before the DB is ready).
-class NoopNetworkRequestRecorder implements NetworkRequestRecorder {
+class NoopNetworkRequestRecorder implements ManagedNetworkRequestRecorder {
   const NoopNetworkRequestRecorder();
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  void clearBuffer() {}
+
+  @override
+  int get droppedCount => 0;
 
   @override
   int get epoch => 0;

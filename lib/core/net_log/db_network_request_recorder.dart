@@ -16,7 +16,7 @@ import 'network_request_recorder.dart';
 /// (app pause, page open). [epoch] changes on every wipe so entries and
 /// in-flight batches from before the wipe are never written.
 class DbNetworkRequestRecorder
-    implements NetworkRequestRecorder, WipeParticipant {
+    implements ManagedNetworkRequestRecorder, WipeParticipant {
   DbNetworkRequestRecorder(
     NetworkLogSink sink, {
     Duration flushDelay = const Duration(seconds: 3),
@@ -42,6 +42,7 @@ class DbNetworkRequestRecorder
   int get epoch => _epoch;
 
   /// Entries lost to overflow or a failed write since startup.
+  @override
   int get droppedCount => _dropped;
 
   @override
@@ -61,6 +62,7 @@ class DbNetworkRequestRecorder
 
   /// Writes everything buffered now. Only [DatabaseException] is absorbed
   /// (counted in [droppedCount]); other errors propagate to the caller.
+  @override
   Future<void> flush() async {
     _timer?.cancel();
     _timer = null;
@@ -76,6 +78,7 @@ class DbNetworkRequestRecorder
   }
 
   /// Drops buffered entries and invalidates in-flight batches and entries.
+  @override
   void clearBuffer() {
     _buffer.clear();
     _timer?.cancel();

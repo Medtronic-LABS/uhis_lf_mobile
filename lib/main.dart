@@ -192,7 +192,7 @@ class UhisNextApp extends StatefulWidget {
   final AuthState authState;
   final BiometricService biometric;
   final AppDatabase appDb;
-  final DbNetworkRequestRecorder networkRecorder;
+  final ManagedNetworkRequestRecorder networkRecorder;
   final AppVersionService appVersionService;
 
   @override
@@ -635,6 +635,9 @@ class _UhisNextAppState extends State<UhisNextApp>
       providers: [
         Provider<ApiClient>.value(value: widget.api),
         Provider<NetworkRequestRecorder>.value(value: widget.networkRecorder),
+        Provider<ManagedNetworkRequestRecorder>.value(
+          value: widget.networkRecorder,
+        ),
         Provider<AppVersionService>.value(value: widget.appVersionService),
         Provider<AppVersionEnforcer>.value(value: _appVersionEnforcer),
         Provider<AuthRepository>.value(value: widget.authRepo),
