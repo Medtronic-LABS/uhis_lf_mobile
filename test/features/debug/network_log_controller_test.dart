@@ -162,13 +162,14 @@ void main() {
     c.dispose();
   });
 
-  test('loadMore reads the next page without a native pull', () async {
+  test('loadMore appends the next page with unique rows', () async {
     await dao.insertBatch([for (var i = 1; i <= 250; i++) _e(i, 'core')]);
     final c = NetworkLogController(repo);
     await c.load();
     await c.loadMore();
     final ids = c.rows.map((r) => r.startedAtMs).toSet();
     expect(ids.length, 250);
+    expect(c.rows, hasLength(250));
     c.dispose();
   });
 

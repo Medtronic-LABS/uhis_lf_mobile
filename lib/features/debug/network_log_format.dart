@@ -18,6 +18,26 @@ abstract final class NetworkLogFormat {
   static String status(NetworkLogEntry e) =>
       e.statusCode?.toString() ?? e.errorType ?? unknownStatus;
 
+  /// Shown instead of an endpoint value that cannot be parsed as a URI.
+  static const String unparsable = '<unparsable>';
+
+  /// A configured endpoint for display: scheme, host, port and path only.
+  /// Userinfo, query and fragment never reach the screen.
+  static String endpointUrl(String raw) {
+    final Uri u;
+    try {
+      u = Uri.parse(raw);
+    } on FormatException {
+      return unparsable;
+    }
+    return Uri(
+      scheme: u.scheme,
+      host: u.host.isEmpty ? null : u.host,
+      port: u.hasPort ? u.port : null,
+      path: u.path,
+    ).toString();
+  }
+
   static String duration(NetworkLogEntry e) => '${e.durationMs ?? 0}';
 
   /// `time method status duration url`, the plain-text Copy format.

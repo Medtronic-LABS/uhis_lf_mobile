@@ -54,7 +54,22 @@ class NetworkLogEntry {
     'timing': _timings.contains(timing) ? timing : 'total',
     'error_type': errorType == null
         ? null
-        : _token(errorType!, RegExp(r'^[A-Za-z]{1,32}$'), 'unknown'),
+        : (allowedErrorTypes.contains(errorType) ? errorType : 'unknown'),
+  };
+
+  /// The only error types ever persisted: the Dio exception names, the
+  /// realtime WebSocket output and the SDK vocabulary. Anything else (for
+  /// example a raw exception class name) is stored as `unknown`.
+  static const Set<String> allowedErrorTypes = {
+    'connectionTimeout',
+    'sendTimeout',
+    'receiveTimeout',
+    'badCertificate',
+    'badResponse',
+    'cancel',
+    'connectionError',
+    'wsError',
+    'unknown',
   };
 
   static const Set<String> _timings = {'total', 'headers', 'handshake'};

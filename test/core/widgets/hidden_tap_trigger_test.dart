@@ -40,6 +40,12 @@ void main() {
     fired = 0;
   });
 
+  testWidgets('taps: 1 fires on every tap', (tester) async {
+    await pump(tester, taps: 1);
+    await tapN(tester, 3, gap: const Duration(milliseconds: 100));
+    expect(fired, 3);
+  });
+
   testWidgets('9 taps do not fire', (tester) async {
     await pump(tester);
     await tapN(tester, 9, gap: const Duration(milliseconds: 100));

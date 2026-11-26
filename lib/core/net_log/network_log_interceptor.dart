@@ -58,24 +58,39 @@ class NetworkLogInterceptor extends Interceptor {
 
   @override
   void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
-    _record(
-      response.requestOptions,
-      statusCode: response.statusCode,
-      finalUri: response.redirects.isEmpty ? null : response.realUri,
+    _guarded(
+      () => _record(
+        response.requestOptions,
+        statusCode: response.statusCode,
+        finalUri: response.redirects.isEmpty ? null : response.realUri,
+      ),
     );
     handler.next(response);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    final badResponse =
-        err.type == DioExceptionType.badResponse && err.response != null;
-    _record(
-      err.requestOptions,
-      statusCode: err.response?.statusCode,
-      errorType: badResponse ? null : err.type.name,
-    );
+    _guarded(() {
+      final badResponse =
+          err.type == DioExceptionType.badResponse && err.response != null;
+      _record(
+        err.requestOptions,
+        statusCode: err.response?.statusCode,
+        errorType: badResponse ? null : err.type.name,
+      );
+    });
     handler.next(err);
+  }
+
+  /// Runs [body], which reads the response and records it, so that nothing
+  /// it touches (getters included) can fail or delay the response.
+  void _guarded(void Function() body) {
+    try {
+      body();
+    } on Object catch (e) {
+      // R23: deliberately broad, a non-critical side effect must not fail a response.
+      ConsoleLog.warn('[NetworkLog] record failed: ${e.runtimeType}');
+    }
   }
 
   void _record(
@@ -84,28 +99,24 @@ class NetworkLogInterceptor extends Interceptor {
     Uri? finalUri,
     String? errorType,
   }) {
-    try {
-      final start = options.extra[startKey];
-      if (start is! _Start) return;
-      final url = UrlSanitizer.sanitize(options.uri.toString());
-      _recorder.record(NetworkLogEntry(
-        startedAtMs: start.startedAtMs,
-        source: 'dart',
-        service: _classifier.classify(url),
-        method: options.method,
-        url: url,
-        finalUrl:
-            finalUri == null ? null : UrlSanitizer.sanitize(finalUri.toString()),
-        statusCode: statusCode,
-        durationMs: start.stopwatch.elapsedMilliseconds,
-        timing: options.responseType == ResponseType.stream ? 'headers' : 'total',
-        attempt: (options.extra[kAttemptKey] as int?) ?? 1,
-        errorType: errorType,
-        epoch: start.epoch,
-      ));
-    } on Object catch (e) {
-      ConsoleLog.warn('[NetworkLog] record failed: ${e.runtimeType}');
-    }
+    final start = options.extra[startKey];
+    if (start is! _Start) return;
+    final url = UrlSanitizer.sanitize(options.uri.toString());
+    _recorder.record(NetworkLogEntry(
+      startedAtMs: start.startedAtMs,
+      source: 'dart',
+      service: _classifier.classify(url),
+      method: options.method,
+      url: url,
+      finalUrl:
+          finalUri == null ? null : UrlSanitizer.sanitize(finalUri.toString()),
+      statusCode: statusCode,
+      durationMs: start.stopwatch.elapsedMilliseconds,
+      timing: options.responseType == ResponseType.stream ? 'headers' : 'total',
+      attempt: (options.extra[kAttemptKey] as int?) ?? 1,
+      errorType: errorType,
+      epoch: start.epoch,
+    ));
   }
 }
 

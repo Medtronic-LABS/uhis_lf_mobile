@@ -6,6 +6,7 @@
 library;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
@@ -19,8 +20,8 @@ import 'assistant_models.dart';
 class AssistantRepository {
   const AssistantRepository(
     this._client, {
-    HttpClientAdapter? httpAdapter,
-    String? coachingBaseUrl,
+    @visibleForTesting HttpClientAdapter? httpAdapter,
+    @visibleForTesting String? coachingBaseUrl,
   })  : _httpAdapter = httpAdapter,
         _coachingBaseUrl = coachingBaseUrl;
 

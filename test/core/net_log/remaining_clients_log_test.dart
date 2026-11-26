@@ -45,7 +45,6 @@ void main() {
     expect(rec.entries, hasLength(1));
     final e = rec.entries.single;
     expect(e.statusCode, status);
-    expect(e.url, isNot(contains('token=abc')));
   }
 
   test('FrappeClient with an injected Dio records one row', () async {
@@ -59,6 +58,7 @@ void main() {
     await _ignoreOutcome(client.postJson('/api/method/x?token=abc', {}));
 
     expectOneSanitisedRow();
+    expect(rec.entries.single.url, isNot(contains('token=abc')));
   });
 
   test('CallLogSyncClient with an injected Dio records one row', () async {

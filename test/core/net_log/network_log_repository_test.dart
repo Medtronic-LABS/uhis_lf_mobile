@@ -184,8 +184,10 @@ void main() {
       });
       final r = repo(src);
       await r.load();
+      expect(src.afterIds, [0]);
+      src.afterIds.clear();
       await r.load();
-      expect(src.afterIds, [0, 7]);
+      expect(src.afterIds.first, 7);
       expect((await dao.nativeState()).cursor, 7);
     });
 

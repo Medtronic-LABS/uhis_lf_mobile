@@ -37,6 +37,9 @@ class _FakeRepo implements NetworkLogRepository {
   final int dropped;
   int clears = 0;
 
+  /// Makes [copyRows] and [clear] throw, like a failing database.
+  bool failing = false;
+
   List<NetworkLogEntry> _filtered(String? s) =>
       (s == null ? all : all.where((e) => e.service == s).toList())
         ..sort((a, b) => b.startedAtMs.compareTo(a.startedAtMs));
@@ -58,11 +61,14 @@ class _FakeRepo implements NetworkLogRepository {
   }
 
   @override
-  Future<List<NetworkLogEntry>> copyRows({String? service}) async =>
-      _filtered(service).take(200).toList();
+  Future<List<NetworkLogEntry>> copyRows({String? service}) async {
+    if (failing) throw Exception('copy failed');
+    return _filtered(service).take(200).toList();
+  }
 
   @override
   Future<void> clear() async {
+    if (failing) throw Exception('clear failed');
     clears++;
     all = [];
   }
@@ -78,6 +84,11 @@ const _endpoints = [
     service: 'admin-api',
     url: 'https://gw.example.test/admin-api',
     rule: 'API_BASE_URL + /admin-api',
+  ),
+  ConfiguredEndpoint(
+    service: 'secret-api',
+    url: 'https://user:pw@api.example.test:8443/x?token=abc#f',
+    rule: 'SECRET_URL',
   ),
 ];
 
@@ -103,6 +114,46 @@ void main() {
     expect(find.text('admin-api'), findsWidgets);
     expect(find.text('https://gw.example.test/admin-api'), findsOneWidget);
     expect(find.text('API_BASE_URL + /admin-api'), findsOneWidget);
+  });
+
+  testWidgets('endpoint rows never show userinfo, query or fragment', (
+    tester,
+  ) async {
+    await _pump(tester, _FakeRepo([_e(1, 'core')]));
+    expect(find.text('https://api.example.test:8443/x'), findsOneWidget);
+    expect(find.textContaining('pw'), findsNothing);
+    expect(find.textContaining('token'), findsNothing);
+  });
+
+  testWidgets('duration comes from the localized string', (tester) async {
+    await _pump(tester, _FakeRepo([_e(1, 'core')]));
+    expect(find.text(NetworkLogStrings.durationMs(12)), findsOneWidget);
+  });
+
+  testWidgets('a failing copy keeps the page usable and says so', (
+    tester,
+  ) async {
+    final repo = _FakeRepo([_e(1, 'core')])..failing = true;
+    await _pump(tester, repo);
+    await tester.tap(find.byTooltip(NetworkLogStrings.copy));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(NetworkLogStrings.actionFailed), findsOneWidget);
+    expect(find.textContaining('example.test/core/r1'), findsOneWidget);
+  });
+
+  testWidgets('a failing clear keeps the page usable and says so', (
+    tester,
+  ) async {
+    final repo = _FakeRepo([_e(1, 'core')])..failing = true;
+    await _pump(tester, repo);
+    await tester.tap(find.byTooltip(NetworkLogStrings.clear));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(NetworkLogStrings.clearConfirm));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(NetworkLogStrings.actionFailed), findsOneWidget);
+    expect(find.textContaining('example.test/core/r1'), findsOneWidget);
   });
 
   testWidgets('chips show counts and filter the list', (tester) async {

@@ -259,7 +259,7 @@ class ScribeJobResult {
 /// hit the service directly.
 class ScribeApiService extends ApiRepository {
   /// [httpAdapter] replaces the real transport (tests only).
-  ScribeApiService(super.api, {HttpClientAdapter? httpAdapter}) {
+  ScribeApiService(super.api, {@visibleForTesting HttpClientAdapter? httpAdapter}) {
     _dio = Dio(BaseOptions(
       baseUrl: _effectiveBaseUrl(),
       connectTimeout: const Duration(seconds: 60),

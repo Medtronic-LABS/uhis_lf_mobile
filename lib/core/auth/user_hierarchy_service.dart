@@ -307,8 +307,8 @@ class UserHierarchyService extends ChangeNotifier {
     this._auth, {
     HealthFacilityDao? healthFacilities,
     SsLinkedVillageDao? ssLinkedVillages,
-    HttpClientAdapter? httpAdapter,
-    String? shukheeBaseUrl,
+    @visibleForTesting HttpClientAdapter? httpAdapter,
+    @visibleForTesting String? shukheeBaseUrl,
   })  : _healthFacilities = healthFacilities,
         _ssLinkedVillages = ssLinkedVillages,
         _httpAdapter = httpAdapter,

@@ -2367,6 +2367,14 @@
     "bn": "নেটিভ",
     "en": "native"
   },
+  "NetworkLog.durationMs": {
+    "bn": "{n} মি.সে.",
+    "en": "{n} ms"
+  },
+  "NetworkLog.actionFailed": {
+    "bn": "কাজটি সম্পন্ন করা যায়নি।",
+    "en": "That action could not be completed."
+  },
   "NetworkError.requestCancelled": {
     "bn": "অনুরোধ বাতিল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।",
     "en": "Request was cancelled. Please try again."

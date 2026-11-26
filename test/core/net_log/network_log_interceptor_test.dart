@@ -152,7 +152,9 @@ void main() {
     expect(rec.entries, hasLength(1));
   });
 
-  test('never records headers, body or response data', () async {
+  // Checks leakage into the RECORDED fields only; the structural guarantee is
+  // that NetworkLogEntry has no header or body fields at all.
+  test('recorded fields never contain headers, body or response data', () async {
     final rec = _FakeRecorder();
     final (api, _) = await _client(rec);
 
@@ -227,4 +229,32 @@ void main() {
     expect(res.statusCode, 200);
     expect(rec.entries, isEmpty);
   });
+
+  test('a response whose getters throw does not fail the response', () async {
+    final rec = _FakeRecorder();
+    final (api, _) = await _client(rec);
+    final interceptor = api.dio.interceptors
+        .whereType<NetworkLogInterceptor>()
+        .single;
+    final handler = _CountingHandler();
+
+    interceptor.onResponse(_FaultyResponse(), handler);
+
+    expect(handler.nexts, 1);
+    expect(rec.entries, isEmpty);
+  });
+}
+
+class _FaultyResponse extends Response<dynamic> {
+  _FaultyResponse() : super(requestOptions: RequestOptions(path: '/x'));
+
+  @override
+  RequestOptions get requestOptions => throw StateError('faulty');
+}
+
+class _CountingHandler extends ResponseInterceptorHandler {
+  int nexts = 0;
+
+  @override
+  void next(Response<dynamic> response) => nexts++;
 }

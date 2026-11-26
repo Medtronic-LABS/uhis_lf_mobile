@@ -7556,4 +7556,8 @@ abstract final class NetworkLogStrings {
       getTranslatedString('NetworkLog.tagHandshake', 'handshake');
   static String get tagNative =>
       getTranslatedString('NetworkLog.tagNative', 'native');
+  static String durationMs(int n) => getTranslatedString(
+      'NetworkLog.durationMs', '{n} ms', params: {'n': '$n'});
+  static String get actionFailed =>
+      getTranslatedString('NetworkLog.actionFailed', 'That action could not be completed.');
 }

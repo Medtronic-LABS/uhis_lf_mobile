@@ -205,6 +205,36 @@ void main() {
       expect(state.floorMs, greaterThanOrEqualTo(before));
     });
 
+    test('error_type keeps only allowlisted names', () async {
+      final (db, dao) = await open();
+      addTearDown(db.close);
+      NetworkLogEntry withType(int t, String type) => NetworkLogEntry(
+        startedAtMs: t,
+        source: 'dart',
+        service: 'core',
+        method: 'GET',
+        url: 'https://example.test/a',
+        errorType: type,
+      );
+      await dao.insertBatch([
+        withType(1, 'connectionTimeout'),
+        withType(2, 'wsError'),
+        withType(3, 'SocketException'),
+        withType(4, 'HttpRequestFailed'),
+      ]);
+
+      final rows = await db.db.query(
+        AppDatabase.tableNetworkLog,
+        orderBy: 'started_at_ms',
+      );
+      expect(rows.map((r) => r['error_type']), [
+        'connectionTimeout',
+        'wsError',
+        'unknown',
+        'unknown',
+      ]);
+    });
+
     test('write path sanitises urls and normalises text fields', () async {
       final (db, dao) = await open();
       addTearDown(db.close);

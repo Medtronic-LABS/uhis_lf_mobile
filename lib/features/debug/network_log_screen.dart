@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/net_log/native_network_event_source.dart';
 import '../../core/net_log/network_log_entry.dart';
 import '../../core/net_log/network_log_repository.dart';
@@ -49,7 +50,13 @@ class _NetworkLogScreenState extends State<NetworkLogScreen> {
   }
 
   Future<void> _copy() async {
-    final rows = await _controller.rowsForCopy();
+    final List<NetworkLogEntry> rows;
+    try {
+      rows = await _controller.rowsForCopy();
+    } on Exception catch (e) {
+      _reportFailure('copy', e);
+      return;
+    }
     await Clipboard.setData(
       ClipboardData(text: rows.map(NetworkLogFormat.line).join('\n')),
     );
@@ -77,7 +84,21 @@ class _NetworkLogScreenState extends State<NetworkLogScreen> {
         ],
       ),
     );
-    if (ok == true) await _controller.clear();
+    if (ok != true) return;
+    try {
+      await _controller.clear();
+    } on Exception catch (e) {
+      _reportFailure('clear', e);
+    }
+  }
+
+  /// Logs the type only and tells the user; the page stays usable.
+  void _reportFailure(String action, Exception e) {
+    ConsoleLog.warn('[NetworkLog] $action failed: ${e.runtimeType}');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(NetworkLogStrings.actionFailed)),
+    );
   }
 
   @override
@@ -219,7 +240,7 @@ class _EndpointRow extends StatelessWidget {
           endpoint.service,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-        Text(endpoint.url, style: const TextStyle(fontSize: 13)),
+        Text(NetworkLogFormat.endpointUrl(endpoint.url), style: const TextStyle(fontSize: 13)),
         Text(
           endpoint.rule,
           style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
@@ -287,7 +308,7 @@ class _LogRow extends StatelessWidget {
                 NetworkLogFormat.status(e),
                 color: NetworkLogFormat.statusColor(e),
               ),
-              Text('${NetworkLogFormat.duration(e)} ms'),
+              Text(NetworkLogStrings.durationMs(e.durationMs ?? 0)),
               if (e.timing == 'headers') _Tag(NetworkLogStrings.tagHeaders),
               if (e.timing == 'handshake') _Tag(NetworkLogStrings.tagHandshake),
               if (e.source == 'native') _Tag(NetworkLogStrings.tagNative),

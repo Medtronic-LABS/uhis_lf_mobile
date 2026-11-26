@@ -15,12 +15,13 @@ class HiddenTapTrigger extends StatefulWidget {
     required this.onTriggered,
     required this.child,
     @visibleForTesting this.clock,
-  });
+  }) : assert(taps > 0);
 
   final int taps;
   final Duration window;
   final VoidCallback onTriggered;
   final Widget child;
+  /// Test seam: replaces [DateTime.now] so tests control the tap timing.
   final DateTime Function()? clock;
 
   @override
