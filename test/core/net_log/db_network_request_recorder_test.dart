@@ -182,6 +182,50 @@ void main() {
     expect(sink.guards.single!(), isFalse);
     sink.gate!.complete();
     await f;
+    expect(rec.droppedCount, 0);
+  });
+
+  test(
+    'entries recorded during an in-flight flush are written exactly once',
+    () async {
+      sink.gate = Completer<void>();
+      rec.record(_e(at: 1));
+      final first = rec.flush();
+      rec.record(_e(at: 2));
+      sink.gate!.complete();
+      await first;
+      await rec.flush();
+      expect(sink.batches.map((b) => b.map((e) => e.startedAtMs).toList()), [
+        [1],
+        [2],
+      ]);
+      expect(rec.droppedCount, 0);
+    },
+  );
+
+  test('a DatabaseException after a wipe is not counted as dropped', () async {
+    sink.gate = Completer<void>();
+    sink.error = _DbEx();
+    rec.record(_e());
+    final f = rec.flush();
+    rec.clearBuffer();
+    sink.gate!.complete();
+    await f;
+    expect(rec.droppedCount, 0);
+  });
+
+  test('a manual flush cancels the armed timer', () async {
+    rec.record(_e());
+    await rec.flush();
+    expect(timers.single.cancelled, isTrue);
+  });
+
+  test('an urgent flush cancels the armed timer', () async {
+    rec.record(_e());
+    rec.record(_e(status: 500, at: 2));
+    await Future<void>.delayed(Duration.zero);
+    expect(sink.batches, hasLength(1));
+    expect(timers.single.cancelled, isTrue);
   });
 
   test('onWipeStarting behaves like clearBuffer', () async {

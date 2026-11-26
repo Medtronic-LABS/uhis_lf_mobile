@@ -71,7 +71,7 @@ class DbNetworkRequestRecorder
     try {
       await _sink.insertBatch(batch, isCurrent: () => captured == _epoch);
     } on DatabaseException {
-      _dropped += batch.length;
+      if (captured == _epoch) _dropped += batch.length;
     }
   }
 
