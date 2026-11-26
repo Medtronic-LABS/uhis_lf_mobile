@@ -9,6 +9,7 @@ import 'local_mah_observations.dart';
 import 'member_assessment_history_dao.dart';
 import 'member_dao.dart';
 import 'pregnancy_detail_rebuilder.dart';
+import 'sync_meta_dao.dart';
 
 /// Writes [MemberAssessmentHistoryRow] on sync ingest and local visit save.
 class MemberAssessmentHistoryWriter {
@@ -18,11 +19,13 @@ class MemberAssessmentHistoryWriter {
     required AppDatabase appDb,
     PregnancyMahProjection? pregnancyProjection,
     Future<String?> Function()? currentUserFhirId,
+    SyncMetaDao? syncMeta,
   })  : _mah = mah,
         _members = members,
         _appDb = appDb,
         _pregnancyProjection = pregnancyProjection,
-        _currentUserFhirId = currentUserFhirId;
+        _currentUserFhirId = currentUserFhirId,
+        _syncMeta = syncMeta;
 
   final MemberAssessmentHistoryDao _mah;
   final MemberDao _members;
@@ -38,14 +41,33 @@ class MemberAssessmentHistoryWriter {
     return id == null || id.isEmpty ? null : id;
   }
 
-  /// Clears MAH before a full assessment-history pull (Spice initial sync parity).
-  Future<void> clearAllForFullSync() => _mah.deleteAll();
-
   /// Bump when the way a synced visit is parsed into a history row changes
   /// (for example a `customStatus` fix). Rows already on the device are then
   /// re-written once from the cached history; see
-  /// `SkSpiceDashboardRepository.load`.
+  /// `SkSpiceDashboardRepository.hydrateMah`.
   static const int normalizeVersion = 1;
+
+  /// Remembers which [normalizeVersion] the rows on this device were written
+  /// with. Without it they are never re-written.
+  final SyncMetaDao? _syncMeta;
+
+  static const String _normalizeMetaEntity = 'mah_normalize';
+
+  /// True when rows on this device were written by older parse rules.
+  Future<bool> needsNormalize() async {
+    final meta = _syncMeta;
+    if (meta == null) return false;
+    final row = await meta.read(_normalizeMetaEntity);
+    return row?.cursor != normalizeVersion;
+  }
+
+  /// Records that every row now on the device follows the current rules.
+  Future<void> markNormalized() async {
+    await _syncMeta?.upsert(const SyncMetaRow(
+      entity: _normalizeMetaEntity,
+      cursor: normalizeVersion,
+    ));
+  }
 
   /// Rebuild MAH from the synced [assessments] cache (same source Spice persists after sync).
   ///
@@ -75,17 +97,15 @@ class MemberAssessmentHistoryWriter {
   Future<int> rebuildFromLocalAssessments() async {
     const table = AppDatabase.tableLocalAssessments;
     final rows = await _appDb.db.query(table);
-    // Read once for the whole pass, not once per assessment.
-    final servers =
-        await _mah.loadServerVisitIndex(DeviceVisitIds.fromRows(rows));
+    final visits = <DeviceVisit>[];
     for (final row in rows) {
-      await _upsertFromLocal(
+      final local = await _deviceVisitFor(
         LocalAssessmentEntity.fromDb(row),
-        projectPregnancy: false,
         practitionerId: null,
-        servers: servers,
       );
+      if (local != null) visits.add(local.visit);
     }
+    await _mah.mergeDeviceVisits(visits);
     return rows.length;
   }
 
@@ -96,7 +116,13 @@ class MemberAssessmentHistoryWriter {
       // repository reads visit history the same way.
       AssessmentHistoryItem.fromAssessmentRow(row);
 
-  Future<void> upsertFromHistoryItems(List<AssessmentHistoryItem> items) async {
+  /// [replaceAll]: a full history pull. Rows the server no longer returns are
+  /// removed in the same transaction that writes [items]; visits saved on
+  /// this device and not yet replaced by a server row are kept.
+  Future<void> upsertFromHistoryItems(
+    List<AssessmentHistoryItem> items, {
+    bool replaceAll = false,
+  }) async {
     if (items.isEmpty) return;
     final memberIds = items.map((i) => i.householdMemberId).toSet().toList();
     final memberToLocal = await _resolveLocalMemberIds(memberIds);
@@ -113,32 +139,49 @@ class MemberAssessmentHistoryWriter {
       );
       if (row != null) rows.add(row);
     }
-    await _mah.upsertMany(rows, fromServer: true);
+    await _mah.upsertMany(
+      rows,
+      fromServer: true,
+      replaceServerRows: replaceAll,
+    );
+    // Every row was just written by the current parse rules.
+    if (replaceAll) await markNormalized();
   }
 
   Future<void> upsertFromLocal(
     LocalAssessmentEntity entity, {
     bool projectPregnancy = true,
   }) async {
-    final localMemberId = entity.householdMemberLocalId;
-    final servers = await _mah.loadServerVisitIndex(
-      await DeviceVisitIds.load(_appDb.db),
-      memberId: localMemberId > 0 ? localMemberId : null,
-      memberFhirId: entity.memberId,
-    );
-    await _upsertFromLocal(
+    final local = await _deviceVisitFor(
       entity,
-      projectPregnancy: projectPregnancy,
       practitionerId: await _practitionerId(),
-      servers: servers,
     );
+    if (local == null) return;
+    await _mah.mergeDeviceVisits(
+      [local.visit],
+      memberId: local.visit.row.memberId,
+      memberFhirId: local.visit.row.memberFhirId,
+    );
+    final service = local.visit.row.serviceProvided;
+    if (projectPregnancy &&
+        local.localMemberId > 0 &&
+        service != null &&
+        PregnancyDetailRebuilder.isMotherServiceProvided(service)) {
+      await _pregnancyProjection
+          ?.rebuildMembersAndProject([local.localMemberId]);
+    }
   }
 
-  Future<void> _upsertFromLocal(
+  /// A local assessment as the history row the dashboard counts, or null when
+  /// it carries no visit id. [practitionerId] null keeps the stored stamp.
+  ///
+  /// Once uploaded, the server's copy of the visit (pulled from
+  /// member-assessment-history under its own encounter id) is the one the
+  /// dashboard counts. `mergeDeviceVisits` drops this device copy then:
+  /// keeping both counted every synced visit twice (LEAP-128).
+  Future<({DeviceVisit visit, int localMemberId})?> _deviceVisitFor(
     LocalAssessmentEntity entity, {
-    required bool projectPregnancy,
     required String? practitionerId,
-    required ServerVisitIndex servers,
   }) async {
     var localMemberId = entity.householdMemberLocalId;
     if (localMemberId <= 0) {
@@ -148,7 +191,7 @@ class MemberAssessmentHistoryWriter {
       localMemberId = int.tryParse(m?.id ?? '') ?? 0;
     }
     final encounterId = _encounterIdFromOtherDetails(entity.otherDetails);
-    if (encounterId == null || encounterId.isEmpty) return;
+    if (encounterId == null || encounterId.isEmpty) return null;
 
     Map<String, dynamic> details = {};
     try {
@@ -160,68 +203,29 @@ class MemberAssessmentHistoryWriter {
       details: details,
     );
     final visitAt = entity.createdAt ?? entity.updatedAt ?? DateTime.now();
-    final visitDate = visitAt.toUtc().toIso8601String();
-    final serviceProvided = wireServiceProvided(entity.assessmentType);
-    final memberId = localMemberId > 0 ? localMemberId : null;
-
-    // Once uploaded, the server's copy of this visit (pulled from
-    // member-assessment-history under its own encounter id) is the one the
-    // dashboard counts. Keeping this device copy too counted every synced
-    // visit twice (LEAP-128).
-    final serverEncounterId = JsonRead.idOrNull(entity.fhirId);
-    final serverCopy = servers.serverCopyOf(
-      deviceEncounterId: encounterId,
-      serverEncounterId: serverEncounterId,
-      service: serviceProvided,
-      visitDate: visitDate,
-      memberId: memberId,
+    final row = MemberAssessmentHistoryRow(
+      memberId: localMemberId > 0 ? localMemberId : null,
       memberFhirId: entity.memberId,
+      visitDate: visitAt.toUtc().toIso8601String(),
+      serviceProvided: wireServiceProvided(entity.assessmentType),
+      encounterId: encounterId,
+      customStatus: entity.customStatus,
+      latestVisit: true,
+      referralStatus: entity.isReferred
+          ? (entity.referralStatus?.trim().isNotEmpty == true
+              ? entity.referralStatus
+              : 'Referred')
+          : entity.referralStatus,
+      referralReason: entity.referredReasons,
+      practitionerId: practitionerId,
+      observationsJson:
+          observations.isNotEmpty ? jsonEncode(observations) : null,
+      shasthyaShebikaId: null,
     );
-    if (serverCopy != null) {
-      await _mah.replaceDeviceCopy(
-        deviceEncounterId: encounterId,
-        serverEncounterId: serverCopy,
-        service: serviceProvided,
-      );
-      if (projectPregnancy &&
-          localMemberId > 0 &&
-          PregnancyDetailRebuilder.isMotherServiceProvided(serviceProvided)) {
-        await _pregnancyProjection?.rebuildMembersAndProject([localMemberId]);
-      }
-      return;
-    }
-
-    // No stamp given (a rebuild): keep the one written when the visit was saved.
-    final stampedPractitionerId = practitionerId ??
-        await _mah.practitionerIdFor(encounterId, serviceProvided);
-
-    await _mah.upsertMany([
-      MemberAssessmentHistoryRow(
-        memberId: memberId,
-        memberFhirId: entity.memberId,
-        visitDate: visitDate,
-        serviceProvided: serviceProvided,
-        encounterId: encounterId,
-        customStatus: entity.customStatus,
-        latestVisit: true,
-        referralStatus: entity.isReferred
-            ? (entity.referralStatus?.trim().isNotEmpty == true
-                ? entity.referralStatus
-                : 'Referred')
-            : entity.referralStatus,
-        referralReason: entity.referredReasons,
-        practitionerId: stampedPractitionerId,
-        observationsJson:
-            observations.isNotEmpty ? jsonEncode(observations) : null,
-        shasthyaShebikaId: null,
-      ),
-    ]);
-
-    if (projectPregnancy &&
-        localMemberId > 0 &&
-        PregnancyDetailRebuilder.isMotherServiceProvided(serviceProvided)) {
-      await _pregnancyProjection?.rebuildMembersAndProject([localMemberId]);
-    }
+    return (
+      visit: (row: row, serverEncounterId: JsonRead.idOrNull(entity.fhirId)),
+      localMemberId: localMemberId,
+    );
   }
 
   Future<Map<String, int?>> _resolveLocalMemberIds(List<String> keys) async {
@@ -306,6 +310,9 @@ class MemberAssessmentHistoryWriter {
       case 'PW_PROFILE':
         return 'pwprofile';
       case 'FAMILY_PLANNING':
+      // The server's spelling: without this its row never matches the
+      // device copy and the visit is counted twice.
+      case 'FAMILYPLANNING':
         return 'family_planning';
       case 'EYE_CARE':
         return 'eye_care';

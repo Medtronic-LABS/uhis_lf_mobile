@@ -46,6 +46,7 @@ void main() {
       mah: MemberAssessmentHistoryDao(app),
       members: MemberDao(app),
       appDb: app,
+      syncMeta: SyncMetaDao(app),
     );
   });
 
@@ -108,7 +109,6 @@ void main() {
       mahWriter: writer,
       pregnancyDetail: PregnancyDetailDao(app, mah, MemberDao(app)),
       auth: _FakeAuth(),
-      syncMeta: SyncMetaDao(app),
     );
   }
 
@@ -552,6 +552,186 @@ void main() {
       expect(row['encounter_id'], 'server-enc-1');
       expect(row['practitioner_id'], 'sk-fhir-9');
     });
+  });
+
+  group('practitioner on the server row survives later writes', () {
+    setUp(() {
+      writer = MemberAssessmentHistoryWriter(
+        mah: MemberAssessmentHistoryDao(app),
+        members: MemberDao(app),
+        appDb: app,
+        currentUserFhirId: () async => 'sk-fhir-9',
+      );
+    });
+
+    AssessmentHistoryItem serverNcd() => AssessmentHistoryItem(
+          householdMemberId: 'member-fhir-1',
+          encounterId: 'server-enc-1',
+          visitDate: DateTime.utc(2026, 11, 20, 9, 30, 15),
+          serviceProvided: 'NCD',
+        );
+
+    test('the same encounter pulled again keeps the stamp', () async {
+      await saveLocal(localVisit(type: 'NCD'));
+      await writer.upsertFromHistoryItems([serverNcd()]);
+      await writer.upsertFromHistoryItems([serverNcd()]);
+
+      expect((await mahRows()).single['practitioner_id'], 'sk-fhir-9');
+    });
+  });
+
+  group('full history pull (replaceAll)', () {
+    test('removes rows the server no longer returns, in one step', () async {
+      await writer.upsertFromHistoryItems([
+        serverVisit(encounterId: 'gone'),
+        serverVisit(encounterId: 'stays', at: visitAt.add(const Duration(hours: 1))),
+      ]);
+
+      await writer.upsertFromHistoryItems(
+        [serverVisit(encounterId: 'stays', at: visitAt.add(const Duration(hours: 1)))],
+        replaceAll: true,
+      );
+
+      expect((await mahRows()).single['encounter_id'], 'stays');
+    });
+
+    test('keeps a visit not yet uploaded, with its practitioner', () async {
+      writer = MemberAssessmentHistoryWriter(
+        mah: MemberAssessmentHistoryDao(app),
+        members: MemberDao(app),
+        appDb: app,
+        currentUserFhirId: () async => 'sk-fhir-9',
+      );
+      await saveLocal(localVisit(type: 'NCD'));
+
+      await writer.upsertFromHistoryItems(
+        [serverVisit(encounterId: 'other', at: visitAt.add(const Duration(hours: 1)))],
+        replaceAll: true,
+      );
+      await writer.rebuildFromLocalAssessments();
+
+      final rows = await mahRows();
+      expect(rows.map((r) => r['encounter_id']),
+          unorderedEquals(['client-visit-1', 'other']));
+      expect(
+        rows.firstWhere((r) => r['encounter_id'] == 'client-visit-1')[
+            'practitioner_id'],
+        'sk-fhir-9',
+      );
+    });
+
+    test('replaces the device copy of a visit the pull returns', () async {
+      await saveLocal(localVisit());
+      await writer.upsertFromHistoryItems([serverVisit()], replaceAll: true);
+      await writer.rebuildFromLocalAssessments();
+
+      expect((await mahRows()).single['encounter_id'], 'server-enc-1');
+    });
+  });
+
+  test(
+      'a pending visit in the same second as a synced one is not removed '
+      'by the synced visit\'s server row', () async {
+    await saveLocal(localVisit(fhirId: 'server-enc-1'));
+    await saveLocal(localVisit(
+      id: 'la-2',
+      reference: 2,
+      clientVisitId: 'client-visit-2',
+    ));
+
+    await writer.upsertFromHistoryItems([serverVisit()]);
+
+    expect(
+      (await mahRows()).map((r) => r['encounter_id']),
+      unorderedEquals(['server-enc-1', 'client-visit-2']),
+    );
+  });
+
+  test('matches on the local member id when the device row has no FHIR id',
+      () async {
+    final local = LocalAssessmentEntity(
+      id: 'la-1',
+      referenceId: 1,
+      householdMemberLocalId: 7,
+      assessmentType: 'ANC',
+      assessmentDetails: '{}',
+      otherDetails: jsonEncode({'encounterId': 'client-visit-1'}),
+      createdAt: visitAt,
+      syncStatus: AssessmentSyncStatus.pending,
+    );
+    await saveLocal(local);
+    // The server row resolves to the same local member.
+    await MemberAssessmentHistoryDao(app).upsertMany([
+      MemberAssessmentHistoryRow(
+        memberId: 7,
+        memberFhirId: 'member-fhir-1',
+        visitDate: '2026-11-20T09:30:15.000Z',
+        serviceProvided: 'anc',
+        encounterId: 'server-enc-1',
+      ),
+    ], fromServer: true);
+
+    expect((await mahRows()).single['encounter_id'], 'server-enc-1');
+  });
+
+  test('the server spelling of family planning matches the device copy',
+      () async {
+    await saveLocal(localVisit(type: 'FAMILY_PLANNING'));
+    await writer.upsertFromHistoryItems([
+      serverVisit(service: 'familyPlanning'),
+    ]);
+    await writer.rebuildFromLocalAssessments();
+
+    expect((await mahRows()).single['encounter_id'], 'server-enc-1');
+  });
+
+  test('loads started together wait for one hydration', () async {
+    // Both copies present, as left by a build without the dedupe.
+    await saveLocal(localVisit());
+    await app.db.insert(MemberAssessmentHistoryDao.tableName, {
+      'member_fhir_id': 'member-fhir-1',
+      'visit_date': '2026-11-20T09:30:15.000Z',
+      'service_provided': 'anc',
+      'encounter_id': 'server-enc-1',
+      'latest_visit': 1,
+    });
+    final repo = dashboardRepo();
+    final day = DateTime.utc(2026, 11, 20, 12);
+
+    final counts = await Future.wait([
+      repo.load(from: day, to: day),
+      repo.load(from: day, to: day),
+    ]);
+
+    expect(counts[0].ancCount, 1);
+    expect(counts[1].ancCount, 1);
+  });
+
+  test('a large pull costs about the same with visits saved on the device',
+      () async {
+    List<AssessmentHistoryItem> pull(String prefix) => [
+          for (var i = 0; i < 4000; i++)
+            AssessmentHistoryItem(
+              householdMemberId: 'member-${i % 400}',
+              encounterId: '$prefix-$i',
+              visitDate: DateTime.utc(2026, 11, 1).add(Duration(minutes: i)),
+              serviceProvided: 'ANC',
+            ),
+        ];
+    Future<int> timed(List<AssessmentHistoryItem> items) async {
+      final watch = Stopwatch()..start();
+      await writer.upsertFromHistoryItems(items);
+      return watch.elapsedMilliseconds;
+    }
+
+    final without = await timed(pull('a'));
+    await saveLocal(localVisit());
+    final withLocal = await timed(pull('b'));
+
+    // Each server row used to scan the whole table once a local visit
+    // existed, which made this several times slower and quadratic.
+    expect(withLocal, lessThan(without * 3 + 500));
+    expect(await mahRows(), hasLength(8001));
   });
 
   group('deleteDuplicateRecords', () {
