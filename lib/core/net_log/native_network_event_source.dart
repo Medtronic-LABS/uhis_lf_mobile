@@ -1,3 +1,4 @@
+import '../services/micro_coaching_service.dart';
 import 'network_log_entry.dart';
 
 enum NativeNetworkStatus { ok, unavailable, notInitialized, failed }
@@ -38,4 +39,25 @@ class UnavailableNativeNetworkEventSource implements NativeNetworkEventSource {
   }) async => const NativeNetworkEventsResult(
     status: NativeNetworkStatus.unavailable,
   );
+}
+
+/// Reads the native micro-coaching SDK request log over its method channel.
+class MicroCoachingNetworkEventSource implements NativeNetworkEventSource {
+  const MicroCoachingNetworkEventSource({
+    Future<NativeNetworkEventsResult> Function({
+      required int afterId,
+      int limit,
+    })? fetcher,
+  }) : _fetcher = fetcher ?? MicroCoachingService.getNetworkEvents;
+
+  final Future<NativeNetworkEventsResult> Function({
+    required int afterId,
+    int limit,
+  }) _fetcher;
+
+  @override
+  Future<NativeNetworkEventsResult> fetch({
+    required int afterId,
+    int limit = 200,
+  }) => _fetcher(afterId: afterId, limit: limit);
 }

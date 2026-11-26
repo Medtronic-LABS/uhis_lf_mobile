@@ -642,7 +642,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         ),
         Provider<NetworkLogDao>(create: (_) => NetworkLogDao(widget.appDb)),
         Provider<NativeNetworkEventSource>.value(
-          value: const UnavailableNativeNetworkEventSource(),
+          value: const MicroCoachingNetworkEventSource(),
         ),
         ProxyProvider2<NetworkLogDao, NativeNetworkEventSource,
             NetworkLogRepository>(
