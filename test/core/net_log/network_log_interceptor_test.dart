@@ -28,6 +28,19 @@ class _ThrowingRecorder implements NetworkRequestRecorder {
   void record(NetworkLogEntry e) => throw const FormatException('boom');
 }
 
+class _ErrorRecorder implements NetworkRequestRecorder {
+  @override
+  int get epoch => 0;
+
+  @override
+  void record(NetworkLogEntry e) => throw StateError('boom');
+}
+
+class _BadEpochRecorder extends _FakeRecorder {
+  @override
+  int get epoch => throw StateError('epoch');
+}
+
 Future<(ApiClient, ScriptedAdapter)> _client(
   NetworkRequestRecorder recorder, [
   Map<String, int> failures = const {},
@@ -166,5 +179,43 @@ void main() {
 
     expect(rec.entries.single.url, isNot(contains('jane.doe')));
     expect(rec.entries.single.url, isNot(contains('@example.com')));
+  });
+
+  test('a recorder throwing an Error fails neither a 200 nor 401 handling',
+      () async {
+    final (api, adapter) = await _client(_ErrorRecorder());
+    var fired = 0;
+    api.onUnauthorized = () => fired++;
+
+    expect((await api.dio.get<dynamic>('/x')).statusCode, 200);
+    adapter.successStatus = 401;
+    expect((await api.dio.get<dynamic>('/y')).statusCode, 401);
+    expect(fired, 1);
+  });
+
+  test('an overwritten start extra does not fail the request', () async {
+    final rec = _FakeRecorder();
+    final (api, _) = await _client(rec);
+    api.dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (o, h) {
+        o.extra[NetworkLogInterceptor.startKey] = 'not-a-start';
+        h.next(o);
+      },
+    ));
+
+    final res = await api.dio.get<dynamic>('/x');
+
+    expect(res.statusCode, 200);
+    expect(rec.entries, isEmpty);
+  });
+
+  test('a recorder whose epoch throws neither fails nor records', () async {
+    final rec = _BadEpochRecorder();
+    final (api, _) = await _client(rec);
+
+    final res = await api.dio.get<dynamic>('/x');
+
+    expect(res.statusCode, 200);
+    expect(rec.entries, isEmpty);
   });
 }

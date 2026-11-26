@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../api/request_extras.dart';
 import '../config/app_config.dart';
@@ -30,21 +31,30 @@ class NetworkLogInterceptor extends Interceptor {
     ));
   }
 
-  static const String _stopwatchKey = 'netLogSw';
-  static const String _epochKey = 'netLogEpoch';
+  /// `RequestOptions.extra` key holding the per-attempt [_Start].
+  @visibleForTesting
+  static const String startKey = 'netLogStart';
 
   final NetworkRequestRecorder _recorder;
   final ServiceClassifier _classifier;
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    options.extra[_stopwatchKey] = Stopwatch()..start();
-    options.extra[_epochKey] = _recorder.epoch;
-    options.extra[_startedKey] = DateTime.now().millisecondsSinceEpoch;
+    // Deliberately broad catch (here and in _record): the log is a
+    // non-critical side effect on the live auth path, so no failure inside it,
+    // Error or Exception, may fail or delay a request. Only the type is logged.
+    try {
+      options.extra[startKey] = _Start(
+        stopwatch: Stopwatch()..start(),
+        epoch: _recorder.epoch,
+        startedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+    } on Object catch (e) {
+      options.extra.remove(startKey);
+      ConsoleLog.warn('[NetworkLog] start failed: ${e.runtimeType}');
+    }
     handler.next(options);
   }
-
-  static const String _startedKey = 'netLogStartedMs';
 
   @override
   void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
@@ -74,12 +84,12 @@ class NetworkLogInterceptor extends Interceptor {
     Uri? finalUri,
     String? errorType,
   }) {
-    final sw = options.extra[_stopwatchKey];
-    if (sw is! Stopwatch) return;
     try {
+      final start = options.extra[startKey];
+      if (start is! _Start) return;
       final url = UrlSanitizer.sanitize(options.uri.toString());
       _recorder.record(NetworkLogEntry(
-        startedAtMs: options.extra[_startedKey] as int,
+        startedAtMs: start.startedAtMs,
         source: 'dart',
         service: _classifier.classify(url),
         method: options.method,
@@ -87,14 +97,27 @@ class NetworkLogInterceptor extends Interceptor {
         finalUrl:
             finalUri == null ? null : UrlSanitizer.sanitize(finalUri.toString()),
         statusCode: statusCode,
-        durationMs: sw.elapsedMilliseconds,
+        durationMs: start.stopwatch.elapsedMilliseconds,
         timing: options.responseType == ResponseType.stream ? 'headers' : 'total',
         attempt: (options.extra[kAttemptKey] as int?) ?? 1,
         errorType: errorType,
-        epoch: options.extra[_epochKey] as int? ?? 0,
+        epoch: start.epoch,
       ));
-    } on Exception catch (e) {
+    } on Object catch (e) {
       ConsoleLog.warn('[NetworkLog] record failed: ${e.runtimeType}');
     }
   }
+}
+
+/// Per-attempt state captured in onRequest; one lookup, one type check.
+class _Start {
+  const _Start({
+    required this.stopwatch,
+    required this.epoch,
+    required this.startedAtMs,
+  });
+
+  final Stopwatch stopwatch;
+  final int epoch;
+  final int startedAtMs;
 }
