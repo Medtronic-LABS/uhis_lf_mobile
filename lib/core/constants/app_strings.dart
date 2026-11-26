@@ -22,6 +22,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 
 import '../../features/visit/forms/childhood_visit.dart';
+import '../../features/visit/immunisation/card_scan_failure.dart';
 import '../../features/visit/immunisation/epi_schedule_engine.dart';
 import '../../features/visit/immunisation/epi_visit_summary.dart';
 import '../i18n/app_locale.dart';
@@ -7477,6 +7478,41 @@ abstract final class AncScanStrings {
         'Anc.valuesDisagreeWarning',
         'Some values disagree across reads — double-check the card',
       );
+}
+
+/// Localized, cause-specific copy for a failed card scan (NCD / ANC / EPI).
+abstract final class CardScanFailureStrings {
+  CardScanFailureStrings._();
+
+  /// [visitNumber] fills the `{n}` token of the visit-data-missing message.
+  static String forFailure(CardScanFailure failure, {required int visitNumber}) =>
+      switch (failure) {
+      CardScanFailure.blurry => getTranslatedString(
+        'CardScan.blurry',
+        "The photo is blurry — hold the phone steady, fill the frame and retake it.",
+      ),
+      CardScanFailure.cardNotIdentified => getTranslatedString(
+        'CardScan.cardNotIdentified',
+        "No card found in the photo — fit the whole card in view and retake it.",
+      ),
+      CardScanFailure.visitDataMissing => getTranslatedString(
+        'CardScan.visitDataMissing',
+        "This card has no data for visit {n} — enter the values manually.",
+        params: {'n': '$visitNumber'},
+      ),
+      CardScanFailure.unreadable => getTranslatedString(
+        'CardScan.unreadable',
+        "The photo couldn't be read — retake it or enter the values manually.",
+      ),
+      CardScanFailure.offline => getTranslatedString(
+        'CardScan.offline',
+        "No connection — enter the values manually or try again when online.",
+      ),
+      CardScanFailure.serviceUnavailable => getTranslatedString(
+        'CardScan.serviceUnavailable',
+        "Card reading is unavailable right now — enter the values manually.",
+      ),
+      };
 }
 
 abstract final class NcdScanStrings {

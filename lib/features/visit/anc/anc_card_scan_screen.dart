@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/constants/app_strings.dart';
 import '../immunisation/card_extraction_transport.dart' show CardBoundingBox;
 import '../immunisation/card_highlight_overlay.dart';
+import '../immunisation/card_scan_failure.dart';
 import 'anc_visit_extraction_models.dart';
 import 'anc_visit_extraction_repository.dart';
 import '../../../core/device/permission_gate.dart';
@@ -195,6 +196,17 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
     ];
   }
 
+  Future<void> _showFailure(File image, CardScanFailure failure) async {
+    final cause = await refineScanFailure(image, failure);
+    if (!mounted) return;
+    setState(() {
+      _error = CardScanFailureStrings.forFailure(
+        cause,
+        visitNumber: widget.visitNumber,
+      );
+    });
+  }
+
   Future<void> _runExtraction(File image) async {
     await _controller?.dispose();
     _controller = null;
@@ -209,15 +221,14 @@ class _AncCardScanScreenState extends State<AncCardScanScreen>
       result =
           await widget.repository.extractAncVisit(image, widget.visitNumber);
     } on AncVisitExtractionException catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.message);
+      debugPrint('AncCardScanScreen: extraction failed: $e');
+      await _showFailure(image, e.failure);
       return;
     }
 
     final visit = result.visit;
     if (visit == null || !visit.anyFieldFound) {
-      if (!mounted) return;
-      setState(() => _error = EpiStrings.scanFailed);
+      await _showFailure(image, CardScanFailure.visitDataMissing);
       return;
     }
 

@@ -14783,6 +14783,30 @@
     "en": "Couldn't read card — please enter manually",
     "bn": "কার্ড পড়া যায়নি — অনুগ্রহ করে নিজে লিখুন"
   },
+  "CardScan.blurry": {
+    "en": "The photo is blurry — hold the phone steady, fill the frame and retake it.",
+    "bn": "ছবিটি অস্পষ্ট — ফোন স্থির রাখুন, ফ্রেম পূর্ণ করুন এবং আবার ছবি তুলুন।"
+  },
+  "CardScan.cardNotIdentified": {
+    "en": "No card found in the photo — fit the whole card in view and retake it.",
+    "bn": "ছবিতে কোনো কার্ড পাওয়া যায়নি — পুরো কার্ডটি ফ্রেমে রেখে আবার ছবি তুলুন।"
+  },
+  "CardScan.visitDataMissing": {
+    "en": "This card has no data for visit {n} — enter the values manually.",
+    "bn": "এই কার্ডে ভিজিট {n}-এর কোনো তথ্য নেই — মানগুলো নিজে লিখুন।"
+  },
+  "CardScan.unreadable": {
+    "en": "The photo couldn't be read — retake it or enter the values manually.",
+    "bn": "ছবিটি পড়া যায়নি — আবার ছবি তুলুন অথবা মানগুলো নিজে লিখুন।"
+  },
+  "CardScan.offline": {
+    "en": "No connection — enter the values manually or try again when online.",
+    "bn": "ইন্টারনেট সংযোগ নেই — মানগুলো নিজে লিখুন অথবা অনলাইনে এসে আবার চেষ্টা করুন।"
+  },
+  "CardScan.serviceUnavailable": {
+    "en": "Card reading is unavailable right now — enter the values manually.",
+    "bn": "কার্ড পড়ার সেবা এখন পাওয়া যাচ্ছে না — মানগুলো নিজে লিখুন।"
+  },
   "Epi.dateBeforeDobError": {
     "en": "Date cannot be before the patient's date of birth",
     "bn": "তারিখ রোগীর জন্ম তারিখের আগে হতে পারবে না"
