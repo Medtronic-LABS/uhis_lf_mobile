@@ -1,0 +1,165 @@
+{
+  "vectors_version": 1,
+  "cases": [
+    {
+      "name": "forgot-password email encoded",
+      "input": "https://api.example.test/user-service/user/forgot-password/jane.doe%40example.test/mobile",
+      "expected": "https://api.example.test/user-service/user/forgot-password/{id}/mobile"
+    },
+    {
+      "name": "forgot-password email raw at-sign",
+      "input": "https://api.example.test/user-service/user/forgot-password/jane.doe@example.test/mobile",
+      "expected": "https://api.example.test/user-service/user/forgot-password/{id}/mobile"
+    },
+    {
+      "name": "fhir observation query",
+      "input": "https://api.example.test/fhir-server/fhir/Observation?encounter=Encounter/abc&_count=200",
+      "expected": "https://api.example.test/fhir-server/fhir/Observation?encounter=<redacted>&_count=<redacted>"
+    },
+    {
+      "name": "scribe result uuid",
+      "input": "https://api.example.test/ai-scribe/scribe/results/123e4567-e89b-12d3-a456-426614174000",
+      "expected": "https://api.example.test/ai-scribe/scribe/results/{id}"
+    },
+    {
+      "name": "scribe note accept uuid",
+      "input": "https://api.example.test/ai-scribe/scribe/notes/123e4567-e89b-12d3-a456-426614174000/accept",
+      "expected": "https://api.example.test/ai-scribe/scribe/notes/{id}/accept"
+    },
+    {
+      "name": "scribe note upload id digit run",
+      "input": "https://api.example.test/ai-scribe/scribe/notes/upload_1700000000_ab12cd34",
+      "expected": "https://api.example.test/ai-scribe/scribe/notes/{id}"
+    },
+    {
+      "name": "upload chunk",
+      "input": "https://api.example.test/ai-scribe/upload/123e4567-e89b-12d3-a456-426614174000/chunk/3",
+      "expected": "https://api.example.test/ai-scribe/upload/{id}/chunk/3"
+    },
+    {
+      "name": "realtime websocket query allowlist",
+      "input": "wss://api.example.test/ai-scribe/scribe/realtime/transcribe?language=bn&model=m1&encounterId=e1&tenantId=t1",
+      "expected": "wss://api.example.test/ai-scribe/scribe/realtime/transcribe?language=<redacted>&model=<redacted>"
+    },
+    {
+      "name": "naba visual image key",
+      "input": "https://api.example.test/admin-api/api/method/spice_next_ai.api.naba.visual_image?key=k1",
+      "expected": "https://api.example.test/admin-api/api/method/spice_next_ai.api.naba.visual_image?key=<redacted>"
+    },
+    {
+      "name": "shukhee lang",
+      "input": "https://api.example.test/admin-api/api/method/shukhee_integration.api.x?_lang=bn",
+      "expected": "https://api.example.test/admin-api/api/method/shukhee_integration.api.x?_lang=<redacted>"
+    },
+    {
+      "name": "get_controls unchanged",
+      "input": "https://api.example.test/admin-api/api/method/shukhee_integration.api.settings.get_controls",
+      "expected": "https://api.example.test/admin-api/api/method/shukhee_integration.api.settings.get_controls"
+    },
+    {
+      "name": "coaching sync modules since",
+      "input": "https://api.example.test/micro-coaching/medtronics-api/sync/modules?since=1700000000",
+      "expected": "https://api.example.test/micro-coaching/medtronics-api/sync/modules?since=<redacted>"
+    },
+    {
+      "name": "users short id unchanged (D1)",
+      "input": "https://api.example.test/micro-coaching/medtronics-api/dashboard/team-activity/users/42/questions?from_date=2026-01-01&po_user_id=7&limit=50",
+      "expected": "https://api.example.test/micro-coaching/medtronics-api/dashboard/team-activity/users/42/questions?from_date=<redacted>&limit=<redacted>"
+    },
+    {
+      "name": "users 42 unchanged",
+      "input": "https://api.example.test/users/42",
+      "expected": "https://api.example.test/users/42"
+    },
+    {
+      "name": "presigned gcs query dropped",
+      "input": "https://storage.example.test/bucket/modules/thumb.png?X-Goog-Algorithm=G&X-Goog-Signature=abc&X-Goog-Expires=60",
+      "expected": "https://storage.example.test/bucket/modules/thumb.png"
+    },
+    {
+      "name": "userinfo and fragment dropped",
+      "input": "https://user:pw@host.example.test/x#f",
+      "expected": "https://host.example.test/x"
+    },
+    {
+      "name": "double-encoded email",
+      "input": "https://api.example.test/u/jane%2540example.test/z",
+      "expected": "https://api.example.test/u/{id}/z"
+    },
+    {
+      "name": "not a url",
+      "input": "::not a url",
+      "expected": "<unparsable>"
+    },
+    {
+      "name": "empty string",
+      "input": "",
+      "expected": "<unparsable>"
+    },
+    {
+      "name": "scheme not allowed",
+      "input": "ftp://host.example.test/x",
+      "expected": "<unparsable>"
+    },
+    {
+      "name": "empty host",
+      "input": "https:///x",
+      "expected": "<unparsable>"
+    },
+    {
+      "name": "long url capped",
+      "input": "https://api.example.test/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "https://api.example.test/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…"
+    },
+    {
+      "name": "bengali digit run",
+      "input": "https://api.example.test/members/১২৩৪৫৬",
+      "expected": "https://api.example.test/members/{id}"
+    },
+    {
+      "name": "bengali short run unchanged",
+      "input": "https://api.example.test/members/১২৩",
+      "expected": "https://api.example.test/members/%E0%A7%A7%E0%A7%A8%E0%A7%A9"
+    },
+    {
+      "name": "five digits unchanged",
+      "input": "https://api.example.test/x/12345",
+      "expected": "https://api.example.test/x/12345"
+    },
+    {
+      "name": "six digits masked",
+      "input": "https://api.example.test/x/123456",
+      "expected": "https://api.example.test/x/{id}"
+    },
+    {
+      "name": "phone like seven digits",
+      "input": "https://api.example.test/x/123-4567",
+      "expected": "https://api.example.test/x/{id}"
+    },
+    {
+      "name": "host lowercased default port dropped",
+      "input": "HTTPS://API.Example.test:443/x",
+      "expected": "https://api.example.test/x"
+    },
+    {
+      "name": "non default port kept",
+      "input": "ws://api.example.test:8080/x",
+      "expected": "ws://api.example.test:8080/x"
+    },
+    {
+      "name": "query keys once each original order",
+      "input": "https://api.example.test/q?limit=1&key=a&limit=2&junk=3&since=4",
+      "expected": "https://api.example.test/q?limit=<redacted>&key=<redacted>&since=<redacted>"
+    },
+    {
+      "name": "query only dropped keys",
+      "input": "https://api.example.test/q?tenantId=t",
+      "expected": "https://api.example.test/q"
+    },
+    {
+      "name": "bad percent in segment masked",
+      "input": "https://api.example.test/x/%E0%A4%A/y",
+      "expected": "https://api.example.test/x/{id}/y"
+    }
+  ]
+}
