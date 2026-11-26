@@ -1,24 +1,7 @@
 import '../services/micro_coaching_service.dart';
-import 'network_log_entry.dart';
+import 'native_network_events_result.dart';
 
-enum NativeNetworkStatus { ok, unavailable, notInitialized, failed }
-
-/// Outcome of one pull from the native SDK request log.
-class NativeNetworkEventsResult {
-  const NativeNetworkEventsResult({
-    required this.status,
-    this.events = const [],
-    this.maxId = 0,
-  });
-
-  final NativeNetworkStatus status;
-
-  /// Events with an empty `service`; the repository classifies them.
-  final List<NetworkLogEntry> events;
-
-  /// Highest event id in the SDK store, used to detect a store reset.
-  final int maxId;
-}
+export 'native_network_events_result.dart';
 
 /// Reads request events recorded by the native micro-coaching SDK.
 abstract interface class NativeNetworkEventSource {

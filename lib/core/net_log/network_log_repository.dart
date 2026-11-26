@@ -98,17 +98,24 @@ class NetworkLogRepository {
         cursor = 0;
         continue;
       }
-      if (result.events.isNotEmpty) {
+      // Cap before any normalising so an oversized batch costs a bounded
+      // amount of work and the cursor only covers rows actually merged.
+      final rows = result.events.take(pageSize).toList();
+      final truncated = result.events.length > pageSize;
+      final lastMerged = rows.fold<int>(
+        0,
+        (m, e) => (e.nativeId ?? 0) > m ? (e.nativeId ?? 0) : m,
+      );
+      final lastRaw = truncated ? 0 : (result.lastRawId ?? 0);
+      final next = [cursor, lastMerged, lastRaw].reduce((a, b) => a > b ? a : b);
+      if (rows.isNotEmpty || next > cursor) {
         // A wipe during the pull: a stale cursor could skip new SDK events.
         if (_recorder.epoch != epoch) break;
-        final batch = [for (final e in result.events) _normalise(e, classifier)];
-        final last = result.events
-            .map((e) => e.nativeId ?? 0)
-            .reduce((a, b) => a > b ? a : b);
-        await _dao.mergeNative(batch, cursorTo: last);
-        cursor = last;
+        final batch = [for (final e in rows) _normalise(e, classifier)];
+        await _dao.mergeNative(batch, cursorTo: next);
+        cursor = next;
       }
-      if (result.events.length < pageSize) break;
+      if ((result.rawCount ?? result.events.length) < pageSize) break;
     }
     return status;
   }

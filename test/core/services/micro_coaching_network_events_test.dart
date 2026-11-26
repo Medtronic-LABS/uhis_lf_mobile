@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -152,6 +154,81 @@ void main() {
   test('unknown extra response keys are ignored', () async {
     _handle((_) async => _ok([_row(1)], maxId: 1, extra: {'a': 1}));
     expect((await pull()).status, NativeNetworkStatus.ok);
+  });
+
+  test('never-completing handler times out as failed', () async {
+    _handle((_) => Completer<Object?>().future);
+    final r = await MicroCoachingService.getNetworkEvents(
+      afterId: 0,
+      timeout: const Duration(milliseconds: 50),
+    );
+    expect(r.status, NativeNetworkStatus.failed);
+  });
+
+  test('events beyond the requested limit are not read', () async {
+    _handle((_) async => _ok([for (var i = 1; i <= 5000; i++) _row(i)], maxId: 5000));
+    final r = await pull(limit: 200);
+    expect(r.events, hasLength(200));
+    expect(r.rawCount, 200);
+    expect(r.lastRawId, 200);
+  });
+
+  test('lastRawId and rawCount include skipped rows', () async {
+    _handle((_) async => _ok([
+      _row(1),
+      {..._row(9), 'url': 5},
+      {'id': 'x'},
+    ], maxId: 9));
+    final r = await pull();
+    expect(r.events, hasLength(1));
+    expect(r.rawCount, 3);
+    expect(r.lastRawId, 9);
+  });
+
+  test('negative afterId is clamped to 0', () async {
+    Object? args;
+    _handle((c) async {
+      args = c.arguments;
+      return _ok([]);
+    });
+    await pull(afterId: -4);
+    expect((args! as Map)['afterId'], 0);
+  });
+
+  test('version is checked before the rest of the envelope', () async {
+    _handle((_) async => {'sdk_event_version': 2, 'status': 7});
+    expect((await pull()).status, NativeNetworkStatus.unavailable);
+  });
+
+  final badEnvelopes = <String, Map<String, Object?>>{
+    'events not a list': {..._ok([]), 'events': 'x'},
+    'status not a string': {..._ok([]), 'status': 1},
+    'version as double': {..._ok([]), 'sdk_event_version': 1.0},
+    'version as string': {..._ok([]), 'sdk_event_version': '1'},
+    'events missing': {'status': 'ok', 'sdk_event_version': 1, 'max_id': 1},
+  };
+  badEnvelopes.forEach((name, payload) {
+    test('envelope $name is failed', () async {
+      _handle((_) async => payload);
+      expect((await pull()).status, NativeNetworkStatus.failed);
+    });
+  });
+
+  final badRows = <String, Map<String, Object?>>{
+    'wrong-typed status_code': {..._row(1), 'status_code': '200'},
+    'wrong-typed error_type': {..._row(1), 'error_type': 5},
+    'negative id': {..._row(1), 'id': -1},
+    'status_code 99': {..._row(1), 'status_code': 99},
+    'status_code 600': {..._row(1), 'status_code': 600},
+    'negative duration': {..._row(1), 'duration_ms': -1},
+  };
+  badRows.forEach((name, row) {
+    test('row with $name is skipped', () async {
+      _handle((_) async => _ok([row, _row(2)], maxId: 2));
+      final r = await pull();
+      expect(r.status, NativeNetworkStatus.ok);
+      expect(r.events.map((e) => e.nativeId), [2]);
+    });
   });
 
   test('MicroCoachingNetworkEventSource delegates to the fetcher', () async {

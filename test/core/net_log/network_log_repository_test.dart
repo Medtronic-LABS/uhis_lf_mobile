@@ -189,6 +189,58 @@ void main() {
       expect((await dao.nativeState()).cursor, 7);
     });
 
+    test('an oversized batch is capped and the cursor stops at the 200th id', () async {
+      final src = FakeSource((after, _) async {
+        if (after == 0) {
+          return NativeNetworkEventsResult(
+            status: NativeNetworkStatus.ok,
+            events: [for (var i = 1; i <= 5000; i++) _native(i)],
+            maxId: 5000,
+          );
+        }
+        return _ok(const [], 5000);
+      });
+      final r = repo(src);
+      await r.load();
+      expect(dao.merged.first, hasLength(200));
+      expect((await dao.nativeState()).cursor, 200);
+      await r.load();
+      expect(src.afterIds.last, 200);
+    });
+
+    test('a fully malformed batch advances the cursor past it', () async {
+      final src = FakeSource((after, _) async {
+        if (after == 0) {
+          return const NativeNetworkEventsResult(
+            status: NativeNetworkStatus.ok,
+            maxId: 400,
+            lastRawId: 200,
+            rawCount: 200,
+          );
+        }
+        return _ok(const [], 400);
+      });
+      final r = repo(src);
+      await r.load();
+      expect((await dao.nativeState()).cursor, 200);
+      expect(src.afterIds, [0, 200]);
+    });
+
+    test('mixed good and bad rows advance to the highest raw id', () async {
+      final src = FakeSource(
+        (_, _) async => NativeNetworkEventsResult(
+          status: NativeNetworkStatus.ok,
+          events: [_native(3)],
+          maxId: 9,
+          lastRawId: 9,
+          rawCount: 4,
+        ),
+      );
+      await repo(src).load();
+      expect((await dao.nativeState()).cursor, 9);
+      expect(src.afterIds, [0]);
+    });
+
     test('cursor resets to 0 when maxId < cursor', () async {
       await dao.mergeNative(const [], cursorTo: 50);
       final src = FakeSource((after, _) async {

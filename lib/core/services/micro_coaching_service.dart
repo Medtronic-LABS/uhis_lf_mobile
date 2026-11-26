@@ -1,11 +1,13 @@
 // Flutter MethodChannel bridge to MicroCoachingSDK (micro-coaching-android-sdk).
 // Channel: com.medtroniclabs.uhis_next/micro_coaching
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../config/app_config.dart';
 import '../config/coaching_sdk_url.dart';
 import '../debug/console_log.dart';
-import '../net_log/native_network_event_source.dart';
+import '../net_log/native_network_events_result.dart';
 import '../net_log/network_log_entry.dart';
 
 class MicroCoachingService {
@@ -59,52 +61,67 @@ class MicroCoachingService {
   static const _networkContractVersion = 1;
   static const _minEventLimit = 1;
   static const _maxEventLimit = 500;
+  static const _networkTimeout = Duration(seconds: 8);
 
   /// Pulls request events recorded by the native SDK (contract v1).
   ///
-  /// Never throws: transport and payload problems map to a status. Logs
-  /// exception types and counts only, never messages or row content.
+  /// Maps MissingPluginException, PlatformException, a timeout and payload
+  /// problems to a status instead of throwing. Logs exception types and
+  /// counts only, never messages or row content. At most [limit] rows are
+  /// read from the response.
   static Future<NativeNetworkEventsResult> getNetworkEvents({
     required int afterId,
     int limit = 200,
+    Duration timeout = _networkTimeout,
   }) async {
     const unavailable = NativeNetworkEventsResult(
       status: NativeNetworkStatus.unavailable,
     );
+    const failed = NativeNetworkEventsResult(status: NativeNetworkStatus.failed);
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return unavailable;
     }
+    final clamped = limit.clamp(_minEventLimit, _maxEventLimit);
     final Object? response;
     try {
-      response = await _channel.invokeMethod<Object?>('getNetworkEvents', {
-        'afterId': afterId < 0 ? 0 : afterId,
-        'limit': limit.clamp(_minEventLimit, _maxEventLimit),
-        'contract_version': _networkContractVersion,
-      });
+      response = await _channel
+          .invokeMethod<Object?>('getNetworkEvents', {
+            'afterId': afterId < 0 ? 0 : afterId,
+            'limit': clamped,
+            'contract_version': _networkContractVersion,
+          })
+          .timeout(timeout);
     } on MissingPluginException {
       ConsoleLog.warn('[MicroCoaching] getNetworkEvents MissingPluginException');
       return unavailable;
     } on PlatformException {
       ConsoleLog.warn('[MicroCoaching] getNetworkEvents PlatformException');
-      return const NativeNetworkEventsResult(status: NativeNetworkStatus.failed);
-    }
-    return _parseNetworkEvents(response);
-  }
-
-  static NativeNetworkEventsResult _parseNetworkEvents(Object? response) {
-    const failed = NativeNetworkEventsResult(status: NativeNetworkStatus.failed);
-    if (response is! Map) return failed;
-    final status = response['status'];
-    final version = response['sdk_event_version'];
-    final events = response['events'];
-    final maxId = response['max_id'];
-    if (status is! String || version is! int || events is! List || maxId is! int) {
+      return failed;
+    } on TimeoutException {
+      ConsoleLog.warn('[MicroCoaching] getNetworkEvents TimeoutException');
       return failed;
     }
-    if (version != _networkContractVersion) {
+    return _parseNetworkEvents(response, clamped);
+  }
+
+  static NativeNetworkEventsResult _parseNetworkEvents(
+    Object? response,
+    int limit,
+  ) {
+    const failed = NativeNetworkEventsResult(status: NativeNetworkStatus.failed);
+    if (response is! Map) return failed;
+    final version = response['sdk_event_version'];
+    // Checked first: another contract version may reshape the rest.
+    if (version is int && version != _networkContractVersion) {
       return const NativeNetworkEventsResult(
         status: NativeNetworkStatus.unavailable,
       );
+    }
+    final status = response['status'];
+    final events = response['events'];
+    final maxId = response['max_id'];
+    if (version is! int || status is! String || events is! List || maxId is! int) {
+      return failed;
     }
     if (status == 'notInitialized') {
       return NativeNetworkEventsResult(
@@ -115,7 +132,11 @@ class MicroCoachingService {
     if (status != 'ok') return failed;
     final parsed = <NetworkLogEntry>[];
     var skipped = 0;
-    for (final row in events) {
+    var lastRawId = -1;
+    final rows = events.take(limit).toList();
+    for (final row in rows) {
+      final rawId = row is Map ? row['id'] : null;
+      if (rawId is int && rawId > lastRawId) lastRawId = rawId;
       final entry = _parseNetworkRow(row);
       if (entry == null) {
         skipped++;
@@ -130,6 +151,8 @@ class MicroCoachingService {
       status: NativeNetworkStatus.ok,
       events: parsed,
       maxId: maxId,
+      lastRawId: lastRawId >= 0 ? lastRawId : null,
+      rawCount: rows.length,
     );
   }
 
@@ -143,16 +166,19 @@ class MicroCoachingService {
     final statusCode = row['status_code'];
     final errorType = row['error_type'];
     if (id is! int ||
+        id < 0 ||
         startedAt is! int ||
         method is! String ||
         url is! String ||
-        duration is! int) {
+        duration is! int ||
+        duration < 0) {
       return null;
     }
-    if ((statusCode != null && statusCode is! int) ||
-        (errorType != null && errorType is! String)) {
+    // A wrongly typed or out-of-range optional field skips the whole row.
+    if (statusCode != null && (statusCode is! int || statusCode < 100 || statusCode > 599)) {
       return null;
     }
+    if (errorType != null && errorType is! String) return null;
     return NetworkLogEntry(
       source: 'native',
       nativeId: id,
