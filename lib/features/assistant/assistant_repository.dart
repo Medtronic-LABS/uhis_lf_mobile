@@ -17,9 +17,20 @@ import '../../core/i18n/app_locale.dart';
 import 'assistant_models.dart';
 
 class AssistantRepository {
-  const AssistantRepository(this._client);
+  const AssistantRepository(
+    this._client, {
+    HttpClientAdapter? httpAdapter,
+    String? coachingBaseUrl,
+  })  : _httpAdapter = httpAdapter,
+        _coachingBaseUrl = coachingBaseUrl;
 
   final ApiClient _client;
+
+  /// Replaces the real transport of the coaching RAG Dio (tests only).
+  final HttpClientAdapter? _httpAdapter;
+
+  /// Overrides [AppConfig.coachingServiceUrl] (tests only).
+  final String? _coachingBaseUrl;
 
   (Dio, String) _resolve() {
     final aiUrl = AppConfig.assistantBaseUrl;
@@ -47,7 +58,7 @@ class AssistantRepository {
     Map<String, dynamic>? patientContext,
     List<Map<String, String>>? history,
   }) async {
-    final coachingUrl = AppConfig.coachingServiceUrl;
+    final coachingUrl = _coachingBaseUrl ?? AppConfig.coachingServiceUrl;
     if (coachingUrl.isNotEmpty && patientContext == null) {
       if (question.trim().length < 3) {
         return AssistantAnswer(text: AssistantStrings.enterAtLeast3Chars);
@@ -65,6 +76,9 @@ class AssistantRepository {
       receiveTimeout: const Duration(seconds: 45),
       validateStatus: (s) => s != null && s < 500,
     ));
+    final adapter = _httpAdapter;
+    if (adapter != null) dio.httpClientAdapter = adapter;
+    _client.attachNetworkLog(dio);
     ConsoleLog.banner(
         '[PayloadDebug] coaching-rag → $baseUrl${Endpoints.coachingRagQuery}\nq=$question');
     try {
@@ -154,7 +168,7 @@ class AssistantRepository {
       'appLanguage': appLanguage,
       'context':
           patientContext == null ? 'community-health-worker' : 'patient-scoped',
-      if (patientContext != null) 'patientContext': patientContext,
+      'patientContext': ?patientContext,
       if (history != null && history.isNotEmpty) 'history': history,
     };
     ConsoleLog.json('[PayloadDebug] assistant-ask', body);

@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 
 import 'api_client.dart';
+import '../net_log/network_log_interceptor.dart';
+import '../net_log/network_request_recorder.dart';
 
 /// Why a Frappe call failed, so callers can react without parsing messages.
 enum FrappeErrorKind {
@@ -52,6 +54,7 @@ class FrappeClient {
     required this.authTokenProvider,
     this.tenantIdProvider,
     Dio? dio,
+    NetworkRequestRecorder? networkRecorder,
     Duration connectTimeout = const Duration(seconds: 10),
     Duration receiveTimeout = const Duration(minutes: 2),
   }) : _dio =
@@ -62,7 +65,11 @@ class FrappeClient {
                connectTimeout: connectTimeout,
                receiveTimeout: receiveTimeout,
              ),
-           );
+           ) {
+    if (networkRecorder != null) {
+      NetworkLogInterceptor.attach(_dio, networkRecorder);
+    }
+  }
 
   final Future<String?> Function() authTokenProvider;
   final Future<String?> Function()? tenantIdProvider;
@@ -182,5 +189,6 @@ FrappeClient buildFrappeAiClient(ApiClient api, {required String baseUrl}) {
       return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
     },
     tenantIdProvider: () async => api.tenantId,
+    networkRecorder: api.networkRecorder,
   );
 }

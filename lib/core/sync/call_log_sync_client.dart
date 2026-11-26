@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import '../net_log/network_log_interceptor.dart';
+import '../net_log/network_request_recorder.dart';
 
 /// One row of `spice_next_core.api.sync.pull`'s response -- deliberately not
 /// scoped to Call Logs alone: a single page legitimately interleaves rows
@@ -78,6 +80,7 @@ class CallLogSyncClient {
     required this.authTokenProvider,
     this.tenantIdProvider,
     Dio? dio,
+    NetworkRequestRecorder? networkRecorder,
     Duration connectTimeout = const Duration(seconds: 10),
     Duration receiveTimeout = const Duration(seconds: 15),
   }) : _dio = dio ??
@@ -87,7 +90,11 @@ class CallLogSyncClient {
                 connectTimeout: connectTimeout,
                 receiveTimeout: receiveTimeout,
               ),
-            );
+            ) {
+    if (networkRecorder != null) {
+      NetworkLogInterceptor.attach(_dio, networkRecorder);
+    }
+  }
 
   static const String pullPath = '/api/method/spice_next_core.api.sync.pull';
 

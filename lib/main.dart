@@ -239,6 +239,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
     },
     tenantIdProvider: () async => widget.api.tenantId,
+    networkRecorder: widget.api.networkRecorder,
   );
   late final CallLogSyncService _callLogSync = CallLogSyncService(
     client: _callLogSyncClient,
@@ -259,6 +260,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       return raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
     },
     tenantIdProvider: () async => widget.api.tenantId,
+    networkRecorder: widget.api.networkRecorder,
   );
   // Shared by OfflineSyncService (pull-side catch-up), OfflinePushService and
   // AssessmentRepository (push-side, fires within seconds of a visit

@@ -258,7 +258,8 @@ class ScribeJobResult {
 /// container itself does not. [_scribePath] strips that prefix so requests
 /// hit the service directly.
 class ScribeApiService extends ApiRepository {
-  ScribeApiService(super.api) {
+  /// [httpAdapter] replaces the real transport (tests only).
+  ScribeApiService(super.api, {HttpClientAdapter? httpAdapter}) {
     _dio = Dio(BaseOptions(
       baseUrl: _effectiveBaseUrl(),
       connectTimeout: const Duration(seconds: 60),
@@ -266,6 +267,8 @@ class ScribeApiService extends ApiRepository {
       receiveTimeout: const Duration(minutes: 3),
       validateStatus: (s) => s != null && s < 500,
     ));
+    if (httpAdapter != null) _dio.httpClientAdapter = httpAdapter;
+    api.attachNetworkLog(_dio);
     // Inject Bearer token + tenantId at request time so scribe HTTP calls
     // are authenticated the same way RealtimeAsrService authenticates WS.
     _dio.interceptors.add(InterceptorsWrapper(
@@ -686,9 +689,9 @@ class ScribeApiService extends ApiRepository {
         _scribePath(Endpoints.realtimeSessionSummary),
         data: {
           'session_id': sessionId,
-          if (encounterId != null) 'encounter_id': encounterId,
+          'encounter_id': ?encounterId,
           'language': language,
-          if (assessmentType != null) 'assessment_type': assessmentType,
+          'assessment_type': ?assessmentType,
           'client_chunks_raw': clientChunksRaw,
           'client_chunks_vad_gated': clientChunksVadGated,
           'client_chunks_sent': clientChunksSent,
@@ -731,11 +734,11 @@ class ScribeApiService extends ApiRepository {
         contentType: DioMediaType.parse(mimeType),
       ),
       'encounter_id': encounterId,
-      if (fhirEncounterId != null) 'fhir_encounter_id': fhirEncounterId,
+      'fhir_encounter_id': ?fhirEncounterId,
       'scribe_mode': scribeMode,
       'language': language,
       'app_version': '2.1.0',
-      if (coverageJson != null) 'coverage_json': coverageJson,
+      'coverage_json': ?coverageJson,
     });
     final resp = await _dio.post(
       _scribePath(Endpoints.trainingAudioSample),
