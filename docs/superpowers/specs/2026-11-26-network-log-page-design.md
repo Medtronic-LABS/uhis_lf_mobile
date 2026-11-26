@@ -205,8 +205,11 @@ Dio 5.11.1 runs request, response **and** error interceptors in the same FIFO or
   - Each entry carries the epoch captured in `onRequest`. `record()` drops entries whose epoch ≠ current (fixes case 3).
   - The flush transaction re-checks `epoch == capturedEpoch` as its first statement and writes nothing if it changed (fixes case 2).
   - `onWipeInTransaction` upserts `sync_meta(entity='network_log.native', cursor=0, last_sync_time=<now ms>)`. `sync_meta` (`app_database.dart:254-259`) is already keyed per entity. The merge ignores native events with `started_at_ms < floor` (fixes case 4) atomically with the wipe.
-  - `createSchema` and the v60 upgrade seed this row with floor 0, so first-install SDK events are kept. If the row is missing, treat the floor as `now`.
-  - The page's Clear button runs `dao.clear()`: one transaction that deletes `network_log` and sets the floor to now.
+  - `createSchema` seeds this row with floor 0, so first-install SDK events are kept; the v60 UPGRADE path seeds floor = `now` (ruling R19: an upgraded device must not import SDK history that may include earlier users). If the row is missing, treat the floor as `now`.
+  - Because `wipeAllData` re-inserts the `network_log.native` row after truncating `sync_meta`, `sync_meta` is NOT empty after a wipe: tests that assert "every table is empty" must exclude that one row.
+  - The page's Clear button runs `repository.clear()`: `recorder.clearBuffer()` first, then `dao.clear()`, one transaction that deletes `network_log` and sets the floor to now. The native cursor is kept by design.
+  - **Residual race (accepted).** The repository checks `recorder.epoch` synchronously before `mergeNative`, but the merge itself is asynchronous and the frozen `mergeNative` API has no `isCurrent` hook. A wipe that lands between the check and the merge transaction can therefore be followed by a merge of pre-wipe SDK rows. The merge still reads the new floor inside its own transaction, so rows older than the wipe are ignored; what can slip through are rows stamped after the wipe time. The only fixes are an SDK-side clear (Kotlin requirement 9, section 13) or an `isCurrent` parameter on `mergeNative`.
+  - **Clock skew (accepted).** The floor is time-based. SDK events stamped in the future by a wrong device clock are skipped only until real time passes their timestamps; the proper fix is to move the cursor to the SDK's current `max_id` at wipe time or to let the SDK clear its store (section 13).
 - The only `wipeAllData` caller is `offline_sync_service.dart:327`. Putting the hook in `AppDatabase` covers future callers. A pre-wipe hook list already has precedent in `AuthState._preWipeHooks` (`auth_state.dart:51,58`), but that one runs on logout, which is the wrong trigger here.
 - Logout: no change. `test/core/auth/auth_state_logout_wipe_test.dart` gains the assertion "network_log survives logout".
 
@@ -251,7 +254,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_network_log_native
    - otherwise re-encode the segment with `encodeComponent`.
    - Known limitations, accepted: an identifier split across several path segments (`/017/123/4567`), opaque tokens of 24+ characters with fewer than 6 consecutive digits, and circled digits such as `①` are not masked.
    - Owner decision D1: the rule is exactly the one above. There is **no** template-aware masking after `users/`, `patients/` or `members/`, and **no** 16+ hex-run rule. Builder's call within that rule: a "digit" is any Unicode decimal digit (so Bengali digits `০-৯` count towards the 6+ run), identical on the Dart and Kotlin sides through the v1 vectors.
-4. Query: decode, keep only allowlisted keys in their original order, once each, as `key=<redacted>`. Drop the query if it cannot be parsed.
+4. Query: keep only allowlisted keys in their original order, once each, as `key=<redacted>`; all values are discarded. A malformed percent escape in a query key or value never makes the query unparsable and is never decoded (the key stays literal, the value is redacted anyway), so nothing leaks. Behaviour the spec leaves open (dot segments, empty segments, a root URL, `%2e` in a host, `user:p@ss@host` => `<unparsable>`) follows Dart's `Uri` parser and is recorded in the vectors as "reference behaviour".
 5. Cap at 2,048 chars: truncate to 2,047 and append `…`. If the cut splits a token (a trailing escape run, a `{id` prefix or half a query pair) the partial token is dropped, so a capped result may be shorter; a trailing `…` is stripped and re-added so a second pass changes nothing. The Kotlin port must reproduce this exactly (see the Dart `_dropPartialToken` and the vectors).
 6. Regexes stay portable (no look-behind) so Dart and Kotlin agree. `sanitize(sanitize(x)) == sanitize(x)` for every input (R9); the vectors and a test over all of them assert it.
 
@@ -493,9 +496,32 @@ PR grouping matches the plan: PR1 = T1-T9a (the page works and native shows "una
 **Builder's calls (no owner input needed)**
 - `final_url`, `timing` and `attempt` columns; the `WipeParticipant` seam in `AppDatabase`; DB open before `ApiClient.create`; the analytics screen-name mapping; no `PhiScreen`; the shared attempt-key file; copy respects the active service filter.
 - **Native rows are re-sanitised.** `mergeNative` runs the Dart `UrlSanitizer` over every SDK `url` before insert (idempotent), so an old or buggy SDK can never put presigned signatures into the table or the clipboard. Adds a merge test with a raw presigned URL.
-- **"Survives logout" test ships in PR1** with the code (`auth_state_logout_wipe_test.dart`), regardless of when the issue text is edited.
+- **"Survives logout" is guarded structurally.** `AuthState` has no path to the database, so a behavioural "network_log survives logout" test cannot exercise logout. `test/core/db/wipe_all_data_callers_test.dart` asserts that `offline_sync_service.dart` is the only caller of `wipeAllData(`, so a future logout-path call fails the build (known limits: a tear-off or a variable-held `db.wipeAllData` is not matched).
 - **Hosts are shown unmasked** in "Configured endpoints" and in copied rows: the owner asked for the complete URL, the page is on-device and read-only, and `lw-security` reviews the exact stored and copied fields.
 - **Bangla strings** are drafted by the builder and marked for native-speaker review in the PR; `strings.json` carries en and bn.
 - **Schema 60 collision** is checked against `origin/develop` at PR time.
 
 Design: app-side network log built from one interceptor inserted before the retry interceptor, epoch-guarded batched SQLCipher writes, wipe seam with a native floor in `sync_meta`, pull contract v1 with the SDK, and a registry plus SDK-drift test. Repos: mobile (coaching-android for the #21 contract). Open owner decisions: none.
+
+## 13. Final review outcomes and follow-ups
+
+The whole branch was reviewed three ways (spec and code, security and privacy, test quality) before the PR. No finding blocked the PR; the fixes are in the last two commits of the branch. What remains is deliberately outside this PR.
+
+**Security requirements for the Kotlin side (`spice-coaching-android#21`)**
+1. Run the Kotlin `UrlSanitizer` before an event is written to Room and pass EVERY case in `test/fixtures/net_log/url_sanitizer_vectors.json` (v1), including the idempotence check and the cap-cut behaviour. Never store a raw URL or any query value (presigned `X-Goog-*` / `X-Amz-*` signatures included).
+2. Record only: id, `started_at_ms`, method, sanitised url (at most 2,048 characters), `status_code`, `duration_ms`, and `error_type` from the fixed vocabulary. Never headers (Authorization, Cookie, tenant id), bodies, exception messages or stack traces, user or CHW ids, or tokens.
+3. No Logcat/Timber output of URLs, headers or bodies in release builds from the recording interceptor.
+4. Keep the table bounded: a hard row cap (for example 2,000), pruned in the same transaction as the insert, with the url length capped before storing.
+5. Write and read off the main thread (Room on `Dispatchers.IO`). Recording must never block, fail or change an OkHttp call: catch everything in the interceptor and call `chain.proceed` exactly once.
+6. `getNetworkEvents`: clamp `limit` to 1..500 and `afterId` to at least 0; return events with `id > afterId` in ascending order, never more than `limit`; return `max_id` honestly; always `result.success` (never `result.error` for "not initialised"); send `result.success` on the main thread.
+7. Ids increase monotonically (autoincrement); `started_at_ms` is wall-clock epoch milliseconds; no backfilling or re-stamping.
+8. Store events from OkHttp's network layer only (skip cache-only responses) and not the SDK's calls to the host app's own channel.
+9. Provide a way to clear the store, or a "clear-before-id" call, that the app can invoke on a user switch (until it exists the Dart floor is time-based only; see section 7d, clock skew and the residual race).
+10. Keep the event store app-private and not exported: no ContentProvider, nothing on external storage, covered by the existing backup exclusion.
+
+**Follow-ups outside this PR (tickets)**
+- The Network page can be opened from outside the app without the 10 taps through an explicit intent carrying a deep link, because Android deep linking is on by default (low impact: only sanitised rows and base URLs). If the app uses no deep links, add `flutter_deeplinking_enabled=false` to `MainActivity` (manifest change by a person).
+- Release builds print request paths with `debugPrint` in the retry and 401 handling of `api_client.dart`, which can put an email in a path into logcat. Pre-existing; file together with the ticket for the debug `LogInterceptor` that prints the Authorization header.
+- `wipe_all_data_callers_test` does not match a tear-off or a variable-held `db.wipeAllData`; the transport registry's declaration detection skips calls preceded by `const`, `[` or `{`.
+- Privacy notes for the PR: short numeric ids and non-UUID slugs stay readable (D1) and the page is reachable signed out, so the next person on a shared device sees the previous user's sanitised request history; copied rows and the endpoints section contain internal hostnames, so scrub them before pasting into GitHub; remote images loaded by `flutter_html` in the teleconsult consent screen are not captured.
+- The Bangla strings (the `NetworkLog.*` keys) are builder drafts and need native-speaker review.
