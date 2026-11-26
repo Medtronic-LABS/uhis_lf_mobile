@@ -45,17 +45,17 @@ class NetworkLogEntry {
   /// recorder or merge bug cannot persist tokens, query strings or raw
   /// exception text. The DAO is the single choke point that calls this.
   Map<String, Object?> toSanitizedDb({required String forcedSource}) => {
-        ...toDb(),
-        'source': forcedSource,
-        'method': _token(method, RegExp(r'^[A-Za-z]{1,16}$'), 'UNKNOWN'),
-        'service': _token(service, RegExp(r'^[a-z0-9-]{1,32}$'), 'other'),
-        'url': UrlSanitizer.sanitize(url),
-        'final_url': finalUrl == null ? null : UrlSanitizer.sanitize(finalUrl!),
-        'timing': _timings.contains(timing) ? timing : 'total',
-        'error_type': errorType == null
-            ? null
-            : _token(errorType!, RegExp(r'^[A-Za-z]{1,32}$'), 'unknown'),
-      };
+    ...toDb(),
+    'source': forcedSource,
+    'method': _token(method, RegExp(r'^[A-Za-z]{1,16}$'), 'UNKNOWN'),
+    'service': _token(service, RegExp(r'^[a-z0-9-]{1,32}$'), 'other'),
+    'url': UrlSanitizer.sanitize(url),
+    'final_url': finalUrl == null ? null : UrlSanitizer.sanitize(finalUrl!),
+    'timing': _timings.contains(timing) ? timing : 'total',
+    'error_type': errorType == null
+        ? null
+        : _token(errorType!, RegExp(r'^[A-Za-z]{1,32}$'), 'unknown'),
+  };
 
   static const Set<String> _timings = {'total', 'headers', 'handshake'};
 
@@ -63,32 +63,32 @@ class NetworkLogEntry {
       allowed.hasMatch(v) ? v : fallback;
 
   Map<String, Object?> toDb() => {
-        'started_at_ms': startedAtMs,
-        'source': source,
-        'native_id': nativeId,
-        'service': service,
-        'method': method,
-        'url': url,
-        'final_url': finalUrl,
-        'status_code': statusCode,
-        'duration_ms': durationMs,
-        'timing': timing,
-        'attempt': attempt,
-        'error_type': errorType,
-      };
+    'started_at_ms': startedAtMs,
+    'source': source,
+    'native_id': nativeId,
+    'service': service,
+    'method': method,
+    'url': url,
+    'final_url': finalUrl,
+    'status_code': statusCode,
+    'duration_ms': durationMs,
+    'timing': timing,
+    'attempt': attempt,
+    'error_type': errorType,
+  };
 
   factory NetworkLogEntry.fromDb(Map<String, Object?> r) => NetworkLogEntry(
-        startedAtMs: r['started_at_ms'] as int,
-        source: r['source'] as String,
-        nativeId: r['native_id'] as int?,
-        service: r['service'] as String,
-        method: r['method'] as String,
-        url: r['url'] as String,
-        finalUrl: r['final_url'] as String?,
-        statusCode: r['status_code'] as int?,
-        durationMs: r['duration_ms'] as int?,
-        timing: r['timing'] as String,
-        attempt: r['attempt'] as int,
-        errorType: r['error_type'] as String?,
-      );
+    startedAtMs: r['started_at_ms'] as int,
+    source: r['source'] as String,
+    nativeId: r['native_id'] as int?,
+    service: r['service'] as String,
+    method: r['method'] as String,
+    url: r['url'] as String,
+    finalUrl: r['final_url'] as String?,
+    statusCode: r['status_code'] as int?,
+    durationMs: r['duration_ms'] as int?,
+    timing: r['timing'] as String,
+    attempt: r['attempt'] as int,
+    errorType: r['error_type'] as String?,
+  );
 }

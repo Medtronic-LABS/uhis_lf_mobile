@@ -9,8 +9,9 @@ import 'package:sqflite/sqflite.dart';
 import '../db/app_database.dart';
 import '../db/sync_meta_dao.dart';
 import 'network_log_entry.dart';
+import 'network_log_sink.dart';
 
-class NetworkLogDao {
+class NetworkLogDao implements NetworkLogSink {
   NetworkLogDao(this._db) : _syncMeta = SyncMetaDao(_db);
 
   final AppDatabase _db;
@@ -27,6 +28,7 @@ class NetworkLogDao {
   /// in chunks of [insertChunk] and purges to [maxRows]. [isCurrent] is the
   /// first statement of the transaction: when it returns false (a wipe
   /// happened since the batch was snapshotted) nothing is written.
+  @override
   Future<void> insertBatch(
     List<NetworkLogEntry> entries, {
     bool Function()? isCurrent,
@@ -70,8 +72,9 @@ class NetworkLogDao {
         whereArgs: [AppDatabase.networkLogNativeEntity],
         limit: 1,
       );
-      final floor =
-          meta.isEmpty ? now : (meta.first['last_sync_time'] as int? ?? 0);
+      final floor = meta.isEmpty
+          ? now
+          : (meta.first['last_sync_time'] as int? ?? 0);
       for (final e in entries.take(mergeCap)) {
         if (e.startedAtMs < floor || e.startedAtMs > now + maxFutureSkewMs) {
           continue;
@@ -146,7 +149,7 @@ class NetworkLogDao {
   }
 
   Future<void> _purge(Transaction tx) => tx.rawDelete(
-        'DELETE FROM $_table WHERE id <= '
-        '(SELECT MAX(id) FROM $_table) - $maxRows',
-      );
+    'DELETE FROM $_table WHERE id <= '
+    '(SELECT MAX(id) FROM $_table) - $maxRows',
+  );
 }

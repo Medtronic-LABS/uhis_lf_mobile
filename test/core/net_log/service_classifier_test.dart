@@ -18,8 +18,10 @@ void main() {
 
   test('longest base-URL prefix wins over the first path segment', () {
     expect(classifier.classify('$api/admin-api/api/method/x'), 'admin-api');
-    expect(classifier.classify('$api/micro-coaching/medtronics-api/sync'),
-        'micro-coaching');
+    expect(
+      classifier.classify('$api/micro-coaching/medtronics-api/sync'),
+      'micro-coaching',
+    );
   });
 
   test('prefix beats first segment when they disagree', () {
@@ -31,8 +33,10 @@ void main() {
     ]);
     expect(c.classify('$api/admin-api/x/y'), 'ai-scribe');
     expect(c.classify('$api/admin-api/other'), 'admin-api');
-    expect(c.classify('https://local.example.test:8000/api/method/z'),
-        'micro-coaching');
+    expect(
+      c.classify('https://local.example.test:8000/api/method/z'),
+      'micro-coaching',
+    );
   });
 
   test('the longest of nested prefixes wins', () {
@@ -66,20 +70,28 @@ void main() {
     expect(classifier.classify('$api/user-service/x'), 'user-service');
     expect(classifier.classify('$api/spice-service/x'), 'spice-service');
     expect(classifier.classify('$api/offline-service/x'), 'offline-service');
-    expect(classifier.classify('$api/fhir-server/fhir/Observation?e=1'),
-        'fhir-server');
+    expect(
+      classifier.classify('$api/fhir-server/fhir/Observation?e=1'),
+      'fhir-server',
+    );
   });
 
   test('ai-scribe and ai-scribe-service both map to ai-scribe', () {
-    expect(classifier.classify('$api/ai-scribe/mobile/app-version'),
-        'ai-scribe');
-    expect(classifier.classify('$api/ai-scribe-service/scribe/transcribe'),
-        'ai-scribe');
+    expect(
+      classifier.classify('$api/ai-scribe/mobile/app-version'),
+      'ai-scribe',
+    );
+    expect(
+      classifier.classify('$api/ai-scribe-service/scribe/transcribe'),
+      'ai-scribe',
+    );
   });
 
   test('another host is other-host', () {
-    expect(classifier.classify('https://storage.example.test/bucket/a.wav'),
-        'other-host');
+    expect(
+      classifier.classify('https://storage.example.test/bucket/a.wav'),
+      'other-host',
+    );
   });
 
   test('an unknown path on the API host is other', () {
@@ -97,7 +109,9 @@ void main() {
   });
 
   test('with no gateway row every host falls to other', () {
-    expect(const ServiceClassifier([]).classify('$api/auth-service/x'),
-        'other');
+    expect(
+      const ServiceClassifier([]).classify('$api/auth-service/x'),
+      'other',
+    );
   });
 }

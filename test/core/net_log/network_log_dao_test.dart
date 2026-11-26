@@ -9,17 +9,16 @@ NetworkLogEntry _e(
   String service = 'core',
   String source = 'dart',
   int? nativeId,
-}) =>
-    NetworkLogEntry(
-      startedAtMs: t,
-      source: source,
-      nativeId: nativeId,
-      service: service,
-      method: 'GET',
-      url: 'https://example.test/x/$t',
-      statusCode: 200,
-      durationMs: 5,
-    );
+}) => NetworkLogEntry(
+  startedAtMs: t,
+  source: source,
+  nativeId: nativeId,
+  service: service,
+  method: 'GET',
+  url: 'https://example.test/x/$t',
+  statusCode: 200,
+  durationMs: 5,
+);
 
 void main() {
   setUpAll(() {
@@ -56,26 +55,28 @@ void main() {
       expect(oldest.single.startedAtMs, 50);
     });
 
-    test('page orders newest first, filters by service and honours offset',
-        () async {
-      final (db, dao) = await open();
-      addTearDown(db.close);
-      await dao.insertBatch([
-        _e(1),
-        _e(3, service: 'ai'),
-        _e(2),
-        _e(4, service: 'ai'),
-      ]);
+    test(
+      'page orders newest first, filters by service and honours offset',
+      () async {
+        final (db, dao) = await open();
+        addTearDown(db.close);
+        await dao.insertBatch([
+          _e(1),
+          _e(3, service: 'ai'),
+          _e(2),
+          _e(4, service: 'ai'),
+        ]);
 
-      final all = await dao.page(limit: 10, offset: 0);
-      expect(all.map((e) => e.startedAtMs), [4, 3, 2, 1]);
-      final ai = await dao.page(limit: 10, offset: 0, service: 'ai');
-      expect(ai.map((e) => e.startedAtMs), [4, 3]);
-      final off = await dao.page(limit: 2, offset: 1);
-      expect(off.map((e) => e.startedAtMs), [3, 2]);
-      final top = await dao.newest(1, service: 'core');
-      expect(top.single.startedAtMs, 2);
-    });
+        final all = await dao.page(limit: 10, offset: 0);
+        expect(all.map((e) => e.startedAtMs), [4, 3, 2, 1]);
+        final ai = await dao.page(limit: 10, offset: 0, service: 'ai');
+        expect(ai.map((e) => e.startedAtMs), [4, 3]);
+        final off = await dao.page(limit: 2, offset: 1);
+        expect(off.map((e) => e.startedAtMs), [3, 2]);
+        final top = await dao.newest(1, service: 'core');
+        expect(top.single.startedAtMs, 2);
+      },
+    );
 
     test('countsByService groups rows', () async {
       final (db, dao) = await open();
@@ -96,76 +97,95 @@ void main() {
       expect(await dao.page(limit: 10, offset: 0), hasLength(1));
     });
 
-    test('mergeNative dedupes on (native_id, started_at_ms) and honours floor',
-        () async {
-      final (db, dao) = await open();
-      addTearDown(db.close);
-      await db.db.update(AppDatabase.tableSyncMeta, {'last_sync_time': 100},
-          where: 'entity = ?', whereArgs: [AppDatabase.networkLogNativeEntity]);
-      final batch = [
-        _e(100, source: 'native', nativeId: 1),
-        _e(200, source: 'native', nativeId: 2),
-        _e(50, source: 'native', nativeId: 3),
-      ];
+    test(
+      'mergeNative dedupes on (native_id, started_at_ms) and honours floor',
+      () async {
+        final (db, dao) = await open();
+        addTearDown(db.close);
+        await db.db.update(
+          AppDatabase.tableSyncMeta,
+          {'last_sync_time': 100},
+          where: 'entity = ?',
+          whereArgs: [AppDatabase.networkLogNativeEntity],
+        );
+        final batch = [
+          _e(100, source: 'native', nativeId: 1),
+          _e(200, source: 'native', nativeId: 2),
+          _e(50, source: 'native', nativeId: 3),
+        ];
 
-      expect(await dao.mergeNative(batch), 2);
-      expect(await dao.mergeNative(batch), 0);
-      // Same native id with a different timestamp is a different row.
-      expect(
-          await dao.mergeNative([_e(300, source: 'native', nativeId: 1)]), 1);
-      expect(await dao.page(limit: 10, offset: 0), hasLength(3));
-    });
+        expect(await dao.mergeNative(batch), 2);
+        expect(await dao.mergeNative(batch), 0);
+        // Same native id with a different timestamp is a different row.
+        expect(
+          await dao.mergeNative([_e(300, source: 'native', nativeId: 1)]),
+          1,
+        );
+        expect(await dao.page(limit: 10, offset: 0), hasLength(3));
+      },
+    );
 
-    test('mergeNative forces source native and skips far-future rows',
-        () async {
-      final (db, dao) = await open();
-      addTearDown(db.close);
-      final now = DateTime.now().millisecondsSinceEpoch;
+    test(
+      'mergeNative forces source native and skips far-future rows',
+      () async {
+        final (db, dao) = await open();
+        addTearDown(db.close);
+        final now = DateTime.now().millisecondsSinceEpoch;
 
-      final n = await dao.mergeNative([
-        _e(now, source: 'dart', nativeId: 1),
-        _e(now + 3600000, source: 'native', nativeId: 2),
-      ]);
+        final n = await dao.mergeNative([
+          _e(now, source: 'dart', nativeId: 1),
+          _e(now + 3600000, source: 'native', nativeId: 2),
+        ]);
 
-      expect(n, 1);
-      final rows = await db.db.query(AppDatabase.tableNetworkLog);
-      expect(rows.single['source'], 'native');
-    });
+        expect(n, 1);
+        final rows = await db.db.query(AppDatabase.tableNetworkLog);
+        expect(rows.single['source'], 'native');
+      },
+    );
 
-    test('mergeNative caps a call at 200 rows and keeps Dart history',
-        () async {
-      final (db, dao) = await open();
-      addTearDown(db.close);
-      for (var s = 0; s < 1900; s += 50) {
-        await dao.insertBatch([for (var i = s; i < s + 50; i++) _e(i)]);
-      }
+    test(
+      'mergeNative caps a call at 200 rows and keeps Dart history',
+      () async {
+        final (db, dao) = await open();
+        addTearDown(db.close);
+        for (var s = 0; s < 1900; s += 50) {
+          await dao.insertBatch([for (var i = s; i < s + 50; i++) _e(i)]);
+        }
 
-      final n = await dao.mergeNative([
-        for (var i = 0; i < 300; i++)
-          _e(10000 + i, source: 'native', nativeId: i),
-      ]);
+        final n = await dao.mergeNative([
+          for (var i = 0; i < 300; i++)
+            _e(10000 + i, source: 'native', nativeId: i),
+        ]);
 
-      expect(n, 200);
-      final counts = await db.db.rawQuery(
+        expect(n, 200);
+        final counts = await db.db.rawQuery(
           'SELECT source, COUNT(*) c FROM ${AppDatabase.tableNetworkLog} '
-          'GROUP BY source');
-      final bySource = {for (final r in counts) r['source']: r['c']};
-      expect(bySource['native'], 200);
-      expect(bySource['dart'], 1800);
-    });
+          'GROUP BY source',
+        );
+        final bySource = {for (final r in counts) r['source']: r['c']};
+        expect(bySource['native'], 200);
+        expect(bySource['dart'], 1800);
+      },
+    );
 
-    test('mergeNative cursorTo only updates the cursor, even backwards',
-        () async {
-      final (db, dao) = await open();
-      addTearDown(db.close);
-      await db.db.update(AppDatabase.tableSyncMeta, {'last_sync_time': 77},
-          where: 'entity = ?', whereArgs: [AppDatabase.networkLogNativeEntity]);
+    test(
+      'mergeNative cursorTo only updates the cursor, even backwards',
+      () async {
+        final (db, dao) = await open();
+        addTearDown(db.close);
+        await db.db.update(
+          AppDatabase.tableSyncMeta,
+          {'last_sync_time': 77},
+          where: 'entity = ?',
+          whereArgs: [AppDatabase.networkLogNativeEntity],
+        );
 
-      await dao.mergeNative(const [], cursorTo: 42);
-      expect(await dao.nativeState(), (cursor: 42, floorMs: 77));
-      await dao.mergeNative(const [], cursorTo: 0);
-      expect(await dao.nativeState(), (cursor: 0, floorMs: 77));
-    });
+        await dao.mergeNative(const [], cursorTo: 42);
+        expect(await dao.nativeState(), (cursor: 42, floorMs: 77));
+        await dao.mergeNative(const [], cursorTo: 0);
+        expect(await dao.nativeState(), (cursor: 0, floorMs: 77));
+      },
+    );
 
     test('a merge using pre-wipe state cannot undo the wipe floor', () async {
       final (db, dao) = await open();
@@ -214,37 +234,43 @@ void main() {
       expect((row['final_url'] as String).length, lessThanOrEqualTo(2048));
     });
 
-    test('insertBatch ignores duplicate native keys and chunks big batches',
-        () async {
-      final (db, dao) = await open();
-      addTearDown(db.close);
-      await dao.insertBatch([
-        for (var i = 0; i < 120; i++) _e(i),
-        _e(500, source: 'native', nativeId: 1),
-        _e(500, source: 'native', nativeId: 1),
-      ]);
+    test(
+      'insertBatch ignores duplicate native keys and chunks big batches',
+      () async {
+        final (db, dao) = await open();
+        addTearDown(db.close);
+        await dao.insertBatch([
+          for (var i = 0; i < 120; i++) _e(i),
+          _e(500, source: 'native', nativeId: 1),
+          _e(500, source: 'native', nativeId: 1),
+        ]);
 
-      expect(await db.db.query(AppDatabase.tableNetworkLog), hasLength(122));
-    });
+        expect(await db.db.query(AppDatabase.tableNetworkLog), hasLength(122));
+      },
+    );
 
-    test('page and newest clamp negative or oversized limit and offset',
-        () async {
-      final (db, dao) = await open();
-      addTearDown(db.close);
-      await dao.insertBatch([_e(1), _e(2), _e(3)]);
+    test(
+      'page and newest clamp negative or oversized limit and offset',
+      () async {
+        final (db, dao) = await open();
+        addTearDown(db.close);
+        await dao.insertBatch([_e(1), _e(2), _e(3)]);
 
-      expect(await dao.page(limit: -1, offset: 0), isEmpty);
-      expect((await dao.page(limit: 10, offset: -5)).length, 3);
-      expect(await dao.newest(-1), isEmpty);
-    });
+        expect(await dao.page(limit: -1, offset: 0), isEmpty);
+        expect((await dao.page(limit: 10, offset: -5)).length, 3);
+        expect(await dao.newest(-1), isEmpty);
+      },
+    );
 
-    test('nativeState defaults to cursor 0 and floor 0 on a fresh install',
-        () async {
-      final (db, dao) = await open();
-      addTearDown(db.close);
+    test(
+      'nativeState defaults to cursor 0 and floor 0 on a fresh install',
+      () async {
+        final (db, dao) = await open();
+        addTearDown(db.close);
 
-      expect(await dao.nativeState(), (cursor: 0, floorMs: 0));
-    });
+        expect(await dao.nativeState(), (cursor: 0, floorMs: 0));
+      },
+    );
 
     test('nativeState treats a missing row as floor = now', () async {
       final (db, dao) = await open();

@@ -69,8 +69,9 @@ class ServiceClassifier {
 
   String? _longestPrefixService(String url) {
     final gatewayEndpoint = _gatewayEndpoint();
-    final gatewayUrl =
-        gatewayEndpoint == null ? null : _trimSlash(gatewayEndpoint.url);
+    final gatewayUrl = gatewayEndpoint == null
+        ? null
+        : _trimSlash(gatewayEndpoint.url);
     String? service;
     var bestLength = -1;
     for (final e in endpoints) {
