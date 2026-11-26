@@ -412,25 +412,6 @@ void main() {
 
       expect((await mahRows()).single['encounter_id'], 'server-enc-1');
     });
-
-    test('duplicate clean-up treats an offset and UTC as the same second',
-        () async {
-      for (final (id, date) in [
-        ('a', '2026-11-20T09:30:15.000Z'),
-        ('b', '2026-11-20T15:30:15+06:00'),
-      ]) {
-        await app.db.insert(MemberAssessmentHistoryDao.tableName, {
-          'member_id': 7,
-          'member_fhir_id': 'member-fhir-1',
-          'visit_date': date,
-          'service_provided': 'anc',
-          'encounter_id': id,
-          'latest_visit': 1,
-        });
-      }
-      await MemberAssessmentHistoryDao(app).deleteDuplicateRecords();
-      expect((await mahRows()).single['encounter_id'], 'a');
-    });
   });
 
   group('re-writing existing rows when parse rules change', () {
@@ -487,7 +468,93 @@ void main() {
     expect(JsonRead.idOrNull(' 900004432063 '), '900004432063');
   });
 
-  group('deleteDuplicateRecords (Spice parity)', () {
+  test('two visits saved on the device in the same second are both kept',
+      () async {
+    await saveLocal(localVisit());
+    await saveLocal(localVisit(
+      id: 'la-2',
+      reference: 2,
+      clientVisitId: 'client-visit-2',
+    ));
+    final day = DateTime.utc(2026, 11, 20, 12);
+    await dashboardRepo().load(from: day, to: day);
+
+    expect(
+      (await mahRows()).map((r) => r['encounter_id']),
+      unorderedEquals(['client-visit-1', 'client-visit-2']),
+    );
+  });
+
+  test('two server encounters in the same second survive a dashboard load',
+      () async {
+    await writer.upsertFromHistoryItems([
+      serverVisit(encounterId: 'e1'),
+      serverVisit(encounterId: 'e2'),
+    ]);
+    final day = DateTime.utc(2026, 11, 20, 12);
+    await dashboardRepo().load(from: day, to: day);
+
+    expect((await mahRows()).map((r) => r['encounter_id']), ['e1', 'e2']);
+  });
+
+  group('practitioner stamped at save time', () {
+    setUp(() {
+      writer = MemberAssessmentHistoryWriter(
+        mah: MemberAssessmentHistoryDao(app),
+        members: MemberDao(app),
+        appDb: app,
+        currentUserFhirId: () async => 'sk-fhir-9',
+      );
+    });
+
+    AssessmentHistoryItem serverNcd({String? practitionerId}) =>
+        AssessmentHistoryItem(
+          householdMemberId: 'member-fhir-1',
+          encounterId: 'server-enc-1',
+          visitDate: DateTime.utc(2026, 11, 20, 9, 30, 15),
+          serviceProvided: 'NCD',
+          rawJson: {'practitionerId': ?practitionerId},
+        );
+
+    test('moves to the server row when that row names no practitioner',
+        () async {
+      await saveLocal(localVisit(type: 'NCD'));
+      await writer.upsertFromHistoryItems([serverNcd()]);
+
+      final row = (await mahRows()).single;
+      expect(row['encounter_id'], 'server-enc-1');
+      expect(row['practitioner_id'], 'sk-fhir-9');
+    });
+
+    test('does not replace the practitioner the server sent', () async {
+      await saveLocal(localVisit(type: 'NCD'));
+      await writer
+          .upsertFromHistoryItems([serverNcd(practitionerId: 'sk-other')]);
+
+      expect((await mahRows()).single['practitioner_id'], 'sk-other');
+    });
+
+    test('moves to the server row when the rebuild replaces the device copy',
+        () async {
+      // Both copies present, as left by a build without the dedupe.
+      await saveLocal(localVisit(type: 'NCD'));
+      await app.db.insert(MemberAssessmentHistoryDao.tableName, {
+        'member_fhir_id': 'member-fhir-1',
+        'visit_date': '2026-11-20T09:30:15.000Z',
+        'service_provided': 'ncd',
+        'encounter_id': 'server-enc-1',
+        'latest_visit': 1,
+      });
+
+      await writer.rebuildFromLocalAssessments();
+
+      final row = (await mahRows()).single;
+      expect(row['encounter_id'], 'server-enc-1');
+      expect(row['practitioner_id'], 'sk-fhir-9');
+    });
+  });
+
+  group('deleteDuplicateRecords', () {
     Future<void> row({
       int? memberId = 7,
       String memberFhirId = 'member-fhir-1',
@@ -506,42 +573,25 @@ void main() {
           'latest_visit': 1,
         });
 
-    test('two copies of one visit become one', () async {
+    test('a repeated encounter id + service becomes one row', () async {
       await row(encounterId: 'a');
-      await row(
-        encounterId: 'b',
-        service: 'ANC',
-        visitDate: '2026-11-20T09:30:15.123Z',
-      );
+      await row(encounterId: 'a', service: 'ANC');
       await MemberAssessmentHistoryDao(app).deleteDuplicateRecords();
-      final rows = await mahRows();
-      expect(rows, hasLength(1));
-      expect(rows.single['encounter_id'], 'a');
+      expect(await mahRows(), hasLength(1));
     });
 
-    test('different members, services, times or statuses are kept', () async {
+    test('different encounters are kept, even in the same second', () async {
       await row(encounterId: 'a');
-      await row(encounterId: 'b', memberId: 8, memberFhirId: 'member-fhir-2');
-      await row(encounterId: 'c', service: 'family_planning');
-      await row(encounterId: 'd', visitDate: '2026-11-20T09:30:16.000Z');
-      await row(encounterId: 'e', customStatus: '["GLASSES_SOLD"]');
-      await row(
-        encounterId: 'f',
-        memberId: null,
-        memberFhirId: 'member-fhir-3',
-      );
-      await row(
-        encounterId: 'g',
-        memberId: null,
-        memberFhirId: 'member-fhir-4',
-      );
+      await row(encounterId: 'b');
+      await row(encounterId: 'a', service: 'family_planning');
+      await row(encounterId: 'c', customStatus: '["GLASSES_SOLD"]');
       await MemberAssessmentHistoryDao(app).deleteDuplicateRecords();
-      expect(await mahRows(), hasLength(7));
+      expect(await mahRows(), hasLength(4));
     });
 
     test('rows before the cut-off date are not touched', () async {
       await row(encounterId: 'a', visitDate: '2026-04-10T09:30:15.000Z');
-      await row(encounterId: 'b', visitDate: '2026-04-10T09:30:15.000Z');
+      await row(encounterId: 'a', visitDate: '2026-04-10T09:30:15.000Z');
       await MemberAssessmentHistoryDao(app).deleteDuplicateRecords();
       expect(await mahRows(), hasLength(2));
     });

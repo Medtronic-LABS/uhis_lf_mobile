@@ -75,11 +75,15 @@ class MemberAssessmentHistoryWriter {
   Future<int> rebuildFromLocalAssessments() async {
     const table = AppDatabase.tableLocalAssessments;
     final rows = await _appDb.db.query(table);
+    // Read once for the whole pass, not once per assessment.
+    final servers =
+        await _mah.loadServerVisitIndex(DeviceVisitIds.fromRows(rows));
     for (final row in rows) {
       await _upsertFromLocal(
         LocalAssessmentEntity.fromDb(row),
         projectPregnancy: false,
         practitionerId: null,
+        servers: servers,
       );
     }
     return rows.length;
@@ -115,17 +119,26 @@ class MemberAssessmentHistoryWriter {
   Future<void> upsertFromLocal(
     LocalAssessmentEntity entity, {
     bool projectPregnancy = true,
-  }) async =>
-      _upsertFromLocal(
-        entity,
-        projectPregnancy: projectPregnancy,
-        practitionerId: await _practitionerId(),
-      );
+  }) async {
+    final localMemberId = entity.householdMemberLocalId;
+    final servers = await _mah.loadServerVisitIndex(
+      await DeviceVisitIds.load(_appDb.db),
+      memberId: localMemberId > 0 ? localMemberId : null,
+      memberFhirId: entity.memberId,
+    );
+    await _upsertFromLocal(
+      entity,
+      projectPregnancy: projectPregnancy,
+      practitionerId: await _practitionerId(),
+      servers: servers,
+    );
+  }
 
   Future<void> _upsertFromLocal(
     LocalAssessmentEntity entity, {
     required bool projectPregnancy,
     required String? practitionerId,
+    required ServerVisitIndex servers,
   }) async {
     var localMemberId = entity.householdMemberLocalId;
     if (localMemberId <= 0) {
@@ -156,15 +169,20 @@ class MemberAssessmentHistoryWriter {
     // dashboard counts. Keeping this device copy too counted every synced
     // visit twice (LEAP-128).
     final serverEncounterId = JsonRead.idOrNull(entity.fhirId);
-    if (await _mah.hasOtherCopyOfVisit(
+    final serverCopy = servers.serverCopyOf(
       deviceEncounterId: encounterId,
       serverEncounterId: serverEncounterId,
       service: serviceProvided,
       visitDate: visitDate,
       memberId: memberId,
       memberFhirId: entity.memberId,
-    )) {
-      await _mah.deleteByEncounter(encounterId, serviceProvided);
+    );
+    if (serverCopy != null) {
+      await _mah.replaceDeviceCopy(
+        deviceEncounterId: encounterId,
+        serverEncounterId: serverCopy,
+        service: serviceProvided,
+      );
       if (projectPregnancy &&
           localMemberId > 0 &&
           PregnancyDetailRebuilder.isMotherServiceProvided(serviceProvided)) {

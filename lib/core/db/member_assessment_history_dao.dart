@@ -107,7 +107,7 @@ class MemberAssessmentHistoryDao {
   }) async {
     if (rows.isEmpty) return;
     await _db.db.transaction((tx) async {
-      final device = fromServer ? await _DeviceVisitIds.load(tx) : null;
+      final device = fromServer ? await DeviceVisitIds.load(tx) : null;
       for (final row in rows) {
         final encounterId = row.encounterId?.trim();
         final service = row.serviceProvided?.trim().toLowerCase();
@@ -122,7 +122,11 @@ class MemberAssessmentHistoryDao {
             whereArgs: [encounterId, service],
           );
           if (device != null && device.isNotEmpty) {
-            await _deleteDeviceCopies(tx, row, encounterId, service, device);
+            // The SK stamped on the device copy when the visit was saved must
+            // survive the swap when the server row names no practitioner.
+            final stamped = await _deleteDeviceCopies(
+                tx, row, encounterId, service, device);
+            dbRow['practitioner_id'] ??= stamped;
           }
         }
         await tx.insert(tableName, dbRow);
@@ -195,12 +199,13 @@ class MemberAssessmentHistoryDao {
     );
   }
 
-  Future<void> _deleteDeviceCopies(
+  /// Returns the practitioner stamped on a deleted device copy, if any.
+  Future<String?> _deleteDeviceCopies(
     DatabaseExecutor tx,
     MemberAssessmentHistoryRow row,
     String encounterId,
     String service,
-    _DeviceVisitIds device,
+    DeviceVisitIds device,
   ) async {
     // Device ids of the local assessments the server stamped with this
     // encounter id, plus device rows of the same member at the same second.
@@ -223,59 +228,92 @@ class MemberAssessmentHistoryDao {
       }
     }
     toDelete.remove(encounterId);
+    String? stamped;
     for (final id in toDelete) {
+      stamped ??= await _practitionerIdFor(tx, id, service);
       await tx.delete(
         tableName,
         where: 'encounter_id = ? AND LOWER(service_provided) = ?',
         whereArgs: [id, service],
       );
     }
+    return stamped;
   }
 
-  /// True when a row for the same visit is already present under another
-  /// encounter id than [deviceEncounterId] (normally the server's copy).
-  Future<bool> hasOtherCopyOfVisit({
-    required String deviceEncounterId,
-    required String? serverEncounterId,
-    required String service,
-    required String visitDate,
-    required int? memberId,
-    required String? memberFhirId,
+  /// The rows that are not this device's own copies, indexed for
+  /// [ServerVisitIndex.serverCopyOf]. One query, so a rebuild over every
+  /// local assessment does not scan this table once per assessment.
+  ///
+  /// Give a member to read only that member's rows (a single visit save).
+  Future<ServerVisitIndex> loadServerVisitIndex(
+    DeviceVisitIds device, {
+    int? memberId,
+    String? memberFhirId,
   }) async {
-    final parts = <String>[];
+    final member = <String>[];
     final args = <Object>[];
-    final match = _sameMemberAndSecond(
-      visitDate: visitDate,
-      memberId: memberId,
-      memberFhirId: memberFhirId,
-    );
-    if (match != null) {
-      parts.add(match.sql);
-      args.addAll(match.args);
+    final fhir = memberFhirId?.trim();
+    if (fhir != null && fhir.isNotEmpty) {
+      member.add('member_fhir_id = ?');
+      args.add(fhir);
     }
-    final server = serverEncounterId?.trim();
-    if (server != null && server.isNotEmpty) {
-      parts.add('encounter_id = ?');
-      args.add(server);
+    if (memberId != null) {
+      member.add('member_id = ?');
+      args.add(memberId);
     }
-    if (parts.isEmpty) return false;
     final rows = await _db.db.rawQuery(
-      'SELECT 1 FROM $tableName '
-      'WHERE LOWER(service_provided) = ? AND encounter_id != ? '
-      'AND (${parts.join(' OR ')}) LIMIT 1',
-      [service.toLowerCase(), deviceEncounterId, ...args],
+      'SELECT encounter_id, LOWER(service_provided) AS service, member_id, '
+      'member_fhir_id, $_visitSecondSql AS visit_second FROM $tableName '
+      'WHERE encounter_id IS NOT NULL'
+      '${member.isEmpty ? '' : ' AND (${member.join(' OR ')})'}',
+      args,
     );
-    return rows.isNotEmpty;
+    return ServerVisitIndex._fromRows(rows, device);
+  }
+
+  /// Removes this device's copy of a visit now that [serverEncounterId] holds
+  /// it, moving the practitioner stamped at save time onto the server row
+  /// when that row names none.
+  Future<void> replaceDeviceCopy({
+    required String deviceEncounterId,
+    required String serverEncounterId,
+    required String service,
+  }) async {
+    final lower = service.toLowerCase();
+    await _db.db.transaction((tx) async {
+      final stamped = await _practitionerIdFor(tx, deviceEncounterId, lower);
+      if (stamped != null) {
+        await tx.update(
+          tableName,
+          {'practitioner_id': stamped},
+          where: 'encounter_id = ? AND LOWER(service_provided) = ? '
+              'AND practitioner_id IS NULL',
+          whereArgs: [serverEncounterId, lower],
+        );
+      }
+      await tx.delete(
+        tableName,
+        where: 'encounter_id = ? AND LOWER(service_provided) = ?',
+        whereArgs: [deviceEncounterId, lower],
+      );
+    });
   }
 
   /// The practitioner already stored for a visit, if any.
-  Future<String?> practitionerIdFor(String encounterId, String service) async {
-    final rows = await _db.db.query(
+  Future<String?> practitionerIdFor(String encounterId, String service) =>
+      _practitionerIdFor(_db.db, encounterId, service.toLowerCase());
+
+  static Future<String?> _practitionerIdFor(
+    DatabaseExecutor db,
+    String encounterId,
+    String lowerService,
+  ) async {
+    final rows = await db.query(
       tableName,
       columns: ['practitioner_id'],
       where: 'encounter_id = ? AND LOWER(service_provided) = ? '
           'AND practitioner_id IS NOT NULL',
-      whereArgs: [encounterId, service.toLowerCase()],
+      whereArgs: [encounterId, lowerService],
       limit: 1,
     );
     return rows.isEmpty ? null : rows.first['practitioner_id'] as String?;
@@ -288,15 +326,6 @@ class MemberAssessmentHistoryDao {
       'WHERE encounter_id IS NOT NULL',
     );
     return {for (final r in rows) r['encounter_id'] as String};
-  }
-
-  /// Removes the row written under the device's own visit id.
-  Future<void> deleteByEncounter(String encounterId, String service) async {
-    await _db.db.delete(
-      tableName,
-      where: 'encounter_id = ? AND LOWER(service_provided) = ?',
-      whereArgs: [encounterId, service.toLowerCase()],
-    );
   }
 
   /// Services Spice leaves out of this table when it saves synced history
@@ -321,18 +350,23 @@ class MemberAssessmentHistoryDao {
   /// as in Spice.
   static const String duplicateCleanUpSince = '2026-05-01';
 
-  /// Spice `deleteDuplicateRecords`, run on every app start: keeps the first
-  /// row of each member + service + visit time + custom status on or after
-  /// [since]. The member is the local id, or the FHIR id when there is none,
-  /// so two different members with no local id are never merged; the visit
-  /// time is compared to the second, as uploads carry no milliseconds.
+  /// Collapses rows that repeat one encounter id + service, on or after
+  /// [since], keeping the first.
+  ///
+  /// Narrower than Spice's `deleteDuplicateRecords`, which groups by member,
+  /// service, visit time and custom status: that would also merge two real
+  /// server encounters in the same second, and could keep a device copy over
+  /// its server row. A device copy is replaced by its server row in
+  /// [upsertMany] and in the local rebuild instead, where device rows are
+  /// told apart from server rows.
   Future<int> deleteDuplicateRecords({String since = duplicateCleanUpSince}) =>
       _db.db.rawDelete('''
 DELETE FROM $tableName
-WHERE id NOT IN (
+WHERE encounter_id IS NOT NULL
+AND id NOT IN (
   SELECT MIN(id) FROM $tableName
-  GROUP BY COALESCE(CAST(member_id AS TEXT), member_fhir_id),
-    LOWER(service_provided), $_visitSecondSql, custom_status
+  WHERE encounter_id IS NOT NULL
+  GROUP BY encounter_id, LOWER(service_provided)
 )
 AND date(datetime(visit_date, 'localtime')) >= ?
 ''', [since]);
@@ -628,10 +662,10 @@ ORDER BY member_id ASC, visit_date ASC, id ASC
   }
 }
 
-/// Visit ids this device gave its own saved assessments, read once per
-/// server batch from `local_assessments.other_details`.
-class _DeviceVisitIds {
-  _DeviceVisitIds(this._all, this._byServerId);
+/// Visit ids this device gave its own saved assessments, read from
+/// `local_assessments.other_details`.
+class DeviceVisitIds {
+  DeviceVisitIds._(this._all, this._byServerId);
 
   final Set<String> _all;
   final Map<String, Set<String>> _byServerId;
@@ -644,12 +678,15 @@ class _DeviceVisitIds {
   Set<String> stampedWith(String serverEncounterId) =>
       _byServerId[serverEncounterId] ?? const {};
 
-  static Future<_DeviceVisitIds> load(DatabaseExecutor tx) async {
-    final rows = await tx.query(
-      AppDatabase.tableLocalAssessments,
-      columns: ['fhir_id', 'other_details'],
-      where: 'other_details IS NOT NULL',
-    );
+  static Future<DeviceVisitIds> load(DatabaseExecutor db) async =>
+      DeviceVisitIds.fromRows(await db.query(
+        AppDatabase.tableLocalAssessments,
+        columns: ['fhir_id', 'other_details'],
+        where: 'other_details IS NOT NULL',
+      ));
+
+  /// From `local_assessments` rows (`fhir_id`, `other_details`).
+  factory DeviceVisitIds.fromRows(Iterable<Map<String, Object?>> rows) {
     final all = <String>{};
     final byServerId = <String, Set<String>>{};
     for (final r in rows) {
@@ -662,6 +699,78 @@ class _DeviceVisitIds {
         byServerId.putIfAbsent(serverId, () => {}).add(deviceId);
       }
     }
-    return _DeviceVisitIds(all, byServerId);
+    return DeviceVisitIds._(all, byServerId);
+  }
+}
+
+/// History rows that are not this device's own copies (normally the
+/// server's), looked up in memory.
+class ServerVisitIndex {
+  ServerVisitIndex._(this._byEncounter, this._bySecond);
+
+  factory ServerVisitIndex._fromRows(
+    Iterable<Map<String, Object?>> rows,
+    DeviceVisitIds device,
+  ) {
+    final byEncounter = <String>{};
+    final bySecond = <String, String>{};
+    for (final r in rows) {
+      final encounterId = r['encounter_id'] as String?;
+      final service = r['service'] as String?;
+      if (encounterId == null || service == null) continue;
+      // Another visit saved on this device is a different visit, not a copy.
+      if (device.contains(encounterId)) continue;
+      byEncounter.add(_encounterKey(encounterId, service));
+      final second = r['visit_second'] as String?;
+      if (second == null) continue;
+      final memberId = r['member_id'] as int?;
+      final fhir = (r['member_fhir_id'] as String?)?.trim();
+      if (memberId != null) {
+        bySecond[_secondKey(service, second, 'id:$memberId')] = encounterId;
+      }
+      if (fhir != null && fhir.isNotEmpty) {
+        bySecond[_secondKey(service, second, 'fhir:$fhir')] = encounterId;
+      }
+    }
+    return ServerVisitIndex._(byEncounter, bySecond);
+  }
+
+  final Set<String> _byEncounter;
+  final Map<String, String> _bySecond;
+
+  static String _encounterKey(String encounterId, String service) =>
+      '$service\u0000$encounterId';
+
+  static String _secondKey(String service, String second, String member) =>
+      '$service\u0000$second\u0000$member';
+
+  /// The encounter id that already holds this device visit, or null: the
+  /// server id stamped on the local assessment, else a row for the same
+  /// member, service and visit second.
+  String? serverCopyOf({
+    required String deviceEncounterId,
+    required String? serverEncounterId,
+    required String service,
+    required String visitDate,
+    required int? memberId,
+    required String? memberFhirId,
+  }) {
+    final lower = service.toLowerCase();
+    final server = serverEncounterId?.trim();
+    if (server != null &&
+        server.isNotEmpty &&
+        server != deviceEncounterId &&
+        _byEncounter.contains(_encounterKey(server, lower))) {
+      return server;
+    }
+    final second = MemberAssessmentHistoryDao.visitSecond(visitDate);
+    final fhir = memberFhirId?.trim();
+    final found = (memberId == null
+            ? null
+            : _bySecond[_secondKey(lower, second, 'id:$memberId')]) ??
+        (fhir == null || fhir.isEmpty
+            ? null
+            : _bySecond[_secondKey(lower, second, 'fhir:$fhir')]);
+    return found == deviceEncounterId ? null : found;
   }
 }
