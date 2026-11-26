@@ -293,6 +293,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     mahWriter: _mahWriter,
     pregnancyDetail: _pregnancyDetailDao,
     auth: widget.authRepo,
+    syncMeta: _syncMetaDao,
   );
   late final TelemetryDao _telemetryDao = TelemetryDao(widget.appDb);
   late final TelemetryService _telemetryService = TelemetryService(

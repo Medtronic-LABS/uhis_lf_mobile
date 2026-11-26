@@ -41,29 +41,45 @@ class MemberAssessmentHistoryWriter {
   /// Clears MAH before a full assessment-history pull (Spice initial sync parity).
   Future<void> clearAllForFullSync() => _mah.deleteAll();
 
+  /// Bump when the way a synced visit is parsed into a history row changes
+  /// (for example a `customStatus` fix). Rows already on the device are then
+  /// re-written once from the cached history; see
+  /// `SkSpiceDashboardRepository.load`.
+  static const int normalizeVersion = 1;
+
   /// Rebuild MAH from the synced [assessments] cache (same source Spice persists after sync).
-  Future<int> rebuildFromAssessmentsTable() async {
+  ///
+  /// [onlyExisting]: re-write only visits already in MAH, so current parse
+  /// rules reach old rows without bringing back visits a full sync removed
+  /// (the cache is never cleared).
+  Future<int> rebuildFromAssessmentsTable({bool onlyExisting = false}) async {
     const table = AppDatabase.tableAssessments;
     final rows = await _appDb.db.query(table);
+    final existing = onlyExisting ? await _mah.encounterIds() : null;
     final items = <AssessmentHistoryItem>[];
     for (final row in rows) {
       final item = _assessmentHistoryItemFromAssessmentRow(row);
-      if (item != null) items.add(item);
+      if (item == null) continue;
+      if (existing != null && !existing.contains(item.encounterId)) continue;
+      items.add(item);
     }
     await upsertFromHistoryItems(items);
     return items.length;
   }
 
   /// Merge offline [local_assessments] into MAH so unsynced SK visits count on dashboard.
+  ///
+  /// Does not stamp a practitioner: a local assessment does not record who
+  /// saved it, and on a shared device the logged-in SK may not be that
+  /// person. The stamp written when the visit was saved is kept.
   Future<int> rebuildFromLocalAssessments() async {
     const table = AppDatabase.tableLocalAssessments;
     final rows = await _appDb.db.query(table);
-    final practitionerId = await _practitionerId();
     for (final row in rows) {
       await _upsertFromLocal(
         LocalAssessmentEntity.fromDb(row),
         projectPregnancy: false,
-        practitionerId: practitionerId,
+        practitionerId: null,
       );
     }
     return rows.length;
@@ -139,11 +155,7 @@ class MemberAssessmentHistoryWriter {
     // member-assessment-history under its own encounter id) is the one the
     // dashboard counts. Keeping this device copy too counted every synced
     // visit twice (LEAP-128).
-    final serverId = entity.fhirId?.trim();
-    final serverEncounterId =
-        serverId == null || serverId.isEmpty || serverId == 'null'
-            ? null
-            : serverId;
+    final serverEncounterId = JsonRead.idOrNull(entity.fhirId);
     if (await _mah.hasOtherCopyOfVisit(
       deviceEncounterId: encounterId,
       serverEncounterId: serverEncounterId,
@@ -161,6 +173,10 @@ class MemberAssessmentHistoryWriter {
       return;
     }
 
+    // No stamp given (a rebuild): keep the one written when the visit was saved.
+    final stampedPractitionerId = practitionerId ??
+        await _mah.practitionerIdFor(encounterId, serviceProvided);
+
     await _mah.upsertMany([
       MemberAssessmentHistoryRow(
         memberId: memberId,
@@ -176,7 +192,7 @@ class MemberAssessmentHistoryWriter {
                 : 'Referred')
             : entity.referralStatus,
         referralReason: entity.referredReasons,
-        practitionerId: practitionerId,
+        practitionerId: stampedPractitionerId,
         observationsJson:
             observations.isNotEmpty ? jsonEncode(observations) : null,
         shasthyaShebikaId: null,
@@ -241,16 +257,8 @@ class MemberAssessmentHistoryWriter {
   static String? encounterIdFromOtherDetails(String? otherDetailsJson) =>
       _encounterIdFromOtherDetails(otherDetailsJson);
 
-  static String? _encounterIdFromOtherDetails(String? otherDetailsJson) {
-    if (otherDetailsJson == null || otherDetailsJson.isEmpty) return null;
-    try {
-      final map = jsonDecode(otherDetailsJson) as Map<String, dynamic>;
-      final id = map['encounterId']?.toString().trim();
-      return (id != null && id.isNotEmpty) ? id : null;
-    } catch (_) {
-      return null;
-    }
-  }
+  static String? _encounterIdFromOtherDetails(String? otherDetailsJson) =>
+      MemberAssessmentHistoryDao.deviceEncounterId(otherDetailsJson);
 
   /// Maps Flutter assessment types to Spice `serviceProvided` wire tags.
   static String? _normalizeServiceProvided(String? raw) {

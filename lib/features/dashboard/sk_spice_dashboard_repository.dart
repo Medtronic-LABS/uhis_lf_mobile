@@ -3,6 +3,7 @@ import '../../core/db/member_assessment_history_dao.dart';
 import '../../core/db/member_assessment_history_writer.dart';
 import '../../core/db/pregnancy_detail_dao.dart';
 import '../../core/db/spice_dashboard_dao.dart';
+import '../../core/db/sync_meta_dao.dart';
 
 /// Loads SK KPI dashboard from local [member_assessment_history] (Spice SQL parity).
 class SkSpiceDashboardRepository {
@@ -12,17 +13,26 @@ class SkSpiceDashboardRepository {
     required MemberAssessmentHistoryWriter mahWriter,
     required PregnancyDetailDao pregnancyDetail,
     required AuthRepository auth,
+    SyncMetaDao? syncMeta,
   })  : _dashboard = dashboard,
         _mah = mah,
         _mahWriter = mahWriter,
         _pregnancyDetail = pregnancyDetail,
-        _auth = auth;
+        _auth = auth,
+        _syncMeta = syncMeta;
 
   final SpiceDashboardDao _dashboard;
   final MemberAssessmentHistoryDao _mah;
   final MemberAssessmentHistoryWriter _mahWriter;
   final PregnancyDetailDao _pregnancyDetail;
   final AuthRepository _auth;
+
+  /// Remembers which [MemberAssessmentHistoryWriter.normalizeVersion] the
+  /// rows on this device were written with. Without it they are not
+  /// re-written.
+  final SyncMetaDao? _syncMeta;
+
+  static const String _normalizeMetaEntity = 'mah_normalize';
 
   bool _mahHydrated = false;
 
@@ -56,15 +66,7 @@ class SkSpiceDashboardRepository {
   }) async {
     if (!_mahHydrated) {
       _mahHydrated = true;
-      // Fill from the cached history only when there is nothing yet (first
-      // run before a history sync). Otherwise sync keeps the table current,
-      // and rebuilding from the never-cleared cache would undo a full sync.
-      if (await _mah.countAll() == 0) {
-        await _mah.backfillFromLegacyAssessmentsTable();
-        await _mahWriter.rebuildFromAssessmentsTable();
-      }
-      await _mahWriter.rebuildFromLocalAssessments();
-      await _cleanUpMah();
+      await hydrateMah();
     }
     await _pregnancyDetail.rebuildAllFromMah();
 
@@ -79,6 +81,38 @@ class SkSpiceDashboardRepository {
       subVillageIds: subVillageIds,
       userFhirId: userFhirId,
     );
+  }
+
+  /// Brings the history table up to date before the first count of a session.
+  Future<void> hydrateMah() async {
+    if (await _mah.countAll() == 0) {
+      // Nothing yet (first run before a history sync): fill from the cache.
+      await _mah.backfillFromLegacyAssessmentsTable();
+      await _mahWriter.rebuildFromAssessmentsTable();
+      await _markNormalized();
+    } else if (await _needsNormalize()) {
+      // Parse rules changed since these rows were written: re-write the
+      // visits already here. Not a full rebuild, because the cache is never
+      // cleared and that would bring back visits a full sync removed.
+      await _mahWriter.rebuildFromAssessmentsTable(onlyExisting: true);
+      await _markNormalized();
+    }
+    await _mahWriter.rebuildFromLocalAssessments();
+    await _cleanUpMah();
+  }
+
+  Future<bool> _needsNormalize() async {
+    final meta = _syncMeta;
+    if (meta == null) return false;
+    final row = await meta.read(_normalizeMetaEntity);
+    return row?.cursor != MemberAssessmentHistoryWriter.normalizeVersion;
+  }
+
+  Future<void> _markNormalized() async {
+    await _syncMeta?.upsert(const SyncMetaRow(
+      entity: _normalizeMetaEntity,
+      cursor: MemberAssessmentHistoryWriter.normalizeVersion,
+    ));
   }
 
   static String _dateYmd(DateTime d) {

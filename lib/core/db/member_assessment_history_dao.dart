@@ -98,12 +98,16 @@ class MemberAssessmentHistoryDao {
   /// Spice's AssessmentHistoryResolver does it: same member + service + visit
   /// time (to the second, the precision the visit is uploaded with), or the
   /// local assessment the server stamped with this encounter id.
+  ///
+  /// Only rows written under a device visit id are dropped this way. Two
+  /// server encounters that share a member, service and second are both kept.
   Future<void> upsertMany(
     List<MemberAssessmentHistoryRow> rows, {
     bool fromServer = false,
   }) async {
     if (rows.isEmpty) return;
     await _db.db.transaction((tx) async {
+      final device = fromServer ? await _DeviceVisitIds.load(tx) : null;
       for (final row in rows) {
         final encounterId = row.encounterId?.trim();
         final service = row.serviceProvided?.trim().toLowerCase();
@@ -117,8 +121,8 @@ class MemberAssessmentHistoryDao {
             where: 'encounter_id = ? AND LOWER(service_provided) = ?',
             whereArgs: [encounterId, service],
           );
-          if (fromServer) {
-            await _deleteDeviceCopies(tx, row, encounterId, service);
+          if (device != null && device.isNotEmpty) {
+            await _deleteDeviceCopies(tx, row, encounterId, service, device);
           }
         }
         await tx.insert(tableName, dbRow);
@@ -126,29 +130,56 @@ class MemberAssessmentHistoryDao {
     });
   }
 
-  /// The visit time a row is matched on: UTC ISO-8601 cut to whole seconds.
-  static String visitSecond(String visitDate) {
-    final parsed = DateTime.tryParse(visitDate);
-    final iso = parsed == null ? visitDate : parsed.toUtc().toIso8601String();
-    return iso.length >= 19 ? iso.substring(0, 19) : iso;
+  /// The visit id this device stored in a local assessment's `other_details`.
+  /// JSON that cannot be read gives null, never an error: callers run inside
+  /// a batch transaction that must not roll back over one bad row.
+  static String? deviceEncounterId(String? otherDetails) {
+    if (otherDetails == null || otherDetails.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(otherDetails);
+      if (decoded is! Map) return null;
+      final id = decoded['encounterId']?.toString().trim();
+      return id == null || id.isEmpty ? null : id;
+    } catch (_) {
+      return null;
+    }
   }
 
-  /// "Same visit" conditions for the dedupe queries, as `OR`-ed SQL parts
-  /// with their arguments. A part is only added when its value is present:
-  /// SQLCipher on Android rejects a null bind value ("the bind value at index
-  /// N is null"), unlike the desktop SQLite the unit tests run on.
-  static ({List<String> parts, List<Object> args}) _sameVisitMatch({
+  /// The visit time a row is matched on: UTC ISO-8601 cut to whole seconds.
+  ///
+  /// A value with no zone is read as UTC, the way SQLite reads it in
+  /// [_visitSecondSql], so both sides of the comparison agree.
+  static String visitSecond(String visitDate) {
+    final parsed = DateTime.tryParse(visitDate.trim());
+    if (parsed == null) {
+      return visitDate.length >= 19 ? visitDate.substring(0, 19) : visitDate;
+    }
+    final utc = parsed.isUtc
+        ? parsed
+        : DateTime.utc(parsed.year, parsed.month, parsed.day, parsed.hour,
+            parsed.minute, parsed.second);
+    return utc.toIso8601String().substring(0, 19);
+  }
+
+  /// SQL for the stored `visit_date` as a UTC second, matching [visitSecond].
+  /// `strftime` converts any offset to UTC; a value it cannot read falls back
+  /// to its first 19 characters.
+  static const String _visitSecondSql =
+      "COALESCE(strftime('%Y-%m-%dT%H:%M:%S', visit_date), "
+      'substr(visit_date, 1, 19))';
+
+  /// "Same member, same second" as SQL with its arguments, or null when the
+  /// row names no member. A member part is only added when its value is
+  /// present: SQLCipher on Android rejects a null bind value ("the bind value
+  /// at index N is null"), unlike the desktop SQLite the unit tests run on.
+  static ({String sql, List<Object> args})? _sameMemberAndSecond({
     required String visitDate,
     required int? memberId,
     required String? memberFhirId,
-    String? encounterId,
-    String? stampedServerEncounterId,
   }) {
-    final parts = <String>[];
-    final args = <Object>[];
-    final fhir = memberFhirId?.trim();
     final member = <String>[];
     final memberArgs = <Object>[];
+    final fhir = memberFhirId?.trim();
     if (fhir != null && fhir.isNotEmpty) {
       member.add('member_fhir_id = ?');
       memberArgs.add(fhir);
@@ -157,28 +188,11 @@ class MemberAssessmentHistoryDao {
       member.add('member_id = ?');
       memberArgs.add(memberId);
     }
-    if (member.isNotEmpty) {
-      parts.add('(substr(visit_date, 1, 19) = ? AND (${member.join(' OR ')}))');
-      args
-        ..add(visitSecond(visitDate))
-        ..addAll(memberArgs);
-    }
-    final server = encounterId?.trim();
-    if (server != null && server.isNotEmpty) {
-      parts.add('encounter_id = ?');
-      args.add(server);
-    }
-    final stamped = stampedServerEncounterId?.trim();
-    if (stamped != null && stamped.isNotEmpty) {
-      parts.add('''
-encounter_id IN (
-  SELECT json_extract(la.other_details, '\$.encounterId')
-  FROM ${AppDatabase.tableLocalAssessments} AS la
-  WHERE la.fhir_id = ? AND la.other_details IS NOT NULL
-)''');
-      args.add(stamped);
-    }
-    return (parts: parts, args: args);
+    if (member.isEmpty) return null;
+    return (
+      sql: '($_visitSecondSql = ? AND (${member.join(' OR ')}))',
+      args: [visitSecond(visitDate), ...memberArgs],
+    );
   }
 
   Future<void> _deleteDeviceCopies(
@@ -186,20 +200,36 @@ encounter_id IN (
     MemberAssessmentHistoryRow row,
     String encounterId,
     String service,
+    _DeviceVisitIds device,
   ) async {
-    final match = _sameVisitMatch(
+    // Device ids of the local assessments the server stamped with this
+    // encounter id, plus device rows of the same member at the same second.
+    final toDelete = <String>{...device.stampedWith(encounterId)};
+    final match = _sameMemberAndSecond(
       visitDate: row.visitDate,
       memberId: row.memberId,
       memberFhirId: row.memberFhirId,
-      stampedServerEncounterId: encounterId,
     );
-    if (match.parts.isEmpty) return;
-    await tx.delete(
-      tableName,
-      where: 'LOWER(service_provided) = ? AND encounter_id != ? '
-          'AND (${match.parts.join(' OR ')})',
-      whereArgs: [service, encounterId, ...match.args],
-    );
+    if (match != null) {
+      final candidates = await tx.rawQuery(
+        'SELECT DISTINCT encounter_id FROM $tableName '
+        'WHERE LOWER(service_provided) = ? AND encounter_id != ? '
+        'AND ${match.sql}',
+        [service, encounterId, ...match.args],
+      );
+      for (final c in candidates) {
+        final id = c['encounter_id'] as String?;
+        if (id != null && device.contains(id)) toDelete.add(id);
+      }
+    }
+    toDelete.remove(encounterId);
+    for (final id in toDelete) {
+      await tx.delete(
+        tableName,
+        where: 'encounter_id = ? AND LOWER(service_provided) = ?',
+        whereArgs: [id, service],
+      );
+    }
   }
 
   /// True when a row for the same visit is already present under another
@@ -212,20 +242,52 @@ encounter_id IN (
     required int? memberId,
     required String? memberFhirId,
   }) async {
-    final match = _sameVisitMatch(
+    final parts = <String>[];
+    final args = <Object>[];
+    final match = _sameMemberAndSecond(
       visitDate: visitDate,
       memberId: memberId,
       memberFhirId: memberFhirId,
-      encounterId: serverEncounterId,
     );
-    if (match.parts.isEmpty) return false;
+    if (match != null) {
+      parts.add(match.sql);
+      args.addAll(match.args);
+    }
+    final server = serverEncounterId?.trim();
+    if (server != null && server.isNotEmpty) {
+      parts.add('encounter_id = ?');
+      args.add(server);
+    }
+    if (parts.isEmpty) return false;
     final rows = await _db.db.rawQuery(
       'SELECT 1 FROM $tableName '
       'WHERE LOWER(service_provided) = ? AND encounter_id != ? '
-      'AND (${match.parts.join(' OR ')}) LIMIT 1',
-      [service.toLowerCase(), deviceEncounterId, ...match.args],
+      'AND (${parts.join(' OR ')}) LIMIT 1',
+      [service.toLowerCase(), deviceEncounterId, ...args],
     );
     return rows.isNotEmpty;
+  }
+
+  /// The practitioner already stored for a visit, if any.
+  Future<String?> practitionerIdFor(String encounterId, String service) async {
+    final rows = await _db.db.query(
+      tableName,
+      columns: ['practitioner_id'],
+      where: 'encounter_id = ? AND LOWER(service_provided) = ? '
+          'AND practitioner_id IS NOT NULL',
+      whereArgs: [encounterId, service.toLowerCase()],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['practitioner_id'] as String?;
+  }
+
+  /// Every encounter id currently in the table.
+  Future<Set<String>> encounterIds() async {
+    final rows = await _db.db.rawQuery(
+      'SELECT DISTINCT encounter_id FROM $tableName '
+      'WHERE encounter_id IS NOT NULL',
+    );
+    return {for (final r in rows) r['encounter_id'] as String};
   }
 
   /// Removes the row written under the device's own visit id.
@@ -253,18 +315,24 @@ encounter_id IN (
         whereArgs: medicalReviewServices,
       );
 
+  /// Earliest visit date the duplicate clean-up touches. Same value Spice
+  /// Android passes from `LandingActivity`:
+  /// `deleteDuplicateRecords("2026-05-01")`. Older rows are left as they are,
+  /// as in Spice.
+  static const String duplicateCleanUpSince = '2026-05-01';
+
   /// Spice `deleteDuplicateRecords`, run on every app start: keeps the first
   /// row of each member + service + visit time + custom status on or after
   /// [since]. The member is the local id, or the FHIR id when there is none,
   /// so two different members with no local id are never merged; the visit
   /// time is compared to the second, as uploads carry no milliseconds.
-  Future<int> deleteDuplicateRecords({String since = '2026-05-01'}) =>
+  Future<int> deleteDuplicateRecords({String since = duplicateCleanUpSince}) =>
       _db.db.rawDelete('''
 DELETE FROM $tableName
 WHERE id NOT IN (
   SELECT MIN(id) FROM $tableName
   GROUP BY COALESCE(CAST(member_id AS TEXT), member_fhir_id),
-    LOWER(service_provided), substr(visit_date, 1, 19), custom_status
+    LOWER(service_provided), $_visitSecondSql, custom_status
 )
 AND date(datetime(visit_date, 'localtime')) >= ?
 ''', [since]);
@@ -557,5 +625,43 @@ ORDER BY member_id ASC, visit_date ASC, id ASC
     }
     final s = raw.toString().trim();
     return s.isEmpty ? null : s;
+  }
+}
+
+/// Visit ids this device gave its own saved assessments, read once per
+/// server batch from `local_assessments.other_details`.
+class _DeviceVisitIds {
+  _DeviceVisitIds(this._all, this._byServerId);
+
+  final Set<String> _all;
+  final Map<String, Set<String>> _byServerId;
+
+  bool get isNotEmpty => _all.isNotEmpty;
+
+  bool contains(String encounterId) => _all.contains(encounterId);
+
+  /// Device ids of the assessments the server stamped with [serverEncounterId].
+  Set<String> stampedWith(String serverEncounterId) =>
+      _byServerId[serverEncounterId] ?? const {};
+
+  static Future<_DeviceVisitIds> load(DatabaseExecutor tx) async {
+    final rows = await tx.query(
+      AppDatabase.tableLocalAssessments,
+      columns: ['fhir_id', 'other_details'],
+      where: 'other_details IS NOT NULL',
+    );
+    final all = <String>{};
+    final byServerId = <String, Set<String>>{};
+    for (final r in rows) {
+      final deviceId = MemberAssessmentHistoryDao.deviceEncounterId(
+          r['other_details'] as String?);
+      if (deviceId == null) continue;
+      all.add(deviceId);
+      final serverId = (r['fhir_id'] as String?)?.trim();
+      if (serverId != null && serverId.isNotEmpty) {
+        byServerId.putIfAbsent(serverId, () => {}).add(deviceId);
+      }
+    }
+    return _DeviceVisitIds(all, byServerId);
   }
 }

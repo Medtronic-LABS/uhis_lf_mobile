@@ -2,14 +2,24 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:uhis_next/core/auth/auth_repository.dart';
 import 'package:uhis_next/core/db/app_database.dart';
 import 'package:uhis_next/core/db/assessment_dao.dart';
 import 'package:uhis_next/core/db/local_assessment_dao.dart';
 import 'package:uhis_next/core/db/member_assessment_history_dao.dart';
 import 'package:uhis_next/core/db/member_assessment_history_writer.dart';
 import 'package:uhis_next/core/db/member_dao.dart';
+import 'package:uhis_next/core/db/pregnancy_detail_dao.dart';
 import 'package:uhis_next/core/db/spice_dashboard_dao.dart';
+import 'package:uhis_next/core/db/sync_meta_dao.dart';
 import 'package:uhis_next/core/models/assessment_history_item.dart';
+import 'package:uhis_next/core/models/json_read.dart';
+import 'package:uhis_next/features/dashboard/sk_spice_dashboard_repository.dart';
+
+class _FakeAuth extends Fake implements AuthRepository {
+  @override
+  Future<String?> userFhirId() async => 'sk-fhir-9';
+}
 
 /// LEAP-128: a visit saved on the device and later pulled back from
 /// member-assessment-history must be one dashboard row, not two.
@@ -89,6 +99,19 @@ void main() {
   Future<List<Map<String, Object?>>> mahRows() =>
       app.db.query(MemberAssessmentHistoryDao.tableName, orderBy: 'id');
 
+  /// The repository the dashboard tab loads through.
+  SkSpiceDashboardRepository dashboardRepo() {
+    final mah = MemberAssessmentHistoryDao(app);
+    return SkSpiceDashboardRepository(
+      dashboard: SpiceDashboardDao(app),
+      mah: mah,
+      mahWriter: writer,
+      pregnancyDetail: PregnancyDetailDao(app, mah, MemberDao(app)),
+      auth: _FakeAuth(),
+      syncMeta: SyncMetaDao(app),
+    );
+  }
+
   Future<void> saveLocal(LocalAssessmentEntity e) async {
     await app.db.insert(LocalAssessmentDao.tableName, e.toDb());
     await writer.upsertFromLocal(e, projectPregnancy: false);
@@ -155,9 +178,9 @@ void main() {
     ]);
     expect(await mahRows(), hasLength(2));
 
-    // Same order as SkSpiceDashboardRepository.load().
-    await writer.rebuildFromAssessmentsTable();
-    await writer.rebuildFromLocalAssessments();
+    // The real path: what the dashboard runs on its first load.
+    final day = DateTime.utc(2026, 11, 20, 12);
+    await dashboardRepo().load(from: day, to: day);
 
     final rows = await mahRows();
     expect(rows, hasLength(1));
@@ -280,6 +303,188 @@ void main() {
 
     await writer.rebuildFromLocalAssessments();
     expect((await mahRows()).single['practitioner_id'], 'sk-fhir-9');
+  });
+
+  test('a rebuild keeps the SK who saved the visit, not the one logged in now',
+      () async {
+    MemberAssessmentHistoryWriter as(String sk) =>
+        MemberAssessmentHistoryWriter(
+          mah: MemberAssessmentHistoryDao(app),
+          members: MemberDao(app),
+          appDb: app,
+          currentUserFhirId: () async => sk,
+        );
+    writer = as('sk-a');
+    await saveLocal(localVisit(type: 'NCD'));
+
+    // SK-B logs in on the same device and opens the dashboard.
+    await as('sk-b').rebuildFromLocalAssessments();
+    expect((await mahRows()).single['practitioner_id'], 'sk-a');
+  });
+
+  test('a rebuild does not stamp a visit that was saved without an SK',
+      () async {
+    await saveLocal(localVisit(type: 'NCD'));
+    expect((await mahRows()).single['practitioner_id'], isNull);
+
+    await MemberAssessmentHistoryWriter(
+      mah: MemberAssessmentHistoryDao(app),
+      members: MemberDao(app),
+      appDb: app,
+      currentUserFhirId: () async => 'sk-b',
+    ).rebuildFromLocalAssessments();
+    expect((await mahRows()).single['practitioner_id'], isNull);
+  });
+
+  test('unreadable other_details on another row does not lose the batch',
+      () async {
+    await saveLocal(localVisit());
+    await app.db.insert(
+      LocalAssessmentDao.tableName,
+      localVisit(id: 'la-bad', reference: 2).toDb()
+        ..['other_details'] = '{not json'
+        ..['fhir_id'] = 'server-enc-1',
+    );
+
+    await writer.upsertFromHistoryItems([serverVisit()]);
+
+    final rows = await mahRows();
+    expect(rows, hasLength(1));
+    expect(rows.single['encounter_id'], 'server-enc-1');
+  });
+
+  test('two server encounters in the same second are both kept', () async {
+    await writer.upsertFromHistoryItems([
+      serverVisit(encounterId: 'e1', customStatus: const ['GLASSES_SOLD']),
+      serverVisit(encounterId: 'e2'),
+    ]);
+    // A later sync sends one of them again.
+    await writer.upsertFromHistoryItems([serverVisit(encounterId: 'e2')]);
+
+    final rows = await mahRows();
+    expect(rows.map((r) => r['encounter_id']), ['e1', 'e2']);
+  });
+
+  group('visit time matching', () {
+    test('visitSecond gives the UTC second for any zone form', () {
+      const utc = '2026-11-20T09:30:15';
+      String second(String v) => MemberAssessmentHistoryDao.visitSecond(v);
+      expect(second('2026-11-20T09:30:15.123Z'), utc);
+      expect(second('2026-11-20T15:30:15+06:00'), utc);
+      expect(second('2026-11-20T09:30:15+00:00'), utc);
+      // No zone: read as UTC, the way SQLite reads the stored text.
+      expect(second('2026-11-20T09:30:15'), utc);
+      expect(second('2026-11-20 09:30:15.500'), utc);
+    });
+
+    test('a device copy stored with an offset is still replaced', () async {
+      final local = localVisit();
+      await app.db.insert(LocalAssessmentDao.tableName, local.toDb());
+      await app.db.insert(MemberAssessmentHistoryDao.tableName, {
+        'member_id': 7,
+        'member_fhir_id': 'member-fhir-1',
+        'visit_date': '2026-11-20T15:30:15+06:00',
+        'service_provided': 'anc',
+        'encounter_id': 'client-visit-1',
+        'latest_visit': 1,
+      });
+
+      await writer.upsertFromHistoryItems([serverVisit()]);
+
+      final rows = await mahRows();
+      expect(rows, hasLength(1));
+      expect(rows.single['encounter_id'], 'server-enc-1');
+    });
+
+    test('a device copy stored with no zone is still replaced', () async {
+      await app.db.insert(
+          LocalAssessmentDao.tableName, localVisit().toDb());
+      await app.db.insert(MemberAssessmentHistoryDao.tableName, {
+        'member_id': 7,
+        'member_fhir_id': 'member-fhir-1',
+        'visit_date': '2026-11-20T09:30:15',
+        'service_provided': 'anc',
+        'encounter_id': 'client-visit-1',
+        'latest_visit': 1,
+      });
+
+      await writer.upsertFromHistoryItems([serverVisit()]);
+
+      expect((await mahRows()).single['encounter_id'], 'server-enc-1');
+    });
+
+    test('duplicate clean-up treats an offset and UTC as the same second',
+        () async {
+      for (final (id, date) in [
+        ('a', '2026-11-20T09:30:15.000Z'),
+        ('b', '2026-11-20T15:30:15+06:00'),
+      ]) {
+        await app.db.insert(MemberAssessmentHistoryDao.tableName, {
+          'member_id': 7,
+          'member_fhir_id': 'member-fhir-1',
+          'visit_date': date,
+          'service_provided': 'anc',
+          'encounter_id': id,
+          'latest_visit': 1,
+        });
+      }
+      await MemberAssessmentHistoryDao(app).deleteDuplicateRecords();
+      expect((await mahRows()).single['encounter_id'], 'a');
+    });
+  });
+
+  group('re-writing existing rows when parse rules change', () {
+    Future<void> cacheVisit(String id, {List<String> status = const []}) =>
+        AssessmentDao(app).upsertMany([
+          AssessmentRow(
+            id: id,
+            patientId: 'member-fhir-1',
+            kind: 'ANC',
+            occurredAt:
+                DateTime.utc(2026, 11, 20, 9, 30, 15).millisecondsSinceEpoch,
+            rawJson: jsonEncode({
+              'householdMemberId': 'member-fhir-1',
+              'customStatus': status,
+            }),
+          ),
+        ]);
+
+    final day = DateTime.utc(2026, 11, 20, 12);
+
+    test('runs once, only for visits already in the table', () async {
+      // A row written by older parse rules (no custom status)...
+      await app.db.insert(MemberAssessmentHistoryDao.tableName, {
+        'member_fhir_id': 'member-fhir-1',
+        'visit_date': '2026-11-20T09:30:15.000Z',
+        'service_provided': 'anc',
+        'encounter_id': 'kept',
+        'latest_visit': 1,
+      });
+      await cacheVisit('kept', status: const ['GLASSES_SOLD']);
+      // ...and a cached visit a full sync has since removed.
+      await cacheVisit('removed-by-full-sync');
+
+      await dashboardRepo().load(from: day, to: day);
+
+      var rows = await mahRows();
+      expect(rows.single['encounter_id'], 'kept');
+      expect(rows.single['custom_status'], contains('GLASSES_SOLD'));
+
+      // Same version next session: the cache is not read again.
+      await cacheVisit('kept');
+      await dashboardRepo().load(from: day, to: day);
+      rows = await mahRows();
+      expect(rows.single['custom_status'], contains('GLASSES_SOLD'));
+    });
+  });
+
+  test('JsonRead.idOrNull treats blank and text "no value" forms as none', () {
+    expect(JsonRead.idOrNull(null), isNull);
+    expect(JsonRead.idOrNull('  '), isNull);
+    expect(JsonRead.idOrNull('null'), isNull);
+    expect(JsonRead.idOrNull(' NULL '), isNull);
+    expect(JsonRead.idOrNull('undefined'), isNull);
+    expect(JsonRead.idOrNull(' 900004432063 '), '900004432063');
   });
 
   group('deleteDuplicateRecords (Spice parity)', () {
