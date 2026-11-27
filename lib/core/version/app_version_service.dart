@@ -31,8 +31,18 @@ class AppVersionUpdateAvailable extends AppVersionCheckResult {
 /// The installed version is below the server's enforced minimum — the app is
 /// blocked until the user updates. [minVersionLabel] is shown to the user.
 class AppVersionUpdateRequired extends AppVersionCheckResult {
-  const AppVersionUpdateRequired(this.minVersionLabel);
+  const AppVersionUpdateRequired(
+    this.minVersionLabel, {
+    this.minVersionCode = 0,
+    this.graceExpired = false,
+  });
   final String minVersionLabel;
+
+  /// Build code the server requires; used to check Play can deliver it.
+  final int minVersionCode;
+
+  /// Server said the grace period for this minimum has elapsed.
+  final bool graceExpired;
 }
 
 /// The version policy could not be fetched and none was cached.
@@ -51,6 +61,8 @@ class AppVersionPolicy {
     required this.latestAppVersionCode,
     required this.latestAppVersionLabel,
     this.versionCheckExempt = false,
+    this.graceExpired = false,
+    this.policyRevision,
   });
 
   final int minAppVersionCode;
@@ -61,6 +73,15 @@ class AppVersionPolicy {
   /// Server-side allowlist (`VERSION_CHECK_EXEMPT_USERS`) — e.g. QA accounts
   /// that must keep running an older build.
   final bool versionCheckExempt;
+
+  /// True once the server's `graceUntilEpochMs` for this minimum is at or
+  /// before its own `serverTimeEpochMs`. Decided from server time only and
+  /// cached with the policy, so offline launches keep the last server verdict
+  /// instead of consulting the device clock.
+  final bool graceExpired;
+
+  /// Server revision of the policy the grace verdict belongs to.
+  final String? policyRevision;
 
   /// Parses the endpoint body (or a cached copy). Returns null when the
   /// minimum code is missing — a policy we can't read must never lock anyone
@@ -75,7 +96,20 @@ class AppVersionPolicy {
       latestAppVersionCode: _asInt(json['latestAppVersionCode']) ?? minCode,
       latestAppVersionLabel: json['latestAppVersionLabel']?.toString() ?? '',
       versionCheckExempt: json['versionCheckExempt'] == true,
+      graceExpired: _graceExpired(json),
+      policyRevision: json['policyRevision']?.toString(),
     );
+  }
+
+  /// Cached copies carry the verdict (`graceExpired`); a fresh response
+  /// carries `graceUntilEpochMs` + `serverTimeEpochMs`. Anything missing
+  /// means "grace not expired" — never stricter than the server said.
+  static bool _graceExpired(Map<dynamic, dynamic> json) {
+    if (json['graceExpired'] is bool) return json['graceExpired'] as bool;
+    final until = _asInt(json['graceUntilEpochMs']);
+    final serverNow = _asInt(json['serverTimeEpochMs']);
+    if (until == null || serverNow == null) return false;
+    return serverNow >= until;
   }
 
   Map<String, Object?> toJson() => {
@@ -84,6 +118,8 @@ class AppVersionPolicy {
         'latestAppVersionCode': latestAppVersionCode,
         'latestAppVersionLabel': latestAppVersionLabel,
         'versionCheckExempt': versionCheckExempt,
+        'graceExpired': graceExpired,
+        if (policyRevision != null) 'policyRevision': policyRevision,
       };
 
   /// Decision for an installed build. An unknown build code (`<= 0`, i.e.
@@ -94,7 +130,11 @@ class AppVersionPolicy {
       return const AppVersionUpToDate();
     }
     if (installedVersionCode < minAppVersionCode) {
-      return AppVersionUpdateRequired(minAppVersionLabel);
+      return AppVersionUpdateRequired(
+        minAppVersionLabel,
+        minVersionCode: minAppVersionCode,
+        graceExpired: graceExpired,
+      );
     }
     if (installedVersionCode < latestAppVersionCode) {
       return AppVersionUpdateAvailable(latestAppVersionLabel);

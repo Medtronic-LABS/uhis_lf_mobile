@@ -1,7 +1,10 @@
-import 'package:flutter/widgets.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/app_strings.dart';
+import 'app_update_controller.dart';
 import 'app_update_flow.dart';
 import 'app_version_enforcer.dart';
 import 'app_version_service.dart';
@@ -28,16 +31,19 @@ class _AppVersionHomeGateState extends State<AppVersionHomeGate>
 
   DateTime? _lastCheck;
   bool _checking = false;
+  late final AppUpdateController _updates = context.read<AppUpdateController>();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _updates.addListener(_onUpdateState);
     WidgetsBinding.instance.addPostFrameCallback((_) => _check());
   }
 
   @override
   void dispose() {
+    _updates.removeListener(_onUpdateState);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -57,14 +63,12 @@ class _AppVersionHomeGateState extends State<AppVersionHomeGate>
     _lastCheck = DateTime.now();
     try {
       final service = context.read<AppVersionEnforcer>().service;
+      unawaited(context.read<AppUpdateController>().refresh());
       final result = await service.check();
       if (!mounted) return;
       switch (result) {
-        case AppVersionUpdateRequired(:final minVersionLabel):
-          await showAppUpdateRequiredDialog(
-            context,
-            message: AppUpdateStrings.forcedUpdateMessage(minVersionLabel),
-          );
+        case final AppVersionUpdateRequired required:
+          await enforceRequiredUpdate(context, required);
         case AppVersionUpdateAvailable():
           await promptOptionalUpdateIfNeeded(context);
         case AppVersionUpToDate():
@@ -76,6 +80,60 @@ class _AppVersionHomeGateState extends State<AppVersionHomeGate>
     }
   }
 
+  void _onUpdateState() {
+    if (mounted) setState(() {});
+  }
+
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    if (!_updates.restartReady) return widget.child;
+    return Column(
+      children: [
+        SafeArea(
+          bottom: false,
+          child: _UpdateReadyBanner(onRestart: _updates.completeRestartIfSafe),
+        ),
+        Expanded(
+          child: MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            child: widget.child,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Persistent, non-modal prompt shown once a flexible update has downloaded.
+/// Restarting is always the user's tap — never automatic.
+class _UpdateReadyBanner extends StatelessWidget {
+  const _UpdateReadyBanner({required this.onRestart});
+
+  final Future<bool> Function() onRestart;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                AppUpdateStrings.updateReadyToRestart,
+                style: TextStyle(color: scheme.onPrimaryContainer),
+              ),
+            ),
+            TextButton(
+              onPressed: () => onRestart(),
+              child: Text(AppUpdateStrings.updateRestartAction),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

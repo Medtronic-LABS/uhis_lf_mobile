@@ -7,8 +7,9 @@ import 'app_update_flow.dart';
 import 'app_version_service.dart';
 
 /// Navigates to `/home` unless the cached version policy says this build is
-/// below the minimum, in which case the blocking update dialog is shown
-/// instead.
+/// below the minimum and Play can deliver the update, in which case the
+/// blocking update dialog is shown instead. Where Play cannot deliver it, a
+/// dismissible warning is shown and the user continues to `/home`.
 ///
 /// Used on PIN/biometric unlock and after sync — paths that never go through
 /// login, so without this a returning user would bypass the force update.
@@ -20,11 +21,8 @@ Future<void> goHomeIfUpToDate(BuildContext context) async {
   final result = await service.cachedResult();
   if (!context.mounted) return;
   if (result is AppVersionUpdateRequired) {
-    await showAppUpdateRequiredDialog(
-      context,
-      message: AppUpdateStrings.forcedUpdateMessage(result.minVersionLabel),
-    );
-    return;
+    final mayContinue = await enforceRequiredUpdate(context, result);
+    if (!mayContinue || !context.mounted) return;
   }
   context.go('/home');
 }

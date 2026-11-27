@@ -176,6 +176,37 @@ abstract final class AppUpdateStrings {
   /// Optional (non-blocking) update prompt — dismissible.
   static String get updateLater =>
       getTranslatedString('updateLater', 'Later');
+  /// Dismissible acknowledgement button on the update warnings.
+  static String get ok => getTranslatedString('updateOk', 'OK');
+  /// Required update exists but Google Play is not serving it to this device yet.
+  static String get requiredUpdateNotYetAvailable => getTranslatedString(
+        'requiredUpdateNotYetAvailable',
+        'A required update is not available on Google Play for this device yet. '
+            'Please update as soon as it appears.',
+      );
+  /// Required update, grace elapsed, and Play still cannot deliver it.
+  static String get requiredUpdateContactSupport => getTranslatedString(
+        'requiredUpdateContactSupport',
+        'This app version is out of date and Google Play cannot provide the '
+            'update on this device. Please contact your supervisor to get the approved version.',
+      );
+  /// Training / sideloaded builds are replaced by an admin-provided build.
+  static String get updateAskAdminForNewBuild => getTranslatedString(
+        'updateAskAdminForNewBuild',
+        'This build is not updated through Google Play. Please ask your administrator for the new build.',
+      );
+  /// Banner shown when a flexible update has finished downloading.
+  static String get updateReadyToRestart => getTranslatedString(
+        'updateReadyToRestart',
+        'Update ready. Restart the app to finish installing.',
+      );
+  static String get updateRestartAction =>
+      getTranslatedString('updateRestartAction', 'Restart');
+  /// Snackbar when an update could not be started or finished.
+  static String get updateCouldNotComplete => getTranslatedString(
+        'updateCouldNotComplete',
+        'The update could not be completed. Please try again later.',
+      );
   /// Shown when the version-policy endpoint cannot be reached.
   static String get versionCheckUnavailable => getTranslatedString(
         'versionCheckUnavailable',

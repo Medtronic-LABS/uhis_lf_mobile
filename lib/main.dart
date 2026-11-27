@@ -115,7 +115,9 @@ import 'core/sync/call_log_sync_client.dart';
 import 'core/sync/call_log_sync_service.dart';
 import 'core/sync/shukhee_encounter_attach_service.dart';
 import 'core/sync/shukhee_encounter_link_client.dart';
+import 'core/version/app_update_controller.dart';
 import 'core/version/app_update_flow.dart';
+import 'core/version/play_update_client.dart';
 import 'core/version/app_version_enforcer.dart';
 import 'core/version/app_version_info.dart';
 import 'core/version/app_version_service.dart';
@@ -144,7 +146,15 @@ Future<void> main() async {
   await Analytics.init();
   final api = await ApiClient.create();
   final appVersionService = AppVersionService(api);
-  final authRepo = AuthRepository(api, appVersionService: appVersionService);
+  final appUpdateController = AppUpdateController(
+    const InAppUpdatePlayClient(),
+    supported: supportsPlayUpdate,
+  );
+  final authRepo = AuthRepository(
+    api,
+    appVersionService: appVersionService,
+    requiredUpdateResolver: appUpdateController,
+  );
   final biometric = BiometricService();
   final appDb = await AppDatabase.open().onError((e, st) async {
     if (kIsWeb) {
@@ -166,6 +176,7 @@ Future<void> main() async {
     biometric: biometric,
     appDb: appDb,
     appVersionService: appVersionService,
+    appUpdateController: appUpdateController,
   ));
 }
 
@@ -178,6 +189,7 @@ class UhisNextApp extends StatefulWidget {
     required this.biometric,
     required this.appDb,
     required this.appVersionService,
+    required this.appUpdateController,
   });
 
   final ApiClient api;
@@ -186,6 +198,7 @@ class UhisNextApp extends StatefulWidget {
   final BiometricService biometric;
   final AppDatabase appDb;
   final AppVersionService appVersionService;
+  final AppUpdateController appUpdateController;
 
   @override
   State<UhisNextApp> createState() => _UhisNextAppState();
@@ -497,6 +510,11 @@ class _UhisNextAppState extends State<UhisNextApp>
   @override
   void initState() {
     super.initState();
+    // A restart into a downloaded update is only harmless on the home
+    // dashboard — never inside a visit or form.
+    widget.appUpdateController.bindSafePoint(
+      () => _router.routerDelegate.currentConfiguration.uri.path == '/home',
+    );
     WidgetsBinding.instance.addObserver(this);
     // Start connectivity monitoring for automatic offline sync retry.
     _connectivitySync.start();
@@ -532,6 +550,7 @@ class _UhisNextAppState extends State<UhisNextApp>
 
   @override
   void dispose() {
+    widget.appUpdateController.dispose();
     _connectivitySync.dispose();
     unawaited(_syncForeground.dispose());
     unawaited(_postSync.dispose());
@@ -614,8 +633,9 @@ class _UhisNextAppState extends State<UhisNextApp>
       // first login that is the entire synced history at once, since cold sync
       // pulls referrals with past due dates that all read as SLA-breached.
       unawaited(_referrals.recomputeAllAfterSync());
-      // Play Core requires re-showing an in-progress immediate update on resume.
-      unawaited(resumeInProgressAppUpdateIfAny());
+      // Play Core requires re-showing an in-progress immediate update on
+      // resume; the controller also surfaces a finished flexible download.
+      unawaited(widget.appUpdateController.refresh());
     }
   }
 
@@ -626,6 +646,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<ApiClient>.value(value: widget.api),
         Provider<AppVersionService>.value(value: widget.appVersionService),
         Provider<AppVersionEnforcer>.value(value: _appVersionEnforcer),
+        ChangeNotifierProvider<AppUpdateController>.value(
+            value: widget.appUpdateController),
         Provider<AuthRepository>.value(value: widget.authRepo),
         Provider<BiometricService>.value(value: widget.biometric),
         Provider<AppDatabase>.value(value: widget.appDb),
