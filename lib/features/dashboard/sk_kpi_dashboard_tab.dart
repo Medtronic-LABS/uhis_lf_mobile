@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/post_sync_refresher.dart';
 import '../../app/theme.dart';
 import '../../core/analytics/analytics.dart';
 import '../../core/analytics/analytics_events.dart';
@@ -37,6 +38,8 @@ class _SkKpiDashboardTabState extends State<SkKpiDashboardTab> {
       SkDashboardServicesCategory.all;
 
   bool _depsReady = false;
+  PostSyncRefresher? _postSync;
+  bool _postSyncWasRefreshing = false;
 
   @override
   void initState() {
@@ -51,8 +54,31 @@ class _SkKpiDashboardTabState extends State<SkKpiDashboardTab> {
     super.didChangeDependencies();
     if (!_depsReady) {
       _depsReady = true;
+      // Nullable read: the tab still works where no refresher is provided.
+      final postSync = context.read<PostSyncRefresher?>();
+      if (postSync != null) {
+        _postSync = postSync;
+        _postSyncWasRefreshing = postSync.isRefreshing.value;
+        postSync.isRefreshing.addListener(_onPostSyncRefreshingChanged);
+      }
       _reload();
     }
+  }
+
+  @override
+  void dispose() {
+    _postSync?.isRefreshing.removeListener(_onPostSyncRefreshingChanged);
+    super.dispose();
+  }
+
+  /// The counts are read once per load, so a sync that lands while this tab is
+  /// open would leave the numbers stale. Reload when the post-sync rebuild of
+  /// the history table finishes (LEAP-128).
+  void _onPostSyncRefreshingChanged() {
+    final refreshing = _postSync?.isRefreshing.value ?? false;
+    final finished = _postSyncWasRefreshing && !refreshing;
+    _postSyncWasRefreshing = refreshing;
+    if (finished && mounted) _reload();
   }
 
   void _reload() {

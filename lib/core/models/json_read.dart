@@ -20,6 +20,17 @@ abstract final class JsonRead {
     return null;
   }
 
+  /// A stored id, trimmed, or null when there is none. Blank values and the
+  /// text forms of "no value" (`null`, `undefined`, any case) count as none:
+  /// some rows carry those where an id was never assigned.
+  static String? idOrNull(Object? value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    if (s.isEmpty) return null;
+    final lower = s.toLowerCase();
+    return lower == 'null' || lower == 'undefined' ? null : s;
+  }
+
   /// First parseable int among [keys] (accepts int, num, or numeric String).
   static int? firstInt(Map json, List<String> keys) {
     for (final k in keys) {

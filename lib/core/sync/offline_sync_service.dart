@@ -1653,9 +1653,11 @@ class OfflineSyncService extends ChangeNotifier {
       if (items.isEmpty) return 0;
 
       if (replaceMahOnFullSync) {
-        await _assessmentHistoryWriter?.clearAllForFullSync();
+        // The old rows are removed where the new ones are written, further
+        // down, in one transaction: clearing here left the table empty (and
+        // open to a rebuild from the stale cache) until then.
         debugPrint(
-          '[OfflineSyncService] full sync — replaced MAH with '
+          '[OfflineSyncService] full sync — replacing MAH with '
           '${items.length} assessment-history row(s)',
         );
       }
@@ -1932,7 +1934,10 @@ class OfflineSyncService extends ChangeNotifier {
         await _assessments.upsertMany(assessmentRows);
       }
 
-      await _assessmentHistoryWriter?.upsertFromHistoryItems(items);
+      await _assessmentHistoryWriter?.upsertFromHistoryItems(
+        items,
+        replaceAll: replaceMahOnFullSync,
+      );
       if (replaceMahOnFullSync) {
         // Pending visits live in local_assessments, not server history — restore
         // them into MAH before post-sync/dashboard so KPIs are not briefly empty.
