@@ -2,14 +2,17 @@ import 'dart:io';
 
 import '../../../core/api/api_client.dart';
 import '../immunisation/card_extraction_transport.dart';
+import '../immunisation/card_scan_failure.dart';
 import 'ncd_visit_extraction_models.dart';
 
 /// Typed failure for an NCD card visit-extraction call — never leak a raw
 /// transport exception up to the UI layer.
 class NcdVisitExtractionException implements Exception {
-  const NcdVisitExtractionException(this.message);
+  const NcdVisitExtractionException(this.message, {required this.failure});
 
+  /// Diagnostic text for logs only — the UI maps [failure] to localized copy.
   final String message;
+  final CardScanFailure failure;
 
   @override
   String toString() => message;
@@ -52,7 +55,7 @@ class NcdVisitExtractionRepository {
       );
       return NcdVisitExtractionResult.fromJson(raw);
     } on CardExtractionTransportException catch (e) {
-      throw NcdVisitExtractionException(e.message);
+      throw NcdVisitExtractionException(e.message, failure: e.failure);
     }
   }
 }

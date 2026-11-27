@@ -2,14 +2,17 @@ import 'dart:io';
 
 import '../../../core/api/api_client.dart';
 import '../immunisation/card_extraction_transport.dart';
+import '../immunisation/card_scan_failure.dart';
 import 'anc_visit_extraction_models.dart';
 
 /// Typed failure for an ANC card visit-extraction call — never leak a raw
 /// transport exception up to the UI layer.
 class AncVisitExtractionException implements Exception {
-  const AncVisitExtractionException(this.message);
+  const AncVisitExtractionException(this.message, {required this.failure});
 
+  /// Diagnostic text for logs only — the UI maps [failure] to localized copy.
   final String message;
+  final CardScanFailure failure;
 
   @override
   String toString() => message;
@@ -52,7 +55,7 @@ class AncVisitExtractionRepository {
       );
       return AncVisitExtractionResult.fromJson(raw);
     } on CardExtractionTransportException catch (e) {
-      throw AncVisitExtractionException(e.message);
+      throw AncVisitExtractionException(e.message, failure: e.failure);
     }
   }
 }

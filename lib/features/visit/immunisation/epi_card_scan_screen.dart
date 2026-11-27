@@ -10,6 +10,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/i18n/app_date_format.dart';
 import '../../../core/telemetry/epi_card_telemetry.dart';
 import 'card_highlight_overlay.dart';
+import 'card_scan_failure.dart';
 import 'epi_card_scanner.dart';
 import 'epi_date_extraction_models.dart' show UnmatchedVaccineRow;
 import 'epi_date_extraction_repository.dart';
@@ -328,6 +329,12 @@ class _EpiCardScanScreenState extends State<EpiCardScanScreen>
       scanError = e;
       debugPrint('EpiCardScanScreen: OCR failed: $e');
       result = const EpiScanResult(matchedCodes: [], rawText: '');
+    }
+    if (!result.anyMatched) {
+      result = result.withFailure(await refineScanFailure(
+        image,
+        result.failure ?? CardScanFailure.unreadable,
+      ));
     }
     _recordAttempt(result: result, scanError: scanError);
     if (!mounted) return;

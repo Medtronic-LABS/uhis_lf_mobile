@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/endpoints.dart';
 import '../../../core/config/app_config.dart';
+import 'card_scan_failure.dart';
 
 /// Normalized (0-1) bounding box, relative to the full card photo — lets a
 /// scan screen draw a highlight without any separate CV pass. Shared by
@@ -38,9 +40,15 @@ class CardBoundingBox {
 /// (or its stack trace) up to the UI layer. Shared by every programme's
 /// repository (EPI, ANC, ...) so each can catch/map its own exception type.
 class CardExtractionTransportException implements Exception {
-  const CardExtractionTransportException(this.message, {this.statusCode});
+  const CardExtractionTransportException(
+    this.message, {
+    required this.failure,
+    this.statusCode,
+  });
 
+  /// Diagnostic text for logs only — the UI maps [failure] to localized copy.
   final String message;
+  final CardScanFailure failure;
   final int? statusCode;
 
   @override
@@ -85,6 +93,19 @@ class CardExtractionTransport {
     return (_client.dio, gatewayPath);
   }
 
+  @visibleForTesting
+  static CardScanFailure failureFor(DioException e) {
+    if (e.response?.statusCode == 422) return CardScanFailure.unreadable;
+    return switch (e.type) {
+      DioExceptionType.connectionError ||
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout =>
+        CardScanFailure.offline,
+      _ => CardScanFailure.serviceUnavailable,
+    };
+  }
+
   /// Sends [cardImage] to the card-extraction service for [programme],
   /// optionally pinning [visitNumber] (ANC/NCD only — selects which visit
   /// column/row on the card to read), and returns the raw decoded JSON
@@ -126,14 +147,14 @@ class CardExtractionTransport {
       if (raw is! Map<String, dynamic>) {
         throw const CardExtractionTransportException(
           'Unexpected response from card extraction.',
+          failure: CardScanFailure.serviceUnavailable,
         );
       }
       return raw;
     } on DioException catch (e) {
       throw CardExtractionTransportException(
-        e.response?.statusCode == 422
-            ? 'Could not read this card.'
-            : 'Card extraction unavailable — try again when online.',
+        'Card extraction failed: ${e.type.name}',
+        failure: failureFor(e),
         statusCode: e.response?.statusCode,
       );
     }

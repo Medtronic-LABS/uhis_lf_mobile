@@ -20,6 +20,7 @@ import '../../patient/member_detail_repository.dart';
 import '../assessment_repository.dart';
 import '../forms/childhood_visit.dart';
 import '../triage/child_assessment_section.dart';
+import 'card_scan_failure.dart';
 import 'child_immunization_dto.dart';
 import 'epi_card_scan_screen.dart';
 import 'epi_card_scanner.dart';
@@ -958,7 +959,9 @@ class _ImmunisationTimelineScreenState
     if (result == null) return;
     if (!result.anyMatched) {
       setState(() {
-        _scanError = EpiStrings.scanFailed;
+        _scanError = CardScanFailureStrings.forFailure(
+          result.failure ?? CardScanFailure.unreadable,
+        );
         _scanResult = null;
         _lastScanSessionId = scanSessionId;
         _scanMatchedCodesAtApply = const {};
