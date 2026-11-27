@@ -4,6 +4,8 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Required to scan National ID cards for patient enrollment</string>
 	<key>NSMicrophoneUsageDescription</key>
