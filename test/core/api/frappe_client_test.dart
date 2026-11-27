@@ -165,4 +165,65 @@ void main() {
       );
     });
   });
+
+  group('postMultipart', () {
+    test('sends the form with auth headers and unwraps message', () async {
+      final (client, adapter) = build([
+        (_) async => jsonResponseBody({
+          'message': {'ok': true},
+        }),
+      ]);
+      final form = FormData.fromMap({'programme': 'epi'});
+
+      final result = await client.postMultipart(
+        '/api/method/x',
+        form,
+        receiveTimeout: const Duration(seconds: 180),
+      );
+
+      expect(result, {'ok': true});
+      final request = adapter.requests.single;
+      expect(request.data, same(form));
+      expect(request.headers['X-Auth-Token'], 'Bearer jwt-1');
+      expect(request.receiveTimeout, const Duration(seconds: 180));
+    });
+  });
+
+  group('error cause', () {
+    test('HTTP error keeps the DioException as cause', () async {
+      final (client, _) = build([
+        (_) async => jsonResponseBody({'exc_type': 'X'}, statusCode: 503),
+      ]);
+
+      await expectLater(
+        client.postJson('/x', {}),
+        throwsA(
+          isA<FrappeException>().having(
+            (e) => e.cause,
+            'cause',
+            isA<DioException>(),
+          ),
+        ),
+      );
+    });
+
+    test('postJson applies a per-call receive timeout', () async {
+      final (client, adapter) = build([
+        (_) async => jsonResponseBody({
+          'message': {'ok': true},
+        }),
+      ]);
+
+      await client.postJson(
+        '/x',
+        {},
+        receiveTimeout: const Duration(seconds: 30),
+      );
+
+      expect(
+        adapter.requests.single.receiveTimeout,
+        const Duration(seconds: 30),
+      );
+    });
+  });
 }

@@ -220,10 +220,13 @@ class Endpoints {
       '/ai-scribe/scribe/realtime/transcribe';
 
   // ── AI Visit Briefing: pre-visit guidance cards ───────────────────────────
+  /// Frappe `spice_next_ai` — same request/response as the legacy ai-scribe
+  /// route, wrapped in `{"message": ...}`. Base URL:
+  /// [AppConfig.spiceNextAiApiBaseUrl].
   static const String visitBriefingGenerate =
-      '/ai-scribe/briefing/generate';
+      '/api/method/spice_next_ai.api.briefing.generate';
   static const String visitBriefingSummary =
-      '/ai-scribe/briefing/summary';
+      '/api/method/spice_next_ai.api.briefing.summary';
 
   // ── AI Programme Recommendation: Step-2 programme picker ─────────────────
   static const String programmeRecommendation =
@@ -243,12 +246,16 @@ class Endpoints {
       '/api/method/spice_next_ai.api.naba.visual_image';
 
   // ── AI Assistant: conversational Q&A ────────────────────────────────────
-  static const String assistantAsk = '/ai-scribe/assistant/ask';
+  /// Frappe `spice_next_ai` — same request/response as the legacy ai-scribe
+  /// route. Base URL: [AppConfig.spiceNextAiApiBaseUrl].
+  static const String assistantAsk =
+      '/api/method/spice_next_ai.api.assistant.ask';
 
   // ── AI Card Extraction: Gemini-vision read of scanned programme cards ────
-  // (EPI vaccination booklet today; ANC/NCD cards reserved for later).
+  /// Frappe `spice_next_ai` — same multipart `card_image` upload as the
+  /// legacy ai-scribe route. Base URL: [AppConfig.spiceNextAiApiBaseUrl].
   static const String cardExtractionExtract =
-      '/ai-scribe/card-extraction/extract';
+      '/api/method/spice_next_ai.api.card_scan.extract';
 
   // ── Telemetry: AI Scribe adoption / accuracy reporting ───────────────────
   /// Batch-ingest of `telemetry_events` rows queued on device. Idempotent on

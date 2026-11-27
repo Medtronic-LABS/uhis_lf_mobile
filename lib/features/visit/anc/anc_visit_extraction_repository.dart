@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../../../core/api/api_client.dart';
+import '../../../core/api/frappe_client.dart';
 import '../immunisation/card_extraction_transport.dart';
 import 'anc_visit_extraction_models.dart';
 
@@ -28,8 +28,8 @@ class AncVisitExtractionException implements Exception {
 /// [EpiDateExtractionRepository] — this class owns only the ANC-specific
 /// request shape and response typing.
 class AncVisitExtractionRepository {
-  AncVisitExtractionRepository(ApiClient client)
-      : _transport = CardExtractionTransport(client);
+  AncVisitExtractionRepository(FrappeClient client)
+    : _transport = CardExtractionTransport(client);
 
   final CardExtractionTransport _transport;
 

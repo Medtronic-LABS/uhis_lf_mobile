@@ -206,6 +206,12 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final LocalAssessmentDao _localAssessmentDao =
       LocalAssessmentDao(widget.appDb);
   late final SyncMetaDao _syncMetaDao = SyncMetaDao(widget.appDb);
+  // One client for every Frappe spice_next_ai AI feature (Assistant, Visit
+  // Briefing, card scan, NABA visuals) on this app's own session.
+  late final FrappeClient _spiceNextAiClient = buildFrappeAiClient(
+    widget.api,
+    baseUrl: AppConfig.spiceNextAiApiBaseUrl,
+  );
   late final HouseholdDao _householdDao = HouseholdDao(widget.appDb);
   late final MemberDao _memberDao = MemberDao(widget.appDb);
   late final ServiceMemberDao _serviceMemberDao =
@@ -739,25 +745,22 @@ class _UhisNextAppState extends State<UhisNextApp>
         // AI Visit Briefing service
         Provider<VisitBriefingRepository>(
             create: (_) =>
-                VisitBriefingRepository(widget.api, cache: _aiCacheDao)),
+                VisitBriefingRepository(_spiceNextAiClient, cache: _aiCacheDao)),
         // NABA guideline pictures (Step 3) — Frappe spice_next_ai, cached on disk
         Provider<GuidelineVisualRepository>(
-            create: (_) => GuidelineVisualRepository(buildFrappeAiClient(
-                  widget.api,
-                  baseUrl: AppConfig.spiceNextAiApiBaseUrl,
-                ))),
+            create: (_) => GuidelineVisualRepository(_spiceNextAiClient)),
         // AI Card Extraction — Gemini-vision date read for scanned EPI cards
         Provider<EpiDateExtractionRepository>(
-            create: (_) => EpiDateExtractionRepository(widget.api)),
+            create: (_) => EpiDateExtractionRepository(_spiceNextAiClient)),
         // AI Card Extraction — Gemini-vision vitals read for scanned ANC cards
         Provider<AncVisitExtractionRepository>(
-            create: (_) => AncVisitExtractionRepository(widget.api)),
+            create: (_) => AncVisitExtractionRepository(_spiceNextAiClient)),
         // AI Card Extraction — Gemini-vision vitals read for scanned NCD cards
         Provider<NcdVisitExtractionRepository>(
-            create: (_) => NcdVisitExtractionRepository(widget.api)),
+            create: (_) => NcdVisitExtractionRepository(_spiceNextAiClient)),
         // AI Assistant — conversational Q&A (Tab 3)
         Provider<AssistantRepository>(
-            create: (_) => AssistantRepository(widget.api)),
+            create: (_) => AssistantRepository(_spiceNextAiClient)),
         // AI Scribe API service
         Provider<ScribeApiService>(
             create: (_) => ScribeApiService(widget.api)),

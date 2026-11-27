@@ -156,13 +156,6 @@ class AppConfig {
     return explicit.isNotEmpty ? explicit : apiBaseUrl;
   }
 
-  /// Base URL for the AI Assistant service (port 8097 when running locally).
-  /// Derives from [aiServiceBaseUrl] when set; otherwise routes through nginx.
-  static String get assistantBaseUrl {
-    if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
-    return apiBaseUrl;
-  }
-
   /// Base URL for `POST /mobile/app-version` on leapfrog-ai-service. Uses
   /// [aiServiceBaseUrl] when set (e.g. `http://<emulator-host>:8095`); otherwise
   /// [apiBaseUrl] with the `/ai-scribe/mobile/app-version` gateway path.

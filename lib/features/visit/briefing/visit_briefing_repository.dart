@@ -1,19 +1,16 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:dio/dio.dart';
 
-import '../../../core/api/api_client.dart';
 import '../../../core/api/endpoints.dart';
-import '../../../core/config/app_config.dart';
+import '../../../core/api/frappe_client.dart';
 import '../../../core/db/ai_response_cache_dao.dart';
 import 'briefing_models.dart';
 
-/// Calls the AI visit briefing service to generate pre-visit guidance cards.
-///
-/// When [AppConfig.aiServiceBaseUrl] is non-empty (set via --dart-define
-/// AI_SERVICE_URL=`http://<emulator-host>:8096`), requests go directly to the local
-/// service without the nginx prefix. Otherwise they route through the gateway.
+/// Calls the Frappe `spice_next_ai` app ([Endpoints.visitBriefingGenerate],
+/// [Endpoints.visitBriefingSummary]) via [FrappeClient] to generate pre-visit
+/// guidance cards. Base URL: `AppConfig.spiceNextAiApiBaseUrl`. Failures throw
+/// [FrappeException]; callers fall back to the local rule-based cards.
 ///
 /// Results are cached in SQLite via [AiResponseCacheDao] when available so
 /// re-opening the same visit / patient on the same day does not re-hit the
@@ -24,8 +21,11 @@ class VisitBriefingRepository {
   const VisitBriefingRepository(this._client, {AiResponseCacheDao? cache})
       : _cache = cache;
 
-  final ApiClient _client;
+  final FrappeClient _client;
   final AiResponseCacheDao? _cache;
+
+  /// Same budget the briefing had on the legacy ai-scribe route.
+  static const _timeout = Duration(minutes: 1);
 
   // Cache namespace — bump when the API response shape changes so rows
   // written by the old client are ignored. Last bump: request payload now
@@ -34,21 +34,6 @@ class VisitBriefingRepository {
   // produces.
   static const String _kindBriefing = 'visit-briefing.v6';
   static const String _kindSummary = 'patient-summary.v3';
-
-  /// Returns the Dio instance and path pair to use for a given remote path.
-  (Dio, String) _resolve(String gatewayPath, String directPath) {
-    final aiUrl = AppConfig.aiServiceBaseUrl;
-    if (aiUrl.isNotEmpty) {
-      final direct = Dio(BaseOptions(
-        baseUrl: aiUrl,
-        connectTimeout: const Duration(seconds: 5),
-        receiveTimeout: const Duration(minutes: 1),
-      ));
-      _client.attachAiServiceAuth(direct);
-      return (direct, directPath);
-    }
-    return (_client.dio, gatewayPath);
-  }
 
   String _hashOf(Map<String, dynamic> ctx) =>
       jsonEncode(ctx).hashCode.toRadixString(16);
@@ -75,20 +60,11 @@ class VisitBriefingRepository {
       }
     }
 
-    final (dio, path) = _resolve(
+    final raw = await _client.postJson(
       Endpoints.visitBriefingGenerate,
-      '/briefing/generate',
+      patientContext,
+      receiveTimeout: _timeout,
     );
-    final response = await dio.post<dynamic>(path, data: patientContext);
-    final raw = response.data;
-    if (raw is! Map<String, dynamic>) {
-      throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-        type: DioExceptionType.badResponse,
-        error: 'Expected JSON object, got ${raw.runtimeType}',
-      );
-    }
 
     if (cache != null) {
       await cache.put(
@@ -115,20 +91,11 @@ class VisitBriefingRepository {
       }
     }
 
-    final (dio, path) = _resolve(
+    final raw = await _client.postJson(
       Endpoints.visitBriefingSummary,
-      '/briefing/summary',
+      patientContext,
+      receiveTimeout: _timeout,
     );
-    final response = await dio.post<dynamic>(path, data: patientContext);
-    final raw = response.data;
-    if (raw is! Map<String, dynamic>) {
-      throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-        type: DioExceptionType.badResponse,
-        error: 'Expected JSON object, got ${raw.runtimeType}',
-      );
-    }
 
     if (cache != null) {
       await cache.put(

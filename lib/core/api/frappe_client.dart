@@ -27,11 +27,15 @@ enum FrappeErrorKind {
 }
 
 class FrappeException implements Exception {
-  const FrappeException(this.kind, this.message, {this.statusCode});
+  const FrappeException(this.kind, this.message, {this.statusCode, this.cause});
 
   final FrappeErrorKind kind;
   final String message;
   final int? statusCode;
+
+  /// The transport error behind this one, if any — lets callers keep their
+  /// existing user messages and analytics (offline vs timeout) unchanged.
+  final Object? cause;
 
   @override
   String toString() =>
@@ -72,16 +76,46 @@ class FrappeClient {
   String get baseUrl => _dio.options.baseUrl;
 
   /// POSTs [body] as JSON and returns the unwrapped `message` object.
+  ///
+  /// [receiveTimeout] overrides the client default for this call only.
   Future<Map<String, dynamic>> postJson(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    Duration? receiveTimeout,
+  }) => _post(path, body, receiveTimeout: receiveTimeout);
+
+  /// POSTs [form] as `multipart/form-data` (e.g. a photo upload) and returns
+  /// the unwrapped `message` object. Frappe passes the plain form fields to
+  /// the whitelisted method as arguments and the file parts via
+  /// `frappe.request.files`.
+  Future<Map<String, dynamic>> postMultipart(
+    String path,
+    FormData form, {
+    Duration? sendTimeout,
+    Duration? receiveTimeout,
+  }) => _post(
+    path,
+    form,
+    sendTimeout: sendTimeout,
+    receiveTimeout: receiveTimeout,
+  );
+
+  Future<Map<String, dynamic>> _post(
+    String path,
+    Object body, {
+    Duration? sendTimeout,
+    Duration? receiveTimeout,
+  }) async {
     final headers = await _authHeaders();
     try {
       final response = await _dio.post<dynamic>(
         path,
         data: body,
-        options: Options(headers: headers),
+        options: Options(
+          headers: headers,
+          sendTimeout: sendTimeout,
+          receiveTimeout: receiveTimeout,
+        ),
       );
       return _unwrapMessage(response.data);
     } on DioException catch (e) {
@@ -157,6 +191,7 @@ class FrappeClient {
       return FrappeException(
         FrappeErrorKind.network,
         e.message ?? 'Network error calling $path',
+        cause: e,
       );
     }
     final kind = switch (status) {
@@ -166,7 +201,12 @@ class FrappeClient {
       417 || >= 500 => FrappeErrorKind.unavailable,
       _ => FrappeErrorKind.badResponse,
     };
-    return FrappeException(kind, '$path failed ($status)', statusCode: status);
+    return FrappeException(
+      kind,
+      '$path failed ($status)',
+      statusCode: status,
+      cause: e,
+    );
   }
 }
 
